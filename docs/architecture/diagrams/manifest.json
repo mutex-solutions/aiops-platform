@@ -1,0 +1,863 @@
+{
+ "generated": "2026-11-12",
+ "lede": "An Apache-2.0 AIOps platform on the Grafana observability stack, on-prem and open-source first. One collector-based agent per host or cluster writes four signals through a tenant gateway into the metrics, logs, traces and profiles stores. A small Go kernel runs plugins that turn alerts into incidents, drive a first-party agent harness with a code-driven troubleshooting method, page people and run approved changes. Every upstream is a plugin, never the product.",
+ "brief_title": "A small kernel, everything else a plugin",
+ "planes": [
+  {
+   "title": "Kernel",
+   "text": "A Go port of the Cordis model that DeepSeek Harness runs on: a context tree, typed service keys, plugins that start when the services they inject exist and restart in place when a provider is swapped, effects that unwind in reverse, and hooks. It holds no product logic."
+  },
+  {
+   "title": "Plugins",
+   "text": "Everything else is a plugin behind a service definition: `sql`, `jobs`, `events`, `http`, tenancy, approval, audit, the change ledger, the LLM gateway, fleet, the loader and the plugin manager. Each definition ships a fake and a conformance suite, so a plugin is tested alone before it is attached."
+  },
+  {
+   "title": "Product",
+   "text": "Plugins turn alerts into incidents and run each pillar agent through one neutral harness registry. The default harness and its read tools are first-party and new; HolmesGPT is one optional harness plugin a user can pick per agent. On-call goes through provider plugins, GoAlert being one optional provider."
+  }
+ ],
+ "headline": [
+  "Goal: an open-source community edition first. A plugin marketplace is the end goal and a later enterprise feature; nothing of it is built now.",
+  "An upstream is a plugin, never the product: no core row, required key, default container or release gate names one upstream. HolmesGPT is `harness-holmesgpt` and GoAlert is `on-call-provider-goalert`, both optional.",
+  "The agent layer is built new: the first-party `harness-native`, decomposed into small plugins in the DeepSeek Harness manner, with first-party read tools for metrics, logs, traces and Kubernetes.",
+  "The plugin system follows DeepSeek Harness strictly: `08` section 1.1 lists every dsh property as carried, adapted or not carried.",
+  "Contributors can add another observability backend as a connector pack. The default stack stays first and is not hard-wired.",
+  "Licences: no software base forces a rebuild. Compliance content (CIS, SOC 2, ISO text) cannot ship and gets a first-party catalogue; two upstream charts are replaced by our own templates; details in `docs/design/licence-audit-2026-11.md`.",
+  "The owner confirmed decisions W2 to W13 on 2026-11-11 (`00` section 2.4). Still open: lawyer questions, the community versus enterprise boundary and the contributor agreement. Phase dates are planning targets."
+ ],
+ "decisions": [
+  {
+   "n": 1,
+   "topic": "Kernel and plugins",
+   "decision": "Go port of the Cordis kernel in `sdk/kernel`. Everything else, the loader and the plugin manager included, is a plugin behind a service definition with a fake and a conformance suite. In-process Go plugins join through a signed distribution builder; plugins in any language run out of process. One binary with `--role edge|api|worker|all`."
+  },
+  {
+   "n": 2,
+   "topic": "Agent harness",
+   "decision": "Every pillar agent runs through one registry, `harnesses`. The default is the first-party `harness-native` with our own read tools. HolmesGPT is the optional plugin `harness-holmesgpt`, selectable per agent. All model calls go through the kernel LLM gateway."
+  },
+  {
+   "n": 3,
+   "topic": "On-call",
+   "decision": "On-call goes through `on-call-provider` plugins. The default is a small first-party provider, built new (owner decision W11); no code before a lawyer answers the schedule-patent question, and without that answer the first release ships providers only. GoAlert is one optional provider."
+  },
+  {
+   "n": 4,
+   "topic": "Slack",
+   "decision": "One `chat-surface-slack` contribution on slack-go, Events API for hosted and Socket Mode for self-host. The bundle is operator-enabled and no release gate depends on it (owner decision W13), because the platform's API terms restrict commercial distribution."
+  },
+  {
+   "n": 5,
+   "topic": "Alert webhooks",
+   "decision": "The signal-ingest plugins admit and deduplicate webhooks before durable acknowledgement. Paging follows through the bound provider. Watchdog proves the page path; platform-page-path reaches a configured platform-health receiver without crossing the kernel. No optional provider is required."
+  },
+  {
+   "n": 6,
+   "topic": "Fleet",
+   "decision": "Built in-house on connect-go, implementing the three `collector.v1.CollectorService` RPCs. Every served config carries a self-monitoring pipeline stamped with `fleet_collector_id`."
+  },
+  {
+   "n": 7,
+   "topic": "Gateway",
+   "decision": "Envoy `jwt_authn` in every profile that runs the backends. Write-route 401 and 403 become 503, so a credential mistake is a retry, not data loss."
+  },
+  {
+   "n": 8,
+   "topic": "Dashboard tenancy",
+   "decision": "One org per tenant on shared instances, in pools of 25 orgs. Single-tenant installs use plain provisioning files."
+  },
+  {
+   "n": 9,
+   "topic": "Kernel state",
+   "decision": "PostgreSQL 16+ everywhere, River for jobs, a transactional outbox, row-level security in every profile. No Kafka or Redis in the kernel."
+  },
+  {
+   "n": 10,
+   "topic": "eBPF",
+   "decision": "`beyla.ebpf` and `pyroscope.ebpf` inside Alloy. Tier A is kernel 5.10+ with BTF. Tetragon is chosen over Falco and ships with SecOps in P2."
+  },
+  {
+   "n": 11,
+   "topic": "Agent packaging",
+   "decision": "One `features` YAML. `curl | sh` on hosts. On Kubernetes, an umbrella chart over the pinned upstream k8s-monitoring chart plus an enrol Job. Windows gets metrics and event logs from P2."
+  },
+  {
+   "n": 12,
+   "topic": "Pillars",
+   "decision": "A pillar is a bundle of rows, never kernel code. MVP ships Incident, Change and Compliance with chat-ops and on-call. SecOps and FinOps in P2, Continuous Improvement and Executive Reporting in P3."
+  },
+  {
+   "n": 13,
+   "topic": "LLM access",
+   "decision": "The llm-gateway plugin owns model access and PII scrub. A stated price uses a daily USD budget; an explicit zero uses runs; an absent price is a configuration error. Per-run step, tool-call, token and time caps are enforced independently."
+  },
+  {
+   "n": 14,
+   "topic": "Executor contracts",
+   "decision": "Approval, credential leases, the change ledger, audit and PII scrub are invariants of bound plugins and their dispatchers. The kernel enforces generic bindings and holds no policy. Conformance and bypass tests prove the fences."
+  },
+  {
+   "n": 15,
+   "topic": "Estate model",
+   "decision": "One entity reference `<kind>:<id>` is fixed at S7. In P2 the estate plugin keeps a projection from its source contributions, never edited by API or chat, with a published rule table run as two recursive queries and one count, and an RDF export."
+  },
+  {
+   "n": 16,
+   "topic": "Troubleshooting method",
+   "decision": "P1: typed correlation key, priority from criticality and signal type, context pack v1, RCA contract v1. P2: cause window with a ranked change shortlist, finish gate, condition rounds, resolution record, bounded re-analysis after a failed fix."
+  },
+  {
+   "n": 17,
+   "topic": "Detection content",
+   "decision": "Plain Prometheus rule files `kubernetes-workload` and `host-basics` in P1. Every rule keeps one entity's identity labels and carries `rule_id`, `rule_pack` and `signal_type`. A shadow gate waits for its trigger."
+  },
+  {
+   "n": 18,
+   "topic": "Lab and evaluation",
+   "decision": "`lab/` stays outside every profile. P1 includes a hand-written case set, pure grader and smoke baseline on two model bindings, including an open-weight model with egress denied. P2 adds one fault engine, generated cases and a measured noise floor."
+  },
+  {
+   "n": 19,
+   "topic": "On-prem change and remediation",
+   "decision": "P1 labels package, privileged-command and unit lines as change evidence in host logs. P2 adds evidence-source contributions and `remediation-executor-gitops-pr`. No SSH or shell from the kernel or any harness."
+  }
+ ],
+ "phases": [
+  {
+   "phase": "Before the release",
+   "when": "S0 to S5",
+   "ships": "Spike and kernel; loader and launcher; the authoring path on two toy registries (manifest 1.0, per-definition versions, builder, gate, templates, attestation); the remote runtime and Python SDK in single-tenant form before the release (owner decision W5); infrastructure definitions; one-process tenancy and generations; the policy spine and the first dispatcher."
+  },
+  {
+   "phase": "First community release",
+   "when": "S6a, S7, S8a, S8b",
+   "ships": "Plugin inventory, manager and index in single-site form; the telemetry base; the first-party agent runtime, read tools and evaluation baseline; the incident loop with paging and approved Kubernetes actions; vendor-neutral definitions and the connector scenario. Optional upstream adapters are not required by shipped profiles. Exit: release 0.1.0 on `self-host-full`, `dev` and `aiops-only`."
+  },
+  {
+   "phase": "After the release",
+   "when": "S9a with S4b, S6b, S9b",
+   "ships": "Community second wave (method and estate, SecOps, FinOps, Windows agent). In parallel, what only hosted needs: generations with canary, tenant trees at scale, per-tenant remote plugin instances, the full plugin manager, the hosted runtime."
+  },
+  {
+   "phase": "Later",
+   "when": "S10, then enterprise",
+   "ships": "Remaining pillars, hosted scale and triggered items. The enterprise edition (marketplace service, billing, entitlement, publisher verification, review) is not planned yet; each item has a seam reserved in the community code."
+  }
+ ],
+ "levels": [
+  {
+   "key": "c1",
+   "prefix": "C1",
+   "label": "C1 System context",
+   "note": "People, the platform as one box, and the systems around it."
+  },
+  {
+   "key": "c2",
+   "prefix": "C2",
+   "label": "C2 Containers",
+   "note": "The runnable units inside the platform and what they talk to."
+  },
+  {
+   "key": "deploy",
+   "prefix": "D",
+   "label": "Deployment views",
+   "note": "Where the containers run in each profile."
+  },
+  {
+   "key": "c3",
+   "prefix": "C3",
+   "label": "C3 Components",
+   "note": "Inside one container at a time: kernel, agent, fleet, gateway, pillars, chat-ops, on-call, estate."
+  },
+  {
+   "key": "flow",
+   "prefix": "F",
+   "label": "Dynamic views",
+   "note": "Sequences, procedures and lifecycles: how the parts act over time."
+  },
+  {
+   "key": "c4",
+   "prefix": "C4",
+   "label": "C4 Code",
+   "note": "The plugin SDK contract."
+  },
+  {
+   "key": "plan",
+   "prefix": "R",
+   "label": "Profiles and roadmap",
+   "note": "Composition layers and the order of work."
+  }
+ ],
+ "diagrams": [
+  {
+   "id": "01-c1-context-hosted",
+   "doc": "01-c1-system-context.md",
+   "level": "c1",
+   "type": "architecture",
+   "title": "C1 System context, hosted profile",
+   "caption": "System context of the `hosted` profile, which follows S9b. Green is the main path: telemetry and signals in (H16), pages and kernel email out to the page targets (H12, with H18 and H20 on the same arrow) and on to the SRE (H13). Dashed arrows are bindings a deployment may leave out: the chat service (H2, H3, H9) and an external on-call service reached through an optional provider plugin (H14). H16 is drawn as two one-way arrows. Not drawn: `person-contributor`, `ext-artifact-registry` and `ext-plugin-index` (\u00a77), and `ext-mcp-server` with H21 (\u00a75.2). The tables in \u00a74.3 and \u00a74.4 are the full list.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "01-c1-context-aiops-only",
+   "doc": "01-c1-system-context.md",
+   "level": "c1",
+   "type": "architecture",
+   "title": "C1 System context, aiops-only profile",
+   "caption": "System context of the `aiops-only` profile. Green is the main path: alert webhooks in (A1), read-only queries out (A2), kernel email and pages out to the page targets (A7) and on to the SRE (H13). Dashed arrows are optional bindings: the chat service (A3, A5 and the SRE's chat arrow), an MCP server whose tools a data pack mounts (A9) and an external on-call service (H14). A6 is drawn as two one-way arrows, and its inbound arrow carries only change and finding signals. Not drawn: `person-exec`, whose surfaces here are the customer's own dashboards and, where enabled, chat digests (\u00a73); A4, the SRE's use of those dashboards; `person-contributor` and the plugin supply path (\u00a77). Arrows with no row in \u00a75.4 keep their \u00a74.4 definition. The tables in \u00a75.3 and \u00a75.4 are the full list.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "01-c1-context-self-host-full",
+   "doc": "01-c1-system-context.md",
+   "level": "c1",
+   "type": "architecture",
+   "title": "C1 System context, self-host-full profile",
+   "caption": "System context of the `self-host-full` profile, on which leg A of the first community release runs; `dev` has no figure of its own. Green is the main path: telemetry and signals in (H16), pages and kernel email out to the page targets (H12, with H18 and H20 on the same arrow) and on to the SRE (H13), who works the loop through dashboards and `aiopsctl` (H1). Dashed arrows are bindings the customer may leave out: the chat service (H2, H3, H9) and an external on-call service reached through an optional provider plugin (H14). `person-contributor` is drawn without arrows: its flows are E1 to E3 of \u00a77 and none touches a running install. Not drawn: `ext-artifact-registry` and `ext-plugin-index` (\u00a77), `ext-mcp-server` and H21 (\u00a75.2). `ext-cloud-apis` and H17 are absent in this profile. The table and the relationship list below are the full list.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "01-c1-plugin-supply",
+   "doc": "01-c1-system-context.md",
+   "level": "c1",
+   "type": "architecture",
+   "title": "C1 Plugin supply path, every profile",
+   "caption": "Plugin supply path, every profile: flows E1 to E7 of \u00a77.4. Green is the main path: the contributor creates a plugin or a pack from a template and checks it (E1), pushes a signed artifact (E2), the operator trusts, installs and enables (E4), and the system pulls by digest (E5). Dashed arrows are optional flows: the index pull request (E3), index resolution (E6) and, on self-host only, a distribution the operator built and signed (E7, owner decision W3 of 2026-11-11). The project repository and a pull request under `contrib/` are not drawn here; \u00a77.6 gives that path.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "01-c1-contribution-paths",
+   "doc": "01-c1-system-context.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Contribution paths: from a template to a running install",
+   "caption": "Contribution paths, every profile. A contributor scaffolds a plugin or a connector pack with `aiopsctl plugin new`, writes it and runs `aiopsctl plugin check`, which gates both paths. Green is path 2, the way back into the project: a pull request under `contrib/`, maintainer review and CI, then the release pipeline publishes the `aiops-contrib` image and signed data packs to the OCI artifact registry and lists the data packs in the plugin index. Grey from the check is path 1: the author packs, signs and pushes from their own repository (E2); the dashed arrow is the optional index pull request (E3), without which the plugin is unlisted. Both paths end the same way: the platform operator trusts, installs and enables (E4), and the install pulls by digest (E5). Index resolution (E6) and a self-built distribution (E7) are drawn in the \u00a77.2 figure, not here.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "02-control-signals",
+   "doc": "02-c2-containers.md",
+   "level": "c2",
+   "type": "architecture",
+   "title": "C2-a1 part 1: signals in, pages out",
+   "caption": "C2-a1 part 1: an alert becomes a page through the kernel roles and the built-in on-call provider, the person acks on kernel-api, and the platform-page-path route bypasses the kernel.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "02-control-investigate",
+   "doc": "02-c2-containers.md",
+   "level": "c2",
+   "type": "architecture",
+   "title": "C2-a1 part 2: investigate and act",
+   "caption": "C2-a1 part 2: a question or an approval reaches kernel-worker, where the first-party harness reads through the gateway, calls the model and reads and acts on the customer estate; chat and the app plugin are optional.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "02-optional-aiops-only",
+   "doc": "02-c2-containers.md",
+   "level": "c2",
+   "type": "architecture",
+   "title": "C2-a2: aiops-only shape and optional containers",
+   "caption": "C2-a2: the aiops-only shape, where one kernel process reads the customer's own observability systems, and the optional or later containers, among them the two optional upstream processes harness-sidecar and oncall-engine.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "02-plugin-distribution",
+   "doc": "02-c2-containers.md",
+   "level": "c2",
+   "type": "architecture",
+   "title": "C2-a3: plugin runtimes, distribution and generations",
+   "caption": "The remote path is the main path in green: a contributor packs and signs with aiopsctl and pushes to ext-artifact-registry, a platform operator installs and enables, the change enters the reload queue on kernel-worker, and the kernel dials the remote-plugin instance. Dashed arrows are the in-process path (builder, new server image, dist use) and the optional index. Hosted roles are drawn as the superset. Two owner decisions of 2026-11-11 shape the view (00 \u00a72.4): W3, a self-hoster may build and sign a distribution, and W4, hosted third parties run only as remote-plugin.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "02-data-plane",
+   "doc": "02-c2-containers.md",
+   "level": "c2",
+   "type": "architecture",
+   "title": "C2-b: data plane and agent side",
+   "caption": "The write path in green: the agent collects from the customer estate and writes through gateway, which injects X-Scope-OrgID, to the four backends. One arrow of each fan carries the label.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "02-deploy-self-host",
+   "doc": "02-c2-containers.md",
+   "level": "deploy",
+   "type": "architecture",
+   "title": "D-2 and D-3: self-host-full on one VM or one cluster",
+   "caption": "D-2 and D-3: self-host-full on one VM or one cluster, with one kernel process that reads through the gateway, and the optional upstream processes present only where the operator enables a plugin.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "02-deploy-agent",
+   "doc": "02-c2-containers.md",
+   "level": "deploy",
+   "type": "architecture",
+   "title": "D-4 to D-6: agent on a cluster, a Linux host and a Windows host",
+   "caption": "On every target the agent enrols once through the gateway, keeps one client secret and then writes only to the gateway; this one figure stands for D-4, D-5 and D-6. The sensor has no network path of its own: the privileged collector, or the host unit, tails its event file.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "03-kernel-composition-state",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel C3-a: kernel module, launcher, loader and core rows",
+   "caption": "A profile becomes running fibers through boot, loader and the rows of the role. On one process, which is every profile of the first community release, reload is the one queue and also the committer; composer (dashed) takes over the commit from S4b in profiles that run more than one process.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "03-kernel-infrastructure-providers",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel C3-a: infrastructure providers and the transaction contract",
+   "caption": "Main path: a stateful plugin opens one transaction on sql-postgres, which is the only row that talks to kernel-db for it. jobs-river, events-outbox, audit-chain and kv-postgres take the caller's Tx and join it through sqlDriver. http-server, limiter, dialer-guarded and the sidecars providers are in the table only.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "03-kernel-identity-tenancy",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel C3-b: identity, tenancy and API surfaces",
+   "caption": "Main path: a caller reaches http-server, an identity verifier names the tenant and the subject, tenant-directory checks the binding, tenant-handle mints the handle, and the handle is what sql-postgres, secrets and audit-chain read. Beside it: the other mint points, tenant-trees with one tenant tree and its bound views, and the agent path through the gateway to auth-endpoints.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "03-kernel-signal-to-incident",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel C3-c: signal to incident, investigation and notification",
+   "caption": "An alert becomes an incident, which is notified, paged and investigated through agent-runs on the default harness, harness-native. Source: diagrams/src/03-kernel-signal-to-incident.json.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "03-kernel-connector-seams",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel: where a connector pack attaches",
+   "caption": "The tool-mcp rows of a connector pack register with tools, the default harness invokes them there, and each row calls the MCP server of the customer's observability system. Source: diagrams/src/03-kernel-connector-seams.json.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "03-kernel-approval-change",
+   "doc": "03-c3-kernel.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Kernel C3-d: approval, change and verification",
+   "caption": "A decision enters through the API surface by default, becomes a decision in approval, moves the record in change-hub, and remediation applies it through the executor row with a leased credential. Source: diagrams/src/03-kernel-approval-change.json.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "03-alert-to-remediation-flow",
+   "doc": "03-c3-kernel.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Alert webhook to verified remediation",
+   "caption": "The MVP demo path in five phases, one box per step with the row that runs it, and a sixth band where the verdicts other than cleared end with a person. Source: diagrams/src/03-alert-to-remediation-flow.json.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "04-agent-pipelines",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3 agent: telemetry pipelines",
+   "caption": "Six served templates feed four writers, and every writer reaches the backends only through the gateway with its own write-scoped token. The three P2 templates (sensor events, Kubernetes audit, network devices) reuse the logs and metrics writers and are not drawn.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-identity-label-contract",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "flow",
+   "type": "dataflow",
+   "title": "Host identity from source to entity reference",
+   "caption": "Which labels each kind of sender ships and which host key form correlate builds from them. Dashed flows start in P2, when estate holds aliases.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-change-evidence-path",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "flow",
+   "type": "architecture",
+   "title": "Change evidence from source to reader",
+   "caption": "Top band, the write path and main path (solid green): journal and package manager logs, the evidence stages of the host-logs template, the logs writer, gateway, logs-store. Bottom band, the read path drawn as calls: in P1 a run of the pillar agent (harness-native by default) calls tool-logs-query, which reads through logs-query-http on the gateway Query routes; from P2 (dashed) change-hub reads through the same query row, and the Kubernetes audit file joins the stream. No harness and no kernel plugin reads the store directly.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "04-data-plane-rows",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Data-plane rows and the keys between them",
+   "caption": "Each arrow runs from the row that injects a key to the row that provides it, and the label is the key. The main path is the config-serving chain from fleet-agentapi through fleet to fleet-composer and its template contributions. Left out: limits with its renderer rows (P2), stack-provisioning, the infrastructure keys every row injects, and kernel-db, the config volume and gateway, which the figures of 3.1 and 3.2 draw.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-kernel-agent-path",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3 kernel: agent-facing path",
+   "caption": "What an agent reaches through the gateway. The solid green main path is the one every profile runs from the first community release: the Collector API calls the fleet composer on the `fleet` key, and the composer reads `kernel-db` directly. Dashed arrows are the hosted additions of S9b (client table, serve cache) and the worker side. On one process, `kernel` plays both `kernel-edge` and `kernel-worker`.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-kernel-control-path",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3 kernel: control path",
+   "caption": "The components that change what agents and the gateway receive, each named with its row. The main path runs from a key rotation to the listener the gateway loads.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-gateway-filters",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3 gateway: listeners and filter chain",
+   "caption": "The request path through the gateway: the public and internal listeners, then the JWT, revocation, scope and flood-guard filters in that order, then the router, which forwards to kernel-edge and the backend stores. Query clients are dashboard-ui and the kernel's query rows and read tools; no harness is a Query client in a default composition.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "04-enrol-first-write",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Enrolment, first config pull, first write",
+   "caption": "One Linux host goes from a bootstrap token to its first accepted metrics push in three stages: enrol and install, first config pull, first write. Every call from the host passes the gateway; replies from kernel-edge are drawn direct for brevity.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "04-limits-rendering",
+   "doc": "04-c3-agent-fleet-gateway.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Tenant limits rendering (P2)",
+   "caption": "One change to a tenant's limits as steps 1 to 10, one lane per place where a step runs, with the two failure exits in the bottom lane. The admin job and the limits job meet only through the outbox event.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "05-pillar-composition",
+   "doc": "05-c3-pillars.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "A pillar is a group row",
+   "caption": "Three core:group rows of aiops-pillars-mvp, the child rows each holds, the dispatchers of aiops-base they depend on, and the default connector pack. A solid arrow is a contribution registering with its registry, a dashed arrow is the row-level inject of a group, and the harness of a pillar is one field, not a child row.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "05-harness-topologies",
+   "doc": "05-c3-pillars.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "The harness plugin point: three ways a harness runs",
+   "caption": "Every caller dispatches through agent-runs. harness-native is the default and runs in process, a remote harness runs in a remote-plugin instance, and the optional harness-holmesgpt drives harness-sidecar. Each of them reaches a model and tools only through the two views, tools and llm-gateway.",
+   "reviewed": false,
+   "redrawn": true
+  },
+  {
+   "id": "05-signal-to-incident",
+   "doc": "05-c3-pillars.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Signal to incident: the hot path",
+   "caption": "From an alert webhook to an open incident, one page and one notice, with no LLM on the path. Paging is drawn by role: the on-call provider is whichever plugin is bound, by default on-call-provider-builtin.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "05-investigation",
+   "doc": "05-c3-pillars.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Investigation: what a harness can reach",
+   "caption": "A run on the default harness. Everything the run needs is inside the kernel process, and the kernel, not the harness, makes every read: the default stores through the gateway read routes, the customer clusters through the Kubernetes API.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "05-change-write-path",
+   "doc": "05-c3-pillars.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Apply and verify a change",
+   "caption": "One platform write in five phases. change-hub writes the ledger and asks approval; after the decision it dispatches through remediation, the only caller of an executor, which takes one credential from credential-lease for that action; two checks then give the verdict.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "05-incident-lifecycle",
+   "doc": "05-c3-pillars.md",
+   "level": "flow",
+   "type": "lifecycle",
+   "title": "Incident states",
+   "caption": "The eight incident states that casefile holds, with the main path from open to resolved and the most common exits. The table of section 5.3 is complete.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "06-slack-conversation",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3a Slack conversation path",
+   "caption": "One chat turn where the optional Slack bundle is enabled: the green path runs from the chat service through the receiver, the chat intake and the turn job to agent-runs, which runs the harness the pillar selects (harness-native by default), and back through the streamer and webapi. Without a chat surface, ask-api reaches the same Dispatch.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "06-approvals-notifications",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3b Approvals and notifications",
+   "caption": "A click only asks: the Slack approval surface turns it into a request to change-hub or a Decide on approval, and the first-party plugins own the plan, the quorum, the lease and the audit record. Only remediation calls the executor and asks for the write credential. Slack notices come from notifications with notifier-slack, which render outbox events after commit.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "06-approve-remediation",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Approve a remediation from Slack",
+   "caption": "The requester and the approver are two different people, and the approval is bound to the plan digest. change-hub re-checks the approvers at dispatch, has remediation apply with a ChangeToken, and verifies before the card says applied.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "06-oncall-components",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3c On-call components",
+   "caption": "The on-call slice of the kernel with the built-in provider: the green path runs from an alert webhook to a page at a page target, and the two purple dashed arrows are the dead-man paths. An optional external provider and its engine, commands and tool-oncall-who are not drawn.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "06-page-escalation-lifecycle",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "flow",
+   "type": "lifecycle",
+   "title": "Life of a page",
+   "caption": "The six states of one page in the built-in on-call provider. The green path is pending, sent, acked, resolved; a page stays in sent while steps and repeats advance, and ends unacknowledged after the last repeat or failed when the page job exhausts its retries. The states are this document's reading; ADR-055 fixes the model.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "06-deployment-selfhost",
+   "doc": "06-c3-chatops-oncall.md",
+   "level": "deploy",
+   "type": "architecture",
+   "title": "Deployment: self-host, one process",
+   "caption": "The first community release on self-host-full: one kernel process pages through its built-in provider to a page target, the on-call person acks at the kernel, and the purple dashed platform-page-path route does not pass through the kernel. The chat service and the engine of an external on-call provider are optional and off in a first install.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "07-sdk-value-types",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "c4",
+   "type": "architecture",
+   "title": "Types on the SDK surface",
+   "caption": "The types a plugin author touches: what is declared as data, what runs as a fiber, and the two values that cross every stateful call.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-plugin-lifecycle-host",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "c4",
+   "type": "lifecycle",
+   "title": "Fiber states and epoch",
+   "caption": "The six states of one fiber, what moves it between them, and what happens to its effects; a changed epoch restarts the fiber in place.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-registry-dispatch",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "c4",
+   "type": "architecture",
+   "title": "A definition, its dispatcher and a contribution",
+   "caption": "A registry definition with its fake and suite, the dispatcher that provides it and alone calls a contribution, and the consumer that calls the dispatcher.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-shared-value-types",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "c4",
+   "type": "architecture",
+   "title": "Value types a contribution and its dispatcher share",
+   "caption": "The entity reference, the parsed signal, the run budget and the executor read-back, and which first-party plugin sets what a contribution may not. The budget is held per pillar and kind in the tenant limits and reaches a harness in its request; an executor returns a state and change-hub chooses the verdict word (green main path).",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "07-remote-activation",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Remote activation per connection across replicas",
+   "caption": "Two replicas each dial one remote instance and get their own activation; calls and callbacks ride the proxy stream, and Deactivate from one replica ends only its own registrations.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-boot-sdk-calls",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Boot: SDK calls on each path",
+   "caption": "One server process booting a profile: boot composes and admits from manifests, mounts the loader, and each row fiber activates when what it needs is available.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-contributor-path",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "The contributor path from scaffold to an enabled row",
+   "caption": "A contributor chooses the form, scaffolds from a template, fills the stubs, records fixtures and runs one check. The plugin is then contributed back under contrib/ (green main path) or listed in an index while the author keeps the code (grey), and an operator installs and enables it. The dashed arrow is the optional smoke step.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "07-connector-pack",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "c4",
+   "type": "architecture",
+   "title": "A connector pack and the registries it feeds",
+   "caption": "One signed pack makes another observability system usable. Its tool row, a row of the instantiable first-party plugin aiops/tool-mcp, registers the allow-listed tools of the system's MCP server with tools as data, and every harness calls them through tools and names no backend (green main path). The row dials the MCP server, which reads the system through the system's own API. A signal contribution and, at P2, an evidence source are added only where the system needs code.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "07-install-distribution",
+   "doc": "07-c4-plugin-sdk.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Install and distribution for both runtimes",
+   "caption": "One signed artifact, one install command. A remote plugin or a pack with no code is locked by digest and installed with no rebuild (green main path); an in-process Go plugin that is not already in a release image goes through a self-built, signed distribution; every path ends at plugin enable.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "08-layer-precedence",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Layer precedence",
+   "caption": "Layers 0 to 4 compose the process-scope generation, layer 5 patches one tenant's scope as a tenant-scope generation, and layer 6 is read by the launcher into the killSwitches launch service and is not a patch.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "08-generation-lifecycle",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "flow",
+   "type": "lifecycle",
+   "title": "Generation states",
+   "caption": "The states of one generation in one scope, process or one tenant, as the composer moves it from a submission to committed or rolled-back, with rejected as the outcome that touches nothing.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "08-connector-packs-aiops-only",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "Connector packs in the aiops-only profile",
+   "caption": "The aiops-only profile of one self-host site with the default pack and one contributed pack: a pack feeds the registries of aiops-base, and the default harness reads only through tools.",
+   "reviewed": false,
+   "redrawn": true
+  },
+  {
+   "id": "08-install-distribution-path",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Install and distribution path",
+   "caption": "How a published plugin reaches a self-host profile: both runtimes pass the gate and trust.yaml, a remote plugin goes on by lock, bundle and a deployment unit, and an in-process Go plugin goes through a distribution the operator builds and signs.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "08-boot-failure-policy",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Boot and failure policy",
+   "caption": "One aiops process starting a composed profile in one role: boot composes and admits before any row mounts, fibers activate by availability with no boot order, and the required audit after settle decides between ready and a non-zero exit.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "08-tenant-overlay-change",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "Tenant overlay change",
+   "caption": "A tenant's overlay changing in hosted: admitted at the API before it is stored, written only by plugin-manager on the worker role, then applied as a tenant-scope generation on a canary replica before the other replicas.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "08-roadmap-steps",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "plan",
+   "type": "workflow",
+   "title": "Phases and steps",
+   "caption": "The sixteen steps in the community-first order: P0 Model core, then P1 with the agent runtime (S8a) beside the telemetry base (S7), the first community release as the exit of S8b, and the two tracks of P2 before S10.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "08-p2-method-estate-order",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "plan",
+   "type": "workflow",
+   "title": "P2 method and estate order",
+   "caption": "The eight method and estate groups of P2 by number, their two inputs and each leans-on link between them; the emphasised arrows are the lab path.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "08-licence-boundary",
+   "doc": "08-profiles-roadmap-adrs.md",
+   "level": "deploy",
+   "type": "architecture",
+   "title": "Licence boundary of the release",
+   "caption": "What our release artifacts contain, what a chart only names for the user's machine to pull, what an operator turns on, what is excluded by name, and the upstream register that the release check reads for all of it.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "09-connector-seams",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3: the method's vendor-neutral seams and connector packs",
+   "caption": "Green arrows are the smallest contributed pack: a data pack whose tool-mcp rows register tools with the tools dispatcher and read an MCP server with the customer credential. Grey arrows are the other P1 contributions and reads, and dashed arrows are P2. The default pack is drawn under its bundle name aiops-datasources and fills the same seams as a contributed pack, so no row of aiops-base names a store.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "09-estate-row-components",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3: the estate plugin and its rows (P2)",
+   "caption": "The estate plugin with its reader row and the rows they touch, from P2: the main path in green runs from the readers through metrics-query to the stores, through the writer into estate-store, and from the consumers through estate-service; the dashed arrow exists in aiops-only only.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "09-estate-sources-dataflow",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "flow",
+   "type": "dataflow",
+   "title": "Estate sources and origins (P2)",
+   "caption": "Each estate row comes from a series that one reader table queries, and the label on the source edge names its origin: declared, read or traced. The writer alone decides what an absence means; catalog, inventory, hypervisor and flow sources wait for their triggers.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "09-correlate-components",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3: the correlate plugin and its neighbours",
+   "caption": "The parts of correlate and the plugins it works with: the main path in green is canonical labels, the typed key, join or open, and the page; the dashed box is the ingest job, page-job and inv-runner run after the incident is committed, and the dashed arrow to estate-service is P2.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "09-troubleshooting-procedure",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "The troubleshooting procedure, steps 1 to 16",
+   "caption": "Kernel code does every step before the first turn and after the answer; the loop is the only step the model runs. Re-analysis goes back to the spend gate, and feedback goes back to detection and the context pack.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "09-investigation-sequence-p1",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "flow",
+   "type": "sequence",
+   "title": "P1: alert to RCA on the default harness",
+   "caption": "Thick green arrows are the main path, thin grey arrows are calls inside the loop, and dashed grey arrows are replies. Nine lifelines, no harness container and no MCP facade: from the investigate job to the stored RCA the run stays inside the kernel process, apart from the model endpoint behind llm-gateway and the telemetry reads on the gateway read routes.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "09-agent-layer-components",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "c3",
+   "type": "architecture",
+   "title": "C3: the agent layer under the method",
+   "caption": "Green arrows are the main path of a run on the default harness: a caller dispatches one task to agent-runs, which runs harness-native, whose tool calls go through the tools dispatcher to a read tool and on to a read target with a credential the kernel holds. Grey arrows are the transcript write, the run/* hooks to the method rows, the loop rows and the model view. Dashed arrows are the optional external harness, which gets the same two views. The figure draws the twelve rows of the element table; harness-external folds the in-process plugin harness-holmesgpt, tools-mcp-facade and the process harness-sidecar into one node outside the kernel container.",
+   "reviewed": true,
+   "redrawn": true
+  },
+  {
+   "id": "09-method-incident-lifecycle",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "flow",
+   "type": "lifecycle",
+   "title": "Incident lifecycle with the method's transitions",
+   "caption": "The state open is the hub: an investigation returns to it, and so does a fix that left the condition present or uncertain. Only the verdict cleared resolves an incident; failed goes back to approval with a rollback request.",
+   "reviewed": true,
+   "redrawn": false
+  },
+  {
+   "id": "09-lab-evaluation-workflow",
+   "doc": "09-c3-estate-and-troubleshooting.md",
+   "level": "flow",
+   "type": "workflow",
+   "title": "Lab and evaluation workflow",
+   "caption": "Green arrows are the main path: inject, telemetry and alerts into the platform under test, the stored answer, the grade and the result table. The first two lanes are the P1 path, the estate and platform under test and the case set with its runner and grader; the third lane is what P2 adds, the fault engine and the generated catalogue. Red dashed arrows mark the two places where information is held back: injector lines never reach the platform, and truth files reach the grader only.",
+   "reviewed": true,
+   "redrawn": true
+  }
+ ]
+}

@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Enrolment, first config pull, first write",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      1075
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "pkg",
+      "type": "external",
+      "label": "\u00a0\u00a0\u00a0Package source",
+      "sublabel": "upstream or mirror"
+    },
+    {
+      "id": "inst",
+      "type": "frontend",
+      "label": "install.sh",
+      "sublabel": "POSIX sh"
+    },
+    {
+      "id": "ag",
+      "type": "frontend",
+      "label": "\u00a0\u00a0Agent process",
+      "sublabel": "remotecfg, token clients"
+    },
+    {
+      "id": "gw",
+      "type": "security",
+      "label": "gateway",
+      "sublabel": "Envoy"
+    },
+    {
+      "id": "edge",
+      "type": "backend",
+      "label": "kernel-edge",
+      "sublabel": "auth, fleet-agentapi"
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "kernel-db",
+      "sublabel": "PostgreSQL"
+    },
+    {
+      "id": "ms",
+      "type": "database",
+      "label": "\u00a0\u00a0metrics-store",
+      "sublabel": "Mimir distributor"
+    }
+  ],
+  "segments": [
+    {
+      "from": 152,
+      "to": 436,
+      "label": "Enrol and install"
+    },
+    {
+      "from": 472,
+      "to": 848,
+      "label": "First config pull"
+    },
+    {
+      "from": 884,
+      "to": 990,
+      "label": "First write"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "inst",
+      "to": "gw",
+      "y": 190,
+      "label": "1 POST /v1/enrol",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m2",
+      "from": "gw",
+      "to": "edge",
+      "y": 236,
+      "label": "2 adds client address",
+      "variant": "default"
+    },
+    {
+      "id": "m3",
+      "from": "edge",
+      "to": "db",
+      "y": 282,
+      "label": "3 agent, client, outbox",
+      "variant": "default"
+    },
+    {
+      "id": "m4",
+      "from": "edge",
+      "to": "inst",
+      "y": 328,
+      "label": "4 id, secret, sha256",
+      "variant": "return"
+    },
+    {
+      "id": "m5",
+      "from": "inst",
+      "to": "pkg",
+      "y": 374,
+      "label": "5 fetch pinned package",
+      "variant": "default"
+    },
+    {
+      "id": "m6",
+      "from": "inst",
+      "to": "ag",
+      "y": 420,
+      "label": "6 verify, write, start",
+      "variant": "default"
+    },
+    {
+      "id": "m7",
+      "from": "ag",
+      "to": "gw",
+      "y": 510,
+      "label": "7 token, scope fleet",
+      "variant": "security"
+    },
+    {
+      "id": "m8",
+      "from": "gw",
+      "to": "edge",
+      "y": 556,
+      "label": "8 flood guard, forward",
+      "variant": "default"
+    },
+    {
+      "id": "m9",
+      "from": "edge",
+      "to": "ag",
+      "y": 602,
+      "label": "9 JWT, 15 min",
+      "variant": "return"
+    },
+    {
+      "id": "m10",
+      "from": "ag",
+      "to": "gw",
+      "y": 648,
+      "label": "10 GetConfig",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m11",
+      "from": "gw",
+      "to": "edge",
+      "y": 694,
+      "label": "11 JWT verified",
+      "variant": "security"
+    },
+    {
+      "id": "m12",
+      "from": "edge",
+      "to": "ag",
+      "y": 740,
+      "label": "12 content and hash",
+      "variant": "return"
+    },
+    {
+      "id": "m13",
+      "from": "ag",
+      "to": "gw",
+      "y": 786,
+      "label": "13 Register, APPLIED",
+      "variant": "default"
+    },
+    {
+      "id": "m14",
+      "from": "gw",
+      "to": "edge",
+      "y": 832,
+      "label": "14 always answered",
+      "variant": "default"
+    },
+    {
+      "id": "m15",
+      "from": "ag",
+      "to": "gw",
+      "y": 922,
+      "label": "15 push, Bearer JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m16",
+      "from": "gw",
+      "to": "ms",
+      "y": 968,
+      "label": "16 X-Scope-OrgID, token stripped",
+      "variant": "security"
+    }
+  ]
+}

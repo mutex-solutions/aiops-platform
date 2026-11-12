@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Life of a page",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      720,
+      630
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Page acked and closed"
+    },
+    {
+      "id": "noack",
+      "label": "No ack"
+    },
+    {
+      "id": "terminal",
+      "label": "Provider call fails"
+    }
+  ],
+  "states": [
+    {
+      "id": "pending",
+      "type": "start",
+      "label": "pending",
+      "sublabel": "page job durable",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "sent",
+      "type": "active",
+      "label": "sent, step n",
+      "sublabel": "notified, delay running",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "acked",
+      "type": "active",
+      "label": "acked",
+      "sublabel": "no further step",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "resolved",
+      "type": "success",
+      "label": "resolved",
+      "sublabel": "incident resolved",
+      "lane": "main",
+      "col": 3,
+      "step": "04"
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "failed",
+      "sublabel": "provider call failed",
+      "lane": "terminal",
+      "col": 0
+    },
+    {
+      "id": "unacknowledged",
+      "type": "waiting",
+      "label": "unacknowledged",
+      "sublabel": "last repeat passed",
+      "lane": "noack",
+      "col": 1
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t1",
+      "from": "pending",
+      "to": "sent",
+      "label": "Page accepted",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 55
+    },
+    {
+      "id": "t2",
+      "from": "sent",
+      "to": "acked",
+      "label": "Ack",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -6
+    },
+    {
+      "id": "t3",
+      "from": "acked",
+      "to": "resolved",
+      "label": "incident resolves",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 55
+    },
+    {
+      "id": "t5",
+      "from": "sent",
+      "to": "unacknowledged",
+      "label": "last repeat passes",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          248,
+          233
+        ],
+        [
+          556,
+          233
+        ]
+      ]
+    },
+    {
+      "id": "t6",
+      "from": "pending",
+      "to": "failed",
+      "label": "retries exhausted",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          16,
+          157
+        ],
+        [
+          16,
+          479
+        ]
+      ],
+      "labelSegment": 2
+    },
+    {
+      "id": "t7",
+      "from": "sent",
+      "to": "resolved",
+      "label": "Resolve",
+      "variant": "default",
+      "route": "top-channel",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "id": "t8",
+      "from": "unacknowledged",
+      "to": "resolved",
+      "label": "Resolve",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          660,
+          307
+        ],
+        [
+          660,
+          157
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Who moves a page",
+      "items": [
+        "paging writes the page row and calls Page once per incident",
+        "Each escalation step is a durable job of the built-in provider; a step job that fires twice sends once",
+        "Ack through any entry (link, API, aiopsctl, chat button) stops the pending steps"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "No ack",
+      "items": [
+        "After the last repeat of the last step the page is unacknowledged and the timeline shows it",
+        "Steps that came due while the kernel was down fire when it returns"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Status of this model",
+      "items": [
+        "A reading of the harness record; ADR-055 fixes it",
+        "No code before the owner chooses the built-in provider and LAWYER Q3 is answered"
+      ]
+    }
+  ]
+}

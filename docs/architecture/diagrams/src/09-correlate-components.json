@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C3: the correlate plugin and its neighbours",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "correlate plugin"
+        },
+        "backend": {
+          "label": "other plugin code"
+        },
+        "database": {
+          "label": "plugin schema"
+        },
+        "security": {
+          "label": "listener or cap"
+        },
+        "messagebus": {
+          "label": "River job"
+        }
+      }
+    },
+    "viewBox": [
+      1394,
+      764
+    ]
+  },
+  "components": [
+    {
+      "id": "storm",
+      "type": "security",
+      "label": "storm",
+      "sublabel": "storm-mode, first stage",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        360,
+        110
+      ]
+    },
+    {
+      "id": "priority-fn",
+      "type": "frontend",
+      "label": "priority-fn",
+      "sublabel": "raise-only, with basis",
+      "tag": "correlate",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        620,
+        110
+      ]
+    },
+    {
+      "id": "unmapped-cap",
+      "type": "security",
+      "label": "unmapped-cap",
+      "sublabel": "50 open unmapped",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        880,
+        110
+      ]
+    },
+    {
+      "id": "normaliser",
+      "type": "backend",
+      "label": "normaliser",
+      "sublabel": "signal-core, signal/normalize",
+      "size": [
+        190,
+        64
+      ],
+      "pos": [
+        50,
+        284
+      ]
+    },
+    {
+      "id": "key-ladder",
+      "type": "frontend",
+      "label": "key-ladder",
+      "sublabel": "service, entity, unmapped",
+      "tag": "correlate",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        360,
+        284
+      ]
+    },
+    {
+      "id": "key-join",
+      "type": "frontend",
+      "label": "key-join",
+      "sublabel": "refresh, join or open",
+      "tag": "correlate",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        620,
+        284
+      ]
+    },
+    {
+      "id": "casefile",
+      "type": "database",
+      "label": "casefile",
+      "sublabel": "incident, policy, timeline",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        880,
+        284
+      ]
+    },
+    {
+      "id": "page-job",
+      "type": "messagebus",
+      "label": "page-job",
+      "sublabel": "River job, calls paging",
+      "tag": "after commit",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        1190,
+        284
+      ]
+    },
+    {
+      "id": "signals",
+      "type": "database",
+      "label": "signals",
+      "sublabel": "schema signal_core, maps",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        620,
+        458
+      ]
+    },
+    {
+      "id": "estate-service",
+      "type": "backend",
+      "label": "estate-service",
+      "sublabel": "key estate, P2",
+      "tag": "P2",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        360,
+        632
+      ]
+    },
+    {
+      "id": "inv-runner",
+      "type": "messagebus",
+      "label": "inv-runner",
+      "sublabel": "casefile investigate job",
+      "tag": "after commit",
+      "size": [
+        170,
+        64
+      ],
+      "pos": [
+        880,
+        632
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ingest job",
+      "wraps": [
+        "storm",
+        "priority-fn",
+        "unmapped-cap",
+        "normaliser",
+        "key-ladder",
+        "key-join",
+        "casefile",
+        "signals"
+      ],
+      "pad": 20
+    }
+  ],
+  "connections": [
+    {
+      "id": "r1",
+      "from": "storm",
+      "to": "key-ladder",
+      "label": "first stage",
+      "labelDy": 24
+    },
+    {
+      "id": "r2",
+      "from": "normaliser",
+      "to": "key-ladder",
+      "label": "canonical labels",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r3",
+      "from": "key-ladder",
+      "to": "key-join",
+      "label": "typed key",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r4",
+      "from": "priority-fn",
+      "to": "key-join",
+      "label": "priority, basis",
+      "labelDy": 24
+    },
+    {
+      "id": "r5",
+      "from": "key-join",
+      "to": "signals",
+      "label": "Signal write",
+      "labelDy": 24
+    },
+    {
+      "id": "r6",
+      "from": "key-join",
+      "to": "casefile",
+      "label": "join or open",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r7",
+      "from": "unmapped-cap",
+      "to": "casefile",
+      "label": "overflow to digest",
+      "labelDy": 24
+    },
+    {
+      "id": "r8",
+      "from": "casefile",
+      "to": "page-job",
+      "label": "page at threshold",
+      "variant": "emphasis",
+      "labelDx": 10
+    },
+    {
+      "id": "r9",
+      "from": "casefile",
+      "to": "inv-runner",
+      "label": "run unless on-demand",
+      "labelDy": 24
+    },
+    {
+      "id": "r10",
+      "from": "key-ladder",
+      "to": "estate-service",
+      "label": "P2 alias, promotion",
+      "variant": "dashed",
+      "labelDy": 24
+    }
+  ]
+}

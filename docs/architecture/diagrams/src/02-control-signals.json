@@ -1,0 +1,299 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C2-a1 part 1: signals in, pages out",
+  "locale": "en",
+  "quality_profile": "showcase"
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   80,
+   150
+  ],
+  "cols": 4,
+  "gapX": 170,
+  "gapY": 110,
+  "cellW": 140,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "person-sre",
+   "type": "external",
+   "label": "person-sre",
+   "sublabel": "receives, acks pages",
+   "row": 0,
+   "col": 1,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "ext-page-targets",
+   "type": "external",
+   "label": "ext-page-targets",
+   "sublabel": "SMTP, webhook, chat",
+   "row": 0,
+   "col": 2,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "ext-cloud-apis",
+   "type": "external",
+   "label": "ext-cloud-apis",
+   "sublabel": "KMS",
+   "row": 0,
+   "col": 3,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "metrics-store",
+   "type": "database",
+   "label": "metrics-store",
+   "sublabel": "Mimir, Alertmanager",
+   "row": 1,
+   "col": 0,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "kernel-api",
+   "type": "backend",
+   "label": "kernel-api",
+   "sublabel": "api, signal ingest",
+   "row": 1,
+   "col": 1,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "kernel-worker",
+   "type": "backend",
+   "label": "kernel-worker",
+   "sublabel": "worker, built-in on-call",
+   "row": 1,
+   "col": 2,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "kernel-db",
+   "type": "database",
+   "label": "kernel-db",
+   "sublabel": "PostgreSQL 16+",
+   "row": 1,
+   "col": 3,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "aiopsctl",
+   "type": "frontend",
+   "label": "aiopsctl",
+   "sublabel": "Go CLI",
+   "row": 2,
+   "col": 0,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "dashboard-ui",
+   "type": "frontend",
+   "label": "dashboard-ui",
+   "sublabel": "Grafana OSS alerting",
+   "row": 2,
+   "col": 2,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "events-bus",
+   "type": "messagebus",
+   "label": "events-bus",
+   "sublabel": "NATS, optional",
+   "row": 2,
+   "col": 3,
+   "size": [
+    140,
+    64
+   ]
+  },
+  {
+   "id": "ext-customer-estate",
+   "type": "external",
+   "label": "ext-customer-estate",
+   "sublabel": "GitOps, scanners",
+   "row": 3,
+   "col": 1,
+   "size": [
+    140,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "aiops-platform",
+   "wraps": [
+    "metrics-store",
+    "kernel-api",
+    "kernel-worker",
+    "kernel-db",
+    "aiopsctl",
+    "dashboard-ui",
+    "events-bus"
+   ],
+   "pad": 36
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "metrics-store",
+   "to": "kernel-api",
+   "label": "alerts, Watchdog",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e2",
+   "from": "kernel-api",
+   "to": "kernel-worker",
+   "label": "enqueues jobs",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e3",
+   "from": "kernel-worker",
+   "to": "ext-page-targets",
+   "label": "pages",
+   "variant": "emphasis",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": -34
+  },
+  {
+   "id": "e4",
+   "from": "ext-page-targets",
+   "to": "person-sre",
+   "label": "delivers page",
+   "variant": "emphasis",
+   "fromSide": "left",
+   "toSide": "right"
+  },
+  {
+   "id": "e5",
+   "from": "person-sre",
+   "to": "kernel-api",
+   "label": "acks page",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 70
+  },
+  {
+   "id": "e6",
+   "from": "metrics-store",
+   "to": "ext-page-targets",
+   "label": "platform-page-path",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "top"
+  },
+  {
+   "id": "e7",
+   "from": "dashboard-ui",
+   "to": "kernel-api",
+   "label": "alerts, HMAC",
+   "fromSide": "left",
+   "toSide": "bottom",
+   "labelAt": [
+    600,
+    518
+   ]
+  },
+  {
+   "id": "e8",
+   "from": "ext-customer-estate",
+   "to": "kernel-api",
+   "label": "GitOps, findings",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelAt": [
+    460,
+    620
+   ]
+  },
+  {
+   "id": "e9",
+   "from": "aiopsctl",
+   "to": "kernel-api",
+   "label": "HTTPS API",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "labelAt": [
+    300,
+    518
+   ]
+  },
+  {
+   "id": "e10",
+   "from": "kernel-worker",
+   "to": "dashboard-ui",
+   "label": "provisions orgs, P2",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 60
+  },
+  {
+   "id": "e11",
+   "from": "kernel-worker",
+   "to": "kernel-db",
+   "label": "state, jobs, outbox",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e12",
+   "from": "kernel-worker",
+   "to": "ext-cloud-apis",
+   "label": "unwraps DEKs",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e13",
+   "from": "kernel-worker",
+   "to": "events-bus",
+   "label": "fan-out, optional",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left"
+  }
+ ]
+}

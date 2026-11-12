@@ -1,0 +1,296 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Types on the SDK surface",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "Author writes"
+    },
+    "backend": {
+     "label": "sdk/kernel"
+    },
+    "messagebus": {
+     "label": "Definition package"
+    },
+    "database": {
+     "label": "Crosses calls"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   120
+  ],
+  "cols": 5,
+  "gapX": 110,
+  "gapY": 110,
+  "cellW": 160,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "durable",
+   "type": "frontend",
+   "label": "Durable namespace",
+   "sublabel": "durable.Namespace",
+   "row": 0,
+   "col": 1,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "definition",
+   "type": "messagebus",
+   "label": "Definition",
+   "sublabel": "sdk/def/<name>/v<N>",
+   "row": 0,
+   "col": 3,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "keyclass",
+   "type": "backend",
+   "label": "Key class",
+   "sublabel": "two binding maps",
+   "row": 0,
+   "col": 4,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "manifest",
+   "type": "frontend",
+   "label": "plugin.yaml",
+   "sublabel": "half generated",
+   "row": 1,
+   "col": 0,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "spec",
+   "type": "frontend",
+   "label": "Spec",
+   "sublabel": "plugin.Spec[C]",
+   "row": 1,
+   "col": 1,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "dep",
+   "type": "frontend",
+   "label": "Dep",
+   "sublabel": "Need, NeedWith, Want",
+   "row": 1,
+   "col": 2,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "key",
+   "type": "backend",
+   "label": "Key",
+   "sublabel": "kernel.Key[T]",
+   "row": 1,
+   "col": 3,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "tx",
+   "type": "database",
+   "label": "Tx",
+   "sublabel": "sql.Tx",
+   "row": 1,
+   "col": 4,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "plugin",
+   "type": "backend",
+   "label": "Plugin",
+   "sublabel": "module table entry",
+   "row": 2,
+   "col": 1,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "fiber",
+   "type": "backend",
+   "label": "Fiber",
+   "sublabel": "six states, epoch",
+   "row": 2,
+   "col": 2,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "context",
+   "type": "backend",
+   "label": "Context",
+   "sublabel": "*kernel.Context",
+   "row": 2,
+   "col": 3,
+   "size": [
+    160,
+    64
+   ]
+  },
+  {
+   "id": "handle",
+   "type": "database",
+   "label": "Tenant handle",
+   "sublabel": "tenants.Handle",
+   "row": 2,
+   "col": 4,
+   "size": [
+    160,
+    64
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "spec-plugin",
+   "from": "spec",
+   "to": "plugin",
+   "label": "plugin.Define",
+   "variant": "emphasis",
+   "labelDy": 68
+  },
+  {
+   "id": "plugin-fiber",
+   "from": "plugin",
+   "to": "fiber",
+   "label": "c.Plugin mounts",
+   "variant": "emphasis"
+  },
+  {
+   "id": "fiber-context",
+   "from": "fiber",
+   "to": "context",
+   "label": "Apply receives",
+   "variant": "emphasis"
+  },
+  {
+   "id": "context-key",
+   "from": "context",
+   "to": "key",
+   "label": "Key.Of(c)",
+   "variant": "emphasis",
+   "labelDy": -42
+  },
+  {
+   "id": "key-tx",
+   "from": "key",
+   "to": "tx",
+   "label": "InTx opens",
+   "variant": "emphasis",
+   "labelDy": 12
+  },
+  {
+   "id": "tx-handle",
+   "from": "tx",
+   "to": "handle",
+   "label": "Tx.Tenant()",
+   "variant": "emphasis",
+   "labelDy": 68
+  },
+  {
+   "id": "spec-dep",
+   "from": "spec",
+   "to": "dep",
+   "label": "Inject"
+  },
+  {
+   "id": "dep-key",
+   "from": "dep",
+   "to": "key",
+   "label": "names a key"
+  },
+  {
+   "id": "spec-durable",
+   "from": "spec",
+   "to": "durable",
+   "label": "declares",
+   "labelDy": -42
+  },
+  {
+   "id": "spec-manifest",
+   "from": "spec",
+   "to": "manifest",
+   "label": "plugingen writes"
+  },
+  {
+   "id": "definition-key",
+   "from": "definition",
+   "to": "key",
+   "label": "NewKey",
+   "labelDy": 68
+  },
+  {
+   "id": "key-keyclass",
+   "from": "key",
+   "to": "keyclass",
+   "label": "checked against"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Declared as data",
+   "items": [
+    "Inject, Provides, Hooks and Durable are data, so profile render finds cycles and missing or duplicate providers before boot",
+    "plugingen writes the generated half of plugin.yaml and CI fails on a difference"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "Key classes",
+   "items": [
+    "NewKey is called only in a definition package",
+    "Provide on a provider-bound key and resolution of a consumer-bound key succeed only for a module-table entry the binding map lists",
+    "kerneltest is the only constructor with both maps off"
+   ]
+  },
+  {
+   "dot": "violet",
+   "title": "Tenant",
+   "items": [
+    "The handle travels in the call's context",
+    "EnqueueTx and EmitTx stamp the tenant from Tx.Tenant(), never from an argument"
+   ]
+  }
+ ]
+}

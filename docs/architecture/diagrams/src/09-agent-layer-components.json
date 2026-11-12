@@ -1,0 +1,303 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3: the agent layer under the method",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "backend": {
+     "label": "dispatcher"
+    },
+    "cloud": {
+     "label": "consumer"
+    },
+    "security": {
+     "label": "hook listener"
+    },
+    "frontend": {
+     "label": "contribution"
+    },
+    "database": {
+     "label": "plugin schema"
+    },
+    "external": {
+     "label": "outside the kernel"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   40,
+   70
+  ],
+  "cols": 4,
+  "gapX": 120,
+  "gapY": 100,
+  "cellW": 180,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "method-rows",
+   "type": "security",
+   "label": "method-rows",
+   "sublabel": "context-pack, rca-contract",
+   "row": 0,
+   "col": 0,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "run-store",
+   "type": "database",
+   "label": "run-store",
+   "sublabel": "schema agent_runs",
+   "row": 0,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "loop-rows",
+   "type": "security",
+   "label": "loop-rows",
+   "sublabel": "four loop listeners",
+   "row": 0,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "kernel-data-tools",
+   "type": "frontend",
+   "label": "kernel-data-tools",
+   "sublabel": "change, runbook, on-call",
+   "row": 0,
+   "col": 3,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "callers",
+   "type": "cloud",
+   "label": "callers",
+   "sublabel": "casefile, ask-api, chat",
+   "row": 1,
+   "col": 0,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "agent-runs",
+   "type": "backend",
+   "label": "agent-runs",
+   "sublabel": "dispatcher of harnesses",
+   "row": 1,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "harness-native",
+   "type": "frontend",
+   "label": "harness-native",
+   "sublabel": "default harness, agentLoop",
+   "row": 1,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "tool-dispatch",
+   "type": "backend",
+   "label": "tool-dispatch",
+   "sublabel": "dispatcher of tools",
+   "row": 1,
+   "col": 3,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "read-tools",
+   "type": "frontend",
+   "label": "read-tools",
+   "sublabel": "telemetry and Kubernetes",
+   "row": 2,
+   "col": 3,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "llm-gateway",
+   "type": "backend",
+   "label": "llm-gateway",
+   "sublabel": "only model route",
+   "row": 2,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "read-targets",
+   "type": "external",
+   "label": "read-targets",
+   "sublabel": "gateway, stores, cluster API",
+   "row": 3,
+   "col": 3,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "harness-external",
+   "type": "external",
+   "label": "harness-external",
+   "sublabel": "harness-holmesgpt, optional",
+   "row": 3,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel container",
+   "wraps": [
+    "method-rows",
+    "run-store",
+    "loop-rows",
+    "kernel-data-tools",
+    "callers",
+    "agent-runs",
+    "harness-native",
+    "tool-dispatch",
+    "read-tools",
+    "llm-gateway"
+   ],
+   "pad": 28
+  }
+ ],
+ "connections": [
+  {
+   "id": "a1",
+   "from": "callers",
+   "to": "agent-runs",
+   "label": "Dispatch task",
+   "variant": "emphasis"
+  },
+  {
+   "id": "a2",
+   "from": "agent-runs",
+   "to": "harness-native",
+   "label": "Run, by selection",
+   "variant": "emphasis"
+  },
+  {
+   "id": "a3",
+   "from": "harness-native",
+   "to": "tool-dispatch",
+   "label": "tool calls",
+   "variant": "emphasis"
+  },
+  {
+   "id": "a4",
+   "from": "tool-dispatch",
+   "to": "read-tools",
+   "label": "Invoke, audited",
+   "variant": "emphasis",
+   "labelDy": 24
+  },
+  {
+   "id": "a5",
+   "from": "read-tools",
+   "to": "read-targets",
+   "label": "kernel read credential",
+   "variant": "emphasis",
+   "labelDy": 72
+  },
+  {
+   "id": "b1",
+   "from": "agent-runs",
+   "to": "run-store",
+   "label": "every step",
+   "labelDx": 52
+  },
+  {
+   "id": "b2",
+   "from": "agent-runs",
+   "to": "method-rows",
+   "label": "run/* hooks",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "b3",
+   "from": "loop-rows",
+   "to": "harness-native",
+   "label": "tighten only",
+   "labelDy": 24
+  },
+  {
+   "id": "b4",
+   "from": "harness-native",
+   "to": "llm-gateway",
+   "label": "model requests",
+   "labelDy": 24
+  },
+  {
+   "id": "b5",
+   "from": "tool-dispatch",
+   "to": "kernel-data-tools",
+   "label": "Invoke, audited"
+  },
+  {
+   "id": "c1",
+   "from": "agent-runs",
+   "to": "harness-external",
+   "label": "Run, if selected",
+   "variant": "dashed"
+  },
+  {
+   "id": "c2",
+   "from": "harness-external",
+   "to": "llm-gateway",
+   "label": "leased model key",
+   "variant": "dashed"
+  },
+  {
+   "id": "c3",
+   "from": "harness-external",
+   "to": "tool-dispatch",
+   "label": "run's tools",
+   "variant": "dashed"
+  }
+ ]
+}

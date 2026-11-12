@@ -1,0 +1,362 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Kernel: where a connector pack attaches",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "backend": {
+     "label": "dispatcher or row"
+    },
+    "security": {
+     "label": "bound dispatcher"
+    },
+    "database": {
+     "label": "dialect row"
+    },
+    "external": {
+     "label": "outside the kernel"
+    }
+   }
+  }
+ },
+ "components": [
+  {
+   "id": "connector-pack",
+   "type": "external",
+   "label": "Connector pack",
+   "sublabel": "one signed artifact",
+   "size": [
+    150,
+    64
+   ],
+   "pos": [
+    30,
+    200
+   ]
+  },
+  {
+   "id": "agent-runs",
+   "type": "security",
+   "label": "agent-runs",
+   "sublabel": "builds run tool set",
+   "size": [
+    170,
+    64
+   ],
+   "pos": [
+    280,
+    90
+   ]
+  },
+  {
+   "id": "harness-native",
+   "type": "backend",
+   "label": "harness-native",
+   "sublabel": "default harness",
+   "size": [
+    170,
+    64
+   ],
+   "pos": [
+    532,
+    90
+   ]
+  },
+  {
+   "id": "tools",
+   "type": "security",
+   "label": "tools",
+   "sublabel": "vendor-neutral read seam",
+   "size": [
+    170,
+    64
+   ],
+   "pos": [
+    785,
+    90
+   ]
+  },
+  {
+   "id": "tool-mcp-row",
+   "type": "backend",
+   "label": "tool-mcp row",
+   "sublabel": "allow-list, tool-list digest",
+   "size": [
+    170,
+    64
+   ],
+   "pos": [
+    785,
+    200
+   ]
+  },
+  {
+   "id": "signal-core",
+   "type": "backend",
+   "label": "signal-core",
+   "sublabel": "signals registry",
+   "size": [
+    190,
+    64
+   ],
+   "pos": [
+    280,
+    310
+   ]
+  },
+  {
+   "id": "metrics-query-http",
+   "type": "database",
+   "label": "metrics-query-http",
+   "sublabel": "metricsQuery dialect contract",
+   "size": [
+    190,
+    64
+   ],
+   "pos": [
+    280,
+    420
+   ]
+  },
+  {
+   "id": "change-hub",
+   "type": "security",
+   "label": "change-hub",
+   "sublabel": "ledger, evidenceSources registry",
+   "size": [
+    190,
+    64
+   ],
+   "pos": [
+    280,
+    530
+   ]
+  },
+  {
+   "id": "estate",
+   "type": "backend",
+   "label": "estate",
+   "sublabel": "projection, from P2",
+   "size": [
+    190,
+    64
+   ],
+   "pos": [
+    280,
+    640
+   ]
+  },
+  {
+   "id": "ext-mcp-server",
+   "type": "external",
+   "label": "MCP server",
+   "sublabel": "Streamable HTTP, read tools",
+   "size": [
+    230,
+    64
+   ],
+   "pos": [
+    1110,
+    200
+   ]
+  },
+  {
+   "id": "ext-customer-observability",
+   "type": "external",
+   "label": "Customer observability system",
+   "sublabel": "stores and alert sender",
+   "size": [
+    230,
+    64
+   ],
+   "pos": [
+    1110,
+    310
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel server (aiops binary)",
+   "wraps": [
+    "tools",
+    "tool-mcp-row",
+    "agent-runs",
+    "harness-native",
+    "signal-core",
+    "metrics-query-http",
+    "change-hub",
+    "estate"
+   ],
+   "pad": 28
+  }
+ ],
+ "connections": [
+  {
+   "id": "a",
+   "from": "connector-pack",
+   "to": "tool-mcp-row",
+   "label": "inserts rows",
+   "variant": "emphasis"
+  },
+  {
+   "id": "b",
+   "from": "tool-mcp-row",
+   "to": "tools",
+   "label": "registers",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c",
+   "from": "agent-runs",
+   "to": "harness-native",
+   "label": "Run, tool set",
+   "variant": "emphasis"
+  },
+  {
+   "id": "d",
+   "from": "harness-native",
+   "to": "tools",
+   "label": "Invoke",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e",
+   "from": "tool-mcp-row",
+   "to": "ext-mcp-server",
+   "label": "MCP via dialer",
+   "variant": "emphasis",
+   "labelAt": [
+    1046,
+    220
+   ]
+  },
+  {
+   "id": "f",
+   "from": "ext-mcp-server",
+   "to": "ext-customer-observability",
+   "label": "reads",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    1258,
+    288
+   ]
+  },
+  {
+   "id": "g",
+   "from": "connector-pack",
+   "to": "signal-core",
+   "label": "signals contribution",
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     105,
+     342
+    ]
+   ],
+   "labelAt": [
+    176,
+    330
+   ]
+  },
+  {
+   "id": "h",
+   "from": "connector-pack",
+   "to": "metrics-query-http",
+   "label": "repoints by snippet",
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     105,
+     452
+    ]
+   ],
+   "labelAt": [
+    176,
+    440
+   ]
+  },
+  {
+   "id": "i",
+   "from": "ext-customer-observability",
+   "to": "signal-core",
+   "label": "alert webhooks",
+   "fromSide": "left",
+   "toSide": "right"
+  },
+  {
+   "id": "j",
+   "from": "metrics-query-http",
+   "to": "ext-customer-observability",
+   "label": "Prometheus query API",
+   "fromSide": "right",
+   "toSide": "bottom"
+  },
+  {
+   "id": "k",
+   "from": "connector-pack",
+   "to": "change-hub",
+   "label": "evidenceSources, P2",
+   "variant": "dashed",
+   "fromSide": "left",
+   "toSide": "left",
+   "via": [
+    [
+     18,
+     232
+    ],
+    [
+     18,
+     562
+    ]
+   ],
+   "labelAt": [
+    150,
+    550
+   ]
+  },
+  {
+   "id": "l",
+   "from": "connector-pack",
+   "to": "estate",
+   "label": "estateSources, P2",
+   "variant": "dashed",
+   "fromSide": "left",
+   "toSide": "left",
+   "via": [
+    [
+     6,
+     232
+    ],
+    [
+     6,
+     672
+    ]
+   ],
+   "labelAt": [
+    150,
+    660
+   ]
+  }
+ ],
+ "cards": [
+  {
+   "dot": "slate",
+   "title": "Arrows",
+   "items": [
+    "Thick green: main path",
+    "Solid grey: P1 seam",
+    "Dashed: registry from P2"
+   ]
+  }
+ ]
+}

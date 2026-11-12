@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C3 gateway: listeners and filter chain",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "agent",
+      "type": "frontend",
+      "label": "agent",
+      "sublabel": "Bearer JWT, writes",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        60,
+        110
+      ]
+    },
+    {
+      "id": "readers",
+      "type": "frontend",
+      "label": "Query clients",
+      "sublabel": "dashboard-ui, query rows, tools",
+      "size": [
+        250,
+        70
+      ],
+      "pos": [
+        60,
+        250
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "kernel-worker",
+      "sublabel": "admin-scope JWT",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        60,
+        530
+      ]
+    },
+    {
+      "id": "pub",
+      "type": "security",
+      "label": "Public listener",
+      "sublabel": "TLS, PROXY protocol",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        460,
+        110
+      ]
+    },
+    {
+      "id": "ilst",
+      "type": "security",
+      "label": "Internal listener",
+      "sublabel": "cluster only, admin routes",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        460,
+        530
+      ]
+    },
+    {
+      "id": "jwt",
+      "type": "security",
+      "label": "JWT filter",
+      "sublabel": "jwt_authn, inline JWKS",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        760,
+        110
+      ]
+    },
+    {
+      "id": "deny",
+      "type": "security",
+      "label": "Revocation filter",
+      "sublabel": "RBAC deny on jti",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        760,
+        250
+      ]
+    },
+    {
+      "id": "rbac",
+      "type": "security",
+      "label": "Scope filter",
+      "sublabel": "RBAC on JWT claims",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        760,
+        390
+      ]
+    },
+    {
+      "id": "rl",
+      "type": "security",
+      "label": "Flood guard",
+      "sublabel": "local_ratelimit",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        760,
+        530
+      ]
+    },
+    {
+      "id": "rt",
+      "type": "backend",
+      "label": "Router",
+      "sublabel": "413 entries, then forward",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        760,
+        670
+      ]
+    },
+    {
+      "id": "edge",
+      "type": "backend",
+      "label": "kernel-edge",
+      "sublabel": "enrol, token, fleet",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        1140,
+        530
+      ]
+    },
+    {
+      "id": "be",
+      "type": "database",
+      "label": "Backend stores",
+      "sublabel": "distributors, frontends, admin",
+      "size": [
+        190,
+        70
+      ],
+      "pos": [
+        1140,
+        670
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "gateway",
+      "wraps": [
+        "pub",
+        "ilst",
+        "jwt",
+        "deny",
+        "rbac",
+        "rl",
+        "rt"
+      ],
+      "pad": 16
+    }
+  ],
+  "connections": [
+    {
+      "id": "e1",
+      "from": "agent",
+      "to": "pub",
+      "label": "writes, enrol, fleet",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "readers",
+      "to": "pub",
+      "label": "Query routes"
+    },
+    {
+      "id": "e3",
+      "from": "worker",
+      "to": "ilst",
+      "label": "read-back, delete saga",
+      "variant": "dashed"
+    },
+    {
+      "id": "e4",
+      "from": "pub",
+      "to": "jwt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "ilst",
+      "to": "jwt",
+      "variant": "dashed"
+    },
+    {
+      "id": "e6",
+      "from": "jwt",
+      "to": "deny",
+      "label": "JWT payload",
+      "variant": "emphasis",
+      "labelAt": [
+        855,
+        215
+      ]
+    },
+    {
+      "id": "e7",
+      "from": "deny",
+      "to": "rbac",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e8",
+      "from": "rbac",
+      "to": "rl",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e9",
+      "from": "rl",
+      "to": "rt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e10",
+      "from": "rt",
+      "to": "edge",
+      "label": "auth, fleet routes",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e11",
+      "from": "rt",
+      "to": "be",
+      "label": "X-Scope-OrgID, token stripped",
+      "variant": "emphasis"
+    }
+  ]
+}

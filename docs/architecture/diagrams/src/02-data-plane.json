@@ -1,0 +1,336 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C2-b: data plane and agent side",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "cloud": {
+     "label": "Object storage"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   110
+  ],
+  "cols": 5,
+  "gapX": 140,
+  "gapY": 65,
+  "cellW": 130,
+  "cellH": 60
+ },
+ "components": [
+  {
+   "id": "kernel-api",
+   "type": "backend",
+   "label": "kernel-api",
+   "sublabel": "api, signal ingest",
+   "row": 0,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "kernel-edge",
+   "type": "backend",
+   "label": "kernel-edge",
+   "sublabel": "edge, fleet API",
+   "row": 1,
+   "col": 2,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "metrics-store",
+   "type": "database",
+   "label": "metrics-store",
+   "sublabel": "Mimir",
+   "row": 1,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "ingest-log",
+   "type": "messagebus",
+   "label": "ingest-log",
+   "sublabel": "Kafka, hosted only",
+   "row": 2,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "ext-customer-estate",
+   "type": "external",
+   "label": "ext-customer-estate",
+   "sublabel": "hosts, nodes, apps",
+   "row": 3,
+   "col": 0,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "agent",
+   "type": "backend",
+   "label": "agent",
+   "sublabel": "Alloy, on customer side",
+   "row": 3,
+   "col": 1,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "gateway",
+   "type": "security",
+   "label": "gateway",
+   "sublabel": "Envoy, JWT verify",
+   "row": 3,
+   "col": 2,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "traces-store",
+   "type": "database",
+   "label": "traces-store",
+   "sublabel": "Tempo",
+   "row": 3,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "object-store",
+   "type": "cloud",
+   "label": "object-store",
+   "sublabel": "S3 or SeaweedFS",
+   "row": 3,
+   "col": 4,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "sensor",
+   "type": "security",
+   "label": "sensor",
+   "sublabel": "Tetragon, P2",
+   "row": 6,
+   "col": 1,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "logs-store",
+   "type": "database",
+   "label": "logs-store",
+   "sublabel": "Loki",
+   "row": 4,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "profiles-store",
+   "type": "database",
+   "label": "profiles-store",
+   "sublabel": "Pyroscope",
+   "row": 5,
+   "col": 3,
+   "size": [
+    130,
+    60
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "aiops-platform",
+   "wraps": [
+    "kernel-api",
+    "kernel-edge",
+    "metrics-store",
+    "ingest-log",
+    "agent",
+    "gateway",
+    "traces-store",
+    "object-store",
+    "sensor",
+    "logs-store",
+    "profiles-store"
+   ],
+   "pad": 40
+  },
+  {
+   "kind": "security-group",
+   "label": "data plane",
+   "wraps": [
+    "metrics-store",
+    "ingest-log",
+    "traces-store",
+    "object-store",
+    "logs-store",
+    "profiles-store"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "ext-customer-estate",
+   "to": "agent",
+   "label": "scrape, tail, OTLP",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left",
+   "labelDx": -20
+  },
+  {
+   "id": "e2",
+   "from": "agent",
+   "to": "gateway",
+   "label": "telemetry, enrol",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e3",
+   "from": "gateway",
+   "to": "metrics-store",
+   "label": "X-Scope-OrgID",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e4",
+   "from": "gateway",
+   "to": "traces-store",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e5",
+   "from": "gateway",
+   "to": "logs-store",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e6",
+   "from": "gateway",
+   "to": "profiles-store",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e7",
+   "from": "gateway",
+   "to": "kernel-edge",
+   "label": "token, enrol, fleet",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e8",
+   "from": "sensor",
+   "to": "agent",
+   "label": "event file tail",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e9",
+   "from": "metrics-store",
+   "to": "object-store",
+   "label": "blocks",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e10",
+   "from": "traces-store",
+   "to": "object-store",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e11",
+   "from": "logs-store",
+   "to": "object-store",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e12",
+   "from": "profiles-store",
+   "to": "object-store",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e13",
+   "from": "metrics-store",
+   "to": "ingest-log",
+   "label": "WAL",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 24
+  },
+  {
+   "id": "e14",
+   "from": "traces-store",
+   "to": "ingest-log",
+   "label": "WAL",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e15",
+   "from": "metrics-store",
+   "to": "kernel-api",
+   "label": "alert webhooks",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": 48,
+   "labelDy": -35
+  }
+ ]
+}

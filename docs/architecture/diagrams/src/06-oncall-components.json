@@ -1,0 +1,328 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3c On-call components",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "backend": {
+     "label": "Plugin or part"
+    },
+    "database": {
+     "label": "State"
+    },
+    "cloud": {
+     "label": "Upstream component"
+    },
+    "external": {
+     "label": "External system"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   100,
+   120
+  ],
+  "cols": 5,
+  "gapX": 96,
+  "gapY": 120,
+  "cellW": 158,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "metrics-store",
+   "type": "cloud",
+   "label": "metrics-store",
+   "sublabel": "Mimir Alertmanager",
+   "row": 0,
+   "col": 0,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "phr",
+   "type": "external",
+   "label": "platform-health receiver",
+   "sublabel": "static email or webhook",
+   "row": 0,
+   "col": 3,
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "ing",
+   "type": "backend",
+   "label": "signal-core",
+   "sublabel": "alert webhook ingest",
+   "row": 1,
+   "col": 0,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "cor",
+   "type": "backend",
+   "label": "correlate",
+   "sublabel": "key, priority, storm",
+   "row": 1,
+   "col": 1,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "cf",
+   "type": "backend",
+   "label": "casefile",
+   "sublabel": "incident, timeline",
+   "row": 1,
+   "col": 2,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "pj",
+   "type": "backend",
+   "label": "page job",
+   "sublabel": "paging, once per incident",
+   "row": 1,
+   "col": 3,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "who",
+   "type": "database",
+   "label": "WhoIsOnCall cache",
+   "sublabel": "paging, kv, 60 s",
+   "row": 2,
+   "col": 0,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "rec",
+   "type": "backend",
+   "label": "on-call periodic jobs",
+   "sublabel": "paging: refresh, reconcile",
+   "row": 2,
+   "col": 1,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "bi",
+   "type": "backend",
+   "label": "built-in provider",
+   "sublabel": "on-call-provider-builtin",
+   "row": 2,
+   "col": 3,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "disp",
+   "type": "backend",
+   "label": "notifications",
+   "sublabel": "scrub, then Send",
+   "row": 2,
+   "col": 4,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "ack",
+   "type": "backend",
+   "label": "ack entries",
+   "sublabel": "link, API, aiopsctl, chat",
+   "row": 3,
+   "col": 3,
+   "size": [
+    158,
+    64
+   ]
+  },
+  {
+   "id": "pt",
+   "type": "external",
+   "label": "page targets",
+   "sublabel": "SMTP, webhook, SMS gateway",
+   "row": 4,
+   "col": 4,
+   "size": [
+    158,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel, on-call slice",
+   "wraps": [
+    "ing",
+    "cor",
+    "cf",
+    "pj",
+    "who",
+    "rec",
+    "bi",
+    "disp",
+    "ack"
+   ],
+   "pad": 80
+  }
+ ],
+ "connections": [
+  {
+   "id": "c1",
+   "from": "metrics-store",
+   "to": "ing",
+   "label": "alert webhook",
+   "variant": "emphasis",
+   "labelAt": [
+    179,
+    204
+   ]
+  },
+  {
+   "id": "c2",
+   "from": "ing",
+   "to": "cor",
+   "label": "ingest job",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c3",
+   "from": "cor",
+   "to": "cf",
+   "label": "open or join",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c4",
+   "from": "cf",
+   "to": "pj",
+   "label": "threshold met",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c5",
+   "from": "pj",
+   "to": "bi",
+   "label": "Page, once",
+   "variant": "emphasis",
+   "labelDy": 43
+  },
+  {
+   "id": "c6",
+   "from": "bi",
+   "to": "disp",
+   "label": "Notify, page",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c7",
+   "from": "disp",
+   "to": "pt",
+   "label": "Send to Recipient",
+   "variant": "emphasis",
+   "labelAt": [
+    1195,
+    594
+   ]
+  },
+  {
+   "id": "c8",
+   "from": "ack",
+   "to": "bi",
+   "label": "Ack",
+   "labelAt": [
+    941,
+    612
+   ]
+  },
+  {
+   "id": "c9",
+   "from": "rec",
+   "to": "bi",
+   "label": "WhoIsOnCall, Status"
+  },
+  {
+   "id": "c10",
+   "from": "rec",
+   "to": "who",
+   "label": "60 s refresh"
+  },
+  {
+   "id": "c11",
+   "from": "ing",
+   "to": "bi",
+   "label": "Watchdog Heartbeat",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "c12",
+   "from": "metrics-store",
+   "to": "phr",
+   "label": "platform-page-path",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Who calls a provider",
+   "items": [
+    "Only paging calls a provider row: the page job, the ack entries and the periodic jobs are parts of it or go through it",
+    "Readers of who is on call get the cache and never wait on a provider",
+    "The page path has no hook, and a page notification passes no gate, digest or pacing"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "Dead-man",
+   "items": [
+    "Watchdog enters signal-core every minute, opens no incident and beats the end-to-end monitor through paging",
+    "platform-page-path goes from the alert router to the platform-health receiver and never crosses the kernel",
+    "Providers never receive other alert webhooks"
+   ]
+  },
+  {
+   "dot": "slate",
+   "title": "Provider",
+   "items": [
+    "on-call-provider-builtin is first-party and runs in the kernel process: no engine and no carrier client",
+    "It is the default under working assumption W11",
+    "An external provider plugin is one more optional contribution behind paging"
+   ]
+  }
+ ]
+}

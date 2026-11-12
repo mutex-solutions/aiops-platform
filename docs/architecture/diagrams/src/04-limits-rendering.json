@@ -1,0 +1,228 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Tenant limits rendering (P2)",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "kernel step"
+        },
+        "security": {
+          "label": "gate or failure"
+        },
+        "database": {
+          "label": "backend"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "l1",
+      "label": "kernel-api"
+    },
+    {
+      "id": "l2",
+      "label": "kernel-worker"
+    },
+    {
+      "id": "l3",
+      "label": "Config volume, backend, gateway"
+    },
+    {
+      "id": "l4",
+      "label": "Refused or drifted",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "check",
+    "admin",
+    "render",
+    "guard",
+    "write",
+    "reload",
+    "readback",
+    "applied"
+  ],
+  "nodes": [
+    {
+      "id": "check",
+      "lane": "l1",
+      "col": 1,
+      "type": "backend",
+      "label": "1 Check and enqueue",
+      "sublabel": "admin-api, /v1/admin",
+      "width": 166
+    },
+    {
+      "id": "admin",
+      "lane": "l2",
+      "col": 1,
+      "type": "backend",
+      "label": "2 Admin job",
+      "sublabel": "platformSql, limits version N",
+      "width": 166
+    },
+    {
+      "id": "render",
+      "lane": "l2",
+      "col": 2,
+      "type": "backend",
+      "label": "3 Render all tenants",
+      "sublabel": "limits job, renderer rows",
+      "width": 169
+    },
+    {
+      "id": "guard",
+      "lane": "l2",
+      "col": 3,
+      "type": "security",
+      "label": "4 Blast-radius guard",
+      "sublabel": "diff against last applied",
+      "width": 169
+    },
+    {
+      "id": "refuse",
+      "lane": "l4",
+      "col": 3,
+      "type": "security",
+      "label": "5 Refuse",
+      "sublabel": "event limits.refused",
+      "width": 128
+    },
+    {
+      "id": "write",
+      "lane": "l2",
+      "col": 4,
+      "type": "backend",
+      "label": "6 Validate and write",
+      "sublabel": "precondition; traces binary check",
+      "width": 169
+    },
+    {
+      "id": "reload",
+      "lane": "l3",
+      "col": 4,
+      "type": "database",
+      "label": "7 Backend reloads",
+      "sublabel": "within 10 s",
+      "width": 150
+    },
+    {
+      "id": "readback",
+      "lane": "l3",
+      "col": 5,
+      "type": "security",
+      "label": "8 Admin read-back",
+      "sublabel": "admin-scope JWT, internal listener",
+      "width": 174
+    },
+    {
+      "id": "applied",
+      "lane": "l2",
+      "col": 5,
+      "type": "backend",
+      "label": "9 Mark applied",
+      "sublabel": "event tenant_limits.applied",
+      "width": 138
+    },
+    {
+      "id": "drift",
+      "lane": "l4",
+      "col": 5,
+      "type": "security",
+      "label": "10 Record drift",
+      "sublabel": "limits_drift, retry, backoff",
+      "width": 146
+    }
+  ],
+  "edges": [
+    {
+      "from": "check",
+      "to": "admin",
+      "label": "admin job queued",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 55,
+      "labelDy": 56
+    },
+    {
+      "from": "admin",
+      "to": "render",
+      "label": "outbox event",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "render",
+      "to": "guard",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "guard",
+      "to": "write",
+      "label": "accepted",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "guard",
+      "to": "refuse",
+      "label": "guard trips",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 39,
+      "labelDy": 87
+    },
+    {
+      "from": "write",
+      "to": "reload",
+      "label": "file replaced",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 48,
+      "labelDy": 56
+    },
+    {
+      "from": "reload",
+      "to": "readback",
+      "label": "after reload",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "readback",
+      "to": "applied",
+      "label": "matches render",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": -47,
+      "labelDy": -7
+    },
+    {
+      "from": "readback",
+      "to": "drift",
+      "label": "drift or timeout",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -51,
+      "labelDy": 70
+    }
+  ]
+}

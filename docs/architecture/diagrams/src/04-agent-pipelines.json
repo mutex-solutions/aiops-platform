@@ -1,0 +1,327 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3 agent: telemetry pipelines",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "external": {
+     "label": "host neighbour"
+    },
+    "backend": {
+     "label": "served template"
+    },
+    "messagebus": {
+     "label": "writer"
+    },
+    "security": {
+     "label": "tenant gateway"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   110
+  ],
+  "cols": 4,
+  "gapX": 150,
+  "gapY": 52,
+  "cellW": 180,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "apps",
+   "type": "external",
+   "label": "Customer applications",
+   "sublabel": "OTLP SDKs",
+   "size": [
+    180,
+    64
+   ],
+   "pos": [
+    20,
+    110
+   ]
+  },
+  {
+   "id": "otlpin",
+   "type": "backend",
+   "label": "OTLP receiver",
+   "sublabel": "otelcol.receiver.otlp, loopback",
+   "row": 0,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "ebpft",
+   "type": "backend",
+   "label": "eBPF traces child",
+   "sublabel": "beyla.ebpf child process",
+   "row": 1,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "hostm",
+   "type": "backend",
+   "label": "Host metrics",
+   "sublabel": "prometheus.exporter.unix",
+   "row": 2,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "selfmon",
+   "type": "backend",
+   "label": "Self-monitoring",
+   "sublabel": "always on, no key",
+   "row": 3,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "hostl",
+   "type": "backend",
+   "label": "Host logs",
+   "sublabel": "journal, files, evidence stages",
+   "row": 4,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "ebpfp",
+   "type": "backend",
+   "label": "eBPF profiler",
+   "sublabel": "pyroscope.ebpf, off by default",
+   "row": 5,
+   "col": 1,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "wo",
+   "type": "messagebus",
+   "label": "OTLP writer",
+   "sublabel": "otlphttp, memory queue",
+   "row": 0,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "wm",
+   "type": "messagebus",
+   "label": "Metrics writer",
+   "sublabel": "remote_write, WAL 8 h",
+   "row": 2,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "wl",
+   "type": "messagebus",
+   "label": "Logs writer",
+   "sublabel": "loki.write, memory only",
+   "row": 4,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "wp",
+   "type": "messagebus",
+   "label": "Profiles writer",
+   "sublabel": "pyroscope.write, in flight",
+   "row": 5,
+   "col": 2,
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "gw",
+   "type": "security",
+   "label": "gateway",
+   "sublabel": "Envoy, Bearer JWT",
+   "size": [
+    200,
+    120
+   ],
+   "pos": [
+    1080,
+    314
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "agent on a Tier A host",
+   "wraps": [
+    "otlpin",
+    "ebpft",
+    "hostm",
+    "selfmon",
+    "hostl",
+    "ebpfp",
+    "wo",
+    "wm",
+    "wl",
+    "wp"
+   ],
+   "pad": 48
+  }
+ ],
+ "connections": [
+  {
+   "id": "f1",
+   "from": "apps",
+   "to": "otlpin",
+   "label": "OTLP on loopback"
+  },
+  {
+   "id": "f2",
+   "from": "otlpin",
+   "to": "wo",
+   "label": ""
+  },
+  {
+   "id": "f3",
+   "from": "ebpft",
+   "to": "wo",
+   "label": "spans"
+  },
+  {
+   "id": "f4",
+   "from": "ebpft",
+   "to": "wm",
+   "label": "scraped metrics"
+  },
+  {
+   "id": "f5",
+   "from": "hostm",
+   "to": "wm",
+   "label": "",
+   "variant": "emphasis"
+  },
+  {
+   "id": "f6",
+   "from": "selfmon",
+   "to": "wm",
+   "label": "agent health",
+   "variant": "dashed"
+  },
+  {
+   "id": "f7",
+   "from": "selfmon",
+   "to": "wl",
+   "label": "",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "top"
+  },
+  {
+   "id": "f8",
+   "from": "selfmon",
+   "to": "wp",
+   "label": "",
+   "variant": "dashed",
+   "fromSide": "left",
+   "toSide": "top",
+   "via": [
+    [
+     366,
+     490
+    ],
+    [
+     366,
+     664
+    ],
+    [
+     810,
+     664
+    ]
+   ]
+  },
+  {
+   "id": "f9",
+   "from": "hostl",
+   "to": "wl",
+   "label": "logs, change evidence"
+  },
+  {
+   "id": "f10",
+   "from": "ebpfp",
+   "to": "wp",
+   "label": ""
+  },
+  {
+   "id": "f11",
+   "from": "wo",
+   "to": "gw",
+   "label": "/v1/traces, /otlp",
+   "fromSide": "right",
+   "toSide": "top",
+   "labelSegment": 0
+  },
+  {
+   "id": "f12",
+   "from": "wm",
+   "to": "gw",
+   "label": "/api/v1/push",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "f13",
+   "from": "wl",
+   "to": "gw",
+   "label": "/loki/api/v1/push",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "labelSegment": 0
+  },
+  {
+   "id": "f14",
+   "from": "wp",
+   "to": "gw",
+   "label": "PusherService/Push",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "labelSegment": 0
+  }
+ ]
+}

@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kernel C3-b: identity, tenancy and API surfaces",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "provider or row"
+        },
+        "security": {
+          "label": "identity and tenancy"
+        },
+        "database": {
+          "label": "reads the handle"
+        },
+        "external": {
+          "label": "outside the kernel"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      60,
+      110
+    ],
+    "cols": 4,
+    "gapX": 136,
+    "gapY": 80,
+    "cellW": 200,
+    "cellH": 72
+  },
+  "components": [
+    {
+      "id": "callers",
+      "type": "external",
+      "label": "Callers",
+      "sublabel": "API clients, agents",
+      "row": 1,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "external",
+      "label": "gateway",
+      "sublabel": "Envoy container",
+      "row": 3,
+      "col": 0,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "http-server",
+      "type": "backend",
+      "label": "http-server",
+      "sublabel": "routes, three listeners",
+      "row": 1,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "identity",
+      "type": "security",
+      "label": "identity",
+      "sublabel": "identities verifier rows",
+      "row": 0,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "tenant-directory",
+      "type": "security",
+      "label": "tenant-directory",
+      "sublabel": "tenants, authz bindings",
+      "row": 2,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "tenant-handle",
+      "type": "security",
+      "label": "tenant-handle",
+      "sublabel": "tenantMint, stateless",
+      "row": 1,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "other-mint-points",
+      "type": "backend",
+      "label": "Other mint points",
+      "sublabel": "jobs, events, ingest, chat",
+      "size": [
+        196,
+        64
+      ],
+      "pos": [
+        732,
+        92
+      ]
+    },
+    {
+      "id": "handle-readers",
+      "type": "database",
+      "label": "Handle readers",
+      "sublabel": "sql-postgres, secrets, audit-chain",
+      "row": 1,
+      "col": 3,
+      "size": [
+        224,
+        64
+      ]
+    },
+    {
+      "id": "tenant-trees",
+      "type": "backend",
+      "label": "tenant-trees",
+      "sublabel": "one group per tenant",
+      "row": 2,
+      "col": 2,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "tenant-tree",
+      "type": "backend",
+      "label": "A tenant tree",
+      "sublabel": "scope: tenant rows",
+      "row": 2,
+      "col": 3,
+      "size": [
+        224,
+        64
+      ]
+    },
+    {
+      "id": "auth-endpoints",
+      "type": "security",
+      "label": "auth-endpoints",
+      "sublabel": "enrol, token, JWKS",
+      "row": 3,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    },
+    {
+      "id": "gateway-renderer",
+      "type": "backend",
+      "label": "gateway-renderer",
+      "sublabel": "renders gateway config",
+      "row": 4,
+      "col": 1,
+      "size": [
+        196,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel server (aiops binary)",
+      "wraps": [
+        "http-server",
+        "identity",
+        "tenant-directory",
+        "tenant-handle",
+        "other-mint-points",
+        "handle-readers",
+        "tenant-trees",
+        "tenant-tree",
+        "auth-endpoints",
+        "gateway-renderer"
+      ],
+      "pad": 52
+    }
+  ],
+  "connections": [
+    {
+      "id": "a-request",
+      "from": "callers",
+      "to": "http-server",
+      "label": "HTTPS request",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDx": -25
+    },
+    {
+      "id": "b-verify",
+      "from": "http-server",
+      "to": "identity",
+      "label": "1 identities.Verify",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        494,
+        218
+      ]
+    },
+    {
+      "id": "c-check",
+      "from": "http-server",
+      "to": "tenant-directory",
+      "label": "2 authz.Check",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        494,
+        370
+      ]
+    },
+    {
+      "id": "d-mint",
+      "from": "http-server",
+      "to": "tenant-handle",
+      "label": "3 tenantMint.Mint",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-handle",
+      "from": "tenant-handle",
+      "to": "handle-readers",
+      "label": "handle in context",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "f-other-mint",
+      "from": "other-mint-points",
+      "to": "tenant-handle",
+      "label": "tenantMint.Mint",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        830,
+        209
+      ]
+    },
+    {
+      "id": "g-trees-mint",
+      "from": "tenant-trees",
+      "to": "tenant-handle",
+      "label": "tenantMint.Mint",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        830,
+        370
+      ]
+    },
+    {
+      "id": "h-isolate",
+      "from": "tenant-trees",
+      "to": "tenant-tree",
+      "label": "isolates, provides Bound",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "i-bound",
+      "from": "tenant-tree",
+      "to": "handle-readers",
+      "label": "seven Bound views",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        1180,
+        370
+      ]
+    },
+    {
+      "id": "j-agent",
+      "from": "callers",
+      "to": "gateway",
+      "label": "agent HTTPS",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        158,
+        446
+      ]
+    },
+    {
+      "id": "k-enrol",
+      "from": "gateway",
+      "to": "auth-endpoints",
+      "label": "enrol, token",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDx": -25
+    },
+    {
+      "id": "l-config",
+      "from": "gateway-renderer",
+      "to": "gateway",
+      "label": "rendered config",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "slate",
+      "title": "Arrows",
+      "items": [
+        "Thick green: main path",
+        "Solid grey: call",
+        "Dashed: pushed config or bound view"
+      ]
+    }
+  ]
+}

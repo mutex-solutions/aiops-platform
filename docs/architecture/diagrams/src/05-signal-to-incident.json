@@ -1,0 +1,350 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Signal to incident: the hot path",
+  "locale": "en",
+  "quality_profile": "showcase"
+ },
+ "components": [
+  {
+   "id": "metrics-store",
+   "type": "external",
+   "label": "metrics-store",
+   "sublabel": "default stack Alertmanager",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    180,
+    66
+   ]
+  },
+  {
+   "id": "ingest-guard",
+   "type": "security",
+   "label": "signal-core",
+   "sublabel": "admit, dedupe, ack",
+   "pos": [
+    172,
+    200
+   ],
+   "size": [
+    120,
+    66
+   ]
+  },
+  {
+   "id": "raw-group",
+   "type": "database",
+   "label": "Raw group",
+   "sublabel": "and ingest job",
+   "pos": [
+    412,
+    200
+   ],
+   "size": [
+    120,
+    66
+   ]
+  },
+  {
+   "id": "ingest-alert",
+   "type": "backend",
+   "label": "signal-ingest-alert-webhook",
+   "sublabel": "Parse, no I/O",
+   "pos": [
+    682,
+    200
+   ],
+   "size": [
+    210,
+    66
+   ]
+  },
+  {
+   "id": "normaliser",
+   "type": "backend",
+   "label": "Label normaliser",
+   "sublabel": "signal/normalize waterfall",
+   "pos": [
+    1002,
+    200
+   ],
+   "size": [
+    170,
+    66
+   ]
+  },
+  {
+   "id": "corr-sync",
+   "type": "backend",
+   "label": "correlate",
+   "sublabel": "key, priority, decision",
+   "pos": [
+    1002,
+    360
+   ],
+   "size": [
+    170,
+    66
+   ]
+  },
+  {
+   "id": "storm",
+   "type": "security",
+   "label": "storm-mode",
+   "sublabel": "above 500 alerts/min",
+   "pos": [
+    729,
+    360
+   ],
+   "size": [
+    180,
+    66
+   ]
+  },
+  {
+   "id": "casefile",
+   "type": "database",
+   "label": "casefile",
+   "sublabel": "incident, own transaction",
+   "pos": [
+    1002,
+    530
+   ],
+   "size": [
+    170,
+    66
+   ]
+  },
+  {
+   "id": "page-job",
+   "type": "messagebus",
+   "label": "Page job",
+   "sublabel": "paging, once per incident",
+   "pos": [
+    562,
+    530
+   ],
+   "size": [
+    190,
+    66
+   ]
+  },
+  {
+   "id": "oncall-provider",
+   "type": "backend",
+   "label": "On-call provider",
+   "sublabel": "on-call-provider-builtin, by default",
+   "pos": [
+    172,
+    530
+   ],
+   "size": [
+    220,
+    66
+   ]
+  },
+  {
+   "id": "notifications",
+   "type": "security",
+   "label": "notifications",
+   "sublabel": "scrub, notifier-* rows",
+   "pos": [
+    187,
+    690
+   ],
+   "size": [
+    190,
+    66
+   ]
+  },
+  {
+   "id": "ext-page-targets",
+   "type": "external",
+   "label": "Page targets",
+   "sublabel": "SMTP, webhook, SMS",
+   "pos": [
+    207,
+    880
+   ],
+   "size": [
+    150,
+    66
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel",
+   "wraps": [
+    "ingest-guard",
+    "raw-group",
+    "ingest-alert",
+    "normaliser",
+    "corr-sync",
+    "casefile",
+    "storm",
+    "page-job",
+    "notifications",
+    "oncall-provider"
+   ],
+   "pad": 72
+  },
+  {
+   "kind": "security-group",
+   "label": "request path, ack p99 250 ms",
+   "wraps": [
+    "ingest-guard",
+    "raw-group"
+   ],
+   "pad": 20
+  },
+  {
+   "kind": "security-group",
+   "label": "ingest job, second commit",
+   "wraps": [
+    "ingest-alert",
+    "normaliser",
+    "storm",
+    "corr-sync"
+   ],
+   "pad": 20
+  },
+  {
+   "kind": "security-group",
+   "label": "after the ingest commit",
+   "wraps": [
+    "casefile",
+    "page-job",
+    "oncall-provider"
+   ],
+   "pad": 20
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "metrics-store",
+   "to": "ingest-guard",
+   "label": "webhook, bearer token",
+   "variant": "emphasis",
+   "labelAt": [
+    90,
+    97
+   ],
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     90,
+     233
+    ]
+   ]
+  },
+  {
+   "id": "e2",
+   "from": "ingest-guard",
+   "to": "raw-group",
+   "label": "insert, then ack",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e3",
+   "from": "raw-group",
+   "to": "ingest-alert",
+   "label": "ingest job, Parse",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e4",
+   "from": "ingest-alert",
+   "to": "normaliser",
+   "label": "parsed alerts",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e5",
+   "from": "normaliser",
+   "to": "corr-sync",
+   "label": "canonical labels",
+   "variant": "emphasis",
+   "labelAt": [
+    1087,
+    313
+   ]
+  },
+  {
+   "id": "e6",
+   "from": "corr-sync",
+   "to": "storm",
+   "label": "first stage",
+   "variant": "security"
+  },
+  {
+   "id": "e7",
+   "from": "corr-sync",
+   "to": "casefile",
+   "label": "Signal rows, signal.received",
+   "variant": "emphasis",
+   "labelAt": [
+    1087,
+    478
+   ]
+  },
+  {
+   "id": "e8",
+   "from": "casefile",
+   "to": "page-job",
+   "label": "threshold met",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e9",
+   "from": "page-job",
+   "to": "oncall-provider",
+   "label": "Page, once",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e10",
+   "from": "oncall-provider",
+   "to": "notifications",
+   "label": "class page",
+   "variant": "emphasis",
+   "labelAt": [
+    282,
+    653
+   ]
+  },
+  {
+   "id": "e11",
+   "from": "notifications",
+   "to": "ext-page-targets",
+   "label": "page, incident notice",
+   "variant": "emphasis",
+   "labelAt": [
+    282,
+    828
+   ]
+  },
+  {
+   "id": "e12",
+   "from": "casefile",
+   "to": "notifications",
+   "label": "incident.opened",
+   "variant": "default",
+   "fromSide": "bottom",
+   "toSide": "right",
+   "via": [
+    [
+     1087,
+     723
+    ]
+   ]
+  }
+ ]
+}

@@ -1,0 +1,303 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Kernel C3-c: signal to incident, investigation and notification",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "backend": {
+     "label": "provider or dispatcher"
+    },
+    "security": {
+     "label": "bound dispatcher"
+    },
+    "external": {
+     "label": "outside the kernel"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   70,
+   110
+  ],
+  "cols": 5,
+  "gapX": 92,
+  "gapY": 96,
+  "cellW": 164,
+  "cellH": 70
+ },
+ "components": [
+  {
+   "id": "alert-sources",
+   "type": "external",
+   "label": "Alert sources",
+   "sublabel": "default: Alertmanager webhooks",
+   "size": [
+    164,
+    64
+   ],
+   "row": 0,
+   "col": 1
+  },
+  {
+   "id": "signal-core",
+   "type": "backend",
+   "label": "signal-core",
+   "sublabel": "signal-ingest-* rows",
+   "row": 1,
+   "col": 0,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "casefile",
+   "type": "backend",
+   "label": "casefile",
+   "sublabel": "incidents, timeline, gate",
+   "row": 1,
+   "col": 2,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "agent-runs",
+   "type": "security",
+   "label": "agent-runs",
+   "sublabel": "harnesses dispatcher, leases",
+   "row": 1,
+   "col": 3,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "harness-native",
+   "type": "backend",
+   "label": "harness-native",
+   "sublabel": "default, first-party loop",
+   "row": 1,
+   "col": 4,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "correlate",
+   "type": "backend",
+   "label": "correlate",
+   "sublabel": "key, priority, policy",
+   "row": 2,
+   "col": 0,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "paging",
+   "type": "backend",
+   "label": "paging",
+   "sublabel": "on-call-provider-builtin",
+   "row": 2,
+   "col": 1,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "notifications",
+   "type": "security",
+   "label": "notifications",
+   "sublabel": "notifier-* rows",
+   "row": 2,
+   "col": 2,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "llm-gateway",
+   "type": "security",
+   "label": "llm-gateway",
+   "sublabel": "scrub, meter, budget",
+   "row": 2,
+   "col": 3,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "tools",
+   "type": "security",
+   "label": "tools",
+   "sublabel": "tool-* read rows",
+   "row": 2,
+   "col": 4,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "ext-page-targets",
+   "type": "external",
+   "label": "Page targets",
+   "sublabel": "email, webhook, chat DM",
+   "row": 3,
+   "col": 2,
+   "size": [
+    164,
+    64
+   ]
+  },
+  {
+   "id": "bound-stores",
+   "type": "external",
+   "label": "Bound telemetry stores",
+   "sublabel": "metrics, logs, traces",
+   "row": 3,
+   "col": 4,
+   "size": [
+    164,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel server (aiops binary)",
+   "wraps": [
+    "signal-core",
+    "correlate",
+    "casefile",
+    "agent-runs",
+    "harness-native",
+    "tools",
+    "llm-gateway",
+    "notifications",
+    "paging"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "a",
+   "from": "alert-sources",
+   "to": "signal-core",
+   "label": "webhook, bearer token",
+   "variant": "emphasis",
+   "fromSide": "left",
+   "toSide": "left",
+   "via": [
+    [
+     16,
+     142
+    ],
+    [
+     16,
+     308
+    ]
+   ],
+   "labelSegment": 0
+  },
+  {
+   "id": "b",
+   "from": "signal-core",
+   "to": "correlate",
+   "label": "correlator, ingest job",
+   "labelDy": 24
+  },
+  {
+   "id": "c",
+   "from": "signal-core",
+   "to": "casefile",
+   "label": "signal.received event",
+   "variant": "emphasis",
+   "labelDy": -3
+  },
+  {
+   "id": "d",
+   "from": "casefile",
+   "to": "agent-runs",
+   "label": "investigate job",
+   "variant": "emphasis",
+   "labelDy": -3
+  },
+  {
+   "id": "e",
+   "from": "agent-runs",
+   "to": "harness-native",
+   "label": "Run",
+   "variant": "emphasis",
+   "labelDy": -3
+  },
+  {
+   "id": "f",
+   "from": "harness-native",
+   "to": "llm-gateway",
+   "label": "model view",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "g",
+   "from": "harness-native",
+   "to": "tools",
+   "label": "tool set",
+   "labelDy": 24,
+   "labelDx": 50
+  },
+  {
+   "id": "h",
+   "from": "tools",
+   "to": "bound-stores",
+   "label": "read tool",
+   "labelDy": 60
+  },
+  {
+   "id": "i",
+   "from": "casefile",
+   "to": "notifications",
+   "label": "event, notify job",
+   "labelDy": 24,
+   "labelDx": 58
+  },
+  {
+   "id": "j",
+   "from": "casefile",
+   "to": "paging",
+   "label": "event, page job",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "k",
+   "from": "paging",
+   "to": "notifications",
+   "label": "class page"
+  },
+  {
+   "id": "l",
+   "from": "notifications",
+   "to": "ext-page-targets",
+   "label": "email, webhook",
+   "labelDy": 60
+  }
+ ]
+}

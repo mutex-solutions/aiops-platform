@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Tenant overlay change",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "column_fit": "spread",
+    "viewBox": [
+      1380,
+      920
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "tenant-admin",
+      "type": "external",
+      "label": "Tenant admin"
+    },
+    {
+      "id": "admin-api",
+      "type": "backend",
+      "label": "admin-api"
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "Gate"
+    },
+    {
+      "id": "plugin-manager",
+      "type": "backend",
+      "label": "plugin-manager"
+    },
+    {
+      "id": "kernel-db",
+      "type": "database",
+      "label": "kernel-db"
+    },
+    {
+      "id": "composer",
+      "type": "backend",
+      "label": "composer"
+    },
+    {
+      "id": "canary-replica",
+      "type": "backend",
+      "label": "Canary replica"
+    },
+    {
+      "id": "other-replicas",
+      "type": "backend",
+      "label": "Other replicas"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 290,
+      "label": "Admit before store"
+    },
+    {
+      "from": 320,
+      "to": 376,
+      "label": "If denied"
+    },
+    {
+      "from": 406,
+      "to": 546,
+      "label": "If admitted: the worker role writes"
+    },
+    {
+      "from": 576,
+      "to": 674,
+      "label": "Canary"
+    },
+    {
+      "from": 704,
+      "to": 844,
+      "label": "Promote and commit"
+    }
+  ],
+  "messages": [
+    {
+      "from": "tenant-admin",
+      "to": "admin-api",
+      "y": 182,
+      "label": "submit overlay change",
+      "variant": "emphasis",
+      "note": "through the API or aiopsctl plugin enable|disable --tenant"
+    },
+    {
+      "from": "admin-api",
+      "to": "gate",
+      "y": 224,
+      "label": "admit overlay",
+      "variant": "emphasis",
+      "note": "the layer 5 limits and the config schemas of the touched rows; the same admission code that composes a profile"
+    },
+    {
+      "from": "gate",
+      "to": "admin-api",
+      "y": 266,
+      "label": "admitted or denied",
+      "variant": "return"
+    },
+    {
+      "from": "admin-api",
+      "to": "tenant-admin",
+      "y": 350,
+      "label": "refused: row, field",
+      "variant": "security",
+      "note": "never stored, so it never fails a boot"
+    },
+    {
+      "from": "admin-api",
+      "to": "plugin-manager",
+      "y": 436,
+      "label": "hand accepted change",
+      "variant": "emphasis",
+      "note": "enqueued for the worker role, the only writer"
+    },
+    {
+      "from": "plugin-manager",
+      "to": "kernel-db",
+      "y": 478,
+      "label": "write overlay, generation",
+      "variant": "emphasis",
+      "note": "tenant_directory.profile_overlay and the proposed tenant-scope generation; each state change is audited"
+    },
+    {
+      "from": "plugin-manager",
+      "to": "composer",
+      "y": 520,
+      "label": "propose generation",
+      "variant": "emphasis"
+    },
+    {
+      "from": "composer",
+      "to": "canary-replica",
+      "y": 606,
+      "label": "name canary",
+      "variant": "emphasis",
+      "note": "the replica never selects a generation itself; its reload queue applies the candidate and tenant-trees force-mounts the tenant's tree"
+    },
+    {
+      "from": "canary-replica",
+      "to": "composer",
+      "y": 648,
+      "label": "report verdict",
+      "variant": "return",
+      "note": "(replica, scope, generation, digest, verdict)"
+    },
+    {
+      "from": "composer",
+      "to": "other-replicas",
+      "y": 734,
+      "label": "promote",
+      "variant": "emphasis",
+      "note": "after a passing canary; any failed verdict rolls the scope back on every replica"
+    },
+    {
+      "from": "other-replicas",
+      "to": "composer",
+      "y": 776,
+      "label": "report verdict",
+      "variant": "return"
+    },
+    {
+      "from": "other-replicas",
+      "to": "kernel-db",
+      "y": 818,
+      "label": "composition/applied",
+      "variant": "dashed",
+      "note": "every replica writes digest, generation and report into the audit chain"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "admin-api",
+      "from": 176,
+      "to": 442,
+      "type": "backend"
+    },
+    {
+      "participant": "composer",
+      "from": 514,
+      "to": 782,
+      "type": "backend"
+    },
+    {
+      "participant": "canary-replica",
+      "from": 600,
+      "to": 654,
+      "type": "backend"
+    }
+  ]
+}

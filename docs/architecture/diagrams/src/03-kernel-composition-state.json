@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kernel C3-a: kernel module, launcher, loader and core rows",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "Go component"
+        },
+        "messagebus": {
+          "label": "reload queue"
+        },
+        "database": {
+          "label": "namespaces"
+        },
+        "external": {
+          "label": "outside the kernel"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      90,
+      56
+    ],
+    "cols": 5,
+    "gapX": 90,
+    "gapY": 104,
+    "cellW": 170,
+    "cellH": 62
+  },
+  "components": [
+    {
+      "id": "profile-inputs",
+      "type": "external",
+      "label": "Layer files",
+      "sublabel": "plus distribution manifest",
+      "size": [
+        180,
+        62
+      ],
+      "pos": [
+        20,
+        222
+      ]
+    },
+    {
+      "id": "generation-source",
+      "type": "external",
+      "label": "Generation source",
+      "sublabel": "layer files, generation object",
+      "size": [
+        180,
+        62
+      ],
+      "pos": [
+        20,
+        388
+      ]
+    },
+    {
+      "id": "sdk-kernel",
+      "type": "backend",
+      "label": "sdk/kernel",
+      "sublabel": "context tree, fibers, hooks",
+      "row": 0,
+      "col": 1,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "readiness",
+      "type": "backend",
+      "label": "readiness",
+      "sublabel": "readiness latch",
+      "row": 0,
+      "col": 3,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "boot",
+      "type": "backend",
+      "label": "boot",
+      "sublabel": "launcher, admission gate",
+      "row": 1,
+      "col": 1,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "loader",
+      "type": "backend",
+      "label": "loader",
+      "sublabel": "one fiber per row",
+      "row": 1,
+      "col": 2,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "role-rows",
+      "type": "backend",
+      "label": "Rows of role",
+      "sublabel": "fibers, no boot order",
+      "row": 1,
+      "col": 3,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "restart-policy",
+      "type": "backend",
+      "label": "restart-policy",
+      "sublabel": "retries FAILED fibers",
+      "row": 1,
+      "col": 4,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "reload",
+      "type": "messagebus",
+      "label": "reload",
+      "sublabel": "one queue, committer",
+      "row": 2,
+      "col": 2,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "plugin-manager",
+      "type": "backend",
+      "label": "plugin-manager",
+      "sublabel": "install, enable, purge",
+      "row": 2,
+      "col": 3,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "composer",
+      "type": "backend",
+      "label": "composer",
+      "sublabel": "from S4b, multi-process",
+      "row": 3,
+      "col": 2,
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "durable",
+      "type": "database",
+      "label": "durable",
+      "sublabel": "namespaces, migrations, purge",
+      "row": 3,
+      "col": 3,
+      "size": [
+        170,
+        62
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel server (aiops binary)",
+      "wraps": [
+        "boot",
+        "sdk-kernel",
+        "loader",
+        "role-rows",
+        "restart-policy",
+        "reload",
+        "readiness",
+        "composer",
+        "plugin-manager",
+        "durable"
+      ],
+      "pad": 32
+    }
+  ],
+  "connections": [
+    {
+      "id": "a",
+      "from": "profile-inputs",
+      "to": "boot",
+      "label": "read before mount",
+      "variant": "emphasis",
+      "labelDx": -8
+    },
+    {
+      "id": "b",
+      "from": "boot",
+      "to": "loader",
+      "label": "prepare, mount",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c",
+      "from": "loader",
+      "to": "role-rows",
+      "label": "one fiber each",
+      "variant": "emphasis"
+    },
+    {
+      "id": "d",
+      "from": "boot",
+      "to": "sdk-kernel",
+      "label": "constructs root"
+    },
+    {
+      "id": "e",
+      "from": "generation-source",
+      "to": "boot",
+      "label": "committed generation",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": -30
+    },
+    {
+      "id": "f",
+      "from": "reload",
+      "to": "loader",
+      "label": "one kernel.Batch"
+    },
+    {
+      "id": "g",
+      "from": "plugin-manager",
+      "to": "reload",
+      "label": "Submit(op)"
+    },
+    {
+      "id": "m",
+      "from": "reload",
+      "to": "generation-source",
+      "label": "commits or restores"
+    },
+    {
+      "id": "k",
+      "from": "restart-policy",
+      "to": "role-rows",
+      "label": "Fiber.Update"
+    },
+    {
+      "id": "l",
+      "from": "readiness",
+      "to": "role-rows",
+      "label": "required set ACTIVE",
+      "labelAt": [
+        955,
+        170
+      ]
+    },
+    {
+      "id": "n",
+      "from": "plugin-manager",
+      "to": "durable",
+      "label": "durablePurge",
+      "labelAt": [
+        955,
+        502
+      ]
+    },
+    {
+      "id": "h",
+      "from": "reload",
+      "to": "composer",
+      "label": "verdict, from S4b",
+      "variant": "dashed",
+      "labelAt": [
+        695,
+        502
+      ]
+    },
+    {
+      "id": "i",
+      "from": "composer",
+      "to": "generation-source",
+      "label": "names generation",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "bottom"
+    },
+    {
+      "id": "j",
+      "from": "composer",
+      "to": "durable",
+      "label": "durable key",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Arrows",
+      "items": [
+        "Thick green: main path",
+        "Solid grey: first community release",
+        "Dashed: from S4b"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,274 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Install and distribution path",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "external": {
+     "label": "outside the site or its operator"
+    },
+    "backend": {
+     "label": "ours"
+    },
+    "security": {
+     "label": "admission"
+    },
+    "database": {
+     "label": "files on disk"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "publish",
+   "label": "Publish"
+  },
+  {
+   "id": "install",
+   "label": "Install and enable, both runtimes"
+  },
+  {
+   "id": "inproc",
+   "label": "In-process Go only: build a distribution"
+  },
+  {
+   "id": "remote",
+   "label": "Remote only: run the instance"
+  }
+ ],
+ "mainPath": [
+  "plugin-author",
+  "ext-artifact-registry",
+  "aiopsctl",
+  "gate",
+  "profile-files",
+  "server-process",
+  "remote-plugin"
+ ],
+ "nodes": [
+  {
+   "id": "plugin-author",
+   "lane": "publish",
+   "col": 0,
+   "width": 146,
+   "type": "external",
+   "label": "Plugin author",
+   "sublabel": "person-contributor"
+  },
+  {
+   "id": "ext-artifact-registry",
+   "lane": "publish",
+   "col": 2,
+   "width": 182,
+   "type": "external",
+   "label": "ext-artifact-registry",
+   "sublabel": "signed OCI artifact"
+  },
+  {
+   "id": "ext-plugin-index",
+   "lane": "install",
+   "col": 0,
+   "width": 160,
+   "type": "external",
+   "label": "ext-plugin-index",
+   "sublabel": "optional, signed discovery"
+  },
+  {
+   "id": "aiopsctl",
+   "lane": "install",
+   "col": 2,
+   "width": 146,
+   "type": "backend",
+   "label": "aiopsctl",
+   "sublabel": "inspect, install, enable"
+  },
+  {
+   "id": "gate",
+   "lane": "install",
+   "col": 3,
+   "width": 150,
+   "type": "security",
+   "label": "Gate, trust.yaml",
+   "sublabel": "ten checks, no code"
+  },
+  {
+   "id": "profile-files",
+   "lane": "install",
+   "col": 4,
+   "width": 168,
+   "type": "database",
+   "label": "Profile files",
+   "sublabel": "plugins.lock, bundle appended"
+  },
+  {
+   "id": "server-process",
+   "lane": "install",
+   "col": 5,
+   "width": 136,
+   "type": "backend",
+   "label": "Server process",
+   "sublabel": "composes new generation"
+  },
+  {
+   "id": "builder",
+   "lane": "inproc",
+   "col": 3,
+   "width": 112,
+   "type": "backend",
+   "label": "builder",
+   "sublabel": "from dist.yaml"
+  },
+  {
+   "id": "distribution-image",
+   "lane": "inproc",
+   "col": 4,
+   "width": 162,
+   "type": "backend",
+   "label": "Distribution image",
+   "sublabel": "module table, signed manifest"
+  },
+  {
+   "id": "orchestrator",
+   "lane": "remote",
+   "col": 4,
+   "width": 196,
+   "type": "external",
+   "label": "Operator's orchestrator",
+   "sublabel": "compose, systemd, Helm"
+  },
+  {
+   "id": "remote-plugin",
+   "lane": "remote",
+   "col": 5,
+   "width": 190,
+   "type": "backend",
+   "label": "Remote plugin instance",
+   "sublabel": "plugin's own image"
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-push",
+   "from": "plugin-author",
+   "to": "ext-artifact-registry",
+   "label": "push",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-pull",
+   "from": "ext-artifact-registry",
+   "to": "aiopsctl",
+   "label": "pull by digest",
+   "role": "main",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "route": "straight",
+   "labelAt": [
+    416,
+    202
+   ]
+  },
+  {
+   "id": "e-resolve",
+   "from": "ext-plugin-index",
+   "to": "aiopsctl",
+   "label": "resolve spec",
+   "role": "async",
+   "fromSide": "right",
+   "toSide": "left",
+   "route": "straight",
+   "variant": "dashed"
+  },
+  {
+   "id": "e-checks",
+   "from": "aiopsctl",
+   "to": "gate",
+   "label": "ten checks",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-lock",
+   "from": "gate",
+   "to": "profile-files",
+   "label": "lock, bundle, unit",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-enable",
+   "from": "profile-files",
+   "to": "server-process",
+   "label": "enable: one generation",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-dial",
+   "from": "server-process",
+   "to": "remote-plugin",
+   "label": "dial, handshake",
+   "role": "main",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "route": "straight",
+   "labelAt": [
+    1071,
+    364
+   ]
+  },
+  {
+   "id": "e-start",
+   "from": "orchestrator",
+   "to": "remote-plugin",
+   "label": "start unit",
+   "role": "branch"
+  },
+  {
+   "id": "e-rebuild",
+   "from": "gate",
+   "to": "builder",
+   "label": "rebuild-required",
+   "role": "branch",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "route": "straight",
+   "labelAt": [
+    634,
+    315
+   ]
+  },
+  {
+   "id": "e-build",
+   "from": "builder",
+   "to": "distribution-image",
+   "label": "build, sign",
+   "role": "branch",
+   "fromSide": "right",
+   "toSide": "left",
+   "route": "straight"
+  },
+  {
+   "id": "e-use",
+   "from": "distribution-image",
+   "to": "profile-files",
+   "label": "dist use, reinstall",
+   "role": "branch",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "route": "straight",
+   "labelAt": [
+    905,
+    315
+   ]
+  }
+ ]
+}

@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "P1: alert to RCA on the default harness",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "column_fit": "spread",
+    "legend": {
+      "mode": "hidden"
+    },
+    "viewBox": [
+      1360,
+      900
+    ]
+  },
+  "participants": [
+    {
+      "id": "metrics-store",
+      "type": "database",
+      "label": "  metrics-store"
+    },
+    {
+      "id": "ingest-alert",
+      "type": "backend",
+      "label": "  ingest-alert"
+    },
+    {
+      "id": "casefile",
+      "type": "database",
+      "label": "  casefile"
+    },
+    {
+      "id": "inv-runner",
+      "type": "backend",
+      "label": "  inv-runner"
+    },
+    {
+      "id": "agent-runs",
+      "type": "backend",
+      "label": "  agent-runs"
+    },
+    {
+      "id": "harness-native",
+      "type": "frontend",
+      "label": "   harness-native"
+    },
+    {
+      "id": "tool-dispatch",
+      "type": "security",
+      "label": "  tool-dispatch"
+    },
+    {
+      "id": "gateway",
+      "type": "external",
+      "label": "  gateway"
+    },
+    {
+      "id": "llm-gateway",
+      "type": "security",
+      "label": "  llm-gateway"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 290,
+      "label": "Ingest"
+    },
+    {
+      "from": 326,
+      "to": 466,
+      "label": "Before"
+    },
+    {
+      "from": 502,
+      "to": 684,
+      "label": "Loop"
+    },
+    {
+      "from": 720,
+      "to": 818,
+      "label": "After"
+    }
+  ],
+  "messages": [
+    {
+      "from": "metrics-store",
+      "to": "ingest-alert",
+      "y": 182,
+      "label": "alert webhook",
+      "variant": "emphasis",
+      "note": "tenant bearer token"
+    },
+    {
+      "from": "ingest-alert",
+      "to": "metrics-store",
+      "y": 224,
+      "label": "ack",
+      "variant": "return",
+      "note": "after one durable insert"
+    },
+    {
+      "from": "ingest-alert",
+      "to": "casefile",
+      "y": 266,
+      "label": "correlate, open incident",
+      "variant": "emphasis",
+      "note": "ingest job: key, priority, join or open"
+    },
+    {
+      "from": "casefile",
+      "to": "inv-runner",
+      "y": 358,
+      "label": "investigate job",
+      "variant": "emphasis",
+      "note": "kill switch, then incident/investigate gate"
+    },
+    {
+      "from": "inv-runner",
+      "to": "agent-runs",
+      "y": 400,
+      "label": "Dispatch task",
+      "variant": "emphasis",
+      "note": "harness selected, leases taken, run row"
+    },
+    {
+      "from": "agent-runs",
+      "to": "harness-native",
+      "y": 442,
+      "label": "Run, first message",
+      "variant": "emphasis",
+      "note": "context pack v1, RCA schema, tool set"
+    },
+    {
+      "from": "harness-native",
+      "to": "llm-gateway",
+      "y": 534,
+      "label": "model request",
+      "variant": "default",
+      "note": "scrubbed, metered, capped"
+    },
+    {
+      "from": "harness-native",
+      "to": "tool-dispatch",
+      "y": 576,
+      "label": "tool call",
+      "variant": "default",
+      "note": "validated, inside the run's tool set"
+    },
+    {
+      "from": "tool-dispatch",
+      "to": "gateway",
+      "y": 618,
+      "label": "telemetry reads",
+      "variant": "default",
+      "note": "kernel service token"
+    },
+    {
+      "from": "harness-native",
+      "to": "agent-runs",
+      "y": 660,
+      "label": "steps, then Answer",
+      "variant": "return",
+      "note": "each step a run_step row"
+    },
+    {
+      "from": "agent-runs",
+      "to": "inv-runner",
+      "y": 752,
+      "label": "checked answer",
+      "variant": "emphasis",
+      "note": "run/answer: references and flags by code"
+    },
+    {
+      "from": "inv-runner",
+      "to": "casefile",
+      "y": 794,
+      "label": "stores RCA",
+      "variant": "emphasis",
+      "note": "or the code-built digest"
+    }
+  ]
+}

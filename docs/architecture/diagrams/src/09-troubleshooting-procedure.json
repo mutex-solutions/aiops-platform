@@ -1,0 +1,321 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "The troubleshooting procedure, steps 1 to 16",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "external": {
+          "label": "ruler"
+        },
+        "backend": {
+          "label": "kernel code"
+        },
+        "cloud": {
+          "label": "model"
+        },
+        "frontend": {
+          "label": "person"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "before",
+      "label": "Before the first turn"
+    },
+    {
+      "id": "during",
+      "label": "During"
+    },
+    {
+      "id": "after",
+      "label": "After the answer"
+    },
+    {
+      "id": "feeds",
+      "label": "Feeds back"
+    }
+  ],
+  "mainPath": [
+    "detect",
+    "intake",
+    "spend-gate",
+    "candidates",
+    "context-pack",
+    "loop",
+    "answer-contract"
+  ],
+  "nodes": [
+    {
+      "id": "detect",
+      "lane": "before",
+      "col": 0,
+      "type": "external",
+      "label": "1 Detect",
+      "sublabel": "shipped rule fires",
+      "width": 110,
+      "height": 52
+    },
+    {
+      "id": "intake",
+      "lane": "before",
+      "col": 1,
+      "type": "backend",
+      "label": "2 Intake",
+      "sublabel": "key, priority, page",
+      "width": 110,
+      "height": 52
+    },
+    {
+      "id": "spend-gate",
+      "lane": "before",
+      "col": 2,
+      "type": "backend",
+      "label": "4 Spend gate",
+      "sublabel": "slot, budget, policy",
+      "width": 124,
+      "height": 52
+    },
+    {
+      "id": "candidates",
+      "lane": "before",
+      "col": 3,
+      "type": "backend",
+      "label": "6 Candidates",
+      "sublabel": "by target reference",
+      "width": 124,
+      "height": 52
+    },
+    {
+      "id": "context-pack",
+      "lane": "before",
+      "col": 4,
+      "type": "backend",
+      "label": "7 Context pack",
+      "sublabel": "first message",
+      "width": 138,
+      "height": 52
+    },
+    {
+      "id": "loop",
+      "lane": "during",
+      "col": 5,
+      "type": "cloud",
+      "label": "8 Loop",
+      "sublabel": "read-only tools",
+      "width": 160,
+      "height": 52
+    },
+    {
+      "id": "answer-contract",
+      "lane": "after",
+      "col": 5,
+      "type": "backend",
+      "label": "9 Answer contract",
+      "sublabel": "parse, ref, flags",
+      "width": 160,
+      "height": 52
+    },
+    {
+      "id": "decide",
+      "lane": "after",
+      "col": 4,
+      "type": "frontend",
+      "label": "12 Decide",
+      "sublabel": "typed action buttons",
+      "width": 116,
+      "height": 52
+    },
+    {
+      "id": "verify",
+      "lane": "after",
+      "col": 3,
+      "type": "backend",
+      "label": "13 Verify",
+      "sublabel": "2 checks, 4 verdicts",
+      "width": 116,
+      "height": 52
+    },
+    {
+      "id": "record",
+      "lane": "after",
+      "col": 2,
+      "type": "backend",
+      "label": "14 Record",
+      "sublabel": "graded resolution, P2",
+      "width": 120,
+      "height": 52
+    },
+    {
+      "id": "re-analyse",
+      "lane": "after",
+      "col": 1,
+      "type": "backend",
+      "label": "15 Re-analyse",
+      "sublabel": "uncovered, failed fix",
+      "width": 130,
+      "height": 52
+    },
+    {
+      "id": "feed-back",
+      "lane": "feeds",
+      "col": 1,
+      "type": "backend",
+      "label": "16 Feed back",
+      "sublabel": "known issues, backlog, P2",
+      "width": 130,
+      "height": 52
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "detect",
+      "to": "intake",
+      "label": "alert webhook",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e2",
+      "from": "intake",
+      "to": "spend-gate",
+      "label": "+ tag (P2)",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e3",
+      "from": "spend-gate",
+      "to": "candidates",
+      "label": "+ evidence (P2)",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e4",
+      "from": "candidates",
+      "to": "context-pack",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e5",
+      "from": "context-pack",
+      "to": "loop",
+      "label": "first message",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "e6",
+      "from": "loop",
+      "to": "answer-contract",
+      "label": "one answer",
+      "variant": "emphasis",
+      "role": "main",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelAt": [
+        1060,
+        289
+      ]
+    },
+    {
+      "id": "e7",
+      "from": "answer-contract",
+      "to": "decide",
+      "label": "+ finish gate (P2)",
+      "variant": "emphasis",
+      "role": "branch",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "e8",
+      "from": "decide",
+      "to": "verify",
+      "label": "applied",
+      "variant": "emphasis",
+      "role": "branch",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "e9",
+      "from": "verify",
+      "to": "record",
+      "label": "verdict",
+      "variant": "emphasis",
+      "role": "branch",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "e10",
+      "from": "record",
+      "to": "re-analyse",
+      "variant": "emphasis",
+      "role": "branch",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "e11",
+      "from": "re-analyse",
+      "to": "feed-back",
+      "variant": "emphasis",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "e12",
+      "from": "re-analyse",
+      "to": "spend-gate",
+      "label": "investigate again",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e13",
+      "from": "feed-back",
+      "to": "detect",
+      "label": "rule backlog",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "labelDy": -16
+    },
+    {
+      "id": "e14",
+      "from": "feed-back",
+      "to": "context-pack",
+      "label": "known issues, playbooks",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right"
+    }
+  ]
+}

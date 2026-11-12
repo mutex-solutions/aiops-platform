@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Incident lifecycle with the method's transitions",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      860,
+      632
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Incident states"
+    },
+    {
+      "id": "waiting",
+      "label": "Close"
+    },
+    {
+      "id": "terminal",
+      "label": "Reopen (P2)"
+    }
+  ],
+  "states": [
+    {
+      "id": "investigating",
+      "type": "active",
+      "label": "investigating",
+      "sublabel": "run holds a slot",
+      "lane": "main",
+      "col": 0,
+      "width": 118
+    },
+    {
+      "id": "open",
+      "type": "start",
+      "label": "open",
+      "sublabel": "new key opens it",
+      "lane": "main",
+      "col": 1,
+      "width": 100,
+      "tag": "pages at threshold"
+    },
+    {
+      "id": "awaiting_approval",
+      "type": "waiting",
+      "label": "awaiting_approval",
+      "sublabel": "typed action requested",
+      "lane": "main",
+      "col": 2,
+      "width": 140
+    },
+    {
+      "id": "remediating",
+      "type": "active",
+      "label": "remediating",
+      "sublabel": "executor applies",
+      "lane": "main",
+      "col": 3,
+      "width": 104
+    },
+    {
+      "id": "verifying",
+      "type": "decision",
+      "label": "verifying",
+      "sublabel": "two zero-cost checks",
+      "lane": "main",
+      "col": 4,
+      "width": 110
+    },
+    {
+      "id": "resolved",
+      "type": "success",
+      "label": "resolved",
+      "sublabel": "terminal",
+      "lane": "waiting",
+      "col": 2,
+      "width": 100
+    },
+    {
+      "id": "reopened-incident",
+      "type": "external",
+      "label": "open (new incident)",
+      "sublabel": "linked, tagged reopened",
+      "lane": "terminal",
+      "col": 2,
+      "width": 156,
+      "tag": "P2"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t-lease",
+      "from": "open",
+      "to": "investigating",
+      "label": "slot lease taken",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "route": "bottom-channel",
+      "channelY": 222,
+      "labelAt": [
+        148,
+        222
+      ]
+    },
+    {
+      "id": "t-rca",
+      "from": "investigating",
+      "to": "open",
+      "label": "RCA or digest",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        176,
+        202
+      ]
+    },
+    {
+      "id": "t-request",
+      "from": "open",
+      "to": "awaiting_approval",
+      "label": "action requested",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        325,
+        202
+      ]
+    },
+    {
+      "id": "t-approved",
+      "from": "awaiting_approval",
+      "to": "remediating",
+      "label": "approved, quorum holds",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        479,
+        202
+      ]
+    },
+    {
+      "id": "t-receipt",
+      "from": "remediating",
+      "to": "verifying",
+      "label": "receipt",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        633,
+        202
+      ]
+    },
+    {
+      "id": "t-cleared",
+      "from": "verifying",
+      "to": "resolved",
+      "label": "cleared",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        710,
+        233
+      ]
+    },
+    {
+      "id": "t-still",
+      "from": "verifying",
+      "to": "open",
+      "label": "still_present, uncertain",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelAt": [
+        479,
+        70
+      ],
+      "via": [
+        [
+          800,
+          157
+        ],
+        [
+          800,
+          70
+        ],
+        [
+          248,
+          70
+        ]
+      ]
+    },
+    {
+      "id": "t-failed",
+      "from": "verifying",
+      "to": "awaiting_approval",
+      "label": "failed, rollback request",
+      "variant": "default",
+      "fromSide": "top",
+      "toSide": "top",
+      "route": "top-channel",
+      "channelY": 96,
+      "labelAt": [
+        556,
+        96
+      ]
+    },
+    {
+      "id": "t-reopen",
+      "from": "resolved",
+      "to": "reopened-incident",
+      "label": "re-fire in window",
+      "variant": "dashed",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        710,
+        393
+      ]
+    }
+  ]
+}

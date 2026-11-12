@@ -1,0 +1,293 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "The contributor path from scaffold to an enabled row",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "contributor's work"
+        },
+        "backend": {
+          "label": "aiopsctl command"
+        },
+        "messagebus": {
+          "label": "pull request"
+        },
+        "external": {
+          "label": "operator's site"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "local",
+      "label": "Write and check: the SDK and aiopsctl, no kernel checkout"
+    },
+    {
+      "id": "share",
+      "label": "Publish and contribute back"
+    },
+    {
+      "id": "site",
+      "label": "Or list it and keep the code; an operator installs either"
+    }
+  ],
+  "mainPath": [
+    "Fit",
+    "Scaffold",
+    "Write",
+    "Record",
+    "Check",
+    "Publish",
+    "ContribPR",
+    "Use"
+  ],
+  "nodes": [
+    {
+      "id": "Fit",
+      "lane": "local",
+      "col": 0,
+      "type": "frontend",
+      "label": "Choose the form",
+      "sublabel": "pack or contribution",
+      "width": 140,
+      "height": 64
+    },
+    {
+      "id": "Scaffold",
+      "lane": "local",
+      "col": 1,
+      "type": "backend",
+      "label": "plugin new",
+      "sublabel": "from a template",
+      "width": 104,
+      "height": 64
+    },
+    {
+      "id": "Write",
+      "lane": "local",
+      "col": 2,
+      "type": "frontend",
+      "label": "Fill the stubs",
+      "sublabel": "rows, content, code",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "Record",
+      "lane": "local",
+      "col": 3,
+      "type": "frontend",
+      "label": "Record fixtures",
+      "sublabel": "own backend, scrubbed",
+      "width": 140,
+      "height": 64
+    },
+    {
+      "id": "Check",
+      "lane": "local",
+      "col": 4,
+      "type": "backend",
+      "label": "plugin check",
+      "sublabel": "before a pull request",
+      "width": 156,
+      "height": 64
+    },
+    {
+      "id": "Smoke",
+      "lane": "local",
+      "col": 5,
+      "type": "backend",
+      "label": "plugin smoke",
+      "sublabel": "needs container runtime",
+      "width": 172,
+      "height": 64
+    },
+    {
+      "id": "Publish",
+      "lane": "share",
+      "col": 4,
+      "type": "backend",
+      "label": "Publish",
+      "sublabel": "pack, sign, push",
+      "width": 156,
+      "height": 64
+    },
+    {
+      "id": "ContribPR",
+      "lane": "share",
+      "col": 5,
+      "type": "messagebus",
+      "label": "Contrib pull request",
+      "sublabel": "adds contrib/<name>/",
+      "width": 172,
+      "height": 64
+    },
+    {
+      "id": "IndexPR",
+      "lane": "site",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Index pull request",
+      "sublabel": "project or other index",
+      "width": 156,
+      "height": 64
+    },
+    {
+      "id": "Use",
+      "lane": "site",
+      "col": 5,
+      "type": "external",
+      "label": "Install and enable",
+      "sublabel": "site trusts signer",
+      "width": 172,
+      "height": 64
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-fit",
+      "from": "Fit",
+      "to": "Scaffold",
+      "label": "template",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-scaffold",
+      "from": "Scaffold",
+      "to": "Write",
+      "label": "work list",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-write",
+      "from": "Write",
+      "to": "Record",
+      "label": "record",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-record",
+      "from": "Record",
+      "to": "Check",
+      "label": "replay",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-check",
+      "from": "Check",
+      "to": "Publish",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "attestation",
+      "route": "straight",
+      "labelAt": [
+        907,
+        169
+      ]
+    },
+    {
+      "id": "e-contrib",
+      "from": "Publish",
+      "to": "ContribPR",
+      "label": "contribute back",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-ships",
+      "from": "ContribPR",
+      "to": "Use",
+      "role": "main",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "ships disabled",
+      "route": "straight",
+      "labelAt": [
+        1161,
+        293
+      ]
+    },
+    {
+      "id": "e-smoke",
+      "from": "Check",
+      "to": "Smoke",
+      "label": "optional T3",
+      "role": "branch",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e-index",
+      "from": "Publish",
+      "to": "IndexPR",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "keep the code",
+      "route": "straight",
+      "labelAt": [
+        907,
+        293
+      ]
+    },
+    {
+      "id": "e-install",
+      "from": "IndexPR",
+      "to": "Use",
+      "label": "install by id",
+      "role": "branch",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Easy to start",
+      "items": [
+        "A new plugin compiles and passes T0 and the generated tests at once",
+        "Its conformance run fails with one line per obligation, and that list is the work list"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "One command before a pull request",
+      "items": [
+        "aiopsctl plugin check ./ replays the fixtures, so CI needs no vendor credential",
+        "Nobody needs a kernel checkout; a pack with no code needs no SDK and no toolchain"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Two ways to share",
+      "items": [
+        "contrib/<name>/ in this repository: maintainers review, CI runs its suites, the row ships disabled",
+        "An index entry: the author keeps the code and the release rhythm"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Estate sources and origins (P2)",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "emphasis": {
+          "label": "main path"
+        },
+        "dashed": {
+          "label": "later trigger"
+        },
+        "default": {
+          "label": "side flow"
+        },
+        "database": {
+          "label": "store"
+        }
+      }
+    },
+    "viewBox": [
+      880,
+      720
+    ]
+  },
+  "stages": [
+    {
+      "label": "Source series"
+    },
+    {
+      "label": "Reader tables"
+    },
+    {
+      "label": "Projection"
+    },
+    {
+      "label": "Store"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "agent-info-series",
+      "type": "messagebus",
+      "label": "Agent info",
+      "sublabel": "and host info series",
+      "stage": 0,
+      "row": 0,
+      "width": 150
+    },
+    {
+      "id": "k8s-state-series",
+      "type": "messagebus",
+      "label": "K8s state",
+      "sublabel": "state exporter",
+      "stage": 0,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "service-graph-series",
+      "type": "messagebus",
+      "label": "Service-graph",
+      "sublabel": "traced call pairs",
+      "stage": 0,
+      "row": 2,
+      "width": 150
+    },
+    {
+      "id": "snmp-interface-series",
+      "type": "messagebus",
+      "label": "SNMP interface",
+      "sublabel": "networkDevices key",
+      "stage": 0,
+      "row": 3,
+      "width": 150
+    },
+    {
+      "id": "triggered-sources",
+      "type": "external",
+      "label": "Triggered sources",
+      "sublabel": "catalog, inventory, hypervisor, flow",
+      "stage": 0,
+      "row": 4,
+      "width": 150
+    },
+    {
+      "id": "host-series",
+      "type": "backend",
+      "label": "host-series",
+      "sublabel": "hosts, aliases, owners",
+      "stage": 1,
+      "row": 0,
+      "width": 150
+    },
+    {
+      "id": "k8s-series",
+      "type": "backend",
+      "label": "k8s-series",
+      "sublabel": "clusters, workloads, placement",
+      "stage": 1,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "trace-graph",
+      "type": "backend",
+      "label": "trace-graph",
+      "sublabel": "calls, datastores, hourly",
+      "stage": 1,
+      "row": 2,
+      "width": 150
+    },
+    {
+      "id": "device-series",
+      "type": "backend",
+      "label": "device-series",
+      "sublabel": "devices, interfaces, last",
+      "stage": 1,
+      "row": 3,
+      "width": 150
+    },
+    {
+      "id": "estate-writer",
+      "type": "backend",
+      "label": "estate-writer",
+      "sublabel": "witness, stale, close",
+      "stage": 2,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "estate-store",
+      "type": "database",
+      "label": "estate-store",
+      "sublabel": "schema estate, RLS",
+      "stage": 3,
+      "row": 1,
+      "width": 150
+    }
+  ],
+  "flows": [
+    {
+      "from": "agent-info-series",
+      "to": "host-series",
+      "label": "declared, read",
+      "route": "straight",
+      "labelDy": -32
+    },
+    {
+      "from": "k8s-state-series",
+      "to": "k8s-series",
+      "label": "read",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "service-graph-series",
+      "to": "trace-graph",
+      "label": "traced",
+      "route": "straight"
+    },
+    {
+      "from": "snmp-interface-series",
+      "to": "device-series",
+      "label": "read",
+      "route": "straight"
+    },
+    {
+      "from": "host-series",
+      "to": "estate-writer",
+      "label": "run",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          530,
+          157
+        ]
+      ],
+      "labelSegment": 1
+    },
+    {
+      "from": "k8s-series",
+      "to": "estate-writer",
+      "label": "run + witness",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -32
+    },
+    {
+      "from": "triggered-sources",
+      "to": "estate-writer",
+      "label": "own reader, later",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          570,
+          613
+        ],
+        [
+          570,
+          326
+        ],
+        [
+          530,
+          326
+        ]
+      ],
+      "labelSegment": 0
+    },
+    {
+      "from": "trace-graph",
+      "to": "estate-writer",
+      "label": "run",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          530,
+          385
+        ]
+      ],
+      "labelSegment": 0
+    },
+    {
+      "from": "device-series",
+      "to": "estate-writer",
+      "label": "run",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          530,
+          499
+        ]
+      ],
+      "labelSegment": 0
+    },
+    {
+      "from": "estate-writer",
+      "to": "estate-store",
+      "label": "only writer",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -32
+    }
+  ]
+}

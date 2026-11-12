@@ -1,0 +1,290 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Investigation: what a harness can reach",
+  "locale": "en",
+  "quality_profile": "showcase"
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   40,
+   110
+  ],
+  "cols": 4,
+  "gapX": 190,
+  "gapY": 90,
+  "cellW": 166,
+  "cellH": 66
+ },
+ "components": [
+  {
+   "id": "inv-runner",
+   "type": "messagebus",
+   "label": "Investigation runner",
+   "sublabel": "casefile investigate job",
+   "row": 0,
+   "col": 0,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "agent-runs",
+   "type": "security",
+   "label": "agent-runs",
+   "sublabel": "leases, caps, transcript",
+   "row": 1,
+   "col": 0,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "harness-native",
+   "type": "backend",
+   "label": "harness-native",
+   "sublabel": "default harness, in process",
+   "row": 1,
+   "col": 1,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "llm-gateway",
+   "type": "security",
+   "label": "llm-gateway",
+   "sublabel": "scrub, meter, budget",
+   "row": 1,
+   "col": 2,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "ext-llm-provider",
+   "type": "external",
+   "label": "LLM provider",
+   "sublabel": "OpenAI-compatible upstream",
+   "row": 1,
+   "col": 3,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "tool-rows",
+   "type": "backend",
+   "label": "Kernel-data tools",
+   "sublabel": "three tool-* rows",
+   "row": 2,
+   "col": 0,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "tool-dispatch",
+   "type": "security",
+   "label": "tools",
+   "sublabel": "gate, cap, scrub, audit",
+   "row": 2,
+   "col": 1,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "kubernetes-read",
+   "type": "backend",
+   "label": "tool-kubernetes-read",
+   "sublabel": "closed kind list",
+   "row": 2,
+   "col": 2,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "ext-customer-estate",
+   "type": "external",
+   "label": "Customer clusters",
+   "sublabel": "Kubernetes API",
+   "row": 2,
+   "col": 3,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "read-tools",
+   "type": "backend",
+   "label": "Read tools",
+   "sublabel": "metrics, logs, traces",
+   "row": 3,
+   "col": 1,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "gateway",
+   "type": "security",
+   "label": "gateway",
+   "sublabel": "Envoy read routes",
+   "row": 4,
+   "col": 1,
+   "size": [
+    166,
+    60
+   ]
+  },
+  {
+   "id": "telemetry-stores",
+   "type": "database",
+   "label": "Telemetry backends",
+   "sublabel": "default stack stores",
+   "row": 4,
+   "col": 2,
+   "size": [
+    166,
+    60
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel",
+   "wraps": [
+    "inv-runner",
+    "agent-runs",
+    "harness-native",
+    "llm-gateway",
+    "tool-dispatch",
+    "read-tools",
+    "kubernetes-read",
+    "tool-rows"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "inv-runner",
+   "to": "agent-runs",
+   "label": "Dispatch, task",
+   "variant": "emphasis",
+   "labelAt": [
+    123,
+    218
+   ],
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "e2",
+   "from": "agent-runs",
+   "to": "harness-native",
+   "label": "Run, two views",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e3",
+   "from": "harness-native",
+   "to": "tool-dispatch",
+   "label": "Invoke, tool set",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    479,
+    374
+   ]
+  },
+  {
+   "id": "e4",
+   "from": "tool-dispatch",
+   "to": "read-tools",
+   "label": "Invoke, audited",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    479,
+    530
+   ]
+  },
+  {
+   "id": "e5",
+   "from": "read-tools",
+   "to": "gateway",
+   "label": "read-only service token",
+   "variant": "security",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    479,
+    686
+   ]
+  },
+  {
+   "id": "e6",
+   "from": "gateway",
+   "to": "telemetry-stores",
+   "label": "X-Scope-OrgID"
+  },
+  {
+   "id": "e7",
+   "from": "harness-native",
+   "to": "llm-gateway",
+   "label": "Stream, by tier",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e8",
+   "from": "llm-gateway",
+   "to": "ext-llm-provider",
+   "label": "scrubbed request",
+   "labelAt": [
+    1028,
+    296
+   ]
+  },
+  {
+   "id": "e9",
+   "from": "tool-dispatch",
+   "to": "kubernetes-read",
+   "label": "Invoke"
+  },
+  {
+   "id": "e10",
+   "from": "kubernetes-read",
+   "to": "ext-customer-estate",
+   "label": "read-only calls",
+   "variant": "security",
+   "labelAt": [
+    1028,
+    452
+   ]
+  },
+  {
+   "id": "e11",
+   "from": "tool-dispatch",
+   "to": "tool-rows",
+   "label": "Invoke"
+  }
+ ]
+}

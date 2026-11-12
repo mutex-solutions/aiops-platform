@@ -1,0 +1,162 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C1 Plugin supply path, every profile",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "Person"
+    },
+    "backend": {
+     "label": "Our system"
+    },
+    "external": {
+     "label": "External system"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   110
+  ],
+  "cols": 5,
+  "gapX": 120,
+  "gapY": 110,
+  "cellW": 150,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "ext-plugin-index",
+   "type": "external",
+   "label": "Plugin index repository",
+   "sublabel": "Optional, discovery only",
+   "row": 0,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "person-contributor",
+   "type": "frontend",
+   "label": "Plugin contributor",
+   "sublabel": "Writes, signs, publishes",
+   "row": 1,
+   "col": 0,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "aiops",
+   "type": "backend",
+   "label": "aiops-platform",
+   "sublabel": "aiopsctl, kernel, plugins",
+   "row": 1,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "person-platform-op",
+   "type": "frontend",
+   "label": "Platform operator",
+   "sublabel": "Decides trusted signers",
+   "row": 1,
+   "col": 4,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "ext-artifact-registry",
+   "type": "external",
+   "label": "OCI artifact registry",
+   "sublabel": "Signed artifacts, by digest",
+   "row": 2,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "person-contributor",
+   "to": "aiops",
+   "label": "Creates, checks offline",
+   "fromSide": "right",
+   "toSide": "left",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e2",
+   "from": "person-contributor",
+   "to": "ext-artifact-registry",
+   "label": "Pushes signed artifact",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "left"
+  },
+  {
+   "id": "e3",
+   "from": "person-contributor",
+   "to": "ext-plugin-index",
+   "label": "Proposes index entry",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "left"
+  },
+  {
+   "id": "e4",
+   "from": "person-platform-op",
+   "to": "aiops",
+   "label": "Trusts, installs, enables",
+   "variant": "emphasis",
+   "fromSide": "left",
+   "toSide": "right"
+  },
+  {
+   "id": "e5",
+   "from": "aiops",
+   "to": "ext-artifact-registry",
+   "label": "Pulls by digest",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 24
+  },
+  {
+   "id": "e6",
+   "from": "aiops",
+   "to": "ext-plugin-index",
+   "label": "Resolves plugin version",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e7",
+   "from": "person-platform-op",
+   "to": "ext-artifact-registry",
+   "label": "Pushes built distribution",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "right"
+  }
+ ]
+}

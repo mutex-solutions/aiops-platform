@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Boot and failure policy",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1600,
+      820
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "orchestrator",
+      "type": "external",
+      "label": "Orchestrator"
+    },
+    {
+      "id": "boot",
+      "type": "backend",
+      "label": "boot"
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "Gate"
+    },
+    {
+      "id": "kernel",
+      "type": "backend",
+      "label": "Kernel"
+    },
+    {
+      "id": "loader",
+      "type": "backend",
+      "label": "loader"
+    },
+    {
+      "id": "row-fiber",
+      "type": "backend",
+      "label": "Row fiber"
+    },
+    {
+      "id": "restart-policy",
+      "type": "backend",
+      "label": "restart-policy"
+    },
+    {
+      "id": "readiness",
+      "type": "backend",
+      "label": "readiness"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 350,
+      "label": "Compose and admit: nothing mounted yet"
+    },
+    {
+      "from": 380,
+      "to": 570,
+      "label": "Mount: no boot order"
+    },
+    {
+      "from": 600,
+      "to": 670,
+      "label": "After settle: required set ACTIVE"
+    },
+    {
+      "from": 700,
+      "to": 770,
+      "label": "After settle: a required key or row not ACTIVE"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "orchestrator",
+      "to": "boot",
+      "y": 196,
+      "label": "start profile, role",
+      "variant": "emphasis",
+      "note": "aiops --role <r>"
+    },
+    {
+      "id": "m2",
+      "from": "boot",
+      "to": "gate",
+      "y": 238,
+      "label": "admit composition",
+      "variant": "emphasis",
+      "note": "boot first reads the committed process-scope generation, composes layers 0 to 4 and reads the kill switches"
+    },
+    {
+      "id": "m3",
+      "from": "gate",
+      "to": "boot",
+      "y": 280,
+      "label": "admitted or denied",
+      "variant": "return",
+      "note": "a denied optional row is detached as disabled; a denied required row stops boot"
+    },
+    {
+      "id": "m4",
+      "from": "boot",
+      "to": "kernel",
+      "y": 322,
+      "label": "prepare launch services",
+      "variant": "emphasis",
+      "note": "constructs the kernel with the two binding maps of the distribution manifest, then provides the launch services"
+    },
+    {
+      "id": "m5",
+      "from": "boot",
+      "to": "loader",
+      "y": 416,
+      "label": "mount composed rows",
+      "variant": "emphasis",
+      "note": "the composed rows of this role"
+    },
+    {
+      "id": "m6",
+      "from": "loader",
+      "to": "row-fiber",
+      "y": 458,
+      "label": "create entry",
+      "variant": "emphasis",
+      "note": "one entry per enabled row; rows of another role are never mounted"
+    },
+    {
+      "id": "m7",
+      "from": "kernel",
+      "to": "row-fiber",
+      "y": 500,
+      "label": "activate when available",
+      "variant": "emphasis",
+      "note": "when every Need has an ACTIVE provider; otherwise PENDING, saying what it waits for"
+    },
+    {
+      "id": "m8",
+      "from": "restart-policy",
+      "to": "row-fiber",
+      "y": 542,
+      "label": "retry FAILED fiber",
+      "variant": "dashed",
+      "note": "gives up after N failures in a window; a give-up on a required or infrastructure provider ends readiness"
+    },
+    {
+      "id": "m9",
+      "from": "boot",
+      "to": "readiness",
+      "y": 636,
+      "label": "required set ACTIVE",
+      "variant": "emphasis",
+      "note": "the process is ready"
+    },
+    {
+      "id": "m10",
+      "from": "boot",
+      "to": "orchestrator",
+      "y": 736,
+      "label": "exit non-zero",
+      "variant": "security",
+      "note": "absent, disabled or not ACTIVE once settled; the orchestrator restarts the process"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "boot",
+      "from": 188,
+      "to": 644,
+      "type": "backend"
+    },
+    {
+      "participant": "loader",
+      "from": 408,
+      "to": 466,
+      "type": "backend"
+    },
+    {
+      "participant": "row-fiber",
+      "from": 450,
+      "to": 550,
+      "type": "backend"
+    }
+  ]
+}

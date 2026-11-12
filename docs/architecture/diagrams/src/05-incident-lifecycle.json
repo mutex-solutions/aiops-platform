@@ -1,0 +1,338 @@
+{
+ "schema_version": 1,
+ "diagram_type": "lifecycle",
+ "meta": {
+  "title": "Incident states",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "viewBox": [
+   880,
+   660
+  ]
+ },
+ "lanes": [
+  {
+   "id": "main",
+   "label": "Main path"
+  },
+  {
+   "id": "waiting",
+   "label": "Needs a person"
+  },
+  {
+   "id": "terminal",
+   "label": "Terminal"
+  }
+ ],
+ "states": [
+  {
+   "id": "open",
+   "type": "start",
+   "label": "open",
+   "sublabel": "casefile opens it",
+   "lane": "main",
+   "col": 0,
+   "step": "01"
+  },
+  {
+   "id": "investigating",
+   "type": "active",
+   "label": "investigating",
+   "sublabel": "investigate job runs",
+   "lane": "main",
+   "col": 1,
+   "step": "02"
+  },
+  {
+   "id": "awaiting_approval",
+   "type": "waiting",
+   "label": "awaiting_approval",
+   "sublabel": "typed action requested",
+   "lane": "main",
+   "col": 2,
+   "step": "03",
+   "width": 144
+  },
+  {
+   "id": "remediating",
+   "type": "active",
+   "label": "remediating",
+   "sublabel": "dispatch through remediation",
+   "lane": "main",
+   "col": 3,
+   "step": "04"
+  },
+  {
+   "id": "verifying",
+   "type": "decision",
+   "label": "verifying",
+   "sublabel": "two checks run",
+   "lane": "main",
+   "col": 4,
+   "step": "05"
+  },
+  {
+   "id": "escalated",
+   "type": "waiting",
+   "label": "escalated",
+   "sublabel": "TTL or no fix",
+   "lane": "waiting",
+   "col": 0
+  },
+  {
+   "id": "merged",
+   "type": "neutral",
+   "label": "merged",
+   "sublabel": "terminal",
+   "lane": "terminal",
+   "col": 0
+  },
+  {
+   "id": "resolved",
+   "type": "success",
+   "label": "resolved",
+   "sublabel": "terminal",
+   "lane": "terminal",
+   "col": 2
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t-cleared",
+   "from": "verifying",
+   "to": "resolved",
+   "label": "cleared",
+   "variant": "emphasis",
+   "route": "straight",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    710,
+    232
+   ]
+  },
+  {
+   "id": "t-ttl",
+   "from": "awaiting_approval",
+   "to": "escalated",
+   "label": "approval TTL",
+   "variant": "security",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    350,
+    216
+   ],
+   "via": [
+    [
+     350,
+     188
+    ],
+    [
+     350,
+     240
+    ],
+    [
+     402,
+     240
+    ]
+   ]
+  },
+  {
+   "id": "t-still",
+   "from": "verifying",
+   "to": "open",
+   "label": "still_present, uncertain",
+   "fromSide": "right",
+   "toSide": "left",
+   "via": [
+    [
+     800,
+     157
+    ],
+    [
+     800,
+     78
+    ],
+    [
+     20,
+     78
+    ],
+    [
+     20,
+     157
+    ]
+   ],
+   "labelAt": [
+    300,
+    78
+   ]
+  },
+  {
+   "id": "t-failed",
+   "from": "verifying",
+   "to": "awaiting_approval",
+   "label": "failed: rollback request",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "top",
+   "via": [
+    [
+     710,
+     96
+    ],
+    [
+     402,
+     96
+    ]
+   ],
+   "labelAt": [
+    556,
+    96
+   ]
+  },
+  {
+   "id": "t-noop",
+   "from": "verifying",
+   "to": "escalated",
+   "label": "failed, noop rollback",
+   "variant": "security",
+   "fromSide": "bottom",
+   "toSide": "right",
+   "via": [
+    [
+     680,
+     188
+    ],
+    [
+     680,
+     307
+    ]
+   ],
+   "labelAt": [
+    575,
+    307
+   ]
+  },
+  {
+   "id": "t-rca",
+   "from": "investigating",
+   "to": "open",
+   "label": "RCA or digest",
+   "fromSide": "top",
+   "toSide": "top",
+   "via": [
+    [
+     248,
+     107
+    ],
+    [
+     94,
+     107
+    ]
+   ],
+   "labelAt": [
+    200,
+    104
+   ]
+  },
+  {
+   "id": "t-stopped",
+   "from": "remediating",
+   "to": "awaiting_approval",
+   "label": "dispatch stopped",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "bottom",
+   "via": [
+    [
+     556,
+     212
+    ],
+    [
+     402,
+     212
+    ]
+   ],
+   "labelAt": [
+    479,
+    212
+   ]
+  },
+  {
+   "id": "t-merge",
+   "from": "investigating",
+   "to": "merged",
+   "label": "human merge",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     248,
+     479
+    ]
+   ],
+   "labelAt": [
+    248,
+    393
+   ]
+  },
+  {
+   "id": "t-esc-resolved",
+   "from": "escalated",
+   "to": "resolved",
+   "label": "alerts clear",
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     402,
+     400
+    ],
+    [
+     630,
+     400
+    ],
+    [
+     630,
+     479
+    ]
+   ],
+   "labelAt": [
+    516,
+    400
+   ]
+  },
+  {
+   "id": "t-open-resolved",
+   "from": "open",
+   "to": "resolved",
+   "label": "alerts clear",
+   "fromSide": "bottom",
+   "toSide": "bottom",
+   "via": [
+    [
+     94,
+     215
+    ],
+    [
+     44,
+     215
+    ],
+    [
+     44,
+     560
+    ],
+    [
+     710,
+     560
+    ]
+   ],
+   "labelAt": [
+    402,
+    560
+   ]
+  }
+ ]
+}

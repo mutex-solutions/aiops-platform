@@ -1,0 +1,289 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Lab and evaluation workflow",
+  "quality_profile": "showcase",
+  "locale": "en",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "security": {
+     "label": "leak guard"
+    },
+    "database": {
+     "label": "files and rows"
+    },
+    "external": {
+     "label": "lab estate and engine"
+    },
+    "cloud": {
+     "label": "local model"
+    },
+    "frontend": {
+     "label": "CLI"
+    },
+    "backend": {
+     "label": "scripts and services"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "under-test",
+   "label": "Estate and platform under test (P1)"
+  },
+  {
+   "id": "cases",
+   "label": "Case set, runner and grader (P1)"
+  },
+  {
+   "id": "p2",
+   "label": "P2 adds"
+  }
+ ],
+ "mainPath": [
+  "lab-runner",
+  "lab-estate",
+  "kernel-under-test",
+  "grader",
+  "result-table",
+  "aiopsctl-eval"
+ ],
+ "nodes": [
+  {
+   "id": "leak-rule",
+   "lane": "cases",
+   "col": 1,
+   "type": "security",
+   "label": "leak-rule",
+   "sublabel": "drops injector lines",
+   "tag": "P1",
+   "width": 112
+  },
+  {
+   "id": "lab-runner",
+   "lane": "cases",
+   "col": 0,
+   "type": "backend",
+   "label": "lab-runner",
+   "sublabel": "own credentials",
+   "tag": "P1",
+   "width": 104
+  },
+  {
+   "id": "lab-estate",
+   "lane": "under-test",
+   "col": 0,
+   "type": "external",
+   "label": "lab-estate",
+   "sublabel": "kind, VM, GitOps app",
+   "tag": "P1",
+   "width": 108
+  },
+  {
+   "id": "kernel-under-test",
+   "lane": "under-test",
+   "col": 3,
+   "type": "backend",
+   "label": "kernel-under-test",
+   "sublabel": "self-host-full, unchanged",
+   "tag": "P1",
+   "width": 150
+  },
+  {
+   "id": "local-model",
+   "lane": "under-test",
+   "col": 4,
+   "type": "cloud",
+   "label": "local-model",
+   "sublabel": "open-weight, no egress",
+   "tag": "P1",
+   "width": 116,
+   "yOffset": -7
+  },
+  {
+   "id": "case-set",
+   "lane": "cases",
+   "col": 2,
+   "type": "database",
+   "label": "case-set",
+   "sublabel": "at least 24 cases",
+   "tag": "P1",
+   "width": 112
+  },
+  {
+   "id": "grader",
+   "lane": "cases",
+   "col": 3,
+   "type": "backend",
+   "label": "grader",
+   "sublabel": "pure, versioned",
+   "tag": "P1",
+   "width": 104
+  },
+  {
+   "id": "result-table",
+   "lane": "cases",
+   "col": 4,
+   "type": "database",
+   "label": "result-table",
+   "sublabel": "rows per case-run",
+   "tag": "P1",
+   "width": 120
+  },
+  {
+   "id": "aiopsctl-eval",
+   "lane": "cases",
+   "col": 5,
+   "type": "frontend",
+   "label": "aiopsctl eval",
+   "sublabel": "runs cases, reports",
+   "tag": "P1",
+   "width": 124
+  },
+  {
+   "id": "case-catalogue",
+   "lane": "p2",
+   "col": 2,
+   "type": "database",
+   "label": "case-catalogue",
+   "sublabel": "generated cases",
+   "tag": "P2",
+   "width": 132
+  },
+  {
+   "id": "fault-engine",
+   "lane": "p2",
+   "col": 1,
+   "type": "external",
+   "label": "fault-engine",
+   "sublabel": "engine, host daemon",
+   "tag": "P2",
+   "width": 118
+  }
+ ],
+ "edges": [
+  {
+   "from": "lab-runner",
+   "to": "lab-estate",
+   "label": "inject, heal",
+   "role": "main",
+   "variant": "emphasis",
+   "labelDy": 12,
+   "labelDx": 78
+  },
+  {
+   "from": "lab-estate",
+   "to": "kernel-under-test",
+   "label": "telemetry, alerts",
+   "role": "main",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "top"
+  },
+  {
+   "from": "kernel-under-test",
+   "to": "grader",
+   "label": "stored answer",
+   "role": "main",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "top",
+   "labelDy": 12
+  },
+  {
+   "from": "grader",
+   "to": "result-table",
+   "label": "graded case-runs",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "from": "result-table",
+   "to": "aiopsctl-eval",
+   "label": "baseline, release report",
+   "role": "main",
+   "variant": "emphasis"
+  },
+  {
+   "from": "lab-runner",
+   "to": "leak-rule",
+   "label": "pre-run check",
+   "role": "branch"
+  },
+  {
+   "from": "leak-rule",
+   "to": "kernel-under-test",
+   "label": "injector lines dropped",
+   "role": "branch",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "left",
+   "labelDy": 12
+  },
+  {
+   "from": "kernel-under-test",
+   "to": "local-model",
+   "label": "model calls",
+   "role": "branch",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "from": "case-set",
+   "to": "lab-runner",
+   "label": "inject, heal steps",
+   "role": "branch",
+   "fromSide": "left",
+   "toSide": "bottom",
+   "labelDy": 12,
+   "via": [
+    [
+     388.3,
+     267.0
+    ],
+    [
+     388.3,
+     323
+    ],
+    [
+     102.0,
+     323
+    ]
+   ]
+  },
+  {
+   "from": "case-set",
+   "to": "grader",
+   "label": "truth files only",
+   "role": "branch",
+   "variant": "security"
+  },
+  {
+   "from": "case-catalogue",
+   "to": "case-set",
+   "label": "replaces, same format",
+   "role": "branch",
+   "variant": "dashed"
+  },
+  {
+   "from": "case-catalogue",
+   "to": "fault-engine",
+   "label": "fault steps",
+   "role": "branch",
+   "variant": "dashed"
+  },
+  {
+   "from": "fault-engine",
+   "to": "lab-estate",
+   "label": "cluster, host faults",
+   "role": "branch",
+   "variant": "dashed",
+   "route": "return-left",
+   "fromSide": "left",
+   "toSide": "left"
+  }
+ ]
+}

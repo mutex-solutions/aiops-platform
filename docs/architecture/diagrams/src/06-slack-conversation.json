@@ -1,0 +1,350 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3a Slack conversation path",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "backend": {
+     "label": "Kernel plugin part"
+    },
+    "security": {
+     "label": "Tenant resolution"
+    },
+    "messagebus": {
+     "label": "Jobs and events"
+    },
+    "external": {
+     "label": "External system"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   6,
+   128
+  ],
+  "cols": 6,
+  "gapX": 80,
+  "gapY": 90,
+  "cellW": 146,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "ext-chat-service",
+   "type": "external",
+   "label": "Slack",
+   "sublabel": "Events API, Socket Mode",
+   "row": 1,
+   "col": 0,
+   "size": [
+    140,
+    64
+   ],
+   "pos": [
+    6,
+    282
+   ]
+  },
+  {
+   "id": "inst",
+   "type": "backend",
+   "label": "installer",
+   "sublabel": "chat-surface-slack row",
+   "row": 0,
+   "col": 1,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    234,
+    128
+   ]
+  },
+  {
+   "id": "rx",
+   "type": "backend",
+   "label": "Slack receiver",
+   "sublabel": "chat-surface-slack row",
+   "row": 1,
+   "col": 1,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    234,
+    282
+   ]
+  },
+  {
+   "id": "intake",
+   "type": "security",
+   "label": "chat intake",
+   "sublabel": "tenant, dedupe, enqueue",
+   "row": 1,
+   "col": 2,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    491,
+    282
+   ]
+  },
+  {
+   "id": "jobs",
+   "type": "messagebus",
+   "label": "jobs and events",
+   "sublabel": "jobs-river, events-outbox",
+   "row": 1,
+   "col": 3,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    737,
+    282
+   ]
+  },
+  {
+   "id": "conv",
+   "type": "backend",
+   "label": "conversation",
+   "sublabel": "chat, turn job",
+   "row": 1,
+   "col": 4,
+   "size": [
+    130,
+    64
+   ],
+   "pos": [
+    987,
+    282
+   ]
+  },
+  {
+   "id": "router",
+   "type": "backend",
+   "label": "router",
+   "sublabel": "pillar per turn",
+   "row": 0,
+   "col": 4,
+   "size": [
+    130,
+    64
+   ],
+   "pos": [
+    987,
+    128
+   ]
+  },
+  {
+   "id": "runs",
+   "type": "backend",
+   "label": "agent-runs",
+   "sublabel": "harness-native by default",
+   "row": 2,
+   "col": 4,
+   "size": [
+    152,
+    64
+   ],
+   "pos": [
+    976,
+    436
+   ]
+  },
+  {
+   "id": "ask-api",
+   "type": "backend",
+   "label": "ask-api",
+   "sublabel": "API, aiopsctl ask",
+   "row": 2,
+   "col": 5,
+   "size": [
+    104,
+    64
+   ],
+   "pos": [
+    1211,
+    436
+   ]
+  },
+  {
+   "id": "egress",
+   "type": "backend",
+   "label": "session, streamer",
+   "sublabel": "chat-surface-slack row",
+   "row": 2,
+   "col": 2,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    491,
+    436
+   ]
+  },
+  {
+   "id": "webapi",
+   "type": "backend",
+   "label": "webapi",
+   "sublabel": "chat-surface-slack row",
+   "row": 2,
+   "col": 1,
+   "size": [
+    146,
+    64
+   ],
+   "pos": [
+    234,
+    436
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel, chat-ops slice",
+   "wraps": [
+    "inst",
+    "rx",
+    "intake",
+    "jobs",
+    "conv",
+    "router",
+    "runs",
+    "ask-api",
+    "egress",
+    "webapi"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "r1",
+   "from": "ext-chat-service",
+   "to": "rx",
+   "label": "events",
+   "variant": "emphasis",
+   "labelDx": -16
+  },
+  {
+   "id": "r2",
+   "from": "rx",
+   "to": "intake",
+   "label": "normalised envelope",
+   "variant": "emphasis"
+  },
+  {
+   "id": "r3",
+   "from": "intake",
+   "to": "jobs",
+   "label": "unique turn job",
+   "variant": "emphasis"
+  },
+  {
+   "id": "r4",
+   "from": "jobs",
+   "to": "conv",
+   "label": "turn job, cancel",
+   "variant": "emphasis"
+  },
+  {
+   "id": "r5",
+   "from": "conv",
+   "to": "router",
+   "label": "ResolvePillar",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": -20
+  },
+  {
+   "id": "r6",
+   "from": "conv",
+   "to": "runs",
+   "label": "Dispatch, kind ask",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 30,
+   "labelDx": 60
+  },
+  {
+   "id": "r7",
+   "from": "conv",
+   "to": "egress",
+   "label": "Post, after scrub",
+   "variant": "emphasis",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "r8",
+   "from": "egress",
+   "to": "webapi",
+   "label": "status, stream",
+   "variant": "emphasis"
+  },
+  {
+   "id": "r9",
+   "from": "webapi",
+   "to": "ext-chat-service",
+   "label": "Web API",
+   "variant": "emphasis",
+   "fromSide": "left",
+   "toSide": "bottom"
+  },
+  {
+   "id": "r10",
+   "from": "inst",
+   "to": "ext-chat-service",
+   "label": "oauth.v2.access",
+   "fromSide": "left",
+   "toSide": "top"
+  },
+  {
+   "id": "r11",
+   "from": "ask-api",
+   "to": "runs",
+   "label": "same Dispatch"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Receive",
+   "items": [
+    "The ack follows one durable insert of the unique turn job",
+    "The surface resolves the tenant from its installation record and chat mints the handle, never from the payload"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "Turn and answer",
+   "items": [
+    "agent-runs selects the harness, takes the leases and writes every step before it forwards it",
+    "The default harness is harness-native; an optional harness runs behind agent-runs in the same way",
+    "chat scrubs every text before a surface is called"
+   ]
+  },
+  {
+   "dot": "slate",
+   "title": "Optional surface",
+   "items": [
+    "The Slack rows are in the bundle aiops-chatops-slack, which no shipped profile lists",
+    "With no chat surface a question enters through ask-api"
+   ]
+  }
+ ]
+}

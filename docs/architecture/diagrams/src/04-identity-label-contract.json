@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Host identity from source to entity reference",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      880,
+      620
+    ],
+    "legend": {
+      "entries": {
+        "emphasis": {
+          "label": "main path"
+        },
+        "dashed": {
+          "label": "from P2"
+        },
+        "database": {
+          "label": "host key form"
+        },
+        "default": {
+          "label": "data flow"
+        }
+      }
+    }
+  },
+  "stages": [
+    {
+      "label": "Upstream output"
+    },
+    {
+      "label": "Sender"
+    },
+    {
+      "label": "kernel"
+    },
+    {
+      "label": "Host key"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "upstream",
+      "type": "external",
+      "label": "SDKs, eBPF child",
+      "sublabel": "ship host_id themselves",
+      "stage": 0,
+      "row": 1,
+      "width": 144
+    },
+    {
+      "id": "tmpl",
+      "type": "backend",
+      "label": "Host agent templates",
+      "sublabel": "stamp, never overwrite",
+      "stage": 1,
+      "row": 1,
+      "width": 160
+    },
+    {
+      "id": "chart",
+      "type": "backend",
+      "label": "Chart collectors",
+      "sublabel": "no agent id stamped",
+      "stage": 1,
+      "row": 2,
+      "width": 144,
+      "yOffset": 7
+    },
+    {
+      "id": "foreign",
+      "type": "external",
+      "label": "Foreign sender",
+      "sublabel": "customer-run collector",
+      "stage": 1,
+      "row": 3,
+      "width": 132
+    },
+    {
+      "id": "estate",
+      "type": "backend",
+      "label": "estate",
+      "sublabel": "holds aliases, P2",
+      "stage": 2,
+      "row": 0
+    },
+    {
+      "id": "correlate",
+      "type": "backend",
+      "label": "correlate",
+      "sublabel": "builds the host key",
+      "stage": 2,
+      "row": 2
+    },
+    {
+      "id": "key-agent",
+      "type": "database",
+      "label": "host:agent/",
+      "sublabel": "<fleet_collector_id>",
+      "stage": 3,
+      "row": 1
+    },
+    {
+      "id": "key-k8s",
+      "type": "database",
+      "label": "host:k8s/",
+      "sublabel": "<cluster>/<node>",
+      "stage": 3,
+      "row": 2
+    },
+    {
+      "id": "key-ext",
+      "type": "database",
+      "label": "host:ext/",
+      "sublabel": "<value>",
+      "stage": 3,
+      "row": 3
+    }
+  ],
+  "flows": [
+    {
+      "id": "f-upstream",
+      "from": "upstream",
+      "to": "tmpl",
+      "label": "host_id",
+      "labelDx": 7
+    },
+    {
+      "id": "f-tmpl",
+      "from": "tmpl",
+      "to": "correlate",
+      "label": "fleet_collector_id, host_name",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-chart",
+      "from": "chart",
+      "to": "correlate",
+      "label": "cluster, node",
+      "labelDy": 26
+    },
+    {
+      "id": "f-foreign",
+      "from": "foreign",
+      "to": "correlate",
+      "label": "host_id or mapped",
+      "via": [
+        [
+          530,
+          499
+        ]
+      ],
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelSegment": 0
+    },
+    {
+      "id": "f-key-k8s",
+      "from": "correlate",
+      "to": "key-k8s",
+      "route": "straight",
+      "label": "node"
+    },
+    {
+      "id": "f-key-ext",
+      "from": "correlate",
+      "to": "key-ext",
+      "label": "foreign",
+      "channelX": 600,
+      "route": "vertical-channel",
+      "labelDx": -10
+    },
+    {
+      "id": "f-key-agent",
+      "from": "correlate",
+      "to": "key-agent",
+      "variant": "emphasis",
+      "label": "agent",
+      "channelX": 600,
+      "route": "vertical-channel",
+      "labelDx": -6
+    },
+    {
+      "id": "f-info",
+      "from": "tmpl",
+      "to": "estate",
+      "label": "agent info series",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          315,
+          157
+        ]
+      ]
+    },
+    {
+      "id": "f-alias",
+      "from": "estate",
+      "to": "correlate",
+      "label": "alias join, P2",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        530,
+        280
+      ]
+    }
+  ]
+}

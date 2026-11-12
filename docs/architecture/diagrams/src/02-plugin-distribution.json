@@ -1,0 +1,338 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C2-a3: plugin runtimes, distribution and generations",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "cloud": {
+     "label": "Artifact"
+    },
+    "external": {
+     "label": "Person or external"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   20,
+   110
+  ],
+  "cols": 5,
+  "gapX": 124,
+  "gapY": 120,
+  "cellW": 150,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "person-contributor",
+   "type": "external",
+   "label": "person-contributor",
+   "sublabel": "builds against SDK",
+   "row": 1,
+   "col": 0,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "person-platform-op",
+   "type": "external",
+   "label": "person-platform-op",
+   "sublabel": "installs and enables",
+   "row": 2,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ],
+   "pos": [
+    270,
+    478
+   ]
+  },
+  {
+   "id": "aiopsctl",
+   "type": "frontend",
+   "label": "aiopsctl",
+   "sublabel": "packer, signer, installer",
+   "row": 1,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ],
+   "pos": [
+    270,
+    294
+   ]
+  },
+  {
+   "id": "ext-artifact-registry",
+   "type": "external",
+   "label": "ext-artifact-registry",
+   "sublabel": "OCI, signed artifacts",
+   "row": 0,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ],
+   "pos": [
+    270,
+    110
+   ]
+  },
+  {
+   "id": "ext-plugin-index",
+   "type": "external",
+   "label": "ext-plugin-index",
+   "sublabel": "discovery only, optional",
+   "row": 2,
+   "col": 0,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "generation-object",
+   "type": "cloud",
+   "label": "generation-object",
+   "sublabel": "immutable, hosted only",
+   "row": 0,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "kernel-db",
+   "type": "database",
+   "label": "kernel-db",
+   "sublabel": "composer, durable schemas",
+   "row": 0,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "kernel-api",
+   "type": "backend",
+   "label": "kernel-api",
+   "sublabel": "api role",
+   "row": 1,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "kernel-worker",
+   "type": "backend",
+   "label": "kernel-worker",
+   "sublabel": "composer, durable, sidecars",
+   "row": 1,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "remote-plugin",
+   "type": "backend",
+   "label": "remote-plugin",
+   "sublabel": "any language, gRPC",
+   "row": 1,
+   "col": 4,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "builder",
+   "type": "backend",
+   "label": "builder",
+   "sublabel": "pinned Go toolchain",
+   "row": 2,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "server-image",
+   "type": "cloud",
+   "label": "server image",
+   "sublabel": "aiops or aiops-contrib",
+   "row": 2,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "running platform (hosted roles drawn)",
+   "wraps": [
+    "generation-object",
+    "kernel-db",
+    "kernel-api",
+    "kernel-worker",
+    "remote-plugin"
+   ],
+   "pad": 36
+  },
+  {
+   "kind": "security-group",
+   "label": "in-process path: a new binary",
+   "wraps": [
+    "builder",
+    "server-image"
+   ],
+   "pad": 32
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "person-contributor",
+   "to": "aiopsctl",
+   "label": "pack, sign",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e2",
+   "from": "aiopsctl",
+   "to": "ext-artifact-registry",
+   "label": "push, pull",
+   "variant": "emphasis",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": -45
+  },
+  {
+   "id": "e3",
+   "from": "person-platform-op",
+   "to": "aiopsctl",
+   "label": "install, enable",
+   "variant": "emphasis",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e4",
+   "from": "aiopsctl",
+   "to": "kernel-api",
+   "label": "plugin operations",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left",
+   "labelDx": -17
+  },
+  {
+   "id": "e5",
+   "from": "kernel-api",
+   "to": "kernel-worker",
+   "label": "to reload queue",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e6",
+   "from": "kernel-worker",
+   "to": "remote-plugin",
+   "label": "dials, mTLS",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e7",
+   "from": "kernel-worker",
+   "to": "kernel-db",
+   "label": "SQL",
+   "variant": "default",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": 26,
+   "labelDy": -24
+  },
+  {
+   "id": "e8",
+   "from": "kernel-worker",
+   "to": "generation-object",
+   "label": "composer writes",
+   "variant": "default",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e9",
+   "from": "generation-object",
+   "to": "kernel-api",
+   "label": "mounted, by flag",
+   "variant": "default",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 103,
+   "labelDx": 55
+  },
+  {
+   "id": "e10",
+   "from": "aiopsctl",
+   "to": "builder",
+   "label": "dist build",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e11",
+   "from": "builder",
+   "to": "server-image",
+   "label": "builds image",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e12",
+   "from": "server-image",
+   "to": "kernel-worker",
+   "label": "dist use",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": -49
+  },
+  {
+   "id": "e13",
+   "from": "aiopsctl",
+   "to": "ext-plugin-index",
+   "label": "resolves spec",
+   "variant": "dashed",
+   "fromSide": "left",
+   "toSide": "right"
+  }
+ ]
+}

@@ -1,0 +1,309 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "D-4 to D-6: agent deployment",
+  "locale": "en",
+  "quality_profile": "showcase"
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   90,
+   130
+  ],
+  "cols": 5,
+  "gapX": 135,
+  "gapY": 65,
+  "cellW": 130,
+  "cellH": 60
+ },
+ "components": [
+  {
+   "id": "enrol-job",
+   "type": "backend",
+   "label": "enrol Job",
+   "sublabel": "pre-install hook",
+   "row": 0,
+   "col": 0,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "client-secret",
+   "type": "security",
+   "label": "client Secret",
+   "sublabel": "id and secret",
+   "row": 0,
+   "col": 1,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "other-collectors",
+   "type": "backend",
+   "label": "other collectors",
+   "sublabel": "logs, OTLP, metrics, events",
+   "row": 0,
+   "col": 2,
+   "size": [
+    160,
+    60
+   ]
+  },
+  {
+   "id": "sensor-k8s",
+   "type": "security",
+   "label": "sensor",
+   "sublabel": "Tetragon DaemonSet, P2",
+   "row": 1,
+   "col": 1,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "privileged-collector",
+   "type": "backend",
+   "label": "privileged collector",
+   "sublabel": "DaemonSet, eBPF, root",
+   "row": 1,
+   "col": 2,
+   "size": [
+    160,
+    60
+   ]
+  },
+  {
+   "id": "gateway",
+   "type": "security",
+   "label": "gateway",
+   "sublabel": "Envoy",
+   "row": 2,
+   "col": 4,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "install-sh",
+   "type": "backend",
+   "label": "install.sh",
+   "sublabel": "runs once",
+   "row": 3,
+   "col": 2,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "agent-host",
+   "type": "backend",
+   "label": "agent",
+   "sublabel": "alloy.service, root",
+   "row": 4,
+   "col": 2,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "sensor-host",
+   "type": "security",
+   "label": "sensor",
+   "sublabel": "tetragon.service, P2",
+   "row": 4,
+   "col": 1,
+   "size": [
+    130,
+    60
+   ]
+  },
+  {
+   "id": "agent-windows",
+   "type": "backend",
+   "label": "agent",
+   "sublabel": "Windows service, P2",
+   "size": [
+    130,
+    60
+   ],
+   "pos": [
+    620,
+    805
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "customer cluster, agent-k8s",
+   "wraps": [
+    "enrol-job",
+    "client-secret",
+    "other-collectors",
+    "sensor-k8s",
+    "privileged-collector"
+   ]
+  },
+  {
+   "kind": "region",
+   "label": "customer Linux host, agent-host",
+   "wraps": [
+    "install-sh",
+    "agent-host",
+    "sensor-host"
+   ],
+   "pad": 54
+  },
+  {
+   "kind": "region",
+   "label": "customer Windows host, agent-windows, P2",
+   "wraps": [
+    "agent-windows"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "e1",
+   "from": "enrol-job",
+   "to": "client-secret",
+   "label": "writes",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e2",
+   "from": "client-secret",
+   "to": "other-collectors",
+   "label": "mounted",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e3",
+   "from": "client-secret",
+   "to": "privileged-collector",
+   "label": "mounted",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e4",
+   "from": "sensor-k8s",
+   "to": "privileged-collector",
+   "label": "file tail",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left",
+   "labelDx": -38
+  },
+  {
+   "id": "e6",
+   "from": "privileged-collector",
+   "to": "gateway",
+   "label": "writes, JWT",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left",
+   "labelSegment": 0
+  },
+  {
+   "id": "e5",
+   "from": "other-collectors",
+   "to": "gateway",
+   "label": "writes, JWT",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "top",
+   "labelSegment": 0
+  },
+  {
+   "id": "e7",
+   "from": "enrol-job",
+   "to": "gateway",
+   "label": "Enrol, once",
+   "variant": "security",
+   "fromSide": "left",
+   "toSide": "right",
+   "via": [
+    [
+     36,
+     160
+    ],
+    [
+     36,
+     70
+    ],
+    [
+     1308,
+     70
+    ],
+    [
+     1308,
+     410
+    ]
+   ],
+   "labelSegment": 2
+  },
+  {
+   "id": "e8",
+   "from": "install-sh",
+   "to": "gateway",
+   "label": "POST /v1/enrol",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "left"
+  },
+  {
+   "id": "e9",
+   "from": "install-sh",
+   "to": "agent-host",
+   "label": "secret, config",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    685,
+    597
+   ]
+  },
+  {
+   "id": "e10",
+   "from": "sensor-host",
+   "to": "agent-host",
+   "label": "file tail",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e11",
+   "from": "agent-host",
+   "to": "gateway",
+   "label": "GetConfig, writes",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "labelSegment": 0
+  },
+  {
+   "id": "e12",
+   "from": "agent-windows",
+   "to": "gateway",
+   "label": "metrics, event logs",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "labelSegment": 0
+  }
+ ]
+}

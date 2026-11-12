@@ -1,0 +1,241 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "A definition, its dispatcher and a contribution",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "Plugin"
+    },
+    "backend": {
+     "label": "Dispatcher"
+    },
+    "messagebus": {
+     "label": "Definition package"
+    },
+    "database": {
+     "label": "Keys and lookup"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   120
+  ],
+  "cols": 4,
+  "gapX": 130,
+  "gapY": 110,
+  "cellW": 180,
+  "cellH": 84
+ },
+ "components": [
+  {
+   "id": "Definition",
+   "type": "messagebus",
+   "label": "Definition",
+   "sublabel": "sdk/def/<name>/v<N>",
+   "row": 0,
+   "col": 1,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Suite",
+   "type": "messagebus",
+   "label": "Conformance suite",
+   "sublabel": "two halves",
+   "row": 0,
+   "col": 2,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Fake",
+   "type": "messagebus",
+   "label": "Fake",
+   "sublabel": "recording dispatcher",
+   "row": 0,
+   "col": 3,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Consumer",
+   "type": "frontend",
+   "label": "Consumer",
+   "sublabel": "Need on registry key",
+   "row": 1,
+   "col": 0,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Dispatcher",
+   "type": "backend",
+   "label": "Dispatcher",
+   "sublabel": "provides the registry",
+   "row": 1,
+   "col": 1,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Contribution",
+   "type": "frontend",
+   "label": "Contribution",
+   "sublabel": "provided under no key",
+   "row": 1,
+   "col": 2,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "PolicyKeys",
+   "type": "database",
+   "label": "Bound policy keys",
+   "sublabel": "pii, approval, audit",
+   "row": 2,
+   "col": 1,
+   "size": [
+    180,
+    84
+   ]
+  },
+  {
+   "id": "Table",
+   "type": "database",
+   "label": "tenants.Table",
+   "sublabel": "one shared lookup",
+   "row": 2,
+   "col": 2,
+   "size": [
+    180,
+    84
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "sdk/def/<name>/v<N>",
+   "wraps": [
+    "Definition",
+    "Suite",
+    "Fake"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "consumer-dispatcher",
+   "from": "Consumer",
+   "to": "Dispatcher",
+   "label": "calls dispatcher",
+   "variant": "emphasis"
+  },
+  {
+   "id": "dispatcher-contribution",
+   "from": "Dispatcher",
+   "to": "Contribution",
+   "label": "guarded call",
+   "variant": "emphasis",
+   "labelDy": 26
+  },
+  {
+   "id": "contribution-dispatcher",
+   "from": "Contribution",
+   "to": "Dispatcher",
+   "label": "Register"
+  },
+  {
+   "id": "definition-dispatcher",
+   "from": "Definition",
+   "to": "Dispatcher",
+   "label": "key provided by",
+   "labelDx": -50,
+   "labelDy": 50
+  },
+  {
+   "id": "dispatcher-policykeys",
+   "from": "Dispatcher",
+   "to": "PolicyKeys",
+   "label": "required inject",
+   "labelDy": 24,
+   "labelDx": -50
+  },
+  {
+   "id": "dispatcher-table",
+   "from": "Dispatcher",
+   "to": "Table",
+   "label": "stores, looks up",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "suite-contribution",
+   "from": "Suite",
+   "to": "Contribution",
+   "label": "obligations half",
+   "labelDy": 50,
+   "labelDx": 50
+  },
+  {
+   "id": "suite-dispatcher",
+   "from": "Suite",
+   "to": "Dispatcher",
+   "label": "guard half",
+   "fromSide": "bottom",
+   "toSide": "top"
+  },
+  {
+   "id": "suite-fake",
+   "from": "Suite",
+   "to": "Fake",
+   "label": "fake passes"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Only the dispatcher calls",
+   "items": [
+    "A contribution is registered with the registry and provided under no key",
+    "The guard is a deadline, a concurrency cap and a breaker per (tenant, row), an Enter lease, the invariant, then the call"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Fail closed",
+   "items": [
+    "The dispatcher of an effectful operation injects pii, approval, changes, credentials and audit",
+    "Without them it does not exist"
+   ]
+  },
+  {
+   "dot": "violet",
+   "title": "Two halves",
+   "items": [
+    "The obligations half is what a contribution owes and is what aiopsctl plugin check runs",
+    "The guard half is what the dispatcher owes and runs against the real dispatcher and the fake"
+   ]
+  }
+ ]
+}

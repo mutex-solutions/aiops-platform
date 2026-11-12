@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Remote activation per connection across replicas",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      1040
+    ],
+    "legend": {
+      "entries": {
+        "emphasis": {
+          "label": "main path"
+        },
+        "default": {
+          "label": "call"
+        },
+        "return": {
+          "label": "return"
+        },
+        "security": {
+          "label": "revocation"
+        }
+      }
+    }
+  },
+  "participants": [
+    {
+      "id": "Dispatcher",
+      "type": "backend",
+      "label": "Dispatcher",
+      "sublabel": "calls through proxy"
+    },
+    {
+      "id": "ProxyA",
+      "type": "backend",
+      "label": "  Proxy fiber A",
+      "sublabel": "aiops/remote, replica A"
+    },
+    {
+      "id": "ProxyB",
+      "type": "backend",
+      "label": "  Proxy fiber B",
+      "sublabel": "aiops/remote, replica B"
+    },
+    {
+      "id": "Sidecars",
+      "type": "messagebus",
+      "label": "sidecars",
+      "sublabel": "Endpoint(name)"
+    },
+    {
+      "id": "Instance",
+      "type": "frontend",
+      "label": "Instance",
+      "sublabel": "remote plugin's process"
+    },
+    {
+      "id": "RemoteHost",
+      "type": "frontend",
+      "label": "remotehost",
+      "sublabel": "sdk, inside instance"
+    },
+    {
+      "id": "Leaders",
+      "type": "external",
+      "label": "Leaders",
+      "sublabel": "sidecars and durable"
+    }
+  ],
+  "segments": [
+    {
+      "from": 168,
+      "to": 396,
+      "label": "1 Replica A dials and activates"
+    },
+    {
+      "from": 420,
+      "to": 564,
+      "label": "2 Replica B: a second connection, a second activation"
+    },
+    {
+      "from": 588,
+      "to": 774,
+      "label": "3 Calls and callbacks ride the proxy stream"
+    },
+    {
+      "from": 798,
+      "to": 900,
+      "label": "4 Deactivate ends one activation, revocation ends all"
+    }
+  ],
+  "messages": [
+    {
+      "from": "ProxyA",
+      "to": "Sidecars",
+      "y": 190,
+      "label": "Endpoint(name)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ProxyA",
+      "to": "Instance",
+      "y": 232,
+      "label": "dial, mutual TLS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ProxyA",
+      "to": "Instance",
+      "y": 274,
+      "label": "handshake, digest",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ProxyA",
+      "to": "RemoteHost",
+      "y": 316,
+      "label": "Activate",
+      "variant": "emphasis"
+    },
+    {
+      "from": "RemoteHost",
+      "to": "ProxyA",
+      "y": 358,
+      "label": "Register",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ProxyB",
+      "to": "Instance",
+      "y": 442,
+      "label": "dial, handshake",
+      "variant": "default"
+    },
+    {
+      "from": "ProxyB",
+      "to": "RemoteHost",
+      "y": 484,
+      "label": "Activate",
+      "variant": "default"
+    },
+    {
+      "from": "RemoteHost",
+      "to": "ProxyB",
+      "y": 526,
+      "label": "Register",
+      "variant": "default"
+    },
+    {
+      "from": "Dispatcher",
+      "to": "ProxyA",
+      "y": 610,
+      "label": "contribution call",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ProxyA",
+      "to": "Instance",
+      "y": 652,
+      "label": "call on stream",
+      "variant": "emphasis"
+    },
+    {
+      "from": "Instance",
+      "to": "ProxyA",
+      "y": 694,
+      "label": "callback, same stream",
+      "variant": "default"
+    },
+    {
+      "from": "Instance",
+      "to": "ProxyA",
+      "y": 736,
+      "label": "result",
+      "variant": "return"
+    },
+    {
+      "from": "ProxyA",
+      "to": "RemoteHost",
+      "y": 820,
+      "label": "Deactivate",
+      "variant": "default"
+    },
+    {
+      "from": "Leaders",
+      "to": "Instance",
+      "y": 862,
+      "label": "revoke certificate",
+      "variant": "security"
+    }
+  ]
+}

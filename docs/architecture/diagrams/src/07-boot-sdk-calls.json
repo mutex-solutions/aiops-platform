@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Boot: SDK calls on each path",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1450,
+      1036
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator"
+    },
+    {
+      "id": "boot",
+      "type": "backend",
+      "label": "boot"
+    },
+    {
+      "id": "Generation",
+      "type": "database",
+      "label": "Generation"
+    },
+    {
+      "id": "ModuleTable",
+      "type": "database",
+      "label": "Module table"
+    },
+    {
+      "id": "Gate",
+      "type": "backend",
+      "label": "Compat. gate"
+    },
+    {
+      "id": "Root",
+      "type": "backend",
+      "label": "Kernel root"
+    },
+    {
+      "id": "loader",
+      "type": "frontend",
+      "label": "loader"
+    },
+    {
+      "id": "Row",
+      "type": "frontend",
+      "label": "Row fiber"
+    },
+    {
+      "id": "readiness",
+      "type": "frontend",
+      "label": "readiness"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 396,
+      "label": "1 Compose and admit: no plugin code has run"
+    },
+    {
+      "from": 430,
+      "to": 568,
+      "label": "2 Prepare and mount the loader"
+    },
+    {
+      "from": 602,
+      "to": 740,
+      "label": "3 Fibers activate when their needs are available, in no order"
+    },
+    {
+      "from": 774,
+      "to": 940,
+      "label": "4 Ready"
+    }
+  ],
+  "messages": [
+    {
+      "from": "operator",
+      "to": "boot",
+      "y": 190,
+      "label": "start aiops",
+      "variant": "emphasis"
+    },
+    {
+      "from": "boot",
+      "to": "Generation",
+      "y": 232,
+      "label": "read committed generation",
+      "variant": "emphasis"
+    },
+    {
+      "from": "boot",
+      "to": "ModuleTable",
+      "y": 274,
+      "label": "resolve plugin ids",
+      "variant": "default"
+    },
+    {
+      "from": "boot",
+      "to": "Gate",
+      "y": 316,
+      "label": "admit every row",
+      "variant": "emphasis"
+    },
+    {
+      "from": "boot",
+      "to": "operator",
+      "y": 372,
+      "label": "static error, exit",
+      "variant": "dashed"
+    },
+    {
+      "from": "boot",
+      "to": "Root",
+      "y": 460,
+      "label": "construct, binding maps",
+      "variant": "emphasis"
+    },
+    {
+      "from": "boot",
+      "to": "Root",
+      "y": 502,
+      "label": "Provide launch keys",
+      "variant": "default"
+    },
+    {
+      "from": "boot",
+      "to": "loader",
+      "y": 544,
+      "label": "root.Plugin(loader, tree)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "loader",
+      "to": "Row",
+      "y": 632,
+      "label": "c.Plugin(p, cfg)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "Row",
+      "to": "Root",
+      "y": 674,
+      "label": "Key.Of, Provide, c.Go",
+      "variant": "default"
+    },
+    {
+      "from": "Row",
+      "to": "loader",
+      "y": 716,
+      "label": "Apply failed: FAILED",
+      "variant": "dashed"
+    },
+    {
+      "from": "loader",
+      "to": "readiness",
+      "y": 804,
+      "label": "tree settled",
+      "variant": "emphasis"
+    },
+    {
+      "from": "readiness",
+      "to": "boot",
+      "y": 846,
+      "label": "required set ACTIVE",
+      "variant": "emphasis"
+    },
+    {
+      "from": "readiness",
+      "to": "boot",
+      "y": 888,
+      "label": "required missing, exit",
+      "variant": "dashed"
+    },
+    {
+      "from": "boot",
+      "to": "operator",
+      "y": 930,
+      "label": "ready",
+      "variant": "return"
+    }
+  ]
+}

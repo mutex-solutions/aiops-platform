@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Approve a remediation from Slack",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1085,
+      986
+    ],
+    "legend": {
+      "entries": {
+        "emphasis": {
+          "label": "main path"
+        },
+        "security": {
+          "label": "policy check"
+        },
+        "dashed": {
+          "label": "outbox event"
+        },
+        "return": {
+          "label": "reply"
+        },
+        "default": {
+          "label": "call"
+        }
+      }
+    }
+  },
+  "participants": [
+    {
+      "id": "person-sre",
+      "type": "frontend",
+      "label": "Requester",
+      "sublabel": "SRE or operator"
+    },
+    {
+      "id": "person-approver",
+      "type": "frontend",
+      "label": "Approver",
+      "sublabel": "second platform user"
+    },
+    {
+      "id": "ans",
+      "type": "backend",
+      "label": "Slack surface",
+      "sublabel": "approval-surface-slack"
+    },
+    {
+      "id": "approval",
+      "type": "security",
+      "label": "approval",
+      "sublabel": "tier, quorum"
+    },
+    {
+      "id": "change-hub",
+      "type": "backend",
+      "label": "change-hub",
+      "sublabel": "plan, dispatch, verify"
+    },
+    {
+      "id": "rem",
+      "type": "backend",
+      "label": "remediation",
+      "sublabel": "and Kubernetes executor"
+    }
+  ],
+  "segments": [
+    {
+      "from": 168,
+      "to": 332,
+      "label": "Request"
+    },
+    {
+      "from": 364,
+      "to": 570,
+      "label": "Approval"
+    },
+    {
+      "from": 602,
+      "to": 892,
+      "label": "Apply"
+    }
+  ],
+  "messages": [
+    {
+      "from": "person-sre",
+      "to": "ans",
+      "y": 190,
+      "label": "clicks Rollout restart",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ans",
+      "to": "change-hub",
+      "y": 232,
+      "label": "request typed action",
+      "variant": "default"
+    },
+    {
+      "from": "change-hub",
+      "to": "rem",
+      "y": 274,
+      "label": "Plan",
+      "variant": "default"
+    },
+    {
+      "from": "rem",
+      "to": "change-hub",
+      "y": 316,
+      "label": "plan, blast radius",
+      "variant": "return"
+    },
+    {
+      "from": "change-hub",
+      "to": "approval",
+      "y": 386,
+      "label": "open on digest",
+      "variant": "security"
+    },
+    {
+      "from": "approval",
+      "to": "ans",
+      "y": 428,
+      "label": "approval.requested",
+      "variant": "dashed"
+    },
+    {
+      "from": "ans",
+      "to": "person-approver",
+      "y": 470,
+      "label": "approval card",
+      "variant": "default"
+    },
+    {
+      "from": "person-approver",
+      "to": "ans",
+      "y": 512,
+      "label": "Approve, confirm",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ans",
+      "to": "approval",
+      "y": 554,
+      "label": "Decide approve",
+      "variant": "security"
+    },
+    {
+      "from": "approval",
+      "to": "change-hub",
+      "y": 624,
+      "label": "decided, dispatch job",
+      "variant": "dashed"
+    },
+    {
+      "from": "change-hub",
+      "to": "approval",
+      "y": 666,
+      "label": "re-check approvers",
+      "variant": "security"
+    },
+    {
+      "from": "change-hub",
+      "to": "rem",
+      "y": 708,
+      "label": "Apply, ChangeToken",
+      "variant": "emphasis"
+    },
+    {
+      "from": "rem",
+      "to": "change-hub",
+      "y": 750,
+      "label": "receipt",
+      "variant": "return"
+    },
+    {
+      "from": "change-hub",
+      "to": "rem",
+      "y": 792,
+      "label": "Verify read-back",
+      "variant": "default"
+    },
+    {
+      "from": "change-hub",
+      "to": "ans",
+      "y": 834,
+      "label": "change verified",
+      "variant": "dashed"
+    },
+    {
+      "from": "ans",
+      "to": "person-sre",
+      "y": 876,
+      "label": "applied, verified",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Checks",
+      "items": [
+        "Requester needs incidents.act; approver needs approvals.decide and a verified link",
+        "First decision wins; the requester never approves",
+        "L3 needs two distinct verified users, neither the requester"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Other endings",
+      "items": [
+        "Deny, TTL expiry or a missed deadline end with chat.update and an audit event",
+        "A missed executor deadline marks the change uncertain, never applied",
+        "A gate listener can raise or deny at steps 9 and 12, never grant"
+      ]
+    }
+  ]
+}

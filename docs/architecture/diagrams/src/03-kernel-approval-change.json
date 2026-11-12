@@ -1,0 +1,329 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kernel C3-d: approval, change and verification",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "row or contribution"
+        },
+        "security": {
+          "label": "bound plugin or gate"
+        },
+        "external": {
+          "label": "outside the kernel"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "ext-chat-service",
+      "type": "external",
+      "label": "Chat service",
+      "sublabel": "optional, operator-enabled",
+      "pos": [
+        20,
+        100
+      ],
+      "size": [
+        165,
+        64
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "chat",
+      "sublabel": "dispatcher, mints handle",
+      "pos": [
+        550,
+        100
+      ],
+      "size": [
+        145,
+        64
+      ]
+    },
+    {
+      "id": "http-server",
+      "type": "backend",
+      "label": "http-server",
+      "sublabel": "approval-surface-api route",
+      "pos": [
+        250,
+        274
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "approval",
+      "type": "security",
+      "label": "approval",
+      "sublabel": "surface rows, quorum, TTL",
+      "pos": [
+        550,
+        274
+      ],
+      "size": [
+        145,
+        64
+      ]
+    },
+    {
+      "id": "change-hub",
+      "type": "security",
+      "label": "change-hub",
+      "sublabel": "ledger, ChangeToken, verdict",
+      "pos": [
+        830,
+        274
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "remediation",
+      "type": "security",
+      "label": "remediation",
+      "sublabel": "guard, only caller",
+      "pos": [
+        1125,
+        274
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "executor-row",
+      "type": "backend",
+      "label": "Executor row",
+      "sublabel": "remediation-executor-kubernetes",
+      "size": [
+        200,
+        64
+      ],
+      "pos": [
+        1115,
+        478
+      ]
+    },
+    {
+      "id": "credential-lease",
+      "type": "security",
+      "label": "credential-lease",
+      "sublabel": "one-action write credential",
+      "pos": [
+        1125,
+        100
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "verification-rows",
+      "type": "backend",
+      "label": "Verification rows",
+      "sublabel": "two verifiers contributions",
+      "size": [
+        160,
+        64
+      ],
+      "pos": [
+        830,
+        100
+      ]
+    },
+    {
+      "id": "audit-chain",
+      "type": "security",
+      "label": "audit-chain",
+      "sublabel": "SHA-256 chain",
+      "pos": [
+        857,
+        478
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "gate-listeners",
+      "type": "security",
+      "label": "Gate listeners",
+      "sublabel": "expected, none in P1",
+      "pos": [
+        550,
+        478
+      ],
+      "size": [
+        145,
+        64
+      ]
+    },
+    {
+      "id": "customer-cluster",
+      "type": "external",
+      "label": "Customer cluster",
+      "sublabel": "Kubernetes API",
+      "pos": [
+        1125,
+        660
+      ],
+      "size": [
+        180,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel server (aiops binary)",
+      "wraps": [
+        "chat",
+        "http-server",
+        "approval",
+        "change-hub",
+        "remediation",
+        "executor-row",
+        "credential-lease",
+        "verification-rows",
+        "audit-chain",
+        "gate-listeners"
+      ],
+      "pad": 36
+    }
+  ],
+  "connections": [
+    {
+      "id": "a",
+      "from": "http-server",
+      "to": "approval",
+      "label": "approval.Decide",
+      "variant": "emphasis"
+    },
+    {
+      "from": "approval",
+      "to": "change-hub",
+      "label": "approval.decided event",
+      "variant": "emphasis",
+      "id": "b"
+    },
+    {
+      "from": "change-hub",
+      "to": "remediation",
+      "label": "change.approved event",
+      "variant": "emphasis",
+      "id": "c"
+    },
+    {
+      "from": "remediation",
+      "to": "executor-row",
+      "label": "Plan, Apply, Verify",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 68,
+      "id": "d"
+    },
+    {
+      "from": "executor-row",
+      "to": "customer-cluster",
+      "label": "typed action",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 72,
+      "id": "e"
+    },
+    {
+      "id": "f",
+      "from": "ext-chat-service",
+      "to": "chat",
+      "label": "click, optional bundle",
+      "variant": "dashed"
+    },
+    {
+      "id": "g",
+      "from": "chat",
+      "to": "approval",
+      "label": "approval.Decide",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 68
+    },
+    {
+      "from": "remediation",
+      "to": "credential-lease",
+      "label": "credentials.Write(token)",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -45,
+      "id": "h"
+    },
+    {
+      "from": "approval",
+      "to": "gate-listeners",
+      "label": "approval/gates",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 68,
+      "id": "i"
+    },
+    {
+      "from": "change-hub",
+      "to": "gate-listeners",
+      "label": "change/pre-dispatch",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "labelSegment": 2,
+      "id": "j"
+    },
+    {
+      "from": "change-hub",
+      "to": "audit-chain",
+      "label": "audit.AppendTx",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 14,
+      "labelDy": 83,
+      "id": "k"
+    },
+    {
+      "from": "change-hub",
+      "to": "verification-rows",
+      "label": "runs two checks",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -45,
+      "id": "l"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "slate",
+      "title": "Arrows",
+      "items": [
+        "Thick green: main path",
+        "Solid grey: call",
+        "Dashed: optional chat surface"
+      ]
+    }
+  ]
+}

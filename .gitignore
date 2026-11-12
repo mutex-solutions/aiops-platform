@@ -1,0 +1,5 @@
+tasks/
+tasks/**/*.png
+.DS_Store
+node_modules/
+docs/architecture/diagrams/html/

@@ -1,0 +1,228 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Layer precedence",
+  "quality_profile": "showcase",
+  "locale": "en",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "backend": {
+     "label": "patch layer or row"
+    },
+    "database": {
+     "label": "generation"
+    },
+    "security": {
+     "label": "kill switch path"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "shipped",
+   "label": "Layers 0 and 1: shipped in the distribution"
+  },
+  {
+   "id": "operator",
+   "label": "Layers 2 to 4: operator"
+  },
+  {
+   "id": "tenant",
+   "label": "Layer 5: one tenant"
+  },
+  {
+   "id": "launcher",
+   "label": "Layer 6: read by the launcher, not a patch"
+  }
+ ],
+ "mainPath": [
+  "l0",
+  "l1",
+  "l2",
+  "l3",
+  "l4",
+  "process-generation",
+  "l5",
+  "tenant-generation"
+ ],
+ "nodes": [
+  {
+   "id": "l0",
+   "lane": "shipped",
+   "col": 0,
+   "type": "backend",
+   "label": "0 Empty root",
+   "sublabel": "no rows",
+   "width": 120
+  },
+  {
+   "id": "l1",
+   "lane": "shipped",
+   "col": 1,
+   "type": "backend",
+   "label": "1 Bundle patches",
+   "sublabel": "insert rows, profile order",
+   "width": 147
+  },
+  {
+   "id": "l2",
+   "lane": "operator",
+   "col": 1,
+   "type": "backend",
+   "label": "2 Profile layer",
+   "sublabel": "profile aiops.patch.yml",
+   "width": 140
+  },
+  {
+   "id": "l3",
+   "lane": "operator",
+   "col": 2,
+   "type": "backend",
+   "label": "3 Site layer",
+   "sublabel": "site aiops.patch.yml",
+   "width": 120
+  },
+  {
+   "id": "l4",
+   "lane": "operator",
+   "col": 3,
+   "type": "backend",
+   "label": "4 CLI overlays",
+   "sublabel": "--patch, never persisted",
+   "width": 133
+  },
+  {
+   "id": "process-generation",
+   "lane": "operator",
+   "col": 4,
+   "type": "database",
+   "label": "Process-scope generation",
+   "sublabel": "immutable tree, digest",
+   "width": 201
+  },
+  {
+   "id": "l5",
+   "lane": "tenant",
+   "col": 4,
+   "type": "backend",
+   "label": "5 Tenant overlay",
+   "sublabel": "tenant_directory.profile_overlay",
+   "width": 166
+  },
+  {
+   "id": "tenant-generation",
+   "lane": "tenant",
+   "col": 5,
+   "type": "database",
+   "label": "Tenant-scope generation",
+   "sublabel": "one tenant only",
+   "width": 194
+  },
+  {
+   "id": "l6",
+   "lane": "launcher",
+   "col": 1,
+   "type": "security",
+   "label": "6 Kill switches",
+   "sublabel": "environment variables",
+   "width": 140
+  },
+  {
+   "id": "kill-switches",
+   "lane": "launcher",
+   "col": 3,
+   "type": "security",
+   "label": "killSwitches",
+   "sublabel": "launch service, read-only",
+   "width": 128
+  },
+  {
+   "id": "readers",
+   "lane": "launcher",
+   "col": 4,
+   "type": "backend",
+   "label": "casefile, telemetry",
+   "sublabel": "rows that read",
+   "width": 168
+  }
+ ],
+ "edges": [
+  {
+   "from": "l0",
+   "to": "l1",
+   "variant": "emphasis",
+   "role": "main"
+  },
+  {
+   "from": "l1",
+   "to": "l2",
+   "label": "patch by id",
+   "variant": "emphasis",
+   "role": "main",
+   "route": "straight",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    339,
+    199
+   ]
+  },
+  {
+   "from": "l2",
+   "to": "l3",
+   "variant": "emphasis",
+   "role": "main"
+  },
+  {
+   "from": "l3",
+   "to": "l4",
+   "variant": "emphasis",
+   "role": "main"
+  },
+  {
+   "from": "l4",
+   "to": "process-generation",
+   "label": "boot or reload",
+   "variant": "emphasis",
+   "role": "main"
+  },
+  {
+   "from": "process-generation",
+   "to": "l5",
+   "label": "per tenant",
+   "variant": "emphasis",
+   "role": "main",
+   "route": "straight",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    902,
+    323
+   ]
+  },
+  {
+   "from": "l5",
+   "to": "tenant-generation",
+   "label": "never inserts",
+   "variant": "emphasis",
+   "role": "main"
+  },
+  {
+   "from": "l6",
+   "to": "kill-switches",
+   "label": "boot reads once",
+   "variant": "security",
+   "role": "branch"
+  },
+  {
+   "from": "readers",
+   "to": "kill-switches",
+   "label": "read switches",
+   "variant": "security",
+   "role": "branch"
+  }
+ ]
+}

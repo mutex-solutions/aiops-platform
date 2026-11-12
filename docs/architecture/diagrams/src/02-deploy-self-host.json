@@ -1,0 +1,341 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "D-2 and D-3: self-host-full on one VM or one cluster",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "cloud": {
+     "label": "Pack content"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   40,
+   80
+  ],
+  "cols": 5,
+  "gapX": 100,
+  "gapY": 110,
+  "cellW": 170,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "dashboard-ui",
+   "type": "frontend",
+   "label": "dashboard-ui",
+   "sublabel": "Grafana OSS, provisioned",
+   "row": 0,
+   "col": 1,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "optional-upstream",
+   "type": "backend",
+   "label": "optional upstream processes",
+   "sublabel": "harness-sidecar, oncall-engine",
+   "size": [
+    280,
+    64
+   ],
+   "pos": [
+    795,
+    80
+   ]
+  },
+  {
+   "id": "agent",
+   "type": "backend",
+   "label": "agent",
+   "sublabel": "remote or local",
+   "row": 1,
+   "col": 0,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "gateway",
+   "type": "security",
+   "label": "gateway",
+   "sublabel": "Envoy, port 443",
+   "row": 1,
+   "col": 1,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "four-backends",
+   "type": "database",
+   "label": "four backends",
+   "sublabel": "monolithic, no Kafka",
+   "row": 1,
+   "col": 2,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "kernel",
+   "type": "backend",
+   "label": "kernel",
+   "sublabel": "role all, tenant default",
+   "row": 1,
+   "col": 3,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "remote-plugin",
+   "type": "backend",
+   "label": "remote-plugin",
+   "sublabel": "optional, any language",
+   "row": 1,
+   "col": 4,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "state",
+   "type": "database",
+   "label": "kernel-db, object-store",
+   "sublabel": "local or customer-run",
+   "row": 2,
+   "col": 2,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "pack-content",
+   "type": "cloud",
+   "label": "pack content",
+   "sublabel": "directory or volume",
+   "row": 2,
+   "col": 4,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "builder",
+   "type": "backend",
+   "label": "builder",
+   "sublabel": "pinned Go toolchain",
+   "row": 3,
+   "col": 3,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "aiopsctl",
+   "type": "frontend",
+   "label": "aiopsctl",
+   "sublabel": "plugin install, dist",
+   "row": 3,
+   "col": 4,
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "ext-artifact-registry",
+   "type": "external",
+   "label": "ext-artifact-registry",
+   "sublabel": "any OCI registry",
+   "row": 4,
+   "col": 4,
+   "size": [
+    170,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "self-host-full: one VM (Compose) or one cluster",
+   "wraps": [
+    "dashboard-ui",
+    "optional-upstream",
+    "gateway",
+    "four-backends",
+    "kernel",
+    "remote-plugin",
+    "state",
+    "pack-content"
+   ],
+   "pad": 32
+  },
+  {
+   "kind": "security-group",
+   "label": "build path, W3",
+   "wraps": [
+    "builder",
+    "aiopsctl"
+   ],
+   "pad": 24
+  }
+ ],
+ "connections": [
+  {
+   "id": "e01",
+   "from": "agent",
+   "to": "gateway",
+   "label": "HTTPS, JWT",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left",
+   "labelDx": -14
+  },
+  {
+   "id": "e02",
+   "from": "gateway",
+   "to": "four-backends",
+   "label": "writes, reads",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e03",
+   "from": "four-backends",
+   "to": "kernel",
+   "label": "alerts",
+   "variant": "emphasis",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e04",
+   "from": "kernel",
+   "to": "optional-upstream",
+   "label": "optional plugin calls",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": 64,
+   "labelDy": -20
+  },
+  {
+   "id": "e05",
+   "from": "dashboard-ui",
+   "to": "gateway",
+   "label": "data queries",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 24,
+   "labelDx": -40
+  },
+  {
+   "id": "e06",
+   "from": "kernel",
+   "to": "gateway",
+   "label": "read tools",
+   "fromSide": "top",
+   "toSide": "top"
+  },
+  {
+   "id": "e07",
+   "from": "kernel",
+   "to": "dashboard-ui",
+   "label": "annotations",
+   "fromSide": "top",
+   "toSide": "bottom"
+  },
+  {
+   "id": "e08",
+   "from": "kernel",
+   "to": "state",
+   "label": "SQL, blobs",
+   "fromSide": "bottom",
+   "toSide": "right"
+  },
+  {
+   "id": "e09",
+   "from": "four-backends",
+   "to": "state",
+   "label": "blocks",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 24
+  },
+  {
+   "id": "e10",
+   "from": "kernel",
+   "to": "pack-content",
+   "label": "reads content",
+   "fromSide": "bottom",
+   "toSide": "left"
+  },
+  {
+   "id": "e11",
+   "from": "kernel",
+   "to": "remote-plugin",
+   "label": "dials, mTLS",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "e12",
+   "from": "aiopsctl",
+   "to": "builder",
+   "label": "dist build",
+   "variant": "dashed",
+   "fromSide": "left",
+   "toSide": "right"
+  },
+  {
+   "id": "e13",
+   "from": "builder",
+   "to": "kernel",
+   "label": "new server image",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": -42
+  },
+  {
+   "id": "e14",
+   "from": "aiopsctl",
+   "to": "ext-artifact-registry",
+   "label": "pull by digest",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelDy": 62
+  },
+  {
+   "id": "e15",
+   "from": "aiopsctl",
+   "to": "pack-content",
+   "label": "installs pack",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": -40
+  }
+ ]
+}

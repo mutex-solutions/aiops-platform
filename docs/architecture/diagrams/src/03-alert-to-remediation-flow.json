@@ -1,0 +1,255 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Alert webhook to verified remediation",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "backend": {
+     "label": "kernel step"
+    },
+    "security": {
+     "label": "approval gate"
+    },
+    "messagebus": {
+     "label": "notification"
+    },
+    "external": {
+     "label": "person"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "p1",
+   "label": "Webhook to incident"
+  },
+  {
+   "id": "p2",
+   "label": "Investigation"
+  },
+  {
+   "id": "p3",
+   "label": "Approval"
+  },
+  {
+   "id": "p4",
+   "label": "Remediation"
+  },
+  {
+   "id": "p5",
+   "label": "Verification"
+  },
+  {
+   "id": "ex",
+   "label": "still_present, failed, uncertain",
+   "variant": "exception"
+  }
+ ],
+ "phases": [],
+ "groups": [],
+ "mainPath": [
+  "admit",
+  "open-incident",
+  "investigate",
+  "check-rca",
+  "propose",
+  "decide",
+  "dispatch",
+  "apply",
+  "verify",
+  "resolve"
+ ],
+ "nodes": [
+  {
+   "id": "admit",
+   "lane": "p1",
+   "col": 0,
+   "type": "backend",
+   "label": "Admit and ack",
+   "sublabel": "signal-core",
+   "width": 128
+  },
+  {
+   "id": "open-incident",
+   "lane": "p1",
+   "col": 1,
+   "type": "backend",
+   "label": "Open incident",
+   "sublabel": "correlate, casefile",
+   "width": 128
+  },
+  {
+   "id": "notify-page",
+   "lane": "p1",
+   "col": 2,
+   "type": "messagebus",
+   "label": "Notify, page",
+   "sublabel": "notifications, paging",
+   "width": 128
+  },
+  {
+   "id": "investigate",
+   "lane": "p2",
+   "col": 1,
+   "type": "backend",
+   "label": "Investigate",
+   "sublabel": "agent-runs, harness-native",
+   "width": 144
+  },
+  {
+   "id": "check-rca",
+   "lane": "p2",
+   "col": 2,
+   "type": "backend",
+   "label": "Check RCA",
+   "sublabel": "rca-contract",
+   "width": 128
+  },
+  {
+   "id": "propose",
+   "lane": "p3",
+   "col": 2,
+   "type": "backend",
+   "label": "Propose, plan",
+   "sublabel": "remediation, change-hub",
+   "width": 128
+  },
+  {
+   "id": "decide",
+   "lane": "p3",
+   "col": 3,
+   "type": "security",
+   "label": "Decide",
+   "sublabel": "approval, second user",
+   "width": 128
+  },
+  {
+   "id": "dispatch",
+   "lane": "p4",
+   "col": 3,
+   "type": "security",
+   "label": "Dispatch",
+   "sublabel": "change-hub, signs token",
+   "width": 128
+  },
+  {
+   "id": "apply",
+   "lane": "p4",
+   "col": 4,
+   "type": "backend",
+   "label": "Apply",
+   "sublabel": "executor row, lease",
+   "width": 128
+  },
+  {
+   "id": "verify",
+   "lane": "p5",
+   "col": 4,
+   "type": "backend",
+   "label": "Verify",
+   "sublabel": "change-hub, two checks",
+   "width": 128
+  },
+  {
+   "id": "resolve",
+   "lane": "p5",
+   "col": 5,
+   "type": "backend",
+   "label": "Resolve",
+   "sublabel": "casefile, incident",
+   "width": 128
+  },
+  {
+   "id": "ask-person",
+   "lane": "ex",
+   "col": 5,
+   "type": "external",
+   "label": "Ask a person",
+   "sublabel": "incident not resolved",
+   "width": 120
+  }
+ ],
+ "edges": [
+  {
+   "from": "admit",
+   "to": "open-incident",
+   "label": "ingest job, event",
+   "variant": "emphasis"
+  },
+  {
+   "from": "open-incident",
+   "to": "notify-page",
+   "label": "incident event"
+  },
+  {
+   "from": "open-incident",
+   "to": "investigate",
+   "label": "investigate job",
+   "variant": "emphasis",
+   "labelDy": 34,
+   "labelDx": 8
+  },
+  {
+   "from": "investigate",
+   "to": "check-rca",
+   "label": "RCA answer",
+   "variant": "emphasis"
+  },
+  {
+   "from": "check-rca",
+   "to": "propose",
+   "label": "engineer requests action",
+   "variant": "emphasis",
+   "labelDy": 34,
+   "labelDx": 8
+  },
+  {
+   "from": "propose",
+   "to": "decide",
+   "label": "digest, tier L1",
+   "variant": "emphasis"
+  },
+  {
+   "from": "decide",
+   "to": "dispatch",
+   "label": "two outbox events",
+   "variant": "emphasis",
+   "labelDy": 34,
+   "labelDx": 8
+  },
+  {
+   "from": "dispatch",
+   "to": "apply",
+   "label": "ChangeToken",
+   "variant": "emphasis"
+  },
+  {
+   "from": "apply",
+   "to": "verify",
+   "label": "receipt, verify job",
+   "variant": "emphasis",
+   "labelDy": 34,
+   "labelDx": 8
+  },
+  {
+   "from": "verify",
+   "to": "resolve",
+   "label": "cleared",
+   "variant": "emphasis"
+  },
+  {
+   "from": "verify",
+   "to": "ask-person",
+   "label": "other verdicts",
+   "variant": "security",
+   "role": "error",
+   "fromSide": "bottom",
+   "toSide": "left"
+  }
+ ]
+}

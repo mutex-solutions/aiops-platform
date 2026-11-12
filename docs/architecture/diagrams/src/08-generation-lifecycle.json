@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Generation states",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "start": {
+          "label": "submission"
+        },
+        "active": {
+          "label": "candidate state"
+        },
+        "success": {
+          "label": "committed"
+        },
+        "failure": {
+          "label": "rejected or rolled back"
+        }
+      }
+    },
+    "viewBox": [
+      900,
+      640
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "One generation in one scope"
+    },
+    {
+      "id": "exits",
+      "label": "Restored"
+    },
+    {
+      "id": "terminal",
+      "label": "Nothing applied"
+    }
+  ],
+  "states": [
+    {
+      "id": "submission",
+      "type": "start",
+      "label": "Submission",
+      "sublabel": "to reload queue",
+      "lane": "main",
+      "col": 0
+    },
+    {
+      "id": "proposed",
+      "type": "active",
+      "label": "proposed",
+      "sublabel": "candidate with digest",
+      "lane": "main",
+      "col": 1,
+      "step": "01"
+    },
+    {
+      "id": "canary",
+      "type": "active",
+      "label": "canary",
+      "sublabel": "one replica per role",
+      "lane": "main",
+      "col": 2,
+      "step": "02"
+    },
+    {
+      "id": "promoting",
+      "type": "active",
+      "label": "promoting",
+      "sublabel": "remaining replicas",
+      "lane": "main",
+      "col": 3,
+      "step": "03"
+    },
+    {
+      "id": "committed",
+      "type": "success",
+      "label": "committed",
+      "sublabel": "every replica runs it",
+      "lane": "main",
+      "col": 4,
+      "step": "04"
+    },
+    {
+      "id": "rejected",
+      "type": "failure",
+      "label": "rejected",
+      "sublabel": "nothing touched",
+      "lane": "terminal",
+      "col": 0
+    },
+    {
+      "id": "rolled-back",
+      "type": "failure",
+      "label": "rolled-back",
+      "sublabel": "back on committed",
+      "lane": "exits",
+      "col": 0
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t-propose",
+      "from": "submission",
+      "to": "proposed",
+      "label": "composed, admitted, planned",
+      "variant": "emphasis",
+      "note": "steps 1 to 3 of a submission pass",
+      "route": "straight",
+      "labelAt": [
+        168,
+        212
+      ]
+    },
+    {
+      "id": "t-canary",
+      "from": "proposed",
+      "to": "canary",
+      "label": "composer names canary",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [
+        328,
+        212
+      ]
+    },
+    {
+      "id": "t-promote",
+      "from": "canary",
+      "to": "promoting",
+      "label": "canary verdict passes",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [
+        479,
+        212
+      ]
+    },
+    {
+      "id": "t-commit",
+      "from": "promoting",
+      "to": "committed",
+      "label": "all replicas pass",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [
+        633,
+        212
+      ]
+    },
+    {
+      "id": "t-reject",
+      "from": "submission",
+      "to": "rejected",
+      "label": "a step fails",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          18,
+          157
+        ],
+        [
+          18,
+          479
+        ]
+      ],
+      "labelAt": [
+        190,
+        479
+      ]
+    },
+    {
+      "id": "t-canary-fail",
+      "from": "canary",
+      "to": "rolled-back",
+      "label": "failed verdict",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelAt": [
+        402,
+        240
+      ]
+    },
+    {
+      "id": "t-promote-fail",
+      "from": "promoting",
+      "to": "rolled-back",
+      "label": "failed verdict",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          556,
+          307
+        ]
+      ],
+      "labelAt": [
+        556,
+        250
+      ]
+    }
+  ]
+}

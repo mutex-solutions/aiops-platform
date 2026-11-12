@@ -1,0 +1,312 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3: the method's vendor-neutral seams and connector packs",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "connector pack"
+    },
+    "backend": {
+     "label": "row of aiops-base"
+    },
+    "database": {
+     "label": "default stores"
+    },
+    "external": {
+     "label": "not deployed by us"
+    }
+   }
+  },
+  "viewBox": [
+   1200,
+   736
+  ]
+ },
+ "components": [
+  {
+   "id": "default-stores",
+   "type": "database",
+   "label": "default-stores",
+   "sublabel": "three stores behind gateway",
+   "pos": [
+    29,
+    90
+   ],
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "default-pack",
+   "type": "frontend",
+   "label": "aiops-datasources",
+   "sublabel": "default connector pack",
+   "pos": [
+    24,
+    282
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "signal-core",
+   "type": "backend",
+   "label": "signal-core",
+   "sublabel": "dispatcher of signals",
+   "pos": [
+    499,
+    90
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "tools",
+   "type": "backend",
+   "label": "tools",
+   "sublabel": "dispatcher of tools",
+   "pos": [
+    499,
+    186
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "content",
+   "type": "backend",
+   "label": "content",
+   "sublabel": "provider of content",
+   "pos": [
+    499,
+    282
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "change-hub",
+   "type": "backend",
+   "label": "change-hub",
+   "sublabel": "dispatches evidenceSources, P2",
+   "pos": [
+    499,
+    378
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "estate",
+   "type": "backend",
+   "label": "estate",
+   "sublabel": "dispatches estateSources, P2",
+   "pos": [
+    499,
+    474
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "other-pack",
+   "type": "frontend",
+   "label": "Contributed connector pack",
+   "sublabel": "another observability system",
+   "pos": [
+    974,
+    282
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "ext-customer-observability",
+   "type": "external",
+   "label": "Customer observability",
+   "sublabel": "customer's own systems",
+   "pos": [
+    499,
+    612
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "ext-mcp-server",
+   "type": "external",
+   "label": "MCP server",
+   "sublabel": "customer or vendor run",
+   "pos": [
+    979,
+    90
+   ],
+   "size": [
+    190,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "aiops-base",
+   "wraps": [
+    "signal-core",
+    "tools",
+    "content",
+    "change-hub",
+    "estate"
+   ],
+   "pad": 20
+  }
+ ],
+ "connections": [
+  {
+   "id": "d-stores",
+   "from": "default-pack",
+   "to": "default-stores",
+   "label": "default reads",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": 50
+  },
+  {
+   "id": "d-tools",
+   "from": "default-pack",
+   "to": "tools",
+   "label": "read tools",
+   "labelSegment": 2,
+   "labelDx": -12
+  },
+  {
+   "id": "d-content",
+   "from": "default-pack",
+   "to": "content",
+   "label": "host runbook",
+   "labelDx": 61
+  },
+  {
+   "id": "d-evidence",
+   "from": "default-pack",
+   "to": "change-hub",
+   "label": "evidence source",
+   "variant": "dashed",
+   "labelSegment": 2,
+   "labelDx": -12
+  },
+  {
+   "id": "d-estate",
+   "from": "default-pack",
+   "to": "estate",
+   "label": "estate reader",
+   "variant": "dashed",
+   "labelSegment": 2,
+   "labelDx": -12
+  },
+  {
+   "id": "d-ext",
+   "from": "default-pack",
+   "to": "ext-customer-observability",
+   "label": "aiops-only endpoints",
+   "fromSide": "bottom",
+   "toSide": "left",
+   "via": [
+    [
+     119,
+     644
+    ]
+   ],
+   "labelSegment": 1
+  },
+  {
+   "id": "o-signals",
+   "from": "other-pack",
+   "to": "signal-core",
+   "label": "payload parser",
+   "labelSegment": 2,
+   "labelDx": 12
+  },
+  {
+   "id": "o-tools",
+   "from": "other-pack",
+   "to": "tools",
+   "label": "tool-mcp rows",
+   "variant": "emphasis",
+   "labelSegment": 2,
+   "labelDx": 12
+  },
+  {
+   "id": "o-mcp",
+   "from": "other-pack",
+   "to": "ext-mcp-server",
+   "label": "reads, customer credential",
+   "variant": "emphasis",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDx": -80,
+   "labelDy": -54
+  },
+  {
+   "id": "o-content",
+   "from": "other-pack",
+   "to": "content",
+   "label": "runbook, rule pack",
+   "labelDx": -61
+  },
+  {
+   "id": "o-evidence",
+   "from": "other-pack",
+   "to": "change-hub",
+   "label": "evidence source",
+   "variant": "dashed",
+   "labelSegment": 2,
+   "labelDx": 12
+  },
+  {
+   "id": "o-estate",
+   "from": "other-pack",
+   "to": "estate",
+   "label": "estate reader",
+   "variant": "dashed",
+   "labelSegment": 2,
+   "labelDx": 12
+  },
+  {
+   "id": "o-ext",
+   "from": "other-pack",
+   "to": "ext-customer-observability",
+   "label": "read connector",
+   "fromSide": "bottom",
+   "toSide": "right",
+   "via": [
+    [
+     1074,
+     644
+    ]
+   ],
+   "labelSegment": 1
+  }
+ ]
+}

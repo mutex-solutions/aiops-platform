@@ -1,0 +1,145 @@
+{
+ "schema_version": 1,
+ "diagram_type": "sequence",
+ "meta": {
+  "title": "Apply and verify a change",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "column_fit": "spread",
+  "viewBox": [
+   1080,
+   690
+  ],
+  "legend": {
+   "mode": "hidden"
+  }
+ },
+ "participants": [
+  {
+   "id": "change-hub",
+   "type": "security",
+   "label": "change-hub",
+   "sublabel": "ledger, token, checks"
+  },
+  {
+   "id": "ledger",
+   "type": "database",
+   "label": "ledger",
+   "sublabel": "change_hub schema"
+  },
+  {
+   "id": "signals",
+   "type": "database",
+   "label": "Signal rows",
+   "sublabel": "resolved webhooks"
+  },
+  {
+   "id": "remediation",
+   "type": "security",
+   "label": "remediation",
+   "sublabel": "sole executor caller"
+  },
+  {
+   "id": "lease",
+   "type": "security",
+   "label": "lease",
+   "sublabel": "credential-lease"
+  },
+  {
+   "id": "executor",
+   "type": "backend",
+   "label": "executor",
+   "sublabel": "five Kubernetes actions"
+  },
+  {
+   "id": "ext-customer-estate",
+   "type": "external",
+   "label": "Clusters",
+   "sublabel": "customer Kubernetes API"
+  }
+ ],
+ "segments": [
+  {
+   "from": 160,
+   "to": 372,
+   "label": "Apply"
+  },
+  {
+   "from": 394,
+   "to": 606,
+   "label": "Verify"
+  }
+ ],
+ "messages": [
+  {
+   "from": "change-hub",
+   "to": "remediation",
+   "y": 186,
+   "label": "Apply, ChangeToken",
+   "variant": "emphasis"
+  },
+  {
+   "from": "remediation",
+   "to": "lease",
+   "y": 228,
+   "label": "Write, token",
+   "variant": "security"
+  },
+  {
+   "from": "remediation",
+   "to": "executor",
+   "y": 270,
+   "label": "Apply, one credential",
+   "variant": "emphasis"
+  },
+  {
+   "from": "executor",
+   "to": "ext-customer-estate",
+   "y": 312,
+   "label": "typed write",
+   "variant": "emphasis"
+  },
+  {
+   "from": "remediation",
+   "to": "change-hub",
+   "y": 354,
+   "label": "receipt",
+   "variant": "return"
+  },
+  {
+   "from": "change-hub",
+   "to": "signals",
+   "y": 420,
+   "label": "check 1, alerts",
+   "variant": "default"
+  },
+  {
+   "from": "change-hub",
+   "to": "remediation",
+   "y": 462,
+   "label": "check 2, Verify",
+   "variant": "default"
+  },
+  {
+   "from": "remediation",
+   "to": "executor",
+   "y": 504,
+   "label": "Verify",
+   "variant": "default"
+  },
+  {
+   "from": "executor",
+   "to": "ext-customer-estate",
+   "y": 546,
+   "label": "read-back",
+   "variant": "default"
+  },
+  {
+   "from": "change-hub",
+   "to": "ledger",
+   "y": 588,
+   "label": "verdict",
+   "variant": "emphasis"
+  }
+ ]
+}

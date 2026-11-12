@@ -1,0 +1,327 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "C3b Approvals and notifications",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "legend": {
+   "entries": {
+    "backend": {
+     "label": "Kernel plugin"
+    },
+    "security": {
+     "label": "Identity and policy"
+    },
+    "messagebus": {
+     "label": "Jobs and events"
+    },
+    "external": {
+     "label": "External system"
+    }
+   }
+  }
+ },
+ "layout": {
+  "mode": "grid",
+  "origin": [
+   60,
+   120
+  ],
+  "cols": 5,
+  "gapX": 115,
+  "gapY": 90,
+  "cellW": 150,
+  "cellH": 64
+ },
+ "components": [
+  {
+   "id": "ext-idp",
+   "type": "external",
+   "label": "OIDC provider",
+   "sublabel": "tenant IdP",
+   "row": 0,
+   "col": 0,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "ident",
+   "type": "security",
+   "label": "identity-slack-link",
+   "sublabel": "verified approver link",
+   "row": 0,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "approval",
+   "type": "security",
+   "label": "approval",
+   "sublabel": "tier, quorum, Decide",
+   "row": 0,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "audit",
+   "type": "security",
+   "label": "audit-chain",
+   "sublabel": "per-tenant hash chain",
+   "row": 0,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "ext-slack",
+   "type": "external",
+   "label": "Slack",
+   "sublabel": "Block Kit, Web API",
+   "row": 1,
+   "col": 0,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "ans",
+   "type": "backend",
+   "label": "Slack approval surface",
+   "sublabel": "approval-surface-slack",
+   "row": 1,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "change-hub",
+   "type": "backend",
+   "label": "change-hub",
+   "sublabel": "ChangeToken, two checks",
+   "row": 1,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "rem",
+   "type": "backend",
+   "label": "remediation",
+   "sublabel": "guard, Kubernetes executor",
+   "row": 1,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "ext-customer-estate",
+   "type": "external",
+   "label": "Customer estate",
+   "sublabel": "cluster, Kubernetes API",
+   "row": 1,
+   "col": 4,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "notif",
+   "type": "backend",
+   "label": "notifications",
+   "sublabel": "notifier-slack, digest",
+   "row": 2,
+   "col": 1,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "events",
+   "type": "messagebus",
+   "label": "events",
+   "sublabel": "events-outbox",
+   "row": 2,
+   "col": 2,
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "credential-lease",
+   "type": "security",
+   "label": "credential-lease",
+   "sublabel": "one action, minutes",
+   "row": 2,
+   "col": 3,
+   "size": [
+    150,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "kernel, chat-ops and change slice",
+   "wraps": [
+    "ident",
+    "approval",
+    "audit",
+    "ans",
+    "change-hub",
+    "rem",
+    "notif",
+    "events",
+    "credential-lease"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "a1",
+   "from": "ext-slack",
+   "to": "ans",
+   "label": "clicks",
+   "variant": "emphasis"
+  },
+  {
+   "id": "a2",
+   "from": "ans",
+   "to": "ident",
+   "label": "Actor",
+   "variant": "security",
+   "labelDx": -34,
+   "labelDy": -14
+  },
+  {
+   "id": "a3",
+   "from": "ident",
+   "to": "ext-idp",
+   "label": "OIDC login",
+   "labelDx": -12
+  },
+  {
+   "id": "a4",
+   "from": "ans",
+   "to": "change-hub",
+   "label": "request action",
+   "variant": "emphasis",
+   "labelDy": -4
+  },
+  {
+   "id": "a5",
+   "from": "change-hub",
+   "to": "approval",
+   "label": "open, re-check",
+   "variant": "security",
+   "labelDx": -46
+  },
+  {
+   "id": "a6",
+   "from": "ans",
+   "to": "approval",
+   "label": "Decide",
+   "variant": "security",
+   "fromSide": "top",
+   "toSide": "left"
+  },
+  {
+   "id": "a7",
+   "from": "approval",
+   "to": "change-hub",
+   "label": "decided, dispatch",
+   "variant": "dashed",
+   "labelDx": 64,
+   "labelDy": 30
+  },
+  {
+   "id": "a8",
+   "from": "approval",
+   "to": "audit",
+   "label": "decision"
+  },
+  {
+   "id": "a9",
+   "from": "change-hub",
+   "to": "rem",
+   "label": "Plan, Apply, Verify",
+   "variant": "emphasis",
+   "labelDy": -4
+  },
+  {
+   "id": "a10",
+   "from": "rem",
+   "to": "credential-lease",
+   "label": "lease",
+   "fromSide": "bottom",
+   "toSide": "top",
+   "labelAt": [
+    962,
+    383
+   ]
+  },
+  {
+   "id": "a11",
+   "from": "rem",
+   "to": "ext-customer-estate",
+   "label": "typed action",
+   "variant": "emphasis",
+   "labelDx": 15,
+   "labelDy": -4
+  },
+  {
+   "id": "a12",
+   "from": "events",
+   "to": "notif",
+   "label": "outbox events",
+   "variant": "dashed"
+  },
+  {
+   "id": "a13",
+   "from": "notif",
+   "to": "ext-slack",
+   "label": "notices, edits",
+   "labelDx": -46
+  }
+ ],
+ "cards": [
+  {
+   "dot": "rose",
+   "title": "Authority stays in the plugins",
+   "items": [
+    "The surface authorises nothing; approval counts quorum on platform users",
+    "Approving needs a Sign in with Slack link",
+    "remediation is the only caller of an executor and refuses Apply without a ChangeToken"
+   ]
+  },
+  {
+   "dot": "cyan",
+   "title": "Notices",
+   "items": [
+    "notifications scrubs, runs the notify/pre-send gate, digests and paces, then calls notifier-slack",
+    "Events are rendered after commit, ordered per tenant; digest-only in storm mode"
+   ]
+  }
+ ]
+}

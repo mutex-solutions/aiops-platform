@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Data-plane rows and the keys between them",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "security": {
+          "label": "auth or gateway row"
+        },
+        "backend": {
+          "label": "fleet row"
+        },
+        "external": {
+          "label": "row of another bundle"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "auth-endpoints",
+      "type": "security",
+      "label": "auth-endpoints",
+      "sublabel": "enrol, token, JWKS routes",
+      "pos": [
+        45,
+        120
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "fleet-agentapi",
+      "type": "backend",
+      "label": "fleet-agentapi",
+      "sublabel": "collector API, mint point",
+      "pos": [
+        525,
+        120
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "auth",
+      "sublabel": "provides tokens, schema auth",
+      "pos": [
+        45,
+        330
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "fleet",
+      "type": "backend",
+      "label": "fleet",
+      "sublabel": "provides fleet, schema fleet",
+      "pos": [
+        525,
+        330
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "fleet-composer",
+      "type": "backend",
+      "label": "fleet-composer",
+      "sublabel": "fleetTemplates registry, dispatcher",
+      "pos": [
+        805,
+        330
+      ],
+      "size": [
+        250,
+        64
+      ]
+    },
+    {
+      "id": "fleet-template",
+      "type": "backend",
+      "label": "fleet-template-*",
+      "sublabel": "one row per template",
+      "pos": [
+        1150,
+        330
+      ],
+      "size": [
+        165,
+        64
+      ]
+    },
+    {
+      "id": "auth-keys",
+      "type": "security",
+      "label": "auth-keys",
+      "sublabel": "key rotation job",
+      "pos": [
+        45,
+        540
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "gateway-renderer",
+      "type": "security",
+      "label": "gateway-renderer",
+      "sublabel": "provides gateway, render job",
+      "pos": [
+        285,
+        540
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "fleet-sweeper",
+      "type": "backend",
+      "label": "fleet-sweeper",
+      "sublabel": "periodic sweep job",
+      "pos": [
+        525,
+        540
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "tenant-handle",
+      "type": "external",
+      "label": "tenant-handle",
+      "sublabel": "aiops-base, provides tenantMint",
+      "pos": [
+        870,
+        120
+      ],
+      "size": [
+        250,
+        64
+      ]
+    },
+    {
+      "id": "metrics-query-http",
+      "type": "external",
+      "label": "metrics-query-http",
+      "sublabel": "aiops-datasources, provides metricsQuery",
+      "pos": [
+        870,
+        540
+      ],
+      "size": [
+        250,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "edge role",
+      "wraps": [
+        "auth-endpoints",
+        "fleet-agentapi"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "all three roles",
+      "wraps": [
+        "auth",
+        "fleet",
+        "fleet-composer",
+        "fleet-template"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "worker role",
+      "wraps": [
+        "auth-keys",
+        "gateway-renderer",
+        "fleet-sweeper"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "r1",
+      "from": "fleet-agentapi",
+      "to": "fleet",
+      "label": "fleet",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 60
+    },
+    {
+      "id": "r2",
+      "from": "fleet",
+      "to": "fleet-composer",
+      "label": "fleetTemplates",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "r3",
+      "from": "fleet-template",
+      "to": "fleet-composer",
+      "label": "contributes",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "r4",
+      "from": "auth-endpoints",
+      "to": "auth",
+      "label": "tokens",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        135,
+        250
+      ]
+    },
+    {
+      "id": "r5",
+      "from": "fleet",
+      "to": "auth",
+      "label": "tokens",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDx": -90
+    },
+    {
+      "id": "r6",
+      "from": "auth-keys",
+      "to": "auth",
+      "label": "tokens",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -30
+    },
+    {
+      "id": "r7",
+      "from": "gateway-renderer",
+      "to": "auth",
+      "label": "tokens",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "r8",
+      "from": "auth-keys",
+      "to": "gateway-renderer",
+      "label": "gateway",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "r9",
+      "from": "fleet-agentapi",
+      "to": "tenant-handle",
+      "label": "tenantMint",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        803,
+        140
+      ]
+    },
+    {
+      "id": "r10",
+      "from": "auth-endpoints",
+      "to": "fleet",
+      "label": "fleet",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "r11",
+      "from": "fleet-sweeper",
+      "to": "fleet",
+      "label": "fleet",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        615,
+        470
+      ]
+    },
+    {
+      "id": "r12",
+      "from": "fleet-sweeper",
+      "to": "metrics-query-http",
+      "label": "metricsQuery",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        803,
+        560
+      ]
+    }
+  ]
+}

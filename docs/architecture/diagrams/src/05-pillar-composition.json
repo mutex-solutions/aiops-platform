@@ -1,0 +1,398 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "A pillar is a group row",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1390,
+      1200
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "Group row (core:group)"
+        },
+        "backend": {
+          "label": "Contribution row"
+        },
+        "security": {
+          "label": "Registry dispatcher"
+        },
+        "messagebus": {
+          "label": "Connector pack"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "aiops-datasources",
+      "type": "messagebus",
+      "label": "aiops-datasources",
+      "sublabel": "default connector pack",
+      "pos": [
+        820,
+        40
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "pillar-incident",
+      "type": "frontend",
+      "label": "pillar-incident",
+      "sublabel": "row of aiops-pillars-mvp",
+      "pos": [
+        100,
+        190
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "tool-dispatch",
+      "type": "security",
+      "label": "tools",
+      "sublabel": "dispatcher of tools",
+      "pos": [
+        820,
+        190
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "tool-rows",
+      "type": "backend",
+      "label": "Kernel-data tools",
+      "sublabel": "tool-change-lookup, tool-runbook-fetch",
+      "pos": [
+        380,
+        290
+      ],
+      "size": [
+        280,
+        60
+      ]
+    },
+    {
+      "id": "kubernetes-read",
+      "type": "backend",
+      "label": "tool-kubernetes-read",
+      "sublabel": "contribution to tools",
+      "pos": [
+        380,
+        390
+      ],
+      "size": [
+        280,
+        60
+      ]
+    },
+    {
+      "id": "agent-runs",
+      "type": "security",
+      "label": "agent-runs",
+      "sublabel": "dispatcher of harnesses",
+      "pos": [
+        820,
+        500
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "harness-native",
+      "type": "backend",
+      "label": "harness-native",
+      "sublabel": "default harness row",
+      "pos": [
+        1190,
+        500
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "pillar-change",
+      "type": "frontend",
+      "label": "pillar-change",
+      "sublabel": "row of aiops-pillars-mvp",
+      "pos": [
+        100,
+        680
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "ingest-gitops",
+      "type": "backend",
+      "label": "signal-ingest-gitops-webhook",
+      "sublabel": "contribution to signals",
+      "pos": [
+        380,
+        780
+      ],
+      "size": [
+        280,
+        60
+      ]
+    },
+    {
+      "id": "ingest-guard",
+      "type": "security",
+      "label": "signal-core",
+      "sublabel": "dispatcher of signals",
+      "pos": [
+        820,
+        760
+      ],
+      "size": [
+        240,
+        100
+      ]
+    },
+    {
+      "id": "pillar-compliance",
+      "type": "frontend",
+      "label": "pillar-compliance",
+      "sublabel": "row of aiops-pillars-mvp",
+      "pos": [
+        100,
+        900
+      ],
+      "size": [
+        240,
+        60
+      ]
+    },
+    {
+      "id": "ingest-policyreport",
+      "type": "backend",
+      "label": "signal-ingest-policyreport",
+      "sublabel": "contribution to signals",
+      "pos": [
+        380,
+        1000
+      ],
+      "size": [
+        280,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "pillar-incident group",
+      "wraps": [
+        "pillar-incident",
+        "tool-rows",
+        "kubernetes-read"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "security-group",
+      "label": "pillar-change group",
+      "wraps": [
+        "pillar-change",
+        "ingest-gitops"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "security-group",
+      "label": "pillar-compliance group",
+      "wraps": [
+        "pillar-compliance",
+        "ingest-policyreport"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "region",
+      "label": "aiops-base",
+      "wraps": [
+        "tool-dispatch",
+        "agent-runs",
+        "harness-native",
+        "ingest-guard"
+      ],
+      "pad": 20
+    }
+  ],
+  "connections": [
+    {
+      "id": "r1",
+      "from": "tool-rows",
+      "to": "tool-dispatch",
+      "label": "registers with",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelAt": [
+        740,
+        307
+      ]
+    },
+    {
+      "id": "r2",
+      "from": "kubernetes-read",
+      "to": "tool-dispatch",
+      "label": "registers with",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelAt": [
+        740,
+        407
+      ]
+    },
+    {
+      "id": "r3",
+      "from": "aiops-datasources",
+      "to": "tool-dispatch",
+      "label": "read tools register",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        940,
+        140
+      ]
+    },
+    {
+      "id": "r4",
+      "from": "harness-native",
+      "to": "agent-runs",
+      "label": "registers with",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [
+        1133,
+        517
+      ]
+    },
+    {
+      "id": "r5",
+      "from": "ingest-gitops",
+      "to": "ingest-guard",
+      "label": "registers with",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        740,
+        797
+      ]
+    },
+    {
+      "id": "r6",
+      "from": "ingest-policyreport",
+      "to": "ingest-guard",
+      "label": "registers with",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelSegment": 0
+    },
+    {
+      "id": "s1",
+      "from": "pillar-incident",
+      "to": "agent-runs",
+      "label": "harness field",
+      "variant": "default",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          220,
+          530
+        ]
+      ]
+    },
+    {
+      "id": "w1",
+      "from": "pillar-incident",
+      "to": "tool-dispatch",
+      "label": "waits for key",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "w2",
+      "from": "pillar-incident",
+      "to": "ingest-guard",
+      "label": "waits for key",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "via": [
+        [
+          58,
+          220
+        ],
+        [
+          58,
+          615
+        ],
+        [
+          1105,
+          615
+        ],
+        [
+          1105,
+          810
+        ]
+      ],
+      "labelSegment": 2
+    },
+    {
+      "id": "w3",
+      "from": "pillar-change",
+      "to": "ingest-guard",
+      "label": "waits for key",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          940,
+          710
+        ]
+      ],
+      "labelAt": [
+        740,
+        697
+      ]
+    },
+    {
+      "id": "w4",
+      "from": "pillar-compliance",
+      "to": "ingest-guard",
+      "label": "waits for key",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelSegment": 0
+    }
+  ]
+}

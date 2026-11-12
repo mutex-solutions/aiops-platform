@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C3 kernel: control path",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "operator tool"
+        },
+        "backend": {
+          "label": "fleet or limits"
+        },
+        "security": {
+          "label": "auth or gateway"
+        },
+        "database": {
+          "label": "store or volume"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "cli",
+      "type": "frontend",
+      "label": "aiopsctl",
+      "sublabel": "operator CLI",
+      "size": [
+        150,
+        64
+      ],
+      "pos": [
+        40,
+        100
+      ]
+    },
+    {
+      "id": "mgmt",
+      "type": "backend",
+      "label": "Fleet management API",
+      "sublabel": "fleet, api role",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        580,
+        100
+      ]
+    },
+    {
+      "id": "revs",
+      "type": "backend",
+      "label": "Revisions and rollout",
+      "sublabel": "fleet, worker role",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        580,
+        226
+      ]
+    },
+    {
+      "id": "sweep",
+      "type": "backend",
+      "label": "Fleet sweeper",
+      "sublabel": "fleet-sweeper, periodic job",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        580,
+        352
+      ]
+    },
+    {
+      "id": "lrec",
+      "type": "backend",
+      "label": "Limits job",
+      "sublabel": "limits, P2",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        580,
+        478
+      ]
+    },
+    {
+      "id": "keys",
+      "type": "security",
+      "label": "Key rotation",
+      "sublabel": "auth-keys, periodic job",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        270,
+        604
+      ]
+    },
+    {
+      "id": "gwr",
+      "type": "security",
+      "label": "Gateway renderer",
+      "sublabel": "gateway-renderer, one job",
+      "size": [
+        180,
+        64
+      ],
+      "pos": [
+        580,
+        604
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "kernel-db",
+      "sublabel": "schemas auth, fleet",
+      "size": [
+        160,
+        64
+      ],
+      "pos": [
+        900,
+        226
+      ]
+    },
+    {
+      "id": "stores",
+      "type": "database",
+      "label": "Backend stores",
+      "sublabel": "Mimir, Loki, Tempo, Pyroscope",
+      "size": [
+        172,
+        64
+      ],
+      "pos": [
+        1165,
+        478
+      ]
+    },
+    {
+      "id": "vol",
+      "type": "database",
+      "label": "Config volume",
+      "sublabel": "ConfigMaps or files",
+      "size": [
+        160,
+        64
+      ],
+      "pos": [
+        900,
+        604
+      ]
+    },
+    {
+      "id": "gw",
+      "type": "security",
+      "label": "gateway",
+      "sublabel": "Envoy",
+      "size": [
+        150,
+        64
+      ],
+      "pos": [
+        1165,
+        604
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel-api and kernel-worker (kernel in S, D)",
+      "wraps": [
+        "mgmt",
+        "revs",
+        "sweep",
+        "lrec",
+        "keys",
+        "gwr"
+      ],
+      "pad": 10
+    }
+  ],
+  "connections": [
+    {
+      "id": "e1",
+      "from": "cli",
+      "to": "mgmt",
+      "label": "pipelines, tokens, agents",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e2",
+      "from": "mgmt",
+      "to": "db",
+      "label": "pipelines, tokens",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelDx": 50
+    },
+    {
+      "id": "e3",
+      "from": "revs",
+      "to": "db",
+      "label": "revisions, served config",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDx": 6
+    },
+    {
+      "id": "e4",
+      "from": "sweep",
+      "to": "db",
+      "label": "lapsed, deaf, recovered",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelDx": 64
+    },
+    {
+      "id": "e5",
+      "from": "keys",
+      "to": "gwr",
+      "label": "asks render, read-back",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e6",
+      "from": "gwr",
+      "to": "vol",
+      "label": "listener, cluster files",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDx": 4
+    },
+    {
+      "id": "e7",
+      "from": "vol",
+      "to": "gw",
+      "label": "mounted",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e8",
+      "from": "gwr",
+      "to": "gw",
+      "label": "LDS read-back",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          670,
+          722
+        ],
+        [
+          1240,
+          722
+        ]
+      ]
+    },
+    {
+      "id": "e9",
+      "from": "lrec",
+      "to": "vol",
+      "label": "P2 overrides files",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelDx": -66
+    },
+    {
+      "id": "e10",
+      "from": "vol",
+      "to": "stores",
+      "label": "P2 mounted",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left"
+    }
+  ]
+}

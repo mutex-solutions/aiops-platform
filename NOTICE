@@ -1,0 +1,11 @@
+aiops-platform
+Copyright 2026 The aiops-platform Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+The documentation in this repository is licensed under the same terms. Text
+quoted from third-party documentation in docs/research/ keeps its own terms.
+
+Third-party components deployed by this project keep their own licenses.
+Notices required by them (Apache-2.0 section 4(d) NOTICE texts, MPL-2.0
+source locations) are generated into THIRD_PARTY_LICENSES/ at every release
+(docs/architecture/08-profiles-roadmap-adrs.md section 5.1, L7 and L8).

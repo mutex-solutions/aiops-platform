@@ -1,0 +1,418 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kernel C3-a: infrastructure providers and the transaction contract",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "plugin or provider"
+        },
+        "database": {
+          "label": "SQL and keyed state"
+        },
+        "messagebus": {
+          "label": "jobs and events"
+        },
+        "security": {
+          "label": "audit and secrets"
+        },
+        "external": {
+          "label": "outside the kernel"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      56,
+      40
+    ],
+    "cols": 6,
+    "gapX": 72,
+    "gapY": 120,
+    "cellW": 140,
+    "cellH": 64
+  },
+  "components": [
+    {
+      "id": "object-store",
+      "type": "external",
+      "label": "object-store",
+      "sublabel": "S3 API endpoint",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        292,
+        40
+      ]
+    },
+    {
+      "id": "kek-provider",
+      "type": "security",
+      "label": "kek provider",
+      "sublabel": "kek-local-file or kek-kms",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        56,
+        224
+      ]
+    },
+    {
+      "id": "blob-s3",
+      "type": "backend",
+      "label": "blob-s3",
+      "sublabel": "objects per tenant",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        292,
+        224
+      ]
+    },
+    {
+      "id": "secrets",
+      "type": "security",
+      "label": "secrets",
+      "sublabel": "envelope encryption",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        56,
+        408
+      ]
+    },
+    {
+      "id": "stateful-plugin",
+      "type": "backend",
+      "label": "Stateful plugin",
+      "sublabel": "any row with state",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        292,
+        408
+      ]
+    },
+    {
+      "id": "jobs-river",
+      "type": "messagebus",
+      "label": "jobs-river",
+      "sublabel": "River, EnqueueTx",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        492,
+        408
+      ]
+    },
+    {
+      "id": "events-outbox",
+      "type": "messagebus",
+      "label": "events-outbox",
+      "sublabel": "outbox table, EmitTx",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        728,
+        408
+      ]
+    },
+    {
+      "id": "audit-chain",
+      "type": "security",
+      "label": "audit-chain",
+      "sublabel": "SHA-256 chain, AppendTx",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        928,
+        408
+      ]
+    },
+    {
+      "id": "kv-postgres",
+      "type": "database",
+      "label": "kv-postgres",
+      "sublabel": "keyed state, TTL",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        1116,
+        408
+      ]
+    },
+    {
+      "id": "sql-platform",
+      "type": "database",
+      "label": "sql-platform",
+      "sublabel": "platformSql, worker only",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        56,
+        592
+      ]
+    },
+    {
+      "id": "sql-postgres",
+      "type": "database",
+      "label": "sql-postgres",
+      "sublabel": "sql.InTx, forced RLS",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        292,
+        592
+      ]
+    },
+    {
+      "id": "kernel-db",
+      "type": "external",
+      "label": "kernel-db",
+      "sublabel": "PostgreSQL 16",
+      "size": [
+        140,
+        64
+      ],
+      "pos": [
+        292,
+        776
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel server (aiops binary)",
+      "wraps": [
+        "kek-provider",
+        "blob-s3",
+        "secrets",
+        "stateful-plugin",
+        "jobs-river",
+        "events-outbox",
+        "audit-chain",
+        "kv-postgres",
+        "sql-platform",
+        "sql-postgres"
+      ],
+      "pad": 52
+    },
+    {
+      "kind": "security-group",
+      "label": "take the caller's Tx",
+      "wraps": [
+        "jobs-river",
+        "events-outbox",
+        "audit-chain",
+        "kv-postgres"
+      ],
+      "pad": 28
+    }
+  ],
+  "connections": [
+    {
+      "id": "a",
+      "from": "stateful-plugin",
+      "to": "sql-postgres",
+      "label": "sql.InTx",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        362,
+        532
+      ]
+    },
+    {
+      "id": "b",
+      "from": "sql-postgres",
+      "to": "kernel-db",
+      "label": "pgx v5",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        362,
+        742
+      ]
+    },
+    {
+      "id": "c",
+      "from": "jobs-river",
+      "to": "sql-postgres",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          562,
+          546
+        ],
+        [
+          472,
+          546
+        ],
+        [
+          472,
+          624
+        ]
+      ]
+    },
+    {
+      "id": "d",
+      "from": "events-outbox",
+      "to": "sql-postgres",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          798,
+          546
+        ],
+        [
+          472,
+          546
+        ],
+        [
+          472,
+          624
+        ]
+      ]
+    },
+    {
+      "id": "e",
+      "from": "audit-chain",
+      "to": "sql-postgres",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          998,
+          546
+        ],
+        [
+          472,
+          546
+        ],
+        [
+          472,
+          624
+        ]
+      ]
+    },
+    {
+      "id": "f",
+      "from": "kv-postgres",
+      "to": "sql-postgres",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          1186,
+          546
+        ],
+        [
+          472,
+          546
+        ],
+        [
+          472,
+          624
+        ]
+      ],
+      "label": "sqlDriver",
+      "labelAt": [
+        516,
+        588
+      ]
+    },
+    {
+      "id": "g",
+      "from": "events-outbox",
+      "to": "jobs-river",
+      "label": "deliver job",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "h",
+      "from": "sql-platform",
+      "to": "kernel-db",
+      "label": "platform role",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          126,
+          808
+        ]
+      ]
+    },
+    {
+      "id": "i",
+      "from": "stateful-plugin",
+      "to": "secrets",
+      "label": "secrets.Get",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "j",
+      "from": "secrets",
+      "to": "kek-provider",
+      "label": "wrap, unwrap DEK",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "k",
+      "from": "stateful-plugin",
+      "to": "blob-s3",
+      "label": "blob",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "l",
+      "from": "blob-s3",
+      "to": "object-store",
+      "label": "S3 API",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        362,
+        138
+      ]
+    }
+  ]
+}

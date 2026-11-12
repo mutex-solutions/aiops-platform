@@ -1,0 +1,297 @@
+{
+ "schema_version": 1,
+ "diagram_type": "lifecycle",
+ "meta": {
+  "title": "Fiber states and epoch",
+  "locale": "en",
+  "quality_profile": "showcase",
+  "viewBox": [
+   880,
+   660
+  ],
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "active": {
+     "label": "in transition"
+    },
+    "success": {
+     "label": "serving, one epoch"
+    },
+    "waiting": {
+     "label": "waiting"
+    },
+    "failure": {
+     "label": "failed, sticky"
+    },
+    "neutral": {
+     "label": "removed / ledger"
+    },
+    "start": {
+     "label": "plugin, not kernel"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "main",
+   "label": "Fiber states (Cordis 4.1.0 names)"
+  },
+  {
+   "id": "recovery",
+   "label": "Failure and effects"
+  },
+  {
+   "id": "terminal",
+   "label": "Retry, a plugin outside sdk/kernel"
+  }
+ ],
+ "states": [
+  {
+   "id": "PENDING",
+   "type": "waiting",
+   "label": "PENDING",
+   "sublabel": "waits for needs",
+   "lane": "main",
+   "col": 0,
+   "step": "01"
+  },
+  {
+   "id": "LOADING",
+   "type": "active",
+   "label": "LOADING",
+   "sublabel": "Apply is running",
+   "lane": "main",
+   "col": 1,
+   "step": "02"
+  },
+  {
+   "id": "ACTIVE",
+   "type": "success",
+   "label": "ACTIVE",
+   "sublabel": "provisions visible",
+   "tag": "one epoch",
+   "lane": "main",
+   "col": 2,
+   "step": "03"
+  },
+  {
+   "id": "UNLOADING",
+   "type": "active",
+   "label": "UNLOADING",
+   "sublabel": "quiesce, then dispose",
+   "lane": "main",
+   "col": 3,
+   "step": "04"
+  },
+  {
+   "id": "DISPOSED",
+   "type": "neutral",
+   "label": "DISPOSED",
+   "sublabel": "removed for good",
+   "lane": "main",
+   "col": 4,
+   "step": "05"
+  },
+  {
+   "id": "FAILED",
+   "type": "failure",
+   "label": "FAILED",
+   "sublabel": "sticky until Update",
+   "lane": "recovery",
+   "col": 0
+  },
+  {
+   "id": "Effects",
+   "type": "neutral",
+   "label": "Effect ledger",
+   "sublabel": "label and disposer",
+   "lane": "recovery",
+   "col": 1
+  },
+  {
+   "id": "restart-policy",
+   "type": "start",
+   "label": "restart-policy",
+   "sublabel": "the only retry",
+   "lane": "terminal",
+   "col": 0,
+   "width": 150
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t-needs",
+   "from": "PENDING",
+   "to": "LOADING",
+   "label": "needs available",
+   "variant": "emphasis",
+   "route": "straight",
+   "labelAt": [
+    171,
+    204
+   ]
+  },
+  {
+   "id": "t-applied",
+   "from": "LOADING",
+   "to": "ACTIVE",
+   "label": "Apply returned nil",
+   "variant": "emphasis",
+   "route": "straight",
+   "labelAt": [
+    325,
+    204
+   ]
+  },
+  {
+   "id": "t-epoch",
+   "from": "ACTIVE",
+   "to": "UNLOADING",
+   "label": "epoch changed",
+   "variant": "emphasis",
+   "route": "straight",
+   "labelAt": [
+    479,
+    204
+   ]
+  },
+  {
+   "id": "t-removed",
+   "from": "UNLOADING",
+   "to": "DISPOSED",
+   "label": "row removed",
+   "variant": "emphasis",
+   "route": "straight",
+   "labelAt": [
+    633,
+    204
+   ]
+  },
+  {
+   "id": "t-wanted",
+   "from": "UNLOADING",
+   "to": "PENDING",
+   "label": "still wanted",
+   "fromSide": "top",
+   "toSide": "left",
+   "via": [
+    [
+     556,
+     74
+    ],
+    [
+     20,
+     74
+    ],
+    [
+     20,
+     157
+    ]
+   ],
+   "labelAt": [
+    325,
+    74
+   ]
+  },
+  {
+   "id": "t-apply-failed",
+   "from": "LOADING",
+   "to": "FAILED",
+   "label": "Apply failed",
+   "variant": "security",
+   "fromSide": "bottom",
+   "toSide": "left"
+  },
+  {
+   "id": "t-update",
+   "from": "FAILED",
+   "to": "LOADING",
+   "label": "Update only",
+   "variant": "dashed",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelDy": 14
+  },
+  {
+   "id": "t-calls-update",
+   "from": "restart-policy",
+   "to": "FAILED",
+   "label": "calls Update",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelAt": [
+    402,
+    395
+   ]
+  },
+  {
+   "id": "t-dispose",
+   "from": "Effects",
+   "to": "UNLOADING",
+   "label": "disposed in reverse",
+   "fromSide": "top",
+   "toSide": "bottom",
+   "labelAt": [
+    556,
+    242
+   ]
+  },
+  {
+   "id": "t-failed-removed",
+   "from": "FAILED",
+   "to": "DISPOSED",
+   "label": "row removed",
+   "variant": "dashed",
+   "fromSide": "right",
+   "toSide": "bottom",
+   "via": [
+    [
+     479,
+     307
+    ],
+    [
+     479,
+     372
+    ],
+    [
+     710,
+     372
+    ]
+   ],
+   "labelAt": [
+    600,
+    372
+   ]
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Epoch",
+   "items": [
+    "Derived from the fiber's revision and the uid of the provision bound to each Need",
+    "A provider swap changes the uid, so every consumer restarts in place",
+    "A fiber is ACTIVE only for the epoch it loaded with"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "Unload",
+   "items": [
+    "Quiesce first: Std() cancelled, no new leases or effects, open Enter leases and tracked goroutines drain",
+    "Then disposers run last in, first out, each under the dispose deadline"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Failure",
+   "items": [
+    "FAILED is sticky and the kernel module never retries",
+    "A dependency change does not retry it",
+    "restart-policy calls Update with its own backoff"
+   ]
+  }
+ ]
+}

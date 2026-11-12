@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The harness plugin point: three ways a harness runs",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "Caller"
+        },
+        "security": {
+          "label": "Dispatcher or provider"
+        },
+        "backend": {
+          "label": "Row in kernel process"
+        },
+        "external": {
+          "label": "Separate process"
+        }
+      }
+    },
+    "viewBox": [
+      1260,
+      902
+    ]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      60,
+      110
+    ],
+    "cols": 4,
+    "gapX": 120,
+    "gapY": 100,
+    "cellW": 180,
+    "cellH": 66
+  },
+  "components": [
+    {
+      "id": "loop-rows",
+      "type": "backend",
+      "label": "Loop rows",
+      "sublabel": "four loop-* listeners",
+      "row": 0,
+      "col": 2,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "chat",
+      "sublabel": "questions, enabled surface",
+      "row": 1,
+      "col": 0,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "harness-native",
+      "type": "backend",
+      "label": "harness-native",
+      "sublabel": "default, in process",
+      "row": 1,
+      "col": 2,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "llm-gateway",
+      "type": "security",
+      "label": "llm-gateway",
+      "sublabel": "model access by tier",
+      "row": 1,
+      "col": 3,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "casefile",
+      "type": "frontend",
+      "label": "casefile",
+      "sublabel": "incident runs",
+      "row": 2,
+      "col": 0,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "agent-runs",
+      "type": "security",
+      "label": "agent-runs",
+      "sublabel": "dispatcher of harnesses",
+      "row": 2,
+      "col": 1,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "tool-dispatch",
+      "type": "security",
+      "label": "tools",
+      "sublabel": "read-only tool set",
+      "row": 2,
+      "col": 3,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "ask-api",
+      "type": "frontend",
+      "label": "ask-api",
+      "sublabel": "behind aiopsctl ask",
+      "row": 3,
+      "col": 0,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "harness-holmesgpt",
+      "type": "backend",
+      "label": "harness-holmesgpt",
+      "sublabel": "optional plugin, in process",
+      "row": 3,
+      "col": 2,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "remote-harness",
+      "type": "external",
+      "label": "Remote harness",
+      "sublabel": "llm, tools callbacks",
+      "row": 4,
+      "col": 1,
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "harness-sidecar",
+      "type": "external",
+      "label": "harness-sidecar",
+      "sublabel": "HolmesGPT 0.46, optional",
+      "row": 4,
+      "col": 2,
+      "size": [
+        180,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel",
+      "wraps": [
+        "casefile",
+        "chat",
+        "ask-api",
+        "agent-runs",
+        "harness-native",
+        "loop-rows",
+        "harness-holmesgpt",
+        "tool-dispatch",
+        "llm-gateway"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "from": "casefile",
+      "to": "agent-runs",
+      "label": "Dispatch, investigate",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        300,
+        449
+      ]
+    },
+    {
+      "id": "c2",
+      "from": "chat",
+      "to": "agent-runs",
+      "label": "Dispatch, ask",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "c3",
+      "from": "ask-api",
+      "to": "agent-runs",
+      "label": "Dispatch, ask",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "n1",
+      "from": "agent-runs",
+      "to": "harness-native",
+      "label": "Run, by default",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "n2",
+      "from": "harness-native",
+      "to": "loop-rows",
+      "label": "loop hooks",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "n3",
+      "from": "harness-native",
+      "to": "tool-dispatch",
+      "label": "tool set",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "n4",
+      "from": "harness-native",
+      "to": "llm-gateway",
+      "label": "model view",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "r1",
+      "from": "agent-runs",
+      "to": "remote-harness",
+      "label": "Run, remote protocol",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        510,
+        735
+      ]
+    },
+    {
+      "id": "h1",
+      "from": "agent-runs",
+      "to": "harness-holmesgpt",
+      "label": "Run, if selected",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "h2",
+      "from": "harness-holmesgpt",
+      "to": "tool-dispatch",
+      "label": "paused tool calls",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "h3",
+      "from": "harness-holmesgpt",
+      "to": "harness-sidecar",
+      "label": "drives, via sidecars",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        811,
+        735
+      ]
+    },
+    {
+      "id": "h4",
+      "from": "harness-sidecar",
+      "to": "llm-gateway",
+      "label": "lease-bound key",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          1200,
+          804
+        ],
+        [
+          1200,
+          306
+        ]
+      ],
+      "labelAt": [
+        1020,
+        804
+      ]
+    }
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Deployment: self-host, one process",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "Kernel process"
+        },
+        "database": {
+          "label": "State"
+        },
+        "cloud": {
+          "label": "Upstream component"
+        },
+        "external": {
+          "label": "External system"
+        },
+        "frontend": {
+          "label": "Person"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      60,
+      60
+    ],
+    "cols": 3,
+    "gapX": 115,
+    "gapY": 160,
+    "cellW": 170,
+    "cellH": 64
+  },
+  "components": [
+    {
+      "id": "ext-chat-service",
+      "type": "external",
+      "label": "Slack",
+      "sublabel": "optional chat service",
+      "row": 0,
+      "col": 1,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "oncall-engine",
+      "type": "cloud",
+      "label": "oncall-engine",
+      "sublabel": "optional external engine",
+      "row": 0,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "metrics-store",
+      "type": "cloud",
+      "label": "metrics-store",
+      "sublabel": "Mimir Alertmanager",
+      "row": 1,
+      "col": 0,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "kernel",
+      "type": "backend",
+      "label": "kernel",
+      "sublabel": "role all, tenant default",
+      "row": 1,
+      "col": 1,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "kernel-db",
+      "type": "database",
+      "label": "kernel-db",
+      "sublabel": "PostgreSQL 16 or later",
+      "row": 1,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "phr",
+      "type": "external",
+      "label": "platform-health receiver",
+      "sublabel": "static email or webhook",
+      "row": 2,
+      "col": 0,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "ext-page-targets",
+      "type": "external",
+      "label": "page targets",
+      "sublabel": "SMTP, webhook, SMS gateway",
+      "row": 2,
+      "col": 1,
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "person-sre",
+      "type": "frontend",
+      "label": "SRE or operator",
+      "sublabel": "on call",
+      "row": 2,
+      "col": 2,
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "self-host-full, first install",
+      "wraps": [
+        "metrics-store",
+        "kernel",
+        "kernel-db"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "optional, operator-enabled",
+      "wraps": [
+        "ext-chat-service",
+        "oncall-engine"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "s1",
+      "from": "metrics-store",
+      "to": "kernel",
+      "label": "alert webhooks",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "s2",
+      "from": "kernel",
+      "to": "ext-page-targets",
+      "label": "pages and notices",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -60,
+      "labelDy": 100
+    },
+    {
+      "id": "s3",
+      "from": "ext-page-targets",
+      "to": "person-sre",
+      "label": "the page",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "s4",
+      "from": "person-sre",
+      "to": "kernel",
+      "label": "ack",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "s5",
+      "from": "kernel",
+      "to": "kernel-db",
+      "label": "insert, jobs, state",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "s6",
+      "from": "metrics-store",
+      "to": "phr",
+      "label": "platform-page-path",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 100
+    },
+    {
+      "id": "s7",
+      "from": "kernel",
+      "to": "ext-chat-service",
+      "label": "optional: Socket Mode",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": -60,
+      "labelDy": -80
+    },
+    {
+      "id": "s8",
+      "from": "kernel",
+      "to": "oncall-engine",
+      "label": "optional: Page, Ack",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One process",
+      "items": [
+        "aiops --role all mounts every row of this slice for the tenant default",
+        "A first install runs no on-call container and no harness container",
+        "Pages leave through notifications: notifier-email and notifier-webhook"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Dead-man",
+      "items": [
+        "Watchdog reaches the kernel every minute with the alert webhooks",
+        "platform-page-path goes straight to the platform-health receiver, not through the kernel"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Optional",
+      "items": [
+        "Slack only with the bundle aiops-chatops-slack: outbound Socket Mode and Web API, no inbound",
+        "oncall-engine only with an external provider plugin and a chart or compose value that is off by default"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "aiops-only",
+      "items": [
+        "The same process without metrics-store: the customer own systems send the alerts",
+        "aiops-oncall is composed; with no policy bound the timeline says so"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "C3: the estate plugin and its rows (P2)",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "plugin code"
+        },
+        "database": {
+          "label": "store"
+        },
+        "external": {
+          "label": "outside the kernel"
+        }
+      }
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      110,
+      60
+    ],
+    "cols": 4,
+    "gapX": 110,
+    "gapY": 96,
+    "cellW": 180,
+    "cellH": 64
+  },
+  "components": [
+    {
+      "id": "metrics-store",
+      "type": "database",
+      "label": "metrics-store",
+      "sublabel": "Mimir, behind gateway",
+      "row": 0,
+      "col": 0,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "ext-customer-observability",
+      "type": "external",
+      "label": "Customer observability",
+      "sublabel": "Prometheus-compatible, aiops-only",
+      "row": 0,
+      "col": 1,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "metrics-query",
+      "type": "backend",
+      "label": "metrics-query",
+      "sublabel": "row metrics-query-http",
+      "row": 1,
+      "col": 0,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-readers",
+      "type": "backend",
+      "label": "estate-readers",
+      "sublabel": "row estate-source-series",
+      "row": 2,
+      "col": 0,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-writer",
+      "type": "backend",
+      "label": "estate-writer",
+      "sublabel": "dispatcher of estateSources",
+      "row": 2,
+      "col": 1,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-store",
+      "type": "database",
+      "label": "estate-store",
+      "sublabel": "schema estate, RLS",
+      "row": 2,
+      "col": 2,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-export",
+      "type": "backend",
+      "label": "estate-export",
+      "sublabel": "Turtle, pure function",
+      "row": 3,
+      "col": 0,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-queries",
+      "type": "backend",
+      "label": "estate-queries",
+      "sublabel": "two closures, one count",
+      "row": 3,
+      "col": 1,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-service",
+      "type": "backend",
+      "label": "estate-service",
+      "sublabel": "key estate",
+      "row": 3,
+      "col": 2,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "tool-estate-lookup",
+      "type": "backend",
+      "label": "tool-estate-lookup",
+      "sublabel": "contribution to tools",
+      "row": 3,
+      "col": 3,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "estate-consumers",
+      "type": "backend",
+      "label": "estate-consumers",
+      "sublabel": "correlate, change-hub, context-pack",
+      "row": 4,
+      "col": 2,
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "vocabulary-files",
+      "type": "external",
+      "label": "vocabulary-files",
+      "sublabel": "terms and rule table",
+      "row": 5,
+      "col": 1,
+      "size": [
+        180,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kernel container",
+      "wraps": [
+        "metrics-query",
+        "estate-readers",
+        "estate-writer",
+        "estate-store",
+        "estate-export",
+        "estate-queries",
+        "estate-service",
+        "tool-estate-lookup",
+        "estate-consumers"
+      ],
+      "pad": 40
+    },
+    {
+      "kind": "security-group",
+      "label": "estate plugin, P2",
+      "wraps": [
+        "estate-writer",
+        "estate-store",
+        "estate-queries",
+        "estate-service"
+      ],
+      "pad": 22
+    }
+  ],
+  "connections": [
+    {
+      "id": "r1",
+      "from": "estate-readers",
+      "to": "metrics-query",
+      "label": "series queries",
+      "variant": "emphasis",
+      "labelAt": [
+        200,
+        321
+      ]
+    },
+    {
+      "id": "r2",
+      "from": "metrics-query",
+      "to": "metrics-store",
+      "label": "read-only",
+      "variant": "emphasis",
+      "labelAt": [
+        200,
+        160
+      ]
+    },
+    {
+      "id": "r3",
+      "from": "metrics-query",
+      "to": "ext-customer-observability",
+      "label": "aiops-only",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelAt": [
+        490,
+        160
+      ]
+    },
+    {
+      "id": "r4",
+      "from": "estate-readers",
+      "to": "estate-writer",
+      "label": "run, witness",
+      "variant": "emphasis",
+      "labelAt": [
+        330,
+        399
+      ]
+    },
+    {
+      "id": "r5",
+      "from": "estate-writer",
+      "to": "estate-store",
+      "label": "only writer",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r6",
+      "from": "estate-service",
+      "to": "estate-store",
+      "label": "reads rows",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r7",
+      "from": "estate-service",
+      "to": "estate-queries",
+      "label": "runs closures"
+    },
+    {
+      "id": "r8",
+      "from": "estate-queries",
+      "to": "vocabulary-files",
+      "label": "implements rules",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        490,
+        732
+      ]
+    },
+    {
+      "id": "r9",
+      "from": "estate-export",
+      "to": "vocabulary-files",
+      "label": "published terms",
+      "via": [
+        [
+          200,
+          892
+        ]
+      ],
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "r10",
+      "from": "tool-estate-lookup",
+      "to": "estate-service",
+      "label": "lookup"
+    },
+    {
+      "id": "r11",
+      "from": "estate-consumers",
+      "to": "estate-service",
+      "label": "advisory reads",
+      "variant": "emphasis"
+    }
+  ]
+}
