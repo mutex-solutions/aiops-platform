@@ -20,7 +20,7 @@ The contract a plugin author sees is complete at the first community release, ve
 
 ### 1.1 Modules and code layout
 
-The approved root module prefix is `github.com/hiento09/aiops-platform` (ADR-056). The three nested SDK modules are `github.com/hiento09/aiops-platform/sdk/kernel`, `github.com/hiento09/aiops-platform/sdk/def` and `github.com/hiento09/aiops-platform/sdk/testkit`; the table uses their repository-relative shorthand. This naming does not authorize publication, which remains subject to the open gate in 08 §5.1 L14.
+The approved root module prefix is `github.com/mutex-solutions/aiops-platform` (ADR-057, superseding the initial namespace of ADR-056). The three nested SDK modules are `github.com/mutex-solutions/aiops-platform/sdk/kernel`, `github.com/mutex-solutions/aiops-platform/sdk/def` and `github.com/mutex-solutions/aiops-platform/sdk/testkit`; the table uses their repository-relative shorthand. The owner authorized development pushes to the private repository; public disclosure remains subject to the open gate in 08 §5.1 L14.
 
 | Path (§8.1) | Go module | Holds | May import |
 |---|---|---|---|

@@ -2,6 +2,9 @@
 
 - Status: accepted by the project owner, 2026-11-12.
 - Scope: editorial preparation of the existing design baseline before its first local commit.
+- Namespace update: ADR-057 supersedes only the initial module prefix below with
+  `github.com/mutex-solutions/aiops-platform`; the original decision is retained as history.
+  The owner's later private-development push authorization does not clear L14.
 - Implementation scope: S0 only; no code or measured spike result is accepted by this ADR.
 
 ## Context
