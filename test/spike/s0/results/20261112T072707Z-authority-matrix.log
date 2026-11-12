@@ -1,0 +1,64 @@
+followup_protocol_sha256=bea36baba4d1e646d05cf1b8ddd5869e9398cfabc0438298eda7ecd477d79678
+=== RUN   TestAuthorityMechanismMatrix
+    authority_matrix_test.go:18: retained fixture id=bd8875502523 database=s0_probe; no automatic destructive cleanup
+=== RUN   TestAuthorityMechanismMatrix/revoke_set_does_not_freeze_userset_placeholder
+=== RUN   TestAuthorityMechanismMatrix/definer_cannot_elevate_set_role
+=== RUN   TestAuthorityMechanismMatrix/removing_set_membership_denies_trusted_role_switch_too
+=== NAME  TestAuthorityMechanismMatrix
+    authority_matrix_test.go:102: {
+          "kind": "s0-sql-authority-mechanism-matrix",
+          "run_id": "bd8875502523",
+          "started_utc": "2026-11-12T07:27:07.406260845Z",
+          "ended_utc": "2026-11-12T07:27:07.418933457Z",
+          "criteria_sha256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+          "baseline_commit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+          "probe_source_sha256": "7486a9f84dda71e29847c7882060a4f40ffb9084edd456cbcfed2c60babebd85",
+          "executable_sha256": "33f530d0f1b984d2daed046a95284e612914a652d0349bd36859ee869c80d80a",
+          "classification": "incompatible-mechanisms-reproduced",
+          "database": "s0_probe",
+          "fixture_id": "bd8875502523",
+          "roles": {
+            "caller": "s0_bd8875502523_caller",
+            "jobs": "s0_bd8875502523_jobs",
+            "owner": "s0_bd8875502523_owner",
+            "runtime": "s0_bd8875502523_runtime"
+          },
+          "checks": [
+            {
+              "name": "revoke_set_userset",
+              "escaped": true,
+              "effect": "REVOKE SET does not prevent custom USERSET scope tampering; foreign row remains readable"
+            },
+            {
+              "name": "definer_set_role",
+              "escaped": false,
+              "effect": "SECURITY DEFINER helper cannot perform SET ROLE",
+              "sqlstate": "42501"
+            },
+            {
+              "name": "caller_raw_exec_no_membership",
+              "escaped": false,
+              "effect": "ordinary same-session SET ROLE denied regardless of Go call site",
+              "sqlstate": "42501"
+            },
+            {
+              "name": "provider_direct_exec_same_tx_no_membership",
+              "escaped": false,
+              "effect": "ordinary same-session SET ROLE denied regardless of Go call site",
+              "sqlstate": "42501"
+            }
+          ],
+          "limitations": [
+            "hypothesis diagnostics, not SQL-boundary acceptance",
+            "no River insertion or performance measured",
+            "all fixture names unique; objects retained"
+          ]
+        }
+        
+--- PASS: TestAuthorityMechanismMatrix (0.16s)
+    --- PASS: TestAuthorityMechanismMatrix/revoke_set_does_not_freeze_userset_placeholder (0.00s)
+    --- PASS: TestAuthorityMechanismMatrix/definer_cannot_elevate_set_role (0.01s)
+    --- PASS: TestAuthorityMechanismMatrix/removing_set_membership_denies_trusted_role_switch_too (0.00s)
+PASS
+
+process_exit_code=0

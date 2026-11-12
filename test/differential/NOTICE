@@ -1,0 +1,39 @@
+S0 test-only differential replay
+New protocol, runner, comparator and fixture code: Apache-2.0.
+SPDX-License-Identifier: Apache-2.0
+
+Unmodified test-only reference packages:
+  @deepseek-ai/cordis 4.1.0
+  @deepseek-ai/cordis-plugin-loader 1.1.0
+  @deepseek-ai/cosmokit 1.9.0
+  @deepseek-ai/schemastery 3.19.0
+  Copyright (c) 2021-present Shigma — MIT.
+  Full unchanged grant and disclaimer are retained in each vendor LICENSE.
+
+The source-content pin is deepseek-ai/deepseek-harness commit
+fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159.
+  Copyright (c) 2026 DeepSeek — MIT.
+  The complete unchanged harness notice is oracle/notices/DeepSeek-MIT.txt.
+  This identifies source content, not a signed/reproducible build claim.
+
+@standard-schema/spec 1.1.0
+  Copyright (c) 2024 Colin McDonnell — MIT.
+  Complete unchanged license: oracle/vendor/standard-schema-spec/LICENSE.
+
+Source and built artifact byte hashes for every copied file are recorded in
+oracle/manifest.json. No upstream runtime/source file was edited. Upstream
+package manifests are preserved as published metadata; no install/build script
+was executed and no optional native dependency was copied or loaded.
+
+D01-D36 re-express neutral kernel lifecycle/config/event operations. Attribution
+for re-expressed pinned harness regression operations is recorded in each
+corresponding script. These are not claims of executing the original harness
+Vitest suite. The source pin's identified regressions remain upstream reference
+material, not original-suite pass evidence. No source-to-bundle reproducibility
+or signature verification is claimed.
+
+Node 24.22.1 is an external, unmodified test tool. The parent retains its complete
+runtime license and archive verification record outside this directory. It is
+not redistributed here. Consult the frozen public S0 reference pins for exact
+archive and full-license hashes. The Node notice must not be replaced with a
+single MIT summary if the runtime is ever redistributed.

@@ -1,0 +1,412 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D05",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "fiber": "p",
+        "config": {}
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "fiber": "p",
+        "config": {}
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "plugin",
+      "data": {
+        "fiber": "u",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "plugin",
+      "data": {
+        "fiber": "d",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "config",
+      "data": {
+        "fiber": "u",
+        "config": {}
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "apply",
+      "data": {
+        "fiber": "u",
+        "config": {}
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "error",
+      "data": {
+        "op": "read",
+        "error": {
+          "name": "Error",
+          "message": "cannot get property \"svc\" without inject"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "output",
+      "data": {
+        "to": "error",
+        "value": {
+          "name": "Error",
+          "message": "cannot get property \"svc\" without inject"
+        }
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "output",
+      "data": {
+        "to": "unchecked",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "config",
+      "data": {
+        "fiber": "d",
+        "config": {}
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "apply",
+      "data": {
+        "fiber": "d",
+        "config": {}
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "output",
+      "data": {
+        "to": "declared",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "plugin",
+      "data": {
+        "fiber": "d",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 22,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 23,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 24,
+      "kind": "plugin",
+      "data": {
+        "fiber": "u",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 25,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 26,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 27,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 28,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 29,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 30,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 31,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "provided",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "value",
+          "active": true
+        }
+      ],
+      "outputs": {}
+    },
+    {
+      "label": "checked",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "ACTIVE",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "ACTIVE",
+          "fiberUID": 3,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": [
+              {
+                "key": "svc",
+                "provisionUID": 1
+              }
+            ]
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "value",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "error": {
+          "name": "Error",
+          "message": "cannot get property \"svc\" without inject"
+        },
+        "unchecked": "value",
+        "declared": "value"
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "error": {
+          "name": "Error",
+          "message": "cannot get property \"svc\" without inject"
+        },
+        "unchecked": "value",
+        "declared": "value"
+      }
+    }
+  ]
+}

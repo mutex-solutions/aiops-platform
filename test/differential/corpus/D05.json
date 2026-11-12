@@ -1,0 +1,102 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D05",
+  "title": "Plugin service access requires a declaration, unchecked Get is explicit",
+  "covers": [
+    "required-declaration"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [{"op": "provide", "key": "svc", "value": "value"}]
+    },
+    {
+      "id": "undeclared",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "error",
+          "catch": true
+        },
+        {
+          "op": "read",
+          "key": "svc",
+          "mode": "get",
+          "to": "unchecked"
+        }
+      ]
+    },
+    {
+      "id": "declared",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "declared"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {"op": "settle", "label": "provided"},
+    {
+      "op": "mount",
+      "fiber": "u",
+      "plugin": "undeclared",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "d",
+      "plugin": "declared",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "checked"
+    },
+    {
+      "op": "dispose",
+      "fiber": "d"
+    },
+    {
+      "op": "dispose",
+      "fiber": "u"
+    },
+    {"op": "dispose", "fiber": "p"},
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "checked",
+      "path": "/outputs/error",
+      "equals": {
+        "name": "Error",
+        "message": "cannot get property \"svc\" without inject"
+      }
+    },
+    {
+      "at": "checked",
+      "path": "/outputs/unchecked",
+      "equals": "value"
+    },
+    {
+      "at": "checked",
+      "path": "/outputs/declared",
+      "equals": "value"
+    }
+  ]
+}

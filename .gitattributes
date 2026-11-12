@@ -1,0 +1,4 @@
+# Retained output and pinned upstream bytes are evidence, not editable prose.
+# Keep normal source/style whitespace checks without rewriting these originals.
+test/spike/s0/results/*.log -whitespace
+test/differential/oracle/vendor/** -whitespace

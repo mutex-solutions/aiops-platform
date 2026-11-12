@@ -1,0 +1,325 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D29",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "f",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 0
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 0
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "config",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 1
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "commit",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 1
+        }
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "listener",
+      "data": {
+        "label": "update-owner"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "gate",
+      "data": {
+        "label": "old-update",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "config",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 2
+        }
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "commit",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 2
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "listener",
+      "data": {
+        "label": "update-owner"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "config",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 3
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "commit",
+      "data": {
+        "fiber": "f",
+        "config": {
+          "v": 3
+        }
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "listener",
+      "data": {
+        "label": "update-owner"
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "gate",
+      "data": {
+        "label": "reject-update",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "error",
+      "data": {
+        "op": "awaitTask",
+        "error": {
+          "name": "Error",
+          "message": "update rejected"
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "output",
+      "data": {
+        "to": "rejection",
+        "value": {
+          "name": "Error",
+          "message": "update rejected"
+        }
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "plugin",
+      "data": {
+        "fiber": "f",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "initial",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "v": 0
+          },
+          "effectiveConfig": {
+            "v": 0
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "pending-update",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "v": 1
+          },
+          "effectiveConfig": {
+            "v": 0
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "current",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "v": 2
+          },
+          "effectiveConfig": {
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "rejected",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "v": 3
+          },
+          "effectiveConfig": {
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "rejection": {
+          "name": "Error",
+          "message": "update rejected"
+        }
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "v": 3
+          },
+          "effectiveConfig": {
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "rejection": {
+          "name": "Error",
+          "message": "update rejected"
+        }
+      }
+    }
+  ]
+}

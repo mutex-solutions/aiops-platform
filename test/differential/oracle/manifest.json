@@ -1,0 +1,699 @@
+{
+  "schema": "s0-vendor-manifest/v1",
+  "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "execution": "unmodified published built JavaScript; no source transpilation",
+  "packages": [
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.1.0",
+      "archiveURL": "https://registry.npmjs.org/@deepseek-ai/cordis/-/cordis-4.1.0.tgz",
+      "archiveSHA256": "3b0099a6aa9b0b52c3e199042acf6f1ae195c5690f7de11aa61171bca7752eca",
+      "files": [
+        {
+          "path": "vendor/cordis/LICENSE",
+          "bytes": 1071,
+          "sha256": "034fb52b1d57360ecbae6cb1632a88f86fd7c3d3f5631a5f082710203dda0be7",
+          "kind": "notice"
+        },
+        {
+          "path": "vendor/cordis/README.md",
+          "bytes": 4794,
+          "sha256": "0a1dbda41b05bd43b6df63db73c3f1be8311facbd58866ca0a5bfcc5dc4341f8",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/bin.js",
+          "bytes": 388,
+          "sha256": "cf84978c7e4165bf090b0d50c34c1986d06577f2ada27c902660783a142c3f81",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/cordis/lib/index.js",
+          "bytes": 64121,
+          "sha256": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/cordis/lib/types/context.d.ts",
+          "bytes": 4761,
+          "sha256": "bce37530fc9032b0439869a8ae75904741fdc3a0483703e20c7252bfe20847d1",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/context.d.ts.map",
+          "bytes": 1599,
+          "sha256": "ccf8dc35676bf8af517e431e77a94a7093b0a8beb2bf3b4430efb258ddd7a06c",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/events.d.ts",
+          "bytes": 12197,
+          "sha256": "814dcc2b5bbd5343a8cb8a921c81ac284e41c62f373a1fc3707fb563cbee0cb8",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/events.d.ts.map",
+          "bytes": 5472,
+          "sha256": "ed350b5e3bf0d07277dc0d907faaa46e441e103444743a773b1bc179da612a08",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/fiber.d.ts",
+          "bytes": 9648,
+          "sha256": "76e923f17a752234aa6695bc68c8b85788a1d3c6d6323e89c0bdf863d604f0f9",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/fiber.d.ts.map",
+          "bytes": 3669,
+          "sha256": "829e435d1f72dcc9c95b15d360b320699deaca4fb40d4609480ba117e9a93f0a",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/index.d.ts",
+          "bytes": 858,
+          "sha256": "51237bf92ef225c92c897c5fb0aa8e4482267a5ae6ff1cf768726a40c9a7db86",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/index.d.ts.map",
+          "bytes": 411,
+          "sha256": "82a677d64bdfbb406b78b9bfdd87538571dab897a6a8ea9c46e224baafe4c535",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/logger.d.ts",
+          "bytes": 3742,
+          "sha256": "333ac745fd03dad7ee86f9d97b381ff67f30186da68c1eea0969f2b3e1cac220",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/logger.d.ts.map",
+          "bytes": 2612,
+          "sha256": "e23ac87adabd27c81819cbc0ff467e75e9dbc663a1bd8fead45cf7a544ac9dff",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/reflect.d.ts",
+          "bytes": 8573,
+          "sha256": "07abdcc513bdee0b3074a284edf6047c6f81638e8dafdfeb7a72eb0a71dbb689",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/reflect.d.ts.map",
+          "bytes": 3344,
+          "sha256": "ee87a2444eb87c00b4f147e647f2552e2659112b836b48ef7d11f6bb8d9ddaa3",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/registry.d.ts",
+          "bytes": 8904,
+          "sha256": "1188a67702253930766e6b03670b8f906e87ac11623c9aa69012215552a6f354",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/registry.d.ts.map",
+          "bytes": 4169,
+          "sha256": "5397aeafe20f8da86e870c4c5ff559647a4e8486d51d4989c49a8aa6399c5615",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/service.d.ts",
+          "bytes": 2610,
+          "sha256": "1bb754c0d12ad9f1b371e9a1496e0caba5b5a7a750796c5de81e123750e2fb09",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/service.d.ts.map",
+          "bytes": 1194,
+          "sha256": "3477c03a00e659ec022fcea6feea50121b5c5229f77f279c831efc9b7b54a5ac",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/utils.d.ts",
+          "bytes": 2764,
+          "sha256": "7145433c5a123551f06887b4ff95910176c80e22eb9fa0c1d6cb0c78db12bddb",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/lib/types/utils.d.ts.map",
+          "bytes": 1749,
+          "sha256": "2edb7ad00a977a267a2cd3c11110fbcb62e9ca7a48e878887f9fed8bcd490ab9",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/package.json",
+          "bytes": 1241,
+          "sha256": "70be1056619663339433309474b1e6a2307088097af3cb082afe4b5ca2021b26",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cordis/src/context.ts",
+          "bytes": 6165,
+          "sha256": "fd5a4f1d2bc6b8b34729c87fda7639a07759ce07fb070ab05374acbcb9ccdc0e",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/context.ts"
+        },
+        {
+          "path": "vendor/cordis/src/events.ts",
+          "bytes": 16163,
+          "sha256": "a464c843822da4eb31a8d998c5e2216a817b8a7dfeacb6e1aab7f830e7320d6b",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/events.ts"
+        },
+        {
+          "path": "vendor/cordis/src/fiber.ts",
+          "bytes": 28013,
+          "sha256": "b64c3a97f15f0381479dcf3d25965e56dc4cecfa4a0881fc055a49f65b9945df",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/fiber.ts"
+        },
+        {
+          "path": "vendor/cordis/src/index.ts",
+          "bytes": 815,
+          "sha256": "071fb226e9a21556625e4391b28e6641b9b34b1cd402155246e0437993d8b740",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/index.ts"
+        },
+        {
+          "path": "vendor/cordis/src/logger.ts",
+          "bytes": 8810,
+          "sha256": "a6836ace311d0bd1abc9c1211cffcba73eff61c89ca47641efd82d91747401cb",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/logger.ts"
+        },
+        {
+          "path": "vendor/cordis/src/reflect.ts",
+          "bytes": 16565,
+          "sha256": "047f01fcdef2aa34b4afc39deaf18c16733fabd2a5ef0d55e5c2595b22caadfd",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/reflect.ts"
+        },
+        {
+          "path": "vendor/cordis/src/registry.ts",
+          "bytes": 11753,
+          "sha256": "34bbd60ae502b4f85201c204afb52a9acabde6878d9278493478c1b2183debd3",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/registry.ts"
+        },
+        {
+          "path": "vendor/cordis/src/service.ts",
+          "bytes": 4263,
+          "sha256": "614205c6ce7cf1a057b8b352e96aa4fcd734c967a3d2283a126c9c61f268e3be",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/service.ts"
+        },
+        {
+          "path": "vendor/cordis/src/utils.ts",
+          "bytes": 10716,
+          "sha256": "c68bab85514ebd8cb08227367ea306b0109a214cd10965c497474eeadaaca756",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/utils.ts"
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/cordis-plugin-loader",
+      "version": "1.1.0",
+      "archiveURL": "https://registry.npmjs.org/@deepseek-ai/cordis-plugin-loader/-/cordis-plugin-loader-1.1.0.tgz",
+      "archiveSHA256": "afb467fc85361e8ab99a88cdcbcf90ef3ffc270dfbe8c2e03f503bb4c899939f",
+      "files": [
+        {
+          "path": "vendor/loader/LICENSE",
+          "bytes": 1071,
+          "sha256": "034fb52b1d57360ecbae6cb1632a88f86fd7c3d3f5631a5f082710203dda0be7",
+          "kind": "notice"
+        },
+        {
+          "path": "vendor/loader/README.md",
+          "bytes": 6238,
+          "sha256": "a9d4fc42fb8741fff0a56d0aa44ebba7fbaed86576357491121017bb9a482bf3",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/index.js",
+          "bytes": 28635,
+          "sha256": "4f0a93a1ef5bb09bd6e1c64b30df11be25efd46c316b9505c5ddf308974367a6",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/diff.d.ts",
+          "bytes": 889,
+          "sha256": "384a3adf345bf14d5160cd89a8f7098e9278289fb76af208b9c0a6dde0afe60e",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/diff.d.ts.map",
+          "bytes": 313,
+          "sha256": "4fb16e876f48eae358f81946223259e3ac177e7ebc6d281b69a1ed27bd33a385",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/entry.d.ts",
+          "bytes": 2471,
+          "sha256": "1f9fb353945fbe651a9d3874541db9a2cecc1ebbcbf7dd6b8956b8c40df27b93",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/entry.d.ts.map",
+          "bytes": 1337,
+          "sha256": "8204d4b11c96582e624c424abf12b56eb4b30b852807c90b19f1f44f445f594f",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/group.d.ts",
+          "bytes": 1041,
+          "sha256": "4fccac47dcb65b6f9a7ed674b97a72ed6e5340ab01deebd1320e7fb926d7db02",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/group.d.ts.map",
+          "bytes": 943,
+          "sha256": "7428ce81e1081b9ee3a99bc230aed778be91bd4b0f03fa23bbd244836a174eda",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/isolate.d.ts",
+          "bytes": 1162,
+          "sha256": "f7123a5bbd90991856db9709d84f46ed08d7174aef6312523fa8a0e7d8c752dc",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/isolate.d.ts.map",
+          "bytes": 962,
+          "sha256": "f12e3950e42bca9373b13b71b2d5140f37bf5833c84e706ef3258f82e5da2f4c",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/tree.d.ts",
+          "bytes": 3031,
+          "sha256": "73eed5054b9cfe661f4409f88ba06ee075510ec14bb2d3616bb3d27be5e32a35",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/tree.d.ts.map",
+          "bytes": 1469,
+          "sha256": "6d2035c7e1d9e4613ac6825d0a05ec975eadf460c26fb76a3a2953a45cd1301e",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/utils.d.ts",
+          "bytes": 587,
+          "sha256": "cb8240b40ff2d5c8509857179e3da91cc34a6bd56b5311cc56a5fd000b1d3677",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/config/utils.d.ts.map",
+          "bytes": 437,
+          "sha256": "4549ae089d9c15772d00f9791bbc9d3ec33df931a8da0306614ad775d3755230",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/index.d.ts",
+          "bytes": 3447,
+          "sha256": "dd7d5f74b490a7274c934e5351cde371c6eeb95ce75e8b081e0921de0fd6e7d0",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/index.d.ts.map",
+          "bytes": 1966,
+          "sha256": "42b3a3d97dcf17c6130d7943781382c2d3faeeda8466b11f4bd932e74e7cbba5",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/internal.d.ts",
+          "bytes": 5046,
+          "sha256": "5c1bfdad5775e0f4abb5e7552b8359196fb69477986df9678a7a27b010ffd1b1",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/internal.d.ts.map",
+          "bytes": 3228,
+          "sha256": "8521a86c3a6e54401f5c8fc6a670e8d647e35bafca3f97326089fb49a27e4d16",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/resolve.d.ts",
+          "bytes": 557,
+          "sha256": "7f35a1510e24cd083b13c3769fcdb8f9fe752ff46402baefabe347c4666d73d6",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/lib/types/resolve.d.ts.map",
+          "bytes": 252,
+          "sha256": "8d3e6a817a59d2e7bca311ee3bf3bc4ac95a10b0972715effe480841e39997be",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/package.json",
+          "bytes": 1054,
+          "sha256": "af17686b3c2ec43cbeb9d918c7713db1d337b7b4ed70754d475eafa38a944751",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/loader/src/config/diff.ts",
+          "bytes": 2171,
+          "sha256": "6025a6b9798a0a16af017bb7d8d6394bbe345685b2ace56b15975add5843edb3",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/diff.ts"
+        },
+        {
+          "path": "vendor/loader/src/config/entry.ts",
+          "bytes": 8383,
+          "sha256": "650e4e1f3015bcca63c5a3474310f87a418add6249d9939d173a2b79f2ee7d9b",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/entry.ts"
+        },
+        {
+          "path": "vendor/loader/src/config/group.ts",
+          "bytes": 2707,
+          "sha256": "9f63daea792e38a106c841e2ca062ded8fb67177665e8dcee821992b2071c017",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/group.ts"
+        },
+        {
+          "path": "vendor/loader/src/config/isolate.ts",
+          "bytes": 5621,
+          "sha256": "70c7f8050a4fdc65031e956c5dae0a751d793ebdb51e5c955312666603c977a3",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/isolate.ts"
+        },
+        {
+          "path": "vendor/loader/src/config/tree.ts",
+          "bytes": 7552,
+          "sha256": "dd856ead27ac9b81e88dd51b13753f138d7951cc6d6bf3e5cfcbe206281aa503",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/tree.ts"
+        },
+        {
+          "path": "vendor/loader/src/config/utils.ts",
+          "bytes": 1051,
+          "sha256": "d85b8ac1693af4667e9c0395cd1d6b15ec28387073a81f0d00bd38d909a05f8e",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/config/utils.ts"
+        },
+        {
+          "path": "vendor/loader/src/index.ts",
+          "bytes": 7710,
+          "sha256": "e2d04b34ef703e08d2e40f0ba41daa31ff564343cfeb018f102133fc62317050",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/index.ts"
+        },
+        {
+          "path": "vendor/loader/src/internal.ts",
+          "bytes": 5765,
+          "sha256": "35a50d597fed58656a11e3c5294fdf99524ed8c106739b4fab522a288eefa877",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/internal.ts"
+        },
+        {
+          "path": "vendor/loader/src/resolve.ts",
+          "bytes": 2763,
+          "sha256": "416336cfdc468ad504c6b7df64d32975a94e18914eca5d5e01dc9682207754d6",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/loader/src/resolve.ts"
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/cosmokit",
+      "version": "1.9.0",
+      "archiveURL": "https://registry.npmjs.org/@deepseek-ai/cosmokit/-/cosmokit-1.9.0.tgz",
+      "archiveSHA256": "6225043dbc7f6ff6c7cb104bc381b74c972577967ad827af26180719e17ff71d",
+      "files": [
+        {
+          "path": "vendor/cosmokit/LICENSE",
+          "bytes": 1071,
+          "sha256": "034fb52b1d57360ecbae6cb1632a88f86fd7c3d3f5631a5f082710203dda0be7",
+          "kind": "notice"
+        },
+        {
+          "path": "vendor/cosmokit/README.md",
+          "bytes": 1418,
+          "sha256": "fa0a17f50f83cda52ce623c9d42afb4eec1b33689285a0b9d2f655acbca13286",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/index.js",
+          "bytes": 17160,
+          "sha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/array.d.ts",
+          "bytes": 1069,
+          "sha256": "f63b6a79179ea0f70902e1c9d8c98b3fd457b124c7c5dcb3adccc4fae5a8c5b6",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/array.d.ts.map",
+          "bytes": 788,
+          "sha256": "76e7996107ba6d4ea97eebe33c825e85f53392fd9b21e87248d0030903f5cdf1",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/index.d.ts",
+          "bytes": 547,
+          "sha256": "850b1bde1c4b0dd26069a365e3837180890205f243f962838c4b769302aa583b",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/index.d.ts.map",
+          "bytes": 309,
+          "sha256": "cc8b19e444b8d7a04697460273e5ace19f1ea4ca51bbc987b3397c0e261d5e5c",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/misc.d.ts",
+          "bytes": 2901,
+          "sha256": "b3ffb1d306130b143d309b7621dc0f94446bf0d0721a5aeaae92f1112c3a852c",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/misc.d.ts.map",
+          "bytes": 2706,
+          "sha256": "7fd470887c2b1a2c86c5b149fdfddc90d7a00bea047547391ad6d169d1bc468f",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/string.d.ts",
+          "bytes": 2790,
+          "sha256": "018925218746fd81518276960ee5eaaf7664f7ac0a1bc01d6604903254186ced",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/string.d.ts.map",
+          "bytes": 2772,
+          "sha256": "6f10c183f6f0c7aac796f6fd0ae3b16b30d455a86d7d2018ecf3641093adeeac",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/time.d.ts",
+          "bytes": 773,
+          "sha256": "2fb4faf4cb90b96c83a3282f6cad6eafd3395a251ae2d193a0a27c63cf4dfc78",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/time.d.ts.map",
+          "bytes": 753,
+          "sha256": "afad91a505bd82c857a69ad72718e59d4a08f05c35493854ac000ace760a3a51",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/types.d.ts",
+          "bytes": 2421,
+          "sha256": "ecec322706391b1eed65497f97bb2ba53dfee289d276c35b91ad83550b61a2fa",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/types.d.ts.map",
+          "bytes": 1552,
+          "sha256": "6da6f71fd5de4144c9f2862aad0951c5586e7b03e95a9624c4ec5730c39cd368",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/volatile.d.ts",
+          "bytes": 1852,
+          "sha256": "9733d9ecf59e8b86a6e5605c830e2efacbd93e527c3fd8388aaf0d09649fef0c",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/lib/types/volatile.d.ts.map",
+          "bytes": 840,
+          "sha256": "7f41de53d13986b169df89edba078f017f0acdaff8338d00ddc45596a19fefa4",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/package.json",
+          "bytes": 739,
+          "sha256": "7825705f990d7b54c6d1216da86eaf8c6a795274834be83dc0d976bbd929f9da",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/cosmokit/src/array.ts",
+          "bytes": 1453,
+          "sha256": "cf4de899ecffd66a90d8cef6f4c7d127d31f77f776d8e173d41c30d2d7632cf7",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/array.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/index.ts",
+          "bytes": 506,
+          "sha256": "1087da74b9c461984e547d524ee766eebcf329a78e4720bff5b60a004ccf6e8c",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/index.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/misc.ts",
+          "bytes": 3865,
+          "sha256": "117617943074ea57c15f216905dacd2f6d1c4c2ff16586f97a7a7a87dbf2141f",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/misc.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/string.ts",
+          "bytes": 3928,
+          "sha256": "5564272b3e15e49235cbe3a8b453f27306baf282d23a893982841670f65d3c04",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/string.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/time.ts",
+          "bytes": 3054,
+          "sha256": "49957c4608465a1fbd738186a92c47fffcd1fc4ba59dbf89524f8a773fe16fe2",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/time.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/types.ts",
+          "bytes": 7038,
+          "sha256": "cc49c12e4a637f7b0754ff78a8299e9c42fa40ee8c678550af0c538a80146a92",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/types.ts"
+        },
+        {
+          "path": "vendor/cosmokit/src/volatile.ts",
+          "bytes": 3637,
+          "sha256": "937433215595f89da249ec7cabb89e331ff4135a40c6686a95666d2095315e55",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cosmokit/src/volatile.ts"
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/schemastery",
+      "version": "3.19.0",
+      "archiveURL": "https://registry.npmjs.org/@deepseek-ai/schemastery/-/schemastery-3.19.0.tgz",
+      "archiveSHA256": "f702ce152aba393497c5d8d1258c6e602c7d85a22c3071b5fee6ccf0503e39e0",
+      "files": [
+        {
+          "path": "vendor/schemastery/LICENSE",
+          "bytes": 1071,
+          "sha256": "034fb52b1d57360ecbae6cb1632a88f86fd7c3d3f5631a5f082710203dda0be7",
+          "kind": "notice"
+        },
+        {
+          "path": "vendor/schemastery/README.md",
+          "bytes": 9687,
+          "sha256": "cdd54eece79b14c3672dfe94abb38b8d01c6ced57fb9975c4147fa17f81512d4",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/schemastery/lib/index.cjs",
+          "bytes": 23821,
+          "sha256": "aca1c1a47c7b6034feee01501aefca3e6dd97a0bac4fe334fd30647ae5a9e480",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/schemastery/lib/index.mjs",
+          "bytes": 22988,
+          "sha256": "cfcbe46c7416bdb35ce891c252152bbf519e08199bede5930dd7cb880c65f1ef",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/schemastery/lib/types/index.d.ts",
+          "bytes": 12506,
+          "sha256": "fca846c1420a192b7ae749da96afa0c9b5c57b2e7dff418153674f90200f4e27",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/schemastery/lib/types/index.d.ts.map",
+          "bytes": 10848,
+          "sha256": "ee91a9f4c24c9bc82b5a37e8c84f690f5ec6e2385795902683557b0a08812e47",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/schemastery/package.json",
+          "bytes": 932,
+          "sha256": "b56f354704ff6e65c8a0c2639f0d46dffa74aaeef9c12e83d47d60f19021112b",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/schemastery/src/index.ts",
+          "bytes": 36623,
+          "sha256": "a6647b515659cf439b701fa9f9574c9c310ce3872d26a13a81e9fa4d02ba10ad",
+          "kind": "source",
+          "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/schemastery/src/index.ts"
+        }
+      ]
+    },
+    {
+      "name": "@standard-schema/spec",
+      "version": "1.1.0",
+      "archiveURL": "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz",
+      "archiveSHA256": "a7cb7268be280ab518d450f8c3b07c86f23417225c0ab53691ed59b3067cceaf",
+      "files": [
+        {
+          "path": "vendor/standard-schema-spec/LICENSE",
+          "bytes": 1071,
+          "sha256": "653b779005a3a4d64a7288c940f7b9a0e8f0b1e0375f6aa6af9473caf131e564",
+          "kind": "notice"
+        },
+        {
+          "path": "vendor/standard-schema-spec/README.md",
+          "bytes": 7551,
+          "sha256": "1abba96482ed100b7b4e61277e7700aa7d1b4e06e433626f39d89cd620e0efa7",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/standard-schema-spec/dist/index.cjs",
+          "bytes": 754,
+          "sha256": "68eba92bc1637688388d7adc1fe5aa748b27c7101ad40123e64135bb5e9ed8e7",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/standard-schema-spec/dist/index.d.cts",
+          "bytes": 6056,
+          "sha256": "bdd14f07b4eca0b4b5203b85b8dbc4d084c749fa590bee5ea613e1641dcd3b29",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/standard-schema-spec/dist/index.d.ts",
+          "bytes": 6056,
+          "sha256": "bdd14f07b4eca0b4b5203b85b8dbc4d084c749fa590bee5ea613e1641dcd3b29",
+          "kind": "package"
+        },
+        {
+          "path": "vendor/standard-schema-spec/dist/index.js",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "kind": "runtime"
+        },
+        {
+          "path": "vendor/standard-schema-spec/package.json",
+          "bytes": 1146,
+          "sha256": "58e5bd75ddd0684c88b07cd799585cc72a37fd6efb8ab0c936d49e230d5164fb",
+          "kind": "package"
+        }
+      ]
+    }
+  ],
+  "additionalNotices": [
+    {
+      "path": "notices/DeepSeek-MIT.txt",
+      "bytes": 1065,
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "sourceURL": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/LICENSE"
+    }
+  ]
+}

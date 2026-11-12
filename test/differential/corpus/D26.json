@@ -1,0 +1,16 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D26",
+  "title": "Awaited own disposal from Apply is an explicit bounded diagnostic",
+  "covers": ["self-dispose-awaited-diagnostic"],
+  "diagnostic": "self-dispose-await",
+  "plugins": [{
+    "id": "self-await",
+    "apply": [{"op": "selfDispose", "await": true}, {"op": "mark", "label": "unreachable-after-await"}]
+  }],
+  "steps": [
+    {"op": "mount", "fiber": "self", "plugin": "self-await", "config": {}},
+    {"op": "settle", "label": "would-settle"}
+  ],
+  "expect": [{"at": "diagnostic", "path": "/states/0/state", "equals": "LOADING"}]
+}

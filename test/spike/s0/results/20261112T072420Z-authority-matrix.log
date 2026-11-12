@@ -1,0 +1,7 @@
+followup_protocol_sha256=bea36baba4d1e646d05cf1b8ddd5869e9398cfabc0438298eda7ecd477d79678
+=== RUN   TestAuthorityMechanismMatrix
+    authority_matrix_test.go:18: bootstrap database verification failed
+--- FAIL: TestAuthorityMechanismMatrix (0.00s)
+FAIL
+
+process_exit_code=1

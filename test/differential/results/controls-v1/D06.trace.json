@@ -1,0 +1,443 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D06",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "provider",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "provider",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "plugin",
+      "data": {
+        "fiber": "parent",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "config",
+      "data": {
+        "fiber": "provider",
+        "config": {}
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "apply",
+      "data": {
+        "fiber": "provider",
+        "config": {}
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "status",
+      "data": {
+        "fiber": "provider",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "status",
+      "data": {
+        "fiber": "parent",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "outer"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "config",
+      "data": {
+        "fiber": "parent",
+        "config": {}
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "apply",
+      "data": {
+        "fiber": "parent",
+        "config": {}
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "plugin",
+      "data": {
+        "fiber": "child",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "status",
+      "data": {
+        "fiber": "child",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "plugin",
+      "data": {
+        "fiber": "private-child",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "status",
+      "data": {
+        "fiber": "private-child",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "config",
+      "data": {
+        "fiber": "child",
+        "config": {}
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "apply",
+      "data": {
+        "fiber": "child",
+        "config": {}
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "output",
+      "data": {
+        "to": "inherited",
+        "value": "outer"
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "config",
+      "data": {
+        "fiber": "private-child",
+        "config": {}
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "apply",
+      "data": {
+        "fiber": "private-child",
+        "config": {}
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "output",
+      "data": {
+        "to": "private-error",
+        "value": "outer"
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "status",
+      "data": {
+        "fiber": "parent",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 22,
+      "kind": "status",
+      "data": {
+        "fiber": "child",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 23,
+      "kind": "status",
+      "data": {
+        "fiber": "private-child",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 24,
+      "kind": "plugin",
+      "data": {
+        "fiber": "parent",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 25,
+      "kind": "status",
+      "data": {
+        "fiber": "parent",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 26,
+      "kind": "plugin",
+      "data": {
+        "fiber": "private-child",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 27,
+      "kind": "status",
+      "data": {
+        "fiber": "private-child",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 28,
+      "kind": "plugin",
+      "data": {
+        "fiber": "child",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 29,
+      "kind": "status",
+      "data": {
+        "fiber": "child",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 30,
+      "kind": "status",
+      "data": {
+        "fiber": "private-child",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 31,
+      "kind": "status",
+      "data": {
+        "fiber": "child",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 32,
+      "kind": "status",
+      "data": {
+        "fiber": "parent",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 33,
+      "kind": "plugin",
+      "data": {
+        "fiber": "provider",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 34,
+      "kind": "status",
+      "data": {
+        "fiber": "provider",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 35,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "outer"
+      }
+    },
+    {
+      "seq": 36,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 37,
+      "kind": "status",
+      "data": {
+        "fiber": "provider",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "children",
+      "states": [
+        {
+          "fiber": "provider",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "parent",
+          "state": "ACTIVE",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": [
+              {
+                "key": "svc",
+                "provisionUID": 1
+              }
+            ]
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "child",
+          "state": "ACTIVE",
+          "fiberUID": 3,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "private-child",
+          "state": "ACTIVE",
+          "fiberUID": 4,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "provider",
+          "provisionUID": 1,
+          "value": "outer",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "inherited": "outer",
+        "private-error": "outer"
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "provider",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "parent",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "child",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "private-child",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "inherited": "outer",
+        "private-error": "outer"
+      }
+    }
+  ]
+}

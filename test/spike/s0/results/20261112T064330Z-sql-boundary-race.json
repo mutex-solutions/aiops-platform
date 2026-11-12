@@ -1,0 +1,57 @@
+{
+  "kind": "s0-sql-view-boundary",
+  "run_id": "18ad0bc280dd",
+  "started_utc": "2026-11-12T06:43:30.702273767Z",
+  "ended_utc": "2026-11-12T06:43:30.711222489Z",
+  "criteria_sha256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "baseline_commit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+  "probe_source_sha256": "89a9aa34cbb6e176e01ab3ba484c04cb7087b5683299cc5279288ff3d262120e",
+  "executable_sha256": "e3d1b275fb731dbe066cd03d3158ff650cd1e8c40f2d2586094216596a915cd4",
+  "classification": "fail",
+  "database": "s0_probe",
+  "fixture_id": "18ad0bc280dd",
+  "roles": {
+    "caller": "s0_18ad0bc280dd_caller",
+    "jobs": "s0_18ad0bc280dd_jobs",
+    "owner": "s0_18ad0bc280dd_owner",
+    "runtime": "s0_18ad0bc280dd_runtime"
+  },
+  "checks": [
+    {
+      "name": "set_local_role_jobs",
+      "escaped": true,
+      "effect": "caller raw Exec entered the provider jobs role"
+    },
+    {
+      "name": "reset_role",
+      "escaped": true,
+      "effect": "caller raw Exec escaped its no-login role back to the login principal"
+    },
+    {
+      "name": "set_config_cross_scope_read",
+      "escaped": true,
+      "effect": "caller changed the transaction scope and read the other scope's row under FORCE RLS"
+    },
+    {
+      "name": "set_config_cross_scope_write",
+      "escaped": true,
+      "effect": "caller changed the transaction scope and wrote another scope's row; attack transaction rolled back"
+    },
+    {
+      "name": "set_local_tenant",
+      "escaped": true,
+      "effect": "caller changed the trusted tenant setting through SET LOCAL"
+    },
+    {
+      "name": "direct_outbox_write",
+      "escaped": false,
+      "effect": "direct foreign-schema write must be denied independently of scope RLS",
+      "sqlstate": "42501"
+    }
+  ],
+  "limitations": [
+    "correctness diagnostic only; no latency/performance/restart acceptance",
+    "hostile Go is outside the accepted sandbox boundary; these statements use the actual raw caller SQL capability",
+    "fixture objects intentionally retained; no destructive automatic cleanup"
+  ]
+}

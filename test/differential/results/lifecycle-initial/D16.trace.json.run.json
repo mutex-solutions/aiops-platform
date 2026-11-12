@@ -1,0 +1,21 @@
+{
+  "schema": "s0-oracle-run/v1",
+  "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "startedUTC": "2026-11-12T07:35:43.281Z",
+  "endedUTC": "2026-11-12T07:35:43.294Z",
+  "nodeVersion": "v24.22.1",
+  "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+  "oracleSHA256": "0024b7bbb01f518e89f180f7f8ad47494a3dfccdbd4346ae22396ec560d16ba7",
+  "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+  "scripts": {
+    "D16": "c930d38157e905b3f55f7eec0d16f0f2b44e7bcf7280a5c5b88278e8e200d03f"
+  },
+  "exitCode": 0,
+  "nativeAttempts": 0,
+  "resolvedPackages": [
+    "@deepseek-ai/cordis",
+    "@deepseek-ai/cosmokit"
+  ],
+  "traceSHA256": "7478d953fd063381a991abde0a782b4ce4bf8acface07fefc97518e5f24e3dc5"
+}

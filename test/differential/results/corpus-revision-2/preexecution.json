@@ -1,0 +1,19 @@
+{
+  "schema": "s0-corpus-revision-plan/v1",
+  "recordedUTC": "2026-11-12T08:36:58.533255+00:00",
+  "executionStarted": false,
+  "baseFreezeSHA256": "3b40b812ed6df7b98780d80f46396eb2c4bcb685393a5ba0464a04623ae72596",
+  "oldScriptSHA256": "f798d978e0e775c91aa8cf26da0aadf2058a154e41a292d05a3c890effd77e79",
+  "newScriptSHA256": "b285c1deb72ccccefe14184cadfe8269684580e70c4c6ba8a0ecf39f3bd161c2",
+  "newScript": "corpus/revision-2/D13.json",
+  "planSHA256": "4636123da0fdb7e2cf743bd21f8281bfc137ecc41d1b1d9fe21c00d76dcc247a",
+  "ownerPreexecutionRecordSHA256": "fd177c3a54678d1bfd9feef844447b7a56eec0ed8ce99173d6aa293f0e7ae218",
+  "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+  "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+  "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "delta": [
+    "unloading.apply mark u-ready",
+    "steps waitMark u-ready immediately before dispose u"
+  ],
+  "expectationsChanged": false
+}

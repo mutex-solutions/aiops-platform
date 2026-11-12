@@ -1,0 +1,114 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D06",
+  "title": "A child inherits a declared injection only within the same realm",
+  "covers": [
+    "inherited-inject-in-realm"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": "outer"
+        }
+      ]
+    },
+    {
+      "id": "parent",
+      "apply": [
+        {
+          "op": "child",
+          "fiber": "child",
+          "plugin": "child",
+          "config": {}
+        },
+        {
+          "op": "context",
+          "mode": "isolate",
+          "to": "private",
+          "key": "svc",
+          "label": "child-private"
+        },
+        {
+          "op": "child",
+          "context": "private",
+          "fiber": "private-child",
+          "plugin": "private-child",
+          "config": {}
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    },
+    {
+      "id": "child",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "inherited"
+        }
+      ]
+    },
+    {
+      "id": "private-child",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "private-error",
+          "catch": true
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "provider",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "parent",
+      "plugin": "parent",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "children"
+    },
+    {
+      "op": "dispose",
+      "fiber": "parent"
+    },
+    {
+      "op": "dispose",
+      "fiber": "provider"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "children",
+      "path": "/outputs/inherited",
+      "equals": "outer"
+    },
+    {
+      "at": "children",
+      "path": "/outputs/private-error",
+      "equals": {
+        "name": "Error",
+        "message": "cannot get property \"svc\" without inject"
+      }
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+Experimental immutable context/key front end
+
+Original Go additions: SPDX-License-Identifier: Apache-2.0.
+
+This test-only package adapts the context tree, joining isolation labels,
+ancestor-first interception and per-consumer availability semantics of
+@deepseek-ai/cordis 4.1.0, as modified and published by DeepSeek Harness.
+Source-content pin: fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159
+https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159
+Reference files: vendor/cordis/src/context.ts and service.ts (the preserved
+oracle copies are test/differential/oracle/vendor/cordis/src/context.ts and
+service.ts). Source package pin: @deepseek-ai/cordis 4.1.0, archive SHA-256
+3b0099a6aa9b0b52c3e199042acf6f1ae195c5690f7de11aa61171bca7752eca.
+
+Go adaptations/additions include typed name+major keys, exact-type collision
+validation, registered entry-value identity, explicit binding data, immutable
+provision snapshots, declared dependencies, typed scope values and explicit
+audiences. They are experimental metadata, not the selected kernel, a mounted
+runtime or a claim of full S0 acceptance. Lifecycle/ACTIVE publication, effect
+ownership, leases, epochs, hooks and both runtime integrations remain separate.
+No package name or public API here selects the eventual kernel SDK layout.
+
+Both source notices are retained in full below. The Apache-2.0 terms on original
+Go additions do not remove or replace the MIT terms on the adapted material.
+
+MIT License
+
+Copyright (c) 2021-present Shigma
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+MIT License
+
+Copyright (c) 2026 DeepSeek
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

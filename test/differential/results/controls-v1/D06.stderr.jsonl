@@ -1,0 +1,1 @@
+{"name":"Error","message":"D06 assertion children/outputs/private-error: \"outer\" != {\"name\":\"Error\",\"message\":\"cannot get property \\\"svc\\\" without inject\"}"}

@@ -1,0 +1,121 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D33",
+  "title": "Serial awaits listeners then stops at zero bail value or first error",
+  "covers": [
+    "serial-mode",
+    "serial-stops-bail-and-error"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "serial-bail",
+      "label": "first",
+      "program": [
+        {
+          "op": "gate",
+          "label": "serial-gate"
+        },
+        {
+          "op": "return",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "serial-bail",
+      "label": "zero",
+      "program": [
+        {
+          "op": "return",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "serial-bail",
+      "label": "not-called",
+      "program": [
+        {
+          "op": "mark",
+          "label": "wrong-after-bail"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "serial-bail",
+      "mode": "serial",
+      "to": "zero-result",
+      "await": false,
+      "task": "serial"
+    },
+    {
+      "op": "waitMark",
+      "label": "serial-gate"
+    },
+    {
+      "op": "snapshot",
+      "label": "serial-waiting"
+    },
+    {
+      "op": "release",
+      "label": "serial-gate"
+    },
+    {
+      "op": "awaitTask",
+      "task": "serial"
+    },
+    {
+      "op": "listen",
+      "key": "serial-error",
+      "label": "throws",
+      "program": [
+        {
+          "op": "fail",
+          "error": "serial failure"
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "serial-error",
+      "label": "not-after-error",
+      "program": [
+        {
+          "op": "mark",
+          "label": "wrong-after-error"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "serial-error",
+      "mode": "serial",
+      "catch": true,
+      "to": "serial-error"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "finished",
+      "path": "/outputs/zero-result",
+      "equals": 0
+    },
+    {
+      "at": "finished",
+      "path": "/outputs/serial-error",
+      "equals": {
+        "name": "Error",
+        "message": "serial failure"
+      }
+    }
+  ]
+}

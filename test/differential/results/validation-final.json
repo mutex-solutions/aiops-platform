@@ -1,0 +1,42 @@
+{
+  "schema": "s0-differential-validation/v1",
+  "scope": "36-scenario pinned oracle baseline only; no candidate/final-port acceptance",
+  "freezeManifestSHA256": "3b40b812ed6df7b98780d80f46396eb2c4bcb685393a5ba0464a04623ae72596",
+  "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "goVersion": "go1.26.8 linux/amd64",
+  "nodeVersion": "v24.22.1",
+  "nodeExecutableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+  "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+  "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+  "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+  "corpusInputTreeSHA256": "fe32e7ce5c7a6cc636eea84d7290c3723270cb08ade334f82e810c685e58ebc0",
+  "commands": [
+    {"command": "for D01-D36: S0_NODE --import oracle/register.mjs oracle/replay.mjs corpus/Dxx.json results/corpus-final/Dxx.trace.json", "exitCode": 0, "normalPasses": 35, "boundedDiagnostics": 1, "nativeAttempts": 0},
+    {"command": "go test ./test/differential", "exitCode": 0, "seconds": 0.059, "scope": "36 recorded expectations, bytes/provenance, strict parsers, ordered comparator and causal trace assertions; live test skipped by default, not counted as an oracle pass"},
+    {"command": "go vet ./test/differential", "exitCode": 0, "result": "no diagnostics"},
+    {"command": "S0_NODE=<verified-isolated-node> S0_ORACLE_RUN=1 go test -race -count=3 ./test/differential", "exitCode": 0, "seconds": 12.064, "liveScenariosPerRepetition": 36, "result": "all 108 live runs matched full ordered recorded traces; D26 diagnostic capture is not awaited completion"},
+    {"command": "go test ./test/differential -run '^$' -fuzz '^FuzzParseTrace$' -fuzztime=60s -parallel=4", "exitCode": 0, "seconds": 61.032, "executions": 1061582, "newInteresting": 8},
+    {"command": "go test ./test/differential -run '^$' -fuzz '^FuzzParseScript$' -fuzztime=60s -parallel=4", "exitCode": 0, "seconds": 61.036, "executions": 2147699, "newInteresting": 188},
+    {"command": "git diff --check -- test/differential", "exitCode": 0, "result": "no diagnostics; files remain uncommitted"}
+  ],
+  "controls": [
+    {"id": "D05-initial", "classification": "failed fixture expectation, preserved", "exitCode": 1, "reason": "root-owned own provision is inherited; corrected declaration-refusal fixture uses sibling plugin provider", "rawEvidence": "results/controls-v1/D05.trace.json"},
+    {"id": "D06-initial", "classification": "failed fixture expectation, preserved", "exitCode": 1, "reason": "pinned getter retains inherited committed injection before realm-boundary check; corrected fixture preserves this observation and independently verifies explicit private required lookup remains PENDING", "rawEvidence": "results/controls-v1/D06.trace.json"}
+  ],
+  "notRun": [
+    "candidate adapter and exact cross-candidate equality",
+    "adaptation/addition tests for strict LIFO, deadlines, hook audience, key classes, entry bindings, leases, tracked work and scoped ownership",
+    "1,000-seed by 1,000-operation lifecycle property corpus",
+    "original upstream Vitest suites",
+    "loader, Schemastery and Standard Schema runtime tests",
+    "performance probes and final production-port acceptance"
+  ],
+  "limitations": [
+    "three identical live trace repetitions are reproducibility evidence, not exhaustive scheduling proof",
+    "60-second codec fuzz campaigns are not lifecycle property or performance acceptance",
+    "semantic receipts are not the full host/resource/performance run record",
+    "D26 remains bounded observed non-progress, not proof that no future progress is mathematically possible",
+    "no signed-build, unique historical-publish-commit or reproducible source-to-bundle claim"
+  ]
+}
