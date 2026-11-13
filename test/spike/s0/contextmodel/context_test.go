@@ -76,6 +76,180 @@ func wantError(t *testing.T, err, expected error) {
 	}
 }
 
+func TestHostContextHasRegisteredIdentityAndFrozenRootDeclarations(t *testing.T) {
+	entry := cm.NewEntry("kernel")
+	key, other := cm.NewKey[int]("item", 1), cm.NewKey[int]("other", 1)
+	r := root(t, cm.RootSpec{Entries: []cm.Plugin{entry}, Keys: []cm.AnyKey{key.Any(), other.Any()}})
+	spec := cm.Spec{ID: "caller", Inject: []cm.Dep{cm.Need(key)}, Provides: []cm.AnyKey{key.Any()}}
+	host, err := r.HostContext(spec)
+	host = must(t, host, err)
+	if host.Parent() != r.Context() || host.Entry() == (cm.Plugin{}) || host.Entry() == entry || host.Entry().Name() != "kernel" {
+		t.Fatal("host did not use its own opaque entry under the generic root")
+	}
+	if host.Spec().ID != "root" || spec.ID != "caller" {
+		t.Fatal("host ID was caller-selected or changed the caller's Spec")
+	}
+	spec.Inject[0], spec.Provides[0] = cm.Dep{}, cm.AnyKey{}
+	copy := host.Spec()
+	copy.ID, copy.Inject[0], copy.Provides[0] = "changed", cm.Dep{}, cm.AnyKey{}
+	expected := cm.Spec{ID: "root", Inject: []cm.Dep{cm.Need(key)}, Provides: []cm.AnyKey{key.Any()}}
+	if !reflect.DeepEqual(host.Spec(), expected) {
+		t.Fatal("host retained caller-owned declaration containers")
+	}
+	if err := host.AuthorizeProvide(key.Any()); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, host.AuthorizeProvide(other.Any()), cm.ErrUndeclared)
+	if err := host.AuthorizeRead(key.Any(), false); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, host.AuthorizeRead(other.Any(), false), cm.ErrUndeclared)
+	values := map[string]any{"origin": "host"}
+	extended := host.WithValues(values).Extend()
+	values["origin"] = "changed"
+	if extended.Entry() != host.Entry() || !reflect.DeepEqual(extended.Spec(), expected) || extended.Values()["origin"] != "host" {
+		t.Fatal("host derivation lost its identity, frame, or frozen values")
+	}
+	descendant := child(t, extended, cm.Spec{ID: entry.Name()})
+	if descendant.Entry() != host.Entry() || descendant.Values()["origin"] != "host" {
+		t.Fatal("Child replaced the inherited host identity or metadata")
+	}
+	wantError(t, descendant.AuthorizeProvide(key.Any()), cm.ErrUndeclared)
+	registered := attach(t, r, r.Context(), host.Entry(), cm.Spec{})
+	if registered.Entry() != host.Entry() {
+		t.Fatal("host identity was not a genuinely registered entry")
+	}
+	empty, err := r.HostContext(cm.Spec{ID: "not-root"})
+	empty = must(t, empty, err)
+	if empty.Entry() != host.Entry() || empty.Spec().ID != "root" || len(empty.Spec().Provides) != 0 {
+		t.Fatal("nil Provides changed the host identity or added declarations")
+	}
+	wantError(t, empty.AuthorizeProvide(key.Any()), cm.ErrUndeclared)
+	scope := cm.NewScope[string](key.Any())
+	_, err = scope.With(host, "metadata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = scope.With(empty, "not-owned")
+	wantError(t, err, cm.ErrScope)
+	generic := r.Context()
+	if generic.Entry() != (cm.Plugin{}) || !reflect.DeepEqual(generic.Spec(), cm.Spec{}) || generic.Parent() != nil {
+		t.Fatal("HostContext changed the generic root")
+	}
+	for _, parent := range []*cm.Context{generic, generic.Extend()} {
+		_, err = parent.Child(cm.Spec{ID: "root"})
+		wantError(t, err, cm.ErrEntry)
+	}
+	user := child(t, attach(t, r, generic, entry, cm.Spec{}), cm.Spec{ID: "root"})
+	if user.Entry() != entry || user.Entry() == host.Entry() {
+		t.Fatal("same-text entry or Spec ID acquired the host identity")
+	}
+}
+
+func TestHostContextHasNoBoundOrSignedPrivileges(t *testing.T) {
+	entry := cm.NewEntry("kernel")
+	provider := cm.NewKey[int]("provider", 1, cm.Classes(cm.ProviderBound, cm.Open))
+	consumer := cm.NewKey[int]("consumer", 1, cm.Classes(cm.Open, cm.ConsumerBound))
+	signed := cm.NewKey[int]("signed", 1, cm.Classes(cm.Open, cm.Signed))
+	r := root(t, cm.RootSpec{
+		Entries: []cm.Plugin{entry}, Keys: []cm.AnyKey{provider.Any(), consumer.Any(), signed.Any()},
+		Bindings: []cm.Binding{
+			{Key: provider.Any(), Providers: []cm.Plugin{entry}},
+			{Key: consumer.Any(), Consumers: []cm.Plugin{entry}},
+			{Key: signed.Any(), Consumers: []cm.Plugin{entry}},
+		},
+	})
+	attach(t, r, r.Context(), entry, cm.Spec{Provides: []cm.AnyKey{provider.Any()}, Inject: []cm.Dep{cm.Need(consumer), cm.Need(signed)}})
+	host, err := r.HostContext(cm.Spec{})
+	host = must(t, host, err)
+	wantError(t, host.AuthorizeProvide(provider.Any()), cm.ErrBinding)
+	for _, key := range []cm.AnyKey{consumer.Any(), signed.Any()} {
+		wantError(t, host.AuthorizeRead(key, false), cm.ErrBinding)
+	}
+	for _, spec := range []cm.Spec{
+		{ID: "kernel", Provides: []cm.AnyKey{provider.Any()}},
+		{ID: "kernel", Inject: []cm.Dep{cm.Need(consumer)}},
+		{ID: "kernel", Inject: []cm.Dep{cm.Need(signed)}},
+	} {
+		_, err = r.HostContext(spec)
+		wantError(t, err, cm.ErrBinding)
+		_, err = host.Child(spec)
+		wantError(t, err, cm.ErrBinding)
+		_, err = r.WithEntry(r.Context(), host.Entry(), spec)
+		wantError(t, err, cm.ErrBinding)
+	}
+	_, err = host.Isolate(provider.Any())
+	wantError(t, err, cm.ErrIsolation)
+}
+
+func TestHostContextIsRootLocalAndUsesOrdinaryDeclarationValidation(t *testing.T) {
+	key := cm.NewKey[int]("item", 1, cm.Config[int]())
+	r := root(t, cm.RootSpec{Keys: []cm.AnyKey{key.Any()}})
+	foreign := root(t, cm.RootSpec{Keys: []cm.AnyKey{key.Any()}})
+	host, err := r.HostContext(cm.Spec{})
+	host = must(t, host, err)
+	other, err := foreign.HostContext(cm.Spec{})
+	other = must(t, other, err)
+	if host.Entry() == other.Entry() || host.Entry().Name() != other.Entry().Name() {
+		t.Fatal("independent roots shared a host identity")
+	}
+	_, err = foreign.WithEntry(foreign.Context(), host.Entry(), cm.Spec{})
+	wantError(t, err, cm.ErrEntry)
+	_, err = r.WithEntry(r.Context(), other.Entry(), cm.Spec{})
+	wantError(t, err, cm.ErrEntry)
+	_, err = r.WithEntry(other, host.Entry(), cm.Spec{})
+	wantError(t, err, cm.ErrContext)
+	for _, invalid := range []*cm.Root{nil, {}} {
+		_, err = invalid.HostContext(cm.Spec{})
+		wantError(t, err, cm.ErrContext)
+	}
+	for _, test := range []struct {
+		spec cm.Spec
+		err  error
+	}{
+		{cm.Spec{Provides: []cm.AnyKey{cm.NewKey[int]("missing", 1).Any()}}, cm.ErrKey},
+		{cm.Spec{Provides: []cm.AnyKey{cm.NewKey[string]("item", 1).Any()}}, cm.ErrCollision},
+		{cm.Spec{Provides: []cm.AnyKey{key.Any(), key.Any()}}, cm.ErrDuplicate},
+		{cm.Spec{Inject: []cm.Dep{cm.Need(key), cm.Need(key)}}, cm.ErrDuplicate},
+		{cm.Spec{Inject: []cm.Dep{cm.NeedWith(key, "wrong")}}, cm.ErrConfig},
+	} {
+		_, err = r.HostContext(test.spec)
+		wantError(t, err, test.err)
+	}
+}
+
+func TestLifecycleFrontendMetadataBridges(t *testing.T) {
+	entry := cm.NewEntry("unit")
+	key := cm.NewKey[int]("item", 0)
+	r := root(t, cm.RootSpec{Entries: []cm.Plugin{entry}, Keys: []cm.AnyKey{key.Any()}})
+	required := attach(t, r, r.Context(), entry, cm.Spec{Inject: []cm.Dep{cm.Need(key)}})
+	if err := required.AuthorizeRead(key.Any(), false); err != nil {
+		t.Fatal(err)
+	}
+	base, err := required.Realm(key.Any())
+	if err != nil || base != (cm.Label{}) {
+		t.Fatalf("root realm = %v %v", base, err)
+	}
+	label := cm.NewLabel("joined")
+	private := isolated(t, required, key.Any(), label)
+	actual, err := private.Realm(key.Any())
+	if err != nil || actual != label {
+		t.Fatalf("opaque realm identity was not preserved: %v", err)
+	}
+	wantError(t, private.AuthorizeRead(key.Any(), false), cm.ErrUndeclared)
+	optional := attach(t, r, r.Context(), entry, cm.Spec{Inject: []cm.Dep{cm.Want(key)}})
+	wantError(t, optional.AuthorizeRead(key.Any(), false), cm.ErrUndeclared)
+	if err := optional.AuthorizeRead(key.Any(), true); err != nil {
+		t.Fatal(err)
+	}
+	var invalid *cm.Context
+	_, err = invalid.Realm(key.Any())
+	wantError(t, err, cm.ErrContext)
+	wantError(t, invalid.AuthorizeRead(key.Any(), false), cm.ErrContext)
+	_, err = required.Realm(cm.NewKey[string]("item", 0).Any())
+	wantError(t, err, cm.ErrCollision)
+}
+
 func TestImmutableExtendAndDeclarationContainers(t *testing.T) {
 	entry := cm.NewEntry("owner/unit")
 	key := cm.NewKey[string]("item", 1)
@@ -102,6 +276,156 @@ func TestImmutableExtendAndDeclarationContainers(t *testing.T) {
 	}
 	if r.Context().Spec().ID != "" || len(r.Context().Spec().Inject) != 0 {
 		t.Fatal("child declarations mutated root")
+	}
+}
+
+func TestImmutableValuesInheritAndShadowWithoutExposingContainers(t *testing.T) {
+	entry := cm.NewEntry("unit")
+	r := root(t, cm.RootSpec{Entries: []cm.Plugin{entry}})
+	base := attach(t, r, r.Context(), entry, cm.Spec{ID: "base"})
+	payload := &struct{ Name string }{"immutable"}
+	input := map[string]any{"base": 1, "shared": "ancestor", "payload": payload, "": "empty", "nil": "ancestor"}
+	ancestor := base.WithValues(input)
+	input["base"], input["added"] = 0, true
+	delete(input, "")
+	leaf := child(t, ancestor.WithValues(map[string]any{"shared": "leaf", "nil": nil}), cm.Spec{ID: "child"}).Extend()
+	expected := map[string]any{"base": 1, "shared": "leaf", "payload": payload, "": "empty", "nil": nil}
+	if got := leaf.Values(); !reflect.DeepEqual(got, expected) {
+		t.Fatalf("merged values = %v, want %v", got, expected)
+	}
+	for name, expectedValue := range expected {
+		if got, exists := leaf.Value(name); !exists || !reflect.DeepEqual(got, expectedValue) {
+			t.Fatalf("Value(%q) = %v, %v; want %v", name, got, exists, expectedValue)
+		}
+	}
+	if got, _ := leaf.Value("payload"); got != payload {
+		t.Fatal("arbitrary payload was cloned rather than retained")
+	}
+	if got, exists := leaf.Value("missing"); exists || got != nil {
+		t.Fatal("missing value was confused with a stored nil")
+	}
+	if _, exists := leaf.Value("added"); exists {
+		t.Fatal("WithValues retained caller-owned map storage")
+	}
+	copy := leaf.Values()
+	copy["base"], copy["new"] = 0, true
+	delete(copy, "shared")
+	if !reflect.DeepEqual(leaf.Values(), expected) {
+		t.Fatal("Values exposed an internal container")
+	}
+	if got, _ := ancestor.Value("shared"); got != "ancestor" {
+		t.Fatal("descendant shadowing mutated its ancestor")
+	}
+	sibling := ancestor.WithValues(map[string]any{"shared": "sibling"})
+	if got, _ := sibling.Value("shared"); got != "sibling" || !reflect.DeepEqual(leaf.Values(), expected) {
+		t.Fatal("sibling values leaked across branches")
+	}
+	for _, values := range []map[string]any{nil, {}} {
+		extended := leaf.WithValues(values)
+		if extended.Parent() != leaf || extended.Entry() != leaf.Entry() || !reflect.DeepEqual(extended.Spec(), leaf.Spec()) || !reflect.DeepEqual(extended.Values(), expected) {
+			t.Fatal("nil/empty values did not behave like Extend")
+		}
+	}
+	empty := base.Values()
+	empty["base"] = 0
+	if len(base.Values()) != 0 || len(r.Context().Values()) != 0 {
+		t.Fatal("metadata reached an ancestor or empty Values exposed storage")
+	}
+}
+
+func TestValuesCannotMintEntryDeclarationRealmOrScopeAuthority(t *testing.T) {
+	owner, reader, outsider := cm.NewEntry("owner"), cm.NewEntry("reader"), cm.NewEntry("outsider")
+	key := cm.NewKey[int]("item", 1, cm.Classes(cm.ProviderBound, cm.ConsumerBound), cm.Config[string]())
+	r := root(t, cm.RootSpec{Entries: []cm.Plugin{owner, reader, outsider}, Keys: []cm.AnyKey{key.Any()}, Bindings: []cm.Binding{{Key: key.Any(), Providers: []cm.Plugin{owner}, Consumers: []cm.Plugin{reader}}}})
+	provider := attach(t, r, r.Context(), owner, cm.Spec{Provides: []cm.AnyKey{key.Any()}})
+	label := cm.NewLabel("actual")
+	scope := cm.NewScope[string](key.Any())
+	scoped, err := scope.With(isolated(t, provider.WithValues(map[string]any{"flow": "metadata"}), key.Any(), label), "trusted")
+	scoped = must(t, scoped, err)
+	consumer := attach(t, r, scoped, reader, cm.Spec{ID: "actual", Inject: []cm.Dep{cm.NeedWith(key, "actual")}})
+	claims := map[string]any{
+		"entry": owner, "frame": provider.Spec(), "frames": []cm.Spec{provider.Spec()},
+		"isolation": cm.NewLabel("claimed"), "intercepts": "claimed", "data": cm.RootSpec{},
+		"scope": scope, "scopes": "claimed", "parent": r.Context(), "hook/id": owner.Name(),
+	}
+	derived := consumer.WithValues(claims)
+	if derived.Parent() != consumer || derived.Entry() != reader || !reflect.DeepEqual(derived.Spec(), consumer.Spec()) {
+		t.Fatal("value names overwrote privileged context fields")
+	}
+	if err := derived.AuthorizeRead(key.Any(), false); err != nil {
+		t.Fatal(err)
+	}
+	if realm, err := derived.Realm(key.Any()); err != nil || realm != label {
+		t.Fatalf("values changed actual realm = %v, %v", realm, err)
+	}
+	if got := cm.Intercepts[string](derived, key.Any()); !reflect.DeepEqual(got, []string{"actual"}) {
+		t.Fatalf("values changed intercepts = %v", got)
+	}
+	if value, exists := scope.From(derived); !exists || value != "trusted" || (cm.Audience{}).Matches(derived) {
+		t.Fatal("values changed inherited scope or audience")
+	}
+	if value, exists := derived.Value("flow"); !exists || value != "metadata" {
+		t.Fatal("scope derivation hid generic metadata")
+	}
+	wantError(t, derived.AuthorizeProvide(key.Any()), cm.ErrBinding)
+	_, err = scope.With(derived, "claimed")
+	wantError(t, err, cm.ErrScope)
+	_, err = derived.Isolate(key.Any())
+	wantError(t, err, cm.ErrIsolation)
+	unbound := attach(t, r, derived, outsider, cm.Spec{}).WithValues(claims)
+	wantError(t, unbound.AuthorizeRead(key.Any(), false), cm.ErrBinding)
+	undeclared := attach(t, r, r.Context(), reader, cm.Spec{}).WithValues(map[string]any{"frame": consumer.Spec(), "hook/id": "actual"})
+	wantError(t, undeclared.AuthorizeRead(key.Any(), false), cm.ErrUndeclared)
+	if _, exists := scope.From(undeclared); exists || !(cm.Audience{}).Matches(undeclared.WithValues(claims)) {
+		t.Fatal("generic values minted a private scope")
+	}
+	noOwner := child(t, provider, cm.Spec{}).WithValues(claims)
+	wantError(t, noOwner.AuthorizeProvide(key.Any()), cm.ErrUndeclared)
+	_, err = scope.With(noOwner, "claimed")
+	wantError(t, err, cm.ErrScope)
+}
+
+func TestAvailabilityUsesActualConsumerValuesWithoutGrantingAuthority(t *testing.T) {
+	provider, reader, outsider := cm.NewEntry("provider"), cm.NewEntry("reader"), cm.NewEntry("outsider")
+	key := cm.NewKey[string]("item", 1, cm.Classes(cm.Open, cm.ConsumerBound))
+	r := root(t, cm.RootSpec{Entries: []cm.Plugin{provider, reader, outsider}, Keys: []cm.AnyKey{key.Any()}, Bindings: []cm.Binding{{Key: key.Any(), Consumers: []cm.Plugin{reader}}}})
+	p := attach(t, r, r.Context(), provider, cm.Spec{Provides: []cm.AnyKey{key.Any()}})
+	base := attach(t, r, r.Context(), reader, cm.Spec{Inject: []cm.Dep{cm.Need(key)}}).WithValues(map[string]any{"hook/id": "base"})
+	first, second := base.WithValues(map[string]any{"hook/id": "first"}), base.WithValues(map[string]any{"hook/id": "second"})
+	var checked, viewed []*cm.Context
+	provision, err := cm.ProvideFor(p, key, func(c *cm.Context) string {
+		viewed = append(viewed, c)
+		value, _ := c.Value("hook/id")
+		return value.(string)
+	}, func(c *cm.Context) bool {
+		checked = append(checked, c)
+		value, _ := c.Value("hook/id")
+		return value == "first"
+	})
+	s := snapshot(t, r, must(t, provision, err))
+	ready, err := s.Available(first, key.Any())
+	if err != nil || !ready {
+		t.Fatalf("first availability = %v, %v", ready, err)
+	}
+	resolves(t, s, first, key, "first")
+	ready, err = s.Available(second, key.Any())
+	if err != nil || ready {
+		t.Fatalf("second availability = %v, %v", ready, err)
+	}
+	_, err = cm.Resolve(s, second, key)
+	wantError(t, err, cm.ErrUnavailable)
+	descendant := child(t, first, cm.Spec{}).Extend()
+	resolves(t, s, descendant, key, "first")
+	unbound := attach(t, r, first, outsider, cm.Spec{}).WithValues(map[string]any{"hook/id": "first", "entry": reader})
+	_, err = s.Available(unbound, key.Any())
+	wantError(t, err, cm.ErrBinding)
+	_, err = cm.Resolve(s, unbound, key)
+	wantError(t, err, cm.ErrBinding)
+	if !reflect.DeepEqual(checked, []*cm.Context{first, first, second, second, descendant}) || !reflect.DeepEqual(viewed, []*cm.Context{first, descendant}) {
+		t.Fatal("metadata callbacks used a substitute consumer or ran without authorization")
+	}
+	if value, _ := base.Value("hook/id"); value != "base" {
+		t.Fatal("consumer values mutated the source context")
 	}
 }
 
@@ -474,19 +798,29 @@ func TestParallelImmutableReadAndDerivation(t *testing.T) {
 	scope := cm.NewScope[int](key.Any())
 	c, err := scope.With(c, 3)
 	c = must(t, c, err)
+	c = c.WithValues(map[string]any{"base": "immutable", "delta": 0})
 	p, err := cm.ProvideFor(c, key, func(caller *cm.Context) int {
 		value, _ := scope.From(caller)
-		return value + cm.Intercepts[int](caller, key.Any())[0]
+		delta, _ := caller.Value("delta")
+		return value + cm.Intercepts[int](caller, key.Any())[0] + delta.(int)
 	}, func(caller *cm.Context) bool { _, exists := scope.From(caller); return exists })
 	p = must(t, p, err)
 	s := snapshot(t, r, p)
 	var group sync.WaitGroup
-	for range 16 {
+	for delta := range 16 {
 		group.Go(func() {
 			for range 50 {
-				derived := c.Extend()
+				input := map[string]any{"delta": delta}
+				derived := c.WithValues(input).Extend()
+				input["delta"] = -1
+				copy := derived.Values()
+				copy["delta"] = -2
+				if value, exists := derived.Value("delta"); !exists || value != delta || derived.Values()["base"] != "immutable" || c.Values()["delta"] != 0 {
+					t.Error("parallel values exposed storage or leaked across branches")
+					return
+				}
 				got, err := cm.Resolve(s, derived, key)
-				if err != nil || got != 4 {
+				if err != nil || got != 4+delta {
 					t.Errorf("concurrent immutable read = %v, %v", got, err)
 					return
 				}

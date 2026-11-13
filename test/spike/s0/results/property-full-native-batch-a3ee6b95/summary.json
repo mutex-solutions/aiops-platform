@@ -1,0 +1,118 @@
+{
+  "kind": "s0-property-result",
+  "mode": "full-1000-seeds-x-1000-operations-per-real-candidate",
+  "seedsPerCandidate": 1000,
+  "operationsPerSeed": 1000,
+  "prng": "SplitMix64",
+  "firstSeed": 1392508928,
+  "realBackends": [
+    "reconciler",
+    "graph-lock"
+  ],
+  "identity": {
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "baselineCommit": "27cf15271903e840c0d8bc523184b1aa1f5fc7b1",
+    "sourceSHA256": "a3ee6b9546ce7ba9bdb45cff7234aff4d08e58bd816d0270a48e631972eb7679",
+    "sources": [
+      {
+        "path": "docs/design/s0-criteria-freeze.json",
+        "sha256": "1d619fd5ae86bc62bc02a03f9daa633efbc3834dca63d70e574610d795e514ef"
+      },
+      {
+        "path": "docs/design/s0-spike-criteria.md",
+        "sha256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c"
+      },
+      {
+        "path": "go.mod",
+        "sha256": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2"
+      },
+      {
+        "path": "go.sum",
+        "sha256": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5"
+      },
+      {
+        "path": "test/spike/s0/concurrency/batch.go",
+        "sha256": "ca93ced2c7c12ad3cdc471232ca1e34f088a285a2f069afa711fbd7a1fb2d124"
+      },
+      {
+        "path": "test/spike/s0/concurrency/batch_test.go",
+        "sha256": "bdbd7a128b887a13b9c7a811c928c83ff2b121cf4ade9a5ad4a4571dc84c02cf"
+      },
+      {
+        "path": "test/spike/s0/concurrency/common_test.go",
+        "sha256": "a625e4420a6b2c4e6bcd58185d135f9d64f0be6d2735a09a3b7e12399a70e425"
+      },
+      {
+        "path": "test/spike/s0/concurrency/configuration.go",
+        "sha256": "941d08e025685c8b031dd5b80f9c076cc84c64f8d41fe39e790e353b1327ba79"
+      },
+      {
+        "path": "test/spike/s0/concurrency/configuration_test.go",
+        "sha256": "71f225a2168f0764729e3c90fa86b75beeccefcd9d4fa9cbe3d8cac189df0107"
+      },
+      {
+        "path": "test/spike/s0/concurrency/graphlock.go",
+        "sha256": "6150c6a9944778e09472c227298a7d7f2236dab268feb4a4ab2f11a32fe6bb8b"
+      },
+      {
+        "path": "test/spike/s0/concurrency/graphlock_test.go",
+        "sha256": "332cf6636e55b7ef446923b648f94dfafbbc9b187295ee7f43e8ae2c6a2fe22c"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer.go",
+        "sha256": "90873d0cbde56ce6db28eeef317d39deff018bb2702f89e70235135fd7116088"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer_test.go",
+        "sha256": "0e721f769fa5065ab6cb2d430ae0125bfcf1de0978c5a91647fa7292aeb9f4cb"
+      },
+      {
+        "path": "test/spike/s0/concurrency/reconciler.go",
+        "sha256": "25138a6a9b414a514ab1f18b46e5384b48f3074735704d65941a3d28158dd514"
+      },
+      {
+        "path": "test/spike/s0/concurrency/reconciler_test.go",
+        "sha256": "ffe8dab359cf01752ce08357eff6eeb4590d29367be21a14e82ab665ac216443"
+      },
+      {
+        "path": "test/spike/s0/concurrency/tracked.go",
+        "sha256": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+      },
+      {
+        "path": "test/spike/s0/concurrency/tracked_test.go",
+        "sha256": "740f0011bf91b4073c0bddfdb52e258d0931f670f27cf090472acf493f319ac4"
+      },
+      {
+        "path": "test/spike/s0/concurrency/types.go",
+        "sha256": "ff7582819c2585d00b660ecec5bf66caaf6878d6a6bf3323404241486746cfef"
+      },
+      {
+        "path": "test/spike/s0/concurrency/types_test.go",
+        "sha256": "0f1f6b75033c86d8d6f05f23cb102ec0eb4aa43ee6c48e6e461a66d73718031d"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/dispatcher.go",
+        "sha256": "88b93cae8e6cfe5af675af255b348b9566286b59921e77a7a4a5f0ccfd246e3f"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/dispatcher_test.go",
+        "sha256": "905cf34f708d462971be5230a207cc4719b5854cb93df031ce079df3dec64077"
+      },
+      {
+        "path": "test/spike/s0/properties/generator.go",
+        "sha256": "8ddf02917571e0d253988cde4aa84101c77b7acb84f9f16e733f3fe39b0d08d9"
+      },
+      {
+        "path": "test/spike/s0/properties/generator_test.go",
+        "sha256": "2ec47e7d5b991293303aff6176dabe7bd36d48ced3fe8b5d2845cba147265d2b"
+      },
+      {
+        "path": "test/spike/s0/properties/runtime_test.go",
+        "sha256": "cebeb299333b74a364b247246bdfd54fd499f4fb9d395521ca3fc0746b6b9fd5"
+      }
+    ],
+    "executableSHA256": "5e755bc41b10f363771fd2393a846fe4745639b1eb2a4df6c70f1f11a2d5c1e4",
+    "goVersion": "go1.26.8",
+    "gomaxprocs": 8
+  }
+}

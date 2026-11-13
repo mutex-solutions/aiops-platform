@@ -1,0 +1,24 @@
+S0 ordinary transaction probe dependencies
+
+This test-only probe links unmodified River modules at v0.51.2 under MPL-2.0:
+  github.com/riverqueue/river
+  github.com/riverqueue/river/riverdriver
+  github.com/riverqueue/river/riverdriver/riverpgxv5
+  github.com/riverqueue/river/rivershared
+  github.com/riverqueue/river/rivertype
+Source-content origin: https://github.com/riverqueue/river/tree/8468ff25e2cc7afd790d7037703ae72d8b2138cb
+Exact module source archives: https://proxy.golang.org/<module>/@v/v0.51.2.zip
+No covered upstream file is modified or copied into this probe. Upstream
+migrations are invoked through their package, not reproduced as first-party SQL.
+Distributing a probe binary still requires preserving notices and the exact MPL
+source route/archive as recorded by the project licence checklist.
+
+River's rivershared/levenshtein package contains source adapted from
+https://github.com/agnivade/levenshtein . Its original MIT notice, Copyright (c)
+2015 Agniva De Sarker, is preserved in LEVENSHTEIN-LICENSE.txt alongside this
+notice. The module-level MPL notice does not erase that nested upstream notice.
+
+Other exact dependencies and their reviewed terms are recorded in
+../../../../docs/design/s0-reference-pins.md and the actual compiled package
+closure. A complete licence inventory is based on linked packages, not a blanket
+assumption that every transitive file has the root module's licence.

@@ -7,7 +7,7 @@
 // own effects, and revoke/drain them. This package does not simulate those steps.
 //
 // Input and returned slices/maps of metadata never expose internal containers.
-// Arbitrary config, service and scope values cannot be deep-cloned generically:
+// Arbitrary config, service, scope and context values cannot be deep-cloned generically:
 // their owners must supply immutable values (clone caller-owned maps/slices first)
 // and must not mutate values obtained from a context. Functions must be safe for
 // concurrent calls. No callback executes under a lock; there are no global maps.
@@ -15,6 +15,7 @@ package contextmodel
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 )
@@ -143,6 +144,7 @@ type registry struct {
 type Root struct {
 	context *Context
 	data    *registry
+	host    Plugin
 }
 
 func NewRoot(spec RootSpec) (*Root, error) {
@@ -192,7 +194,9 @@ func NewRoot(spec RootSpec) (*Root, error) {
 		}
 		r.bindings[binding.Key.id] = p
 	}
-	return &Root{context: &Context{data: r}, data: r}, nil
+	host := NewEntry("kernel")
+	r.entries[host.token] = host
+	return &Root{context: &Context{data: r}, data: r, host: host}, nil
 }
 
 func (r *registry) check(key AnyKey) error {
@@ -211,9 +215,19 @@ func (r *registry) check(key AnyKey) error {
 
 func (r *Root) Context() *Context { return r.context }
 
-// WithEntry is the only identity assignment path. Entry text in a child Spec
-// has no connection to this registration. A root owner can attach under any
-// of its own contexts, but cannot attach an entry or context from another root.
+// HostContext creates the native root's metadata frame, not a mounted plugin.
+// The private registered entry has no bound permissions; only Root owns authority.
+func (r *Root) HostContext(spec Spec) (*Context, error) {
+	if r == nil || r.context == nil || r.data == nil {
+		return nil, ErrContext
+	}
+	spec.ID = "root"
+	return r.context.child(r.host, spec)
+}
+
+// WithEntry assigns a registered identity using root authority. Entry text in a
+// child Spec has no connection to this registration. A root owner can attach under
+// any of its own contexts, but cannot attach a foreign entry or context.
 func (r *Root) WithEntry(parent *Context, entry Plugin, spec Spec) (*Context, error) {
 	if r == nil || r.data == nil || parent == nil || parent.data != r.data {
 		return nil, ErrContext
@@ -277,12 +291,45 @@ type Context struct {
 	isolation  map[keyID]Label
 	intercepts []intercept
 	scopes     map[*scopeToken]any
+	values     map[string]any
 }
 
 func (c *Context) Parent() *Context { return c.parent }
 func (c *Context) Entry() Plugin    { return c.entry }
 func (c *Context) Extend() *Context {
 	return &Context{parent: c, data: c.data, entry: c.entry, frame: c.frame}
+}
+
+// WithValues extends metadata in a separate, untrusted namespace. Every string
+// key is valid; none assigns entry, frame, realm or scope authority. The map is
+// shallow-copied; callers must keep arbitrary payloads immutable.
+func (c *Context) WithValues(values map[string]any) *Context {
+	node := c.Extend()
+	node.values = maps.Clone(values)
+	return node
+}
+
+// Value returns the nearest ancestor's value, including an explicitly stored nil.
+func (c *Context) Value(name string) (any, bool) {
+	for node := c; node != nil; node = node.parent {
+		if value, exists := node.values[name]; exists {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+// Values merges ancestor-first into a new map. Payloads are not cloned.
+func (c *Context) Values() map[string]any {
+	var nodes []*Context
+	for node := c; node != nil; node = node.parent {
+		nodes = append(nodes, node)
+	}
+	values := make(map[string]any)
+	for _, node := range slices.Backward(nodes) {
+		maps.Copy(values, node.values)
+	}
+	return values
 }
 
 func (c *Context) Child(spec Spec) (*Context, error) { return c.child(c.entry, spec) }
@@ -375,6 +422,49 @@ func (c *Context) realm(key keyID) Label {
 		}
 	}
 	return Label{}
+}
+
+// Realm exposes the registered key's opaque realm identity for a real lifecycle
+// frontend. It does not authorize a read or imply a live provider exists.
+func (c *Context) Realm(key AnyKey) (Label, error) {
+	if c == nil || c.data == nil {
+		return Label{}, ErrContext
+	}
+	if err := c.data.check(key); err != nil {
+		return Label{}, err
+	}
+	return c.realm(key.id), nil
+}
+
+// AuthorizeRead checks immutable entry/declaration metadata only. The caller
+// still needs the runtime's captured live/retained binding; optional=true permits
+// availability scheduling but never authorizes a plain optional Resolve.
+func (c *Context) AuthorizeRead(key AnyKey, optional bool) error {
+	if c == nil || c.data == nil {
+		return ErrContext
+	}
+	if err := c.checkConsumer(key); err != nil {
+		return err
+	}
+	if !c.declared(key, optional) {
+		return ErrUndeclared
+	}
+	return nil
+}
+
+// AuthorizeProvide checks entry and declaration metadata. A lifecycle frontend
+// must still perform native registration and effect ownership before Owns is true.
+func (c *Context) AuthorizeProvide(key AnyKey) error {
+	if c == nil || c.data == nil {
+		return ErrContext
+	}
+	if err := c.checkProvider(key); err != nil {
+		return err
+	}
+	if !c.owns(key) {
+		return ErrUndeclared
+	}
+	return nil
 }
 
 // Isolate returns a child. A provider-bound exception requires the actual
@@ -527,11 +617,8 @@ func Provide[T any](c *Context, key Key[T], value T, available func(*Context) bo
 }
 
 func ProvideFor[T any](c *Context, key Key[T], view func(*Context) T, available func(*Context) bool) (Provision, error) {
-	if err := c.checkProvider(key.Any()); err != nil {
+	if err := c.AuthorizeProvide(key.Any()); err != nil {
 		return Provision{}, err
-	}
-	if !c.owns(key.Any()) {
-		return Provision{}, ErrUndeclared
 	}
 	if view == nil {
 		return Provision{}, ErrUnavailable

@@ -1,0 +1,590 @@
+{
+  "authority_gate": "FAIL unchanged; known-unsafe role/custom-GUC fixture; not remeasured",
+  "classification": "COMPILE ONLY; no tests, goroutines, SQL, provisioning, or PostgreSQL connection executed",
+  "compile_command": "GOPROXY=off GOSUMDB=off go test -mod=readonly -c -o /dev/null ./plugins/jobs-river/internal/s0workers",
+  "compile_exit_code": 0,
+  "first_party_package_variants": [
+    "github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers",
+    "github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers [github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers.test]",
+    "github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers.test"
+  ],
+  "limits": [
+    "go list package closure is compiler input, not a symbol-level dead-code-elimination inventory or an attested binary SBOM",
+    "Individual module LICENSE files were read and hashed; identical River license hashes checked across all five modules",
+    "No unknown third-party modules or replacements accepted",
+    "Source cache only; upstream source and manifests unchanged; no test executable retained",
+    "No functional, SQL authority, full S0, performance, lifecycle-fairness, crash, or source-release provenance test pass claimed"
+  ],
+  "modules": [
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "adb1663fda031df8f4344aa68f299fd87d80353e31339406742ded21dae65702",
+      "module": "github.com/jackc/pgpassfile",
+      "module_sum": "h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=",
+      "source_archive": "https://proxy.golang.org/github.com/jackc/pgpassfile/@v/v1.0.0.zip",
+      "version": "v1.0.0"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "fc505773403fe869ed64cc2235cdd13988a427bb7e3a7e7004a3f4b27420f8fc",
+      "module": "github.com/jackc/pgservicefile",
+      "module_sum": "h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=",
+      "source_archive": "https://proxy.golang.org/github.com/jackc/pgservicefile/@v/v0.0.0-20240606120523-5a60cdf6a761.zip",
+      "version": "v0.0.0-20240606120523-5a60cdf6a761"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "467f95e074fe23079a5623ed652619682692041b8551da27e3c2ddb9659a1507",
+      "module": "github.com/jackc/pgx/v5",
+      "module_sum": "h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=",
+      "source_archive": "https://proxy.golang.org/github.com/jackc/pgx/v5/@v/v5.11.0.zip",
+      "version": "v5.11.0"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "2d50e98a4900b4d6457a38d39c1432fdc156fc2f7b365f2e33ec9344acbb0057",
+      "module": "github.com/jackc/puddle/v2",
+      "module_sum": "h1:f8HoREISb3l5eO9coPgK7U3hKLhWGokOFVcThl5jrao=",
+      "source_archive": "https://proxy.golang.org/github.com/jackc/puddle/v2/@v/v2.2.3.zip",
+      "version": "v2.2.3"
+    },
+    {
+      "license": "MPL-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd",
+      "module": "github.com/riverqueue/river",
+      "module_sum": "h1:lCFmF8zlKftfjDEW6zCtcRamXmCgOFk6XjeJ82gAEh8=",
+      "source_archive": "https://proxy.golang.org/github.com/riverqueue/river/@v/v0.51.2.zip",
+      "version": "v0.51.2"
+    },
+    {
+      "license": "MPL-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd",
+      "module": "github.com/riverqueue/river/riverdriver",
+      "module_sum": "h1:hIDg+sRD7h3Xcjy2ozlbDBnjsyLVDbLnB2cWgTR1SoU=",
+      "source_archive": "https://proxy.golang.org/github.com/riverqueue/river/riverdriver/@v/v0.51.2.zip",
+      "version": "v0.51.2"
+    },
+    {
+      "license": "MPL-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd",
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "module_sum": "h1:vLucKpDFLu/w6m8/jQl4NV4bxu1U8iiM835pfPooJ+U=",
+      "source_archive": "https://proxy.golang.org/github.com/riverqueue/river/riverdriver/riverpgxv5/@v/v0.51.2.zip",
+      "version": "v0.51.2"
+    },
+    {
+      "license": "MPL-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd",
+      "module": "github.com/riverqueue/river/rivershared",
+      "module_sum": "h1:d4MU7Az6iMQb9ADhgi9GEoO1ThB7Ou1Oe2EtvRaRIoA=",
+      "source_archive": "https://proxy.golang.org/github.com/riverqueue/river/rivershared/@v/v0.51.2.zip",
+      "version": "v0.51.2"
+    },
+    {
+      "license": "MPL-2.0",
+      "license_file": "LICENSE",
+      "license_sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd",
+      "module": "github.com/riverqueue/river/rivertype",
+      "module_sum": "h1:2GIvVH6cRJcXtIlba8bHmZDvlcydtND0PZQBHCRyEsw=",
+      "source_archive": "https://proxy.golang.org/github.com/riverqueue/river/rivertype/@v/v0.51.2.zip",
+      "version": "v0.51.2"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "be83ad53208d03a9fe08c7fac231cabf79422989ef5706bff217bd35104ebf07",
+      "module": "github.com/tidwall/gjson",
+      "module_sum": "h1:+agJ3rEzKcCXKDKo0ml26UROcpcAlnZyjq+TjbY5Fto=",
+      "source_archive": "https://proxy.golang.org/github.com/tidwall/gjson/@v/v1.20.0.zip",
+      "version": "v1.20.0"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "be83ad53208d03a9fe08c7fac231cabf79422989ef5706bff217bd35104ebf07",
+      "module": "github.com/tidwall/match",
+      "module_sum": "h1:0pt8FlkOwjN2fPt4bIl4BoNxb98gGHN2ObFEDkrfZnM=",
+      "source_archive": "https://proxy.golang.org/github.com/tidwall/match/@v/v1.2.0.zip",
+      "version": "v1.2.0"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "0ca70311227fe097c662dece3f359e3317fa7f9d41f8d29eb45fc5135e216139",
+      "module": "github.com/tidwall/pretty",
+      "module_sum": "h1:qjsOFOWWQl+N3RsoF5/ssm1pHmJJwhjlSbZ51I6wMl4=",
+      "source_archive": "https://proxy.golang.org/github.com/tidwall/pretty/@v/v1.2.1.zip",
+      "version": "v1.2.1"
+    },
+    {
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_sha256": "dbf5e2aa91aee5f19a1ce2cc7891e2ac37204b6461c0adc539426636e27b208e",
+      "module": "github.com/tidwall/sjson",
+      "module_sum": "h1:kLy8mja+1c9jlljvWTlSazM7cKDRfJuR/bOJhcY5NcY=",
+      "source_archive": "https://proxy.golang.org/github.com/tidwall/sjson/@v/v1.2.5.zip",
+      "version": "v1.2.5"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_file": "LICENSE",
+      "license_sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "module": "golang.org/x/sync",
+      "module_sum": "h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=",
+      "source_archive": "https://proxy.golang.org/golang.org/x/sync/@v/v0.24.0.zip",
+      "version": "v0.24.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_file": "LICENSE",
+      "license_sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "module": "golang.org/x/text",
+      "module_sum": "h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=",
+      "source_archive": "https://proxy.golang.org/golang.org/x/text/@v/v0.43.0.zip",
+      "version": "v0.43.0"
+    }
+  ],
+  "nested_notice": {
+    "copied_from_existing_probe": "../s0txprobe/LEVENSHTEIN-LICENSE.txt",
+    "copyright": "2015 Agniva De Sarker",
+    "license": "MIT",
+    "notice": "LEVENSHTEIN-LICENSE.txt",
+    "notice_sha256": "911d0fb30ff3345e4df60da21c2f2340a69bd98c0e3d1e79d27ae6177ebeb617",
+    "origin": "https://github.com/agnivade/levenshtein",
+    "package": "github.com/riverqueue/river/rivershared/levenshtein"
+  },
+  "not_linked_upstream_test_modules": [
+    "github.com/jackc/pgerrcode",
+    "github.com/robfig/cron/v3"
+  ],
+  "package_enumeration_command": "go list -mod=readonly -deps -test -json ./plugins/jobs-river/internal/s0workers",
+  "setup_inventory_correction": {
+    "authority_gate": "FAIL unchanged; no role/GUC authority modification",
+    "catalog_assertions": "exact five upstream table names before extension DDL; exact five plus result and separate owner/FORCE RLS afterward",
+    "cause": "pgx main migration 007 drops river_client_queue and river_client; old fixture ALTERed removed river_client at statement 21",
+    "child_validation": "gofmt plus offline compile exit 0; unchanged 15-module/78-package compiler-input closure verified; no tests or SQL executed",
+    "classification": "source-corrected setup only; functional behavior not remeasured by child",
+    "final_upstream_tables": [
+      "river_job",
+      "river_leader",
+      "river_migration",
+      "river_notification",
+      "river_queue"
+    ],
+    "forced_table_count_with_result": 6,
+    "previous_parent_report": "all four cases failed 42P01 before workers started; original separate log retained by parent"
+  },
+  "source_sha256": {
+    "diagnostic_test.go": "16773f583a540a820c41e14ead5df714fdf936faeae438375c48730a1b116d33",
+    "fixture_test.go": "f34bfe2e38ca455f23c0aa3c2793cc77f899c840c4ae55bbcf7d8ac868e0b43a",
+    "report_test.go": "72b79c8e771898f79e7747505e4ea1ebdd7b47375765b004427bdfd9616d579d",
+    "worker_test.go": "98b5a2b45936d6584dfc8d4081e7f8f3bfad04b59b0c35d270fdbb8a15629dc3"
+  },
+  "standard_library": "Go toolchain packages omitted from third-party inventory; no blanket artifact redistribution license assertion",
+  "target": {
+    "GOARCH": "amd64",
+    "GOOS": "linux"
+  },
+  "third_party_module_count": 15,
+  "third_party_packages": [
+    {
+      "module": "github.com/jackc/pgpassfile",
+      "package": "github.com/jackc/pgpassfile",
+      "version": "v1.0.0"
+    },
+    {
+      "module": "github.com/jackc/pgservicefile",
+      "package": "github.com/jackc/pgservicefile",
+      "version": "v0.0.0-20240606120523-5a60cdf6a761"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/internal/iobufpool",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/internal/pgdatetime",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/internal/pgio",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/internal/sanitize",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/internal/stmtcache",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgconn",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgconn/ctxwatch",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgconn/internal/bgreader",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgproto3",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgtype",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "package": "github.com/jackc/pgx/v5/pgxpool",
+      "version": "v5.11.0"
+    },
+    {
+      "module": "github.com/jackc/puddle/v2",
+      "package": "github.com/jackc/puddle/v2",
+      "version": "v2.2.3"
+    },
+    {
+      "module": "github.com/jackc/puddle/v2",
+      "package": "github.com/jackc/puddle/v2/internal/genstack",
+      "version": "v2.2.3"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/dblist",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/dbunique",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/execution",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/jobcompleter",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/jobexecutor",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/jobstats",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/leadership",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/maintenance",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/notifier",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/notifylimiter",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/pluginconfig",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/pluginlookup",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/retrypolicy",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/rivercommon",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/riverplugin",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/util/chanutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/internal/workunit",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver",
+      "package": "github.com/riverqueue/river/riverdriver",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "package": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "package": "github.com/riverqueue/river/riverdriver/riverpgxv5/internal/dbsqlc",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "package": "github.com/riverqueue/river/rivermigrate",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/baseservice",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/circuitbreaker",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/levenshtein",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/riverpilot",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/riversharedmaintenance",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/sqlctemplate",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/startstop",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/structtag",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/testsignal",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/uniquestates",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/dbutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/maputil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/ptrutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/randutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/serviceutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/sliceutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/testutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/timeoututil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/timeutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "package": "github.com/riverqueue/river/rivershared/util/valutil",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivertype",
+      "package": "github.com/riverqueue/river/rivertype",
+      "version": "v0.51.2"
+    },
+    {
+      "module": "github.com/tidwall/gjson",
+      "package": "github.com/tidwall/gjson",
+      "version": "v1.20.0"
+    },
+    {
+      "module": "github.com/tidwall/match",
+      "package": "github.com/tidwall/match",
+      "version": "v1.2.0"
+    },
+    {
+      "module": "github.com/tidwall/pretty",
+      "package": "github.com/tidwall/pretty",
+      "version": "v1.2.1"
+    },
+    {
+      "module": "github.com/tidwall/sjson",
+      "package": "github.com/tidwall/sjson",
+      "version": "v1.2.5"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "package": "golang.org/x/sync/errgroup",
+      "version": "v0.24.0"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "package": "golang.org/x/sync/semaphore",
+      "version": "v0.24.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/cases",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/internal",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/internal/language",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/internal/language/compact",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/internal/tag",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/language",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/runes",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/secure/bidirule",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/secure/precis",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/transform",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/unicode/bidi",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/unicode/norm",
+      "version": "v0.43.0"
+    },
+    {
+      "module": "golang.org/x/text",
+      "package": "golang.org/x/text/width",
+      "version": "v0.43.0"
+    }
+  ],
+  "toolchain": "go version go1.26.8 linux/amd64"
+}

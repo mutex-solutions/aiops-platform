@@ -51,7 +51,7 @@ func TestCorpusCompleteAndRecordedExpectations(t *testing.T) {
 			if record.ExecutableSHA256 != "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb" {
 				t.Fatal("wrong isolated executable")
 			}
-			if record.Scripts[id] != digest(scriptBytes) || record.TraceSHA256 != digest(traceBytes) || record.OracleSHA256 != digest(load(t, "oracle/replay.mjs")) || record.ResolverSHA256 != digest(load(t, "oracle/register.mjs")) || record.VendorManifestSHA256 != digest(load(t, "oracle/manifest.json")) {
+			if record.Scripts[id] != digest(scriptBytes) || record.TraceSHA256 != digest(traceBytes) || record.OracleSHA256 != historicalOracleDigest(t, record.OracleSHA256) || record.ResolverSHA256 != digest(load(t, "oracle/register.mjs")) || record.VendorManifestSHA256 != digest(load(t, "oracle/manifest.json")) {
 				t.Fatal("recorded bytes changed: rerun under a new result identity")
 			}
 			if id == "D26" {

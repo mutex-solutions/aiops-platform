@@ -1,0 +1,52 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D10",
+  "title": "Awaiting a missing dependency settles PENDING rather than ACTIVE",
+  "covers": [
+    "pending-until-ready",
+    "await-not-active"
+  ],
+  "plugins": [
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "seen"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {"op": "awaitFiber", "fiber": "c"},
+    {
+      "op": "settle",
+      "label": "pending"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "pending",
+      "path": "/states/0/state",
+      "equals": "PENDING"
+    }
+  ]
+}

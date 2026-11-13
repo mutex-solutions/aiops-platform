@@ -1,0 +1,52 @@
+=== RUN   TestHooksActualGoldenTraceDiagnostics
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D31
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D31/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=58dfca8455210f239fbf78e4d032c56fb3e5c35db9abc65c171b673ef5f742e5 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D31/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D31/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=58dfca8455210f239fbf78e4d032c56fb3e5c35db9abc65c171b673ef5f742e5 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D31/graph-lock
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D32
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D32/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=b62a8226ee96aafd1a5c90bc31d952771eafc5b8e50428338b2ed6850ef76ea4 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D32/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D32/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=b62a8226ee96aafd1a5c90bc31d952771eafc5b8e50428338b2ed6850ef76ea4 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D32/graph-lock
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D33
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D33/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=e9b9dc37807335e0d4b25692a2e4fc4bb9cdd2a3e7c196df9c0badcf5023ba7c evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D33/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D33/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=e9b9dc37807335e0d4b25692a2e4fc4bb9cdd2a3e7c196df9c0badcf5023ba7c evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D33/graph-lock
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D34
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D34/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=6a3a2a13e4b46c244b4a0a92dc3331c002f66164fef873265d1a4f9b5ecd6c79 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D34/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D34/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=6a3a2a13e4b46c244b4a0a92dc3331c002f66164fef873265d1a4f9b5ecd6c79 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D34/graph-lock
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D35
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D35/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=6deee1e8847185382092adf42620135aaf3205b071e552882f00700906fb0c95 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D35/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D35/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=6deee1e8847185382092adf42620135aaf3205b071e552882f00700906fb0c95 evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D35/graph-lock
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D36
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D36/reconciler
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=a99c7b2f1b42d6ad678add00058229fa8d6c56cc818652f25446483e6015adbf evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D36/reconciler
+=== RUN   TestHooksActualGoldenTraceDiagnostics/D36/graph-lock
+    hooks_adapter_test.go:106: strict actual hook comparison=<nil> actualSHA256=a99c7b2f1b42d6ad678add00058229fa8d6c56cc818652f25446483e6015adbf evidence=/tmp/aiops-s0-semantic-current-P5hSFvtI/hooks/TestHooksActualGoldenTraceDiagnostics/D36/graph-lock
+--- PASS: TestHooksActualGoldenTraceDiagnostics (0.28s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D31 (0.05s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D31/reconciler (0.02s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D31/graph-lock (0.02s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D32 (0.04s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D32/reconciler (0.02s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D32/graph-lock (0.02s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D33 (0.05s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D33/reconciler (0.02s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D33/graph-lock (0.02s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D34 (0.04s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D34/reconciler (0.02s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D34/graph-lock (0.02s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D35 (0.05s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D35/reconciler (0.03s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D35/graph-lock (0.03s)
+    --- PASS: TestHooksActualGoldenTraceDiagnostics/D36 (0.04s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D36/reconciler (0.02s)
+        --- PASS: TestHooksActualGoldenTraceDiagnostics/D36/graph-lock (0.02s)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	1.307s

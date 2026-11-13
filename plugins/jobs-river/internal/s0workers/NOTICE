@@ -1,0 +1,33 @@
+S0 ordinary-functional worker scope-data diagnostic dependencies
+
+This test-only package links unmodified River modules at v0.51.2, MPL-2.0:
+  github.com/riverqueue/river
+  github.com/riverqueue/river/riverdriver
+  github.com/riverqueue/river/riverdriver/riverpgxv5
+  github.com/riverqueue/river/rivershared
+  github.com/riverqueue/river/rivertype
+Exact source origin:
+  https://github.com/riverqueue/river/tree/8468ff25e2cc7afd790d7037703ae72d8b2138cb
+Exact source archives for each named module:
+  https://proxy.golang.org/<module>/@v/v0.51.2.zip
+Upstream covered files are unmodified and not copied here. Migrations execute
+through rivermigrate with its Schema option; no migration SQL is reproduced.
+Preserve module notices and exact source archives/routes before distributing a
+compiled diagnostic artifact. No product distribution or MPL compliance claim
+for an unreviewed future artifact is made.
+
+River rivershared/levenshtein adapts source from
+https://github.com/agnivade/levenshtein, MIT, Copyright (c) 2015 Agniva De Sarker.
+Its complete original notice is retained as LEVENSHTEIN-LICENSE.txt, copied from
+the existing s0txprobe notice; module-level MPL terms do not erase nested terms.
+
+The first-party test scaffolding is Apache-2.0. Small original identifier,
+redaction, and bootstrap conventions follow existing internal/s0txprobe tests;
+that test-only package is not imported. This package does not import company,
+kernel, SDK, or any production platform package.
+
+pgx v5.11.0 source origin:
+  https://github.com/jackc/pgx/tree/5e583fa7aabfa88b796292f849fc9d7d75ac159d
+Remaining actual compiled modules/packages and license-file SHA-256 values are
+recorded in compile-metadata.json. That is a compile closure, not a blanket
+license assertion over upstream-only tests or an executable S0 result.

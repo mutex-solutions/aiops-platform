@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -51,6 +52,19 @@ func rcSettle(t *testing.T, r Runtime) {
 	}
 }
 
+func rcInspect(t *testing.T, r Runtime) Inspection {
+	t.Helper()
+	inspector, ok := r.(Inspector)
+	if !ok {
+		t.Fatal("reconciler does not implement Inspector")
+	}
+	inspection, err := inspector.Inspect(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inspection
+}
+
 func rcSnapshot(t *testing.T, r Runtime, id uint64) Snapshot {
 	t.Helper()
 	ss, err := r.Snapshots(rcGuard(t))
@@ -66,6 +80,1353 @@ func rcSnapshot(t *testing.T, r Runtime, id uint64) Snapshot {
 	return Snapshot{}
 }
 
+func TestReconcilerContextOwnershipAckSurvivesCancellationAfterAdmission(t *testing.T) {
+	for _, operation := range []string{"provide", "child"} {
+		t.Run(operation, func(t *testing.T) {
+			// Use the actual owner handler and root activation, but hold the
+			// transport acknowledgment until after native quiescence. This makes
+			// the accepted-command/canceled-context race deterministic.
+			r := &reconcilerRuntime{inbox: make(chan rcMessage, 1), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
+			o := &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter)}
+			o.startRoot()
+			c := o.root.act.ctx
+			if !c.Enter() {
+				t.Fatal("root setup lease refused")
+			}
+			result := make(chan rcReply, 1)
+			if operation == "provide" {
+				go func() { result <- rcReply{err: c.Provide("resource", "actual")} }()
+			} else {
+				go func() {
+					id, err := c.MountChild(Spec{ID: "actual-child", Needs: []string{"missing"}})
+					result <- rcReply{id: id, err: err}
+				}()
+			}
+			message := <-r.inbox
+			reply, _ := o.handle(message)
+			if reply.err != nil {
+				t.Fatal(reply.err)
+			}
+			o.quiesce(o.root)
+			if c.Std().Err() != context.Canceled {
+				t.Fatal("fixture did not cancel after admission")
+			}
+			message.ack <- reply
+			got := <-result
+			if got.err != nil || got.id != reply.id {
+				t.Fatalf("native admission succeeded but ownership ack was lost: reply=%+v got=%+v", reply, got)
+			}
+			if operation == "provide" {
+				if provision := o.providers["resource"]; provision == nil || provision.binding.value != "actual" || !c.Owns("resource") {
+					t.Fatal("accepted native reservation was not retained")
+				}
+			} else if got.id == 0 || o.fibers[got.id] == nil {
+				t.Fatal("accepted native child did not return its real ID")
+			}
+			c.Leave()
+			o.work()
+			close(r.done)
+			if err := r.observers.close(rcGuard(t)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestReconcilerProvideCancellationRaceNeverReportsFailureForReservedUID(t *testing.T) {
+	r := rcRuntime(t)
+	contexts := make(chan *Context, 1)
+	const count = 64
+	keys := make([]string, count)
+	resources := make([]*atomic.Bool, count)
+	for i := range count {
+		keys[i], resources[i] = "resource-"+strconv.Itoa(i), new(atomic.Bool)
+	}
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: keys, Apply: func(c *Context) error {
+		contexts <- c
+		if err := c.Defer("resources", func(context.Context) error {
+			for _, resource := range resources {
+				resource.Store(true)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return c.Provide(keys[0], resources[0])
+	}})
+	rcSettle(t, r)
+	c := <-contexts
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	rcMount(t, r, Spec{ID: "consumer", Needs: keys[:1], Apply: func(c *Context) error {
+		return c.Defer("gated-consumer", func(context.Context) error {
+			value, err := c.Read(keys[0])
+			if err != nil || value.(*atomic.Bool).Load() {
+				return errors.New("provider resource released before retained consumer cleanup")
+			}
+			close(entered)
+			<-release
+			if value.(*atomic.Bool).Load() {
+				return errors.New("provider resource released during retained consumer cleanup")
+			}
+			return nil
+		})
+	}})
+	rcSettle(t, r)
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	var rejected [count]atomic.Bool
+	for i := 1; i < count; i++ {
+		if !c.Enter() {
+			t.Fatal("setup lease refused")
+		}
+		workers.Go(func() {
+			defer c.Leave()
+			<-start
+			if err := c.Provide(keys[i], resources[i]); err != nil {
+				if !errors.Is(err, ErrInactive) {
+					t.Errorf("setup rejection = %v", err)
+				}
+				rejected[i].Store(true)
+				resources[i].Store(true) // The caller owns rollback only on rejection.
+			}
+		})
+	}
+	close(start)
+	if err := r.Dispose(rcGuard(t), provider); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	workers.Wait()
+	for _, provision := range rcInspect(t, r).Provisions {
+		if provision.Owner != provider {
+			continue
+		}
+		for i, key := range keys {
+			if provision.Key == key && (rejected[i].Load() || resources[i].Load()) {
+				t.Fatalf("successful native UID %d returned rejection/caller rollback for %s", provision.UID, key)
+			}
+		}
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+}
+
+func TestReconcilerRetiringContextCannotDisposeDesiredReplacement(t *testing.T) {
+	r := rcRuntime(t)
+	contexts := make(chan *Context, 2)
+	cleanupEntered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var loads atomic.Int32
+	id := rcMount(t, r, Spec{ID: "replacement", Apply: func(c *Context) error {
+		contexts <- c
+		if loads.Add(1) != 1 {
+			return nil
+		}
+		return c.Defer("held-cleanup", func(context.Context) error { close(cleanupEntered); <-release; return nil })
+	}})
+	rcSettle(t, r)
+	old := <-contexts
+	if err := r.Update(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	<-cleanupEntered
+	if err := old.Dispose(); !errors.Is(err, ErrInactive) {
+		t.Fatalf("retiring activation disposed newer desired epoch: %v", err)
+	}
+	if s := rcSnapshot(t, r, id); !s.Alive || s.Target == nil || s.Target.Revision != 1 {
+		t.Fatalf("stale Dispose poisoned replacement target: %+v", s)
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	<-contexts
+	if s := rcSnapshot(t, r, id); s.State != Active || !s.Alive || s.Revision != 1 || loads.Load() != 2 {
+		t.Fatalf("replacement did not survive stale context: %+v", s)
+	}
+}
+
+func TestReconcilerPartialEffectCleanupUsesFreshNativeDisposeBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		contexts := make(chan *Context, 1)
+		id := rcMount(t, r, Spec{ID: "rollback", Apply: func(c *Context) error { contexts <- c; return nil }})
+		rcSettle(t, r)
+		c := <-contexts
+		if !c.Enter() {
+			t.Fatal("setup lease rejected")
+		}
+		if err := r.Dispose(rcGuard(t), id); err != nil {
+			t.Fatal(err)
+		}
+		if c.Std().Err() != context.Canceled || c.cleanupEffect == nil {
+			t.Fatal("native rollback bridge missing after quiescence")
+		}
+		cleanupErr := errors.New("partial disposer failure")
+		before := time.Now()
+		err := c.cleanupEffect(func(ctx context.Context) error {
+			if ctx.Err() != nil {
+				return errors.New("rollback inherited canceled activation context")
+			}
+			deadline, ok := ctx.Deadline()
+			if !ok || deadline.Sub(before) != rcDisposeBudget {
+				return errors.New("rollback lacks native disposal budget")
+			}
+			if _, err := r.(Inspector).Inspect(ctx); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return cleanupErr
+		})
+		if !errors.Is(err, cleanupErr) || !errors.Is(err, context.DeadlineExceeded) || time.Since(before) != rcDisposeBudget {
+			t.Fatalf("rollback result/budget = %v after %s", err, time.Since(before))
+		}
+		if c.released.Load() || c.lease.Load() != 1 {
+			t.Fatal("rollback deadline fabricated native lease completion")
+		}
+		if err := c.cleanupEffect(func(context.Context) error { panic("rollback panic") }); err == nil {
+			t.Fatal("rollback panic escaped native callback boundary")
+		}
+		c.Leave()
+		rcSettle(t, r)
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerEffectRegistrationCancellationTransfersOwnershipExactlyOnce(t *testing.T) {
+	r := rcRuntime(t)
+	contexts := make(chan *Context, 1)
+	id := rcMount(t, r, Spec{ID: "effect-ack", Apply: func(c *Context) error { contexts <- c; return nil }})
+	rcSettle(t, r)
+	c := <-contexts
+	const count = 128
+	var calls [count]atomic.Int32
+	var workers sync.WaitGroup
+	start := make(chan struct{})
+	// Reserve all setup leases before quiescence. Registration may be accepted
+	// or rejected by the owner; only the accepting side may own cleanup.
+	for i := range count {
+		if !c.Enter() {
+			t.Fatal("setup lease rejected before race")
+		}
+		workers.Go(func() {
+			defer c.Leave()
+			<-start
+			dispose := func(context.Context) error { calls[i].Add(1); return nil }
+			if err := c.Defer("racing-effect", dispose); err != nil {
+				if !errors.Is(err, ErrInactive) {
+					t.Errorf("registration race returned %v", err)
+				}
+				if err := c.cleanupEffect(dispose); err != nil {
+					t.Errorf("caller rollback = %v", err)
+				}
+			}
+		})
+	}
+	close(start)
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	workers.Wait()
+	rcSettle(t, r)
+	for i := range count {
+		if got := calls[i].Load(); got != 1 {
+			t.Fatalf("registration %d transferred disposer ownership %d times", i, got)
+		}
+	}
+}
+
+func TestReconcilerBatchInvalidSuffixHasNoPrefixOrIDEffects(t *testing.T) {
+	r := rcRuntime(t)
+	id := rcMount(t, r, Spec{ID: "existing"})
+	rcSettle(t, r)
+	before := rcInspect(t, r)
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var callbacks atomic.Int32
+	operations := []BatchOperation{
+		{Kind: BatchMount, Spec: Spec{ID: "not-mounted", Apply: func(*Context) error { callbacks.Add(1); return nil }}},
+		{Kind: BatchUpdate, Fiber: id},
+		{Kind: BatchDispose, Fiber: id},
+		{Kind: BatchUpdate, Fiber: id},
+	}
+	if ids, err := r.(Batcher).Batch(rcGuard(t), operations); err == nil || ids != nil {
+		t.Fatalf("invalid suffix admitted prefix: ids=%v err=%v", ids, err)
+	}
+	if after := rcInspect(t, r); !reflect.DeepEqual(after, before) || callbacks.Load() != 0 {
+		t.Fatalf("invalid batch mutated native state: before=%+v after=%+v callbacks=%d", before, after, callbacks.Load())
+	}
+	afterEvents, err := r.Events(rcGuard(t))
+	if err != nil || !reflect.DeepEqual(afterEvents, events) {
+		t.Fatalf("invalid batch changed ledger: %v %+v", err, afterEvents)
+	}
+	if next := rcMount(t, r, Spec{ID: "next"}); next != id+1 {
+		t.Fatalf("invalid prefix consumed mount identity: %d -> %d", id, next)
+	}
+}
+
+func TestReconcilerBatchRepeatedUpdatesPublishOnlyLatestRevision(t *testing.T) {
+	r := rcRuntime(t)
+	var loads atomic.Int32
+	id := rcMount(t, r, Spec{ID: "updated", Apply: func(*Context) error { loads.Add(1); return nil }})
+	rcSettle(t, r)
+	ids, err := r.(Batcher).Batch(rcGuard(t), []BatchOperation{
+		{Kind: BatchUpdate, Fiber: id},
+		{Kind: BatchUpdate, Fiber: id},
+		{Kind: BatchMount, Spec: Spec{ID: "new"}},
+	})
+	if err != nil || !slices.Equal(ids, []uint64{0, 0, id + 1}) {
+		t.Fatalf("batch result positions = %v, %v", ids, err)
+	}
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, id); s.Revision != 2 || s.Target == nil || s.Target.Revision != 2 || s.State != Active || loads.Load() != 2 {
+		t.Fatalf("intermediate revision admitted an activation: %+v loads=%d", s, loads.Load())
+	}
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loading, unloading int
+	for _, event := range events {
+		if event.Fiber == id && event.Kind == "state" {
+			if event.State == Loading {
+				loading++
+			}
+			if event.State == Unloading {
+				unloading++
+			}
+		}
+	}
+	if loading != 2 || unloading != 1 {
+		t.Fatalf("batch did not coalesce lifecycle work: Loading=%d Unloading=%d", loading, unloading)
+	}
+}
+
+func TestReconcilerBatchColdConsumerBeforeProviderUpdateNeverBindsOldUID(t *testing.T) {
+	r := rcRuntime(t)
+	var providerLoads, checks atomic.Int32
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", providerLoads.Add(1)) }})
+	rcSettle(t, r)
+	oldUID := rcInspect(t, r).Provisions[0].UID
+	seen := make(chan any, 1)
+	ids, err := r.(Batcher).Batch(rcGuard(t), []BatchOperation{
+		{Kind: BatchMount, Spec: Spec{ID: "cold", Needs: []string{"sample"}, Check: func(c *Context) bool {
+			checks.Add(1)
+			value, err := c.Read("sample")
+			return err == nil && value == int32(2)
+		}, Apply: func(c *Context) error { value, err := c.Read("sample"); seen <- value; return err }}},
+		{Kind: BatchUpdate, Fiber: provider},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, ids[0]); s.State != Active || len(s.Epoch) != 1 || s.Epoch[0] == oldUID || checks.Load() != 1 {
+		t.Fatalf("cold Check/Apply observed superseded provider: %+v checks=%d", s, checks.Load())
+	}
+	if value := <-seen; value != int32(2) {
+		t.Fatalf("cold consumer bound old provider value: %v", value)
+	}
+}
+
+func TestReconcilerBatchHeldApplyJoinsBeforeLatestActivation(t *testing.T) {
+	r := rcRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var loads, running, peak atomic.Int32
+	id := rcMount(t, r, Spec{ID: "held", Apply: func(*Context) error {
+		current := running.Add(1)
+		defer running.Add(-1)
+		for previous := peak.Load(); current > previous && !peak.CompareAndSwap(previous, current); previous = peak.Load() {
+		}
+		if loads.Add(1) == 1 {
+			close(entered)
+			<-release
+			return errors.New("superseded failure")
+		}
+		return nil
+	}})
+	<-entered
+	if _, err := r.(Batcher).Batch(rcGuard(t), []BatchOperation{{Kind: BatchUpdate, Fiber: id}, {Kind: BatchUpdate, Fiber: id}}); err != nil {
+		t.Fatal(err)
+	}
+	if s := rcSnapshot(t, r, id); s.Target == nil || s.Target.Revision != 2 || s.State != Loading || loads.Load() != 1 {
+		t.Fatalf("batch overlapped or hid held Apply: %+v loads=%d", s, loads.Load())
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, id); s.State != Active || s.Revision != 2 || s.Error != "" || loads.Load() != 2 || peak.Load() != 1 {
+		t.Fatalf("old batch completion poisoned/reentered latest target: %+v loads=%d peak=%d", s, loads.Load(), peak.Load())
+	}
+}
+
+func TestReconcilerDiamondProviderRemovalFollowsBothConsumerStableTransitions(t *testing.T) {
+	r := rcRuntime(t)
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"a"}, Apply: func(c *Context) error { return c.Provide("a", "retained") }})
+	branches := make([]uint64, 0, 2)
+	for _, key := range []string{"b", "c"} {
+		branches = append(branches, rcMount(t, r, Spec{ID: "branch-" + key, Needs: []string{"a"}, Provides: []string{key}, Apply: func(c *Context) error {
+			value, err := c.Read("a")
+			if err != nil {
+				return err
+			}
+			return c.Provide(key, value)
+		}}))
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var loads atomic.Int32
+	leaf := rcMount(t, r, Spec{ID: "leaf", Needs: []string{"b", "c"}, Apply: func(c *Context) error {
+		if loads.Add(1) != 1 {
+			return nil
+		}
+		return c.Defer("gated-leaf", func(context.Context) error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}})
+	rcSettle(t, r)
+	oldUID := rcSnapshot(t, r, branches[0]).Epoch[0]
+	if err := r.Update(rcGuard(t), provider); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	if inspection := rcInspect(t, r); len(inspection.Provisions) != 3 || inspection.Provisions[0].UID != oldUID || inspection.Provisions[0].Active {
+		t.Fatalf("provider was not retained while diamond leaf cleaned: %+v", inspection.Provisions)
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var removed uint64
+	stable := make(map[uint64]uint64)
+	for _, event := range events {
+		if event.Kind == "state" && event.From == Unloading && event.State == Pending {
+			stable[event.Fiber] = event.Sequence
+		}
+		if event.Kind == "remove" && event.Fiber == provider && event.UID == oldUID {
+			removed = event.Sequence
+		}
+	}
+	for _, consumer := range append(branches, leaf) {
+		if stable[consumer] == 0 || removed == 0 || stable[consumer] >= removed {
+			t.Fatalf("provider removal %d overtook consumer %d stable transition %d; raw ledger=%+v", removed, consumer, stable[consumer], events)
+		}
+	}
+}
+
+func TestReconcilerObserverQueueRemainsOpenUntilNativeCloseActuallyFinishes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		observers := r.(ObserverRuntime)
+		entered, release := make(chan struct{}), make(chan struct{})
+		id := rcMount(t, r, Spec{ID: "blocked-cleanup", ApplyEffect: func(*Context) (Disposer, error) {
+			return func(context.Context) error { close(entered); <-release; return nil }, nil
+		}})
+		rcSettle(t, r)
+		if err := r.Close(rcGuard(t)); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("blocked native Close = %v", err)
+		}
+		<-entered
+		synctest.Wait()
+		before := observers.ObserverStatus()
+		if before.Closing || before.Stopped {
+			t.Fatalf("bounded lifecycle failure prematurely closed observer queue: %+v", before)
+		}
+		inspection := rcInspect(t, r)
+		if before.Accepted != inspection.Sequence || rcSnapshot(t, r, id).State != Unloading {
+			t.Fatalf("observer admissions diverged from live native ledger: status=%+v sequence=%d", before, inspection.Sequence)
+		}
+		close(release)
+		synctest.Wait()
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+		after := observers.ObserverStatus()
+		if !after.Closing || !after.Stopped || after.Accepted <= before.Accepted || after.Accepted != after.Delivered || after.Remaining != 0 {
+			t.Fatalf("real cleanup completion events dropped or queue not joined: before=%+v after=%+v", before, after)
+		}
+	})
+}
+
+func TestReconcilerRootIsNativeHiddenAnchorWithActualProvisionRecords(t *testing.T) {
+	r := NewReconciler()
+	t.Cleanup(func() {
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Error(err)
+		}
+	})
+	root, err := r.(RootProvider).RootContext(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := r.(RootProvider).RootContext(rcGuard(t))
+	if err != nil || again != root || root.fiber != 0 || !root.Enter() {
+		t.Fatalf("root context identity/live anchor = %p / %p, err=%v", root, again, err)
+	}
+	root.Leave()
+	if err := root.Dispose(); !errors.Is(err, ErrRootDispose) {
+		t.Fatalf("root self disposal = %v", err)
+	}
+	if err := r.Dispose(rcGuard(t), 0); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("ordinary Dispose reached host root: %v", err)
+	}
+	if err := r.Update(rcGuard(t), 0); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("ordinary Update reached host root: %v", err)
+	}
+	if inspection := rcInspect(t, r); len(inspection.Fibers) != 0 || len(inspection.Provisions) != 0 || inspection.Sequence != 0 {
+		t.Fatalf("root fabricated startup fiber/events: %+v", inspection)
+	}
+	if err := root.Provide("", nil); err == nil {
+		t.Fatal("root accepted empty provision key")
+	}
+	type builtin struct{ name string }
+	firstValue, secondValue := &builtin{"first"}, &builtin{"second"}
+	if err := root.Provide("zeta", firstValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("alpha", secondValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("zeta", "duplicate"); err == nil {
+		t.Fatal("root bypassed native duplicate reservation")
+	}
+	if !root.Owns("zeta") || !root.Owns("alpha") {
+		t.Fatal("root provisions not native Context ownership")
+	}
+	var seen any
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"zeta"}, Apply: func(c *Context) error { var err error; seen, err = c.Read("zeta"); return err }})
+	rcSettle(t, r)
+	inspection := rcInspect(t, r)
+	if seen != firstValue || len(inspection.Fibers) != 1 || inspection.Fibers[0].ID != consumer || len(inspection.Provisions) != 2 {
+		t.Fatalf("root provision did not bind real user fiber: %+v value=%p", inspection, seen)
+	}
+	first, second := inspection.Provisions[0], inspection.Provisions[1]
+	if first.Key != "zeta" || second.Key != "alpha" || first.UID == 0 || first.UID >= second.UID || first.Owner != 0 || second.Owner != 0 || first.Name != "root" || second.Name != "root" || !first.Active || !second.Active || first.Value != firstValue || second.Value != secondValue {
+		t.Fatalf("root native provider records = %+v", inspection.Provisions)
+	}
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.Sequence != uint64(len(events)) {
+		t.Fatalf("inspection watermark=%d event prefix=%d", inspection.Sequence, len(events))
+	}
+	var serviceKeys []string
+	for _, event := range events {
+		if event.Fiber == 0 {
+			if event.Kind == "mount" || event.Kind == "state" || event.Name != "root" {
+				t.Fatalf("host anchor fabricated plugin lifecycle event: %+v", event)
+			}
+			if event.Kind == "service" {
+				serviceKeys = append(serviceKeys, event.Key)
+				if event.State != Active {
+					t.Fatalf("root service was not ACTIVE: %+v", event)
+				}
+			}
+		}
+	}
+	if !slices.Equal(serviceKeys, []string{"zeta", "alpha"}) {
+		t.Fatalf("root service notices = %v", serviceKeys)
+	}
+}
+
+func TestReconcilerRootCloseJoinsChildrenUsersAndRootWorkBeforeLIFOCleanup(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		root, err := r.(RootProvider).RootContext(rcGuard(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var mu sync.Mutex
+		var order []string
+		appendOrder := func(label string) { mu.Lock(); order = append(order, label); mu.Unlock() }
+		if err := root.Defer("first", func(context.Context) error { appendOrder("first"); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if err := root.Provide("host", "retained"); err != nil {
+			t.Fatal(err)
+		}
+		if err := root.Defer("last", func(ctx context.Context) error {
+			if _, err := r.(Inspector).Inspect(ctx); err != nil {
+				return err
+			}
+			appendOrder("last")
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		childEntered, userEntered := make(chan struct{}), make(chan struct{})
+		childRelease, userRelease, workRelease := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		child, err := root.MountChild(Spec{ID: "structural-child", ApplyEffect: func(*Context) (Disposer, error) {
+			return func(context.Context) error { close(childEntered); <-childRelease; return nil }, nil
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		user := rcMount(t, r, Spec{ID: "ordinary-user", Needs: []string{"host"}, ApplyEffect: func(c *Context) (Disposer, error) {
+			return func(context.Context) error {
+				value, err := c.Read("host")
+				if err != nil || value != "retained" {
+					return errors.New("root released retained binding before user cleanup")
+				}
+				close(userEntered)
+				<-userRelease
+				return nil
+			}, nil
+		}})
+		if err := root.Go("host-work", func(context.Context) error { <-workRelease; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if !root.Enter() {
+			t.Fatal("root lease rejected before Close")
+		}
+		rcSettle(t, r)
+		closed := make(chan error, 1)
+		go func() { closed <- r.Close(rcGuard(t)) }()
+		<-childEntered
+		<-userEntered
+		if root.Std().Err() != context.Canceled || root.Enter() {
+			t.Fatal("Close did not quiesce host activation")
+		}
+		if _, err := root.MountChild(Spec{}); !errors.Is(err, ErrInactive) {
+			t.Fatalf("closing root accepted child: %v", err)
+		}
+		inspection := rcInspect(t, r)
+		if len(inspection.Provisions) != 1 || inspection.Provisions[0].Active || inspection.Provisions[0].Value != "retained" || inspection.Provisions[0].Owner != 0 {
+			t.Fatalf("root provision not retained during ordinary cleanup: %+v", inspection.Provisions)
+		}
+		mu.Lock()
+		if len(order) != 0 {
+			t.Errorf("root cleanup overtook children/users/work: %v", order)
+		}
+		mu.Unlock()
+		close(childRelease)
+		close(userRelease)
+		synctest.Wait()
+		if rcSnapshot(t, r, child).State != Disposed || rcSnapshot(t, r, user).State != Disposed {
+			t.Fatal("Close failed to join ordinary fibers")
+		}
+		close(workRelease)
+		synctest.Wait()
+		mu.Lock()
+		if len(order) != 0 {
+			t.Errorf("root cleanup overtook explicit host lease: %v", order)
+		}
+		mu.Unlock()
+		root.Leave()
+		if err := <-closed; err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		if !slices.Equal(order, []string{"last", "first"}) {
+			t.Errorf("host effect cleanup order = %v", order)
+		}
+		mu.Unlock()
+		if root.Owns("host") || root.lease.Load() != 0 || !root.released.Load() {
+			t.Fatal("root activation not actually released")
+		}
+		if _, err := r.(RootProvider).RootContext(rcGuard(t)); !errors.Is(err, ErrClosed) {
+			t.Fatalf("RootContext after Close = %v", err)
+		}
+	})
+}
+
+func TestReconcilerRootIgnoredTrackedCancellationKeepsOwnerAlive(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		root, err := r.(RootProvider).RootContext(rcGuard(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cleaned atomic.Bool
+		if err := root.Defer("resource", func(context.Context) error { cleaned.Store(true); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		release := make(chan struct{})
+		if err := root.Go("blocked", func(context.Context) error { <-release; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		before := time.Now()
+		if err := r.Close(rcGuard(t)); !errors.Is(err, context.DeadlineExceeded) || time.Since(before) != rcDrainBudget {
+			t.Fatalf("ignored root cancellation deadline = %v after %s", err, time.Since(before))
+		}
+		if cleaned.Load() || root.lease.Load() != 1 || root.released.Load() {
+			t.Fatal("deadline fabricated host work completion")
+		}
+		if _, err := r.(Inspector).Inspect(rcGuard(t)); err != nil {
+			t.Fatalf("owner exited with real host work outstanding: %v", err)
+		}
+		close(release)
+		synctest.Wait()
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+		if !cleaned.Load() || !root.released.Load() {
+			t.Fatal("actual host completion did not finish Close")
+		}
+	})
+}
+
+func TestReconcilerRootTrackedFailureRetiresOnlyOwnedLifetimeUntilExplicitClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		root, err := r.(RootProvider).RootContext(rcGuard(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := root.Provide("host", "retained"); err != nil {
+			t.Fatal(err)
+		}
+		failure := &rcInspectingError{r: r}
+		release := make(chan struct{})
+		if err := root.Go("host-failure", func(context.Context) error { <-release; return failure }); err != nil {
+			t.Fatal(err)
+		}
+		child, err := root.MountChild(Spec{ID: "child"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var consumerCleaned atomic.Bool
+		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"host"}, Apply: func(c *Context) error {
+			return c.Defer("consumer", func(context.Context) error {
+				if _, err := c.Read("host"); err != nil {
+					return err
+				}
+				consumerCleaned.Store(true)
+				return nil
+			})
+		}})
+		unrelated := rcMount(t, r, Spec{ID: "unrelated"})
+		rcSettle(t, r)
+		close(release)
+		synctest.Wait()
+		if !root.released.Load() || failure.calls.Load() != 1 || rcSnapshot(t, r, child).State != Disposed {
+			t.Fatalf("root retirement leaked activation/formatted on owner: released=%v calls=%d child=%+v", root.released.Load(), failure.calls.Load(), rcSnapshot(t, r, child))
+		}
+		if s := rcSnapshot(t, r, consumer); s.State != Pending || s.Target != nil || !s.Alive || !consumerCleaned.Load() {
+			t.Fatalf("root service loss did not clean dependent: %+v", s)
+		}
+		if s := rcSnapshot(t, r, unrelated); s.State != Active || !s.Alive {
+			t.Fatalf("root failure stopped unrelated fiber: %+v", s)
+		}
+		if _, err := r.(RootProvider).RootContext(rcGuard(t)); !errors.Is(err, ErrInactive) {
+			t.Fatalf("retired root capability = %v", err)
+		}
+		if err := r.Update(rcGuard(t), unrelated); err != nil {
+			t.Fatalf("root failure closed ordinary command transport: %v", err)
+		}
+		if err := r.(Waiter).AwaitFiber(rcGuard(t), unrelated); err != nil {
+			t.Fatal(err)
+		}
+		if s := rcSnapshot(t, r, unrelated); s.State != Active || s.Revision != 1 {
+			t.Fatalf("unrelated fiber cannot update after root retirement: %+v", s)
+		}
+		if inspection := rcInspect(t, r); len(inspection.Provisions) != 0 {
+			t.Fatalf("retired root retained provision rows: %+v", inspection.Provisions)
+		}
+		if err := r.Close(rcGuard(t)); !errors.Is(err, failure) {
+			t.Fatalf("retired host failure disappeared before explicit Close: %v", err)
+		}
+		if err := r.Close(rcGuard(t)); !errors.Is(err, failure) {
+			t.Fatalf("repeat Close lost retained host failure: %v", err)
+		}
+	})
+}
+
+func TestReconcilerTrackedRecordsNativeOrderAndRetainsCleanupUntilExit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		first, second := make(chan struct{}), make(chan struct{})
+		var cleaned atomic.Bool
+		contexts := make(chan *Context, 1)
+		id := rcMount(t, r, Spec{ID: "tracked", Apply: func(c *Context) error {
+			contexts <- c
+			if err := c.Go("zeta-first", func(context.Context) error { <-first; return nil }); err != nil {
+				return err
+			}
+			if err := c.Go("alpha-second", func(context.Context) error { <-second; return nil }); err != nil {
+				return err
+			}
+			return c.Defer("resource", func(context.Context) error { cleaned.Store(true); return nil })
+		}})
+		rcSettle(t, r)
+		c := <-contexts
+		if s := rcSnapshot(t, r, id); !slices.Equal(s.Tracked, []string{"zeta-first", "alpha-second"}) || s.State != Active {
+			t.Fatalf("native tracked creation order = %+v", s)
+		}
+		inspection := rcInspect(t, r)
+		inspection.Fibers[0].Tracked[0] = "corrupt"
+		if s := rcSnapshot(t, r, id); s.Tracked[0] != "zeta-first" {
+			t.Fatal("mutable tracked list escaped inspection")
+		}
+		if err := r.Dispose(rcGuard(t), id); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if cleaned.Load() || c.Std().Err() != context.Canceled || c.lease.Load() != 2 {
+			t.Fatalf("quiescence released live work: cleaned=%v leases=%d", cleaned.Load(), c.lease.Load())
+		}
+		if err := c.Go("late", func(context.Context) error { t.Error("late work launched"); return nil }); !errors.Is(err, ErrInactive) {
+			t.Fatalf("quiescent tracked start = %v", err)
+		}
+		close(first)
+		synctest.Wait()
+		if s := rcSnapshot(t, r, id); !slices.Equal(s.Tracked, []string{"alpha-second"}) || cleaned.Load() || c.lease.Load() != 1 {
+			t.Fatalf("record removed before actual final exit: %+v leases=%d cleaned=%v", s, c.lease.Load(), cleaned.Load())
+		}
+		close(second)
+		synctest.Wait()
+		rcSettle(t, r)
+		if s := rcSnapshot(t, r, id); len(s.Tracked) != 0 || s.State != Disposed || !cleaned.Load() || c.lease.Load() != 0 {
+			t.Fatalf("tracked cleanup did not drain: %+v", s)
+		}
+		events, err := r.Events(rcGuard(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ledger []string
+		for _, event := range events {
+			if event.Kind == "go:start" || event.Kind == "go:done" {
+				ledger = append(ledger, event.Kind+":"+event.Key)
+			}
+		}
+		if !slices.Equal(ledger, []string{"go:start:zeta-first", "go:start:alpha-second", "go:done:zeta-first", "go:done:alpha-second"}) {
+			t.Fatalf("native tracked ledger = %v", ledger)
+		}
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerTrackedActiveErrorFailsAndInvalidatesConsumers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		release := make(chan struct{})
+		workerErr := &rcInspectingError{r: r}
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			if err := c.Go("failing", func(context.Context) error { <-release; return workerErr }); err != nil {
+				return err
+			}
+			return c.Provide("sample", "retained")
+		}})
+		var consumerCleaned atomic.Bool
+		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			return c.Defer("consumer", func(context.Context) error { consumerCleaned.Store(true); return nil })
+		}})
+		rcSettle(t, r)
+		close(release)
+		synctest.Wait()
+		if err := r.(Waiter).AwaitFiber(rcGuard(t), provider); !errors.Is(err, workerErr) {
+			t.Fatalf("tracked failure lost identity: %v", err)
+		}
+		if s := rcSnapshot(t, r, provider); s.State != Failed || s.Target != nil || len(s.Tracked) != 0 || !s.Alive || workerErr.calls.Load() != 1 {
+			t.Fatalf("ACTIVE tracked failure = %+v Error calls=%d", s, workerErr.calls.Load())
+		}
+		if s := rcSnapshot(t, r, consumer); s.State != Pending || s.Target != nil || !consumerCleaned.Load() {
+			t.Fatalf("tracked provider failure did not invalidate consumer closure: %+v", s)
+		}
+		if err := r.(Notifier).Notify(rcGuard(t), "sample"); err != nil {
+			t.Fatal(err)
+		}
+		if s := rcSnapshot(t, r, provider); s.Target != nil || s.State != Failed {
+			t.Fatalf("notice cleared sticky tracked failure: %+v", s)
+		}
+		if err := r.Dispose(rcGuard(t), provider); err != nil {
+			t.Fatal(err)
+		}
+		rcSettle(t, r)
+		if err := r.(Waiter).AwaitFiber(rcGuard(t), provider); !errors.Is(err, workerErr) {
+			t.Fatalf("disposed tracked failure lost identity: %v", err)
+		}
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerTrackedFailureDuringApplyWaitsForSingleTransition(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		applyEntered, releaseApply, releaseWork := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		contexts := make(chan *Context, 1)
+		workerErr := errors.New("worker failed while Apply running")
+		var cleaned atomic.Bool
+		id := rcMount(t, r, Spec{ID: "loading", ApplyEffect: func(c *Context) (Disposer, error) {
+			contexts <- c
+			if err := c.Go("early-error", func(context.Context) error { <-releaseWork; return workerErr }); err != nil {
+				return nil, err
+			}
+			close(applyEntered)
+			<-releaseApply
+			return func(context.Context) error { cleaned.Store(true); return nil }, nil
+		}})
+		<-applyEntered
+		c := <-contexts
+		close(releaseWork)
+		synctest.Wait()
+		if s := rcSnapshot(t, r, id); s.State != Loading || s.Target != nil || len(s.Tracked) != 0 || c.Std().Err() != context.Canceled || cleaned.Load() {
+			t.Fatalf("tracked error raced in-flight Apply teardown: %+v", s)
+		}
+		if err := c.Defer("late", func(context.Context) error { return nil }); !errors.Is(err, ErrInactive) {
+			t.Fatalf("failed LOADING context accepted effects: %v", err)
+		}
+		close(releaseApply)
+		synctest.Wait()
+		if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, workerErr) {
+			t.Fatalf("in-flight Apply overwrote tracked error: %v", err)
+		}
+		if s := rcSnapshot(t, r, id); s.State != Failed || !cleaned.Load() || s.Target != nil {
+			t.Fatalf("tracked early failure did not unwind returned cleanup: %+v", s)
+		}
+		if err := r.Dispose(rcGuard(t), id); err != nil {
+			t.Fatal(err)
+		}
+		rcSettle(t, r)
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerTrackedSupersededErrorCannotPoisonNewTarget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		release := make(chan struct{})
+		var loads atomic.Int32
+		id := rcMount(t, r, Spec{ID: "updated", Apply: func(c *Context) error {
+			if loads.Add(1) != 1 {
+				return nil
+			}
+			return c.Go("old-worker", func(context.Context) error { <-release; return errors.New("obsolete worker failure") })
+		}})
+		rcSettle(t, r)
+		if err := r.Update(rcGuard(t), id); err != nil {
+			t.Fatal(err)
+		}
+		if s := rcSnapshot(t, r, id); s.Target == nil || s.Target.Revision != 1 || !slices.Equal(s.Tracked, []string{"old-worker"}) || s.State != Unloading {
+			t.Fatalf("new target not retained while old worker drains: %+v", s)
+		}
+		close(release)
+		synctest.Wait()
+		rcSettle(t, r)
+		if s := rcSnapshot(t, r, id); s.State != Active || s.Target == nil || s.Target.Revision != 1 || s.Error != "" || len(s.Tracked) != 0 || loads.Load() != 2 {
+			t.Fatalf("old tracked completion poisoned target: %+v loads=%d", s, loads.Load())
+		}
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerTrackedIgnoredCancellationKeepsRecordAfterDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		release := make(chan struct{})
+		var cleaned atomic.Bool
+		id := rcMount(t, r, Spec{ID: "blocked-worker", Apply: func(c *Context) error {
+			if err := c.Go("blocked", func(context.Context) error { <-release; return nil }); err != nil {
+				return err
+			}
+			return c.Defer("resource", func(context.Context) error { cleaned.Store(true); return nil })
+		}})
+		rcSettle(t, r)
+		if err := r.Close(rcGuard(t)); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("ignored tracked cancellation did not bound Close: %v", err)
+		}
+		if s := rcSnapshot(t, r, id); !slices.Equal(s.Tracked, []string{"blocked"}) || cleaned.Load() || s.State != Unloading {
+			t.Fatalf("deadline fabricated tracked completion: %+v cleaned=%v", s, cleaned.Load())
+		}
+		close(release)
+		synctest.Wait()
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+		if !cleaned.Load() {
+			t.Fatal("real tracked completion did not finish pending Close")
+		}
+	})
+}
+
+func TestReconcilerTrackedCancellationPanicAndDeadlineClassification(t *testing.T) {
+	for _, result := range []string{"canceled", "panic", "deadline"} {
+		t.Run(result, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				r := NewReconciler()
+				release := make(chan struct{})
+				id := rcMount(t, r, Spec{ID: result, Apply: func(c *Context) error {
+					return c.Go(result, func(ctx context.Context) error {
+						if result == "canceled" {
+							<-ctx.Done()
+							return context.Canceled
+						}
+						<-release
+						if result == "panic" {
+							panic("tracked panic")
+						}
+						return context.DeadlineExceeded
+					})
+				}})
+				rcSettle(t, r)
+				if result == "canceled" {
+					if err := r.Dispose(rcGuard(t), id); err != nil {
+						t.Fatal(err)
+					}
+					synctest.Wait()
+					rcSettle(t, r)
+					if s := rcSnapshot(t, r, id); s.Error != "" || s.State != Disposed || len(s.Tracked) != 0 {
+						t.Fatalf("normal shutdown cancellation became failure: %+v", s)
+					}
+				} else {
+					close(release)
+					synctest.Wait()
+					err := r.(Waiter).AwaitFiber(rcGuard(t), id)
+					if err == nil || (result == "deadline" && !errors.Is(err, context.DeadlineExceeded)) {
+						t.Fatalf("tracked %s lost failure: %v", result, err)
+					}
+					if s := rcSnapshot(t, r, id); s.State != Failed || s.Target != nil || s.Error == "" || len(s.Tracked) != 0 {
+						t.Fatalf("tracked %s was not sticky failure: %+v", result, s)
+					}
+					if err := r.Dispose(rcGuard(t), id); err != nil {
+						t.Fatal(err)
+					}
+					rcSettle(t, r)
+				}
+				if err := r.Close(rcGuard(t)); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
+func TestReconcilerTrackedAdmissionRaceLeavesNoReservationOrLease(t *testing.T) {
+	r := rcRuntime(t)
+	contexts := make(chan *Context, 2)
+	id := rcMount(t, r, Spec{ID: "admission", Apply: func(c *Context) error { contexts <- c; return nil }})
+	rcSettle(t, r)
+	old := <-contexts
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	var accepted, completed atomic.Int32
+	for range 64 {
+		workers.Go(func() {
+			<-start
+			err := old.Go("same-label", func(context.Context) error { completed.Add(1); return nil })
+			if err == nil {
+				accepted.Add(1)
+			} else if !errors.Is(err, ErrInactive) {
+				t.Errorf("start race: %v", err)
+			}
+		})
+	}
+	close(start)
+	if err := r.Update(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	workers.Wait()
+	rcSettle(t, r)
+	<-contexts
+	if accepted.Load() != completed.Load() || old.lease.Load() != 0 || !old.released.Load() {
+		t.Fatalf("admitted work lost completion: admitted=%d completed=%d lease=%d released=%v", accepted.Load(), completed.Load(), old.lease.Load(), old.released.Load())
+	}
+	if s := rcSnapshot(t, r, id); s.State != Active || s.Target == nil || s.Target.Revision != 1 || len(s.Tracked) != 0 {
+		t.Fatalf("admission left native record on replacement: %+v", s)
+	}
+}
+
+func TestReconcilerWithdrawalValuePrecedesActualRemovalAndReload(t *testing.T) {
+	r := rcRuntime(t)
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+		return c.Provide("sample", "retained")
+	}})
+	rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(*Context) error { return nil }})
+	rcSettle(t, r)
+	if err := r.Update(rcGuard(t), provider); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	withdraw, removed, reloading := -1, -1, -1
+	for i, event := range events {
+		if event.Fiber != provider {
+			continue
+		}
+		if event.Kind == "service" && event.State == Unloading && withdraw < 0 {
+			withdraw = i
+			if event.Value != "retained" {
+				t.Fatalf("withdrawal lost its real retained value: %+v", event)
+			}
+		}
+		if event.Kind == "remove" && removed < 0 {
+			removed = i
+		}
+		if event.Kind == "state" && event.From == Unloading && event.State == Loading && reloading < 0 {
+			reloading = i
+		}
+	}
+	if withdraw < 0 || removed <= withdraw || reloading <= removed {
+		t.Fatalf("withdraw/remove/reload order = %d/%d/%d", withdraw, removed, reloading)
+	}
+}
+
+func TestReconcilerTargetRevisionWhileCommittedCleanupIsGated(t *testing.T) {
+	r := rcRuntime(t)
+	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "retained") }})
+	cleanupEntered, releaseCleanup := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(releaseCleanup) })
+	var loads atomic.Int32
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(*Context) bool { return true }, Apply: func(c *Context) error {
+		if loads.Add(1) != 1 {
+			return nil
+		}
+		return c.Defer("gated", func(context.Context) error {
+			close(cleanupEntered)
+			<-releaseCleanup
+			return nil
+		})
+	}})
+	rcSettle(t, r)
+	before := rcSnapshot(t, r, consumer)
+	if !before.Alive || before.Target == nil || before.Target.Revision != 0 || !slices.Equal(before.Target.UIDs, before.Epoch) {
+		t.Fatalf("initial target = %+v, snapshot=%+v", before.Target, before)
+	}
+	if err := r.Update(rcGuard(t), consumer); err != nil {
+		t.Fatal(err)
+	}
+	<-cleanupEntered
+	for revision := uint64(1); revision <= 2; revision++ {
+		if revision == 2 {
+			if err := r.Update(rcGuard(t), consumer); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s := rcSnapshot(t, r, consumer)
+		if s.State != Unloading || !s.Alive || s.Target == nil || s.Target.Revision != revision || s.Revision != revision || !slices.Equal(s.Epoch, before.Epoch) || !slices.Equal(s.Target.UIDs, before.Epoch) {
+			t.Fatalf("desired revision hidden by committed cleanup: %+v target=%+v", s, s.Target)
+		}
+		// Target tuples and committed lists are independent copies in every API.
+		s.Target.UIDs[0] = 999
+		s.Target.Revision = 999
+		s.Epoch[0] = 999
+		inspection := rcInspect(t, r)
+		for _, snapshot := range inspection.Fibers {
+			if snapshot.ID == consumer && (snapshot.Target == nil || snapshot.Target.Revision != revision || !slices.Equal(snapshot.Epoch, before.Epoch) || !slices.Equal(snapshot.Target.UIDs, before.Epoch)) {
+				t.Fatalf("mutable target escaped into inspection: %+v", snapshot)
+			}
+		}
+	}
+	releaseOnce.Do(func() { close(releaseCleanup) })
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, consumer); s.State != Active || s.Target == nil || s.Target.Revision != 2 || loads.Load() != 2 {
+		t.Fatalf("latest desired revision not committed: %+v loads=%d", s, loads.Load())
+	}
+}
+
+func TestReconcilerNativeProvisionReservationsAndUIDOrder(t *testing.T) {
+	r := rcRuntime(t)
+	provided, releaseApply := make(chan struct{}), make(chan struct{})
+	cleanupEntered, releaseCleanup := make(chan struct{}), make(chan struct{})
+	var applyOnce, cleanupOnce sync.Once
+	defer applyOnce.Do(func() { close(releaseApply) })
+	defer cleanupOnce.Do(func() { close(releaseCleanup) })
+	provider := rcMount(t, r, Spec{ID: "owner-name", Provides: []string{"alpha", "zeta"}, Apply: func(c *Context) error {
+		// Actual reservation order deliberately differs from key and declaration order.
+		if err := c.Provide("zeta", "actual-zeta"); err != nil {
+			return err
+		}
+		if err := c.Provide("alpha", uint64(9007199254740993)); err != nil {
+			return err
+		}
+		if err := c.Defer("hold-provisions", func(context.Context) error {
+			close(cleanupEntered)
+			<-releaseCleanup
+			return nil
+		}); err != nil {
+			return err
+		}
+		close(provided)
+		<-releaseApply
+		return nil
+	}})
+	<-provided
+	inspection := rcInspect(t, r)
+	if len(inspection.Provisions) != 2 {
+		t.Fatalf("reserved provision rows = %+v", inspection.Provisions)
+	}
+	first, second := inspection.Provisions[0], inspection.Provisions[1]
+	if first.Key != "zeta" || second.Key != "alpha" || first.UID == 0 || first.UID >= second.UID || first.Owner != provider || second.Owner != provider || first.Name != "owner-name" || second.Name != "owner-name" || first.Active || second.Active || first.Value != "actual-zeta" || second.Value != uint64(9007199254740993) {
+		t.Fatalf("reservation order/metadata = %+v", inspection.Provisions)
+	}
+	if s := rcSnapshot(t, r, provider); !s.Alive || s.State != Loading || s.Target == nil || s.Target.Revision != 0 || len(s.Target.UIDs) != 0 {
+		t.Fatalf("initial no-Needs target must be [0]: %+v target=%+v", s, s.Target)
+	}
+	inspection.Provisions[0].Value = "corrupt"
+	inspection.Provisions[0].Key = "corrupt"
+	inspection.Provisions[0].UID = 999
+	inspection.Fibers[0].Target.Revision = 999
+	if fresh := rcInspect(t, r); fresh.Provisions[0] != first || fresh.Fibers[0].Target.Revision != 0 {
+		t.Fatalf("inspection did not copy its lists: %+v", fresh)
+	}
+	applyOnce.Do(func() { close(releaseApply) })
+	rcSettle(t, r)
+	for _, row := range rcInspect(t, r).Provisions {
+		if !row.Active {
+			t.Fatalf("ACTIVE provider record not active: %+v", row)
+		}
+	}
+	if err := r.Dispose(rcGuard(t), provider); err != nil {
+		t.Fatal(err)
+	}
+	<-cleanupEntered
+	inspection = rcInspect(t, r)
+	if len(inspection.Provisions) != 2 {
+		t.Fatalf("retiring reservations removed before their effects: %+v", inspection.Provisions)
+	}
+	for _, row := range inspection.Provisions {
+		if row.Active || row.Owner != provider || row.Name != "owner-name" {
+			t.Fatalf("retiring row lost ownership/availability: %+v", row)
+		}
+	}
+	if inspection.Provisions[0].Value != first.Value || inspection.Provisions[1].Value != second.Value {
+		t.Fatalf("retiring provision value replaced: %+v", inspection.Provisions)
+	}
+	if s := rcSnapshot(t, r, provider); s.Alive || s.Target != nil || s.State != Unloading {
+		t.Fatalf("Dispose must clear source UID/target before teardown: %+v", s)
+	}
+	cleanupOnce.Do(func() { close(releaseCleanup) })
+	rcSettle(t, r)
+	if fresh := rcInspect(t, r); len(fresh.Provisions) != 0 || len(fresh.Fibers) != 1 || fresh.Fibers[0].Alive || fresh.Fibers[0].Target != nil || fresh.Fibers[0].State != Disposed {
+		t.Fatalf("retired inspection = %+v", fresh)
+	}
+}
+
+func TestReconcilerInspectUsesCachedAvailabilityWithoutCallbacks(t *testing.T) {
+	r := rcRuntime(t)
+	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "value") }})
+	var allowed atomic.Bool
+	var checks atomic.Int32
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(c *Context) bool {
+		attempt := checks.Add(1)
+		// Reenter inspection from the predicate. An owner-invoked predicate
+		// would deadlock here; inspection cannot recursively invoke it either.
+		if _, err := r.(Inspector).Inspect(c.Std()); err != nil {
+			return false
+		}
+		if attempt == 3 {
+			entered <- struct{}{}
+			<-release
+		}
+		return allowed.Load()
+	}})
+	rcSettle(t, r)
+	for range 3 {
+		if s := rcSnapshot(t, r, consumer); s.State != Pending || !s.Alive || s.Target != nil {
+			t.Fatalf("false availability target = %+v", s)
+		}
+		_ = rcInspect(t, r)
+	}
+	if checks.Load() != 1 {
+		t.Fatalf("inspection ran availability callback %d times", checks.Load())
+	}
+	allowed.Store(true)
+	if err := r.(Notifier).Notify(rcGuard(t), "sample"); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	before := rcSnapshot(t, r, consumer)
+	if before.Target == nil || before.State != Active {
+		t.Fatalf("successful notice did not publish target: %+v", before)
+	}
+	allowed.Store(false)
+	if err := r.(Notifier).Notify(rcGuard(t), "sample"); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	for range 3 {
+		s := rcSnapshot(t, r, consumer)
+		if s.Target == nil || !reflect.DeepEqual(s.Target, before.Target) || s.State != Active {
+			t.Fatalf("in-flight notice discarded last checked target: %+v", s)
+		}
+		_ = rcInspect(t, r)
+	}
+	if checks.Load() != 3 {
+		t.Fatalf("inspection retried in-flight availability: %d", checks.Load())
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, consumer); s.State != Pending || s.Target != nil || !s.Alive {
+		t.Fatalf("failed notice did not invalidate target: %+v", s)
+	}
+}
+
+type rcInspectingError struct {
+	r     Runtime
+	calls atomic.Int32
+}
+
+func (e *rcInspectingError) Error() string {
+	e.calls.Add(1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := e.r.(Inspector).Inspect(ctx); err != nil {
+		return "error formatting could not reenter owner"
+	}
+	return "reentrant startup failure"
+}
+
+func TestReconcilerInspectNeverFormatsPluginErrorOnOwner(t *testing.T) {
+	r := rcRuntime(t)
+	startupErr := &rcInspectingError{r: r}
+	id := rcMount(t, r, Spec{ID: "failed", Apply: func(*Context) error { return startupErr }})
+	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
+		t.Fatalf("Await lost startup error identity: %v", err)
+	}
+	for range 3 {
+		if s := rcSnapshot(t, r, id); s.Error != "reentrant startup failure\nreentrant startup failure" || s.Target != nil {
+			t.Fatalf("cached startup diagnostic = %+v", s)
+		}
+		_ = rcInspect(t, r)
+		if err := r.Settle(rcGuard(t)); !errors.Is(err, startupErr) {
+			t.Fatalf("Settle lost original startup cause: %v", err)
+		}
+	}
+	if startupErr.calls.Load() != 1 {
+		t.Fatalf("owner reformatted plugin error %d times", startupErr.calls.Load())
+	}
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, id); s.Alive || s.Target != nil || s.State != Disposed || s.Error != "reentrant startup failure" {
+		t.Fatalf("failed disposed history = %+v", s)
+	}
+	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
+		t.Fatalf("disposed Await lost startup error identity: %v", err)
+	}
+	if startupErr.calls.Load() != 1 {
+		t.Fatal("retired inspection formatted plugin error")
+	}
+}
+
 func TestReconcilerMissingDependencyAndActiveVisibility(t *testing.T) {
 	r := rcRuntime(t)
 	entered := make(chan *Context, 1)
@@ -74,8 +1435,8 @@ func TestReconcilerMissingDependencyAndActiveVisibility(t *testing.T) {
 		return nil
 	}})
 	rcSettle(t, r)
-	if got := rcSnapshot(t, r, consumer).State; got != Pending {
-		t.Fatalf("missing dependency state = %s", got)
+	if got := rcSnapshot(t, r, consumer); got.State != Pending || got.Target != nil || !got.Alive {
+		t.Fatalf("missing dependency snapshot = %+v", got)
 	}
 	provided, release := make(chan struct{}), make(chan struct{})
 	defer func() {
@@ -166,8 +1527,15 @@ func TestReconcilerRetainsProviderThroughConsumerCleanup(t *testing.T) {
 	if c.Std().Err() != context.Canceled {
 		t.Fatalf("Std error = %v", c.Std().Err())
 	}
-	if got := rcSnapshot(t, r, consumer).State; got != Unloading {
-		t.Fatalf("consumer state = %s", got)
+	if got := rcSnapshot(t, r, consumer); got.State != Unloading || !got.Alive || got.Target != nil || len(got.Epoch) != 1 {
+		t.Fatalf("provider loss must clear target but retain cleanup binding: %+v", got)
+	}
+	inspection := rcInspect(t, r)
+	if len(inspection.Provisions) != 1 || inspection.Provisions[0].Active || inspection.Provisions[0].Owner != provider || inspection.Provisions[0].Name != "provider" || inspection.Provisions[0].Value != &providerDisposed {
+		t.Fatalf("held retiring provision metadata = %+v", inspection.Provisions)
+	}
+	if s := rcSnapshot(t, r, provider); s.Alive || s.Target != nil {
+		t.Fatalf("provider Dispose did not clear source liveness/target at request: %+v", s)
 	}
 	close(releaseCleanup)
 	rcSettle(t, r)
@@ -222,8 +1590,8 @@ func TestReconcilerStickyFailureRequiresExplicitUpdate(t *testing.T) {
 	if err := r.Settle(rcGuard(t)); err == nil {
 		t.Fatal("failed Apply did not report error")
 	}
-	if got := rcSnapshot(t, r, id).State; got != Failed {
-		t.Fatalf("failed state = %s", got)
+	if got := rcSnapshot(t, r, id); got.State != Failed || got.Target != nil || !got.Alive {
+		t.Fatalf("failed snapshot = %+v", got)
 	}
 	if err := r.Update(rcGuard(t), provider); err != nil {
 		t.Fatal(err)
@@ -234,12 +1602,15 @@ func TestReconcilerStickyFailureRequiresExplicitUpdate(t *testing.T) {
 	if attempts.Load() != 1 {
 		t.Fatalf("failure retried %d times", attempts.Load())
 	}
+	if got := rcSnapshot(t, r, id); got.Target != nil || !got.Alive {
+		t.Fatalf("provider notice revived sticky failed target: %+v", got)
+	}
 	if err := r.Update(rcGuard(t), id); err != nil {
 		t.Fatal(err)
 	}
 	rcSettle(t, r)
-	if got := rcSnapshot(t, r, id).State; got != Active {
-		t.Fatalf("updated failure state = %s", got)
+	if got := rcSnapshot(t, r, id); got.State != Active || got.Target == nil || got.Target.Revision != 1 || !slices.Equal(got.Target.UIDs, got.Epoch) {
+		t.Fatalf("explicit Update failed to clear sticky target: %+v", got)
 	}
 }
 
@@ -268,12 +1639,15 @@ func TestReconcilerSupersededLoadErrorAndCoalescing(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if s := rcSnapshot(t, r, id); s.State != Loading || s.Target == nil || s.Target.Revision != 32 || !s.Alive {
+		t.Fatalf("new desired target hidden behind superseded load: %+v", s)
+	}
 	close(release)
 	rcSettle(t, r)
 	if attempts.Load() != 2 {
 		t.Fatalf("coalesced attempts = %d, want 2", attempts.Load())
 	}
-	if s := rcSnapshot(t, r, id); s.State != Active || s.Revision != 32 || s.Error != "" {
+	if s := rcSnapshot(t, r, id); s.State != Active || s.Revision != 32 || s.Error != "" || s.Target == nil || s.Target.Revision != 32 {
 		t.Fatalf("new target poisoned by stale completion: %+v", s)
 	}
 }
@@ -312,6 +1686,506 @@ func TestReconcilerSelfDisposeDoesNotAwaitOwnApply(t *testing.T) {
 	if !disposed {
 		t.Fatal("self-disposal did not reach DISPOSED")
 	}
+}
+
+func TestReconcilerConfigurationPreparedBeforeApplyAndRetainsIdentity(t *testing.T) {
+	r := rcRuntime(t)
+	type value struct{ label string }
+	raw, effective := &value{"raw"}, &value{"effective"}
+	var resolves atomic.Int32
+	config := NewConfiguration(raw, ConfigHooks{Resolve: func(ctx context.Context, candidate any) (any, error) {
+		resolves.Add(1)
+		if _, err := r.(Inspector).Inspect(ctx); err != nil {
+			return nil, err
+		}
+		if candidate != raw {
+			return nil, errors.New("raw identity changed")
+		}
+		return effective, nil
+	}})
+	seen := make(chan any, 1)
+	id := rcMount(t, r, Spec{ID: "configured", Config: config, Apply: func(c *Context) error { seen <- c.Config(); return nil }})
+	rcSettle(t, r)
+	if got := <-seen; got != effective {
+		t.Fatalf("Apply config identity = %p, want %p", got, effective)
+	}
+	s := rcSnapshot(t, r, id)
+	if !s.Configured || !s.ConfigPrepared || s.RawConfig != raw || s.EffectiveConfig != effective || s.ConfigVersion != 0 || resolves.Load() != 1 {
+		t.Fatalf("configuration snapshot = %+v, resolves=%d", s, resolves.Load())
+	}
+	retained := &value{"retained"}
+	config.RetainRaw(retained)
+	if s := rcSnapshot(t, r, id); s.RawConfig != retained || s.EffectiveConfig != effective || s.ConfigVersion != 1 || s.Revision != 0 || resolves.Load() != 1 {
+		t.Fatalf("RetainRaw resolved or restarted: %+v resolves=%d", s, resolves.Load())
+	}
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, id); s.Alive || s.RawConfig != retained || s.EffectiveConfig != effective || !s.ConfigPrepared {
+		t.Fatalf("disposed configuration history = %+v", s)
+	}
+	config.RetainRaw(&value{"after-dispose"})
+	if s := rcSnapshot(t, r, id); s.RawConfig != retained || s.ConfigVersion != 1 {
+		t.Fatalf("retired snapshot retained live configuration cell: %+v", s)
+	}
+}
+
+func TestReconcilerConfigurationPrepareFailurePreventsApply(t *testing.T) {
+	r := rcRuntime(t)
+	startupErr := errors.New("invalid initial config")
+	var applied atomic.Bool
+	id := rcMount(t, r, Spec{ID: "invalid-config", Config: NewConfiguration("raw", ConfigHooks{Resolve: func(context.Context, any) (any, error) { return nil, startupErr }}), Apply: func(*Context) error { applied.Store(true); return nil }})
+	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
+		t.Fatalf("Prepare failure lost startup identity: %v", err)
+	}
+	if s := rcSnapshot(t, r, id); applied.Load() || s.State != Failed || s.Target != nil || s.ConfigPrepared || s.RawConfig != "raw" || !s.Configured {
+		t.Fatalf("failed configuration activation = %+v applied=%v", s, applied.Load())
+	}
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+}
+
+func TestReconcilerConfigurationVetoRejectionInvalidCandidateAndNoSave(t *testing.T) {
+	r := rcRuntime(t)
+	type value struct{ label string }
+	initial, candidate, rejected, invalid := &value{"initial"}, &value{"candidate"}, &value{"rejected"}, &value{"invalid"}
+	initialEffective, nextEffective := &value{"initial-effective"}, &value{"next-effective"}
+	rejectErr, resolveErr := errors.New("update rejected"), errors.New("candidate invalid")
+	var mode atomic.Int32
+	var commits, resolves, updates, applies atomic.Int32
+	config := NewConfiguration(initial, ConfigHooks{
+		Resolve: func(ctx context.Context, raw any) (any, error) {
+			resolves.Add(1)
+			if _, err := r.Snapshots(ctx); err != nil {
+				return nil, err
+			}
+			if raw == invalid {
+				return nil, resolveErr
+			}
+			if raw == initial {
+				return initialEffective, nil
+			}
+			return nextEffective, nil
+		},
+		Commit: func(ctx context.Context, raw any) error {
+			commits.Add(1)
+			_, err := r.(Inspector).Inspect(ctx)
+			return err
+		},
+		Update: func(ctx context.Context, resolved any, next func() error) error {
+			updates.Add(1)
+			if _, err := r.Snapshots(ctx); err != nil {
+				return err
+			}
+			if resolved != nextEffective {
+				return errors.New("candidate identity changed")
+			}
+			if mode.Load() == 1 {
+				return rejectErr
+			}
+			return nil // Successful veto retains the active instance/revision.
+		},
+	})
+	contexts := make(chan *Context, 1)
+	id := rcMount(t, r, Spec{ID: "configured", Config: config, Apply: func(c *Context) error { applies.Add(1); contexts <- c; return nil }})
+	rcSettle(t, r)
+	activation := <-contexts
+	if err := r.(ConfigUpdater).UpdateConfig(rcGuard(t), id, candidate, false); err != nil {
+		t.Fatal(err)
+	}
+	if s := rcSnapshot(t, r, id); s.RawConfig != candidate || s.EffectiveConfig != nextEffective || s.Revision != 0 || s.ConfigVersion != 1 || s.State != Active || applies.Load() != 1 || activation.Config() != initialEffective {
+		t.Fatalf("successful veto changed activation or lost candidate: %+v", s)
+	}
+	if err := r.(ConfigUpdater).UpdateConfig(rcGuard(t), id, invalid, false); !errors.Is(err, resolveErr) {
+		t.Fatalf("invalid resolution = %v", err)
+	}
+	if s := rcSnapshot(t, r, id); s.RawConfig != candidate || s.ConfigVersion != 1 || commits.Load() != 1 || updates.Load() != 1 {
+		t.Fatalf("invalid candidate committed/retained: %+v commits=%d updates=%d", s, commits.Load(), updates.Load())
+	}
+	mode.Store(1)
+	if err := r.(ConfigUpdater).UpdateConfig(rcGuard(t), id, rejected, false); !errors.Is(err, rejectErr) {
+		t.Fatalf("rejected Update = %v", err)
+	}
+	if s := rcSnapshot(t, r, id); s.RawConfig != rejected || s.EffectiveConfig != nextEffective || s.ConfigVersion != 2 || s.Revision != 0 || s.State != Active {
+		t.Fatalf("rejection rolled back raw or published effective: %+v", s)
+	}
+	mode.Store(0)
+	if err := r.(ConfigUpdater).UpdateConfig(rcGuard(t), id, candidate, true); err != nil {
+		t.Fatal(err)
+	}
+	if s := rcSnapshot(t, r, id); s.ConfigVersion != 3 || s.RawConfig != candidate || commits.Load() != 2 || updates.Load() != 3 || resolves.Load() != 5 || applies.Load() != 1 {
+		t.Fatalf("noSave suppressed more than persistence: %+v commits=%d updates=%d resolves=%d", s, commits.Load(), updates.Load(), resolves.Load())
+	}
+}
+
+func TestReconcilerConfigurationLatestRawWinsGatedCleanup(t *testing.T) {
+	r := rcRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	config := NewConfiguration("initial", ConfigHooks{})
+	var loads atomic.Int32
+	seen := make(chan any, 2)
+	id := rcMount(t, r, Spec{ID: "configured", Config: config, Apply: func(c *Context) error {
+		seen <- c.Config()
+		if loads.Add(1) != 1 {
+			return nil
+		}
+		return c.Defer("gated-cleanup", func(context.Context) error { close(entered); <-release; return nil })
+	}})
+	rcSettle(t, r)
+	<-seen
+	first, err := r.(ConfigRequester).RequestUpdateConfig(rcGuard(t), id, "superseded", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	second, err := r.(ConfigRequester).RequestUpdateConfig(rcGuard(t), id, "latest", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := rcSnapshot(t, r, id); s.RawConfig != "latest" || s.Revision != 2 || s.EffectiveConfig != "initial" || s.State != Unloading || s.Target == nil || s.Target.Revision != 2 {
+		t.Fatalf("new raw published before old cleanup completed: %+v", s)
+	}
+	releaseOnce.Do(func() { close(release) })
+	if err := first.Await(rcGuard(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Await(rcGuard(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-seen; got != "latest" {
+		t.Fatalf("superseded config reached Apply: %v", got)
+	}
+	if s := rcSnapshot(t, r, id); s.RawConfig != "latest" || s.EffectiveConfig != "latest" || s.ConfigVersion != 2 || s.Revision != 2 || loads.Load() != 2 {
+		t.Fatalf("coalesced native configuration = %+v loads=%d", s, loads.Load())
+	}
+}
+
+func TestReconcilerChildLoadsDuringParentLoadingAndJoinsBeforeParentCleanup(t *testing.T) {
+	r := rcRuntime(t)
+	parentEntered, releaseParent := make(chan struct{}), make(chan struct{})
+	childEntered, releaseChild := make(chan struct{}), make(chan struct{})
+	var parentOnce, childOnce sync.Once
+	defer parentOnce.Do(func() { close(releaseParent) })
+	defer childOnce.Do(func() { close(releaseChild) })
+	children := make(chan uint64, 1)
+	contexts := make(chan *Context, 1)
+	var parentCleaned atomic.Bool
+	parent := rcMount(t, r, Spec{ID: "parent", ApplyEffect: func(c *Context) (Disposer, error) {
+		contexts <- c
+		child, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+			return func(context.Context) error { close(childEntered); <-releaseChild; return nil }, nil
+		}})
+		if err != nil {
+			return nil, err
+		}
+		children <- child
+		close(parentEntered)
+		<-releaseParent
+		return func(context.Context) error { parentCleaned.Store(true); return nil }, nil
+	}})
+	<-parentEntered
+	child, old := <-children, <-contexts
+	if err := r.(Waiter).AwaitFiber(rcGuard(t), child); err != nil {
+		t.Fatal(err)
+	}
+	if s := rcSnapshot(t, r, parent); s.State != Loading {
+		t.Fatalf("parent unexpectedly finished before child: %+v", s)
+	}
+	if s := rcSnapshot(t, r, child); s.State != Active {
+		t.Fatalf("child could not load while parent LOADING: %+v", s)
+	}
+	parentOnce.Do(func() { close(releaseParent) })
+	rcSettle(t, r)
+	if err := r.Dispose(rcGuard(t), parent); err != nil {
+		t.Fatal(err)
+	}
+	<-childEntered
+	if parentCleaned.Load() {
+		t.Fatal("parent cleaned resources before non-injecting child finished")
+	}
+	if s := rcSnapshot(t, r, child); s.Alive || s.Target != nil || s.State != Unloading {
+		t.Fatalf("parent quiescence did not invalidate child: %+v", s)
+	}
+	if _, err := old.MountChild(Spec{ID: "late"}); !errors.Is(err, ErrInactive) {
+		t.Fatalf("stale parent mounted a child: %v", err)
+	}
+	childOnce.Do(func() { close(releaseChild) })
+	rcSettle(t, r)
+	if !parentCleaned.Load() || rcSnapshot(t, r, parent).State != Disposed || rcSnapshot(t, r, child).State != Disposed {
+		t.Fatal("structural disposal did not join both fibers")
+	}
+}
+
+func TestReconcilerChildNeedsParentServiceWithoutDependencyDeadlock(t *testing.T) {
+	r := rcRuntime(t)
+	children := make(chan uint64, 1)
+	seen := make(chan any, 1)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var parentCleaned atomic.Bool
+	parent := rcMount(t, r, Spec{ID: "parent-provider", Provides: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+		if err := c.Provide("sample", "parent-value"); err != nil {
+			return nil, err
+		}
+		child, err := c.MountChild(Spec{ID: "child-consumer", Needs: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+			value, err := c.Read("sample")
+			if err != nil {
+				return nil, err
+			}
+			seen <- value
+			return func(context.Context) error {
+				if _, err := c.Read("sample"); err != nil {
+					return err
+				}
+				close(entered)
+				<-release
+				return nil
+			}, nil
+		}})
+		if err != nil {
+			return nil, err
+		}
+		children <- child
+		return func(context.Context) error { parentCleaned.Store(true); return nil }, nil
+	}})
+	rcSettle(t, r)
+	child := <-children
+	if got := <-seen; got != "parent-value" {
+		t.Fatalf("child binding = %v", got)
+	}
+	if err := r.Dispose(rcGuard(t), parent); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	if parentCleaned.Load() {
+		t.Fatal("parent cleanup overtook injecting child")
+	}
+	inspection := rcInspect(t, r)
+	if len(inspection.Provisions) != 1 || inspection.Provisions[0].Value != "parent-value" || inspection.Provisions[0].Active {
+		t.Fatalf("native provider record not retained during child cleanup: %+v", inspection.Provisions)
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	if !parentCleaned.Load() || rcSnapshot(t, r, child).State != Disposed {
+		t.Fatal("parent/child service-dependency join deadlocked or leaked")
+	}
+}
+
+func TestReconcilerChildPendingAndOldActivationCannotOwnReplacementChildren(t *testing.T) {
+	r := rcRuntime(t)
+	children := make(chan uint64, 2)
+	contexts := make(chan *Context, 2)
+	parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
+		contexts <- c
+		child, err := c.MountChild(Spec{ID: "pending-child", Needs: []string{"absent"}, Apply: func(*Context) error { t.Error("missing-service child applied"); return nil }})
+		if err != nil {
+			return err
+		}
+		children <- child
+		return nil
+	}})
+	rcSettle(t, r)
+	old, first := <-contexts, <-children
+	if rcSnapshot(t, r, parent).State != Active || rcSnapshot(t, r, first).State != Pending {
+		t.Fatal("pending child incorrectly blocked parent activation")
+	}
+	if err := r.Update(rcGuard(t), parent); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	<-contexts
+	second := <-children
+	if rcSnapshot(t, r, first).State != Disposed || rcSnapshot(t, r, second).State != Pending {
+		t.Fatal("replacement parent kept prior activation's child")
+	}
+	if _, err := old.MountChild(Spec{ID: "late"}); !errors.Is(err, ErrInactive) {
+		t.Fatalf("released activation attached replacement child: %v", err)
+	}
+	if err := r.Dispose(rcGuard(t), parent); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	if rcSnapshot(t, r, second).State != Disposed {
+		t.Fatal("pending child outlived its parent")
+	}
+}
+
+func TestReconcilerChildOwnershipHasNoIdleWatchers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
+			for range 16 {
+				if _, err := c.MountChild(Spec{ID: "child"}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}})
+		rcSettle(t, r)
+		synctest.Wait()
+		stacks := make([]byte, 1<<20)
+		n := runtime.Stack(stacks, true)
+		if bytes.Count(stacks[:n], []byte(".(*rcOwner).run(")) != 1 || bytes.Contains(stacks[:n], []byte(".(*rcOwner).load.func")) || bytes.Contains(stacks[:n], []byte(".(*rcOwner).disposeNext.func")) {
+			t.Fatal("idle structural graph retained transition/watcher goroutines")
+		}
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerChildCleanupHasBoundedParentJoin(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		entered, release := make(chan struct{}), make(chan struct{})
+		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
+			_, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+				return func(context.Context) error { close(entered); <-release; return nil }, nil
+			}})
+			return err
+		}})
+		rcSettle(t, r)
+		if err := r.Dispose(rcGuard(t), parent); err != nil {
+			t.Fatal(err)
+		}
+		<-entered
+		if err := r.(Waiter).AwaitFiber(rcGuard(t), parent); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("ignored child cleanup did not bound parent join: %v", err)
+		}
+		close(release)
+		synctest.Wait()
+		_ = r.Settle(rcGuard(t))
+		if err := r.Close(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestReconcilerPendingDisposeHasUnloadingHistory(t *testing.T) {
+	r := rcRuntime(t)
+	id := rcMount(t, r, Spec{ID: "pending", Needs: []string{"absent"}, Apply: func(*Context) error { t.Fatal("pending Apply ran"); return nil }})
+	rcSettle(t, r)
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
+	events, err := r.Events(rcGuard(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var states []State
+	for _, event := range events {
+		if event.Fiber == id && event.Kind == "state" {
+			states = append(states, event.State)
+		}
+	}
+	if !slices.Equal(states, []State{Unloading, Disposed}) {
+		t.Fatalf("pending disposal history = %v", states)
+	}
+	if s := rcSnapshot(t, r, id); s.Alive || s.Target != nil || s.State != Disposed {
+		t.Fatalf("pending disposal metadata = %+v", s)
+	}
+}
+
+func TestReconcilerApplyEffectOwnsReturnedCleanupAfterBodyProvisions(t *testing.T) {
+	r := rcRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	id := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+		if err := c.Provide("sample", "retained"); err != nil {
+			return nil, err
+		}
+		return func(context.Context) error {
+			close(entered)
+			<-release
+			return nil
+		}, nil
+	}})
+	rcSettle(t, r)
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	inspection := rcInspect(t, r)
+	if len(inspection.Provisions) != 1 || inspection.Provisions[0].Value != "retained" || inspection.Provisions[0].Active || inspection.Provisions[0].Owner != id {
+		t.Fatalf("body provision removed before returned cleanup completed: %+v", inspection.Provisions)
+	}
+	if s := rcSnapshot(t, r, id); !slices.Equal(s.Effects, []string{"provide:sample", "apply"}) || s.Alive || s.Target != nil {
+		t.Fatalf("returned disposer ownership = %+v", s)
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	if inspection := rcInspect(t, r); len(inspection.Provisions) != 0 {
+		t.Fatalf("body provision leaked after returned cleanup: %+v", inspection.Provisions)
+	}
+}
+
+func TestReconcilerApplyEffectCollectsSupersededAndSelfDisposeResults(t *testing.T) {
+	for _, action := range []string{"self", "update"} {
+		t.Run(action, func(t *testing.T) {
+			r := rcRuntime(t)
+			entered, release := make(chan struct{}), make(chan struct{})
+			var releaseOnce sync.Once
+			defer releaseOnce.Do(func() { close(release) })
+			var loads, cleaned atomic.Int32
+			id := rcMount(t, r, Spec{ID: "late-result", ApplyEffect: func(c *Context) (Disposer, error) {
+				if loads.Add(1) != 1 {
+					return nil, nil
+				}
+				if action == "self" {
+					if err := c.Dispose(); err != nil {
+						return nil, err
+					}
+				}
+				close(entered)
+				<-release
+				return func(context.Context) error { cleaned.Add(1); return nil }, nil
+			}})
+			<-entered
+			if action == "update" {
+				if err := r.Update(rcGuard(t), id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			releaseOnce.Do(func() { close(release) })
+			rcSettle(t, r)
+			if cleaned.Load() != 1 {
+				t.Fatalf("late returned cleanup ownership = %d", cleaned.Load())
+			}
+			if s := rcSnapshot(t, r, id); (action == "self" && (s.State != Disposed || s.Alive)) || (action == "update" && (s.State != Active || s.Target == nil || s.Target.Revision != 1)) {
+				t.Fatalf("late-result lifecycle = %+v", s)
+			}
+		})
+	}
+}
+
+func TestReconcilerApplyEffectRejectsAmbiguityAndFailedReturnedCleanup(t *testing.T) {
+	r := rcRuntime(t)
+	if _, err := r.Mount(rcGuard(t), Spec{Apply: func(*Context) error { return nil }, ApplyEffect: func(*Context) (Disposer, error) { return nil, nil }}); err == nil {
+		t.Fatal("accepted both Apply and ApplyEffect")
+	}
+	var cleaned atomic.Bool
+	startupErr := errors.New("failed return")
+	id := rcMount(t, r, Spec{ID: "failed-effect", ApplyEffect: func(*Context) (Disposer, error) {
+		return func(context.Context) error { cleaned.Store(true); return nil }, startupErr
+	}})
+	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
+		t.Fatalf("ApplyEffect failure lost: %v", err)
+	}
+	if cleaned.Load() {
+		t.Fatal("failed ApplyEffect transferred ownership of returned cleanup")
+	}
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	rcSettle(t, r)
 }
 
 func TestReconcilerSequentialLIFOPartialFailure(t *testing.T) {
@@ -376,8 +2250,14 @@ func TestReconcilerDeclaredDuplicateAndLateEffects(t *testing.T) {
 		if err := c.Provide("undeclared", nil); err == nil {
 			return errors.New("undeclared provision accepted")
 		}
+		if c.Owns("undeclared") || c.Owns("sample") {
+			return errors.New("Owns invented a provision reservation")
+		}
 		if err := c.Provide("sample", "value"); err != nil {
 			return err
+		}
+		if !c.Owns("sample") {
+			return errors.New("successful provision not published to Owns")
 		}
 		if err := c.Provide("sample", "duplicate"); err == nil {
 			return errors.New("duplicate provision accepted")
@@ -400,6 +2280,9 @@ func TestReconcilerDeclaredDuplicateAndLateEffects(t *testing.T) {
 	if old.Enter() {
 		old.Leave()
 		t.Fatal("old activation accepted a lease")
+	}
+	if old.Owns("sample") {
+		t.Fatal("released activation retained provision ownership")
 	}
 }
 
@@ -642,7 +2525,7 @@ func TestReconcilerAwaitRetainsFailedErrorAfterDisposal(t *testing.T) {
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
 		t.Fatalf("disposed AwaitFiber lost error identity: %v", err)
 	}
-	if s := rcSnapshot(t, r, id); s.State != Disposed || s.Error != startupErr.Error() || len(s.Effects) != 0 {
+	if s := rcSnapshot(t, r, id); s.State != Disposed || s.Error != startupErr.Error() || len(s.Effects) != 0 || s.Alive || s.Target != nil {
 		t.Fatalf("failed disposed metadata = %+v", s)
 	}
 	if err := r.Dispose(rcGuard(t), id); err != nil {

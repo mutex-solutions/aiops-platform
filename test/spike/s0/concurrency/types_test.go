@@ -9,6 +9,20 @@ import (
 	"testing"
 )
 
+func TestDesiredAndCommittedEpochAreDistinctData(t *testing.T) {
+	retained := []uint64{7}
+	desired := []uint64{9}
+	s := Snapshot{ID: 1, State: Unloading, Revision: 3, Epoch: retained,
+		Alive: true, Target: &EpochSnapshot{Revision: 3, UIDs: desired}}
+	if s.Target.Revision != 3 || s.Epoch[0] == s.Target.UIDs[0] {
+		t.Fatal("fixture did not distinguish retained bindings from desired target")
+	}
+	s.Alive, s.Target = false, nil
+	if s.State != Unloading || s.Epoch[0] != 7 {
+		t.Fatal("disposal request erased retained activation before cleanup")
+	}
+}
+
 func TestLeaseRefusesQuiescentActivation(t *testing.T) {
 	var c Context
 	if c.Enter() {

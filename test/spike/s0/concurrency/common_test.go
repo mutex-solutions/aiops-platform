@@ -91,6 +91,65 @@ func TestSharedAvailabilityContract(t *testing.T) {
 	}
 }
 
+func TestSharedConfigRequestPrefixDoesNotJoinOwnTeardown(t *testing.T) {
+	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			r := makeRuntime()
+			defer r.Close(ctx)
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			var applied atomic.Int64
+			cell := NewConfiguration(int64(1), ConfigHooks{})
+			id, err := r.Mount(ctx, Spec{ID: "configured", Config: cell, ApplyEffect: func(c *Context) (Disposer, error) {
+				applied.Store(c.Config().(int64))
+				return func(context.Context) error {
+					once.Do(func() { close(entered) })
+					<-release
+					return nil
+				}, nil
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Settle(ctx); err != nil {
+				t.Fatal(err)
+			}
+			requester, ok := r.(ConfigRequester)
+			if !ok {
+				t.Fatal("native config request API missing")
+			}
+			first, err := requester.RequestUpdateConfig(ctx, id, int64(2), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-entered:
+			case <-ctx.Done():
+				t.Fatal("request did not enter real teardown")
+			}
+			second, err := requester.RequestUpdateConfig(ctx, id, int64(3), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cell.Snapshot().Raw != int64(3) || applied.Load() != 1 {
+				t.Fatal("request did not synchronously retain latest raw while old cleanup remained held")
+			}
+			close(release)
+			if err := first.Await(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := second.Await(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if applied.Load() != 3 {
+				t.Fatal("latest native configuration was not applied after coalesced teardown")
+			}
+		})
+	}
+}
+
 func TestSharedLifecycleContract(t *testing.T) {
 	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
 		t.Run(name, func(t *testing.T) {

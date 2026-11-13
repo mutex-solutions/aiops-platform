@@ -4,6 +4,35 @@ Frozen criteria SHA-256:
 `628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c`.
 No failure record is deleted or converted to pass.
 
+## Current result boundaries
+
+- [Frozen full property workload](property-full-20261112T203000Z/): both real
+  candidates passed 1,000 seeds x 1,000 operations under race, exit 0. This is
+  source `2a2dc5ce...`, before later native root/observer/LIFO/Batch changes;
+  it is not acceptance evidence for those changed statements or a final SDK.
+- [Worker delivery/revocation](worker-functional-corrected.json): all four selected
+  real-background-worker cases passed under race. The prior
+  [42P01 setup failure](worker-functional-first.log) remains retained. Functional
+  delivery does not repair the known-unsafe role/GUC SQL boundary.
+- [Initial 10k diagnostic failure](scale-diagnostic-initial.md): the first
+  graph-lock chain exceeded its unchanged operation guard and left real work.
+  Later same-process samples were contaminated, not clean performance results.
+  A UID-targeted dependency wake fix was then validated in fresh isolated
+  processes; one-trial observations do not meet full performance sampling gates.
+- ADR-035's separate causal comparison is owner-approved, not automatically
+  validated by a checkpoint assertion. Raw traces and strict results are retained.
+
+- [Reviewed semantic integration](semantic-reviewed-ownership-fixed/invocation.json):
+  source-fenced strict D31–D36 hook traces and causal D02/D10/D12/D16 matched on
+  both candidates under race after review fixes. Earlier
+  [typed-error receipt limitations](semantic-integration-typed-errors/qualification-review.md)
+  remain retained; the new run does not rewrite historical failures.
+
+Both full-property passes above predate the latest native Effect/config/ACK
+changes and are not current-source property acceptance. Affected full reruns
+remain required. None of these rows declares complete S0 or selects a final
+concurrency core.
+
 ## SQL caller-boundary diagnostic
 
 - `20261112T063704Z-sql-boundary.json` and its log: first diagnostic invocation,
@@ -72,6 +101,27 @@ The original SQL boundary failure remains unwaived. No generic PostgreSQL
 capability design, extension, broker, River insertion or atomicity has thereby
 been proven impossible. A different authority mechanism still needs design and
 owner approval if it changes the accepted transaction/role contract.
+
+## Ordinary transaction atomicity — independent of authority
+
+`20261112T174224Z-ordinary-atomicity.json` and its verbatim log record an actual
+race-instrumented run of the separate `s0txprobe` fixture: process exit 0, all
+21 selected ordinary cases passed. The fixed report command is labelled as
+canonical, not captured argv; the parent record adds the actual invocation.
+
+All four writes (caller state, unmodified River InsertTx, outbox and audit) shared
+one caller transaction and writer-xid stamp. Cases cover two scoped commits,
+precommit invisibility, rollback and SQL errors after each participant boundary,
+failed role restoration on an aborted transaction, explicit rollback after
+cancellation, own physical-connection loss before commit, missing scope, context
+filtering, direct foreign-schema write denial and pool reuse. Exactly two
+committed records remained in each participant table. Live durability was on.
+
+This fixture intentionally uses the **original known-unsafe role/GUC boundary**;
+it tests ordinary functional atomicity, not a new capability or authority repair.
+The original SQL gate remains FAIL. No worker delivery, 500 Tx/s cost, background
+identity, restart/load, ambiguous commit-ack loss, or full S0 pass is claimed.
+Source and executable hashes plus explicit limitations are in the record.
 
 Credentials and database endpoints are deliberately absent. Reproduction uses
 private environment variables documented by the probe, not a committed DSN.

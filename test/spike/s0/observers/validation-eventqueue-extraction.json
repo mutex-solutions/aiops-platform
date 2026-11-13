@@ -1,0 +1,103 @@
+{
+  "classification": "cycle-free eventqueue extraction with identity-preserving observer aliases; not native integration or whole S0/G5 proof",
+  "started_at_utc": "2026-11-13T02:38:43.579957+00:00",
+  "git_head": "27cf15271903e840c0d8bc523184b1aa1f5fc7b1",
+  "go_version": "go version go1.26.8 linux/amd64",
+  "packages": [
+    "./test/spike/s0/internal/eventqueue",
+    "./test/spike/s0/observers"
+  ],
+  "historical_receipt": {
+    "path": "test/spike/s0/observers/validation.json",
+    "sha256": "47a89cf2ba233a6a06d80316c108e03273215577d25decfa7dd8ca3d4cdff421",
+    "preserved_unchanged": true
+  },
+  "implementation_changed_only_package_header": true,
+  "restored_pre_extraction_implementation_sha256": "b074c065213446b97868472d6ef2f18c4efa1c6d4cd32ef8d05341ffd79041e1",
+  "owned_source_sha256_before": {
+    "test/spike/s0/internal/eventqueue/dispatcher.go": "88b93cae8e6cfe5af675af255b348b9566286b59921e77a7a4a5f0ccfd246e3f",
+    "test/spike/s0/internal/eventqueue/dispatcher_test.go": "905cf34f708d462971be5230a207cc4719b5854cb93df031ce079df3dec64077",
+    "test/spike/s0/observers/dispatcher.go": "640529c8ca84ddde0d1e6525cdea758d26f7b7ac976b300f2fbac9db48ca7bec",
+    "test/spike/s0/observers/dispatcher_test.go": "45a6b7725df538a35dc2b89fdf1cead8a58415e4af4873c359984fdec8f31e1c",
+    "test/spike/s0/observers/lifecycle_test.go": "a7cb10fdc91157a9af9fcf3937a9e88a71be54c4d2cbe3d9384511f3d90c4f58",
+    "test/spike/s0/observers/alias_test.go": "28255653e4341f2917a100607723451969755e237cbd52882e41183004652d04",
+    "test/spike/s0/observers/README.md": "d86fa04911f9a6ca1f4d5eb35abd26e09b168e1c67adb51257fb90acc82be4cb"
+  },
+  "read_only_test_dependency_sha256_before": {
+    "go.mod": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2",
+    "go.sum": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5",
+    "test/spike/s0/concurrency/types.go": "984be3969c932065c78ab368cf3d73103628a5789811c2092ed945cf7078287a",
+    "test/spike/s0/concurrency/graphlock.go": "306ed60d14014d88ab8c926c17cf141e00dc93d2812ee256012f2b697dbf4302",
+    "test/spike/s0/concurrency/reconciler.go": "4d313da3468765d98c99f55d0372daa2a1581a787d74286de36a24cd40ea1536",
+    "test/spike/s0/concurrency/configuration.go": "941d08e025685c8b031dd5b80f9c076cc84c64f8d41fe39e790e353b1327ba79",
+    "test/spike/s0/concurrency/tracked.go": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+  },
+  "commands": [
+    {
+      "argv": [
+        "go",
+        "test",
+        "./test/spike/s0/internal/eventqueue",
+        "./test/spike/s0/observers",
+        "-count=1"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.801,
+      "stdout": "ok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue\t0.010s\nok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/observers\t0.056s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./test/spike/s0/internal/eventqueue",
+        "./test/spike/s0/observers",
+        "-count=50"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 6.658,
+      "stdout": "ok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue\t1.228s\nok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/observers\t5.157s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "./test/spike/s0/internal/eventqueue",
+        "./test/spike/s0/observers"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.181,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "owned_source_sha256_after": {
+    "test/spike/s0/internal/eventqueue/dispatcher.go": "88b93cae8e6cfe5af675af255b348b9566286b59921e77a7a4a5f0ccfd246e3f",
+    "test/spike/s0/internal/eventqueue/dispatcher_test.go": "905cf34f708d462971be5230a207cc4719b5854cb93df031ce079df3dec64077",
+    "test/spike/s0/observers/dispatcher.go": "640529c8ca84ddde0d1e6525cdea758d26f7b7ac976b300f2fbac9db48ca7bec",
+    "test/spike/s0/observers/dispatcher_test.go": "45a6b7725df538a35dc2b89fdf1cead8a58415e4af4873c359984fdec8f31e1c",
+    "test/spike/s0/observers/lifecycle_test.go": "a7cb10fdc91157a9af9fcf3937a9e88a71be54c4d2cbe3d9384511f3d90c4f58",
+    "test/spike/s0/observers/alias_test.go": "28255653e4341f2917a100607723451969755e237cbd52882e41183004652d04",
+    "test/spike/s0/observers/README.md": "d86fa04911f9a6ca1f4d5eb35abd26e09b168e1c67adb51257fb90acc82be4cb"
+  },
+  "read_only_test_dependency_sha256_after": {
+    "go.mod": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2",
+    "go.sum": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5",
+    "test/spike/s0/concurrency/types.go": "984be3969c932065c78ab368cf3d73103628a5789811c2092ed945cf7078287a",
+    "test/spike/s0/concurrency/graphlock.go": "306ed60d14014d88ab8c926c17cf141e00dc93d2812ee256012f2b697dbf4302",
+    "test/spike/s0/concurrency/reconciler.go": "4d313da3468765d98c99f55d0372daa2a1581a787d74286de36a24cd40ea1536",
+    "test/spike/s0/concurrency/configuration.go": "941d08e025685c8b031dd5b80f9c076cc84c64f8d41fe39e790e353b1327ba79",
+    "test/spike/s0/concurrency/tracked.go": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+  },
+  "inputs_unchanged": true,
+  "finished_at_utc": "2026-11-13T02:38:51.234461+00:00",
+  "complete": true,
+  "limitations": [
+    "Extraction only; no native event publisher integration was implemented in this owned scope.",
+    "Native lifecycle tests remain real-backend tests in observers; internal private tests are queue algorithm-only fixtures.",
+    "Unmarked callback self-join and unbounded hung-observer backlog restrictions remain unchanged.",
+    "No whole S0/G5, canonical native observer trace, or scale proof is claimed."
+  ]
+}

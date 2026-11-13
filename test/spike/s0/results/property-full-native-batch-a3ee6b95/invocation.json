@@ -1,0 +1,31 @@
+{
+  "classification": "PASS frozen experimental native root/observer/Batch property workload only; not final SDK or S0",
+  "exitCode": 0,
+  "managedJob": "bash-63d7ab977cb94189",
+  "elapsedSeconds": 2481.19,
+  "candidateSeconds": {
+    "reconciler": 1298.16,
+    "graph-lock": 1182.89
+  },
+  "sourceSHA256": "a3ee6b9546ce7ba9bdb45cff7234aff4d08e58bd816d0270a48e631972eb7679",
+  "executableSHA256": "5e755bc41b10f363771fd2393a846fe4745639b1eb2a4df6c70f1f11a2d5c1e4",
+  "race": true,
+  "gomaxprocs": 8,
+  "argv": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-race",
+    "-count=1",
+    "-timeout=90m",
+    "-v",
+    "-run",
+    "^TestRuntimeProperties$",
+    "./test/spike/s0/properties"
+  ],
+  "originalDirectory": "test/spike/s0/properties/evidence/native-batch-lz34U1RH",
+  "limits": [
+    "Generator/model/assertions remain the recorded bounded DAG stream, not every possible behavior.",
+    "Full final-port differential, production per-file coverage, performance budgets, SQL authority and final line gate remain open."
+  ]
+}

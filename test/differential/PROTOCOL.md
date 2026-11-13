@@ -95,6 +95,38 @@ restart boundaries. Extra/missing events and a changed epoch equality relation
 are mismatches. Opaque IDs use distinct namespaces. Error stack/path/timing data
 is not injected into semantic traces in the first place.
 
+## Owner-approved causal-comparison sidecar
+
+ADR-035's [preexecution amendment](../../docs/design/s0-causal-comparison-amendment.md)
+adds a separate `CompareCausal`, not a replacement for the strict rules above.
+Complete raw trace v1 arrays retain their arrival/insertion order. Strict results
+and causal results are recorded independently; historical mismatches stay strict
+mismatches.
+
+A `s0-causal-witness/v1` sidecar binds exact script/trace bytes by SHA-256 and
+records `{label, afterEvent}` at each actual checkpoint observation. The oracle
+opt-in is `S0_CAUSAL_WITNESS_PATH`; the Go interpreter records the native owner
+watermark from the same Inspect operation and projects only that ledger prefix.
+No inline semantic event is fabricated. Missing/invalid hashes, cuts or unsupported
+control syntax are not a match. Hashes identify bytes, not signed authenticity.
+
+Version 1 compiles a conservative static resource/dependency model. It checks
+complete event content/multiplicity, each fiber's order, root command/conflict
+order, states/epochs/config/outputs, global bijective identities and demonstrated
+independence for any provision-array interleaving. Two startup exceptions are
+proved per trace: pure mount publication can cross unrelated callbacks, and a
+readiness notification bracket follows the provider that actually makes a
+mounted consumer ready. These exceptions do not erase teardown, dependency or
+error obligations. Gate/task/child/availability/dynamic constructs without
+sufficient witnesses remain explicitly unsupported; no scenario is silently
+removed or replaced by its final state. Negative comparator tests and actual
+same-script oracle/candidate runs are separate required evidence.
+
+Historical receipts bind their preserved exact interpreter source under
+`oracle/history/`; new executions bind the current interpreter and their own
+sidecars. Frozen corpus files/receipts are not overwritten when instrumentation
+changes. No source hash alone turns a failed or unexecuted test into acceptance.
+
 ## Diagnostic and process boundaries
 
 The required isolated runtime is Node **24.22.1** via environmental `S0_NODE`.

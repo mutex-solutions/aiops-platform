@@ -1,0 +1,14 @@
+{
+  "schema": "s0-causal-comparison-amendment/v1",
+  "approval": "Owner explicitly selected Duyệt causal comparison có kiểm chứng (Recommended) in the resumed S0 confirmation",
+  "scope": "separate verified causal comparison for demonstrated independent interleavings; strict/raw evidence retained",
+  "amendment": {
+    "path": "docs/design/s0-causal-comparison-amendment.md",
+    "sha256": "becf5c0634ec98c279d76db3ac3dc1c08cea70cd2d66301393c445b3df73559a"
+  },
+  "originalCriteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "originalPinsSHA256": "8e6beaf0fdd87575280da19b1e71f62419bbbb27372fa8821dc449ca15b604aa",
+  "historicalResultsReclassified": false,
+  "implementationVerified": false,
+  "s0Complete": false
+}

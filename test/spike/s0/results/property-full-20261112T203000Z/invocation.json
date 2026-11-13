@@ -1,0 +1,49 @@
+{
+  "classification": "PASS for frozen experimental candidate property workload only; not S0 or final SDK acceptance",
+  "managedJob": "bash-e1bd181bba9b4d6d",
+  "exitCode": 0,
+  "sourceSHA256": "2a2dc5ce8fe8cd609cbc0d7ae7a0322c828b6455532260f44e5c1f1a9aee1471",
+  "executableSHA256": "0ca71bffe0ae2a84428b2e2feb3ea59e127e941ed71f1b3e4861cd1d83a3cf89",
+  "workload": {
+    "seedsPerCandidate": 1000,
+    "operationsPerSeed": 1000,
+    "candidates": [
+      "reconciler",
+      "graph-lock"
+    ],
+    "race": true,
+    "gomaxprocs": 8
+  },
+  "elapsedTestSeconds": 2383.64,
+  "candidateSeconds": {
+    "reconciler": 1292.68,
+    "graph-lock": 1090.83
+  },
+  "command": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-race",
+    "-count=1",
+    "-timeout=90m",
+    "-v",
+    "-run",
+    "^TestRuntimeProperties$",
+    "./test/spike/s0/properties"
+  ],
+  "environment": {
+    "GOTOOLCHAIN": "local",
+    "GOMAXPROCS": "8",
+    "S0_PROPERTY_FULL": "1",
+    "S0_PROPERTY_SOURCE_SHA256": "2a2dc5ce8fe8cd609cbc0d7ae7a0322c828b6455532260f44e5c1f1a9aee1471",
+    "S0_PROPERTY_RESULTS": "test/spike/s0/properties/evidence/resumed-WSbH2CES"
+  },
+  "originalSummary": "test/spike/s0/properties/test/spike/s0/properties/evidence/resumed-WSbH2CES/pass-full-1000-seeds-x-1000-operations-per-real-candidate-1794515829498973453.json",
+  "originalLog": "test/spike/s0/properties/evidence/resumed-WSbH2CES/command.log",
+  "limitations": [
+    "Earlier timeout and accidental cancellation remain incomplete, not promoted to passes.",
+    "Result applies to recorded source, generator, static DAG workload and assertions, not every future core revision.",
+    "No final-port, full differential, scale, SQL authority, per-file coverage or physical-line acceptance is inferred.",
+    "No start timestamp is asserted from the destination directory name."
+  ]
+}

@@ -14,21 +14,27 @@ import (
 )
 
 // GraphLock is an experimental graph-mutex scheduler, not a production kernel.
-// Only active lifecycle/check transitions have goroutines; idle fibers have none.
+// Only active lifecycle/check transitions have per-fiber goroutines; idle fibers
+// have none. One shared off-owner observer dispatcher follows the native ledger.
 // Context bindings are immutable and Read/Enter/Leave never take the graph lock.
 type GraphLock struct {
 	mu         sync.Mutex
 	fibers     map[uint64]*graphFiber
-	retired    map[uint64]Snapshot // Value-only inspection history; no activation/closure references.
-	retiredErr map[uint64]error    // Preserve sticky startup-error identity for AwaitFiber after disposal.
+	root       *graphFiber             // Lazy native ID-0 owner, never a user fiber or snapshot row.
+	retired    map[uint64]graphRetired // Inspection history; no activation/effect references.
+	retiredErr map[uint64]error        // Preserve sticky startup-error identity for AwaitFiber after disposal.
 	services   map[string]graphService
 	indexByKey map[string]map[uint64]*graphFiber
 	nextFiber  uint64
 	nextUID    uint64
 	totalSeq   uint64
 	events     []Event
+	observers  *nativeObservers
 	changed    chan struct{}
 	closed     bool
+	batchDepth int
+	batchDirty []*graphFiber
+	batchSeen  map[uint64]bool
 	knobs      graphKnobs
 }
 
@@ -41,20 +47,32 @@ type graphKnobs struct {
 }
 
 type graphFiber struct {
-	id       uint64
-	spec     Spec
-	state    State
-	revision uint64
-	epoch    []uint64
-	failedAt uint64
-	failed   bool
-	lastErr  error
-	awaitErr error // Current startup failure only; cleanup diagnostics are not startup rejection.
-	wantGone bool
-	worker   bool
-	current  *graphActivation
-	notice   uint64
-	blocked  *graphBlocked
+	id        uint64
+	spec      Spec
+	state     State
+	revision  uint64
+	epoch     []uint64
+	failedAt  uint64
+	failed    bool
+	lastErr   error
+	awaitErr  error // Current startup failure only; cleanup diagnostics are not startup rejection.
+	wantGone  bool
+	worker    bool
+	current   *graphActivation
+	notice    uint64
+	blocked   *graphBlocked
+	available *graphAvailability // Last accepted off-lock Check result, not the committed activation.
+	parent    *graphActivation   // Structural owner: this exact parent activation, not its replacement.
+}
+
+type graphRetired struct {
+	snapshot   Snapshot
+	diagnostic error // Format caller-defined Error methods only after releasing mu.
+}
+
+type graphAvailability struct {
+	epoch  []uint64
+	notice uint64
 }
 
 type graphBlocked struct {
@@ -64,24 +82,31 @@ type graphBlocked struct {
 }
 
 type graphActivation struct {
-	fiber      *graphFiber
-	ctx        *Context
-	cancel     context.CancelFunc
-	revision   uint64
-	epoch      []uint64
-	checked    uint64
-	provided   map[string]provision
-	effects    []graphEffect
-	loading    bool
-	retiring   bool
-	leaseWake  chan struct{}
-	loadTimer  *time.Timer
-	cleanupErr error
+	fiber             *graphFiber
+	ctx               *Context
+	cancel            context.CancelFunc
+	revision          uint64
+	epoch             []uint64
+	checked           uint64
+	provided          map[string]provision
+	children          map[uint64]*graphFiber
+	tracked           map[uint64]string // Registered work, retained until its real completion.
+	nextTrack         uint64
+	effects           []graphEffect
+	loading           bool
+	retiring          bool
+	dependantsChanged chan struct{} // Only actual binding/child release wakes this owner.
+	leaseWake         chan struct{}
+	loadTimer         *time.Timer
+	cleanupErr        error
 }
 
 type graphEffect struct {
-	label   string
-	dispose Disposer
+	label        string
+	dispose      Disposer
+	child        uint64 // Structural membership only; joined before any ordinary disposer.
+	provisionKey string
+	provisionUID uint64 // Native reservation ownership, ordered with ordinary effects.
 }
 
 type graphService struct {
@@ -93,10 +118,11 @@ type graphService struct {
 func NewGraphLock() Runtime {
 	return &GraphLock{
 		fibers:     make(map[uint64]*graphFiber),
-		retired:    make(map[uint64]Snapshot),
+		retired:    make(map[uint64]graphRetired),
 		retiredErr: make(map[uint64]error),
 		services:   make(map[string]graphService),
 		indexByKey: make(map[string]map[uint64]*graphFiber),
+		observers:  newNativeObservers(),
 		changed:    make(chan struct{}),
 		knobs: graphKnobs{
 			load:       2 * time.Second,
@@ -115,6 +141,7 @@ func (g *GraphLock) appendEventLocked(event Event) {
 	g.totalSeq++
 	event.Sequence = g.totalSeq
 	g.events = append(g.events, event)
+	g.observers.append(event)
 	g.signalLocked()
 }
 
@@ -153,24 +180,70 @@ func graphUnique(keys []string) bool {
 	return true
 }
 
+// RootContext returns the runtime's one trusted native composition context. It
+// is not mounted as a user plugin, does not consume a user ID, and starts no idle
+// worker. Builtin provision values are supplied by the composition caller.
+func (g *GraphLock) RootContext(ctx context.Context) (*Context, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		return nil, ErrClosed
+	}
+	if g.root == nil {
+		f := &graphFiber{spec: Spec{ID: "root"}, state: Active, revision: 1}
+		g.root = f
+		a := g.activationLocked(f, make(map[string]provision), nil)
+		a.ctx.dispose = func() error { return ErrRootDispose }
+	} else if g.root.current == nil || g.root.current.retiring || !g.root.current.ctx.live.Load() {
+		return nil, ErrInactive
+	}
+	return g.root.current.ctx, nil
+}
+
 func (g *GraphLock) Mount(ctx context.Context, spec Spec) (uint64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.mountLocked(spec, nil)
+}
+
+// mountLocked is shared by roots and native children. No user callback runs
+// here. A child is registered as owned before it can start its own worker.
+func (g *GraphLock) mountLocked(spec Spec, parent *graphActivation) (uint64, error) {
 	if !graphUnique(spec.Needs) || !graphUnique(spec.Provides) {
 		return 0, errors.New("needs/provides must contain unique nonempty keys")
 	}
-	// The declaration is owned by the scheduler after Mount returns.
-	spec.Needs = append([]string(nil), spec.Needs...)
-	spec.Provides = append([]string(nil), spec.Provides...)
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	if spec.Apply != nil && spec.ApplyEffect != nil {
+		return 0, errors.New("Apply and ApplyEffect are mutually exclusive")
+	}
 	if g.closed {
 		return 0, ErrClosed
 	}
+	// The declaration is owned by the scheduler after Mount/MountChild returns.
+	spec.Needs = append([]string(nil), spec.Needs...)
+	spec.Provides = append([]string(nil), spec.Provides...)
+	return g.mountPreparedLocked(spec, parent), nil
+}
+
+// mountPreparedLocked accepts scheduler-owned, already validated declarations.
+// It is the non-failing commit shared by ordinary Mount and the Batch prefix.
+func (g *GraphLock) mountPreparedLocked(spec Spec, parent *graphActivation) uint64 {
 	g.nextFiber++
-	f := &graphFiber{id: g.nextFiber, spec: spec, state: Pending}
+	f := &graphFiber{id: g.nextFiber, spec: spec, state: Pending, parent: parent}
 	g.fibers[f.id] = f
+	if parent != nil {
+		if parent.children == nil {
+			parent.children = make(map[uint64]*graphFiber)
+		}
+		parent.children[f.id] = f
+		parent.effects = append(parent.effects, graphEffect{label: "child", child: f.id})
+		g.eventLocked(parent.fiber, "effect:add", "child", 0)
+	}
 	for _, key := range spec.Needs {
 		if g.indexByKey[key] == nil {
 			g.indexByKey[key] = make(map[uint64]*graphFiber)
@@ -179,7 +252,7 @@ func (g *GraphLock) Mount(ctx context.Context, spec Spec) (uint64, error) {
 	}
 	g.eventLocked(f, "mount", "", 0)
 	g.reconcileLocked(f)
-	return f.id, nil
+	return f.id
 }
 
 func (g *GraphLock) Update(ctx context.Context, id uint64) error {
@@ -204,6 +277,137 @@ func (g *GraphLock) Update(ctx context.Context, id uint64) error {
 	g.eventLocked(f, "update", "", 0)
 	g.reconcileLocked(f)
 	return nil
+}
+
+// Batch commits data-only desired changes before any new lifecycle/check work
+// is admitted. All validation, including the last operation, precedes IDs,
+// revisions, disposal requests, and actual ledger events.
+func (g *GraphLock) Batch(ctx context.Context, operations []BatchOperation) ([]uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		return nil, ErrClosed
+	}
+	prepared, err := prepareBatch(operations, func(id uint64) bool {
+		f := g.fibers[id]
+		return f != nil && !f.wantGone
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	ids := make([]uint64, len(prepared))
+	g.batchDepth++
+	g.batchSeen = make(map[uint64]bool)
+	for i, operation := range prepared {
+		switch operation.Kind {
+		case BatchMount:
+			ids[i] = g.mountPreparedLocked(operation.Spec, nil)
+		case BatchUpdate:
+			f := g.fibers[operation.Fiber]
+			f.revision++
+			f.lastErr, f.awaitErr = nil, nil
+			g.eventLocked(f, "update", "", 0)
+			g.reconcileLocked(f)
+		case BatchDispose:
+			g.requestDisposeLocked(g.fibers[operation.Fiber])
+		}
+	}
+	// A cold consumer may precede its provider's Update in the input. Invalidate
+	// the entire old-target closure first, while reconciliation is still deferred;
+	// only afterward can that consumer bind a currently ACTIVE reservation.
+	for i := 0; i < len(g.batchDirty); i++ {
+		f := g.batchDirty[i]
+		if a := f.current; a != nil && !a.retiring && !g.targetMatchesLocked(a) {
+			g.retireLocked(a)
+		}
+	}
+	dirty := g.batchDirty
+	g.batchDirty, g.batchSeen = nil, nil
+	g.batchDepth--
+	for _, f := range dirty {
+		g.reconcileLocked(f)
+	}
+	return ids, nil
+}
+
+// UpdateConfig runs the configuration cell outside the graph owner. Restart is
+// a real revision update followed by a fiber-local join, not an adapter rewrite
+// of raw/effective state or a global Settle barrier.
+func (g *GraphLock) UpdateConfig(ctx context.Context, id uint64, raw any, noSave bool) error {
+	request, err := g.RequestUpdateConfig(ctx, id, raw, noSave)
+	if err != nil {
+		return err
+	}
+	return request.Await(ctx)
+}
+
+func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any, noSave bool) (ConfigRequest, error) {
+	request := ConfigRequest{Await: func(context.Context) error { return nil }}
+	if err := ctx.Err(); err != nil {
+		return request, err
+	}
+	g.mu.Lock()
+	if g.closed {
+		g.mu.Unlock()
+		return request, ErrClosed
+	}
+	f, ok := g.fibers[id]
+	if !ok {
+		_, disposed := g.retired[id]
+		g.mu.Unlock()
+		if disposed {
+			return request, ErrInactive
+		}
+		return request, ErrUnknown
+	}
+	if f.wantGone {
+		g.mu.Unlock()
+		return request, ErrInactive
+	}
+	cell := f.spec.Config
+	if cell == nil {
+		g.mu.Unlock()
+		return request, errors.New("fiber has no configuration cell")
+	}
+	committed := f.current
+	target := g.targetLocked(f)
+	revision := f.revision
+	g.mu.Unlock()
+	err := cell.ApplyUpdate(ctx, raw, noSave, target != nil,
+		func() error {
+			if err := g.Update(ctx, id); err != nil {
+				return err
+			}
+			request.Await = func(wait context.Context) error { return g.AwaitFiber(wait, id) }
+			return nil
+		},
+		func() bool {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			return g.fibers[id] == f && !g.closed && !f.wantGone && f.current == committed && f.revision == revision && graphSameTarget(g.targetLocked(f), target)
+		},
+		func() error {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			if g.fibers[id] != f || f.wantGone {
+				return ErrInactive
+			}
+			if g.closed {
+				return ErrClosed
+			}
+			f.failed = false
+			f.lastErr = nil
+			f.awaitErr = nil
+			g.signalLocked()
+			return nil
+		})
+	return request, err
 }
 
 func (g *GraphLock) Dispose(ctx context.Context, id uint64) error {
@@ -280,7 +484,7 @@ func (g *GraphLock) Settle(ctx context.Context) error {
 				return false
 			}
 		}
-		return true
+		return g.root == nil || (!g.root.worker && g.root.state != Unloading)
 	})
 }
 
@@ -342,7 +546,40 @@ func (g *GraphLock) Snapshots(ctx context.Context) ([]Snapshot, error) {
 		return nil, err
 	}
 	g.mu.Lock()
-	defer g.mu.Unlock()
+	out, diagnostics := g.snapshotsLocked()
+	g.mu.Unlock()
+	graphFormatDiagnostics(out, diagnostics)
+	return out, nil
+}
+
+// Inspect observes one graph-lock cut, including reserved LOADING provisions
+// and retiring provisions still held by dependants or cleanup. Value preserves
+// the caller's actual service identity; callers must keep its contents immutable.
+// Neither inspection nor its copies execute checks, marshaling, or service code.
+func (g *GraphLock) Inspect(ctx context.Context) (Inspection, error) {
+	if err := ctx.Err(); err != nil {
+		return Inspection{}, err
+	}
+	g.mu.Lock()
+	fibers, diagnostics := g.snapshotsLocked()
+	provisions := make([]ProvisionSnapshot, 0, len(g.services))
+	for key, service := range g.services {
+		a := service.activation
+		provisions = append(provisions, ProvisionSnapshot{
+			Key: key, UID: service.uid, Owner: service.owner, Name: a.fiber.spec.ID,
+			Value: service.value, Active: !a.retiring && a.fiber.state == Active,
+		})
+	}
+	sequence := g.totalSeq
+	g.mu.Unlock()
+	// UID is assigned at the real successful reservation, not at publication or
+	// semantic service notification (which can follow a different key order).
+	sort.Slice(provisions, func(i, j int) bool { return provisions[i].UID < provisions[j].UID })
+	graphFormatDiagnostics(fibers, diagnostics)
+	return Inspection{Sequence: sequence, Fibers: fibers, Provisions: provisions}, nil
+}
+
+func (g *GraphLock) snapshotsLocked() ([]Snapshot, []error) {
 	ids := make([]uint64, 0, len(g.fibers)+len(g.retired))
 	for id := range g.fibers {
 		ids = append(ids, id)
@@ -352,25 +589,64 @@ func (g *GraphLock) Snapshots(ctx context.Context) ([]Snapshot, error) {
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	out := make([]Snapshot, 0, len(ids))
+	diagnostics := make([]error, 0, len(ids))
 	for _, id := range ids {
 		if archived, disposed := g.retired[id]; disposed {
-			archived.Epoch = append([]uint64(nil), archived.Epoch...)
-			out = append(out, archived)
+			s := archived.snapshot
+			s.Epoch = append([]uint64(nil), s.Epoch...)
+			out = append(out, s)
+			diagnostics = append(diagnostics, archived.diagnostic)
 			continue
 		}
 		f := g.fibers[id]
-		s := Snapshot{ID: id, Name: f.spec.ID, State: f.state, Revision: f.revision, Epoch: append([]uint64(nil), f.epoch...)}
-		if f.lastErr != nil {
-			s.Error = f.lastErr.Error()
+		s := Snapshot{
+			ID: id, Name: f.spec.ID, State: f.state, Revision: f.revision,
+			Epoch: append([]uint64(nil), f.epoch...), Alive: !f.wantGone,
+			Target: g.targetLocked(f),
 		}
+		graphCaptureConfig(&s, f.spec.Config)
 		if f.current != nil {
 			for _, effect := range f.current.effects {
 				s.Effects = append(s.Effects, effect.label)
 			}
+			tokens := make([]uint64, 0, len(f.current.tracked))
+			for token := range f.current.tracked {
+				tokens = append(tokens, token)
+			}
+			sort.Slice(tokens, func(i, j int) bool { return tokens[i] < tokens[j] })
+			for _, token := range tokens {
+				s.Tracked = append(s.Tracked, f.current.tracked[token])
+			}
 		}
 		out = append(out, s)
+		diagnostics = append(diagnostics, f.lastErr)
 	}
-	return out, nil
+	return out, diagnostics
+}
+
+// Snapshot on the cell only copies immutable identities under its own mutex;
+// no cell operation calls graph code while holding that mutex. The archive
+// retains this value-only view, never the cell or its caller-supplied hooks.
+func graphCaptureConfig(snapshot *Snapshot, cell *Configuration) {
+	if cell == nil {
+		return
+	}
+	configuration := cell.Snapshot()
+	snapshot.Configured = true
+	snapshot.ConfigPrepared = configuration.Prepared
+	snapshot.RawConfig = configuration.Raw
+	snapshot.EffectiveConfig = configuration.Effective
+	snapshot.ConfigVersion = configuration.Version
+}
+
+// Error is a caller-defined method too. Capture error identities with the graph
+// state, but never format them while holding the graph mutex.
+func graphFormatDiagnostics(snapshots []Snapshot, diagnostics []error) {
+	for i, diagnostic := range diagnostics {
+		if diagnostic != nil {
+			snapshots[i].Error = diagnostic.Error()
+		}
+	}
 }
 
 // Record is test-only instrumentation, not a lifecycle command. Serialization
@@ -444,17 +720,61 @@ func (g *GraphLock) Events(ctx context.Context) ([]Event, error) {
 	return out, nil
 }
 
+// ObserveEvents registers activation-owned observation, never a callback on the
+// graph owner. The helper owns its subscription lease and Defer registration, so
+// this method must not hold mu while it runs.
+func (g *GraphLock) ObserveEvents(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {
+	if owner == nil || owner.host != g {
+		return nil, ErrObserverBinding
+	}
+	return g.observers.observe(owner, label, fn)
+}
+
+// AwaitObservers is an explicit off-owner barrier, intentionally not Settle.
+func (g *GraphLock) AwaitObservers(ctx context.Context) error { return g.observers.await(ctx) }
+
+func (g *GraphLock) ObserverStatus() ObserverStatus { return g.observers.status() }
+
 func (g *GraphLock) Close(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	g.mu.Lock()
 	g.closed = true
-	for _, f := range g.fibers {
-		g.requestDisposeLocked(f)
+	// Quiesce every user first, including roots not mounted through MountChild.
+	// The native root then retains its provisions until all bound consumers and
+	// structural descendants have finished their actual teardown.
+	ids := make([]uint64, 0, len(g.fibers))
+	for id := range g.fibers {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		if f := g.fibers[id]; f != nil {
+			g.requestDisposeLocked(f)
+		}
+	}
+	if g.root != nil {
+		g.root.wantGone = true
+		if g.root.current != nil {
+			g.retireLocked(g.root.current)
+		} else {
+			g.reconcileLocked(g.root)
+		}
 	}
 	g.mu.Unlock()
-	return g.Settle(ctx)
+	if err := g.Settle(ctx); err != nil {
+		return err
+	}
+	g.mu.Lock()
+	var rootErr error
+	if g.root != nil {
+		rootErr = errors.Join(g.root.awaitErr, g.root.lastErr)
+	}
+	g.mu.Unlock()
+	// All actual lifecycle events have now been published. Even a failed root
+	// must drain and close the dispatcher; a lifecycle timeout above must not.
+	return errors.Join(rootErr, g.observers.close(ctx))
 }
 
 // Transition machinery below deliberately never calls Apply or a disposer
@@ -465,6 +785,37 @@ var _ Runtime = (*GraphLock)(nil)
 var _ Notifier = (*GraphLock)(nil)
 var _ Waiter = (*GraphLock)(nil)
 var _ Recorder = (*GraphLock)(nil)
+var _ Inspector = (*GraphLock)(nil)
+var _ ConfigUpdater = (*GraphLock)(nil)
+var _ RootProvider = (*GraphLock)(nil)
+var _ ObserverRuntime = (*GraphLock)(nil)
+var _ Batcher = (*GraphLock)(nil)
+
+// targetLocked describes the desired future activation, not the activation
+// retained during unload. Availability is resolved solely from current ACTIVE
+// provider reservations and already accepted off-lock predicate results. A new
+// or notified predicate has no target until that result is accepted; inspection
+// itself must not run it. A config-only revision retains accepted binding truth.
+func (g *GraphLock) targetLocked(f *graphFiber) *EpochSnapshot {
+	if f.wantGone || (f.failed && f.failedAt == f.revision) {
+		return nil
+	}
+	epoch := make([]uint64, 0, len(f.spec.Needs))
+	for _, key := range f.spec.Needs {
+		service, ok := g.services[key]
+		if !ok || service.activation.retiring || service.activation.fiber.state != Active {
+			return nil
+		}
+		epoch = append(epoch, service.uid)
+	}
+	if f.spec.Check != nil {
+		accepted := f.available
+		if accepted == nil || accepted.notice != f.notice || !graphSameEpoch(accepted.epoch, epoch) {
+			return nil
+		}
+	}
+	return &EpochSnapshot{Revision: f.revision, UIDs: epoch}
+}
 
 func (g *GraphLock) bindingsLocked(f *graphFiber) (map[string]provision, []uint64, bool) {
 	bindings := make(map[string]provision, len(f.spec.Needs))
@@ -492,6 +843,13 @@ func graphSameEpoch(a, b []uint64) bool {
 	return true
 }
 
+func graphSameTarget(a, b *EpochSnapshot) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Revision == b.Revision && graphSameEpoch(a.UIDs, b.UIDs)
+}
+
 func (g *GraphLock) targetMatchesLocked(a *graphActivation) bool {
 	f := a.fiber
 	if f.wantGone || f.revision != a.revision {
@@ -502,6 +860,25 @@ func (g *GraphLock) targetMatchesLocked(a *graphActivation) bool {
 }
 
 func (g *GraphLock) reconcileLocked(f *graphFiber) {
+	if g.batchDepth != 0 {
+		if !g.batchSeen[f.id] {
+			g.batchSeen[f.id] = true
+			g.batchDirty = append(g.batchDirty, f)
+		}
+		return
+	}
+	if f == g.root {
+		// Root has no plugin body, retry path, user registry entry, or archive.
+		// Its same native activation is terminal after failure or Close.
+		if f.current == nil {
+			if f.wantGone {
+				g.stateLocked(f, Disposed)
+			} else {
+				g.stateLocked(f, Failed)
+			}
+		}
+		return
+	}
 	if f.state == Disposed {
 		return
 	}
@@ -516,13 +893,28 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 		return
 	}
 	if f.wantGone {
+		if f.state != Unloading {
+			// Even a never-activated PENDING fiber has an asynchronous unload
+			// boundary. Do not skip directly to DISPOSED or run Apply to make one.
+			g.stateLocked(f, Unloading)
+			f.worker = true
+			go func() {
+				g.mu.Lock()
+				defer g.mu.Unlock()
+				f.worker = false
+				g.reconcileLocked(f)
+				g.signalLocked()
+			}()
+			return
+		}
+		if f.worker {
+			return
+		}
 		g.stateLocked(f, Disposed)
 		g.eventLocked(f, "dispose:complete", "", 0)
 		archive := Snapshot{ID: f.id, Name: f.spec.ID, State: Disposed, Revision: f.revision, Epoch: append([]uint64(nil), f.epoch...)}
-		if f.lastErr != nil {
-			archive.Error = f.lastErr.Error()
-		}
-		g.retired[f.id] = archive
+		graphCaptureConfig(&archive, f.spec.Config)
+		g.retired[f.id] = graphRetired{snapshot: archive, diagnostic: f.lastErr}
 		if f.awaitErr != nil {
 			g.retiredErr[f.id] = f.awaitErr
 		}
@@ -533,6 +925,23 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 			}
 		}
 		delete(g.fibers, f.id)
+		if g.closed && g.root != nil && g.root.current != nil {
+			g.signalDependantsLocked(g.root.current)
+		}
+		if parent := f.parent; parent != nil {
+			delete(parent.children, f.id)
+			for i, effect := range parent.effects {
+				if effect.child == f.id {
+					copy(parent.effects[i:], parent.effects[i+1:])
+					parent.effects[len(parent.effects)-1] = graphEffect{}
+					parent.effects = parent.effects[:len(parent.effects)-1]
+					break
+				}
+			}
+			f.parent = nil
+			g.signalDependantsLocked(parent)
+			g.signalLocked()
+		}
 		return
 	}
 	// Failures are revision-sticky; service arrival/removal is not a retry.
@@ -563,14 +972,17 @@ func (g *GraphLock) wakeKeyLocked(key string) {
 	}
 }
 
-func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) {
+// activationLocked installs the same native Provide/effect/child/tracked/lease
+// hooks for a user activation and the trusted root. It executes no caller code.
+func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) *graphActivation {
 	std, cancel := context.WithCancel(context.Background())
 	a := &graphActivation{
 		fiber: f, cancel: cancel, revision: f.revision, epoch: epoch, checked: f.notice,
-		provided: make(map[string]provision), loading: true,
-		leaseWake: make(chan struct{}, 1),
+		provided:          make(map[string]provision),
+		dependantsChanged: make(chan struct{}),
+		leaseWake:         make(chan struct{}, 1),
 	}
-	c := &Context{std: std, fiber: f.id, bindings: bindings}
+	c := &Context{host: g, std: std, fiber: f.id, bindings: bindings}
 	c.leaseChanged = func() {
 		select {
 		case a.leaseWake <- struct{}{}:
@@ -579,6 +991,16 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 	}
 	c.provide = func(key string, value any) error { return g.provide(a, key, value) }
 	c.effect = func(label string, dispose Disposer) error { return g.deferEffect(a, label, dispose) }
+	c.cleanupEffect = func(dispose Disposer) error { return g.cleanupEffect(a, dispose) }
+	c.trackedStart = func(label string) (func(error), error) { return g.startTracked(a, label) }
+	c.child = func(spec Spec) (uint64, error) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if f.current != a || a.retiring || !c.live.Load() {
+			return 0, ErrInactive
+		}
+		return g.mountLocked(spec, a)
+	}
 	c.dispose = func() error {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -594,6 +1016,12 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 	f.current = a
 	f.epoch = append([]uint64(nil), epoch...)
 	f.lastErr = nil
+	return a
+}
+
+func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) {
+	a := g.activationLocked(f, bindings, epoch)
+	a.loading = true
 	f.worker = true
 	g.stateLocked(f, Loading)
 	a.loadTimer = time.AfterFunc(g.knobs.load, func() {
@@ -611,6 +1039,7 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 		f.lastErr = deadlineErr
 		g.eventLocked(f, "deadline:load", "", 0)
 		g.retireLocked(a)
+		g.stateLocked(f, Unloading)
 	})
 	go g.runLoad(a)
 }
@@ -622,7 +1051,10 @@ func (g *GraphLock) provide(a *graphActivation, key string, value any) error {
 	if f.current != a || a.retiring || !a.ctx.live.Load() {
 		return ErrInactive
 	}
-	declared := false
+	if key == "" {
+		return errors.New("provision key must not be empty")
+	}
+	declared := f == g.root
 	for _, candidate := range f.spec.Provides {
 		if candidate == key {
 			declared = true
@@ -638,12 +1070,21 @@ func (g *GraphLock) provide(a *graphActivation, key string, value any) error {
 	if _, exists := g.services[key]; exists {
 		return fmt.Errorf("provision %q is already owned", key)
 	}
+	if f == g.root {
+		// The trusted root has no user declaration. Successful reservations
+		// become its native ordered removal/notification list, never fixtures.
+		f.spec.Provides = append(f.spec.Provides, key)
+	}
 	g.nextUID++
 	p := provision{uid: g.nextUID, owner: f.id, value: value}
 	a.provided[key] = p
+	a.ctx.publishOwned(key)
 	// Reservation is immediate; bindingsLocked hides it until ACTIVE.
 	g.services[key] = graphService{provision: p, activation: a}
+	label := "provide:" + key
+	a.effects = append(a.effects, graphEffect{label: label, provisionKey: key, provisionUID: p.uid})
 	g.eventLocked(f, "provide", key, p.uid)
+	g.eventLocked(f, "effect:add", label, 0)
 	if !a.loading {
 		// Synchronous consumer transitions precede the service notification.
 		// Check callbacks still run off-lock and can complete after this event.
@@ -667,19 +1108,124 @@ func (g *GraphLock) deferEffect(a *graphActivation, label string, dispose Dispos
 	return nil
 }
 
+// cleanupEffect joins one partial or late setup disposer outside the graph
+// owner. The Effect helper retains its actual lease until this function returns;
+// a deadline records blocked work, never permission to release that ownership.
+func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
+	if dispose == nil {
+		return nil
+	}
+	g.mu.Lock()
+	budget := g.knobs.cleanup
+	g.mu.Unlock()
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	pending, recorded := true, false // Both protected by g.mu, including timer completion.
+	recordDeadlineLocked := func() {
+		if recorded || a.fiber.current != a {
+			return
+		}
+		recorded = true
+		diagnostic := errors.New("effect cleanup deadline exceeded; still awaiting disposer")
+		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
+		a.fiber.lastErr = errors.Join(a.fiber.lastErr, diagnostic)
+		g.eventLocked(a.fiber, "deadline:cleanupEffect", "", 0)
+	}
+	timer := time.AfterFunc(budget, func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if pending {
+			recordDeadlineLocked()
+		}
+	})
+	err := graphCallDispose(dispose, cleanupCtx)
+	timeout := cleanupCtx.Err()
+	timer.Stop()
+	g.mu.Lock()
+	pending = false
+	if timeout != nil {
+		// The real callback can observe its context deadline and return before
+		// the sibling diagnostic timer acquires mu. Record it at most once.
+		recordDeadlineLocked()
+	}
+	if err != nil && a.fiber.current == a && a.retiring {
+		a.cleanupErr = errors.Join(a.cleanupErr, err)
+	}
+	g.mu.Unlock()
+	return errors.Join(timeout, err)
+}
+
+// startTracked is called after the common Go helper acquires its real lease and
+// before it starts caller code. Completion is bookkeeping only: lease Leave is
+// still the actual drain barrier, and no extra joining goroutine is necessary.
+func (g *GraphLock) startTracked(a *graphActivation, label string) (func(error), error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	f := a.fiber
+	if f.current != a || a.retiring || !a.ctx.live.Load() {
+		return nil, ErrInactive
+	}
+	a.nextTrack++
+	token := a.nextTrack
+	if a.tracked == nil {
+		a.tracked = make(map[uint64]string)
+	}
+	a.tracked[token] = label
+	g.eventLocked(f, "go:start", label, token)
+	var once sync.Once
+	return func(err error) {
+		once.Do(func() {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			delete(a.tracked, token)
+			g.eventLocked(f, "go:done", label, token)
+			if err == nil || f.current != a || a.retiring || !a.ctx.live.Load() || !g.targetMatchesLocked(a) {
+				return
+			}
+			// Preserve the exact error identity. Error formatting and panic
+			// conversion belong outside the graph owner, just like Apply.
+			f.failedAt = a.revision
+			f.failed = true
+			f.lastErr = err
+			f.awaitErr = err
+			g.eventLocked(f, "go:failed", label, token)
+			g.retireLocked(a)
+		})
+	}, nil
+}
+
 func (g *GraphLock) retireLocked(a *graphActivation) {
 	if a.retiring {
 		return
 	}
+	wasActive := a.fiber.state == Active
 	a.retiring = true
 	// Invalidate before canceling: reentrant calls cannot acquire new leases.
 	a.ctx.live.Store(false)
 	a.cancel()
-	g.stateLocked(a.fiber, Unloading)
+	if !a.loading {
+		g.stateLocked(a.fiber, Unloading)
+	}
 	g.eventLocked(a.fiber, "invalidate", "", 0)
+	// Structural children retire even when they hold none of our provisions.
+	// Request every child before waiting on retained dependency bindings, or a
+	// child awaiting its parent's service could deadlock parent teardown.
+	children := make([]uint64, 0, len(a.children))
+	for id := range a.children {
+		children = append(children, id)
+	}
+	sort.Slice(children, func(i, j int) bool { return children[i] < children[j] })
+	for _, id := range children {
+		g.requestDisposeLocked(a.children[id])
+	}
 	for _, key := range a.fiber.spec.Provides {
-		if _, exists := a.provided[key]; exists {
+		if provided, exists := a.provided[key]; exists {
 			g.wakeKeyLocked(key)
+			if wasActive {
+				// Strict availability is withdrawn now, but the real service
+				// identity stays reserved through dependent and owner cleanup.
+				g.serviceEventLocked(a.fiber, "service:withdraw", key, provided)
+			}
 		}
 	}
 	if a.loading {
@@ -705,6 +1251,35 @@ func graphCallApply(apply func(*Context) error, ctx *Context) (err error) {
 	if apply != nil {
 		return apply(ctx)
 	}
+	return nil
+}
+
+func graphCallApplyEffect(apply func(*Context) (Disposer, error), ctx *Context) (dispose Disposer, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("Apply panic: %v", recovered)
+		}
+	}()
+	return apply(ctx)
+}
+
+// callApply collects a successful returned disposer after the body, rather than
+// before it or through the now-inactive public Defer path. A self-disposing or
+// superseded body remains the sole old activation until this worker unwinds it.
+func (g *GraphLock) callApply(a *graphActivation) error {
+	if a.fiber.spec.ApplyEffect == nil {
+		return graphCallApply(a.fiber.spec.Apply, a.ctx)
+	}
+	dispose, err := graphCallApplyEffect(a.fiber.spec.ApplyEffect, a.ctx)
+	if err != nil || dispose == nil {
+		return err
+	}
+	g.mu.Lock()
+	if a.fiber.current == a {
+		a.effects = append(a.effects, graphEffect{label: "apply", dispose: dispose})
+		g.eventLocked(a.fiber, "effect:add", "apply", 0)
+	}
+	g.mu.Unlock()
 	return nil
 }
 
@@ -765,6 +1340,7 @@ func (g *GraphLock) checkAvailability(a *graphActivation, force bool) bool {
 		}
 		a.checked = notice
 		if !available {
+			f.available = nil
 			f.blocked = &graphBlocked{revision: a.revision, epoch: append([]uint64(nil), a.epoch...), notice: notice}
 			if err != nil {
 				f.lastErr = err
@@ -775,6 +1351,7 @@ func (g *GraphLock) checkAvailability(a *graphActivation, force bool) bool {
 			return false
 		}
 		f.blocked = nil
+		f.available = &graphAvailability{epoch: append([]uint64(nil), a.epoch...), notice: notice}
 		g.eventLocked(f, "availability:accepted", "", 0)
 		g.mu.Unlock()
 		return true
@@ -796,12 +1373,48 @@ func (g *GraphLock) runActiveCheck(a *graphActivation) {
 	g.mu.Unlock()
 }
 
+func graphCallPrepare(cell *Configuration, ctx context.Context) (prepared PreparedConfig, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("configuration preparation panic: %v", recovered)
+		}
+	}()
+	return cell.Prepare(ctx)
+}
+
+// prepareConfig is worker-owned. User resolution runs off-lock within the same
+// absolute load deadline as Apply. A superseded raw version never reaches Apply;
+// the old attempt unloads before reconciliation prepares the latest target.
+func (g *GraphLock) prepareConfig(a *graphActivation) (bool, error) {
+	cell := a.fiber.spec.Config
+	if cell == nil {
+		return true, nil
+	}
+	prepared, err := graphCallPrepare(cell, a.ctx.std)
+	if err != nil {
+		return false, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if a.retiring || !g.targetMatchesLocked(a) || !prepared.Published {
+		g.retireLocked(a)
+		return false, nil
+	}
+	a.ctx.config = prepared.Value
+	a.ctx.configVersion = prepared.Version
+	return true, nil
+}
+
 func (g *GraphLock) runLoad(a *graphActivation) {
 	var err error
 	if g.checkAvailability(a, true) {
-		err = graphCallApply(a.fiber.spec.Apply, a.ctx)
-		if err == nil {
-			g.checkAvailability(a, false)
+		var prepared bool
+		prepared, err = g.prepareConfig(a)
+		if prepared && err == nil {
+			err = g.callApply(a)
+			if err == nil {
+				g.checkAvailability(a, false)
+			}
 		}
 	}
 	g.mu.Lock()
@@ -829,6 +1442,7 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 		g.eventLocked(a.fiber, "load:stale", "", 0)
 	}
 	if a.retiring {
+		g.stateLocked(a.fiber, Unloading)
 		g.mu.Unlock()
 		g.runUnload(a)
 		return
@@ -851,6 +1465,15 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 // A provider keeps its effects and identity until every activation holding one
 // of its provision UIDs has fully unloaded, not merely canceled its context.
 func (g *GraphLock) hasDependantsLocked(a *graphActivation) bool {
+	if a.fiber == g.root && g.closed && len(g.fibers) != 0 {
+		// Explicit shutdown joins every ordinary user, even one with no root
+		// service binding or structural parent, before releasing host resources.
+		// A contained root failure is narrower: g.closed is still false there.
+		return true
+	}
+	if len(a.children) != 0 {
+		return true
+	}
 	for key, provided := range a.provided {
 		for _, dependant := range g.indexByKey[key] {
 			if dependant.current == nil {
@@ -864,6 +1487,24 @@ func (g *GraphLock) hasDependantsLocked(a *graphActivation) bool {
 	return false
 }
 
+func (g *GraphLock) signalDependantsLocked(a *graphActivation) {
+	close(a.dependantsChanged)
+	a.dependantsChanged = make(chan struct{})
+}
+
+// releaseBindingsLocked wakes only the actual provider activations retained by
+// this consumer, never every retiring fiber on each unrelated event. Providers
+// cannot remove/reuse a bound UID before this release, but verify it explicitly
+// so a newer reservation cannot be mistaken for the old owner.
+func (g *GraphLock) releaseBindingsLocked(a *graphActivation) {
+	for key, bound := range a.ctx.bindings {
+		service, exists := g.services[key]
+		if exists && service.uid == bound.uid && service.owner == bound.owner {
+			g.signalDependantsLocked(service.activation)
+		}
+	}
+}
+
 func (g *GraphLock) awaitDependants(a *graphActivation) {
 	for {
 		g.mu.Lock()
@@ -871,7 +1512,10 @@ func (g *GraphLock) awaitDependants(a *graphActivation) {
 			g.mu.Unlock()
 			return
 		}
-		changed := g.changed
+		// Predicate and channel version share mu with every actual release.
+		// A release before this check is observed; one afterward closes this
+		// exact channel. Neither path can miss the last dependency going away.
+		changed := a.dependantsChanged
 		g.mu.Unlock()
 		<-changed
 	}
@@ -897,6 +1541,33 @@ func (g *GraphLock) awaitLeases(a *graphActivation) {
 	}
 }
 
+// removeProvision is a native ownership effect, not a caller disposer. All
+// dependent activations and leases have already drained. Withdrawal happened at
+// quiescence; this is actual LIFO removal, visible before any older custom effect.
+func (g *GraphLock) removeProvision(a *graphActivation, effect graphEffect) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	provided, exists := a.provided[effect.provisionKey]
+	if !exists || provided.uid != effect.provisionUID {
+		return
+	}
+	if service, published := g.services[effect.provisionKey]; published && service.activation == a && service.uid == effect.provisionUID {
+		delete(g.services, effect.provisionKey)
+	}
+	delete(a.provided, effect.provisionKey)
+	a.ctx.unpublishOwned(effect.provisionKey)
+	for i, owned := range a.effects {
+		if owned.provisionUID == effect.provisionUID {
+			copy(a.effects[i:], a.effects[i+1:])
+			a.effects[len(a.effects)-1] = graphEffect{}
+			a.effects = a.effects[:len(a.effects)-1]
+			break
+		}
+	}
+	g.wakeKeyLocked(effect.provisionKey)
+	g.serviceEventLocked(a.fiber, "service:remove", effect.provisionKey, provided)
+}
+
 func (g *GraphLock) runUnload(a *graphActivation) {
 	g.awaitDependants(a)
 	g.awaitLeases(a)
@@ -915,6 +1586,13 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	})
 	var disposeErr error
 	for i := len(effects) - 1; i >= 0; i-- {
+		if effects[i].child != 0 {
+			continue // Structural children were already joined before ordinary effects.
+		}
+		if effects[i].provisionUID != 0 {
+			g.removeProvision(a, effects[i])
+			continue
+		}
 		disposeErr = errors.Join(disposeErr, graphCallDispose(effects[i].dispose, cleanupCtx))
 	}
 	timer.Stop()
@@ -928,22 +1606,10 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	a.ctx.released.Store(true)
 	a.effects = nil
 	g.eventLocked(a.fiber, "effects:gone", "", 0)
-	for _, key := range a.fiber.spec.Provides {
-		if provided, exists := a.provided[key]; exists {
-			if service, published := g.services[key]; published && service.activation == a {
-				delete(g.services, key)
-			}
-			g.serviceEventLocked(a.fiber, "service:remove", key, provided)
-		}
-	}
 	a.fiber.current = nil
 	a.fiber.worker = false
+	g.releaseBindingsLocked(a)
 	g.signalLocked()
 	g.reconcileLocked(a.fiber)
-	for _, key := range a.fiber.spec.Provides {
-		if _, exists := a.provided[key]; exists {
-			g.wakeKeyLocked(key)
-		}
-	}
 	g.mu.Unlock()
 }

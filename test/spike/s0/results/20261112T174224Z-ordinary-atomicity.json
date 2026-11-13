@@ -1,0 +1,124 @@
+{
+  "classification": "atomicity-only diagnostic selected cases executed; NOT SQL-boundary acceptance",
+  "original_sql_gate": "FAIL unchanged; not remeasured by this package",
+  "measured": true,
+  "canonical_command_without_credentials_not_invocation_capture": "go test -mod=readonly -count=1 -v ./plugins/jobs-river/internal/s0txprobe",
+  "exit_code": 0,
+  "go_version": "go1.26.8",
+  "source_sha256": {
+    "atomicity_test.go": "b881d2557f535401108c4272bfa93587a40b7305b21007f5932be70c6e1eb1a5",
+    "fixture_test.go": "1abb55d0b1fc818b951ba3d7c05e33feb212891b8fe5a21d9c26f17f41733887",
+    "report_test.go": "c20212c4fb2d1936c4e8828496060fa126fea61bc0bae0be0690a24989fcff54"
+  },
+  "executable_sha256": "d20f333fcc75231329b947a468e87a8743dbe1ccbf3df6bdf28e3e13ec682569",
+  "identity_error": false,
+  "fixture_id": "f87039581ebf",
+  "fixture_retained": true,
+  "fsync": "on",
+  "synchronous_commit": "on",
+  "cases": [
+    {
+      "name": "rollback_after_0",
+      "status": "pass"
+    },
+    {
+      "name": "rollback_after_1",
+      "status": "pass"
+    },
+    {
+      "name": "rollback_after_2",
+      "status": "pass"
+    },
+    {
+      "name": "rollback_after_3",
+      "status": "pass"
+    },
+    {
+      "name": "rollback_after_4",
+      "status": "pass"
+    },
+    {
+      "name": "commit_scope-a",
+      "status": "pass"
+    },
+    {
+      "name": "commit_scope-b",
+      "status": "pass"
+    },
+    {
+      "name": "sql_error_after_0",
+      "status": "pass"
+    },
+    {
+      "name": "sql_error_after_1",
+      "status": "pass"
+    },
+    {
+      "name": "sql_error_after_2",
+      "status": "pass"
+    },
+    {
+      "name": "sql_error_after_3",
+      "status": "pass"
+    },
+    {
+      "name": "sql_error_after_4",
+      "status": "pass"
+    },
+    {
+      "name": "InsertTx_error_restore_is_not_success",
+      "status": "pass"
+    },
+    {
+      "name": "canceled_after_1",
+      "status": "pass"
+    },
+    {
+      "name": "canceled_after_2",
+      "status": "pass"
+    },
+    {
+      "name": "canceled_after_4",
+      "status": "pass"
+    },
+    {
+      "name": "physical_connection_lost_before_commit",
+      "status": "pass"
+    },
+    {
+      "name": "scope_reads_are_context_filtered",
+      "status": "pass"
+    },
+    {
+      "name": "no_handle_reads_zero_writes_rejected",
+      "status": "pass"
+    },
+    {
+      "name": "caller_cannot_direct_insert_outbox_or_audit",
+      "status": "pass"
+    },
+    {
+      "name": "all_tables_contain_only_the_two_commits",
+      "status": "pass"
+    }
+  ],
+  "limits": [
+    "Atomicity-only diagnostic, NOT SQL-boundary acceptance and NOT full S0 acceptance.",
+    "Original tenant/scope-setting tamper and login jobs-role membership remain UNSAFE. No denied operation or authority-elevation mechanism tested.",
+    "Provider-owned river_job columns are experimental fixture extensions; stock River has no tenant API and this is not an S3 schema decision.",
+    "No jobs worker, fetch/completion/rescue/uniqueness/leader or background identity-delivery test; no 500 Tx/s performance acceptance.",
+    "Cancellation uses an explicitly canceled operation then owner rollback; not in-flight cancellation or automatic-abort proof.",
+    "Connection-loss case closes its own connection before commit; commit acknowledgement loss/ambiguous commit is NOT covered.",
+    "Bootstrap observer may bypass RLS for retained row counting; all four transaction writes use only the fresh runtime login and declared roles.",
+    "No automatic schema/role cleanup; retain fixture_id for owner inspection and manual cleanup.",
+    "Report requires orderly TestMain return; panic, kill, or crash may prevent emission. Source hashes identify on-disk source at report time, not an attested binary build."
+  ],
+  "actual_invocation": [
+    "s0txprobe-race.test",
+    "-test.run",
+    "^TestAtomicityDiagnostic$",
+    "-test.v",
+    "-test.timeout=150s"
+  ],
+  "actual_process_exit_code": 0
+}

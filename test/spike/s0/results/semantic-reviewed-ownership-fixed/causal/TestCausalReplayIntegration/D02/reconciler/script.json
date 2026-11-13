@@ -1,0 +1,130 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D02",
+  "title": "Fresh isolation realms hold separate provisions with the same key",
+  "covers": [
+    "separate-isolation-realms"
+  ],
+  "contexts": [
+    {
+      "id": "realm-a",
+      "parent": "root",
+      "isolate": {
+        "key": "svc"
+      }
+    },
+    {
+      "id": "realm-b",
+      "parent": "root",
+      "isolate": {
+        "key": "svc"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "$config": "value"
+          }
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "seen"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "context": "realm-a",
+      "fiber": "pa",
+      "plugin": "provider",
+      "config": {
+        "value": "A"
+      }
+    },
+    {
+      "op": "mount",
+      "context": "realm-b",
+      "fiber": "pb",
+      "plugin": "provider",
+      "config": {
+        "value": "B"
+      }
+    },
+    {
+      "op": "settle",
+      "label": "providers"
+    },
+    {
+      "op": "read",
+      "context": "realm-a",
+      "key": "svc",
+      "mode": "get",
+      "to": "a"
+    },
+    {
+      "op": "read",
+      "context": "realm-b",
+      "key": "svc",
+      "mode": "get",
+      "to": "b"
+    },
+    {
+      "op": "read",
+      "key": "svc",
+      "mode": "get",
+      "to": "root"
+    },
+    {
+      "op": "snapshot",
+      "label": "separate"
+    },
+    {
+      "op": "dispose",
+      "fiber": "pb"
+    },
+    {
+      "op": "dispose",
+      "fiber": "pa"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "separate",
+      "path": "/outputs/a",
+      "equals": "A"
+    },
+    {
+      "at": "separate",
+      "path": "/outputs/b",
+      "equals": "B"
+    },
+    {
+      "at": "separate",
+      "path": "/outputs/root",
+      "equals": {
+        "$undefined": true
+      }
+    }
+  ]
+}

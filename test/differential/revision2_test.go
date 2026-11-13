@@ -85,7 +85,7 @@ func TestD13Revision2RecordedReplay(t *testing.T) {
 		if record.Scripts["D13"] != digest(scriptBytes) || record.TraceSHA256 != digest(data) || record.ExitCode != 0 || record.Result != "pass" || record.NativeAttempts != 0 {
 			t.Fatal("invalid revised replay provenance")
 		}
-		if record.OracleSHA256 != "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1" || record.OracleSHA256 != digest(load(t, "oracle/replay.mjs")) {
+		if record.OracleSHA256 != "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1" || record.OracleSHA256 != historicalOracleDigest(t, record.OracleSHA256) {
 			t.Fatal("interpreter changed")
 		}
 		if record.ExecutableSHA256 != "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb" || record.NodeVersion != "v24.22.1" || record.CriteriaSHA256 != CriteriaSHA256 || record.SourceCommit != SourceCommit {

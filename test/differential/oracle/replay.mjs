@@ -11,9 +11,11 @@ const isPromise = value => value && typeof value.then === 'function';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const err = error => ({ name: error?.name ?? 'Error', message: String(error?.message ?? error), ...(error?.code ? { code: error.code } : {}), ...(error instanceof AggregateError ? { errors: error.errors.map(err) } : {}) });
 
-export function createReplay(script) {
+export function createReplay(script, { causalWitness = false } = {}) {
   if (script.schema !== 's0-script/v1' || !/^D\d\d$/.test(script.id)) throw new Error('invalid script identity');
   const trace = { schema: 's0-trace/v1', scenario: script.id, events: [], checkpoints: [] };
+  // Witness cuts are observations of the raw trace, never additional trace data.
+  const checkpointAfterEvent = causalWitness ? [] : undefined;
   const root = new Context();
   const contexts = new Map([['root', root]]), fibers = new Map(), plugins = new Map(), fiberIDs = new WeakMap();
   const labels = new Map(), realmIDs = new Map(), outputs = {}, gates = new Map(), marks = new Map(), waiters = new Map(), tasks = new Map(), serviceValues = new WeakMap(), disposers = new Map(), appliedConfigs = new WeakMap();
@@ -319,9 +321,11 @@ export function createReplay(script) {
       return { key: p.name, realm: realmIDs.get(p.isolate) ?? `root:${p.name}`, provider: fid(p.ctx.fiber), provisionUID: p.uid, value: snapshot(p.value), active: p.ctx.fiber.state === 2 };
     });
     trace.checkpoints.push({ label, states: snapshots, provisions, outputs: snapshot(outputs) });
+    // Capture only after the entire synchronous checkpoint has been cloned.
+    checkpointAfterEvent?.push({ label, afterEvent: trace.events.length });
   }
   const finished = run(script.steps, envFor());
-  return { trace, done: Promise.resolve(finished), checkpoint };
+  return { trace, done: Promise.resolve(finished), checkpoint, ...(causalWitness ? { checkpointAfterEvent } : {}) };
 }
 
 function assertExpectations(script, trace) {
@@ -338,7 +342,8 @@ async function main() {
   if (!scriptPath) throw new Error('usage: node --import ./register.mjs ./replay.mjs SCRIPT.json [TRACE.json]');
   const bytes = readFileSync(scriptPath), script = JSON.parse(bytes);
   const startedUTC = new Date().toISOString();
-  const replay = createReplay(script);
+  const witnessPath = process.env.S0_CAUSAL_WITNESS_PATH;
+  const replay = createReplay(script, { causalWitness: !!witnessPath });
   let timer;
   if (script.diagnostic === 'self-dispose-await') {
     const boundMS = 200;
@@ -362,6 +367,10 @@ async function main() {
     const record = { schema: 's0-oracle-run/v1', resolverSHA256: hash(readFileSync(new URL('./register.mjs', import.meta.url))), baselineCommit: '2d8d6ec717bb327739d1630d03ad6787c37660d6', command: ['S0_NODE', '--import', 'oracle/register.mjs', 'oracle/replay.mjs', `corpus/${script.id}.json`, 'OUTPUT'], result: assertionError ? 'fail' : script.diagnostic ? 'diagnostic' : 'pass', ...(assertionError ? { assertionError: err(assertionError) } : {}), criteriaSHA256: '628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c', sourceCommit: 'fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159', startedUTC, endedUTC: new Date().toISOString(), nodeVersion: process.version, executableSHA256: hash(readFileSync(process.execPath)), oracleSHA256: hash(readFileSync(fileURLToPath(import.meta.url))), vendorManifestSHA256: hash(readFileSync(new URL('./manifest.json', import.meta.url))), scripts: { [script.id]: hash(bytes) }, exitCode: assertionError ? 1 : 0, nativeAttempts: globalThis.__s0Resolver.nativeAttempts, resolvedPackages: globalThis.__s0Resolver.resolved, traceSHA256: hash(text) };
     writeFileSync(outputPath + '.run.json', JSON.stringify(record, null, 2) + '\n', { flag: 'wx' });
   } else process.stdout.write(text);
+  if (witnessPath && !assertionError && !script.diagnostic) {
+    const witness = { schema: 's0-causal-witness/v1', traceSHA256: hash(text), scriptSHA256: hash(bytes), checkpoints: replay.checkpointAfterEvent };
+    writeFileSync(witnessPath, JSON.stringify(witness, null, 2) + '\n', { flag: 'wx' });
+  }
   if (assertionError) throw assertionError;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch(error => { process.stderr.write(JSON.stringify(err(error)) + '\n'); process.exitCode = 1; });

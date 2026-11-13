@@ -1,0 +1,292 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "builtin:hooks",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-bail/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:start",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook dispatch serial-bail",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "first"
+    }
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "gate",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "serial-gate",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:start",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook listener first",
+    "UID": 2,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:done",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook listener first",
+    "UID": 2,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "zero"
+    }
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "zero-result",
+      "value": 0
+    }
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:done",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook dispatch serial-bail",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-error/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-error/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-error/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook serial-error/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "throws"
+    }
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "message": "serial failure",
+        "name": "Error"
+      },
+      "op": "dispatch"
+    }
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "serial-error",
+      "value": {
+        "message": "serial failure",
+        "name": "Error"
+      }
+    }
+  }
+]

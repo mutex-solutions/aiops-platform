@@ -1,0 +1,200 @@
+{
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "pa",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "A"
+        },
+        "EffectiveConfig": {
+          "value": "A"
+        },
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "pb",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "B"
+        },
+        "EffectiveConfig": {
+          "value": "B"
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 35
+  },
+  "providers": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "pa",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:\"svc\"@0/realm:1"
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "A"
+        },
+        "EffectiveConfig": {
+          "value": "A"
+        },
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "pb",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:\"svc\"@0/realm:2"
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "B"
+        },
+        "EffectiveConfig": {
+          "value": "B"
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "\"svc\"@0/realm:1",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "pa",
+        "Value": "A",
+        "Active": true
+      },
+      {
+        "Key": "\"svc\"@0/realm:2",
+        "UID": 2,
+        "Owner": 2,
+        "Name": "pb",
+        "Value": "B",
+        "Active": true
+      }
+    ],
+    "Sequence": 16
+  },
+  "separate": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "pa",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:\"svc\"@0/realm:1"
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "A"
+        },
+        "EffectiveConfig": {
+          "value": "A"
+        },
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "pb",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:\"svc\"@0/realm:2"
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": "B"
+        },
+        "EffectiveConfig": {
+          "value": "B"
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "\"svc\"@0/realm:1",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "pa",
+        "Value": "A",
+        "Active": true
+      },
+      {
+        "Key": "\"svc\"@0/realm:2",
+        "UID": 2,
+        "Owner": 2,
+        "Name": "pb",
+        "Value": "B",
+        "Active": true
+      }
+    ],
+    "Sequence": 19
+  }
+}

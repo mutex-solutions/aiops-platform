@@ -1,0 +1,78 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D10",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "c",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "plugin",
+      "data": {
+        "fiber": "c",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "PENDING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "pending",
+      "states": [
+        {
+          "fiber": "c",
+          "state": "PENDING",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {
+            "$undefined": true
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "c",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {
+            "$undefined": true
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    }
+  ]
+}

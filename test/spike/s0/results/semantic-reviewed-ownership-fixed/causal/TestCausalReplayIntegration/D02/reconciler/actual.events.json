@@ -1,0 +1,381 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "value": "A"
+      },
+      "fiber": "pa"
+    }
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "value": "A"
+      },
+      "fiber": "pa"
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "\"svc\"@0/realm:1",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "value": "B"
+      },
+      "fiber": "pb"
+    }
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "value": "B"
+      },
+      "fiber": "pb"
+    }
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "service",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:1",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "\"svc\"@0/realm:2",
+    "UID": 2,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "service",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:2",
+    "UID": 2,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "a",
+      "value": "A"
+    }
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "b",
+      "value": "B"
+    }
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "root",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "service",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:2",
+    "UID": 2,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "dispose-effect",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "provide:\"svc\"@0/realm:2",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:2",
+    "UID": 2,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 23,
+    "Fiber": 2,
+    "Name": "pb",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 24,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 25,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 26,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "service",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:1",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 27,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "dispose-effect",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "provide:\"svc\"@0/realm:1",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 28,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:1",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 29,
+    "Fiber": 1,
+    "Name": "pa",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

@@ -1,0 +1,88 @@
+{
+  "classification": "test-only observer dispatcher prototype; not core integration or whole S0/G5 proof",
+  "started_at_utc": "2026-11-12T20:03:26.026645+00:00",
+  "git_head": "27cf15271903e840c0d8bc523184b1aa1f5fc7b1",
+  "go_version": "go version go1.26.8 linux/amd64",
+  "package": "./test/spike/s0/observers",
+  "native_test_backends": [
+    "concurrency.NewGraphLock",
+    "concurrency.NewReconciler"
+  ],
+  "owned_source_sha256_before": {
+    "test/spike/s0/observers/dispatcher.go": "b074c065213446b97868472d6ef2f18c4efa1c6d4cd32ef8d05341ffd79041e1",
+    "test/spike/s0/observers/dispatcher_test.go": "954eccf491e5dd0fc62d52bb0057073218bf7c70cc1977e01121cb5e4c8726a9",
+    "test/spike/s0/observers/lifecycle_test.go": "d1216a0bf16b01fd3cea50ce9b2e27c0a809546c0448eabc9f2afca6902e50e5",
+    "test/spike/s0/observers/README.md": "8414807e57a051a4ddab5718c21b475bffa41a0c8683e7ce9d1902b6ebe28d43"
+  },
+  "read_only_test_dependency_sha256_before": {
+    "go.mod": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2",
+    "go.sum": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5",
+    "test/spike/s0/concurrency/types.go": "56af80d6080a4da70cd0de81cbd3feea6573328cb2fb7106659e67fdf92c55b6",
+    "test/spike/s0/concurrency/graphlock.go": "54efc40340073d9198723cfa194de6c89479cf14eea86f0ecfeae164c7385b5a",
+    "test/spike/s0/concurrency/reconciler.go": "37440055ee113c6c694de95df0fb3f5631b86ce1e504c7f409d25e39525d6a38",
+    "test/spike/s0/concurrency/configuration.go": "941d08e025685c8b031dd5b80f9c076cc84c64f8d41fe39e790e353b1327ba79",
+    "test/spike/s0/concurrency/tracked.go": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+  },
+  "commands": [
+    {
+      "argv": [
+        "go",
+        "test",
+        "./test/spike/s0/observers",
+        "-count=1"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.585,
+      "stdout": "ok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/observers\t0.062s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./test/spike/s0/observers",
+        "-count=50"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 6.623,
+      "stdout": "ok  \tgithub.com/mutex-solutions/aiops-platform/test/spike/s0/observers\t5.659s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "./test/spike/s0/observers"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.162,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "owned_source_sha256_after": {
+    "test/spike/s0/observers/dispatcher.go": "b074c065213446b97868472d6ef2f18c4efa1c6d4cd32ef8d05341ffd79041e1",
+    "test/spike/s0/observers/dispatcher_test.go": "954eccf491e5dd0fc62d52bb0057073218bf7c70cc1977e01121cb5e4c8726a9",
+    "test/spike/s0/observers/lifecycle_test.go": "d1216a0bf16b01fd3cea50ce9b2e27c0a809546c0448eabc9f2afca6902e50e5",
+    "test/spike/s0/observers/README.md": "8414807e57a051a4ddab5718c21b475bffa41a0c8683e7ce9d1902b6ebe28d43"
+  },
+  "read_only_test_dependency_sha256_after": {
+    "go.mod": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2",
+    "go.sum": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5",
+    "test/spike/s0/concurrency/types.go": "56af80d6080a4da70cd0de81cbd3feea6573328cb2fb7106659e67fdf92c55b6",
+    "test/spike/s0/concurrency/graphlock.go": "54efc40340073d9198723cfa194de6c89479cf14eea86f0ecfeae164c7385b5a",
+    "test/spike/s0/concurrency/reconciler.go": "37440055ee113c6c694de95df0fb3f5631b86ce1e504c7f409d25e39525d6a38",
+    "test/spike/s0/concurrency/configuration.go": "941d08e025685c8b031dd5b80f9c076cc84c64f8d41fe39e790e353b1327ba79",
+    "test/spike/s0/concurrency/tracked.go": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+  },
+  "inputs_unchanged": true,
+  "finished_at_utc": "2026-11-12T20:03:33.416236+00:00",
+  "complete": true,
+  "limitations": [
+    "Native event publishers are not integrated; actual ledger events are manually fed.",
+    "Callback context marker catches only waits using callback contexts/derivatives; unrelated-context self-join remains a documented caller restriction.",
+    "A hung callback or logger retains the single real worker and an unbounded accepted backlog; Close reports remaining work, never kills or drops it.",
+    "No canonical end-to-end trace, complete scale/leak/deadline workload, retention policy, or whole S0/G5 proof."
+  ]
+}

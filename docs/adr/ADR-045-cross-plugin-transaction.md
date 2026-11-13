@@ -151,6 +151,22 @@ restricted SQL surface is needed, its change to the accepted role/Tx mechanism
 must be presented to the owner before adoption. No claim that all same-transaction
 InsertTx approaches are impossible follows from this diagnostic.
 
+## Independent ordinary atomicity evidence
+
+A separate ordinary-functional fixture has now exercised state, unmodified River
+InsertTx, outbox and audit on the same caller-owned transaction. The
+[actual result](../../test/spike/s0/results/20261112T174224Z-ordinary-atomicity.json)
+records 21 selected passing cases under the race detector, with fsync and
+synchronous_commit on: two scoped commits, precommit invisibility, equal writer
+transaction IDs, rollback and SQL errors at participant boundaries, failed restore
+on an aborted transaction, explicit rollback after cancellation, own connection
+loss before commit, missing scope, direct foreign-schema denial and reuse.
+
+This deliberately uses the original unsafe role/GUC mechanism and a provider-owned
+identity-column extension. It is evidence for ordinary atomic participation only,
+not SQL-authority acceptance, a new capability mechanism, background identity,
+performance or a final S3 contract. The failed authority gate is not waived.
+
 ## Unexecuted capability hypothesis and tool boundary
 
 A further role-capability protocol and test-only source artifact were prepared
