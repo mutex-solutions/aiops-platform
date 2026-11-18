@@ -1,4 +1,4 @@
-# S0 §8.3 actual callpath harness (authoring only)
+# S0 §8.3 actual callpath harness (runner implemented; acceptance run NOT executed)
 
 Owns only this directory. No scheduler/composition changes, database, Node, product
 provider, selection, acceptance claim, or performance execution accompany authoring.
@@ -53,3 +53,88 @@ final-port evidence. Source closure hashing must cover actual linked Go inputs
 (including composition and both candidates), not unrelated SQL/draft output.
 The parent supplies/reviews that execution provenance and decides eligibility;
 small unit checks cannot satisfy the performance gate.
+
+## Running
+
+Ordinary `go test` runs only the small causal semantic tests (no timing thresholds).
+`TestFullCallpath` skips with "NOT MEASURED" unless `S0_CALLPATH_RUN=1`; a full run
+then **fails** unless the classification is `pass`. Missed thresholds, correctness
+failures, noise, and missing identity/noise/raw evidence are all non-pass.
+
+Full acceptance run (about 2 hours 10 minutes: 10 repetitions x 2 candidates x 3
+caller counts x 120 s stress, plus the short baselines). Use a quiet host, no race
+detector, from the repository root, with a fresh output directory and the
+parent-supplied identity JSON (`baselineCommit`, `commands`, `finalParityCompleted`,
+`hostEvidence`, optional `expected*SHA256`):
+
+```sh
+GOMAXPROCS=8 S0_CALLPATH_RUN=1 S0_CALLPATH_OUT=<fresh dir> S0_CALLPATH_IDENTITY=<identity.json> \
+  go test ./test/spike/s0/callpath -run '^TestFullCallpath$' -count=1 -timeout 4h -v
+```
+
+The runner computes the criteria, source-closure and executable digests itself and
+records toolchain, affinity, GOMAXPROCS and per-run swap/throttle/load samples; it
+never records absolute paths or host names. Output is created exclusively. A reduced
+pipeline check (`S0_CALLPATH_DRYRUN=1`, `-run '^TestDryRunCallpath$'`, about 25 s) is
+labelled NOT ACCEPTANCE and can never classify as `pass`.
+
+## Implementation notes
+
+Readings of the protocol where it was silent or ambiguous; each is the stricter one.
+
+- **Operations.** `lookup_view` is `composition.Resolve` on the current consumer
+  activation (per-call `AuthorizeRead`, captured-epoch `Read`, provider view
+  function). The view returns a **value** `BoundView{consumer, owner}`, so no pointer
+  is allocated per lookup. `owner_enter_leave` is the provider activation's native
+  `Enter`+`Leave` including the scheduler wake callback. `lookup_view_lease_call` is
+  Resolve + `BoundView.Call` (provider Enter, body, provider Leave). Each loads the
+  current atomic binding/owner per call. The timer arm is the same measuring loop
+  with an empty operation, reported separately and never subtracted.
+- **Allocation.** Allocations are the process-wide `Mallocs` delta across the
+  observation window, with goroutines and arrays created beforehand. The zero
+  allocation budget is applied to `owner_enter_leave` in every run (not an average).
+  Other operations' allocations are reported only. Observed: `Resolve` allocates 2
+  objects per call inside `contextmodel.Context.Dependencies` (reached from
+  `AuthorizeRead`), so lookup and dispatch cannot be zero-allocation.
+- **Threshold scope.** p99 <= 2 microseconds is required of the aggregate over all
+  ten runs **and** of every individual run; any run over is a fail, not averaged away.
+- **Mutation-free baseline.** Any non-OK observation (including a refusal) fails the
+  run. One fresh fixture per repetition and candidate; operation and caller order
+  reverse on odd repetitions.
+- **Alternation.** Candidate order reverses on odd repetitions; arm order
+  (baseline/stress) reverses on odd repetitions too, so two orderings of each
+  appear (the pair is always reversed together).
+- **Stress observation.** Callers observe `lookup_view_lease_call` (the full call
+  path). Each observation has a scheduled instant spread evenly over the window
+  (observation j at j x 120 s / 100,000, assigned to caller j mod callers). Latency
+  is the call's own start-to-end time; the scheduled instant, actual start offset and
+  owner activation seen are recorded alongside, so lateness is visible and never
+  subtracted. This offered load is about 833 calls/s; the deterministic refusal
+  semantics are proved by the ordinary tests, and the run fails unless every owner
+  update produced exactly one owner activation and one fresh consumer binding.
+- **Stress accounting.** Every scheduled arrival has a record, including overflow.
+  Each admitted item has a 5 s deadline from its scheduled arrival (timeout is a
+  failure). Any overflow, failed or timed-out item, any unexpected error class,
+  any executed inactive-owner body, outstanding work after a 30 s drain, a
+  non-ACTIVE fiber after drain, or a wrong observation count fails. This is stricter
+  than the 99.9% acknowledgement rule of §4. Refusals on old activations are counted
+  per outcome class and are not failures.
+- **Stress fixtures.** One fresh fixture per (repetition, candidate, caller count),
+  so each of the 60 stress runs has exactly 12,000 scheduled updates. There is no
+  warm-up and no discarded observation.
+- **Inactive-owner body.** The owner's native disposer sets a closed flag after leases
+  drain; the body counts a violation if it runs with the flag set.
+- **Noise.** Throughput is observations per wall second of each baseline arm; a
+  coefficient of variation above 10% across the ten runs, any swap or cgroup CPU
+  throttle delta, GOMAXPROCS other than 8, a race build, or a criteria digest that
+  differs from the freeze receipt classifies as `invalid` (repeat unchanged). A
+  counter that cannot be observed makes the run `inconclusive`. Candidate failures
+  override noise classification.
+- **Source closure.** Production Go of concurrency, composition, contextmodel,
+  internal/eventqueue and scale (scale is linked for its exported nearest-rank, CV
+  and candidate helpers), every file of this package including tests and this
+  README, `go.mod`, `go.sum`, the criteria and the freeze receipt. A test checks that
+  every module-local package the binary imports is covered. The process must run
+  from the package directory (as `go test` does).
+- **Dry run.** Reduced counts, or any plan other than the frozen one: classification
+  can only be `inconclusive` or worse, and `Run` refuses a reduced plan unless `Dry`.
