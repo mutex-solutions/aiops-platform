@@ -1,0 +1,36 @@
+{
+  "classification": "PASS frozen native EffectScope experimental-core property workload; NOT full S0/final SDK acceptance",
+  "managedJob": "bash-9eed993fccb04c06",
+  "exitCode": 0,
+  "sourceSHA256": "4f41881b0b6dcea94a2df20d10a873a14b4c658f701b1860e6decb058e47d923",
+  "executableSHA256": "280698d14a3bfdea20dc9e5bfdfb972257ee4cb5bb58af97fa261c22120fb814",
+  "baselineCommit": "ad2fa95ae9bc5c2d74c772f0b0639d879b20fd3b",
+  "seedsPerCandidate": 1000,
+  "operationsPerSeed": 1000,
+  "race": true,
+  "gomaxprocs": 8,
+  "elapsedSeconds": 2631.51,
+  "candidateSeconds": {
+    "reconciler": 1411.6,
+    "graph-lock": 1219.76
+  },
+  "actualCommand": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-race",
+    "-count=1",
+    "-timeout=90m",
+    "-v",
+    "-run",
+    "^TestRuntimeProperties$",
+    "./test/spike/s0/properties"
+  ],
+  "originalEvidenceDirectory": "test/spike/s0/properties/evidence/native-scopes-yalRK5zC",
+  "originalLogSHA256": "3e55500e6799d9c57977963a373f411fca45df3d17b1f3637ab6ab72092b5eef",
+  "limits": [
+    "Workload is the pinned independent lifecycle DAG model; scope-specific native tests are separate evidence.",
+    "No performance comparison is inferred from race test durations.",
+    "Full corpus/adapted assertions, fixed-grammar SQL adoption, sampling/cold-path/restart and final SDK coverage/line gates remain open."
+  ]
+}

@@ -1,0 +1,228 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "owned",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "code": "INACTIVE_EFFECT",
+        "message": "cannot create effect on inactive context",
+        "name": "Error"
+      },
+      "op": "lateEffect"
+    }
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "unload-error",
+      "value": {
+        "code": "INACTIVE_EFFECT",
+        "message": "cannot create effect on inactive context",
+        "name": "Error"
+      }
+    }
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "code": "INACTIVE_EFFECT",
+        "message": "cannot create effect on inactive context",
+        "name": "Error"
+      },
+      "op": "lateEffect"
+    }
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "disposed-error",
+      "value": {
+        "code": "INACTIVE_EFFECT",
+        "message": "cannot create effect on inactive context",
+        "name": "Error"
+      }
+    }
+  }
+]

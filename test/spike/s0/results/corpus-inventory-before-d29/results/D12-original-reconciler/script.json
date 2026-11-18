@@ -1,0 +1,84 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D12",
+  "title": "A late provider wakes an already pending consumer",
+  "covers": [
+    "late-provider-activation"
+  ],
+  "plugins": [
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "consumer"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    },
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": "late"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "waiting"
+    },
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "ready"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "waiting",
+      "path": "/states/0/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "ready",
+      "path": "/states/0/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "ready",
+      "path": "/outputs/consumer",
+      "equals": "late"
+    }
+  ]
+}

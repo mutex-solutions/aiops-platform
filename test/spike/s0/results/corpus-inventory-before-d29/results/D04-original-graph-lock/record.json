@@ -1,0 +1,88 @@
+{
+  "actualTraceDigest": "8074bf9510bea89f9fce3e7819b2b37484a9721ca06c311f06bf52252c45cb5b",
+  "assertions": [
+    {
+      "actual": "FAILED",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "refused",
+      "expected": "FAILED",
+      "index": 0,
+      "originalPassed": true,
+      "path": "/states/1/state",
+      "problem": ""
+    },
+    {
+      "actual": "first",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "retained",
+      "expected": "first",
+      "index": 1,
+      "originalPassed": true,
+      "path": "/outputs/retained",
+      "problem": ""
+    }
+  ],
+  "backend": "graph-lock",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "failed",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "",
+  "failedOriginalAssertions": 0,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "3007414a40a3e7cd773ba1051bde835151d95ad20a583399dd709bcd541f54f7",
+  "knownBoundary": "",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:12:52.093Z",
+    "endedUTC": "2026-11-12T08:12:52.103Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D04": "dd941ddaf589119eaafee8c4b58714dc0efe5a714738fa93de4cb59128ac4e39"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D04.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "3007414a40a3e7cd773ba1051bde835151d95ad20a583399dd709bcd541f54f7"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [
+    {
+      "error": "provision \"\\\"svc\\\"@0/realm:0\" is already owned",
+      "operation": "dispose",
+      "type": "*errors.errorString"
+    }
+  ],
+  "scenario": "D04",
+  "scriptSHA256": "dd941ddaf589119eaafee8c4b58714dc0efe5a714738fa93de4cb59128ac4e39",
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D04\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"p\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"first\"},\"fiber\":\"p\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"first\"},\"fiber\":\"p\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"first\"}},{\"seq\":7,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"duplicate\"}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":9,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"second\"},\"fiber\":\"duplicate\"}},{\"seq\":10,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"second\"},\"fiber\":\"duplicate\"}},{\"seq\":11,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"service \\\"svc\\\" has been registered at \\u003cprovider\\u003e\",\"name\":\"Error\"},\"fiber\":\"duplicate\"}},{\"seq\":12,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"LOADING\",\"to\":\"UNLOADING\"}},{\"seq\":13,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"UNLOADING\",\"to\":\"FAILED\"}},{\"seq\":14,\"kind\":\"output\",\"data\":{\"to\":\"retained\",\"value\":\"first\"}},{\"seq\":15,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"duplicate\"}},{\"seq\":16,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"FAILED\",\"to\":\"UNLOADING\"}},{\"seq\":17,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":18,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"p\"}},{\"seq\":19,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":20,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"first\"}},{\"seq\":21,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":{\"$undefined\":true}}},{\"seq\":22,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"first\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{}},{\"label\":\"refused\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"FAILED\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{}},{\"label\":\"retained\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"FAILED\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{\"retained\":\"first\"}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"p\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[],\"outputs\":{\"retained\":\"first\"}}]}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D04\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"p\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"first\"},\"fiber\":\"p\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"first\"},\"fiber\":\"p\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"first\"}},{\"seq\":7,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"duplicate\"}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":9,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"second\"},\"fiber\":\"duplicate\"}},{\"seq\":10,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"second\"},\"fiber\":\"duplicate\"}},{\"seq\":11,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"provision \\\"\\\\\\\"svc\\\\\\\"@0/realm:0\\\" is already owned\",\"name\":\"Error\"},\"fiber\":\"duplicate\"}},{\"seq\":12,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"LOADING\",\"to\":\"UNLOADING\"}},{\"seq\":13,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"UNLOADING\",\"to\":\"FAILED\"}},{\"seq\":14,\"kind\":\"output\",\"data\":{\"to\":\"retained\",\"value\":\"first\"}},{\"seq\":15,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"duplicate\"}},{\"seq\":16,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"FAILED\",\"to\":\"UNLOADING\"}},{\"seq\":17,\"kind\":\"status\",\"data\":{\"fiber\":\"duplicate\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":18,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"p\"}},{\"seq\":19,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":20,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"first\"}},{\"seq\":21,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":{\"$undefined\":true}}},{\"seq\":22,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"first\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{}},{\"label\":\"refused\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"FAILED\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{}},{\"label\":\"retained\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"FAILED\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"first\",\"active\":true}],\"outputs\":{\"retained\":\"first\"}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"p\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"first\"},\"effectiveConfig\":{\"value\":\"first\"}},{\"fiber\":\"duplicate\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"second\"},\"effectiveConfig\":{\"value\":\"second\"}}],\"provisions\":[],\"outputs\":{\"retained\":\"first\"}}]}",
+  "unsupportedSentinel": false,
+  "variant": "original"
+}

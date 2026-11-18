@@ -1,0 +1,462 @@
+{
+  "NOTACCEPTANCE": true,
+  "additionalD13Revision2Executions": 2,
+  "backends": 2,
+  "cases": [
+    {
+      "assertionFailures": 0,
+      "case": "D01-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D01-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D01-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D01-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D02-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D02-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D02-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D02-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D03-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D03-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D03-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D03-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D04-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D04-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D04-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D04-original-graph-lock"
+    },
+    {
+      "assertionFailures": 3,
+      "case": "D05-original-reconciler",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D05-original-reconciler"
+    },
+    {
+      "assertionFailures": 2,
+      "case": "D05-original-graph-lock",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D05-original-graph-lock"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D06-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D06-original-reconciler"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D06-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D06-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D07-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D07-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D07-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D07-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D08-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D08-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D08-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D08-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D09-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D09-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D09-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D09-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D10-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D10-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D10-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D10-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D11-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D11-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D11-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D11-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D12-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D12-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D12-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D12-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D13-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D13-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D14-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D14-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D14-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D14-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D15-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D15-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D15-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D15-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D16-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D16-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D16-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D16-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D17-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D17-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D17-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D17-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D18-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D18-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D18-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D18-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D19-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D19-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D19-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D19-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D20-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D20-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D20-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D20-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D21-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D21-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D21-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D21-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D22-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D22-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D22-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D22-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D23-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D23-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D23-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D23-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D24-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D24-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D24-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D24-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D25-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D25-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D25-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D25-original-graph-lock"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D26-original-reconciler",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D26-original-reconciler"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D26-original-graph-lock",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D26-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D27-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D27-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D27-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D27-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D28-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D28-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D28-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D28-original-graph-lock"
+    },
+    {
+      "assertionFailures": 5,
+      "case": "D29-original-reconciler",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D29-original-reconciler"
+    },
+    {
+      "assertionFailures": 5,
+      "case": "D29-original-graph-lock",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D29-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D30-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D30-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D30-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D30-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D31-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D31-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D31-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D31-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D32-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D32-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D32-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D32-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D33-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D33-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D33-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D33-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D34-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D34-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D34-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D34-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D35-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D35-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D35-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D35-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D36-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D36-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D36-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D36-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-revision-2-overlay-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D13-revision-2-overlay-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-revision-2-overlay-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D13-revision-2-overlay-graph-lock"
+    }
+  ],
+  "counts": {
+    "failed": 26,
+    "incomplete": 6,
+    "match": 42
+  },
+  "oracleExecution": "none; frozen goldens read after candidate execution",
+  "originalScripts": 36,
+  "recordedExecutions": 74,
+  "schema": "s0-corpus-inventory/v1",
+  "scope": "bounded diagnostic inventory only; match/failed/incomplete separate, no total-pass claim and no altered assertion payloads",
+  "sourceWitnessErr": ""
+}

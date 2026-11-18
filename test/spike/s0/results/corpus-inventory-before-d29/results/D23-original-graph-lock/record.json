@@ -1,0 +1,105 @@
+{
+  "actualTraceDigest": "d85232d7642a1db11b4d21c8c4500013e893ef9745b964049d305bccd5cb615a",
+  "assertions": [
+    {
+      "actual": "ACTIVE",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "unwound",
+      "expected": "ACTIVE",
+      "index": 0,
+      "originalPassed": true,
+      "path": "/states/0/state",
+      "problem": ""
+    },
+    {
+      "actual": [],
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "unwound",
+      "expected": [],
+      "index": 1,
+      "originalPassed": true,
+      "path": "/outputs/effects",
+      "problem": ""
+    },
+    {
+      "actual": {
+        "message": "setup failed",
+        "name": "Error"
+      },
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "unwound",
+      "expected": {
+        "message": "setup failed",
+        "name": "Error"
+      },
+      "index": 2,
+      "originalPassed": true,
+      "path": "/outputs/setup-error",
+      "problem": ""
+    }
+  ],
+  "backend": "graph-lock",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "failed",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "",
+  "failedOriginalAssertions": 0,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "c6359f69de75d997ac89506cef7c26dfd5850f0627ce00c0d91610f596f1f627",
+  "knownBoundary": "",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:13:00.846Z",
+    "endedUTC": "2026-11-12T08:13:00.855Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D23": "b39bb1989fc56cb165a9385246d92e72433387df50d8cd855746e61c8338f702"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D23.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "c6359f69de75d997ac89506cef7c26dfd5850f0627ce00c0d91610f596f1f627"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [
+    {
+      "error": "setup failed",
+      "operation": "effect setup throwing-setup",
+      "type": "*errors.joinError"
+    }
+  ],
+  "scenario": "D23",
+  "scriptSHA256": "b39bb1989fc56cb165a9385246d92e72433387df50d8cd855746e61c8338f702",
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D23\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"f\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"f\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"f\"}},{\"seq\":5,\"kind\":\"mark\",\"data\":{\"label\":\"second\",\"value\":{\"$undefined\":true}}},{\"seq\":6,\"kind\":\"mark\",\"data\":{\"label\":\"first\",\"value\":{\"$undefined\":true}}},{\"seq\":7,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"setup failed\",\"name\":\"Error\"},\"op\":\"effect\"}},{\"seq\":8,\"kind\":\"output\",\"data\":{\"to\":\"setup-error\",\"value\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"seq\":9,\"kind\":\"mark\",\"data\":{\"label\":\"once\",\"value\":{\"$undefined\":true}}},{\"seq\":10,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":11,\"kind\":\"output\",\"data\":{\"to\":\"effects\",\"value\":[]}},{\"seq\":12,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"f\"}},{\"seq\":13,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":14,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"active\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"label\":\"unwound\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"effects\":[],\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"f\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"effects\":[],\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}}]}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D23\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"f\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"f\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"f\"}},{\"seq\":5,\"kind\":\"mark\",\"data\":{\"label\":\"second\",\"value\":{\"$undefined\":true}}},{\"seq\":6,\"kind\":\"mark\",\"data\":{\"label\":\"first\",\"value\":{\"$undefined\":true}}},{\"seq\":7,\"kind\":\"mark\",\"data\":{\"label\":\"once\",\"value\":{\"$undefined\":true}}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":9,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"setup failed\",\"name\":\"Error\"},\"op\":\"effect\"}},{\"seq\":10,\"kind\":\"output\",\"data\":{\"to\":\"setup-error\",\"value\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"seq\":11,\"kind\":\"output\",\"data\":{\"to\":\"effects\",\"value\":[]}},{\"seq\":12,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"f\"}},{\"seq\":13,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":14,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"active\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"label\":\"unwound\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"effects\":[],\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"f\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"effects\":[],\"setup-error\":{\"message\":\"setup failed\",\"name\":\"Error\"}}}]}",
+  "unsupportedSentinel": false,
+  "variant": "original"
+}

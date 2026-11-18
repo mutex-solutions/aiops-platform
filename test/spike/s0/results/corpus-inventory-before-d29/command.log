@@ -1,0 +1,83 @@
+=== RUN   TestCorpusInventory
+    corpus_inventory_test.go:205: NOT ACCEPTANCE: recording original corpus; evidence=/tmp/aiops-s0-corpus-inventory-GifNlXGU/results
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D01-original-reconciler class=match assertions=0/4 failed unsupported=false close=nil actual=26db3b9370e70b73924ab99bb472f5f578e866ca63b5bd143224217658195cbf
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D01-original-graph-lock class=match assertions=0/4 failed unsupported=false close=nil actual=26db3b9370e70b73924ab99bb472f5f578e866ca63b5bd143224217658195cbf
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D02-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=e54e2cd7c2e79de5ebd4d9df5456f639f96ffad7070553e0064762383739112d
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D02-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=91d91108b8b260f376bd1ea1e337da4e3d4b26aa29c065e3d1923c86ff39d985
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D03-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=b6669ff39c8ed2d987716e911c77a4122da836a6fb155d580c50cec7e6943bc7
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D03-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=4654d840b8f1b24bdea936204693779c576b762eb2541bce4fd60208f1844e7a
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D04-original-reconciler class=failed assertions=0/2 failed unsupported=false close=nil actual=446dc438b45d502f63a4e0a19b24e4c6da57844786d5d599a83594b97cd692dc
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D04-original-graph-lock class=failed assertions=0/2 failed unsupported=false close=nil actual=8074bf9510bea89f9fce3e7819b2b37484a9721ca06c311f06bf52252c45cb5b
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D05-original-reconciler class=incomplete assertions=3/3 failed unsupported=true close=nil actual=3debfef380ca348f081f9ebcf5d4961b32bbab847bba2c0c07c78cbea37ec048
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D05-original-graph-lock class=incomplete assertions=2/3 failed unsupported=true close=nil actual=350e5bb2a3182ee0737169a9d69bd5a2f882f348933e9618124555533c882e5e
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D06-original-reconciler class=failed assertions=1/3 failed unsupported=false close=nil actual=18773e347b7f604c866fcba8deb4f7c995c9ebee8f0dcb647a1a139375e0022c
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D06-original-graph-lock class=failed assertions=1/3 failed unsupported=false close=nil actual=0a26519ef99a6a82c30047e056edf498ff1be4aace81cc094ef4402b65636991
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D07-original-reconciler class=failed assertions=0/1 failed unsupported=false close=nil actual=b73c1c5b0c4c2fe565d834be6e1d06fcddadf2d70d83177bb4a2b4bb6b8c9fa2
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D07-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=1d4f3bf317545e0821dab5483964064f220165459fda160374a212ab2d6fbde6
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D08-original-reconciler class=failed assertions=0/1 failed unsupported=false close=nil actual=9dec40ea7603abb438623155631de28301a93d213b724a642e56b900ea2d8124
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D08-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=dc697c88af09aac1c035d0a9b255711b049c2560227591ce9b82cb6ac3ef4c66
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D09-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=220122db6b1376d34ba49a0dea711d1cbef9f6c4bb6b5c2f3ee7189b62c68cc2
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D09-original-graph-lock class=failed assertions=0/3 failed unsupported=false close=nil actual=d1dae708b31ef379f05ecee40c7e7f267a9a4fc94d7daa0a354155c959c1c447
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D10-original-reconciler class=match assertions=0/1 failed unsupported=false close=nil actual=5da01b7c34e9d8db4fe6b399b7085e05a3ac8c50d3252a409c9ab8aad73664b1
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D10-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=5da01b7c34e9d8db4fe6b399b7085e05a3ac8c50d3252a409c9ab8aad73664b1
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D11-original-reconciler class=failed assertions=0/5 failed unsupported=false close=nil actual=0137f107db6ac54102be0c2d636c15bebf1a494d41b5c64f194e08fbe0d530fb
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D11-original-graph-lock class=match assertions=0/5 failed unsupported=false close=nil actual=5a78ff1f9237dcc6b9ca8e61d4657a2120538e305bc85816a5e2d813c9566434
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D12-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=296b9cd14e61af9a1358aa1d9808dd21b933fe21efbd9d526c39c42c1a024095
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D12-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=d858e2cab03ffe0c1f2c6b61a2aed02ad1706b406d396a1fdcc0c20baa97801d
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D13-original-reconciler class=failed assertions=0/6 failed unsupported=false close=nil actual=5df313e2b874068a97d0b9333131f1b0bac1a480cd0be2a9edaf736611417382
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D13-original-graph-lock class=failed assertions=0/6 failed unsupported=false close=nil actual=58cc5cd6fa160837be68f8cec13f24e12ab21866ab8dd3f40aebf21db0a4b139
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D14-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=e1014a1d9462ec9460c48eed47c6b77a421e1115db253838b01761b75f4edf90
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D14-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=33a5ac6499fc475a8b9c57df89ca23232b07fe2edb2a6e975db2ef27ce360cf2
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D15-original-reconciler class=failed assertions=0/2 failed unsupported=false close=nil actual=896008eb98a9e3379c7f690f7d57e75eab4414ca60a386bb425b56424f0fe637
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D15-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=d5a9f3f2a78835603cec04f7b37df8d514bb565120634863a4cfa12330330b9f
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D16-original-reconciler class=failed assertions=0/2 failed unsupported=false close=nil actual=007ea1f2f7c12ba5b3da1531fbf6d4331a72ab0525c0f73ec6ec1b4205735666
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D16-original-graph-lock class=failed assertions=0/2 failed unsupported=false close=nil actual=c999ea82b45b389c094329e5a4c30292d519be2ff50a2e06de96f1a685513fd4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D17-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=fefa9e4ebfac5e39d60343c0e6ad1a1ed2eccff0dc5152a4a5aff0cb72146958
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D17-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=fefa9e4ebfac5e39d60343c0e6ad1a1ed2eccff0dc5152a4a5aff0cb72146958
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D18-original-reconciler class=failed assertions=0/2 failed unsupported=false close=nil actual=9d7c8db422440ace720b7c80bf27354e8eeb295bf76fcc2fe489c22bc2198821
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D18-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=6c263bd1cc450d692c2c14f58e22579795082d7c8e5b003f1c8eb2c706ca2ec4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D19-original-reconciler class=match assertions=0/3 failed unsupported=false close=nil actual=ddbaaa689b009ac4c011f6e9ecdcb62165dcab5f0b2da735d796a0ca1f1e586c
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D19-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=ddbaaa689b009ac4c011f6e9ecdcb62165dcab5f0b2da735d796a0ca1f1e586c
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D20-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=a2ca0a93f7d5252fe1e18e7976052d8ca937be5cad18b364614ac7ae90536270
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D20-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=a2ca0a93f7d5252fe1e18e7976052d8ca937be5cad18b364614ac7ae90536270
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D21-original-reconciler class=failed assertions=0/4 failed unsupported=false close=nil actual=835a2828b324bcfb45c0bfa5a8599f2bb943b0b7da17d29e17638a0fe6ade2b1
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D21-original-graph-lock class=match assertions=0/4 failed unsupported=false close=nil actual=403df6b716aa3d433f03218b8f9effde807d22a304793b5dd858874ac7be5adf
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D22-original-reconciler class=failed assertions=0/4 failed unsupported=false close=nil actual=e2f6d4b62b1a77e1b484fe13c656e7f10033a624b0fc1b35b420af36c30f577a
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D22-original-graph-lock class=failed assertions=0/4 failed unsupported=false close=nil actual=4388a505e2f11ebba336b71708e389c596bc6e4b086864f275aabf4a457de4ee
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D23-original-reconciler class=failed assertions=0/3 failed unsupported=false close=nil actual=d85232d7642a1db11b4d21c8c4500013e893ef9745b964049d305bccd5cb615a
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D23-original-graph-lock class=failed assertions=0/3 failed unsupported=false close=nil actual=d85232d7642a1db11b4d21c8c4500013e893ef9745b964049d305bccd5cb615a
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D24-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=28f3a1cd8dd7aebb42d0be9221091a930927db64e04bac44d8d091f8d4f76782
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D24-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=28f3a1cd8dd7aebb42d0be9221091a930927db64e04bac44d8d091f8d4f76782
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D25-original-reconciler class=match assertions=0/1 failed unsupported=false close=nil actual=dfb7c53e70abef045ca90d547ca5a62f77cc9451f67deb5f0e7c13e1dda33f82
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D25-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=dfb7c53e70abef045ca90d547ca5a62f77cc9451f67deb5f0e7c13e1dda33f82
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D26-original-reconciler class=incomplete assertions=1/1 failed unsupported=true close=nil actual=d650de6b050a1f3008410d80cc5f0ba5eb3947ceb598ace668a033b552bd672f
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D26-original-graph-lock class=incomplete assertions=1/1 failed unsupported=true close=nil actual=d650de6b050a1f3008410d80cc5f0ba5eb3947ceb598ace668a033b552bd672f
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D27-original-reconciler class=match assertions=0/4 failed unsupported=false close=nil actual=17ae6223454748714608c74c0ec596ab8c5ea4b5fe4d1fbb0160a76caa71652b
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D27-original-graph-lock class=match assertions=0/4 failed unsupported=false close=nil actual=17ae6223454748714608c74c0ec596ab8c5ea4b5fe4d1fbb0160a76caa71652b
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D28-original-reconciler class=match assertions=0/4 failed unsupported=false close=nil actual=c9f7e7a2c82615ae885746d9b3658a4ef7cbed1bd314bf0525c6ad1dc7780ff4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D28-original-graph-lock class=match assertions=0/4 failed unsupported=false close=nil actual=c9f7e7a2c82615ae885746d9b3658a4ef7cbed1bd314bf0525c6ad1dc7780ff4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D29-original-reconciler class=incomplete assertions=5/5 failed unsupported=true close=nil actual=8b8c5039062c744242e3ab922ee0766fdb34ed4ffb510484d49fb52583612b1b
+    corpus_inventory_test.go:327: inventory has unexplained/missing behavior in D29-original-reconciler; evidence=/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D29-original-reconciler (NOT ACCEPTANCE)
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D29-original-graph-lock class=incomplete assertions=5/5 failed unsupported=true close=nil actual=8b8c5039062c744242e3ab922ee0766fdb34ed4ffb510484d49fb52583612b1b
+    corpus_inventory_test.go:327: inventory has unexplained/missing behavior in D29-original-graph-lock; evidence=/tmp/aiops-s0-corpus-inventory-GifNlXGU/results/D29-original-graph-lock (NOT ACCEPTANCE)
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D30-original-reconciler class=match assertions=0/3 failed unsupported=false close=nil actual=ca4665ab699069ae929e769617e779f3b167e0a99ea5d09660659f1354ef13b7
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D30-original-graph-lock class=match assertions=0/3 failed unsupported=false close=nil actual=ca4665ab699069ae929e769617e779f3b167e0a99ea5d09660659f1354ef13b7
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D31-original-reconciler class=match assertions=0/1 failed unsupported=false close=nil actual=58dfca8455210f239fbf78e4d032c56fb3e5c35db9abc65c171b673ef5f742e5
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D31-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=58dfca8455210f239fbf78e4d032c56fb3e5c35db9abc65c171b673ef5f742e5
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D32-original-reconciler class=match assertions=0/1 failed unsupported=false close=nil actual=b62a8226ee96aafd1a5c90bc31d952771eafc5b8e50428338b2ed6850ef76ea4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D32-original-graph-lock class=match assertions=0/1 failed unsupported=false close=nil actual=b62a8226ee96aafd1a5c90bc31d952771eafc5b8e50428338b2ed6850ef76ea4
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D33-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=e9b9dc37807335e0d4b25692a2e4fc4bb9cdd2a3e7c196df9c0badcf5023ba7c
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D33-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=e9b9dc37807335e0d4b25692a2e4fc4bb9cdd2a3e7c196df9c0badcf5023ba7c
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D34-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=6a3a2a13e4b46c244b4a0a92dc3331c002f66164fef873265d1a4f9b5ecd6c79
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D34-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=6a3a2a13e4b46c244b4a0a92dc3331c002f66164fef873265d1a4f9b5ecd6c79
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D35-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=6deee1e8847185382092adf42620135aaf3205b071e552882f00700906fb0c95
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D35-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=6deee1e8847185382092adf42620135aaf3205b071e552882f00700906fb0c95
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D36-original-reconciler class=match assertions=0/2 failed unsupported=false close=nil actual=a99c7b2f1b42d6ad678add00058229fa8d6c56cc818652f25446483e6015adbf
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D36-original-graph-lock class=match assertions=0/2 failed unsupported=false close=nil actual=a99c7b2f1b42d6ad678add00058229fa8d6c56cc818652f25446483e6015adbf
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D13-revision-2-overlay-reconciler class=failed assertions=0/6 failed unsupported=false close=nil actual=4d0903a07aafe30bd8b808e67e5386c3e717fa21e1d989f9a976d2a284b9db1d
+    corpus_inventory_test.go:318: NOT ACCEPTANCE D13-revision-2-overlay-graph-lock class=failed assertions=0/6 failed unsupported=false close=nil actual=c306ed99177c612b605f5c47cff2f1d16343d1d74b90298b53c588dcd21cff2f
+    corpus_inventory_test.go:342: NOT ACCEPTANCE SUMMARY: executions=74 match=42 failed=26 incomplete=6 evidence=/tmp/aiops-s0-corpus-inventory-GifNlXGU/results
+--- FAIL: TestCorpusInventory (1.52s)
+FAIL
+FAIL	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	1.545s
+FAIL

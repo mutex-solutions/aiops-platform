@@ -1,0 +1,32 @@
+{
+  "classification": "PASS full frozen experimental-candidate property workload on reviewed checkpoint; NOT final kernel/S0 acceptance",
+  "exitCode": 0,
+  "managedJob": "bash-79ecf0161fab4c43",
+  "sourceSHA256": "8d6834ef1e4b3f1c4dcff8fe5581f56869b34757fca1c47dc1204a1d23833395",
+  "executableSHA256": "9dad58e8ec2034d2a0e709c1b0054b5c07d9584a85a62f39b021c98f1c439be0",
+  "baselineCommit": "ad2fa95ae9bc5c2d74c772f0b0639d879b20fd3b",
+  "race": true,
+  "gomaxprocs": 8,
+  "elapsedSeconds": 2474.86,
+  "candidateSeconds": {
+    "reconciler": 1302.38,
+    "graph-lock": 1172.35
+  },
+  "argv": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-race",
+    "-count=1",
+    "-timeout=90m",
+    "-v",
+    "-run",
+    "^TestRuntimeProperties$",
+    "./test/spike/s0/properties"
+  ],
+  "originalEvidenceDirectory": "test/spike/s0/properties/evidence/reviewed-ad2fa95-FjsFzc4q",
+  "limits": [
+    "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+    "Final SDK rerun, complete differential/adaptation coverage, sampling/performance, SQL authority and line/coverage gates remain open."
+  ]
+}

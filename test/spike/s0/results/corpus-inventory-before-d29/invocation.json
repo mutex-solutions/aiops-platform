@@ -1,0 +1,35 @@
+{
+  "classification": "failed/incomplete diagnostic inventory; NOT full S0 or semantic acceptance",
+  "exitCode": 1,
+  "managedJob": "bash-17bd25be7144406c",
+  "counts": {
+    "failed": 26,
+    "incomplete": 6,
+    "match": 42
+  },
+  "executions": 74,
+  "actualCommand": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-race",
+    "-count=1",
+    "-run",
+    "^TestCorpusInventory$",
+    "-v",
+    "./test/spike/s0/replay",
+    "-timeout=6m"
+  ],
+  "environmentWithoutCredentials": {
+    "S0_CORPUS_INVENTORY": "1",
+    "S0_CORPUS_REQUIRE_ASSERTIONS": "1",
+    "GOTOOLCHAIN": "local",
+    "GOMAXPROCS": "8"
+  },
+  "logSHA256": "2396d71ed9ba30e024d2497f1902ff4e7a4a0fbce5daf75dd00dc88599a9fabd",
+  "limits": [
+    "Strict failed classifications include independent scheduling and approved request/completion adaptations; they remain strict mismatches, not silently waived.",
+    "D29 currently lacks native plugin internal/update integration; D05/D26 remain explicit non-carried/diagnostic boundaries.",
+    "All original assertions and raw traces remain unchanged."
+  ]
+}

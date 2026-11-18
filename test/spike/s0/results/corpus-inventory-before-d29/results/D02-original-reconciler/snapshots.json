@@ -1,0 +1,184 @@
+{
+  "disposed": [
+    {
+      "ID": 1,
+      "Name": "pa",
+      "State": "DISPOSED",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "A"
+      },
+      "EffectiveConfig": {
+        "value": "A"
+      },
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 2,
+      "Name": "pb",
+      "State": "DISPOSED",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "B"
+      },
+      "EffectiveConfig": {
+        "value": "B"
+      },
+      "ConfigVersion": 0
+    }
+  ],
+  "providers": [
+    {
+      "ID": 1,
+      "Name": "pa",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"svc\"@0/realm:1"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"svc\"@0/realm:1",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "A"
+      },
+      "EffectiveConfig": {
+        "value": "A"
+      },
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 2,
+      "Name": "pb",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"svc\"@0/realm:2"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"svc\"@0/realm:2",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "B"
+      },
+      "EffectiveConfig": {
+        "value": "B"
+      },
+      "ConfigVersion": 0
+    }
+  ],
+  "separate": [
+    {
+      "ID": 1,
+      "Name": "pa",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"svc\"@0/realm:1"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"svc\"@0/realm:1",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "A"
+      },
+      "EffectiveConfig": {
+        "value": "A"
+      },
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 2,
+      "Name": "pb",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"svc\"@0/realm:2"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"svc\"@0/realm:2",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "value": "B"
+      },
+      "EffectiveConfig": {
+        "value": "B"
+      },
+      "ConfigVersion": 0
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D20",
+  "title": "A superseded load error cannot fail the latest update target",
+  "covers": [
+    "superseded-load-error",
+    "partial-load-cleanup"
+  ],
+  "plugins": [
+    {
+      "id": "superseded",
+      "apply": [
+        {
+          "op": "effect",
+          "label": "owned",
+          "cleanup": [
+            {
+              "op": "mark",
+              "label": "owned-cleanup",
+              "value": {
+                "$config": "v"
+              }
+            }
+          ]
+        },
+        {
+          "op": "when",
+          "base": {
+            "$config": "v"
+          },
+          "value": 1,
+          "program": [
+            {
+              "op": "gate",
+              "label": "old-load"
+            },
+            {
+              "op": "fail",
+              "error": "superseded activation"
+            }
+          ]
+        },
+        {
+          "op": "output",
+          "to": "latest",
+          "value": {
+            "$config": "v"
+          }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "superseded",
+      "config": {
+        "v": 1,
+        "cleanup": "old-cleanup"
+      }
+    },
+    {
+      "op": "waitMark",
+      "label": "old-load"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 2,
+        "cleanup": "new-cleanup"
+      },
+      "await": false,
+      "task": "new-target"
+    },
+    {
+      "op": "release",
+      "label": "old-load"
+    },
+    {
+      "op": "settle",
+      "label": "latest"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "latest",
+      "path": "/states/0/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "latest",
+      "path": "/outputs/latest",
+      "equals": 2
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

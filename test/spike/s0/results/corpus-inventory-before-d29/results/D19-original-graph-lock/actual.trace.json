@@ -1,0 +1,234 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D19",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "config": {
+          "fail": true,
+          "v": 1
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "config": {
+          "fail": true,
+          "v": 1
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "error",
+      "data": {
+        "error": {
+          "message": "recoverable-startup",
+          "name": "Error"
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "FAILED"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "commit",
+      "data": {
+        "config": {
+          "fail": false,
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "FAILED",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "config",
+      "data": {
+        "config": {
+          "fail": false,
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "apply",
+      "data": {
+        "config": {
+          "fail": false,
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "output",
+      "data": {
+        "to": "version",
+        "value": 2
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "failed",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "FAILED",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "fail": true,
+            "v": 1
+          },
+          "effectiveConfig": {
+            "fail": true,
+            "v": 1
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "recovered",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 1,
+          "epoch": {
+            "revision": 1,
+            "needs": []
+          },
+          "rawConfig": {
+            "fail": false,
+            "v": 2
+          },
+          "effectiveConfig": {
+            "fail": false,
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "version": 2
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 1,
+          "epoch": null,
+          "rawConfig": {
+            "fail": false,
+            "v": 2
+          },
+          "effectiveConfig": {
+            "fail": false,
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "version": 2
+      }
+    }
+  ]
+}

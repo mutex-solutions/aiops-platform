@@ -1,0 +1,343 @@
+{
+  "after": [
+    {
+      "ID": 1,
+      "Name": "p",
+      "State": "ACTIVE",
+      "Revision": 1,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"a\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"a\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 1,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "v": 2
+      },
+      "EffectiveConfig": {
+        "v": 2
+      },
+      "ConfigVersion": 1
+    },
+    {
+      "ID": 2,
+      "Name": "l",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        4
+      ],
+      "Effects": [
+        "provide:\"b\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"b\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          4
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 3,
+      "Name": "r",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        4
+      ],
+      "Effects": [
+        "provide:\"c\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"c\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          4
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 4,
+      "Name": "leaf",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        5,
+        6
+      ],
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          5,
+          6
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    }
+  ],
+  "before": [
+    {
+      "ID": 1,
+      "Name": "p",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"a\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"a\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "v": 1
+      },
+      "EffectiveConfig": {
+        "v": 1
+      },
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 2,
+      "Name": "l",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        1
+      ],
+      "Effects": [
+        "provide:\"b\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"b\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          1
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 3,
+      "Name": "r",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        1
+      ],
+      "Effects": [
+        "provide:\"c\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"c\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          1
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 4,
+      "Name": "leaf",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": [
+        2,
+        3
+      ],
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": [
+          2,
+          3
+        ]
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    }
+  ],
+  "disposed": [
+    {
+      "ID": 1,
+      "Name": "p",
+      "State": "DISPOSED",
+      "Revision": 1,
+      "Epoch": null,
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {
+        "v": 2
+      },
+      "EffectiveConfig": {
+        "v": 2
+      },
+      "ConfigVersion": 1
+    },
+    {
+      "ID": 2,
+      "Name": "l",
+      "State": "DISPOSED",
+      "Revision": 0,
+      "Epoch": [
+        4
+      ],
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 3,
+      "Name": "r",
+      "State": "DISPOSED",
+      "Revision": 0,
+      "Epoch": [
+        4
+      ],
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    },
+    {
+      "ID": 4,
+      "Name": "leaf",
+      "State": "DISPOSED",
+      "Revision": 0,
+      "Epoch": [
+        5,
+        6
+      ],
+      "Effects": null,
+      "EffectTree": null,
+      "Tracked": null,
+      "Error": "",
+      "Alive": false,
+      "Target": null,
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "actualTraceDigest": "1d4f3bf317545e0821dab5483964064f220165459fda160374a212ab2d6fbde6",
+  "assertions": [
+    {
+      "actual": {
+        "base": true,
+        "limit": 7,
+        "mode": "need"
+      },
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "needwith",
+      "expected": {
+        "base": true,
+        "limit": 7,
+        "mode": "need"
+      },
+      "index": 0,
+      "originalPassed": true,
+      "path": "/outputs/view",
+      "problem": ""
+    }
+  ],
+  "backend": "graph-lock",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "match",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "",
+  "failedOriginalAssertions": 0,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "8a1576b8f541c53cf39d62309dd6bd8521f15101ed7e80acd80dc422ca5a15b9",
+  "knownBoundary": "",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:12:53.461Z",
+    "endedUTC": "2026-11-12T08:12:53.470Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D07": "f136c8e7358d69c280d5513b8d51a194552abe1e2ef07b652c8c539e47741cd2"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D07.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "8a1576b8f541c53cf39d62309dd6bd8521f15101ed7e80acd80dc422ca5a15b9"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [],
+  "scenario": "D07",
+  "scriptSHA256": "f136c8e7358d69c280d5513b8d51a194552abe1e2ef07b652c8c539e47741cd2",
+  "strictErr": "",
+  "unsupportedSentinel": false,
+  "variant": "original"
+}

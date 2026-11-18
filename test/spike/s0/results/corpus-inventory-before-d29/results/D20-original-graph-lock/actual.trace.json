@@ -1,0 +1,240 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D20",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "config": {
+          "cleanup": "old-cleanup",
+          "v": 1
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "config": {
+          "cleanup": "old-cleanup",
+          "v": 1
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "gate",
+      "data": {
+        "label": "old-load",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "config",
+      "data": {
+        "config": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "commit",
+      "data": {
+        "config": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "error",
+      "data": {
+        "error": {
+          "message": "superseded activation",
+          "name": "Error"
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "mark",
+      "data": {
+        "label": "owned-cleanup",
+        "value": 1
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "config",
+      "data": {
+        "config": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "apply",
+      "data": {
+        "config": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "output",
+      "data": {
+        "to": "latest",
+        "value": 2
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "mark",
+      "data": {
+        "label": "owned-cleanup",
+        "value": 2
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "latest",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 1,
+          "epoch": {
+            "revision": 1,
+            "needs": []
+          },
+          "rawConfig": {
+            "cleanup": "new-cleanup",
+            "v": 2
+          },
+          "effectiveConfig": {
+            "cleanup": "new-cleanup",
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "latest": 2
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 1,
+          "epoch": null,
+          "rawConfig": {
+            "cleanup": "new-cleanup",
+            "v": 2
+          },
+          "effectiveConfig": {
+            "cleanup": "new-cleanup",
+            "v": 2
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "latest": 2
+      }
+    }
+  ]
+}

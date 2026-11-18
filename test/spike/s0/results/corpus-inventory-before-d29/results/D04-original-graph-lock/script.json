@@ -1,0 +1,82 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D04",
+  "title": "Duplicate provision is refused without replacing the current owner",
+  "covers": [
+    "duplicate-provision-refusal"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "$config": "value"
+          }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {
+        "value": "first"
+      }
+    },
+    {
+      "op": "settle",
+      "label": "first"
+    },
+    {
+      "op": "mount",
+      "fiber": "duplicate",
+      "plugin": "provider",
+      "config": {
+        "value": "second"
+      }
+    },
+    {
+      "op": "settle",
+      "label": "refused"
+    },
+    {
+      "op": "read",
+      "key": "svc",
+      "mode": "get",
+      "to": "retained"
+    },
+    {
+      "op": "snapshot",
+      "label": "retained"
+    },
+    {
+      "op": "dispose",
+      "fiber": "duplicate"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "refused",
+      "path": "/states/1/state",
+      "equals": "FAILED"
+    },
+    {
+      "at": "retained",
+      "path": "/outputs/retained",
+      "equals": "first"
+    }
+  ]
+}

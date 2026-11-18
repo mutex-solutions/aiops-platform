@@ -1,0 +1,126 @@
+{
+  "actualTraceDigest": "8b8c5039062c744242e3ab922ee0766fdb34ed4ffb510484d49fb52583612b1b",
+  "assertions": [
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"pending-update\"",
+      "adaptationMetadata": "",
+      "at": "pending-update",
+      "expected": {
+        "v": 0
+      },
+      "index": 0,
+      "originalPassed": false,
+      "path": "/states/0/effectiveConfig",
+      "problem": "missing checkpoint \"pending-update\""
+    },
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"current\"",
+      "adaptationMetadata": "",
+      "at": "current",
+      "expected": {
+        "v": 2
+      },
+      "index": 1,
+      "originalPassed": false,
+      "path": "/states/0/effectiveConfig",
+      "problem": "missing checkpoint \"current\""
+    },
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"rejected\"",
+      "adaptationMetadata": "",
+      "at": "rejected",
+      "expected": {
+        "v": 3
+      },
+      "index": 2,
+      "originalPassed": false,
+      "path": "/states/0/rawConfig",
+      "problem": "missing checkpoint \"rejected\""
+    },
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"rejected\"",
+      "adaptationMetadata": "",
+      "at": "rejected",
+      "expected": {
+        "v": 2
+      },
+      "index": 3,
+      "originalPassed": false,
+      "path": "/states/0/effectiveConfig",
+      "problem": "missing checkpoint \"rejected\""
+    },
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"rejected\"",
+      "adaptationMetadata": "",
+      "at": "rejected",
+      "expected": {
+        "message": "update rejected",
+        "name": "Error"
+      },
+      "index": 4,
+      "originalPassed": false,
+      "path": "/outputs/rejection",
+      "problem": "missing checkpoint \"rejected\""
+    }
+  ],
+  "backend": "reconciler",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "incomplete",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "replay operation unsupported: listen: hook replay currently supports genuine host-root listeners only",
+  "failedOriginalAssertions": 5,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "cbb63b86f0c9496b6c99efbce668f5b65b70ce9db1e840ed40772a2048f7d121",
+  "knownBoundary": "missing native integration: plugin internal/update hooks; unsupported remains a failure",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:13:03.848Z",
+    "endedUTC": "2026-11-12T08:13:03.858Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D29": "0e93ee8035b88a669fc0c63ff2ac672e70f430172cbfbdcd7b6e4a58522d799c"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D29.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "cbb63b86f0c9496b6c99efbce668f5b65b70ce9db1e840ed40772a2048f7d121"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [],
+  "scenario": "D29",
+  "scriptSHA256": "0e93ee8035b88a669fc0c63ff2ac672e70f430172cbfbdcd7b6e4a58522d799c",
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D29\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"f\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{\"v\":0},\"fiber\":\"f\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{\"v\":0},\"fiber\":\"f\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"config\",\"data\":{\"config\":{\"v\":1},\"fiber\":\"f\"}},{\"seq\":7,\"kind\":\"commit\",\"data\":{\"config\":{\"v\":1},\"fiber\":\"f\"}},{\"seq\":8,\"kind\":\"listener\",\"data\":{\"label\":\"update-owner\"}},{\"seq\":9,\"kind\":\"gate\",\"data\":{\"label\":\"old-update\",\"value\":{\"$undefined\":true}}},{\"seq\":10,\"kind\":\"config\",\"data\":{\"config\":{\"v\":2},\"fiber\":\"f\"}},{\"seq\":11,\"kind\":\"commit\",\"data\":{\"config\":{\"v\":2},\"fiber\":\"f\"}},{\"seq\":12,\"kind\":\"listener\",\"data\":{\"label\":\"update-owner\"}},{\"seq\":13,\"kind\":\"config\",\"data\":{\"config\":{\"v\":3},\"fiber\":\"f\"}},{\"seq\":14,\"kind\":\"commit\",\"data\":{\"config\":{\"v\":3},\"fiber\":\"f\"}},{\"seq\":15,\"kind\":\"listener\",\"data\":{\"label\":\"update-owner\"}},{\"seq\":16,\"kind\":\"gate\",\"data\":{\"label\":\"reject-update\",\"value\":{\"$undefined\":true}}},{\"seq\":17,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"update rejected\",\"name\":\"Error\"},\"op\":\"awaitTask\"}},{\"seq\":18,\"kind\":\"output\",\"data\":{\"to\":\"rejection\",\"value\":{\"message\":\"update rejected\",\"name\":\"Error\"}}},{\"seq\":19,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"f\"}},{\"seq\":20,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":21,\"kind\":\"status\",\"data\":{\"fiber\":\"f\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"initial\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"v\":0},\"effectiveConfig\":{\"v\":0}}],\"provisions\":[],\"outputs\":{}},{\"label\":\"pending-update\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"v\":1},\"effectiveConfig\":{\"v\":0}}],\"provisions\":[],\"outputs\":{}},{\"label\":\"current\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"v\":2},\"effectiveConfig\":{\"v\":2}}],\"provisions\":[],\"outputs\":{}},{\"label\":\"rejected\",\"states\":[{\"fiber\":\"f\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"v\":3},\"effectiveConfig\":{\"v\":2}}],\"provisions\":[],\"outputs\":{\"rejection\":{\"message\":\"update rejected\",\"name\":\"Error\"}}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"f\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"v\":3},\"effectiveConfig\":{\"v\":2}}],\"provisions\":[],\"outputs\":{\"rejection\":{\"message\":\"update rejected\",\"name\":\"Error\"}}}]}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D29\",\"events\":[],\"checkpoints\":[]}",
+  "unsupportedSentinel": true,
+  "variant": "original"
+}

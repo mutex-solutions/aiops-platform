@@ -1,0 +1,14 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "builtin:hooks",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

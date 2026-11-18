@@ -1,0 +1,78 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D26",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "self",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "self",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "fiber": "self",
+        "config": {}
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "fiber": "self",
+        "config": {}
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "selfDispose",
+      "data": {
+        "fiber": "self",
+        "await": true
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "plugin",
+      "data": {
+        "fiber": "self",
+        "disposed": true
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "diagnostic",
+      "states": [
+        {
+          "fiber": "self",
+          "state": "LOADING",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    }
+  ],
+  "diagnostic": {
+    "code": "SELF_DISPOSE_AWAIT_BLOCKED",
+    "boundMS": 200,
+    "message": "Apply awaited its own disposal; the load/dispose cycle did not settle before the diagnostic bound."
+  }
+}

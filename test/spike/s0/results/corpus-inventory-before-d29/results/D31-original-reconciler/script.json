@@ -1,0 +1,75 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D31",
+  "title": "Emit is synchronous, does not await listeners, and supports symbol event keys",
+  "covers": [
+    "emit-mode",
+    "symbol-event-keys"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "symbol-event",
+      "symbol": true,
+      "label": "async-first",
+      "program": [
+        {
+          "op": "gate",
+          "label": "emit-listener"
+        },
+        {
+          "op": "mark",
+          "label": "emit-finished"
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "symbol-event",
+      "symbol": true,
+      "label": "sync-second",
+      "program": [
+        {
+          "op": "mark",
+          "label": "second-called"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "symbol-event",
+      "symbol": true,
+      "mode": "emit",
+      "to": "emit-result"
+    },
+    {
+      "op": "snapshot",
+      "label": "returned"
+    },
+    {
+      "op": "release",
+      "label": "emit-listener"
+    },
+    {
+      "op": "waitMark",
+      "label": "emit-finished"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "returned",
+      "path": "/outputs/emit-result",
+      "equals": {
+        "$undefined": true
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

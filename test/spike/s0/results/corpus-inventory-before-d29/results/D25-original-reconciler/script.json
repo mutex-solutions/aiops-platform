@@ -1,0 +1,16 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D25",
+  "title": "Own disposal request from Apply does not await itself",
+  "covers": ["own-dispose-request", "late-cleanup"],
+  "plugins": [{
+    "id": "self-request",
+    "apply": [{"op": "selfDispose", "await": false}, {"op": "mark", "label": "apply-returned"}],
+    "cleanup": [{"op": "mark", "label": "cleanup-complete"}]
+  }],
+  "steps": [
+    {"op": "mount", "fiber": "self", "plugin": "self-request", "config": {}},
+    {"op": "settle", "label": "requested"}
+  ],
+  "expect": [{"at": "requested", "path": "/states/0/state", "equals": "DISPOSED"}]
+}
