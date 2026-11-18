@@ -1,0 +1,252 @@
+{
+ "cuts": [
+  {
+   "label": "latest",
+   "afterEvent": 15
+  },
+  {
+   "label": "disposed",
+   "afterEvent": 19
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D20",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "plugin",
+    "data": {
+     "fiber": "f",
+     "disposed": false
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "PENDING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "config",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 1,
+      "cleanup": "old-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "apply",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 1,
+      "cleanup": "old-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "gate",
+    "data": {
+     "label": "old-load",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "config",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 2,
+      "cleanup": "new-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 7,
+    "kind": "commit",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 2,
+      "cleanup": "new-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 8,
+    "kind": "error",
+    "data": {
+     "fiber": "f",
+     "error": {
+      "name": "Error",
+      "message": "superseded activation"
+     }
+    }
+   },
+   {
+    "seq": 9,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "LOADING",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 10,
+    "kind": "mark",
+    "data": {
+     "label": "owned-cleanup",
+     "value": 1
+    }
+   },
+   {
+    "seq": 11,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "UNLOADING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 12,
+    "kind": "config",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 2,
+      "cleanup": "new-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 13,
+    "kind": "apply",
+    "data": {
+     "fiber": "f",
+     "config": {
+      "v": 2,
+      "cleanup": "new-cleanup"
+     }
+    }
+   },
+   {
+    "seq": 14,
+    "kind": "output",
+    "data": {
+     "to": "latest",
+     "value": 2
+    }
+   },
+   {
+    "seq": 15,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "LOADING",
+     "to": "ACTIVE"
+    }
+   },
+   {
+    "seq": 16,
+    "kind": "plugin",
+    "data": {
+     "fiber": "f",
+     "disposed": true
+    }
+   },
+   {
+    "seq": 17,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "ACTIVE",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 18,
+    "kind": "mark",
+    "data": {
+     "label": "owned-cleanup",
+     "value": 2
+    }
+   },
+   {
+    "seq": 19,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "UNLOADING",
+     "to": "DISPOSED"
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "latest",
+    "states": [
+     {
+      "fiber": "f",
+      "state": "ACTIVE",
+      "fiberUID": 1,
+      "revision": 1,
+      "epoch": {
+       "revision": 1,
+       "needs": []
+      },
+      "rawConfig": {
+       "v": 2,
+       "cleanup": "new-cleanup"
+      },
+      "effectiveConfig": {
+       "v": 2,
+       "cleanup": "new-cleanup"
+      }
+     }
+    ],
+    "provisions": [],
+    "outputs": {
+     "latest": 2
+    }
+   },
+   {
+    "label": "disposed",
+    "states": [
+     {
+      "fiber": "f",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 1,
+      "epoch": null,
+      "rawConfig": {
+       "v": 2,
+       "cleanup": "new-cleanup"
+      },
+      "effectiveConfig": {
+       "v": 2,
+       "cleanup": "new-cleanup"
+      }
+     }
+    ],
+    "provisions": [],
+    "outputs": {
+     "latest": 2
+    }
+   }
+  ]
+ }
+}

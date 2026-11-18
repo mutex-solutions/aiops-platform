@@ -28,7 +28,7 @@ func (m *causalModel) identities(trace *Trace, witness CausalWitness) error {
 		for pi := range cp.Provisions {
 			p := &cp.Provisions[pi]
 			address := causalAddress{p.Key, p.Realm}
-			if !m.isCandidate(address, p.Provider) || m.fibers[p.Provider] == nil {
+			if !m.isCandidate(address, p.Provider) || m.fibers[p.Provider] == nil && p.Provider != rootProviderName {
 				return causalUnsupported("unproved provision ownership %s/%s/%s", p.Key, p.Realm, p.Provider)
 			}
 			if current[address] != "" {
@@ -50,6 +50,9 @@ func (m *causalModel) identities(trace *Trace, witness CausalWitness) error {
 					return fmt.Errorf("provision UID aliased/reused across lifetime or address")
 				}
 				activation := activations[p.Provider]
+				if p.Provider == rootProviderName {
+					activation = 1 // K2.4: the root provider has one activation for the whole script
+				}
 				if activation == 0 || occurrences[address] == (causalBind{p.Provider, activation}) {
 					return fmt.Errorf("provision identity changed without a distinct provider activation")
 				}
@@ -104,7 +107,7 @@ func (m *causalModel) identities(trace *Trace, witness CausalWitness) error {
 // rootOutcomes validates root command anchors against each observed segment,
 // independently of the other trace. It never executes a plugin or reads Expect.
 // Unproved target policies are excluded by compilation rather than guessed.
-func (m *causalModel) rootOutcomes(trace *Trace, witness CausalWitness) error {
+func (m *causalModel) rootOutcomes(trace *Trace, witness CausalWitness, o *a3obs) error {
 	revisions := make(map[string]int)
 	rawConfigs := make(map[string]any)
 	previous := 0
@@ -120,6 +123,12 @@ func (m *causalModel) rootOutcomes(trace *Trace, witness CausalWitness) error {
 				}
 				rawConfigs[target] = command.Config
 			case "update", "restart":
+				if m.a3.newShape[target] {
+					// K5, K6: bundles, requests and revisions of a new-shape fiber are
+					// validated event by event while observing (a3obs).
+					rawConfigs[target] = command.Config
+					continue
+				}
 				if ci == 0 {
 					return causalUnsupported("mutation without settled prior target")
 				}
@@ -190,7 +199,12 @@ func (m *causalModel) rootOutcomes(trace *Trace, witness CausalWitness) error {
 			}
 		}
 		for _, state := range cp.States {
-			if state.Revision != revisions[state.Fiber] || state.Epoch != nil && state.Epoch.Revision != state.Revision {
+			if m.a3.newShape[state.Fiber] {
+				// K6.5: one revision per restart request, however many were coalesced.
+				if state.Revision != o.requestsAtCut[ci][state.Fiber] || state.Epoch != nil && state.Epoch.Revision != state.Revision {
+					return fmt.Errorf("checkpoint %q revision of %q contradicts its restart requests", cp.Label, state.Fiber)
+				}
+			} else if state.Revision != revisions[state.Fiber] || state.Epoch != nil && state.Epoch.Revision != state.Revision {
 				return fmt.Errorf("checkpoint %q contradicts command revision", cp.Label)
 			}
 			if config, known := rawConfigs[state.Fiber]; known && !causalEqual(config, state.RawConfig) {

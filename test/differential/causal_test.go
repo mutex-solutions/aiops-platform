@@ -853,7 +853,7 @@ func TestCausalFirstInvalidatingProviderMayDiffer(t *testing.T) {
 func TestCausalRecordedStaticModelScope(t *testing.T) {
 	// Compile scripts only: these checks do not invent historical checkpoint
 	// positions or upgrade frozen raw traces into causal execution evidence.
-	for _, id := range []string{"D02", "D10", "D12", "D14", "D15", "D16", "D18", "D19", "D27"} {
+	for _, id := range []string{"D02", "D10", "D12", "D14", "D15", "D16", "D18", "D19", "D27", "D01", "D17", "D20", "D24", "D25", "D28", "D29", "D30", "D31", "D32", "D33", "D34", "D35", "D36"} {
 		t.Run(id, func(t *testing.T) {
 			raw, err := os.ReadFile("corpus/" + id + ".json")
 			if err != nil {
@@ -864,7 +864,7 @@ func TestCausalRecordedStaticModelScope(t *testing.T) {
 			}
 		})
 	}
-	for _, id := range []string{"D17", "D20", "D25", "D26", "D28", "D29", "D30"} {
+	for _, id := range []string{"D26"} {
 		t.Run(id, func(t *testing.T) {
 			raw, err := os.ReadFile("corpus/" + id + ".json")
 			if err != nil {

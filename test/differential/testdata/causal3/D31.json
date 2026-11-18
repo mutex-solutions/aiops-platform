@@ -1,0 +1,94 @@
+{
+ "cuts": [
+  {
+   "label": "returned",
+   "afterEvent": 5
+  },
+  {
+   "label": "finished",
+   "afterEvent": 6
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D31",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "listener",
+    "data": {
+     "label": "async-first"
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "gate",
+    "data": {
+     "label": "emit-listener",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "listener",
+    "data": {
+     "label": "sync-second"
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "mark",
+    "data": {
+     "label": "second-called",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "output",
+    "data": {
+     "to": "emit-result",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "mark",
+    "data": {
+     "label": "emit-finished",
+     "value": {
+      "$undefined": true
+     }
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "returned",
+    "states": [],
+    "provisions": [],
+    "outputs": {
+     "emit-result": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "label": "finished",
+    "states": [],
+    "provisions": [],
+    "outputs": {
+     "emit-result": {
+      "$undefined": true
+     }
+    }
+   }
+  ]
+ }
+}

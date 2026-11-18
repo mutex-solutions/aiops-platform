@@ -39,7 +39,20 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 	asyncGate := make(map[string]map[string]causalGate)
 	writeCount := make(map[string]int)
 	rootOutputSeen := make(map[string]int)
-	rootErrorSeen := 0
+	o := m.newA3obs()
+	// nextRootError returns the next unconsumed root error command of an op.
+	nextRootError := func(op string) *causalRootError {
+		n, seen := o.errSeen[op], 0
+		for i := range m.rootErrors {
+			if m.rootErrors[i].op == op {
+				if seen == n {
+					return &m.rootErrors[i]
+				}
+				seen++
+			}
+		}
+		return nil
+	}
 	notifyUsed := make(map[string]int)
 	refusing, refusalPending := make(map[string]bool), make(map[string]bool)
 	seqPos := make(map[string]int)
@@ -151,6 +164,18 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				return fmt.Errorf("checkpoint %q: waitMark %q needs %d arrivals, trace has %d", cp.Label, w.label, w.count, arrivals[w.label])
 			}
 		}
+		if err := o.checkCut(ci, cp.Label); err != nil {
+			return err
+		}
+		if !spec.snapshot {
+			// K3: a settled cut shows every fiber that requested its own disposal
+			// as disposed.
+			for actor, requested := range o.selfReq {
+				if requested && states[actor] != "DISPOSED" {
+					return fmt.Errorf("checkpoint %q: %q requested its disposal but is %s", cp.Label, actor, states[actor])
+				}
+			}
+		}
 		if !causalEqual(cp.Outputs, outputs) {
 			return fmt.Errorf("checkpoint %q contradicts output-event prefix", cp.Label)
 		}
@@ -219,7 +244,18 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 					}
 				}
 			}
-			if config, ok := configs[state.Fiber]; ok && !causalEqual(config, state.EffectiveConfig) {
+			if m.a3.updListener[state.Fiber] != nil {
+				// K7.5: the publication of an update with a listener is deferred
+				// and conditional; the effective configuration may only be one
+				// value the fiber has applied or resolved.
+				known := false
+				for _, c := range append(append([]any(nil), o.appliedCfgs[state.Fiber]...), o.candidates[state.Fiber]...) {
+					known = known || causalEqual(c, state.EffectiveConfig)
+				}
+				if !known {
+					return fmt.Errorf("checkpoint %q effective config of %q is no applied or resolved value", cp.Label, state.Fiber)
+				}
+			} else if config, ok := configs[state.Fiber]; ok && !causalEqual(config, state.EffectiveConfig) {
 				return fmt.Errorf("checkpoint %q differs from captured effective config", cp.Label)
 			}
 		}
@@ -312,12 +348,17 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				if s := states[w.fiber]; s == "" || s == "LOADING" || s == "UNLOADING" {
 					return fmt.Errorf("root command overtook awaited fiber %q (state %q)", w.fiber, s)
 				}
+			} else if len(w.lanes) != 0 {
+				if !o.lanesDone(w.lanes) {
+					return fmt.Errorf("root command overtook an awaited dispatch, update chain or task")
+				}
 			} else if arrivals[w.label] < w.count {
 				return fmt.Errorf("root command ran before arrival %d at %q (seen %d)", w.count, w.label, arrivals[w.label])
 			}
 		}
 		return nil
 	}
+	deps := a3deps{states: states, activations: activations, rootWaits: rootWaits}
 	programEvent := func(actor, phase string, item causalItem) error {
 		cs := m.seq[actor]
 		if cs == nil {
@@ -367,29 +408,113 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 		e := trace.Events[index]
 		actor := ""
 		rootLane := false
+		cmdDriven := false
 		observation := causalObservation{}
 		var folded map[string]any
 		var def causalLabelDef
 		switch e.Kind {
-		case "status", "plugin", "config", "apply", "update", "commit", "cleanup", "error":
+		case "listener", "inner":
+			// K8: a host listener starts, or the built-in step of a waterfall runs.
+			key, _ := e.Data["label"].(string)
+			if e.Kind == "inner" {
+				key, _ = e.Data["key"].(string)
+			}
+			l, err := o.laneFor(e.Kind, key, deps)
+			if err != nil {
+				return nil, err
+			}
+			if l == nil {
+				return nil, causalUnsupported("unproved %s owner %q", e.Kind, key)
+			}
+			actor = l.spec.actor
+		case "status", "plugin", "config", "apply", "update", "commit", "cleanup", "error", "selfDispose":
 			actor, _ = e.Data["fiber"].(string)
 			rootLane = e.Kind == "config" && m.rootCommandActors[actor]
+			if m.a3.newShape[actor] && m.fibers[actor] != nil {
+				switch e.Kind {
+				case "config":
+					if states[actor] == "LOADING" && !o.frameSeen[actor] {
+						// Frame-driven: the first config event of a loading frame is the
+						// latest raw configuration resolved (K6.4).
+						o.frameSeen[actor], o.frameCfg[actor] = true, e.Data["config"]
+						if len(m.fibers[actor].plugin.ConfigTransform) == 0 && !causalEqual(e.Data["config"], o.rawLatest[actor]) {
+							return nil, fmt.Errorf("loading frame of %q resolves a stale target configuration", actor)
+						}
+						break
+					}
+					fallthrough
+				case "commit", "update":
+					effective, hasEffective := configs[actor]
+					if err := o.cmdEvent(actor, e.Kind, e.Data, effective, hasEffective, deps, applied[actor]); err != nil {
+						return nil, err
+					}
+					cmdDriven, rootLane = true, true
+				}
+			}
 			if e.Kind == "error" && actor == "" {
 				// A caught error carries its operation, not its fiber (C3.3).
 				op, _ := e.Data["op"].(string)
-				if op == "awaitFiber" {
-					if rootErrorSeen >= len(m.rootErrors) {
-						return nil, fmt.Errorf("extra root awaitFiber error")
+				if op == "awaitFiber" || op == "awaitTask" {
+					cmd := nextRootError(op)
+					if cmd == nil {
+						return nil, fmt.Errorf("extra root %s error", op)
 					}
-					cmd := m.rootErrors[rootErrorSeen]
 					if err := rootWaits(cmd.waits); err != nil {
 						return nil, err
 					}
-					if states[cmd.target] != "FAILED" {
+					if op == "awaitFiber" && states[cmd.target] != "FAILED" {
 						return nil, fmt.Errorf("awaitFiber rejected before %q FAILED", cmd.target)
 					}
-					rootErrorSeen++
+					o.errSeen[op]++
 					actor, rootLane = causalRootActor, true
+					break
+				}
+				if op == "dispatch" {
+					l, err := o.laneFor("error", "dispatch", deps)
+					if err != nil {
+						return nil, err
+					}
+					if l == nil {
+						return nil, causalUnsupported("unproved dispatch error owner")
+					}
+					actor = l.spec.actor
+					break
+				}
+				if op == "lateEffect" {
+					// K4.3: a fiber in teardown, or an unconsumed root command.
+					var fiberDefs []causalLabelDef
+					for _, le := range m.a3.lateEffects {
+						d := causalLabelDef{actor: le.actor, phase: "effect-cleanup", effect: le.effect}
+						if legalPhase(d) {
+							fiberDefs = append(fiberDefs, d)
+						}
+					}
+					rootCmd := nextRootError("lateEffect")
+					rootOK := rootCmd != nil && rootWaits(rootCmd.waits) == nil && (rootCmd.previousDisposed == "" || states[rootCmd.previousDisposed] == "DISPOSED")
+					target := ""
+					switch {
+					case len(fiberDefs)+boolInt(rootOK) == 0:
+						return nil, fmt.Errorf("lateEffect refusal outside the frame of every possible executor")
+					case len(fiberDefs)+boolInt(rootOK) > 1:
+						return nil, causalUnsupported("ambiguous lateEffect executor")
+					case rootOK:
+						target = rootCmd.target
+						o.errSeen["lateEffect"]++
+						actor, rootLane = causalRootActor, true
+					default:
+						def, actor = fiberDefs[0], fiberDefs[0].actor
+						for _, le := range m.a3.lateEffects {
+							if le.actor == actor && le.effect == def.effect {
+								target = le.target
+							}
+						}
+					}
+					if s := states[target]; s != "UNLOADING" && s != "DISPOSED" {
+						return nil, fmt.Errorf("lateEffect refused while its target %q is %q", target, s)
+					}
+					if payload, _ := e.Data["error"].(map[string]any); payload["code"] != "INACTIVE_EFFECT" {
+						return nil, fmt.Errorf("lateEffect refusal lacks the INACTIVE_EFFECT code")
+					}
 					break
 				}
 				var defs []causalLabelDef
@@ -411,6 +536,12 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 			}
 		case "gate", "mark":
 			label, _ := e.Data["label"].(string)
+			if l, err := o.laneFor(e.Kind, label, deps); err != nil {
+				return nil, err
+			} else if l != nil {
+				def, actor = causalLabelDef{actor: l.spec.actor, phase: "hook", isGate: e.Kind == "gate"}, l.spec.actor
+				break
+			}
 			defs := m.labels[label]
 			if len(defs) == 0 {
 				return nil, causalUnsupported("unproved %s owner %q", e.Kind, label)
@@ -440,6 +571,23 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 			value, exists := e.Data["value"]
 			if !exists {
 				return nil, fmt.Errorf("service event lacks value")
+			}
+			if rp := m.a3.rootProvides[address]; rp != nil && !o.rootPublished[address] {
+				// K2: the publication of a root provision command.
+				if err := rootWaits(rp.waits); err != nil {
+					return nil, err
+				}
+				if rp.previousDisposed != "" && states[rp.previousDisposed] != "DISPOSED" {
+					return nil, fmt.Errorf("root provision overtook an awaited disposal")
+				}
+				if !causalEqual(value, rp.value) {
+					return nil, fmt.Errorf("root provision %s/%s published a value other than its command's", key, realm)
+				}
+				o.rootPublished[address] = true
+				store[address] = causalStoreEntry{owner: rootProviderName, value: value, activation: 1}
+				states[rootProviderName], activations[rootProviderName] = "ACTIVE", 1
+				actor, rootLane = causalRootActor, true
+				break
 			}
 			prior, occupied := store[address]
 			if !occupied {
@@ -526,12 +674,22 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				if err := rootWaits(m.rootOutputWaits[to][seen]); err != nil {
 					return nil, err
 				}
+				if expect := m.a3.rootOutExpect[to][seen]; expect != nil && !causalEqual(value, expect.value) {
+					return nil, fmt.Errorf("root output %q differs from its static metadata value", to)
+				}
 				rootOutputSeen[to]++
 				actor, rootLane = causalRootActor, true
+			} else if l, err := o.laneFor("output", to, deps); err != nil {
+				return nil, err
+			} else if l != nil {
+				def, actor = causalLabelDef{actor: l.spec.actor, phase: "hook"}, l.spec.actor
 			} else {
 				d, err := resolve(m.cellDefs[to], to)
 				if err != nil {
 					return nil, fmt.Errorf("output %q: %w", to, err)
+				}
+				if d.meta != nil && !causalEqual(value, d.meta.value) {
+					return nil, fmt.Errorf("output %q differs from its static metadata value", to)
 				}
 				def, actor = d, d.actor
 				writeCount[actor+"\x00"+to+"\x00"+phaseClass(d.phase)]++
@@ -540,12 +698,13 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 		default:
 			return nil, causalUnsupported("event kind %q", e.Kind)
 		}
-		if actor != causalRootActor && states[actor] == "" && e.Kind != "plugin" {
+		if actor != causalRootActor && states[actor] == "" && e.Kind != "plugin" && !o.isLane(actor) {
 			return nil, fmt.Errorf("event before fixed mount publication")
 		}
 		// C1.3: a parked gate blocks every later event of its lane until the
-		// recorder's cut proves the release command had been issued.
-		if g, parked := syncBlock[actor]; parked && e.Kind != "plugin" {
+		// recorder's cut proves the release command had been issued. Command-driven
+		// events are not frame events (K6.2) and neither clear nor obey the gate.
+		if g, parked := syncBlock[actor]; parked && e.Kind != "plugin" && !cmdDriven {
 			if nextCut < g.rel {
 				return nil, fmt.Errorf("lane %q continued past gate %q before its release", actor, g.label)
 			}
@@ -612,7 +771,12 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				return nil, fmt.Errorf("invalid/extra root plugin event")
 			}
 			f := m.fibers[actor]
-			if f.parent == "" {
+			if f.parent == "" && isDisposed && m.a3.selfDispose[actor] {
+				// K3.2: the request of the fiber's own Apply, not a root command.
+				if !o.selfReq[actor] {
+					return nil, fmt.Errorf("disposal of self-disposing %q without its selfDispose request", actor)
+				}
+			} else if f.parent == "" {
 				if pluginCount >= len(m.pluginCommands) {
 					return nil, fmt.Errorf("invalid/extra root plugin event")
 				}
@@ -655,6 +819,21 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				observation.pureMount = f.parent == "" && f.pureMount
 			}
 		}
+		if e.Kind == "selfDispose" {
+			// K3.1: one request per activation, inside the fiber's own Apply frame.
+			if !m.a3.selfDispose[actor] || states[actor] != "LOADING" || !applied[actor] || o.selfReq[actor] || e.Data["await"] != false {
+				return nil, fmt.Errorf("invalid selfDispose request of %q", actor)
+			}
+			o.selfReq[actor] = true
+			if err := programEvent(actor, "apply", causalItem{"selfDispose", ""}); err != nil {
+				return nil, err
+			}
+		}
+		if e.Kind == "error" && def.phase == "effect-cleanup" {
+			if err := effectStep(def.effect, causalItem{"error", "lateEffect"}); err != nil {
+				return nil, err
+			}
+		}
 		if e.Kind == "cleanup" {
 			if states[actor] != "UNLOADING" || len(m.fibers[actor].plugin.Cleanup) == 0 {
 				return nil, fmt.Errorf("cleanup event of %q outside UNLOADING or without a cleanup body", actor)
@@ -692,13 +871,22 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				}
 			}
 			if to == "UNLOADING" && (from == "ACTIVE" || from == "LOADING") {
-				cause := disposed[actor] || mutationAnchors[actor] || failed[actor]
+				cause := disposed[actor] || mutationAnchors[actor] || failed[actor] || m.a3.newShape[actor] && o.anchors[actor] > 0
+				if from == "LOADING" && o.selfReq[actor] {
+					// K3.3: a request does not abort a running Apply.
+					if err := programDone(actor, "apply"); err != nil {
+						return nil, err
+					}
+				}
 				bindings := make(map[causalAddress]causalBind)
 				for address, bind := range bound[actor] {
 					bindings[address] = bind
 					if states[bind.provider] == "UNLOADING" && retiring[bind.provider] == bind.act {
 						cause = true
 					}
+				}
+				if !cause && m.a3.newShape[actor] {
+					return nil, fmt.Errorf("%q left %s without a pending update request, a disposal, a failure or a retiring provider", actor, from)
 				}
 				if !cause {
 					return nil, causalUnsupported("UNLOADING without exact bound invalidator or observed own command/error")
@@ -717,6 +905,14 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				}
 			}
 			if to == "LOADING" {
+				if m.a3.newShape[actor] {
+					// K6.3: one reload serves every request made before it started; a
+					// reload that no request asked for is a violation.
+					if from == "UNLOADING" && o.anchors[actor] == 0 {
+						return nil, fmt.Errorf("%q reloaded without a pending update request", actor)
+					}
+					o.anchors[actor], o.frameSeen[actor] = 0, false
+				}
 				delete(retiring, actor)
 				applied[actor], failed[actor], reachedActive[actor] = false, false, false
 				for _, id := range m.effectIDs(actor) {
@@ -736,6 +932,12 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 			}
 			if to == "FAILED" && !failed[actor] {
 				return nil, fmt.Errorf("FAILED state without captured error")
+			}
+			if to == "FAILED" && o.anchors[actor] > 0 {
+				return nil, fmt.Errorf("%q FAILED while a newer update request is pending", actor)
+			}
+			if to == "ACTIVE" && o.selfReq[actor] {
+				return nil, fmt.Errorf("%q ACTIVE after its own disposal request", actor)
 			}
 			if from == "UNLOADING" && to != "LOADING" {
 				delete(bound, actor)
@@ -789,6 +991,18 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 				applied[actor] = true
 				activations[actor]++
 				configs[actor] = config
+				o.appliedCfgs[actor] = append(o.appliedCfgs[actor], config)
+				if m.a3.newShape[actor] {
+					if o.hasWantApply[actor] {
+						if !causalEqual(o.wantApply[actor], config) {
+							return nil, fmt.Errorf("restart of %q applies a configuration other than its update hook's", actor)
+						}
+						o.hasWantApply[actor] = false
+					}
+					if len(m.fibers[actor].plugin.ConfigTransform) == 0 && o.frameSeen[actor] && !causalEqual(o.frameCfg[actor], config) {
+						return nil, fmt.Errorf("Apply of %q carries a configuration other than its frame's resolved target", actor)
+					}
+				}
 				seqPos[actor+"\x00apply"] = 0
 				delete(stepPos, actor+"\x00LOADING")
 				refusing[actor], refusalPending[actor] = false, false
@@ -841,7 +1055,7 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 			if _, exists := e.Data["config"]; !exists {
 				return nil, fmt.Errorf("commit event lacks captured config")
 			}
-			if command := mutationCommand(actor); command != nil && command.Mode != "noSave" && causalEqual(command.Config, e.Data["config"]) {
+			if command := mutationCommand(actor); !m.a3.newShape[actor] && command != nil && command.Mode != "noSave" && causalEqual(command.Config, e.Data["config"]) {
 				mutationAnchors[actor] = true
 			}
 		}
@@ -856,10 +1070,22 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 		observation.actor, observation.rootLane = actor, rootLane
 		observations[index] = observation
 	}
-	if nextCut != len(witness.Checkpoints) || pluginCount != len(m.pluginCommands) || rootErrorSeen != len(m.rootErrors) {
+	consumed := 0
+	for _, n := range o.errSeen {
+		consumed += n
+	}
+	if nextCut != len(witness.Checkpoints) || pluginCount != len(m.pluginCommands) || consumed != len(m.rootErrors) {
 		return nil, fmt.Errorf("incomplete checkpoint/root command prefix")
 	}
-	if err := m.rootOutcomes(trace, witness); err != nil {
+	for name, waits := range m.rootOutputWaits {
+		if rootOutputSeen[name] != len(waits) {
+			return nil, fmt.Errorf("root output %q produced %d of %d expected events", name, rootOutputSeen[name], len(waits))
+		}
+	}
+	if err := o.finish(); err != nil {
+		return nil, err
+	}
+	if err := m.rootOutcomes(trace, witness, o); err != nil {
 		return nil, err
 	}
 	return observations, nil

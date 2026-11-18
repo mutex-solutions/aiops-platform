@@ -1,0 +1,126 @@
+{
+ "cuts": [
+  {
+   "label": "requested",
+   "afterEvent": 11
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D25",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "plugin",
+    "data": {
+     "fiber": "self",
+     "disposed": false
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "status",
+    "data": {
+     "fiber": "self",
+     "from": "PENDING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "config",
+    "data": {
+     "fiber": "self",
+     "config": {}
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "apply",
+    "data": {
+     "fiber": "self",
+     "config": {}
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "selfDispose",
+    "data": {
+     "fiber": "self",
+     "await": false
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "plugin",
+    "data": {
+     "fiber": "self",
+     "disposed": true
+    }
+   },
+   {
+    "seq": 7,
+    "kind": "mark",
+    "data": {
+     "label": "apply-returned",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 8,
+    "kind": "status",
+    "data": {
+     "fiber": "self",
+     "from": "LOADING",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 9,
+    "kind": "cleanup",
+    "data": {
+     "fiber": "self"
+    }
+   },
+   {
+    "seq": 10,
+    "kind": "mark",
+    "data": {
+     "label": "cleanup-complete",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 11,
+    "kind": "status",
+    "data": {
+     "fiber": "self",
+     "from": "UNLOADING",
+     "to": "DISPOSED"
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "requested",
+    "states": [
+     {
+      "fiber": "self",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {}
+   }
+  ]
+ }
+}

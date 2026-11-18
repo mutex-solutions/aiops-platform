@@ -1,0 +1,69 @@
+{
+ "cuts": [
+  {
+   "label": "finished",
+   "afterEvent": 6
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D34",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "listener",
+    "data": {
+     "label": "false"
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "listener",
+    "data": {
+     "label": "zero"
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "output",
+    "data": {
+     "to": "zero",
+     "value": 0
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "listener",
+    "data": {
+     "label": "null"
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "listener",
+    "data": {
+     "label": "empty"
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "output",
+    "data": {
+     "to": "empty",
+     "value": ""
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "finished",
+    "states": [],
+    "provisions": [],
+    "outputs": {
+     "zero": 0,
+     "empty": ""
+    }
+   }
+  ]
+ }
+}

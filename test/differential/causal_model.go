@@ -40,6 +40,9 @@ type causalWait struct {
 	label string
 	count int
 	fiber string
+	// lanes (amendment 3): every listed hook or chain lane has consumed at least
+	// pos of its planned events.
+	lanes []causalLaneNeed
 }
 
 // causalLabelDef is one static place where a gate/mark/output operation can run.
@@ -53,6 +56,9 @@ type causalLabelDef struct {
 	// is false for teardown-driven events and asynchronous programs.
 	step    int
 	stepped bool
+	// meta is the statically resolved value of an output whose value is exactly
+	// one $meta expression (amendment 3, K1.3).
+	meta *causalExpect
 }
 
 type causalEffect struct {
@@ -69,8 +75,11 @@ type causalEffect struct {
 }
 
 type causalRootError struct {
+	op     string // awaitFiber, awaitTask or lateEffect
 	target string
 	waits  []causalWait
+	// previousDisposed is the awaited root disposal this command follows (A1).
+	previousDisposed string
 }
 
 type causalCheckpointSpec struct {
@@ -80,6 +89,9 @@ type causalCheckpointSpec struct {
 	commands []Action
 	waits    []causalWait // waitMark obligations issued in this segment
 	snapshot bool
+	// taskNeeds lists, cumulatively, the lanes of every task issued up to this
+	// settle cut; a settle completes every task (amendment 3, K6.6).
+	taskNeeds []causalLaneNeed
 }
 type causalPluginCommand struct {
 	fiber            string
@@ -117,6 +129,7 @@ type causalModel struct {
 	seq               map[string]*causalSeq
 	effectPlan        map[string]causalEffectPlan
 	mountEpoch        map[string]int // settle checkpoints before a root mount (children: their root ancestor)
+	a3                causalA3
 }
 
 // causalItem is one event a body must produce, in order (a frame's lane program).
@@ -165,6 +178,7 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		footprints: make(map[string]*causalFootprint), conflicts: make(map[string]map[string]bool),
 		release: make(map[string]int), rootOutputWaits: make(map[string][][]causalWait),
 	}
+	m.initA3()
 	for _, ctx := range script.Contexts {
 		// An intercept context layers tracked-service configuration; it never
 		// changes which realm an address resolves to (C4.1).
@@ -197,12 +211,16 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 				if a.To != "" || a.Mode != "" && a.Mode != "service" && a.Mode != "available" {
 					return causalUnsupported("non-ordinary provision syntax")
 				}
-			case "read", "output", "fail", "when", "gate", "mark", "effect", "withdraw", "child", "context":
+			case "read", "output", "fail", "when", "gate", "mark", "effect", "withdraw", "child", "context", "listen", "selfDispose", "lateEffect":
 			default:
 				return causalUnsupported("body operation %q", a.Op)
 			}
-			if err := supportedSyntax(a.Program); err != nil {
-				return err
+			// A listener program has its own, smaller grammar (K7), checked when
+			// the listener is registered.
+			if a.Op != "listen" {
+				if err := supportedSyntax(a.Program); err != nil {
+					return err
+				}
 			}
 			if err := supportedSyntax(a.Cleanup); err != nil {
 				return err
@@ -211,7 +229,7 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		return nil
 	}
 	for _, p := range script.Plugins {
-		if p.Update != "" {
+		if p.Update != "" && p.Update != "retain" && p.Update != "unchanged" {
 			return nil, causalUnsupported("custom update continuation/veto policy")
 		}
 		// NeedWith configuration that is plain data cannot reorder events; its
@@ -568,6 +586,10 @@ func (m *causalModel) nonServiceConflict(a, b string) bool {
 // cell (C5); every writer write-conflicts. The root command lane never shares a
 // cell with a fiber, because the writer of an event would then be unprovable.
 func (m *causalModel) output(actor, name string, frame causalFrame) error {
+	return m.outputExpect(actor, name, frame, nil)
+}
+
+func (m *causalModel) outputExpect(actor, name string, frame causalFrame, expect *causalExpect) error {
 	if name == "" {
 		return nil
 	}
@@ -588,17 +610,27 @@ func (m *causalModel) output(actor, name string, frame causalFrame) error {
 	}
 	m.footprints[actor].writes["output:"+name] = true
 	if actor != causalRootActor {
-		m.cellDefs[name] = append(m.cellDefs[name], causalLabelDef{actor: actor, phase: frame.phase, effect: frame.effect, step: frame.step, stepped: causalStepped(frame.phase)})
+		m.cellDefs[name] = append(m.cellDefs[name], causalLabelDef{actor: actor, phase: frame.phase, effect: frame.effect, step: frame.step, stepped: causalStepped(frame.phase), meta: expect})
 	}
 	return nil
 }
 func (m *causalModel) references(actor string, value any) error {
+	return m.referencesIn("", actor, value)
+}
+
+// referencesIn is references for a value evaluated in the static context ctx
+// (amendment 3, K1). With ctx empty every $meta expression stays unsupported.
+func (m *causalModel) referencesIn(ctx, actor string, value any) error {
 	switch v := value.(type) {
 	case map[string]any:
-		// Meta can expose runtime context/fiber/service objects; static labels
-		// do not prove that arbitrary metadata paths are immutable data.
+		// Meta can expose runtime context/fiber/service objects; only a path
+		// that stays inside the statically merged metadata of a static context is
+		// immutable data (K1).
 		if _, exists := v["$meta"]; exists {
-			return causalUnsupported("runtime metadata expression")
+			if !m.metaReferencesOK(ctx, v) {
+				return causalUnsupported("runtime metadata expression")
+			}
+			return nil
 		}
 		if output, exists := v["$output"]; exists {
 			name, ok := output.(string)
@@ -608,19 +640,19 @@ func (m *causalModel) references(actor string, value any) error {
 			m.footprints[actor].reads["output:"+strings.Split(name, ".")[0]] = true
 		}
 		for _, nested := range v {
-			if err := m.references(actor, nested); err != nil {
+			if err := m.referencesIn(ctx, actor, nested); err != nil {
 				return err
 			}
 		}
 	case map[string]string:
 		for _, nested := range v {
-			if err := m.references(actor, nested); err != nil {
+			if err := m.referencesIn(ctx, actor, nested); err != nil {
 				return err
 			}
 		}
 	case []any:
 		for _, nested := range v {
-			if err := m.references(actor, nested); err != nil {
+			if err := m.referencesIn(ctx, actor, nested); err != nil {
 				return err
 			}
 		}
@@ -629,15 +661,18 @@ func (m *causalModel) references(actor string, value any) error {
 }
 
 // causalSynchronous rejects control metadata the comparator cannot prove. The
-// metadata accepted by amendment 2 is accepted only on the operations whose
-// semantics it has a rule for: await:false on effect and root dispose, task on
-// dispose and withdraw, count on waitMark, catch on effect, read and awaitFiber.
+// metadata accepted by amendments 2 and 3 is accepted only on the operations whose
+// semantics it has a rule for: await:false on effect, root dispose, update,
+// dispatch and selfDispose; task on dispose, withdraw, update, dispatch and
+// awaitTask; count on waitMark; catch on effect, read, awaitFiber, lateEffect,
+// dispatch and awaitTask; symbol on listen and dispatch.
 func causalSynchronous(a Action) error {
-	bad := a.Global || a.Symbol || a.Prepend
-	bad = bad || a.Task != "" && a.Op != "dispose" && a.Op != "withdraw"
-	bad = bad || a.Await != nil && !*a.Await && a.Op != "effect" && a.Op != "dispose"
+	bad := a.Global || a.Prepend
+	bad = bad || a.Symbol && a.Op != "listen" && a.Op != "dispatch"
+	bad = bad || a.Task != "" && a.Op != "dispose" && a.Op != "withdraw" && a.Op != "update" && a.Op != "dispatch" && a.Op != "awaitTask"
+	bad = bad || a.Await != nil && !*a.Await && a.Op != "effect" && a.Op != "dispose" && a.Op != "update" && a.Op != "dispatch" && a.Op != "selfDispose"
 	bad = bad || a.Count != 0 && a.Op != "waitMark"
-	bad = bad || a.Catch && a.Op != "effect" && a.Op != "read" && a.Op != "awaitFiber"
+	bad = bad || a.Catch && a.Op != "effect" && a.Op != "read" && a.Op != "awaitFiber" && a.Op != "lateEffect" && a.Op != "dispatch" && a.Op != "awaitTask"
 	if bad {
 		return causalUnsupported("async/control/catch metadata on %q", a.Op)
 	}
@@ -665,19 +700,29 @@ func (m *causalModel) body(actions []Action, actor string, frame causalFrame, sc
 		if err := causalFieldsOK(a); err != nil {
 			return err
 		}
-		if a.Op != "child" && a.Op != "context" && (a.Context != "" || a.Fiber != "") {
+		if a.Op != "child" && a.Op != "context" && a.Op != "lateEffect" && (a.Context != "" || a.Fiber != "") {
 			return causalUnsupported("body context override or cleanup callback on %q", a.Op)
 		}
 		if a.Op != "effect" && len(a.Cleanup) != 0 {
 			return causalUnsupported("body context override or cleanup callback on %q", a.Op)
 		}
-		if a.Op != "when" && a.Op != "effect" && len(a.Program) != 0 {
+		if a.Op != "when" && a.Op != "effect" && a.Op != "listen" && len(a.Program) != 0 {
 			return causalUnsupported("nested body on %q", a.Op)
 		}
-		if err := m.references(actor, a.Value); err != nil {
+		bodyCtx := scope.context
+		if a.Op != "child" && a.Op != "context" {
+			bodyCtx = scope.context
+		} else if a.Context != "" {
+			if id, local := scope.local[a.Context]; local {
+				bodyCtx = id
+			} else {
+				bodyCtx = a.Context
+			}
+		}
+		if err := m.referencesIn(bodyCtx, actor, a.Value); err != nil {
 			return err
 		}
-		if err := m.references(actor, a.Base); err != nil {
+		if err := m.referencesIn(bodyCtx, actor, a.Base); err != nil {
 			return err
 		}
 		switch a.Op {
@@ -717,10 +762,27 @@ func (m *causalModel) body(actions []Action, actor string, frame causalFrame, sc
 				return err
 			}
 		case "output":
-			if err := m.output(actor, a.To, fr); err != nil {
+			if err := m.outputExpect(actor, a.To, fr, m.metaExpectation(bodyCtx, a.Value)); err != nil {
 				return err
 			}
 		case "fail":
+		case "listen":
+			if err := m.updateListener(actor, a, frame); err != nil {
+				return err
+			}
+		case "selfDispose":
+			if !frame.top || fr.phase != "apply" || a.Task != "" || a.Catch || a.Await != nil && *a.Await || m.fibers[actor].parent != "" {
+				return causalUnsupported("selfDispose form")
+			}
+			m.a3.selfDispose[actor] = true
+		case "lateEffect":
+			if fr.phase != "effect-cleanup" || !a.Catch || a.To == "" || a.Label == "" || m.fibers[a.Fiber] == nil || m.fibers[a.Fiber].parent != "" {
+				return causalUnsupported("lateEffect form")
+			}
+			m.a3.lateEffects = append(m.a3.lateEffects, causalLateEffect{actor: actor, effect: fr.effect, target: a.Fiber})
+			if err := m.output(actor, a.To, fr); err != nil {
+				return err
+			}
 		case "gate", "mark":
 			if a.Label == "" {
 				return causalUnsupported("unlabelled %s", a.Op)
@@ -754,7 +816,7 @@ func (m *causalModel) body(actions []Action, actor string, frame causalFrame, sc
 			if eff.ordered {
 				exact := true
 				eff.items = causalItems(a.Cleanup, &exact)
-				eff.ordered = exact && len(eff.items) == len(a.Cleanup)
+				eff.ordered = exact && len(eff.items) == len(a.Cleanup)+causalLateEffects(a.Cleanup)
 			}
 			m.effects[id] = eff
 			setup := causalFrame{phase: "effect-setup", effect: id}
@@ -927,6 +989,13 @@ func causalItems(actions []Action, exact *bool) []causalItem {
 			return items
 		case "child":
 			items = append(items, causalItem{"child", a.Fiber})
+		case "selfDispose":
+			items = append(items, causalItem{"selfDispose", ""})
+		case "lateEffect":
+			items = append(items, causalItem{"error", "lateEffect"})
+			if a.To != "" {
+				items = append(items, causalItem{"output", a.To})
+			}
 		case "effect":
 			// Only a synchronous effect with no cleanup, catch or disposer name
 			// places its program events exactly in the Apply sequence.
@@ -950,6 +1019,9 @@ var causalFields = map[string]string{
 	"effect":   "op label program cleanup to mode error catch await",
 	"waitMark": "op label count", "release": "op label", "notify": "op keys",
 	"awaitFiber": "op fiber catch", "dispose": "op fiber await task",
+	"update": "op fiber config await task mode", "listen": "op key label program symbol",
+	"dispatch": "op key mode to value catch await task symbol", "awaitTask": "op task catch to",
+	"selfDispose": "op await", "lateEffect": "op fiber label catch to",
 }
 
 func causalFieldsOK(a Action) error {
@@ -1031,7 +1103,7 @@ func (m *causalModel) contention(plugins map[string]PluginSpec) error {
 	for cell, writers := range m.outputs {
 		var live []string
 		for _, w := range writers {
-			if w != causalRootActor && !m.inert(w) {
+			if w != causalRootActor && m.fibers[w] != nil && !m.inert(w) {
 				live = append(live, w)
 			}
 		}
@@ -1046,7 +1118,7 @@ func causalUsesControls(bodies ...[]Action) bool {
 	for _, body := range bodies {
 		for _, a := range body {
 			switch a.Op {
-			case "gate", "mark", "effect", "withdraw", "child", "context":
+			case "gate", "mark", "effect", "withdraw", "child", "context", "listen", "selfDispose", "lateEffect":
 				return true
 			}
 			if causalUsesControls(a.Program, a.Cleanup) {
@@ -1079,7 +1151,9 @@ func causalPlanEffects(actor string, body []Action) causalEffectPlan {
 			}
 			count := 0
 			for _, c := range a.Cleanup {
-				if c.Op != "mark" && c.Op != "gate" {
+				if c.Op == "lateEffect" && c.Catch && c.To != "" {
+					count++ // an error event and an output event
+				} else if c.Op != "mark" && c.Op != "gate" {
 					return causalEffectPlan{}
 				}
 				count++

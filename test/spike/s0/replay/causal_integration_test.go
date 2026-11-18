@@ -27,6 +27,12 @@ const (
 	// Amendment 2 (and its addendum) were recorded before the comparator change.
 	causalAmendment2    = "../../../../docs/design/s0-causal-comparison-amendment-2.md"
 	causalAmendment2SHA = "214452407b234843ddcb0a1205d81bf9c60837d6048ff21f2656155228976c35"
+	// Amendment 3 and its addendum were recorded before the comparator change and
+	// before any recorded run.
+	causalAmendment3          = "../../../../docs/design/s0-causal-comparison-amendment-3.md"
+	causalAmendment3SHA       = "45ae806bd4def4f5ce0a8345aec8e6ac3233913bc2c2a46b74abace0db4ea17f"
+	causalAmendment3Addendum  = "../../../../docs/design/s0-causal-comparison-amendment-3-addendum.md"
+	causalAmendment3AddendSHA = "63f7bed867f49be270f1dd39968585d97811c9440c45a6f5d87409dff5c867d8"
 )
 
 var causalBackends = []struct {
@@ -166,7 +172,7 @@ func saveCausalEvidence(t *testing.T, dir, name string, data []byte) {
 func causalSources(t *testing.T) map[string]string {
 	t.Helper()
 	sources := map[string]string{}
-	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json", causalAmendment2, "../../../../docs/design/s0-causal-comparison-amendment-2-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-2.json"} {
+	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json", causalAmendment2, "../../../../docs/design/s0-causal-comparison-amendment-2-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-2.json", causalAmendment3, "../../../../docs/design/s0-causal-comparison-amendment-3-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-3.json"} {
 		paths, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -259,6 +265,9 @@ func requireCausalLive(t *testing.T) {
 	}
 	if digest(loadFixture(t, causalAmendment2)) != causalAmendment2SHA {
 		t.Fatal("recorded comparison amendment 2 changed")
+	}
+	if digest(loadFixture(t, causalAmendment3)) != causalAmendment3SHA || digest(loadFixture(t, causalAmendment3Addendum)) != causalAmendment3AddendSHA {
+		t.Fatal("recorded comparison amendment 3 or its addendum changed")
 	}
 }
 
