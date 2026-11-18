@@ -114,6 +114,9 @@ without it); a `-race` run is labelled not frozen-scale in its report. Reduced
 scale knobs (`S0_WORKER_RESTART_FULL_CYCLES`, `_COMBINED_CYCLES`,
 `_WARMUP_SECONDS`, `_WINDOW_SECONDS`, `_RECOVERY_IDS`, `_FAILFAST`) only shrink the
 run, the same bounds still apply, and the report then says NOT acceptance.
+`S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS` (default 900; see "Bounded
+retention") does not shrink the run; 0 turns River's cleaner off and then the run
+is not acceptance either.
 Output: one `S0WORKERS_RESTART_FULL_CYCLE` JSON line per cycle (every bound with
 limit/observed/pass) and one final `S0WORKERS_RESTART_FULL_REPORT` line with
 per-arm totals, interpretations and limits. The run FAILS when any bound is
@@ -224,6 +227,49 @@ ids, ack-to-completion max 648..958 ms, recovery 502..754 ms, and `river_job`
 about 220,000 rows. Without the diagnostic setting the same run failed from cycle 1.
 `S0_WORKER_RESTART_FULL_PREGROW_ROWS` and the diagnostic setting are opt-in, are
 recorded in the report config and are never part of an acceptance run.
+
+## Bounded retention (ADR-045, 2026-11-18)
+
+River's own cleaner bounds the retained `river_job` history. The worker client in
+the full gate sets `CompletedJobRetentionPeriod`, `CancelledJobRetentionPeriod` and
+`DiscardedJobRetentionPeriod` (River v0.51.2) from
+`S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS`, default **900** (15 minutes); `0`
+maps to River's `-1` (no deletion). The cleaner runs in the client that is elected
+leader (every 30 s, batches of 10,000 by id, as the jobs role), so with the pool
+and client arms recreating the worker client each cycle the leader changes and the
+first pass of a new leader follows its election. At about 15,000 rows per
+150 s cycle, 900 s keeps about six cycles (about 90,000 rows) instead of 450,000.
+
+Observation cannot race the cleaner, by construction and by detection:
+
+- The value is refused unless it is 0 or at least twice `CycleBound()` (warm-up +
+  window + two 30 s budgets + 30 s: 240 s frozen, so at least 480 s; 115 s for the
+  CI reduced gate, so at least 230 s). A cycle's own jobs finish no earlier than
+  its start and its final sweep (the last reader of `river_job`) completes within
+  `CycleBound()` of it, so no job of the cycle is eligible before the sweep. The
+  durable result row lives in the caller-owned `result` table, which the cleaner
+  has no privilege on and never touches.
+- The sweep that finds an acknowledged ID with its result row but no job row
+  records it as `job_removed_before_final_sweep`, a failed bound of its own. Such an
+  ID is never counted as completed and is not reported as a false 2xx.
+  `TestReconcileJobRemovedBeforeSweep` and `TestJobRetentionParameter` cover both.
+- `TestRiverCleanerBoundedRetention` (database) shows the cleaner removing old
+  completed, cancelled and discarded jobs as the jobs role while keeping a recent
+  finished job, unfinished jobs and every result row.
+
+Each cycle line now also carries `river_job_seq_scans_in_cycle`,
+`river_job_seq_tuples_read_in_cycle`, `river_job_live_rows_after_cycle` and
+`river_job_total_bytes_after_cycle`, and the gate prints
+`S0WORKERS_RESTART_FULL_FETCH_PLAN` (EXPLAIN ANALYZE of River's fetch as the jobs
+role) before the cycles and after the last one, and fails when the table has 10,000
+or more rows and that fetch is not an index scan. With retention on, River's own
+delete (`JobDeleteBefore`) reads the retained table sequentially about once per 30 s
+pass: bounded by the retained size, not by history.
+
+Measured on the development host (PostgreSQL 16.15, reduced 5 s + 20 s cycles; see
+ADR-045 for the numbers): with 150,000 pre-grown rows and retention off, 12 pool
+cycles completed every acknowledged ID with no sequential scan of `river_job` per
+cycle; with retention on the live rows stayed near 24,600 over 30 cycles.
 
 ## Evidence and review handoff
 
