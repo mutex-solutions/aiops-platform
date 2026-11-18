@@ -1,0 +1,244 @@
+[
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [],
+        "Effects": [
+          "provide:\"svc\"@0/realm:1",
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:\"svc\"@0/realm:1",
+            "State": "ready",
+            "Children": null
+          },
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": []
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": [
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            1
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "\"svc\"@0/realm:1",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "p",
+        "Value": {},
+        "Active": true
+      }
+    ],
+    "Sequence": 15
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": [],
+        "Effects": [
+          "provide:\"svc\"@0/realm:1",
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:\"svc\"@0/realm:1",
+            "State": "ready",
+            "Children": null
+          },
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": [
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "\"svc\"@0/realm:1",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "p",
+        "Value": {},
+        "Active": false
+      }
+    ],
+    "Sequence": 22
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "PENDING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 31
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 34
+  }
+]

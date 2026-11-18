@@ -1,0 +1,106 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D34",
+  "title": "Bail treats zero and empty string as values, not JavaScript truthiness",
+  "covers": [
+    "bail-mode",
+    "zero-empty-bail-values"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "bail-zero",
+      "label": "false",
+      "program": [
+        {
+          "op": "return",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "bail-zero",
+      "label": "zero",
+      "program": [
+        {
+          "op": "return",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "bail-zero",
+      "label": "not-after-zero",
+      "program": [
+        {
+          "op": "mark",
+          "label": "wrong-after-zero"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "bail-zero",
+      "mode": "bail",
+      "to": "zero"
+    },
+    {
+      "op": "listen",
+      "key": "bail-empty",
+      "label": "null",
+      "program": [
+        {
+          "op": "return",
+          "value": null
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "bail-empty",
+      "label": "empty",
+      "program": [
+        {
+          "op": "return",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "bail-empty",
+      "label": "not-after-empty",
+      "program": [
+        {
+          "op": "mark",
+          "label": "wrong-after-empty"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "bail-empty",
+      "mode": "bail",
+      "to": "empty"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "finished",
+      "path": "/outputs/zero",
+      "equals": 0
+    },
+    {
+      "at": "finished",
+      "path": "/outputs/empty",
+      "equals": ""
+    }
+  ]
+}

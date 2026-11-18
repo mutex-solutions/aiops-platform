@@ -1,0 +1,334 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "old-cleanup",
+        "v": 1
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "old-cleanup",
+        "v": 1
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "effect",
+    "From": "",
+    "State": "LOADING",
+    "Key": "owned",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "gate",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "old-load",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "new-cleanup",
+        "v": 2
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "commit",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "new-cleanup",
+        "v": 2
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "message": "superseded activation",
+        "name": "Error"
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "dispose-effect",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "owned",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "owned-cleanup",
+      "value": 1
+    }
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "new-cleanup",
+        "v": 2
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "cleanup": "new-cleanup",
+        "v": 2
+      },
+      "fiber": "f"
+    }
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "effect",
+    "From": "",
+    "State": "LOADING",
+    "Key": "owned",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "latest",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "dispose-effect",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "owned",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "owned-cleanup",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 23,
+    "Fiber": 1,
+    "Name": "f",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

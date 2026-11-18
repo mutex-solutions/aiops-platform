@@ -1,0 +1,105 @@
+{
+  "actualTraceDigest": "ff26e3fe20f28fa0f8df74ab881f93a5862c37b2f0f596746e968b10a9b7afc6",
+  "assertions": [
+    {
+      "actual": {
+        "message": "undeclared key",
+        "name": "Error"
+      },
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "checked",
+      "expected": {
+        "message": "cannot get property \"svc\" without inject",
+        "name": "Error"
+      },
+      "index": 0,
+      "originalPassed": false,
+      "path": "/outputs/error",
+      "problem": "D05 checked/outputs/error: actual {\"message\":\"undeclared key\",\"name\":\"Error\"} != expected {\"message\":\"cannot get property \\\"svc\\\" without inject\",\"name\":\"Error\"}"
+    },
+    {
+      "actual": null,
+      "actualPathErr": "missing assertion path /outputs/unchecked",
+      "adaptationMetadata": "",
+      "at": "checked",
+      "expected": "value",
+      "index": 1,
+      "originalPassed": false,
+      "path": "/outputs/unchecked",
+      "problem": "missing assertion path /outputs/unchecked"
+    },
+    {
+      "actual": "value",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "checked",
+      "expected": "value",
+      "index": 2,
+      "originalPassed": true,
+      "path": "/outputs/declared",
+      "problem": ""
+    }
+  ],
+  "backend": "graph-lock",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "incomplete",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "step 7 dispose fiber=\"u\" label=\"\": replay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract\nreplay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract",
+  "failedOriginalAssertions": 2,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "bf41ee473cfa22db0c38f998e0b927d205690d52ce8b9a63979f458c136aafc1",
+  "knownBoundary": "not-carried unchecked ctx.get; incomplete, never raw parity",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:12:52.547Z",
+    "endedUTC": "2026-11-12T08:12:52.558Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D05": "9e5392e08efcbae96deca1a899509b9896896792375ed85791b8b1c11dbd43bd"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D05.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "bf41ee473cfa22db0c38f998e0b927d205690d52ce8b9a63979f458c136aafc1"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [
+    {
+      "error": "replay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract",
+      "operation": "dispose",
+      "type": "*replay.UnsupportedError"
+    }
+  ],
+  "scenario": "D05",
+  "scriptSHA256": "9e5392e08efcbae96deca1a899509b9896896792375ed85791b8b1c11dbd43bd",
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D05\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"p\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"p\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"p\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"value\"}},{\"seq\":7,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"u\"}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":9,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"d\"}},{\"seq\":10,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":11,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"u\"}},{\"seq\":12,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"u\"}},{\"seq\":13,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"cannot get property \\\"svc\\\" without inject\",\"name\":\"Error\"},\"op\":\"read\"}},{\"seq\":14,\"kind\":\"output\",\"data\":{\"to\":\"error\",\"value\":{\"message\":\"cannot get property \\\"svc\\\" without inject\",\"name\":\"Error\"}}},{\"seq\":15,\"kind\":\"output\",\"data\":{\"to\":\"unchecked\",\"value\":\"value\"}},{\"seq\":16,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"d\"}},{\"seq\":17,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"d\"}},{\"seq\":18,\"kind\":\"output\",\"data\":{\"to\":\"declared\",\"value\":\"value\"}},{\"seq\":19,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":20,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":21,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"d\"}},{\"seq\":22,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":23,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":24,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"u\"}},{\"seq\":25,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":26,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":27,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"p\"}},{\"seq\":28,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":29,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"value\"}},{\"seq\":30,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":{\"$undefined\":true}}},{\"seq\":31,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"provided\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"value\",\"active\":true}],\"outputs\":{}},{\"label\":\"checked\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"u\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"d\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:3\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[{\"key\":\"svc\",\"provisionUID\":\"uid:1\"}]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"value\",\"active\":true}],\"outputs\":{\"declared\":\"value\",\"error\":{\"message\":\"cannot get property \\\"svc\\\" without inject\",\"name\":\"Error\"},\"unchecked\":\"value\"}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"p\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"u\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"d\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{\"declared\":\"value\",\"error\":{\"message\":\"cannot get property \\\"svc\\\" without inject\",\"name\":\"Error\"},\"unchecked\":\"value\"}}]}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D05\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"p\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"p\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"p\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"p\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"root:svc\",\"value\":\"value\"}},{\"seq\":7,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"u\"}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":9,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"d\"}},{\"seq\":10,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":11,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"u\"}},{\"seq\":12,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"d\"}},{\"seq\":13,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"u\"}},{\"seq\":14,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"undeclared key\",\"name\":\"Error\"},\"op\":\"read\"}},{\"seq\":15,\"kind\":\"output\",\"data\":{\"to\":\"error\",\"value\":{\"message\":\"undeclared key\",\"name\":\"Error\"}}},{\"seq\":16,\"kind\":\"error\",\"data\":{\"error\":{\"message\":\"replay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract\",\"name\":\"Error\"},\"fiber\":\"u\"}},{\"seq\":17,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"LOADING\",\"to\":\"UNLOADING\"}},{\"seq\":18,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"UNLOADING\",\"to\":\"FAILED\"}},{\"seq\":19,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"d\"}},{\"seq\":20,\"kind\":\"output\",\"data\":{\"to\":\"declared\",\"value\":\"value\"}},{\"seq\":21,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":22,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"d\"}},{\"seq\":23,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":24,\"kind\":\"status\",\"data\":{\"fiber\":\"d\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":25,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"u\"}},{\"seq\":26,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"FAILED\",\"to\":\"UNLOADING\"}},{\"seq\":27,\"kind\":\"status\",\"data\":{\"fiber\":\"u\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"provided\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"value\",\"active\":true}],\"outputs\":{}},{\"label\":\"checked\",\"states\":[{\"fiber\":\"p\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"u\",\"state\":\"FAILED\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}},{\"fiber\":\"d\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:3\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[{\"key\":\"svc\",\"provisionUID\":\"uid:1\"}]},\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"root:svc\",\"provider\":\"p\",\"provisionUID\":\"uid:1\",\"value\":\"value\",\"active\":true}],\"outputs\":{\"declared\":\"value\",\"error\":{\"message\":\"undeclared key\",\"name\":\"Error\"}}}]}",
+  "unsupportedSentinel": true,
+  "variant": "original"
+}

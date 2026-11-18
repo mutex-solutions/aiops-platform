@@ -1,0 +1,82 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D07",
+  "title": "NeedWith config is bound to a consumer service view",
+  "covers": [
+    "needwith-config"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "mode": "service",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "mode": "config",
+          "base": {
+            "base": true
+          },
+          "to": "view"
+        }
+      ],
+      "needs": {
+        "svc": {
+          "limit": 7,
+          "mode": "need"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "needwith"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "needwith",
+      "path": "/outputs/view",
+      "equals": {
+        "base": true,
+        "limit": 7,
+        "mode": "need"
+      }
+    }
+  ]
+}

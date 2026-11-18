@@ -1,0 +1,95 @@
+[
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": []
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": 1
+        },
+        "EffectiveConfig": {
+          "default": 9,
+          "value": 1
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 6
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": []
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": 2
+        },
+        "EffectiveConfig": {
+          "default": 9,
+          "value": 1
+        },
+        "ConfigVersion": 1
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 6
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "value": 2
+        },
+        "EffectiveConfig": {
+          "default": 9,
+          "value": 1
+        },
+        "ConfigVersion": 1
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 12
+  }
+]

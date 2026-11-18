@@ -1,0 +1,186 @@
+{
+  "current": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "hook fiber/f/internal/update/default"
+        ],
+        "EffectTree": [
+          {
+            "Label": "hook fiber/f/internal/update/default",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 2
+        },
+        "EffectiveConfig": {
+          "v": 2
+        },
+        "ConfigVersion": 2
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 18
+  },
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 3
+        },
+        "EffectiveConfig": {
+          "v": 2
+        },
+        "ConfigVersion": 3
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 30
+  },
+  "initial": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "hook fiber/f/internal/update/default"
+        ],
+        "EffectTree": [
+          {
+            "Label": "hook fiber/f/internal/update/default",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 0
+        },
+        "EffectiveConfig": {
+          "v": 0
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 7
+  },
+  "pending-update": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "hook fiber/f/internal/update/default"
+        ],
+        "EffectTree": [
+          {
+            "Label": "hook fiber/f/internal/update/default",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 1
+        },
+        "EffectiveConfig": {
+          "v": 0
+        },
+        "ConfigVersion": 1
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 12
+  },
+  "rejected": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "hook fiber/f/internal/update/default"
+        ],
+        "EffectTree": [
+          {
+            "Label": "hook fiber/f/internal/update/default",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 3
+        },
+        "EffectiveConfig": {
+          "v": 2
+        },
+        "ConfigVersion": 3
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 26
+  }
+}

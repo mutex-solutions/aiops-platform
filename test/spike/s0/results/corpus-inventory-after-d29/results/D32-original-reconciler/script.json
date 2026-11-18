@@ -1,0 +1,83 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D32",
+  "title": "Parallel waits for every listener before aggregating errors",
+  "covers": [
+    "parallel-mode",
+    "parallel-all-settled"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "parallel",
+      "label": "fails",
+      "program": [
+        {
+          "op": "fail",
+          "error": "parallel failure"
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "parallel",
+      "label": "slow",
+      "program": [
+        {
+          "op": "gate",
+          "label": "parallel-slow"
+        },
+        {
+          "op": "mark",
+          "label": "parallel-complete"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "parallel",
+      "mode": "parallel",
+      "await": false,
+      "task": "parallel"
+    },
+    {
+      "op": "waitMark",
+      "label": "parallel-slow"
+    },
+    {
+      "op": "snapshot",
+      "label": "in-flight"
+    },
+    {
+      "op": "release",
+      "label": "parallel-slow"
+    },
+    {
+      "op": "awaitTask",
+      "task": "parallel",
+      "catch": true,
+      "to": "aggregate"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "finished",
+      "path": "/outputs/aggregate",
+      "equals": {
+        "name": "AggregateError",
+        "message": "",
+        "errors": [
+          {
+            "name": "Error",
+            "message": "parallel failure"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,485 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:\"svc\"@0/realm:0",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "availability:accepted",
+    "From": "",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "u"
+    }
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "d"
+    }
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "u"
+    }
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "message": "undeclared key",
+        "name": "Error"
+      },
+      "op": "read"
+    }
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "error",
+      "value": {
+        "message": "undeclared key",
+        "name": "Error"
+      }
+    }
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "message": "replay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract",
+        "name": "Error"
+      },
+      "fiber": "u"
+    }
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "load:failed",
+    "From": "",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 23,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 24,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "FAILED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 25,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "d"
+    }
+  },
+  {
+    "Sequence": 26,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "declared",
+      "value": "value"
+    }
+  },
+  {
+    "Sequence": 27,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 28,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 29,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 30,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 31,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 32,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 33,
+    "Fiber": 3,
+    "Name": "d",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 34,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "FAILED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 35,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "state",
+    "From": "FAILED",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 36,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 37,
+    "Fiber": 2,
+    "Name": "u",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

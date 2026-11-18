@@ -1,0 +1,99 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D15",
+  "title": "Disposing and replacing a provider changes the consumer binding",
+  "covers": [
+    "provider-swap"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "$config": "v"
+          }
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "seen"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p1",
+      "plugin": "provider",
+      "config": {
+        "v": "old"
+      }
+    },
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "old"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p1"
+    },
+    {
+      "op": "settle",
+      "label": "gap"
+    },
+    {
+      "op": "mount",
+      "fiber": "p2",
+      "plugin": "provider",
+      "config": {
+        "v": "new"
+      }
+    },
+    {
+      "op": "settle",
+      "label": "new"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p2"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "gap",
+      "path": "/states/1/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "new",
+      "path": "/outputs/seen",
+      "equals": "new"
+    }
+  ]
+}

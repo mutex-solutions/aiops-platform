@@ -1,0 +1,56 @@
+{
+ "classification": "diagnostic inventory after native D29 integration; NOT full S0 or semantic acceptance",
+ "exitCode": 0,
+ "commit": "3e479f1",
+ "counts": {
+  "failed": 27,
+  "incomplete": 4,
+  "match": 43
+ },
+ "executions": 74,
+ "actualCommand": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-run",
+  "^TestCorpusInventory$",
+  "-v",
+  "./test/spike/s0/replay",
+  "-timeout=6m"
+ ],
+ "environmentWithoutCredentials": {
+  "S0_CORPUS_INVENTORY": "1",
+  "S0_CORPUS_REQUIRE_ASSERTIONS": "1",
+  "GOTOOLCHAIN": "local",
+  "GOMAXPROCS": "8"
+ },
+ "logSHA256": "c56bf88c86c21d23b9872f322717cace09a64b9d984fe88830a72d3d6a5e05ed",
+ "changesSincePreviousInventory": [
+  "D29 on both candidates: incomplete -> match"
+ ],
+ "repeatability": {
+  "note": "five further unrecorded runs of the same command on the same source",
+  "failedCounts": [
+   29,
+   26,
+   26,
+   26,
+   27
+  ],
+  "incompleteCounts": [
+   4,
+   4,
+   4,
+   4,
+   4
+  ],
+  "observation": "the strict raw-trace class of D02 flips between match and failed on either candidate from run to run with zero assertion failures; strict classification is schedule-dependent"
+ },
+ "limits": [
+  "Strict failed classifications include independent scheduling and approved request/completion adaptations; they remain strict mismatches, not silently waived.",
+  "D05/D26 remain explicit non-carried/diagnostic boundaries.",
+  "All original assertions and raw traces remain unchanged."
+ ]
+}

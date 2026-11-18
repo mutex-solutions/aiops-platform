@@ -1,0 +1,70 @@
+{
+  "actualTestExecutableArgs": [
+    "/tmp/go-build1450526252/b001/replay.test",
+    "-test.paniconexit0",
+    "-test.count=1",
+    "-test.run=^TestCorpusInventory$",
+    "-test.v=true",
+    "-test.timeout=6m0s"
+  ],
+  "goArch": "amd64",
+  "goBuildInfo": {
+    "GoVersion": "go1.26.8",
+    "Path": "github.com/mutex-solutions/aiops-platform/test/spike/s0/replay.test",
+    "Main": {
+      "Path": "github.com/mutex-solutions/aiops-platform",
+      "Version": "(devel)"
+    },
+    "Settings": [
+      {
+        "Key": "-buildmode",
+        "Value": "exe"
+      },
+      {
+        "Key": "-compiler",
+        "Value": "gc"
+      },
+      {
+        "Key": "-race",
+        "Value": "true"
+      },
+      {
+        "Key": "CGO_ENABLED",
+        "Value": "1"
+      },
+      {
+        "Key": "CGO_CFLAGS"
+      },
+      {
+        "Key": "CGO_CPPFLAGS"
+      },
+      {
+        "Key": "CGO_CXXFLAGS"
+      },
+      {
+        "Key": "CGO_LDFLAGS"
+      },
+      {
+        "Key": "GOARCH",
+        "Value": "amd64"
+      },
+      {
+        "Key": "GOOS",
+        "Value": "linux"
+      },
+      {
+        "Key": "GOAMD64",
+        "Value": "v1"
+      }
+    ]
+  },
+  "goCandidateBaseline": "3e479f1f1db48e738b7ca3a8f9cebf92cb21d1c6",
+  "goCandidateBaselineError": "\u003cnil\u003e",
+  "goOS": "linux",
+  "goRuntimeVersion": "go1.26.8",
+  "gomaxprocs": 8,
+  "numCPU": 24,
+  "provenanceLimit": "unsigned local hashes; baseline HEAD is not a clean-tree or build-source attestation; os.Args is the test process argv, not an invented go invocation; parent retains full outer command/environment log",
+  "raceInstrumentation": "not inferred from runtime; consult retained actual outer build/test command and build settings",
+  "testExecutableSHA256": "6141533dd891f81c7c9ff5df1bac2f5e39c589f3e3c81e1f2c4f9b90306d9aa0"
+}

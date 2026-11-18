@@ -1,0 +1,462 @@
+{
+  "NOTACCEPTANCE": true,
+  "additionalD13Revision2Executions": 2,
+  "backends": 2,
+  "cases": [
+    {
+      "assertionFailures": 0,
+      "case": "D01-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D01-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D01-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D01-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D02-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D02-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D02-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D02-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D03-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D03-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D03-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D03-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D04-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D04-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D04-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D04-original-graph-lock"
+    },
+    {
+      "assertionFailures": 3,
+      "case": "D05-original-reconciler",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D05-original-reconciler"
+    },
+    {
+      "assertionFailures": 2,
+      "case": "D05-original-graph-lock",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D05-original-graph-lock"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D06-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D06-original-reconciler"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D06-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D06-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D07-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D07-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D07-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D07-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D08-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D08-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D08-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D08-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D09-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D09-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D09-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D09-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D10-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D10-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D10-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D10-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D11-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D11-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D11-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D11-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D12-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D12-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D12-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D12-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D13-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D13-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D14-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D14-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D14-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D14-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D15-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D15-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D15-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D15-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D16-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D16-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D16-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D16-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D17-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D17-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D17-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D17-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D18-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D18-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D18-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D18-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D19-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D19-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D19-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D19-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D20-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D20-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D20-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D20-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D21-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D21-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D21-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D21-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D22-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D22-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D22-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D22-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D23-original-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D23-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D23-original-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D23-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D24-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D24-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D24-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D24-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D25-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D25-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D25-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D25-original-graph-lock"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D26-original-reconciler",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D26-original-reconciler"
+    },
+    {
+      "assertionFailures": 1,
+      "case": "D26-original-graph-lock",
+      "classification": "incomplete",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D26-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D27-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D27-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D27-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D27-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D28-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D28-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D28-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D28-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D29-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D29-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D29-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D29-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D30-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D30-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D30-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D30-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D31-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D31-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D31-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D31-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D32-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D32-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D32-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D32-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D33-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D33-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D33-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D33-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D34-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D34-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D34-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D34-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D35-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D35-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D35-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D35-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D36-original-reconciler",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D36-original-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D36-original-graph-lock",
+      "classification": "match",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D36-original-graph-lock"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-revision-2-overlay-reconciler",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D13-revision-2-overlay-reconciler"
+    },
+    {
+      "assertionFailures": 0,
+      "case": "D13-revision-2-overlay-graph-lock",
+      "classification": "failed",
+      "evidence": "/tmp/aiops-s0-corpus-inventory-sW581sSj/D13-revision-2-overlay-graph-lock"
+    }
+  ],
+  "counts": {
+    "failed": 27,
+    "incomplete": 4,
+    "match": 43
+  },
+  "oracleExecution": "none; frozen goldens read after candidate execution",
+  "originalScripts": 36,
+  "recordedExecutions": 74,
+  "schema": "s0-corpus-inventory/v1",
+  "scope": "bounded diagnostic inventory only; match/failed/incomplete separate, no total-pass claim and no altered assertion payloads",
+  "sourceWitnessErr": ""
+}

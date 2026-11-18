@@ -1,0 +1,50 @@
+[
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "c",
+        "State": "PENDING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": false,
+        "RawConfig": {},
+        "EffectiveConfig": null,
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 1
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "c",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": false,
+        "RawConfig": {},
+        "EffectiveConfig": null,
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 5
+  }
+]

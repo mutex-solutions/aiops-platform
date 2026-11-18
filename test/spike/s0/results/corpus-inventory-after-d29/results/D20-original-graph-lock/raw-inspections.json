@@ -1,0 +1,73 @@
+[
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 1,
+        "Epoch": null,
+        "Effects": [
+          "owned"
+        ],
+        "EffectTree": [
+          {
+            "Label": "owned",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 1,
+          "UIDs": []
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "EffectiveConfig": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "ConfigVersion": 1
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 21
+  },
+  {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "DISPOSED",
+        "Revision": 1,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "EffectiveConfig": {
+          "cleanup": "new-cleanup",
+          "v": 2
+        },
+        "ConfigVersion": 1
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 28
+  }
+]

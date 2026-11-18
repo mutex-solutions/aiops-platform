@@ -1,0 +1,333 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D05",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "p"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "config": {},
+        "fiber": "p"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "config": {},
+        "fiber": "p"
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "d"
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "config",
+      "data": {
+        "config": {},
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "config",
+      "data": {
+        "config": {},
+        "fiber": "d"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "apply",
+      "data": {
+        "config": {},
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "error",
+      "data": {
+        "error": {
+          "message": "undeclared key",
+          "name": "Error"
+        },
+        "op": "read"
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "output",
+      "data": {
+        "to": "error",
+        "value": {
+          "message": "undeclared key",
+          "name": "Error"
+        }
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "error",
+      "data": {
+        "error": {
+          "message": "replay operation unsupported: read get: unchecked plugin reads are outside the accepted typed context contract",
+          "name": "Error"
+        },
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "UNLOADING",
+        "to": "FAILED"
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "apply",
+      "data": {
+        "config": {},
+        "fiber": "d"
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "output",
+      "data": {
+        "to": "declared",
+        "value": "value"
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 22,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "d"
+      }
+    },
+    {
+      "seq": 23,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 24,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 25,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 26,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "FAILED",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 27,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "provided",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "value",
+          "active": true
+        }
+      ],
+      "outputs": {}
+    },
+    {
+      "label": "checked",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "FAILED",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "ACTIVE",
+          "fiberUID": 3,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": [
+              {
+                "key": "svc",
+                "provisionUID": 1
+              }
+            ]
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "value",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "declared": "value",
+        "error": {
+          "message": "undeclared key",
+          "name": "Error"
+        }
+      }
+    }
+  ]
+}

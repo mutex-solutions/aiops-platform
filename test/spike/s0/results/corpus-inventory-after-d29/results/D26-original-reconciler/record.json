@@ -1,0 +1,77 @@
+{
+  "actualTraceDigest": "d650de6b050a1f3008410d80cc5f0ba5eb3947ceb598ace668a033b552bd672f",
+  "assertions": [
+    {
+      "actual": null,
+      "actualPathErr": "missing checkpoint \"diagnostic\"",
+      "adaptationMetadata": "",
+      "at": "diagnostic",
+      "expected": "LOADING",
+      "index": 0,
+      "originalPassed": false,
+      "path": "/states/0/state",
+      "problem": "missing checkpoint \"diagnostic\""
+    }
+  ],
+  "backend": "reconciler",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "incomplete",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "replay operation unsupported: diagnostic: Go self-disposal is request-only; awaited self-disposal is not emulated",
+  "failedOriginalAssertions": 1,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goDiagnosticFabricated": false,
+  "goldenSHA256": "7c16ffa8b0c6a732160473973acd8ecb8ed671c9985736ab08b8ac91d1c2dd5f",
+  "knownBoundary": "not-carried awaited own-dispose; separate saved oracle diagnostic, never synthesized in Go",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:13:02.240Z",
+    "endedUTC": "2026-11-12T08:13:02.447Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D26": "488faab12b8ec64931fe4d3b1b93442febab73d5c615c96758492ac15c410107"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D26.json",
+      "OUTPUT"
+    ],
+    "result": "diagnostic",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "7c16ffa8b0c6a732160473973acd8ecb8ed671c9985736ab08b8ac91d1c2dd5f"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [],
+  "scenario": "D26",
+  "scriptSHA256": "488faab12b8ec64931fe4d3b1b93442febab73d5c615c96758492ac15c410107",
+  "separateOracleDiagnosticDescriptor": {
+    "code": "SELF_DISPOSE_AWAIT_BLOCKED",
+    "boundMS": 200,
+    "message": "Apply awaited its own disposal; the load/dispose cycle did not settle before the diagnostic bound."
+  },
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D26\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"self\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"self\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{},\"fiber\":\"self\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"self\"}},{\"seq\":5,\"kind\":\"selfDispose\",\"data\":{\"await\":true,\"fiber\":\"self\"}},{\"seq\":6,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"self\"}}],\"checkpoints\":[{\"label\":\"diagnostic\",\"states\":[{\"fiber\":\"self\",\"state\":\"LOADING\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{},\"effectiveConfig\":{}}],\"provisions\":[],\"outputs\":{}}],\"diagnostic\":{\"code\":\"SELF_DISPOSE_AWAIT_BLOCKED\",\"boundMS\":200,\"message\":\"Apply awaited its own disposal; the load/dispose cycle did not settle before the diagnostic bound.\"}}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D26\",\"events\":[],\"checkpoints\":[]}",
+  "unsupportedSentinel": true,
+  "variant": "original"
+}

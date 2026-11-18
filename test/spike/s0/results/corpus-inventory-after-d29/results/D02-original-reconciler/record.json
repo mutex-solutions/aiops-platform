@@ -1,0 +1,97 @@
+{
+  "actualTraceDigest": "dbec6907748db7bffdde58b278b0c09239bc4f61e7ca5b5226563a81118b2198",
+  "assertions": [
+    {
+      "actual": "A",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "separate",
+      "expected": "A",
+      "index": 0,
+      "originalPassed": true,
+      "path": "/outputs/a",
+      "problem": ""
+    },
+    {
+      "actual": "B",
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "separate",
+      "expected": "B",
+      "index": 1,
+      "originalPassed": true,
+      "path": "/outputs/b",
+      "problem": ""
+    },
+    {
+      "actual": {
+        "$undefined": true
+      },
+      "actualPathErr": "",
+      "adaptationMetadata": "",
+      "at": "separate",
+      "expected": {
+        "$undefined": true
+      },
+      "index": 2,
+      "originalPassed": true,
+      "path": "/outputs/root",
+      "problem": ""
+    }
+  ],
+  "backend": "reconciler",
+  "candidateNewIDs": "see actual native IDs, addresses, targets and UIDs in raw-inspections.json; no invented identifiers",
+  "classification": "failed",
+  "closeClassification": "nil",
+  "closeErr": "",
+  "comparisonCapabilityErr": "",
+  "executeErr": "",
+  "failedOriginalAssertions": 0,
+  "frontend": "RunComposedJSON (same shared native configuration cell and transforms)",
+  "goldenSHA256": "f5252929e4f5551d53f017060ed6d698793c5e51c66be89a72ff410c97441fac",
+  "knownBoundary": "",
+  "nativeEffects": "see full native EffectTree/Effects in raw-inspections.json and snapshots.json",
+  "notAcceptance": true,
+  "oracleHistoricalSource": "../../../differential/oracle/history/replay-b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1.mjs",
+  "oracleProofErr": "",
+  "oracleReceipt": {
+    "schema": "s0-oracle-run/v1",
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "sourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "startedUTC": "2026-11-12T08:12:51.158Z",
+    "endedUTC": "2026-11-12T08:12:51.168Z",
+    "nodeVersion": "v24.22.1",
+    "executableSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "oracleSHA256": "b0f4e4474e4ffba2b5c9316680fa21581c2032d699fb845d0a9c6c5d0d6488b1",
+    "vendorManifestSHA256": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e",
+    "scripts": {
+      "D02": "9993ccd24a6a402ceec5c106a2aba17475e49918d30185b62fd30395ec881de7"
+    },
+    "exitCode": 0,
+    "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "baselineCommit": "2d8d6ec717bb327739d1630d03ad6787c37660d6",
+    "command": [
+      "S0_NODE",
+      "--import",
+      "oracle/register.mjs",
+      "oracle/replay.mjs",
+      "corpus/D02.json",
+      "OUTPUT"
+    ],
+    "result": "pass",
+    "nativeAttempts": 0,
+    "resolvedPackages": [
+      "@deepseek-ai/cordis",
+      "@deepseek-ai/cosmokit"
+    ],
+    "traceSHA256": "f5252929e4f5551d53f017060ed6d698793c5e51c66be89a72ff410c97441fac"
+  },
+  "parseErr": "",
+  "rawEnvelopeNote": "native co.provision wrappers have unexported fields and JSON encodes their value as {}; raw-inspections/events retain that envelope. observed-inspections.json contains the already-projected actual typed provision observations, not golden substitutions",
+  "runtimeErrors": [],
+  "scenario": "D02",
+  "scriptSHA256": "9993ccd24a6a402ceec5c106a2aba17475e49918d30185b62fd30395ec881de7",
+  "strictErr": "ordered semantic mismatch\nexpected: {\"schema\":\"s0-trace/v1\",\"scenario\":\"D02\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"pa\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"pb\"}},{\"seq\":4,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":5,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"A\"},\"fiber\":\"pa\"}},{\"seq\":6,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"A\"},\"fiber\":\"pa\"}},{\"seq\":7,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"B\"},\"fiber\":\"pb\"}},{\"seq\":8,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"B\"},\"fiber\":\"pb\"}},{\"seq\":9,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":10,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":\"A\"}},{\"seq\":11,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":12,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":\"B\"}},{\"seq\":13,\"kind\":\"output\",\"data\":{\"to\":\"a\",\"value\":\"A\"}},{\"seq\":14,\"kind\":\"output\",\"data\":{\"to\":\"b\",\"value\":\"B\"}},{\"seq\":15,\"kind\":\"output\",\"data\":{\"to\":\"root\",\"value\":{\"$undefined\":true}}},{\"seq\":16,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"pb\"}},{\"seq\":17,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":18,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":\"B\"}},{\"seq\":19,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":{\"$undefined\":true}}},{\"seq\":20,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":21,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"pa\"}},{\"seq\":22,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":23,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":\"A\"}},{\"seq\":24,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":{\"$undefined\":true}}},{\"seq\":25,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"providers\",\"states\":[{\"fiber\":\"pa\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"provider\":\"pa\",\"provisionUID\":\"uid:1\",\"value\":\"A\",\"active\":true},{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"provider\":\"pb\",\"provisionUID\":\"uid:2\",\"value\":\"B\",\"active\":true}],\"outputs\":{}},{\"label\":\"separate\",\"states\":[{\"fiber\":\"pa\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"provider\":\"pa\",\"provisionUID\":\"uid:1\",\"value\":\"A\",\"active\":true},{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"provider\":\"pb\",\"provisionUID\":\"uid:2\",\"value\":\"B\",\"active\":true}],\"outputs\":{\"a\":\"A\",\"b\":\"B\",\"root\":{\"$undefined\":true}}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"pa\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[],\"outputs\":{\"a\":\"A\",\"b\":\"B\",\"root\":{\"$undefined\":true}}}]}\nactual:   {\"schema\":\"s0-trace/v1\",\"scenario\":\"D02\",\"events\":[{\"seq\":1,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"pa\"}},{\"seq\":2,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":3,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"A\"},\"fiber\":\"pa\"}},{\"seq\":4,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"A\"},\"fiber\":\"pa\"}},{\"seq\":5,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":6,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":\"A\"}},{\"seq\":7,\"kind\":\"plugin\",\"data\":{\"disposed\":false,\"fiber\":\"pb\"}},{\"seq\":8,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"PENDING\",\"to\":\"LOADING\"}},{\"seq\":9,\"kind\":\"config\",\"data\":{\"config\":{\"value\":\"B\"},\"fiber\":\"pb\"}},{\"seq\":10,\"kind\":\"apply\",\"data\":{\"config\":{\"value\":\"B\"},\"fiber\":\"pb\"}},{\"seq\":11,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"LOADING\",\"to\":\"ACTIVE\"}},{\"seq\":12,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":\"B\"}},{\"seq\":13,\"kind\":\"output\",\"data\":{\"to\":\"a\",\"value\":\"A\"}},{\"seq\":14,\"kind\":\"output\",\"data\":{\"to\":\"b\",\"value\":\"B\"}},{\"seq\":15,\"kind\":\"output\",\"data\":{\"to\":\"root\",\"value\":{\"$undefined\":true}}},{\"seq\":16,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"pb\"}},{\"seq\":17,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":18,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":\"B\"}},{\"seq\":19,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"value\":{\"$undefined\":true}}},{\"seq\":20,\"kind\":\"status\",\"data\":{\"fiber\":\"pb\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}},{\"seq\":21,\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"pa\"}},{\"seq\":22,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"ACTIVE\",\"to\":\"UNLOADING\"}},{\"seq\":23,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":\"A\"}},{\"seq\":24,\"kind\":\"service\",\"data\":{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"value\":{\"$undefined\":true}}},{\"seq\":25,\"kind\":\"status\",\"data\":{\"fiber\":\"pa\",\"from\":\"UNLOADING\",\"to\":\"DISPOSED\"}}],\"checkpoints\":[{\"label\":\"providers\",\"states\":[{\"fiber\":\"pa\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"provider\":\"pa\",\"provisionUID\":\"uid:1\",\"value\":\"A\",\"active\":true},{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"provider\":\"pb\",\"provisionUID\":\"uid:2\",\"value\":\"B\",\"active\":true}],\"outputs\":{}},{\"label\":\"separate\",\"states\":[{\"fiber\":\"pa\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:1\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"ACTIVE\",\"fiberUID\":\"uid:2\",\"revision\":0,\"epoch\":{\"revision\":0,\"needs\":[]},\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[{\"key\":\"svc\",\"realm\":\"svc:@realm-a\",\"provider\":\"pa\",\"provisionUID\":\"uid:1\",\"value\":\"A\",\"active\":true},{\"key\":\"svc\",\"realm\":\"svc:@realm-b\",\"provider\":\"pb\",\"provisionUID\":\"uid:2\",\"value\":\"B\",\"active\":true}],\"outputs\":{\"a\":\"A\",\"b\":\"B\",\"root\":{\"$undefined\":true}}},{\"label\":\"disposed\",\"states\":[{\"fiber\":\"pa\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"A\"},\"effectiveConfig\":{\"value\":\"A\"}},{\"fiber\":\"pb\",\"state\":\"DISPOSED\",\"fiberUID\":null,\"revision\":0,\"epoch\":null,\"rawConfig\":{\"value\":\"B\"},\"effectiveConfig\":{\"value\":\"B\"}}],\"provisions\":[],\"outputs\":{\"a\":\"A\",\"b\":\"B\",\"root\":{\"$undefined\":true}}}]}",
+  "unsupportedSentinel": false,
+  "variant": "original"
+}

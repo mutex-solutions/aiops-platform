@@ -1,0 +1,108 @@
+{
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "DISPOSED",
+        "Revision": 2,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 3
+        },
+        "EffectiveConfig": {
+          "v": 3
+        },
+        "ConfigVersion": 2
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 29
+  },
+  "initial": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 1
+        },
+        "EffectiveConfig": {
+          "v": 1
+        },
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 8
+  },
+  "latest": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "f",
+        "State": "ACTIVE",
+        "Revision": 2,
+        "Epoch": null,
+        "Effects": [
+          "apply"
+        ],
+        "EffectTree": [
+          {
+            "Label": "apply",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 2,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 3
+        },
+        "EffectiveConfig": {
+          "v": 3
+        },
+        "ConfigVersion": 2
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 23
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "provided": [
+    {
+      "ID": 1,
+      "Name": "p",
+      "State": "ACTIVE",
+      "Revision": 0,
+      "Epoch": null,
+      "Effects": [
+        "provide:\"svc\"@0/realm:0"
+      ],
+      "EffectTree": [
+        {
+          "Label": "provide:\"svc\"@0/realm:0",
+          "State": "ready",
+          "Children": null
+        }
+      ],
+      "Tracked": null,
+      "Error": "",
+      "Alive": true,
+      "Target": {
+        "Revision": 0,
+        "UIDs": null
+      },
+      "Configured": true,
+      "ConfigPrepared": true,
+      "RawConfig": {},
+      "EffectiveConfig": {},
+      "ConfigVersion": 0
+    }
+  ]
+}

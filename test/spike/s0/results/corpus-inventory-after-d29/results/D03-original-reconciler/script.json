@@ -1,0 +1,119 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D03",
+  "title": "Equal isolation labels join while a distinct label stays separate",
+  "covers": [
+    "equal-isolation-labels-join"
+  ],
+  "contexts": [
+    {
+      "id": "first",
+      "parent": "root",
+      "isolate": {
+        "key": "svc",
+        "label": "shared"
+      }
+    },
+    {
+      "id": "second",
+      "parent": "root",
+      "isolate": {
+        "key": "svc",
+        "label": "shared"
+      }
+    },
+    {
+      "id": "other",
+      "parent": "root",
+      "isolate": {
+        "key": "svc",
+        "label": "different"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": "joined"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "joined"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "context": "first",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "context": "second",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "context": "other",
+      "fiber": "isolated",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "joined"
+    },
+    {
+      "op": "dispose",
+      "fiber": "isolated"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "joined",
+      "path": "/states/1/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "joined",
+      "path": "/states/2/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "joined",
+      "path": "/outputs/joined",
+      "equals": "joined"
+    }
+  ]
+}

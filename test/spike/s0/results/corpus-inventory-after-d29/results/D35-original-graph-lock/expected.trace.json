@@ -1,0 +1,94 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D35",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "listener",
+      "data": {
+        "label": "outer"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "mark",
+      "data": {
+        "label": "outer-before",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "listener",
+      "data": {
+        "label": "veto"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "mark",
+      "data": {
+        "label": "outer-after",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "output",
+      "data": {
+        "to": "veto-result",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "listener",
+      "data": {
+        "label": "delegates"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "inner",
+      "data": {
+        "key": "waterfall-value"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "output",
+      "data": {
+        "to": "inner-result",
+        "value": "inner-value"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "output",
+      "data": {
+        "to": "delegated",
+        "value": "inner-value"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "finished",
+      "states": [],
+      "provisions": [],
+      "outputs": {
+        "veto-result": {
+          "$undefined": true
+        },
+        "inner-result": "inner-value",
+        "delegated": "inner-value"
+      }
+    }
+  ]
+}
