@@ -1,96 +1,83 @@
 # aiops-platform
 
-aiops-platform is an Apache-2.0 AIOps platform, on-prem and open-source first, in which the Grafana® observability stack is first-party and the default, and other observability systems are reached through connector packs that a contributor can write and contribute back. The end goal is a plugin marketplace where users contribute and sell plugins to each other: phase 1 is the community edition, which this repository describes, and the marketplace with billing is a later enterprise edition that is not built, with the boundary between the two an open owner decision (ADR-049).
+[![CI](https://github.com/mutex-solutions/aiops-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mutex-solutions/aiops-platform/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status: S0 in progress — experimental checkpoint, not a runnable platform.** The repository contains the architecture, a pinned test-only reference oracle, and lifecycle/context experiments. The SQL authority gate remains failed, full Go/Cordis parity and scale acceptance are incomplete, and there is no production kernel or completed S0. See [S0 progress](docs/design/s0-progress.md). The current Go module prefix is `github.com/mutex-solutions/aiops-platform` (ADR-057). Development pushes target a private repository; public disclosure remains gated by L14. No CI/CD is set up for this checkpoint. The order of work is community first, by the owner's decision of 2026-11-11 ([`00-decisions.md`](docs/architecture/00-decisions.md) §2.4): the plugin architecture is kept whole, and a release that people can run comes early. P0, the model core (steps S0, S1, S2a, S2b, S3, S4a and S5), builds the kernel, the loader and launcher, the authoring path by which a third party writes, publishes and installs a plugin, in process and remote, the infrastructure definitions, tenancy for one tenant with generations on one process, and the policy plugins. P1 (S6a, S7, S8a and S8b) adds the plugin manager and the plugin index in their single-site form, the telemetry base, the agent runtime (the harness contract, the first-party harness and its read tools) and the incident loop with on-call, notifiers and chat-ops. Its exit, at S8b, is the first community release, version `0.1.0`: `self-host-full` with one tenant and one process, `dev`, and `aiops-only` for the connector scenario. What only a hosted service or a marketplace needs comes after it, behind the same definitions: many tenant trees, canary generations, per-tenant remote plugin instances, the full plugin manager and the `hosted` profile (P2, beside the community second wave). The rule that makes the cut: the contract a plugin author sees is complete at the first community release. No step has a date, phase dates are planning targets, and each step ends in a test.
+An open-source AIOps platform for on-prem estates, built on the Grafana®
+observability stack, where every feature is a plugin.
 
-## What it is
+> **Status: early development (phase S0).** There is nothing to install yet.
+> The repository holds the architecture and the kernel experiments that decide
+> how the plugin runtime is built. See [progress](docs/design/s0-progress.md).
 
-- **On-prem and open-source first.** The target estate is Kubernetes clusters and Linux hosts on virtual machines or bare metal, and from phase P2 network devices polled over SNMP. Hypervisors, hardware health and self-hosted databases enter on named triggers. Cloud inputs are optional later rows, and no row in the `self-host-full` profile needs a public cloud provider API. A chat service, an external on-call engine, a paging carrier and a hosted model are optional bindings: with none bound, the loop runs through the API and `aiopsctl`, email or webhook paging and a local model endpoint.
-- **One agent per host or cluster.** Unmodified Grafana Alloy with our installer, enrolment and centrally served configuration, aiming at a Datadog-like install: one command, one small `features` file. It ships metrics, logs, traces, profiles and eBPF signals through a tenant gateway into the Mimir™, Loki®, Tempo® and Pyroscope™ backends. Every host pipeline is stamped with the enrolled agent id as the host identity, and the host log pipeline labels package, privileged-command and unit lines as change evidence, because a host has no deployment event to look up.
-- **One control-plane binary, `aiops`.** It ingests alerts, opens and correlates incidents, investigates them with an agent harness, pages the on-call person, runs approved changes under a fixed set of safety contracts, and serves chat-ops and dashboards: provisioned dashboards from the first community release, and a dashboard app plugin as an optional bundle from P2. A first install runs no harness container and no on-call container. The troubleshooting method is a set of first-party plugins around whichever harness a pillar selects: `correlate` keys each incident on a service or on the entity its alerts name and sets its priority, `context-pack` builds the first message with the change candidates, and `rca-contract` checks the answer against a fixed contract.
-- **The agent harness is a plugin point.** Every pillar agent (incident, compliance, FinOps and the others) runs through one registry, `harnesses`, behind its dispatcher `agent-runs`. A harness takes one task, a persona, a first message built by code, an offered set of read tools, model access by tier and a budget in steps, tool calls, tokens and time, and returns a stream of steps and one answer. It never writes, holds no credential and reaches a model only through the LLM gateway. The default is `harness-native`, first-party and new: a loop that runs in process (the first-party default is owner decision A; that the loop runs in the kernel process is owner decision W12, `00-decisions.md` §2.4). Telemetry is read by first-party tools that the kernel calls with its own read credential, so every call gets the actor filter, the cap, the scrub and an audit row. The harness is chosen per pillar: by the tenant among the harnesses an operator marked selectable (from the multi-tenant runtime, S4b), then by the pillar group, then by the default. An external harness is an optional plugin that declares its departures from the contract. `harness-holmesgpt` drives an unmodified HolmesGPT image and can stand in as the harness of any pillar agent; it is listed by no shipped profile, and nothing in the core names or needs it.
-- **On-call is a registry of providers.** `paging` dispatches the `oncallProviders` registry. The default is `on-call-provider-builtin`, first-party and written new: responders with contact methods and notification rules, one rotation shape with overrides, escalation steps, and ack by chat button, API, CLI or a signed one-time link. It is the default by owner decision of 2026-11-11 (§2.4 W11). No code is written before a lawyer's answer on schedule patents, which is still open, and if that answer is missing when step S8b starts the first release ships providers only. Any other provider is a plugin. `on-call-provider-goalert` connects to a GoAlert the operator runs; it is optional and listed by no shipped profile. No on-call engine runs per tenant. With no provider or no bound policy the platform pages no one and says so on the incident. A dead-man switch watches in both directions: the kernel watches the alerting path, and the alerting stack watches the kernel's page path.
-- **Open estate model and content, published as files.** The estate vocabulary (every term names its open source or is marked ours), its rule table and a Turtle export are files, parsed in CI by an open-source RDF tool; no ontology engine runs in any profile. Inside the product the estate is a projection, dropped and rebuilt from its sources and never edited through the API or chat. It arrives in P2 and is keyed by the entity reference (`<kind>:<id>`) that step S7 fixes for incident keys and change targets. The shipped detection rules are plain Prometheus rule files and the agent label contract is published, so a customer's own ruler and collector can use both.
-- **Seven pillars.** Incident, Change, Compliance, SecOps, FinOps, Continuous Improvement and Executive Reporting. Each pillar is a group of rows (its persona, tool set, signal sources, harness selection and executors), never kernel code.
-- **Everything is a plugin behind a service definition.** The server is built on a Go port of the Cordis model, the kernel of the DeepSeek Harness (dsh). A service definition is a key, an interface and a version of its own, shipped with a fake and a conformance suite. A plugin's manifest states the definition versions it needs and a distribution states the versions it serves; a definition is `v0` until a release review promotes it, and an old major of a stable definition stays served for a stated support window. A plugin declares what it needs and what it provides, and is tested alone on the real kernel, which ships in the SDK, before it is attached. There is no boot order: a plugin activates when the services it needs are available, and restarts in place, in every profile, when one of its providers changes. The safety contracts (approval floor, change ledger, credential leases, audit chain, PII scrub) are first-party plugins that no composition can shadow, and a capability they guard does not exist without them; the kernel itself holds no policy.
-- **An upstream is a plugin, never the product.** Every upstream (a process, a library, a service, content or a contract) enters through one provider or contribution behind a definition whose fake and conformance suite name no upstream, and lives in its own bundle, a connector pack or a stack bundle. Removing any one upstream plugin leaves a binary that builds and boots every shipped profile, and CI proves it with a leave-one-out render. The few stated exceptions are contracts, not defaults (`00-decisions.md` §4.3). Optional bundles (the chat surface for Slack, the HolmesGPT harness, the GoAlert provider and, from P2, the dashboard app) ship in the release image, are listed by no shipped profile and are enabled by the operator with no rebuild (§2.4 W8, W13). Each upstream is listed once in the upstream register, `tools/upstream-components.yaml`, with its licence, verdict, conditions and evidence, and a release check reads that file.
-- **The default stack is a choice of bundles, not a contract.** The first-party connectors and plugins are for the Grafana ecosystem. No row outside a connector pack or a stack bundle holds a query string or calls a telemetry store's query API, and CI checks that on the static graph. A connector pack makes one other observability system usable for one or more capabilities: alert intake, the agent's reads, kernel reads, change evidence, estate sources, rule content. It is a bundle published as one signed artifact, in three sizes: a data pack (rows and content, no code, installed with no rebuild), a read connector (the same plus one plugin) and a stack bundle (agents, gateway, limits and provisioning for a second stack; not planned in this edition). The read seam of every harness is the `tools` registry. A data pack mounts allow-listed read tools of an MCP server through rows of the first-party `tool-mcp`, so with no code it reaches only systems that offer such a server (§2.4 W9); any other system needs a read connector. This edition reads from other systems through packs on `aiops-only`; it collects, stores, isolates and limits only on the default stack.
-- **Composed by profiles, changed as generations.** The same binary runs as `hosted` (multi-tenant, run by us), `self-host-full` (the customer runs the whole stack), `aiops-only` (the AIOps layer against the customer's own observability systems: Prometheus-compatible and Loki-compatible stores through the default connector pack, any other system through another pack) and `dev`; `aiopsctl` is the `cli` profile of the same launcher. The first community release ships `self-host-full`, `dev` and `aiops-only`; `hosted` follows later. A profile is ordered bundles plus patch layers over an empty root. A configuration change is a generation: it goes through one reload queue, is judged once it settles, and is rolled back on a failed verdict. The process is replaced only for new in-process code, or when a process-scope plugin leaks past its dispose deadline, a restore fails or the restart policy gives up on an infrastructure provider. A tenant-scope leak is quarantined for that tenant and row on the replica, which is recycled only above the leak budget (plugin record §13).
-- **Installed through supported plugin interfaces.** A plugin in any language runs out of process over gRPC as a set of contributions: `aiopsctl plugin install` takes a signed OCI artifact, and the plugin is then enabled with no rebuild and no restart. A pack with no code (rows and content only) is installed the same way. An in-process Go plugin enters a binary through the distribution builder (`aiopsctl dist build`, then `dist sign`), from a repository with no kernel checkout. In-process plugins under `contrib/` also ship in the `aiops-contrib` image, each row disabled, for a self-hoster with nothing to build. Plugins are found through a plugin index, a signed public repository used for discovery only; its format and the commands that compose and sign it are published, so a third party can run an index or a marketplace of its own. Hosted runs the release distribution only. Three rules here are owner decisions of 2026-11-11 (`00-decisions.md` §2.4): the remote runtime in its single-tenant form and the Python SDK ship before the first community release (W5), a self-hoster may build and sign a distribution of their own, which can also rebind bound keys (W3), and hosted third-party code runs only as remote contributions, one instance per tenant (W4).
+![System context, self-hosted profile](docs/architecture/diagrams/png/01-c1-context-self-host-full.png)
 
-Out of scope: our own telemetry store, a configuration database of our own, a rule evaluator of our own, a triple store or ontology server at runtime, SSH or a shell from the kernel or any harness, our own identity provider, a portal SPA, status pages, a second SQL engine (`sql` is a PostgreSQL dialect contract; an owner decision, `00-decisions.md` §2.4 W2), and any modified Grafana or backend build.
+## What it will be
 
-## For contributors
+- **One agent per host or cluster.** Unmodified Grafana Alloy with a one-command
+  install, shipping metrics, logs, traces, profiles and eBPF signals.
+- **One control-plane binary, `aiops`.** It takes in alerts, correlates
+  incidents, investigates them with an AI agent, pages on-call, and runs
+  approved changes behind safety gates.
+- **Seven pillars.** Incident, Change, Compliance, SecOps, FinOps, Continuous
+  Improvement and Executive Reporting.
+- **Everything is a plugin.** Each capability sits behind a versioned service
+  definition with a fake and a conformance suite, so a plugin is testable alone.
+  Plugins run in process (Go) or out of process over gRPC (any language).
+- **Bring your own stack.** Grafana Mimir™, Loki®, Tempo® and Pyroscope™ are
+  the default. Other observability systems plug in through connector packs.
+- **On-prem first.** Kubernetes, virtual machines and bare metal. No public
+  cloud API is required.
 
-The reason this project is open source is that the community builds plugins and contributes them back. The project writes the connectors and plugins for the Grafana ecosystem, the default agent harness and the default on-call provider. A contributor can add another observability system as a connector pack, and any other integration (an agent harness, a tool, a notifier, an on-call provider, a chat surface, an executor) as a contribution to an existing registry, without modifying the core and with no kernel checkout.
+## Roadmap
 
-| Step | What the contributor does |
+| Phase | Goal | State |
+|---|---|---|
+| S0 | Choose the kernel concurrency core and prove it against the reference model | In progress |
+| S1 to S8 | Kernel, SDK, plugin runtime, first plugins | Planned |
+| 0.1.0 | First community release: something you can run | Planned |
+
+Details are in the [roadmap](docs/architecture/08-profiles-roadmap-adrs.md).
+
+## Run the tests
+
+Requires Go 1.26.
+
+```sh
+go build ./...
+go test -race ./...
+```
+
+Database probes and the reference comparison are opt-in and skip by default.
+The [CI workflow](.github/workflows/ci.yml) shows how to run them with
+PostgreSQL 16 and the pinned Node.js runtime.
+
+## Repository layout
+
+| Path | Contents |
 |---|---|
-| Scaffold | `aiopsctl plugin new connector` for a data pack, or `aiopsctl plugin new <registry>` with `--lang go` or `--lang python` for code. The template compiles and fails conformance with one line per obligation, and that list is the work list |
-| Write and record | Rows and content for a pack; for code, the methods of the definition. Fixtures are recorded from a backend the contributor runs. Project CI holds no vendor credential and tests a pack by replay |
-| Check | One command before a pull request: `aiopsctl plugin check ./`. It needs `aiopsctl`, and for code the SDK and a toolchain, never the kernel source. For a pack it also runs the connector scenario, inside `aiopsctl` and with no container runtime: a firing alert becomes one incident on the expected entity, the first message lists the bound signals, the default harness, on replayed model turns, makes one successful call on each tool the pack offers, and the resolve clears it |
-| Publish | Pack, sign and push the artifact, then open a pull request to the plugin index (the plugin stays in the author's repository) or a pull request that adds it under `contrib/` in this repository |
+| [`docs/architecture/`](docs/architecture/README.md) | Decision record and C4 diagrams. Start with [`00-decisions.md`](docs/architecture/00-decisions.md) |
+| [`docs/design/`](docs/design/) | Design records: [plugin system](docs/design/plugin-system-2026-11.md), [community edition](docs/design/community-first-2026-11.md), [agent harness](docs/design/harness-and-upstreams-2026-11.md), [licence audit](docs/design/licence-audit-2026-11.md) |
+| [`docs/adr/`](docs/adr/) | Architecture decision records |
+| [`docs/research/`](docs/research/) | Research on upstream projects and licences |
+| [`test/spike/s0/`](test/spike/s0/) | Kernel experiments: two candidate cores, property tests, replay |
+| [`test/differential/`](test/differential/README.md) | Scenario corpus and the reference oracle |
+| [`plugins/jobs-river/`](plugins/jobs-river/) | Job queue and transaction probes on PostgreSQL |
 
-| | In this edition |
-|---|---|
-| Portable to another system, by a contributor | Alert intake, every read of the agent (through `tools`), the agent harness itself, kernel reads for stores that speak the Prometheus or the Loki query dialect, notifiers (page channels included), on-call providers, chat surfaces, executors, rule packs and runbooks; from P2 also change evidence and estate sources |
-| Specific to the default stack | The agent and fleet, the tenant gateway, limits rendering, backend provisioning, the dead-man rule and route, provisioned dashboards with the annotator, the shipped rule files as written, the lab |
+## Contributing
 
-Systems a contributor might target include a plain Prometheus and Alertmanager pair, VictoriaMetrics and VictoriaLogs, Elasticsearch or OpenSearch, SigNoz or another ClickHouse-based stack, and Datadog. The names only identify those systems; which of them needs a data pack and which a read connector is settled with the first pack for each.
-
-A plugin that wraps an upstream follows the rules of the [licence record](docs/design/licence-audit-2026-11.md) §7. In-process code is under a licence on the allow-list (Apache-2.0, MIT, BSD and similar; MPL-2.0 with a recorded condition; GPL, LGPL and AGPL are denied in process). An upstream process is pulled by digest from its publisher and is never shipped by the project. The upstream's lowercase technical name may appear once, as the suffix of the plugin id, and only when its register entry allows it. The conformance suite of a definition names no upstream, so the cassettes of an upstream stay in the plugin that wraps it.
-
-The first community release is accepted only when six legs pass (`00-decisions.md` §7.1): the operator demo with its host leg (A); the connector scenario on stores we do not deploy (B); a data pack and a code contribution written from the templates (C); the index and gate checks (D); an evaluation smoke baseline on a hand-written case set (E; §2.4 W10); and upstream independence (F): every shipped profile renders without each upstream bundle it lists, the default provider map names no optional upstream plugin, and each optional upstream plugin is replayed from its own cassettes. One reference pack for a logs store outside the default stack is kept green in CI for legs B and C (§2.4 W6).
-
-Decided: the owner confirmed W2 to W13 on 2026-11-11, and they are owner decisions from that date (`00-decisions.md` §2.4). Those of the harness round, W7 to W13, are the scope of the first-party harness at the first release, where the optional upstream plugins live, `tool-mcp` in place of the binding registry, the evaluation gate, the built-in on-call provider, the first-party loop inside the kernel process, and the Slack bundle as operator-enabled. Still open, and the owner's to decide: the contributor agreement and whether plugins under `contrib/` are promised free in every edition (ADR-050), who the maintainers are, and the boundary between the two editions (ADR-049). A lawyer's answer on schedule patents is also open, and no code of the built-in on-call provider is written before it. The full list of what is open is in `00-decisions.md` §2.4. The list of P1 deliverables the owner accepted earlier is pending again, because the harness round changes it. No review time is promised yet. The detail is in the [community record](docs/design/community-first-2026-11.md) §6 and §7 and the [harness record](docs/design/harness-and-upstreams-2026-11.md) §1 and §10.
-
-## Repository contents
-
-| Path | What is there |
-|---|---|
-| [`docs/architecture/`](docs/architecture/README.md) | The architecture set: the canonical decision record, C4 diagrams from system context down to the plugin SDK, the estate model and the troubleshooting method, profiles, roadmap and decision records |
-| [`docs/design/plugin-system-2026-11.md`](docs/design/plugin-system-2026-11.md) | The plugin record, cited as "plugin record §n": the detail of the plugin system that the decision record states. It covers the kernel, the context API, the service-definition catalogue, hooks, composition and reload, tenancy, runtimes and distribution, the plugin manager and compatibility gate, failure policy, test tiers, the dsh property checklist and the order of work |
-| [`docs/design/plugin-r3/`](docs/design/plugin-r3/) | The four round-3 proposals the plugin record was decided from |
-| [`docs/design/community-first-2026-11.md`](docs/design/community-first-2026-11.md) | The community record, cited as "community record §n": the owner decisions of 2026-11-11 and what follows from them. It covers the community-first order of work and the first community release, marketplace readiness (a version per definition with a support window, the remote protocol handshake, manifest schema 1.0, the index), the proposed boundary between the community and the enterprise edition, vendor-neutral connectors and the connector pack, and the contributor journey |
-| [`docs/design/community-r4/`](docs/design/community-r4/) | The two round-4 designs the community record was decided from: sequencing and marketplace readiness, and vendor-neutral connectors |
-| [`docs/design/harness-and-upstreams-2026-11.md`](docs/design/harness-and-upstreams-2026-11.md) | The harness record, cited as "harness record §n": the second round of owner decisions of 2026-11-11 and what follows from them. It covers the harness definition with its departures and conformance levels, harness selection per pillar agent, the first-party harness and its loop rows, the read tools and `tool-mcp`, HolmesGPT as an optional harness plugin, the rule that an upstream is a plugin (names, exceptions, the register and its checks), on-call by registry with the built-in provider and the dead-man contract, evaluation before the first release, and the change to the order of work with its effort estimate |
-| [`docs/design/harness-r5/`](docs/design/harness-r5/) | The two round-5 designs the harness record was decided from: the agent harness, and upstreams as plugins |
-| [`docs/design/licence-audit-2026-11.md`](docs/design/licence-audit-2026-11.md) | The licence record, cited as "licence record §n": every upstream and content source the open-source edition builds on, each with its licence, the mode in which it is used and a verdict against five uses. It lists what must be rebuilt or replaced, what may exist only as an optional plugin, the conditions the project follows, the questions for a lawyer, the project's licence rules and what is still UNVERIFIED. Engineering analysis, not legal advice |
-| [`docs/research/`](docs/research/) | Public upstream research on plugin models, agents, observability systems, on-call, integration boundaries and licences. External facts cite their sources; unconfirmed items are marked UNVERIFIED. The accepted plugin and licence records supersede earlier proposals, which remain historical inputs rather than implementation contracts |
-| [`docs/design/proposals/`](docs/design/proposals/) | The three competing architecture proposals that were judged and merged into the decision record |
-| [`docs/adr/`](docs/adr/ADR-056-documentation-baseline.md) | Accepted decision changes, beginning with the owner-approved documentation baseline and module-path prefix (ADR-056). Publication remains subject to the open written-rights gate L14 |
-
-The planned code layout is in [`docs/architecture/08-profiles-roadmap-adrs.md`](docs/architecture/08-profiles-roadmap-adrs.md) §4: `sdk/kernel`, `sdk/def/<name>/v<N>` (with its `definition.yaml`, fake and conformance suite), `sdk/testkit`, `plugins/<id>/`, `contrib/<name>/`, `templates/`, `examples/`, `boot/`, `loader/`, `dist/` and `test/`.
-
-## How to read the architecture
-
-1. Start with [`00-decisions.md`](docs/architecture/00-decisions.md). It is the single source of truth; every other document obeys it, and changing it needs an ADR.
-2. Read the C4 set top-down: system context (C1, `01`), containers (C2, `02`), components inside one container (C3, `03` to `06`, and [`09`](docs/architecture/09-c3-estate-and-troubleshooting.md) for the estate model and the troubleshooting method), code-level contracts (C4, `07`).
-3. Finish with `08` for profiles, the phased roadmap, the decision records and the compliance checklist.
-4. For the plugin system in depth, or to write a plugin, read the [plugin record](docs/design/plugin-system-2026-11.md). Where it and `00-decisions.md` differ, `00-decisions.md` wins.
-5. For the order of work, the first community release, or to write a connector pack for another observability system, read the [community record](docs/design/community-first-2026-11.md). `00-decisions.md` wins over it as well.
-6. For the agent layer, to write an agent harness or an on-call provider, or to wrap any upstream as a plugin, read the [harness record](docs/design/harness-and-upstreams-2026-11.md). `00-decisions.md` wins over it as well.
-7. Before adding, bundling or naming an upstream, read the [licence record](docs/design/licence-audit-2026-11.md), in particular its §7 (the project's rules) and §6 (what only a lawyer can settle).
-
-The [architecture index](docs/architecture/README.md) lists each file, its C4 level and suggested reading paths by role.
+The project is not ready for feature contributions yet. Issues, questions and
+design feedback are welcome. The plan for community plugins and connector
+packs is in the [community record](docs/design/community-first-2026-11.md).
 
 ## License and trademarks
 
-The project is licensed under the Apache License 2.0. `LICENSE` and `NOTICE` are at the root and go into the first commit (`docs/architecture/08-profiles-roadmap-adrs.md` §5.1 L1). The documentation is licensed under Apache-2.0 as well; text quoted from third-party documentation in `docs/research/` keeps its own terms. The kernel module and the loader are a Go port of Cordis and cordis-plugin-loader as the DeepSeek Harness publishes them, both MIT; the port carries two MIT notices, one for the upstream packages and one for the dsh modifications (`docs/architecture/08-profiles-roadmap-adrs.md` §5.1 L12; licence record §2.1).
+Licensed under [Apache-2.0](LICENSE); see [NOTICE](NOTICE).
 
-The upstream components the project deploys keep their own licenses. The AGPL-3.0 services of the default stack run unmodified as separate processes, from their publisher's images pinned by digest, and the project links none of their AGPL code. The project publishes no mirror and no offline bundle: an air-gapped site copies the pinned digests itself, with a script the project ships (`00-decisions.md` §3.2; `docs/architecture/08-profiles-roadmap-adrs.md` §5).
-
-Every upstream and content source this edition builds on was reviewed on 2026-11-11 against five uses: the Apache-2.0 community edition, a hosted multi-tenant service, a later commercial enterprise edition, third parties selling plugins that wrap the upstream, and the upstream's name in a plugin id. The result is the [licence record](docs/design/licence-audit-2026-11.md). It is engineering analysis, not legal advice, and its §6 lists fifteen questions a lawyer must answer. Its findings in short:
-
-| Finding | Detail |
-|---|---|
-| No software base must be rebuilt for its licence | The optional plugin bases HolmesGPT and GoAlert are both Apache-2.0 and rated suitable with conditions. The first-party harness, the read tools and the built-in on-call provider are written new by design choice, not by licence need (licence record §1, §3) |
-| Content must be first-party | The compliance control catalogue, its wording and its framework mappings are written new, because the text of third-party compliance frameworks cannot ship in any edition (licence record §3, §7.4) |
-| Packaging is replaced in a few places | Two upstream charts of the default stack are not packaged and the project renders templates of its own; dashboard-server plugins never enter a plugin index or a marketplace (licence record §3) |
-| Some integrations are optional plugins only | They are never in the core, a shipped profile, a default bundle or a conformance suite, and no release gate needs them. The Slack platform is the one that touches the plan most, because its API terms restrict commercial distribution: its bundle is operator-enabled, the release gate runs chat steps through the API, and where the bundle ships its path is only replayed from synthetic cassettes (`00-decisions.md` §2.1 row 4, §2.4 W13, §7.1 leg F3; licence record §4) |
-| The largest risks are not copyleft | They are contracts, trademarks and one patent family: the dashboard vendor's trademark and plugin terms, the developer terms of chat and on-call services, and schedule patents that a native on-call provider must clear before any code is written (licence record §1, §6 Q3) |
-
-A component whose register entry is `unverified` blocks the release that first ships it.
+The kernel is a Go port of Cordis and cordis-plugin-loader, both MIT, as
+published by the DeepSeek Harness. Upstream components keep their own licenses.
+The AGPL-3.0 services of the default stack run unmodified as separate
+processes, and the project links none of their code. The full review is in the
+[licence audit](docs/design/licence-audit-2026-11.md).
 
 The Grafana Labs Marks are trademarks of Grafana Labs, and are used with Grafana Labs' permission. We are not affiliated with, endorsed or sponsored by Grafana Labs or its affiliates.
