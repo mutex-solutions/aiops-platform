@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -305,6 +307,54 @@ func TestClassifyTransport(t *testing.T) {
 	} {
 		if got := classifyTransport(err); got != want {
 			t.Fatalf("%v: %s want %s", err, got, want)
+		}
+	}
+}
+
+// The S4 cap must be structural: however many attempts are offered at once, no
+// more than fullMaxConcurrent are ever inside the gate, the excess is counted as
+// deferred, and a waiter whose deadline passes gets an error instead of a slot.
+func TestCapGateIsStructural(t *testing.T) {
+	g := newCapGate(fullMaxConcurrent)
+	var cur, peak atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 5*fullMaxConcurrent; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := g.acquire(context.Background()); err != nil {
+				t.Error(err)
+				return
+			}
+			defer g.release()
+			n := cur.Add(1)
+			for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+			}
+			time.Sleep(5 * time.Millisecond)
+			cur.Add(-1)
+		}()
+	}
+	wg.Wait()
+	if peak.Load() > fullMaxConcurrent || g.deferred.Load() == 0 {
+		t.Fatalf("peak %d (cap %d), deferred %d", peak.Load(), fullMaxConcurrent, g.deferred.Load())
+	}
+	full := newCapGate(1)
+	if err := full.acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if full.acquire(ctx) == nil || full.deferred.Load() != 1 {
+		t.Fatal("a waiter past its deadline must fail and be counted as deferred")
+	}
+}
+
+func TestFullConfigDiagnosticsAreNeverAcceptance(t *testing.T) {
+	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	for _, env := range []map[string]string{{"S0_WORKER_RESTART_FULL_PREGROW_ROWS": "10"}, {"S0_WORKER_RESTART_FULL_DIAG_JOBS_NO_SEQSCAN": "1"}} {
+		c, err := fullConfigFromEnv(get(env))
+		if err != nil || c.Acceptance() {
+			t.Fatalf("%v: diagnostic knobs must make the run non-acceptance: %v", env, err)
 		}
 	}
 }

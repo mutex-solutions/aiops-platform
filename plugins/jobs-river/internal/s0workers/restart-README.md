@@ -159,6 +159,69 @@ and worker handlers snooze.
 - Orphans: failed drain/stop/close/shutdown within 5 s, wrong live pool/client/
   listener count, or idle-in-transaction sessions of the fixture login after drain.
 - 30 s completion drain after the window is counted from the last ACK.
+- Concurrency cap: at most 32 requests is structural. A gate in front of every
+  HTTP attempt takes a slot before the request is made; an attempt that finds none
+  waits (inside its own 5 s operation timeout and its latency from the scheduled
+  instant; the arrival schedule is never shifted) and is counted as
+  `concurrency_cap_deferred_attempts`. The in-flight maximum is still observed
+  independently by `concurrent_requests_max`. Before this the cap was only
+  observed: arrivals spawned unbounded goroutines, so one frozen-scale cycle read 33.
+- Observation cost is independent of retained history. The final sweep used
+  `args->>'idempotency_id' LIKE prefix%` over the whole River table (one sequential
+  scan of every retained row per cycle) and the same shape on the result table. Both
+  are now bounded by `id > floor` where the floor is `max(id)` read (primary-key
+  probe) before the cycle starts; job ids come from a sequence, so every job and
+  result of the cycle is above it. The 50 ms completion poll was never the cause:
+  it is an index range scan on `(state, finalized_at)` plus a primary-key join.
+  All observation runs on the admin pool, never on the caller or jobs pools.
+
+### Finding: sequential scans of the River table come from the system under test
+
+A frozen-scale run (first 20 pool cycles) read 97,389 sequential scans /
+6.59 billion tuples on `river_job` while throughput collapsed past about 90,000
+rows. Reproduced with `S0_WORKER_RESTART_FULL_PREGROW_ROWS` (completed jobs and
+result rows seeded by the admin role) and `pg_stat_statements` on PostgreSQL 16.15,
+each component run in isolation against an 85,000-row table (500 executions each):
+
+| statement (role) | seq scans | seq tuples read | plan |
+| --- | --- | --- | --- |
+| completion poll, join on result (admin) | 0 | 0 | index scan `(state,finalized_at)` + pkey |
+| `SELECT tenant,scope_id ... WHERE id=$1` (jobs role, RLS) | 0 | 0 | primary key |
+| River `JobGetAvailable` fetch shape (jobs role, RLS) | **500** | **42,500,000** | Seq Scan, Sort, LockRows |
+| final sweep, once per cycle (admin), old shape | 1 | 85,000 | Seq Scan (now pkey range, 0) |
+
+In the whole run `JobGetAvailable` was the only heavy statement (about 4,900
+buffers per call at 160,000 rows versus about 20 for `JobInsertFastMany`).
+
+Cause: the fixture forces row-level security on `river_job` with the `provider_jobs`
+policy (`true`) for the jobs role. For a role subject to RLS the planner may only use
+column statistics through leakproof operators, and `enum_eq` (`state = 'available'`)
+is not leakproof. The estimate for `state='available'` therefore falls back to
+1/n_distinct, 28,186 rows against 118 as superuser (400 real), and for the fetch
+shape the plan flips from the `river_job_prioritized_fetching_index` scan (cost about
+8) to a Seq Scan plus Sort (cost about 4,900) once the table is large. The same query
+as a superuser, or as the jobs role with `BYPASSRLS`, or as owner without FORCE, uses
+the index with cost about 8. Policy shape (`true`) does not matter; any RLS qual on
+the table triggers it. This is a finding about the fixture's RLS design, not about
+the harness, and it is reported, not hidden: every cycle of a table of 160,000
+retained rows fails (cycle 1: 3,647 of 5,000 acked ids durable, ack-to-completion
+about 50 s, recovery 35 s; from cycle 4 on none of the cycle's own ids complete).
+
+Product-level fix candidates (not applied here): give the jobs role a policy-free
+path to River's tables (owner without FORCE, or BYPASSRLS if the authority design
+allows it), or keep RLS and accept the River fetch cost grows with table size, or
+bound the retained `river_job` history (River's cleaner retention) so the fetch
+stays small; per-role `enable_seqscan=off` is a diagnostic only.
+
+Proof that this is the only cause: `S0_WORKER_RESTART_FULL_DIAG_JOBS_NO_SEQSCAN=1`
+(diagnostic, makes the run non-acceptance) sets `enable_seqscan=off` on the fixture
+login role. On a 160,000-row table, 12 pool cycles at 100 ids/s (10 s warm-up,
+40 s window, 1,000 recovery ids) every cycle durably completed 5,000 of 5,000 acked
+ids, ack-to-completion max 648..958 ms, recovery 502..754 ms, and `river_job`
+`seq_scan` stayed at 16 (all of them before the first cycle) while the table grew to
+about 220,000 rows. Without the diagnostic setting the same run failed from cycle 1.
+`S0_WORKER_RESTART_FULL_PREGROW_ROWS` and the diagnostic setting are opt-in, are
+recorded in the report config and are never part of an acceptance run.
 
 ## Evidence and review handoff
 

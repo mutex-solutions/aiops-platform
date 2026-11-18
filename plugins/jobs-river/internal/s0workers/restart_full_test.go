@@ -61,6 +61,7 @@ type fullCycleSummary struct {
 	ArrivalsOver10ms    int             `json:"arrivals_started_over_10ms_late"`
 	RecoveryIDs         recoveryIDStats `json:"recovery_new_ids"`
 	MaxConcurrent       int             `json:"max_concurrent_requests"`
+	CapDeferred         int64           `json:"concurrency_cap_deferred_attempts"`
 	HeldHTTPAtRestart   int64           `json:"held_http_transactions_at_restart_request"`
 	HeldWorkerAtRestart int64           `json:"held_worker_handlers_at_restart_request"`
 	HeldHTTPTotal       int64           `json:"held_http_transactions_cycle_total"`
@@ -140,7 +141,7 @@ func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
 		Started: time.Now().UTC(), PID: os.Getpid(), GoVersion: runtime.Version(), GOMAXPROCS: runtime.GOMAXPROCS(0), RaceInstrumented: raceInstrumented,
 		AcceptanceScale: cfg.Acceptance() && !raceInstrumented && runtime.GOMAXPROCS(0) == fullGOMAXPROCS, Before: fullSource(t),
 		Config: map[string]any{"cycles_per_kind": cfg.CyclesPerKind, "combined_cycles": cfg.Combined, "warmup_s": cfg.Warmup.Seconds(), "window_s": cfg.Window.Seconds(),
-			"restart_at_s_from_start": cfg.RestartAt().Seconds(), "recovery_ids": cfg.RecoveryIDs, "rate_per_s": fullRate, "hold_ms": fullHold.Milliseconds(),
+			"restart_at_s_from_start": cfg.RestartAt().Seconds(), "recovery_ids": cfg.RecoveryIDs, "diagnostic_pregrow_rows": cfg.PregrowRows, "diagnostic_login_role_enable_seqscan_off": cfg.JobsNoSeqScan, "rate_per_s": fullRate, "hold_ms": fullHold.Milliseconds(),
 			"operation_timeout_s": fullOpTimeout.Seconds(), "pool_conns": fullPoolConns, "worker_max": fullWorkers},
 		Frozen: map[string]any{"cycles_each_pool_client_listener": frozenCyclesPerKind, "combined_cycles": frozenCombinedCycles, "recovery_seconds": 5,
 			"ack_to_completion_seconds": 30, "new_ids_per_recovery": frozenRecoveryIDs, "new_ids_per_second": fullRate, "warmup_s": 30, "window_s": 120, "restart_at_s": 60, "hold_ms": 200},
@@ -193,7 +194,7 @@ var fullInterpretations = []string{
 	"1,000 new IDs: the first RecoveryIDs IDs scheduled at or after the recovery instant must each be acknowledged on the first attempt with no failed attempt of any class, and complete within 30 s of their ACK. Arrival start lag over 50 ms for any of them fails the cycle.",
 	"Ack-to-completion is measured from the client-observed 2xx to the first SQL observation of completion (50 ms poll plus a final sweep), so it overestimates by at most the poll interval; completion seen before the ACK counts as 0.",
 	"Duplicate logical result: more than one job or one result row per idempotency ID. Duplicate attempts (HTTP retries, River retries/errors, handler redeliveries, replays finding the result present) are reported, not failed; only duplicate logical results are zero-bound.",
-	"At most 32 concurrent requests and an eight-connection pool per role are observed/applied; an exceeded concurrency cap fails the cycle (not enforced by queueing). GOMAXPROCS must be 8; race-instrumented runs are labelled not frozen-scale.",
+	"At most 32 concurrent requests is enforced structurally by a gate in front of every HTTP attempt (a request that finds no free slot waits inside its own 5 s operation timeout and its latency from the scheduled instant; each such wait is reported as concurrency_cap_deferred_attempts) and the in-flight maximum is still observed independently; an eight-connection pool per role is applied. GOMAXPROCS must be 8; race-instrumented runs are labelled not frozen-scale.",
 	"Orphans: failed handler drain, StopAndCancel, pool close or listener shutdown within 5 s, plus live pool/client/listener counts and idle-in-transaction sessions of the fixture login role after each cycle.",
 }
 
@@ -281,9 +282,13 @@ func (a *fullApp) scanner(ctx context.Context, l *opLedger, since time.Time) (st
 
 // sweep reads the full SQL truth for one cycle's IDs. IDs it finds complete that the
 // poll never saw are recorded durable at sweep time (late, conservative).
-func (a *fullApp) sweep(ctx context.Context, l *opLedger, prefix string) (map[string]dbRow, int, error) {
+//
+// Cost is independent of retained history: job ids come from a sequence, so every
+// job and result row of this cycle has an id above idFloor (the largest id at
+// cycle start) and both queries are primary-key range scans over this cycle only.
+func (a *fullApp) sweep(ctx context.Context, l *opLedger, prefix string, idFloor int64) (map[string]dbRow, int, error) {
 	db := map[string]dbRow{}
-	rows, err := a.f.admin.Query(ctx, "SELECT j.args->>'idempotency_id', j.id, j.state::text, j.attempt, coalesce(cardinality(j.errors),0) FROM "+table(a.f.jobs, "river_job")+" j WHERE j.args->>'idempotency_id' LIKE $1", prefix+"%")
+	rows, err := a.f.admin.Query(ctx, "SELECT j.args->>'idempotency_id', j.id, j.state::text, j.attempt, coalesce(cardinality(j.errors),0) FROM "+table(a.f.jobs, "river_job")+" j WHERE j.id > $2 AND j.args->>'idempotency_id' LIKE $1", prefix+"%", idFloor)
 	if err != nil {
 		return nil, 0, safeError("full sweep jobs", err)
 	}
@@ -305,7 +310,7 @@ func (a *fullApp) sweep(ctx context.Context, l *opLedger, prefix string) (map[st
 	if err := rows.Err(); err != nil {
 		return nil, 0, safeError("full sweep rows", err)
 	}
-	rows, err = a.f.admin.Query(ctx, "SELECT idempotency_id, count(*) FROM "+table(a.f.data, "result")+" WHERE idempotency_id LIKE $1 GROUP BY 1", prefix+"%")
+	rows, err = a.f.admin.Query(ctx, "SELECT idempotency_id, count(*) FROM "+table(a.f.data, "result")+" WHERE job_id > $2 AND idempotency_id LIKE $1 GROUP BY 1", prefix+"%", idFloor)
 	if err != nil {
 		return nil, 0, safeError("full sweep results", err)
 	}
@@ -333,6 +338,26 @@ func (a *fullApp) sweep(ctx context.Context, l *opLedger, prefix string) (map[st
 	return db, missed, nil
 }
 
+// pregrow seeds retained history before the cycles: n completed jobs with their
+// result rows, inserted by the admin role. It exists only to reproduce a long
+// run's table size quickly (S0_WORKER_RESTART_FULL_PREGROW_ROWS); it is outside
+// every measured cycle.
+func (a *fullApp) pregrow(ctx context.Context, n int) error {
+	_, err := a.f.admin.Exec(ctx, "INSERT INTO "+table(a.f.jobs, "river_job")+" (state,queue,kind,args,max_attempts,attempt,finalized_at,created_at,scheduled_at,tenant,scope_id) SELECT 'completed',$1,$2,jsonb_build_object('tenant','pregrow','idempotency_id','pregrow-'||g),25,1,now()-interval '1 hour',now()-interval '1 hour',now()-interval '1 hour',$3,$4 FROM generate_series(1,$5) g", queue, workerArgs{}.Kind(), fullScope.tenant, fullScope.id, n)
+	if err != nil {
+		return safeError("pregrow jobs", err)
+	}
+	_, err = a.f.admin.Exec(ctx, "INSERT INTO "+table(a.f.data, "result")+" (job_id,tenant,scope_id,idempotency_id) SELECT id,tenant,scope_id,args->>'idempotency_id' FROM "+table(a.f.jobs, "river_job")+" WHERE args->>'tenant'='pregrow'")
+	return safeError("pregrow results", err)
+}
+
+// idFloor is the largest job id before the cycle starts (primary-key index probe).
+func (a *fullApp) idFloor(ctx context.Context) (int64, error) {
+	var id int64
+	err := a.f.admin.QueryRow(ctx, "SELECT coalesce(max(id),0) FROM "+table(a.f.jobs, "river_job")).Scan(&id)
+	return id, safeError("full cycle id floor", err)
+}
+
 func (a *fullApp) idleInTransaction(ctx context.Context) (int, error) {
 	var n int
 	err := a.f.admin.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE usename=$1 AND state LIKE 'idle in transaction%'", a.f.login).Scan(&n)
@@ -344,7 +369,10 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 	sum := fullCycleSummary{Arm: arm, Cycle: cycle}
 	l := newLedger()
 	prefix := fmt.Sprintf("fk-%s-%s-c%02d-", a.f.id, arm, cycle)
+	floor, floorErr := a.idFloor(ctx)
+	must(t, floorErr)
 	start := time.Now().UTC().Add(100 * time.Millisecond)
+	deferred0 := a.gate.deferred.Load()
 	stopScan := a.scanner(ctx, l, start)
 	redel0, replay0 := a.tally()
 	heldHTTP0, heldWorker0, orphans0 := a.heldHTTP.Load(), a.heldWorker.Load(), a.orphans.Load()
@@ -381,7 +409,7 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 		must(t, safeError("drain wait", timerWait(ctx, time.Now().Add(25*time.Millisecond))))
 	}
 	scanErrors := stopScan()
-	db, missed, sweepErr := a.sweep(ctx, l, prefix)
+	db, missed, sweepErr := a.sweep(ctx, l, prefix, floor)
 	recs, mismatch := l.snapshot()
 	rec := reconcile(recs, db, mismatch, restartCompletionBudget)
 	ready, readyOK := recoveryReady(recs, rs.Epoch, rs.Requested)
@@ -449,7 +477,7 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 		sum.AckLatencyMaxMs = ms(lat[len(lat)-1])
 	}
 	sum.ArrivalLagP99Ms, sum.ArrivalLagMaxMs, sum.ArrivalsOver10ms = ms(lagP99), ms(lagMax), over
-	sum.RecoveryIDs, sum.MaxConcurrent = recIDs, in.MaxConcurrent
+	sum.RecoveryIDs, sum.MaxConcurrent, sum.CapDeferred = recIDs, in.MaxConcurrent, a.gate.deferred.Load()-deferred0
 	sum.HeldHTTPTotal, sum.HeldWorkerTotal = a.heldHTTP.Load()-heldHTTP0, a.heldWorker.Load()-heldWorker0
 	sum.Orphans, sum.LivePools, sum.LiveClients, sum.LiveListeners = orphans, a.livePools.Load(), a.liveClients.Load(), a.liveListeners.Load()
 	sum.Goroutines, sum.OpenFDs = runtime.NumGoroutine(), openFDs()
@@ -482,10 +510,17 @@ func TestWorkerRestartFullGate(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(arm.cycles)*perCycle+10*time.Minute)
 			defer cancel()
 			f := openFixture(t, ctx)
+			if cfg.JobsNoSeqScan {
+				_, err := f.admin.Exec(ctx, "ALTER ROLE "+ident(f.login)+" SET enable_seqscan = off")
+				must(t, safeError("diagnostic jobs role setting", err))
+			}
 			app := newFullApp(f)
 			t.Cleanup(app.teardown)
 			must(t, safeError("full app start", app.start(ctx)))
 			report.WorkerStarted = true
+			if cfg.PregrowRows > 0 {
+				must(t, app.pregrow(ctx, cfg.PregrowRows))
+			}
 			sum := fullArmSummary{Arm: arm.name, CyclesPlanned: arm.cycles}
 			rep.Arms = append(rep.Arms, sum)
 			idx := len(rep.Arms) - 1

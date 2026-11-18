@@ -62,6 +62,7 @@ type fullApp struct {
 	livePools, liveClients     atomic.Int64
 	liveListeners              atomic.Int64
 	httpHoldSlots              chan struct{}
+	gate                       *capGate // structural S4 cap on concurrent requests
 
 	// The dispatcher's delivery channel must always be drained.
 	deliveries    chan delivery
@@ -82,7 +83,7 @@ type fullApp struct {
 }
 
 func newFullApp(f *fixture) *fullApp {
-	a := &fullApp{f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2)}
+	a := &fullApp{f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2), gate: newCapGate(fullMaxConcurrent)}
 	a.httpClient = &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 64, IdleConnTimeout: 30 * time.Second}}
 	go func() {
 		defer close(a.drainDone)
@@ -502,6 +503,11 @@ func (a *fullApp) teardown() {
 // ---- client side ----
 
 func (a *fullApp) once(ctx context.Context, key string, attempt int) (fullACK, string) {
+	if err := a.gate.acquire(ctx); err != nil {
+		return fullACK{}, "concurrency_cap_wait_timeout"
+	}
+	defer a.gate.release()
+	// maxInflight stays an independent observation of what the gate allowed.
 	n := a.inflightReq.Add(1)
 	defer a.inflightReq.Add(-1)
 	for {

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -46,6 +47,9 @@ type fullConfig struct {
 	CyclesPerKind, Combined int
 	Warmup, Window          time.Duration
 	RecoveryIDs             int
+	// Diagnostics only; either one makes the run non-conforming (never acceptance).
+	PregrowRows   int  // completed jobs+results seeded before the cycles (retained-history reproduction)
+	JobsNoSeqScan bool // ALTER ROLE <login> SET enable_seqscan=off, to prove the planner finding
 }
 
 func envInt(get func(string) string, name string, def, lo, hi int) (int, error) {
@@ -79,6 +83,10 @@ func fullConfigFromEnv(get func(string) string) (fullConfig, error) {
 			return c, err
 		}
 	}
+	if c.PregrowRows, err = envInt(get, "S0_WORKER_RESTART_FULL_PREGROW_ROWS", 0, 0, 10_000_000); err != nil {
+		return c, err
+	}
+	c.JobsNoSeqScan = get("S0_WORKER_RESTART_FULL_DIAG_JOBS_NO_SEQSCAN") == "1"
 	c.Warmup, c.Window = time.Duration(warm)*time.Second, time.Duration(win)*time.Second
 	// After the restart request the schedule must still hold recovery (<=5 s) plus the new IDs.
 	if c.Window/2 < restartRecoveryBudget+time.Duration(c.RecoveryIDs)*fullInterval {
@@ -88,10 +96,39 @@ func fullConfigFromEnv(get func(string) string) (fullConfig, error) {
 }
 
 func (c fullConfig) Acceptance() bool {
-	return c.CyclesPerKind == frozenCyclesPerKind && c.Combined == frozenCombinedCycles && c.Warmup == frozenWarmup && c.Window == frozenWindow && c.RecoveryIDs == frozenRecoveryIDs
+	return c.CyclesPerKind == frozenCyclesPerKind && c.Combined == frozenCombinedCycles && c.Warmup == frozenWarmup && c.Window == frozenWindow && c.RecoveryIDs == frozenRecoveryIDs && c.PregrowRows == 0 && !c.JobsNoSeqScan
 }
 func (c fullConfig) Arrivals() int            { return int((c.Warmup + c.Window) / fullInterval) }
 func (c fullConfig) RestartAt() time.Duration { return c.Warmup + c.Window/2 } // S6: measured t=60 s
+
+// capGate makes the S4 concurrency cap structural: an attempt takes a slot before
+// it touches the network and returns it afterwards, so no more than the cap can be
+// in flight. An attempt that finds no free slot is counted as deferred (the
+// arrival schedule is never shifted; the wait is inside the arrival's own 5 s
+// operation timeout and inside its latency measured from the scheduled instant).
+type capGate struct {
+	slots    chan struct{}
+	deferred atomic.Int64
+}
+
+func newCapGate(n int) *capGate { return &capGate{slots: make(chan struct{}, n)} }
+
+func (g *capGate) acquire(ctx context.Context) error {
+	select {
+	case g.slots <- struct{}{}:
+		return nil
+	default:
+	}
+	g.deferred.Add(1)
+	select {
+	case g.slots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (g *capGate) release() { <-g.slots }
 
 // ---- open-loop arrival scheduler (S4) ----
 
