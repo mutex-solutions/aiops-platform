@@ -1,0 +1,51 @@
+{
+  "schema": "s0-causal-comparison-amendment-2/v1",
+  "approval": "Repository owner decision of 2026-11-18: the comparator may be extended only through a written amendment recorded before execution, naming each added capability and why it does not loosen the criteria, followed by a rerun of all 36 scenarios",
+  "extends": {
+    "amendment": "docs/design/s0-causal-comparison-amendment.md",
+    "amendmentSHA256": "becf5c0634ec98c279d76db3ac3dc1c08cea70cd2d66301393c445b3df73559a",
+    "freeze": "docs/design/s0-causal-comparison-freeze.json",
+    "freezeSHA256": "cd6cd53e1b67a3f74561bdc10c224ccc5ae99f8f7f0af15aae1a00c70dede4e0"
+  },
+  "amendment": {
+    "path": "docs/design/s0-causal-comparison-amendment-2.md",
+    "sha256": "214452407b234843ddcb0a1205d81bf9c60837d6048ff21f2656155228976c35"
+  },
+  "originalCriteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "recordedBeforeComparatorChange": true,
+  "baseCommit": "6fdc116",
+  "frozenComparatorSHA256": {
+    "test/differential/causal.go": "0fcbb78841f867342507fae811f2ea1a98e9d43881b2a16d829df95acf424ec0",
+    "test/differential/causal_model.go": "47a02fba279fb4565159ed906f6dad077ecf1688f28a94904d6e3c71ef255b80",
+    "test/differential/causal_test.go": "0c721072c8071160426d953b27f1d15927335bdb0ff46e9623fb9dcab1b5fbaa"
+  },
+  "capabilities": [
+    {"id": "C1", "name": "gate/mark/waitMark/release continuations", "status": "added", "scenarios": ["D11", "D13", "D21", "D22", "D23"]},
+    {"id": "C2", "name": "child fibers mounted from a parent body, structural ownership and teardown join", "status": "added", "scenarios": ["D06", "D22"]},
+    {"id": "C3", "name": "effects with bodies and async/control/catch metadata", "status": "added", "scenarios": ["D18", "D23"]},
+    {"id": "C4", "name": "intercept contexts, NeedWith, service and available provision modes", "status": "added", "scenarios": ["D07", "D08", "D09"]},
+    {"id": "C5", "name": "ownership proof for an output cell shared across realms", "status": "added", "scenarios": ["D03"]},
+    {"id": "C6", "name": "more than one provider of one address, by refusal or swap, refusal error text compared by class", "status": "added", "scenarios": ["D04", "D15"]}
+  ],
+  "notAdded": [],
+  "outOfScope": {
+    "D05": "unchecked ctx.get is a not-carried boundary",
+    "D26": "awaited self-dispose is a not-carried boundary",
+    "errorText": "only the duplicate-provision refusal message of C6.5 is compared by class; all other error text is compared verbatim",
+    "unsupportedOps": ["listen", "dispatch", "awaitTask", "selfDispose", "lateEffect", "global", "symbol", "prepend", "update veto policies", "runtime $meta expressions"]
+  },
+  "rules": {
+    "weakensExistingCheck": false,
+    "scenarioSpecificCodePaths": false,
+    "eventSortingOrDropping": false,
+    "toleranceKnobs": false,
+    "unprovedConstructResult": "ErrCausalUnsupported"
+  },
+  "rerun": {
+    "scenarios": 36,
+    "revisions": {"D13": "corpus/revision-3", "D22": "corpus/revision-4"},
+    "matchRequires": "100 of 100 runs under -race and 100 of 100 with GOMAXPROCS=2"
+  },
+  "implementationVerified": false,
+  "s0Complete": false
+}
