@@ -1,0 +1,55 @@
+{
+  "schema": "s0-causal-comparison-amendment-4/v1",
+  "approval": "Repository owner decision of 2026-11-19: the remaining D22 difference is a measurement matter, handled by a new comparator rule introduced through a written amendment recorded before execution, not by synchronisation in the candidates",
+  "extends": {
+    "amendment": "docs/design/s0-causal-comparison-amendment.md",
+    "amendmentSHA256": "becf5c0634ec98c279d76db3ac3dc1c08cea70cd2d66301393c445b3df73559a",
+    "amendment2": "docs/design/s0-causal-comparison-amendment-2.md",
+    "amendment2SHA256": "214452407b234843ddcb0a1205d81bf9c60837d6048ff21f2656155228976c35",
+    "amendment3": "docs/design/s0-causal-comparison-amendment-3.md",
+    "amendment3SHA256": "45ae806bd4def4f5ce0a8345aec8e6ac3233913bc2c2a46b74abace0db4ea17f",
+    "addendum3": "docs/design/s0-causal-comparison-amendment-3-addendum.md",
+    "addendum3SHA256": "63f7bed867f49be270f1dd39968585d97811c9440c45a6f5d87409dff5c867d8",
+    "freeze3": "docs/design/s0-causal-comparison-freeze-3.json",
+    "freeze3SHA256": "666ab92d18530ca5b0ae14edafaf08470f83455aa117a872a38f5e137b0fc069"
+  },
+  "amendment": {
+    "path": "docs/design/s0-causal-comparison-amendment-4.md",
+    "sha256": "b1fc5c87d77d25e5e7061442b4a22b4b286af373fc1c574076341740da7e5e16"
+  },
+  "originalCriteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "recordedBeforeComparatorChange": true,
+  "frozenComparatorSHA256": {
+    "test/differential/causal.go": "72c7ffcdd5dd8838eeaadca084b4964c6b38cda604301b8a93a683f62c1923c4",
+    "test/differential/causal_model.go": "4a18f0d35b0ff8510929d6d76cb62192d9266eeb4de36cd1677f863d5c089f83",
+    "test/differential/causal_observe.go": "0818b8839f55f02a4da2a5ac0c1a383114b656cdf92ad9fc2f5406573709bc2c",
+    "test/differential/causal_root.go": "12218f41227804392995c82903b7421758cecd629cdb084936ec1ee25e92a84b",
+    "test/differential/causal_identity.go": "6f5dbea9f343dca3a1e19933f3282cd1c526cf32317a649bfe2e655512e7e65d",
+    "test/differential/causal3_model.go": "2ef093ad1ed0e0841453ad74eeb42420d4eb40c8cabeee450036d87ecc3e9840",
+    "test/differential/causal3_observe.go": "e50af7b1c47bdef54dc0b96ec20c0dc1196b853ae2d6b612b434276b1ce5ff19",
+    "test/differential/causal3_listen.go": "6a3a5e227c5a9c2779d6a238c5b4842aa71d079f072cbb94b6cf791a1eae29c0",
+    "test/differential/causal_amendment3_test.go": "2db1506bade2fd3865bdf7af8378f3484b888bb6c1d1d65143746750f0f75194"
+  },
+  "targets": ["D22"],
+  "capabilities": [
+    {"id": "L1", "name": "a cut after an un-awaited root disposal does not order the work the disposal started: downstream events of the target and its structural descendants may fall on either side of the cut up to the next ordered cut", "status": "added", "scenarios": ["D22"]}
+  ],
+  "notAdded": [
+    "relaxation for a float set that provides addresses or writes output cells, for fibers depending on a disposed provider, for un-awaited commands other than dispose, for awaited disposals, and for cuts that follow an ordering command"
+  ],
+  "rules": {
+    "weakensExistingCheck": "only the stated relaxation L1, nothing else",
+    "scenarioSpecificCodePaths": false,
+    "eventSortingOrDropping": false,
+    "toleranceKnobs": false,
+    "unprovedConstructResult": "ErrCausalUnsupported",
+    "violationProvedByTraceResult": "mismatch, never ErrCausalUnsupported"
+  },
+  "rerun": {
+    "scenarios": 36,
+    "revisions": {"D13": "corpus/revision-5", "D22": "corpus/revision-4"},
+    "matchRequires": "100 of 100 runs under -race and 100 of 100 with GOMAXPROCS=2"
+  },
+  "implementationVerified": false,
+  "s0Complete": false
+}
