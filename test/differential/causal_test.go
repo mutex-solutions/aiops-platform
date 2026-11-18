@@ -378,7 +378,7 @@ func TestCausalSharedOutputReadPreventsFalseIndependence(t *testing.T) {
 }
 
 func TestCausalUnknownSemanticsAreUnsupported(t *testing.T) {
-	for _, op := range []string{"gate", "mark", "release", "waitMark", "notify", "child", "listen", "effect", "context", "selfDispose", "set"} {
+	for _, op := range []string{"gate", "mark", "release", "waitMark", "notify", "listen", "effect", "selfDispose", "set"} {
 		t.Run(op, func(t *testing.T) {
 			var script map[string]any
 			if err := json.Unmarshal([]byte(causalUnitScript), &script); err != nil {
@@ -641,16 +641,19 @@ func TestCausalRequiresProtocolSequenceAndWholeStream(t *testing.T) {
 
 func TestCausalRejectsUnprovedControlsAndStaticCycles(t *testing.T) {
 	for name, script := range map[string]string{
-		"async-update":       strings.Replace(causalUnitScript, `{"op":"settle","label":"ready"}`, `{"op":"update","fiber":"p","await":false,"task":"u"},{"op":"settle","label":"ready"}`, 1),
-		"count-metadata":     strings.Replace(causalUnitScript, `"op":"provide"`, `"op":"provide","count":2`, 1),
-		"available-service":  strings.Replace(causalUnitScript, `"op":"provide"`, `"op":"provide","mode":"available"`, 1),
-		"dynamic-context":    strings.Replace(causalUnitScript, `"steps":[`, `"steps":[{"op":"context","to":"dynamic"},`, 1),
-		"unused-gate":        strings.Replace(causalUnitScript, `"plugins":[`, `"plugins":[{"id":"unused","apply":[{"op":"gate","label":"x"}]},`, 1),
-		"root-snapshot-race": strings.Replace(causalUnitScript, `"op":"settle"`, `"op":"snapshot"`, 1),
-		"duplicate-provider": strings.Replace(causalUnitScript, `"key":"c","value"`, `"key":"b","value"`, 1),
-		"needs-cycle":        strings.Replace(causalUnitScript, `"id":"provider","apply"`, `"id":"provider","needs":{"b":null},"apply"`, 1),
-		"runtime-meta":       strings.Replace(causalUnitScript, `"$output":"right"`, `"$meta":"fiber.uid"`, 1),
-		"ambiguous-output":   strings.Replace(causalUnitScript, `"to":"right"`, `"to":"left"`, 1),
+		"async-update":         strings.Replace(causalUnitScript, `{"op":"settle","label":"ready"}`, `{"op":"update","fiber":"p","await":false,"task":"u"},{"op":"settle","label":"ready"}`, 1),
+		"count-metadata":       strings.Replace(causalUnitScript, `"op":"provide"`, `"op":"provide","count":2`, 1),
+		"available-service":    strings.Replace(causalUnitScript, `"op":"provide"`, `"op":"provide","mode":"available"`, 1),
+		"dynamic-context":      strings.Replace(causalUnitScript, `"steps":[`, `"steps":[{"op":"context","to":"dynamic"},`, 1),
+		"unused-listen":        strings.Replace(causalUnitScript, `"plugins":[`, `"plugins":[{"id":"unused","apply":[{"op":"listen","key":"x"}]},`, 1),
+		"unreleased-gate":      strings.Replace(causalUnitScript, `"op":"provide","key":"a","value":1`, `"op":"gate","label":"x"},{"op":"provide","key":"a","value":1`, 1),
+		"root-snapshot-race":   strings.Replace(causalUnitScript, `"op":"settle"`, `"op":"snapshot"`, 1),
+		"duplicate-provider":   strings.Replace(causalUnitScript, `"op":"provide","key":"a","value":1`, `"op":"provide","key":"a","value":1},{"op":"provide","key":"a","value":2`, 1),
+		"concurrent-providers": strings.Replace(causalUnitScript, `"key":"c","value"`, `"key":"b","value"`, 1),
+		"needs-cycle":          strings.Replace(causalUnitScript, `"id":"provider","apply"`, `"id":"provider","needs":{"b":null},"apply"`, 1),
+		"runtime-meta":         strings.Replace(causalUnitScript, `"$output":"right"`, `"$meta":"fiber.uid"`, 1),
+		"ambiguous-output":     strings.Replace(causalUnitScript, `"steps":[`, `"steps":[{"op":"output","to":"left","value":1},`, 1),
+		"concurrent-writers":   strings.Replace(causalUnitScript, `"to":"right"`, `"to":"left"`, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := compileCausalModel([]byte(script)); !errors.Is(err, ErrCausalUnsupported) {
@@ -850,7 +853,7 @@ func TestCausalFirstInvalidatingProviderMayDiffer(t *testing.T) {
 func TestCausalRecordedStaticModelScope(t *testing.T) {
 	// Compile scripts only: these checks do not invent historical checkpoint
 	// positions or upgrade frozen raw traces into causal execution evidence.
-	for _, id := range []string{"D02", "D10", "D12", "D14", "D16", "D19", "D27"} {
+	for _, id := range []string{"D02", "D10", "D12", "D14", "D15", "D16", "D18", "D19", "D27"} {
 		t.Run(id, func(t *testing.T) {
 			raw, err := os.ReadFile("corpus/" + id + ".json")
 			if err != nil {
@@ -861,7 +864,7 @@ func TestCausalRecordedStaticModelScope(t *testing.T) {
 			}
 		})
 	}
-	for _, id := range []string{"D15", "D17", "D18", "D20", "D25", "D26", "D28", "D29", "D30"} {
+	for _, id := range []string{"D17", "D20", "D25", "D26", "D28", "D29", "D30"} {
 		t.Run(id, func(t *testing.T) {
 			raw, err := os.ReadFile("corpus/" + id + ".json")
 			if err != nil {

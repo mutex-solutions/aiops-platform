@@ -13,6 +13,9 @@ import (
 
 const causalRootActor = "<root-command>"
 
+// causalNever is a segment index no cut ever reaches: a gate with no release.
+const causalNever = 1 << 30
+
 type causalAddress struct{ key, realm string }
 type causalFootprint struct{ reads, writes map[string]bool }
 type causalFiber struct {
@@ -20,30 +23,119 @@ type causalFiber struct {
 	context   string
 	needs     []string
 	pureMount bool
+	parent    string // non-empty for a child mounted from a parent body (amendment 2, C2)
 }
+
+// causalBind names the exact provider activation a consumer is bound to. With
+// more than one candidate provider of an address (C6) an activation number alone
+// is ambiguous.
+type causalBind struct {
+	provider string
+	act      int
+}
+
+// causalWait is a causal obligation inherited by every later root command: the
+// n-th arrival at a label (waitMark) or a settled fiber (awaitFiber). C1.
+type causalWait struct {
+	label string
+	count int
+	fiber string
+}
+
+// causalLabelDef is one static place where a gate/mark/output operation can run.
+type causalLabelDef struct {
+	actor  string
+	phase  string // apply, cleanup, effect-setup, effect-async, effect-cleanup
+	effect string // owning effect id for effect programs
+	isGate bool
+	// step is the index of the top-level body operation that triggers this
+	// event; events of one frame must come in non-decreasing step order. stepped
+	// is false for teardown-driven events and asynchronous programs.
+	step    int
+	stepped bool
+}
+
+type causalEffect struct {
+	id       string
+	actor    string
+	partial  bool
+	async    bool
+	to       string
+	withdraw bool // a withdraw of this effect's disposer exists in the same body
+	// ordered is true for an effect whose cleanup program is a plain sequence:
+	// its events must occur in program order, once per activation (C3.2).
+	ordered bool
+	items   []causalItem
+}
+
+type causalRootError struct {
+	target string
+	waits  []causalWait
+}
+
 type causalCheckpointSpec struct {
 	label    string
 	fibers   []string
 	plugins  int
 	commands []Action
+	waits    []causalWait // waitMark obligations issued in this segment
+	snapshot bool
 }
 type causalPluginCommand struct {
 	fiber            string
 	disposed         bool
 	previousDisposed string
+	waits            []causalWait
 }
 type causalModel struct {
 	script            *Script
 	contexts          map[string]map[string]string
+	ctxMeta           map[string]map[string]any
 	fibers            map[string]*causalFiber
 	mountOrder        []string
-	providers         map[causalAddress]string
-	outputs           map[string]string
+	providers         map[causalAddress][]string
+	provides          map[string][]causalAddress
+	provBefore        map[string][]causalAddress // gate label -> addresses provided earlier in its body
+	avail             map[causalAddress]string
+	outputs           map[string][]string
+	cellDefs          map[string][]causalLabelDef
+	labels            map[string][]causalLabelDef
+	effects           map[string]*causalEffect
+	effectCount       map[string]int
+	catchers          map[string][]string
+	refusable         map[string]bool
+	children          map[string][]string
 	footprints        map[string]*causalFootprint
 	conflicts         map[string]map[string]bool
 	cuts              []causalCheckpointSpec
 	pluginCommands    []causalPluginCommand
 	rootCommandActors map[string]bool
+	release           map[string]int
+	rootOutputWaits   map[string][][]causalWait
+	rootErrors        []causalRootError
+	notifyCuts        []map[string]int
+	seq               map[string]*causalSeq
+	effectPlan        map[string]causalEffectPlan
+	mountEpoch        map[string]int // settle checkpoints before a root mount (children: their root ancestor)
+}
+
+// causalItem is one event a body must produce, in order (a frame's lane program).
+type causalItem struct{ kind, key string }
+
+// causalSeq is the ordered, event-producing program of one fiber's Apply body
+// and plugin cleanup body. exact is false whenever an operation makes the exact
+// sequence unprovable (when, partial effects, caught errors, asynchronous
+// continuations); then only window, lane and content rules apply.
+type causalSeq struct {
+	apply, cleanup           []causalItem
+	applyExact, cleanupExact bool
+}
+
+// causalFrame says where in a plugin a body runs.
+type causalFrame struct {
+	phase, effect string
+	step          int
+	top           bool
 }
 
 func causalUnsupported(format string, args ...any) error {
@@ -63,15 +155,19 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		return nil, err
 	}
 	m := &causalModel{
-		script: script, contexts: map[string]map[string]string{"root": {}},
-		fibers: make(map[string]*causalFiber), providers: make(map[causalAddress]string),
-		outputs: make(map[string]string), footprints: make(map[string]*causalFootprint),
-		conflicts: make(map[string]map[string]bool),
+		script: script, contexts: map[string]map[string]string{"root": {}}, ctxMeta: map[string]map[string]any{"root": {}},
+		fibers: make(map[string]*causalFiber), providers: make(map[causalAddress][]string),
+		provides: make(map[string][]causalAddress), provBefore: make(map[string][]causalAddress), avail: make(map[causalAddress]string),
+		outputs: make(map[string][]string), cellDefs: make(map[string][]causalLabelDef),
+		labels: make(map[string][]causalLabelDef), effects: make(map[string]*causalEffect),
+		effectCount: make(map[string]int), catchers: make(map[string][]string),
+		refusable: make(map[string]bool), seq: make(map[string]*causalSeq), mountEpoch: make(map[string]int), effectPlan: make(map[string]causalEffectPlan), children: make(map[string][]string),
+		footprints: make(map[string]*causalFootprint), conflicts: make(map[string]map[string]bool),
+		release: make(map[string]int), rootOutputWaits: make(map[string][][]causalWait),
 	}
 	for _, ctx := range script.Contexts {
-		if ctx.Intercept != nil {
-			return nil, causalUnsupported("intercept context %q", ctx.ID)
-		}
+		// An intercept context layers tracked-service configuration; it never
+		// changes which realm an address resolves to (C4.1).
 		inherited := make(map[string]string)
 		for key, realm := range m.contexts[ctx.Parent] {
 			inherited[key] = realm
@@ -87,6 +183,7 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 			inherited[key] = realm
 		}
 		m.contexts[ctx.ID] = inherited
+		m.ctxMeta[ctx.ID] = causalMergeMeta(m.ctxMeta[ctx.Parent], ctx.Meta)
 	}
 	plugins := make(map[string]PluginSpec)
 	var supportedSyntax func([]Action) error
@@ -97,10 +194,10 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 			}
 			switch a.Op {
 			case "provide":
-				if a.Mode != "" || a.To != "" {
+				if a.To != "" || a.Mode != "" && a.Mode != "service" && a.Mode != "available" {
 					return causalUnsupported("non-ordinary provision syntax")
 				}
-			case "read", "output", "fail", "when":
+			case "read", "output", "fail", "when", "gate", "mark", "effect", "withdraw", "child", "context":
 			default:
 				return causalUnsupported("body operation %q", a.Op)
 			}
@@ -117,10 +214,10 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		if p.Update != "" {
 			return nil, causalUnsupported("custom update continuation/veto policy")
 		}
-		// Non-null injection configuration can participate in tracked service
-		// resolution; v1 proves only ordinary read-only Needs membership.
+		// NeedWith configuration that is plain data cannot reorder events; its
+		// effect is visible only in output values, which are compared (C4.2).
 		for _, value := range p.Needs {
-			if value != nil {
+			if value != nil && !causalPureMountConfig(value) {
 				return nil, causalUnsupported("non-null Needs configuration")
 			}
 		}
@@ -134,7 +231,8 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		plugins[p.ID] = p
 	}
 	// All mounts are root program commands. A fiber name is a single lifetime;
-	// dynamic mounts, alias contexts and child activations are not inferred.
+	// dynamic mounts and alias contexts are not inferred. Children (C2) are
+	// registered while their parent body is compiled.
 	for _, a := range script.Steps {
 		if a.Op != "mount" {
 			continue
@@ -153,12 +251,15 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		m.fibers[a.Fiber] = &causalFiber{plugin: p, context: context, needs: orderedNeeds[p.ID], pureMount: causalPureMountConfig(a.Config)}
 		m.mountOrder = append(m.mountOrder, a.Fiber)
 	}
-	for _, actor := range append([]string{causalRootActor}, m.mountOrder...) {
-		m.footprints[actor] = &causalFootprint{reads: make(map[string]bool), writes: make(map[string]bool)}
+	m.footprint(causalRootActor)
+	for _, actor := range m.mountOrder {
+		m.footprint(actor)
 	}
 	// Compile entire synchronous activations, not just the action which happened
 	// to emit a particular event. An unobserved $output read still causes conflict.
-	for _, actor := range m.mountOrder {
+	// The slice grows while child fibers are registered.
+	for i := 0; i < len(m.mountOrder); i++ {
+		actor := m.mountOrder[i]
 		f := m.fibers[actor]
 		if err := m.references(actor, f.plugin.ConfigTransform); err != nil {
 			return nil, err
@@ -171,14 +272,26 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		for _, key := range f.needs {
 			m.footprints[actor].reads[m.serviceCell(f.context, key)] = true
 		}
-		if err := m.body(f.plugin.Apply, actor, false); err != nil {
+		m.refusable[actor] = causalRefusableBody(f.plugin.Apply)
+		applyExact, cleanupExact := true, true
+		cs := &causalSeq{}
+		cs.apply = causalItems(f.plugin.Apply, &applyExact)
+		cs.cleanup = causalItems(f.plugin.Cleanup, &cleanupExact)
+		cs.applyExact, cs.cleanupExact = applyExact, cleanupExact
+		m.seq[actor] = cs
+		m.effectPlan[actor] = causalPlanEffects(actor, f.plugin.Apply)
+		scope := &causalScope{context: f.context, local: make(map[string]string)}
+		if err := m.body(f.plugin.Apply, actor, causalFrame{phase: "apply", top: true}, scope, orderedNeeds, plugins); err != nil {
 			return nil, err
 		}
-		if err := m.body(f.plugin.Cleanup, actor, true); err != nil {
+		if err := m.body(f.plugin.Cleanup, actor, causalFrame{phase: "cleanup", top: true}, scope, orderedNeeds, plugins); err != nil {
 			return nil, err
 		}
 	}
 	if err := m.rootSteps(); err != nil {
+		return nil, err
+	}
+	if err := m.contention(plugins); err != nil {
 		return nil, err
 	}
 	// Needs edges are validated for cycles independently of trace scheduling.
@@ -186,9 +299,12 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 	for _, actor := range m.mountOrder {
 		f := m.fibers[actor]
 		for _, key := range f.needs {
-			if p := m.providers[m.address(f.context, key)]; p != "" {
+			for _, p := range m.providers[m.address(f.context, key)] {
 				dependencies[actor] = append(dependencies[actor], p)
 				m.link(actor, p)
+			}
+			if cell := m.avail[m.address(f.context, key)]; cell != "" {
+				m.footprints[actor].reads["output:"+cell] = true
 			}
 		}
 	}
@@ -232,6 +348,48 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 		}
 	}
 	return m, nil
+}
+
+func causalMergeMeta(parent, own map[string]any) map[string]any {
+	out := make(map[string]any)
+	for k, v := range parent {
+		out[k] = v
+	}
+	for k, v := range own {
+		out[k] = v
+	}
+	return out
+}
+
+// causalRefusableBody reports whether an Apply body has no error source other
+// than a refused provision: only provide, output and mark (C6.4).
+func causalRefusableBody(actions []Action) bool {
+	for _, a := range actions {
+		switch a.Op {
+		case "provide", "output", "mark":
+		default:
+			return false
+		}
+		if len(a.Program) != 0 || len(a.Cleanup) != 0 || a.Catch {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *causalModel) footprint(actor string) {
+	if m.footprints[actor] == nil {
+		m.footprints[actor] = &causalFootprint{reads: make(map[string]bool), writes: make(map[string]bool)}
+	}
+}
+
+func (m *causalModel) isCandidate(address causalAddress, actor string) bool {
+	for _, p := range m.providers[address] {
+		if p == actor {
+			return true
+		}
+	}
+	return false
 }
 
 // Metadata order, never event/provision order: JavaScript Object.keys visits
@@ -334,7 +492,7 @@ func (m *causalModel) eventsConflict(a, b causalObservation) bool {
 	if !publication.publication {
 		publication, loading = b, a
 	}
-	if publication.publication && loading.startupLoading && loading.startupProviders[publication.serviceAddress] == publication.publicationActivation && m.directNeedsAddress(loading.actor, publication.serviceAddress) && !m.nonServiceConflict(publication.actor, loading.actor) {
+	if publication.publication && loading.startupLoading && loading.startupProviders[publication.serviceAddress] == (causalBind{publication.actor, publication.publicationActivation}) && m.directNeedsAddress(loading.actor, publication.serviceAddress) && !m.nonServiceConflict(publication.actor, loading.actor) {
 		// Both streams already proved all providers ACTIVE and the local last
 		// enabling provider's status-before-notification bracket. Which branch
 		// completed readiness is schedule-dependent, not event semantics.
@@ -344,8 +502,8 @@ func (m *causalModel) eventsConflict(a, b causalObservation) bool {
 		if !provider.unloadingActive || !consumer.unloadingRunning || m.nonServiceConflict(provider.actor, consumer.actor) {
 			return false
 		}
-		for address, activation := range consumer.teardownProviders {
-			if m.providers[address] == provider.actor && activation == provider.unloadingActivation {
+		for address, bind := range consumer.teardownProviders {
+			if m.isCandidate(address, provider.actor) && bind == (causalBind{provider.actor, provider.unloadingActivation}) {
 				return true
 			}
 		}
@@ -406,18 +564,32 @@ func (m *causalModel) nonServiceConflict(a, b string) bool {
 	return false
 }
 
-func (m *causalModel) output(actor, name string) error {
+// output registers a writer of a named output cell. Several fibers may write one
+// cell (C5); every writer write-conflicts. The root command lane never shares a
+// cell with a fiber, because the writer of an event would then be unprovable.
+func (m *causalModel) output(actor, name string, frame causalFrame) error {
 	if name == "" {
 		return nil
-	}
-	if owner := m.outputs[name]; owner != "" && owner != actor {
-		return causalUnsupported("output %q has ambiguous owner", name)
 	}
 	if strings.Contains(name, ".") {
 		return causalUnsupported("ambiguous dotted output cell %q", name)
 	}
-	m.outputs[name] = actor
+	for _, owner := range m.outputs[name] {
+		if (owner == causalRootActor) != (actor == causalRootActor) {
+			return causalUnsupported("output %q has ambiguous owner", name)
+		}
+	}
+	known := false
+	for _, owner := range m.outputs[name] {
+		known = known || owner == actor
+	}
+	if !known {
+		m.outputs[name] = append(m.outputs[name], actor)
+	}
 	m.footprints[actor].writes["output:"+name] = true
+	if actor != causalRootActor {
+		m.cellDefs[name] = append(m.cellDefs[name], causalLabelDef{actor: actor, phase: frame.phase, effect: frame.effect, step: frame.step, stepped: causalStepped(frame.phase)})
+	}
 	return nil
 }
 func (m *causalModel) references(actor string, value any) error {
@@ -455,22 +627,51 @@ func (m *causalModel) references(actor string, value any) error {
 	}
 	return nil
 }
+
+// causalSynchronous rejects control metadata the comparator cannot prove. The
+// metadata accepted by amendment 2 is accepted only on the operations whose
+// semantics it has a rule for: await:false on effect and root dispose, task on
+// dispose and withdraw, count on waitMark, catch on effect, read and awaitFiber.
 func causalSynchronous(a Action) error {
-	if a.Task != "" || a.Await != nil && !*a.Await || a.Count != 0 || a.Catch || a.Global || a.Symbol || a.Prepend {
+	bad := a.Global || a.Symbol || a.Prepend
+	bad = bad || a.Task != "" && a.Op != "dispose" && a.Op != "withdraw"
+	bad = bad || a.Await != nil && !*a.Await && a.Op != "effect" && a.Op != "dispose"
+	bad = bad || a.Count != 0 && a.Op != "waitMark"
+	bad = bad || a.Catch && a.Op != "effect" && a.Op != "read" && a.Op != "awaitFiber"
+	if bad {
 		return causalUnsupported("async/control/catch metadata on %q", a.Op)
 	}
 	return nil
 }
-func (m *causalModel) body(actions []Action, actor string, cleanup bool) error {
+
+// causalScope is the static context environment of one fiber body. Contexts a
+// body creates with a fixed isolation label are static realm assignments.
+type causalScope struct {
+	context string
+	local   map[string]string // body context name -> registered context id
+}
+
+func (m *causalModel) body(actions []Action, actor string, frame causalFrame, scope *causalScope, orderedNeeds map[string][]string, plugins map[string]PluginSpec) error {
 	f := m.fibers[actor]
-	for _, a := range actions {
+	cleanup := frame.phase == "cleanup" || frame.phase == "effect-cleanup"
+	for opIndex, a := range actions {
+		fr := frame
+		if frame.top {
+			fr.step, fr.top = opIndex, false
+		}
 		if err := causalSynchronous(a); err != nil {
 			return err
 		}
-		if a.Context != "" || a.Fiber != "" || len(a.Cleanup) != 0 {
+		if err := causalFieldsOK(a); err != nil {
+			return err
+		}
+		if a.Op != "child" && a.Op != "context" && (a.Context != "" || a.Fiber != "") {
 			return causalUnsupported("body context override or cleanup callback on %q", a.Op)
 		}
-		if a.Op != "when" && len(a.Program) != 0 {
+		if a.Op != "effect" && len(a.Cleanup) != 0 {
+			return causalUnsupported("body context override or cleanup callback on %q", a.Op)
+		}
+		if a.Op != "when" && a.Op != "effect" && len(a.Program) != 0 {
 			return causalUnsupported("nested body on %q", a.Op)
 		}
 		if err := m.references(actor, a.Value); err != nil {
@@ -481,28 +682,171 @@ func (m *causalModel) body(actions []Action, actor string, cleanup bool) error {
 		}
 		switch a.Op {
 		case "provide":
-			if cleanup || a.Mode != "" || a.To != "" {
+			if fr.phase != "apply" || a.To != "" {
 				return causalUnsupported("non-ordinary/dynamic provision")
 			}
-			address := m.address(f.context, a.Key)
-			if m.providers[address] != "" {
-				return causalUnsupported("non-unique provider for %s/%s", address.key, address.realm)
+			address := m.address(scope.context, a.Key)
+			for _, p := range m.providers[address] {
+				if p == actor {
+					return causalUnsupported("non-unique provider for %s/%s", address.key, address.realm)
+				}
 			}
-			m.providers[address] = actor
-			m.footprints[actor].writes[m.serviceCell(f.context, a.Key)] = true
+			m.providers[address] = append(m.providers[address], actor)
+			m.provides[actor] = append(m.provides[actor], address)
+			m.footprints[actor].writes[m.serviceCell(scope.context, a.Key)] = true
+			if a.Mode == "available" {
+				value, _ := a.Value.(map[string]any)
+				cell, _ := value["ready"].(string)
+				if cell == "" || strings.Contains(cell, ".") || m.avail[address] != "" && m.avail[address] != cell {
+					return causalUnsupported("availability predicate cell")
+				}
+				m.avail[address] = cell
+				m.footprints[actor].reads["output:"+cell] = true
+			} else if m.avail[address] != "" {
+				return causalUnsupported("mixed availability modes for %s/%s", address.key, address.realm)
+			}
 		case "read":
-			if a.Mode != "" && a.Mode != "get" {
+			if a.Mode != "" && a.Mode != "get" && a.Mode != "config" {
 				return causalUnsupported("tracked/dynamic service read")
 			}
-			m.footprints[actor].reads[m.serviceCell(f.context, a.Key)] = true
-			if err := m.output(actor, a.To); err != nil {
+			m.footprints[actor].reads[m.serviceCell(scope.context, a.Key)] = true
+			if a.Catch {
+				m.catchers["read"] = append(m.catchers["read"], actor)
+			}
+			if err := m.output(actor, a.To, fr); err != nil {
 				return err
 			}
 		case "output":
-			if err := m.output(actor, a.To); err != nil {
+			if err := m.output(actor, a.To, fr); err != nil {
 				return err
 			}
 		case "fail":
+		case "gate", "mark":
+			if a.Label == "" {
+				return causalUnsupported("unlabelled %s", a.Op)
+			}
+			phase := fr.phase
+			m.labels[a.Label] = append(m.labels[a.Label], causalLabelDef{actor: actor, phase: phase, effect: fr.effect, isGate: a.Op == "gate", step: fr.step, stepped: causalStepped(phase)})
+			m.footprints[actor].writes["label:"+a.Label] = true
+			if a.Op == "gate" && phase == "apply" {
+				m.provBefore[a.Label] = append([]causalAddress(nil), m.provides[actor]...)
+			}
+		case "effect":
+			if fr.phase != "apply" {
+				return causalUnsupported("effect outside an Apply body")
+			}
+			id := fmt.Sprintf("%s#%d", actor, m.effectCount[actor])
+			m.effectCount[actor]++
+			async := a.Await != nil && !*a.Await
+			eff := &causalEffect{id: id, actor: actor, partial: a.Mode == "partial", async: async}
+			if a.Mode != "" && a.Mode != "partial" {
+				return causalUnsupported("effect mode %q", a.Mode)
+			}
+			if a.Catch {
+				m.catchers["effect"] = append(m.catchers["effect"], actor)
+				if err := m.output(actor, a.To, fr); err != nil {
+					return err
+				}
+			} else {
+				eff.to = a.To
+			}
+			eff.ordered = !eff.partial && !a.Catch
+			if eff.ordered {
+				exact := true
+				eff.items = causalItems(a.Cleanup, &exact)
+				eff.ordered = exact && len(eff.items) == len(a.Cleanup)
+			}
+			m.effects[id] = eff
+			setup := causalFrame{phase: "effect-setup", effect: id}
+			if async {
+				setup.phase = "effect-async"
+			}
+			if err := m.body(a.Program, actor, setup, scope, orderedNeeds, plugins); err != nil {
+				return err
+			}
+			if err := m.body(a.Cleanup, actor, causalFrame{phase: "effect-cleanup", effect: id}, scope, orderedNeeds, plugins); err != nil {
+				return err
+			}
+			if eff.partial {
+				m.stepEffectCleanup(id, fr.step)
+			}
+		case "withdraw":
+			if fr.phase != "apply" || a.Task == "" {
+				return causalUnsupported("withdraw outside an Apply body or without a named disposer")
+			}
+			found := false
+			for _, id := range m.effectIDs(actor) {
+				if m.effects[id].to == a.Task {
+					m.effects[id].withdraw, found = true, true
+					m.stepEffectCleanup(id, fr.step)
+				}
+			}
+			if !found {
+				return causalUnsupported("withdraw of unknown disposer %q", a.Task)
+			}
+		case "child":
+			if fr.phase != "apply" || cleanup {
+				return causalUnsupported("child outside an Apply body")
+			}
+			p, ok := plugins[a.Plugin]
+			if !ok || m.fibers[a.Fiber] != nil || a.Fiber == "" || a.Fiber == "root" || a.Fiber == causalRootActor {
+				return causalUnsupported("non-unique/unknown child %q", a.Fiber)
+			}
+			context := scope.context
+			if a.Context != "" {
+				id, local := scope.local[a.Context]
+				if local {
+					context = id
+				} else {
+					context = a.Context
+				}
+			}
+			if _, ok := m.contexts[context]; !ok {
+				return causalUnsupported("non-static child context %q", context)
+			}
+			m.fibers[a.Fiber] = &causalFiber{plugin: p, context: context, needs: orderedNeeds[p.ID], parent: actor}
+			m.mountOrder = append(m.mountOrder, a.Fiber)
+			m.children[actor] = append(m.children[actor], a.Fiber)
+			m.footprint(a.Fiber)
+			if err := m.references(actor, a.Config); err != nil {
+				return err
+			}
+		case "context":
+			if fr.phase != "apply" || a.To == "" || a.Mode != "isolate" && a.Mode != "intercept" && a.Mode != "" {
+				return causalUnsupported("dynamic context form")
+			}
+			parent := scope.context
+			if a.Context != "" {
+				if id, local := scope.local[a.Context]; local {
+					parent = id
+				} else {
+					parent = a.Context
+				}
+			}
+			if _, ok := m.contexts[parent]; !ok {
+				return causalUnsupported("non-static context parent %q", parent)
+			}
+			// Each fiber of one plugin executes this body; without a fixed label an
+			// isolated realm would be fresh per execution and unprovable.
+			realms := make(map[string]string)
+			for k, v := range m.contexts[parent] {
+				realms[k] = v
+			}
+			if a.Mode == "isolate" {
+				if a.Label == "" || a.Key == "" {
+					return causalUnsupported("unlabelled dynamic isolate")
+				}
+				realms[causalBuiltin(a.Key)] = a.Key + ":" + a.Label
+			}
+			id := a.To
+			if prior, exists := m.contexts[id]; exists && !causalEqual(prior, realms) {
+				return causalUnsupported("conflicting dynamic context %q", id)
+			}
+			if _, exists := m.contexts[id]; !exists {
+				m.contexts[id] = realms
+				m.ctxMeta[id] = causalMergeMeta(m.ctxMeta[parent], a.Meta)
+			}
+			scope.local[a.To] = id
 		case "when":
 			// Both branches contribute conservative footprints. Conditional
 			// provision creation needs a richer lifetime witness and is excluded.
@@ -518,746 +862,263 @@ func (m *causalModel) body(actions []Action, actor string, cleanup bool) error {
 			if hasProvide(a.Program) {
 				return causalUnsupported("conditional provision")
 			}
-			if err := m.body(a.Program, actor, cleanup); err != nil {
+			if err := m.body(a.Program, actor, fr, scope, orderedNeeds, plugins); err != nil {
 				return err
 			}
 		default:
 			return causalUnsupported("body operation %q", a.Op)
 		}
 	}
+	_ = f
 	return nil
 }
 
-// observe validates the sidecar against facts reconstructible from the raw
-// stream. A hash is binding, not authenticity: the recorder is still responsible
-// for observing the cut. Impossible output/state/plugin prefixes are rejected.
-func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObservation, error) {
-	observations := make([]causalObservation, len(trace.Events))
-	states := make(map[string]string)
-	outputs := make(map[string]any)
-	configs := make(map[string]any)
-	disposed := make(map[string]bool)
-	activations := make(map[string]int)
-	applied, failed := make(map[string]bool), make(map[string]bool)
-	bound := make(map[string]map[causalAddress]int)
-	retiring := make(map[string]int)
-	mutationAnchors := make(map[string]bool)
-	segment := 0
-	mutationCommand := func(actor string) *Action {
-		if segment >= len(m.cuts) {
-			return nil
-		}
-		for i := range m.cuts[segment].commands {
-			command := &m.cuts[segment].commands[i]
-			if command.Fiber == actor && command.Op == "update" {
-				return command
-			}
-		}
-		return nil
+func (m *causalModel) effectIDs(actor string) []string {
+	ids := make([]string, 0, m.effectCount[actor])
+	for i := 0; i < m.effectCount[actor]; i++ {
+		ids = append(ids, fmt.Sprintf("%s#%d", actor, i))
 	}
-	type observedProvision struct {
-		value      any
-		activation int
-	}
-	store := make(map[causalAddress]observedProvision)
-	invalidated := make(map[causalAddress]bool)
-	published := make(map[causalAddress]int)
-	// For every provider activation, these mounted pending consumers became
-	// ready at its ACTIVE transition and must enter LOADING before publication.
-	triggered := make(map[string]map[string]bool)
-	readiness := func(actor string) map[causalAddress]int {
-		fiber := m.fibers[actor]
-		bindings := make(map[causalAddress]int)
-		for _, key := range fiber.needs {
-			address := m.address(fiber.context, key)
-			provider := m.providers[address]
-			if provider == "" || states[provider] != "ACTIVE" || activations[provider] == 0 {
-				return nil
-			}
-			bindings[address] = activations[provider]
-		}
-		return bindings
-	}
-	pluginCount, nextCut := 0, 0
-	check := func(ci int) error {
-		cp, spec := &trace.Checkpoints[ci], m.cuts[ci]
-		if pluginCount != spec.plugins || len(cp.States) != len(spec.fibers) {
-			return fmt.Errorf("checkpoint %q contradicts root mount/disposal prefix", cp.Label)
-		}
-		if !causalEqual(cp.Outputs, outputs) {
-			return fmt.Errorf("checkpoint %q contradicts output-event prefix", cp.Label)
-		}
-		if len(cp.Provisions) != len(store) {
-			return fmt.Errorf("checkpoint %q contradicts observed provision-store domain", cp.Label)
-		}
-		seenProvisions := make(map[causalAddress]bool)
-		for _, provision := range cp.Provisions {
-			address := causalAddress{provision.Key, provision.Realm}
-			observed, ok := store[address]
-			if !ok || seenProvisions[address] || provision.Provider != m.providers[address] || !causalEqual(provision.Value, observed.value) || provision.Active != (states[provision.Provider] == "ACTIVE") {
-				return fmt.Errorf("checkpoint %q contradicts published provision ownership/value/state", cp.Label)
-			}
-			seenProvisions[address] = true
-		}
-		for i, state := range cp.States {
-			if state.Fiber != spec.fibers[i] || state.State != states[state.Fiber] {
-				return fmt.Errorf("checkpoint %q contradicts ordered fiber/status prefix", cp.Label)
-			}
-			if disposed[state.Fiber] != (state.FiberUID == nil) {
-				return fmt.Errorf("checkpoint %q contradicts live fiber identity", cp.Label)
-			}
-			if state.State == "DISPOSED" && !disposed[state.Fiber] {
-				return fmt.Errorf("disposed state without root disposal")
-			}
-			if state.State == "ACTIVE" && state.Epoch == nil {
-				return fmt.Errorf("active state without epoch")
-			}
-			if state.State == "LOADING" || state.State == "UNLOADING" {
-				return causalUnsupported("unsettled lifecycle checkpoint without phase witness")
-			}
-			if state.State == "ACTIVE" {
-				for address, provider := range m.providers {
-					if provider == state.Fiber {
-						if _, ok := store[address]; !ok {
-							return fmt.Errorf("active provider lacks observed publication")
-						}
-					}
-				}
-			}
-			if state.Epoch != nil {
-				needs := m.fibers[state.Fiber].needs
-				if len(needs) != len(state.Epoch.Needs) {
-					return fmt.Errorf("checkpoint %q Needs count mismatch", cp.Label)
-				}
-				for ni, key := range needs {
-					if key != state.Epoch.Needs[ni].Key {
-						return fmt.Errorf("checkpoint %q Needs JSON order mismatch", cp.Label)
-					}
-				}
-			}
-			if config, ok := configs[state.Fiber]; ok && !causalEqual(config, state.EffectiveConfig) {
-				return fmt.Errorf("checkpoint %q differs from captured effective config", cp.Label)
-			}
-		}
-		return nil
-	}
-	for index := 0; index <= len(trace.Events); index++ {
-		for nextCut < len(witness.Checkpoints) && witness.Checkpoints[nextCut].AfterEvent == index {
-			if err := check(nextCut); err != nil {
-				return nil, err
-			}
-			nextCut++
-			segment = nextCut
-			mutationAnchors = make(map[string]bool)
-		}
-		if index == len(trace.Events) {
-			break
-		}
-		e := trace.Events[index]
-		actor := ""
-		rootLane := false
-		observation := causalObservation{}
-		switch e.Kind {
-		case "status", "plugin", "config", "apply", "update", "commit", "cleanup", "error":
-			actor, _ = e.Data["fiber"].(string)
-			rootLane = e.Kind == "config" && m.rootCommandActors[actor]
-			if m.fibers[actor] == nil {
-				return nil, causalUnsupported("unproved %s owner %q", e.Kind, actor)
-			}
-		case "service":
-			key, keyOK := e.Data["key"].(string)
-			realm, realmOK := e.Data["realm"].(string)
-			if !keyOK || !realmOK {
-				return nil, causalUnsupported("service event without address")
-			}
-			address := causalAddress{key, realm}
-			actor = m.providers[address]
-			if actor == "" {
-				return nil, causalUnsupported("unproved service provider for %s/%s", key, realm)
-			}
-			// Publication is the unique notification while this ordinary
-			// provider activation is ACTIVE, never inferred from its payload.
-			// Retained-value invalidation/removal notifications stay strict.
-			if states[actor] == "ACTIVE" && !disposed[actor] {
-				activation := activations[actor]
-				if activation == 0 || published[address] == activation {
-					return nil, causalUnsupported("ambiguous ordinary publication window")
-				}
-				for consumer, pending := range triggered[actor] {
-					if pending {
-						return nil, fmt.Errorf("last enabling provider %q published before consumer %q LOADING", actor, consumer)
-					}
-				}
-				if _, exists := store[address]; exists {
-					return nil, fmt.Errorf("provider republished before retiring former provision")
-				}
-				value, exists := e.Data["value"]
-				if !exists {
-					return nil, fmt.Errorf("service publication lacks value")
-				}
-				store[address] = observedProvision{value: value, activation: activation}
-				invalidated[address] = false
-				published[address] = activation
-				observation.publication, observation.publicationActivation, observation.serviceAddress = true, activation, address
-			} else {
-				prior, present := store[address]
-				if !present || states[actor] != "UNLOADING" {
-					return nil, fmt.Errorf("service retirement without owned unloading provision")
-				}
-				value, exists := e.Data["value"]
-				if !exists {
-					return nil, fmt.Errorf("service retirement lacks value")
-				}
-				undefined := causalEqual(value, map[string]any{"$undefined": true})
-				if !invalidated[address] && causalEqual(value, prior.value) {
-					for consumer, bindings := range bound {
-						if bindings[address] == prior.activation && (states[consumer] == "ACTIVE" || states[consumer] == "LOADING") {
-							return nil, fmt.Errorf("retained withdrawal precedes bound consumer %q UNLOADING", consumer)
-						}
-					}
-					invalidated[address] = true
-				} else if undefined {
-					for consumer, bindings := range bound {
-						if bindings[address] == prior.activation {
-							return nil, fmt.Errorf("provider deletion precedes retained consumer %q stable teardown", consumer)
-						}
-					}
-					delete(store, address)
-					delete(invalidated, address)
-				} else {
-					return nil, fmt.Errorf("retirement notification changed retained service value")
-				}
-			}
-		case "output":
-			to, ok := e.Data["to"].(string)
-			if !ok || m.outputs[to] == "" {
-				return nil, causalUnsupported("unproved output owner %q", to)
-			}
-			actor = m.outputs[to]
-			value, exists := e.Data["value"]
-			if !exists {
-				return nil, fmt.Errorf("output event lacks value")
-			}
-			outputs[to] = value
-			rootLane = actor == causalRootActor
-		default:
-			return nil, causalUnsupported("event kind %q", e.Kind)
-		}
-		if actor != causalRootActor && states[actor] == "" && e.Kind != "plugin" {
-			return nil, fmt.Errorf("event before fixed mount publication")
-		}
-		if e.Kind == "plugin" {
-			isDisposed, ok := e.Data["disposed"].(bool)
-			if !ok || pluginCount >= len(m.pluginCommands) {
-				return nil, fmt.Errorf("invalid/extra root plugin event")
-			}
-			cmd := m.pluginCommands[pluginCount]
-			if cmd.fiber != actor || cmd.disposed != isDisposed {
-				return nil, fmt.Errorf("root plugin command order mismatch")
-			}
-			if cmd.previousDisposed != "" && states[cmd.previousDisposed] != "DISPOSED" {
-				return nil, fmt.Errorf("root disposal overtook awaited prior disposal")
-			}
-			if isDisposed {
-				if disposed[actor] || states[actor] == "" {
-					return nil, fmt.Errorf("duplicate/unmounted disposal")
-				}
-				disposed[actor] = true
-			} else {
-				if states[actor] != "" {
-					return nil, fmt.Errorf("duplicate fixed mount publication")
-				}
-				states[actor] = "PENDING"
-				observation.pureMount = m.fibers[actor].pureMount
-			}
-			pluginCount++
-			rootLane = true
-		}
-		if e.Kind == "status" {
-			from, _ := e.Data["from"].(string)
-			to, _ := e.Data["to"].(string)
-			if states[actor] != from || !causalTransition(from, to) {
-				return nil, fmt.Errorf("illegal lifecycle order for %q: %s -> %s", actor, from, to)
-			}
-			if to == "UNLOADING" && (from == "ACTIVE" || from == "LOADING") {
-				cause := disposed[actor] || mutationAnchors[actor] || failed[actor]
-				bindings := make(map[causalAddress]int)
-				for address, activation := range bound[actor] {
-					bindings[address] = activation
-					provider := m.providers[address]
-					if states[provider] == "UNLOADING" && retiring[provider] == activation {
-						cause = true
-					}
-				}
-				if !cause {
-					return nil, causalUnsupported("UNLOADING without exact bound invalidator or observed own command/error")
-				}
-				observation.unloadingRunning, observation.teardownProviders = true, bindings
-				if from == "ACTIVE" {
-					observation.unloadingActive = true
-					observation.unloadingActivation = activations[actor]
-					retiring[actor] = activations[actor]
-				}
-			}
-			if to == "LOADING" {
-				delete(retiring, actor)
-				applied[actor], failed[actor] = false, false
-				bindings := readiness(actor)
-				if bindings == nil {
-					return nil, fmt.Errorf("consumer %q LOADING before every required provider ACTIVE", actor)
-				}
-				bound[actor] = bindings
-				if from == "PENDING" {
-					observation.startupLoading, observation.startupProviders = true, bindings
-				}
-				for _, pending := range triggered {
-					delete(pending, actor)
-				}
-			}
-			if to == "FAILED" && !failed[actor] {
-				return nil, fmt.Errorf("FAILED state without captured error")
-			}
-			if from == "UNLOADING" && to != "LOADING" {
-				delete(bound, actor)
-			}
-			states[actor] = to
-			if to == "ACTIVE" {
-				if readiness(actor) == nil {
-					return nil, fmt.Errorf("consumer %q ACTIVE before every required provider ACTIVE", actor)
-				}
-				if !applied[actor] || failed[actor] {
-					return nil, fmt.Errorf("ACTIVE without one successful Apply in current loading frame")
-				}
-				pending := make(map[string]bool)
-				for _, consumer := range m.mountOrder {
-					if states[consumer] == "PENDING" && !disposed[consumer] && readiness(consumer) != nil {
-						for _, key := range m.fibers[consumer].needs {
-							if m.providers[m.address(m.fibers[consumer].context, key)] == actor {
-								pending[consumer] = true
-							}
-						}
-					}
-				}
-				triggered[actor] = pending
-			}
-		}
-		if e.Kind == "config" || e.Kind == "apply" {
-			config, exists := e.Data["config"]
-			if !exists {
-				return nil, fmt.Errorf("%s event lacks captured config", e.Kind)
-			}
-			// resolveConfig emits config without publishing; only Apply/commit
-			// capture the retained effective object.
-			if e.Kind == "apply" {
-				if states[actor] != "LOADING" || applied[actor] || failed[actor] {
-					return nil, fmt.Errorf("Apply outside a fresh LOADING frame")
-				}
-				applied[actor] = true
-				activations[actor]++
-				configs[actor] = config
-			}
-		}
-		if e.Kind == "error" {
-			payload, ok := e.Data["error"].(map[string]any)
-			if !ok || payload["message"] == nil || payload["name"] == nil {
-				return nil, fmt.Errorf("error event lacks exact error payload")
-			}
-			failed[actor] = true
-		}
-		if e.Kind == "update" {
-			config, exists := e.Data["config"]
-			if !exists {
-				return nil, fmt.Errorf("update event lacks captured config")
-			}
-			configs[actor] = config
-		}
-		if e.Kind == "commit" {
-			if _, exists := e.Data["config"]; !exists {
-				return nil, fmt.Errorf("commit event lacks captured config")
-			}
-			if command := mutationCommand(actor); command != nil && command.Mode != "noSave" && causalEqual(command.Config, e.Data["config"]) {
-				mutationAnchors[actor] = true
-			}
-		}
-		observation.fingerprint = causalJSON(struct {
-			Kind string         `json:"kind"`
-			Data map[string]any `json:"data"`
-		}{e.Kind, e.Data})
-		observation.actor, observation.rootLane = actor, rootLane
-		observations[index] = observation
-	}
-	if nextCut != len(witness.Checkpoints) || pluginCount != len(m.pluginCommands) {
-		return nil, fmt.Errorf("incomplete checkpoint/root command prefix")
-	}
-	if err := m.rootOutcomes(trace, witness); err != nil {
-		return nil, err
-	}
-	return observations, nil
+	return ids
 }
 
-func causalTransition(from, to string) bool {
-	switch from {
-	case "PENDING":
-		return to == "LOADING" || to == "UNLOADING"
-	case "LOADING":
-		return to == "ACTIVE" || to == "FAILED" || to == "UNLOADING"
-	case "ACTIVE":
-		return to == "UNLOADING"
-	case "FAILED":
-		return to == "LOADING" || to == "UNLOADING"
-	case "UNLOADING":
-		return to == "PENDING" || to == "LOADING" || to == "FAILED" || to == "DISPOSED"
+// descendants lists every transitive child of a fiber.
+func (m *causalModel) descendants(actor string) []string {
+	var out []string
+	for _, c := range m.children[actor] {
+		out = append(out, c)
+		out = append(out, m.descendants(c)...)
+	}
+	return out
+}
+
+// waited reports whether a waitMark for the label was issued in a segment up to
+// and including cut ci: the recorder's evidence that a script awaited it.
+func (m *causalModel) waited(label string, ci int) bool {
+	for i := 0; i <= ci && i < len(m.cuts); i++ {
+		for _, w := range m.cuts[i].waits {
+			if w.label == label {
+				return true
+			}
+		}
 	}
 	return false
 }
 
-// identities anchors IDs by static ownership and per-address lifetime occurrence,
-// not global provision creation order. Every opaque value has exactly one owner
-// in its namespace across ALL checkpoints, including retired occurrences.
-func (m *causalModel) identities(trace *Trace, witness CausalWitness) error {
-	fiberDomain, fiberOwner := make(map[string]string), make(map[string]string)
-	provisionDomain := make(map[string]string)
-	occurrences := make(map[causalAddress]int)
-	previous := make(map[causalAddress]string)
-	previousTokens := make(map[causalAddress]string)
-	previousCut := 0
-	activations := make(map[string]int)
-	for ci := range trace.Checkpoints {
-		for _, event := range trace.Events[previousCut:witness.Checkpoints[ci].AfterEvent] {
-			if event.Kind == "apply" {
-				actor, _ := event.Data["fiber"].(string)
-				activations[actor]++
-			}
-		}
-		cp := &trace.Checkpoints[ci]
-		current, currentTokens := make(map[causalAddress]string), make(map[causalAddress]string)
-		byToken := make(map[string]ProvisionSnapshot)
-		for pi := range cp.Provisions {
-			p := &cp.Provisions[pi]
-			address := causalAddress{p.Key, p.Realm}
-			if m.providers[address] != p.Provider || m.fibers[p.Provider] == nil {
-				return causalUnsupported("unproved provision ownership %s/%s/%s", p.Key, p.Realm, p.Provider)
-			}
-			if current[address] != "" {
-				return fmt.Errorf("duplicate provision address")
-			}
-			rawID := causalJSON(p.ProvisionUID)
-			token := ""
-			if previous[address] == rawID {
-				// If a provider started another Apply, its former opaque identity
-				// cannot name the new provision even when its value stayed equal.
-				for _, e := range trace.Events[previousCut:witness.Checkpoints[ci].AfterEvent] {
-					if e.Kind == "apply" && e.Data["fiber"] == p.Provider {
-						return fmt.Errorf("provision UID reused across provider activation")
-					}
-				}
-				token = previousTokens[address]
-			} else {
-				if provisionDomain[rawID] != "" {
-					return fmt.Errorf("provision UID aliased/reused across lifetime or address")
-				}
-				activation := activations[p.Provider]
-				if activation == 0 || occurrences[address] == activation {
-					return fmt.Errorf("provision identity changed without a distinct provider activation")
-				}
-				occurrences[address] = activation
-				token = "provision:" + causalJSON([]any{p.Key, p.Realm, p.Provider, activation})
-				provisionDomain[rawID] = token
-			}
-			current[address], currentTokens[address] = rawID, token
-			p.ProvisionUID = token
-			byToken[token] = *p
-			for _, state := range cp.States {
-				if state.Fiber == p.Provider && p.Active != (state.State == "ACTIVE") {
-					return fmt.Errorf("provision active flag contradicts provider state")
-				}
-			}
-		}
-		for si := range cp.States {
-			state := &cp.States[si]
-			if state.FiberUID != nil {
-				rawID := causalJSON(state.FiberUID)
-				if prior := fiberDomain[rawID]; prior != "" && prior != state.Fiber {
-					return fmt.Errorf("fiber UID alias across owners")
-				}
-				if prior := fiberOwner[state.Fiber]; prior != "" && prior != rawID {
-					return fmt.Errorf("fiber UID changed within fixed lifetime")
-				}
-				fiberDomain[rawID], fiberOwner[state.Fiber] = state.Fiber, rawID
-				state.FiberUID = "fiber:" + state.Fiber
-			}
-			if state.Epoch != nil {
-				for ni := range state.Epoch.Needs {
-					binding := &state.Epoch.Needs[ni]
-					token := provisionDomain[causalJSON(binding.ProvisionUID)]
-					if token == "" {
-						return fmt.Errorf("binding references unobserved provision UID")
-					}
-					address := m.address(m.fibers[state.Fiber].context, binding.Key)
-					p, present := byToken[token]
-					if !present || p.Key != address.key || p.Realm != address.realm || p.Provider != m.providers[address] || !p.Active {
-						return fmt.Errorf("binding references stale/wrong provider epoch or realm")
-					}
-					binding.ProvisionUID = token
-				}
-			}
-		}
-		previous, previousTokens = current, currentTokens
-		previousCut = witness.Checkpoints[ci].AfterEvent
-	}
-	return nil
-}
-
-// rootOutcomes validates root command anchors against each observed segment,
-// independently of the other trace. It never executes a plugin or reads Expect.
-// Unproved target policies are excluded by compilation rather than guessed.
-func (m *causalModel) rootOutcomes(trace *Trace, witness CausalWitness) error {
-	revisions := make(map[string]int)
-	rawConfigs := make(map[string]any)
-	previous := 0
-	for ci, spec := range m.cuts {
-		cp := &trace.Checkpoints[ci]
-		events := trace.Events[previous:witness.Checkpoints[ci].AfterEvent]
-		for _, command := range spec.commands {
-			target := command.Fiber
-			switch command.Op {
-			case "mount", "rawConfig":
-				if !causalPureMountConfig(command.Config) {
-					return causalUnsupported("root config expression outcome cannot be proved")
-				}
-				rawConfigs[target] = command.Config
-			case "update", "restart":
-				if ci == 0 {
-					return causalUnsupported("mutation without settled prior target")
-				}
-				var before, after *FiberSnapshot
-				for i := range trace.Checkpoints[ci-1].States {
-					s := &trace.Checkpoints[ci-1].States[i]
-					if s.Fiber == target {
-						before = s
-					}
-				}
-				for i := range cp.States {
-					s := &cp.States[i]
-					if s.Fiber == target {
-						after = s
-					}
-				}
-				if before == nil || after == nil {
-					return fmt.Errorf("root mutation has no observed target")
-				}
-				if before.State != "ACTIVE" && before.State != "FAILED" {
-					return causalUnsupported("mutation outcome for non-active/non-failed target")
-				}
-				loads, unloads, applies, commits := 0, 0, 0, 0
-				for _, event := range events {
-					if event.Data["fiber"] != target {
-						continue
-					}
-					if event.Kind == "status" {
-						if event.Data["to"] == "LOADING" {
-							loads++
-						}
-						if event.Data["to"] == "UNLOADING" {
-							unloads++
-						}
-					}
-					if event.Kind == "apply" {
-						applies++
-					}
-					if event.Kind == "commit" {
-						commits++
-						if command.Op != "update" || command.Mode == "noSave" || !causalEqual(event.Data["config"], command.Config) {
-							return fmt.Errorf("root mutation commit contradicts command")
-						}
-					}
-				}
-				if command.Op == "update" {
-					if !causalPureMountConfig(command.Config) {
-						return causalUnsupported("dynamic update config outcome")
-					}
-					rawConfigs[target] = command.Config
-					want := 1
-					if command.Mode == "noSave" {
-						want = 0
-					}
-					if commits != want {
-						return fmt.Errorf("missing/extra update command commit")
-					}
-				} else if commits != 0 {
-					return fmt.Errorf("restart unexpectedly committed input")
-				}
-				if loads != 1 || before.State == "ACTIVE" && unloads < 1 || applies > 1 {
-					return fmt.Errorf("missing/duplicate root mutation lifecycle")
-				}
-				if after.State != "ACTIVE" && after.State != "FAILED" && after.State != "PENDING" {
-					return fmt.Errorf("unsettled root mutation outcome")
-				}
-				revisions[target]++
-			}
-		}
-		for _, state := range cp.States {
-			if state.Revision != revisions[state.Fiber] || state.Epoch != nil && state.Epoch.Revision != state.Revision {
-				return fmt.Errorf("checkpoint %q contradicts command revision", cp.Label)
-			}
-			if config, known := rawConfigs[state.Fiber]; known && !causalEqual(config, state.RawConfig) {
-				return fmt.Errorf("checkpoint %q contradicts retained raw config", cp.Label)
-			}
-		}
-		previous = witness.Checkpoints[ci].AfterEvent
-	}
-	return nil
-}
-
-func (m *causalModel) rootSteps() error {
-	mounted, disposed := make(map[string]bool), make(map[string]bool)
-	order := make([]string, 0)
-	dirty, mutation, previousDispose := false, false, ""
-	observation := false
-	rootActors := make(map[string]bool)
-	m.rootCommandActors = rootActors
-	rootObserved := func(actor string) {
-		rootActors[actor] = true
-		m.link(causalRootActor, actor)
-		observation = true
-	}
-	labels := make(map[string]bool)
-	commands := make([]Action, 0)
-	for _, a := range m.script.Steps {
-		if a.Op != "settle" && a.Op != "snapshot" {
-			commands = append(commands, a)
-		}
-		if err := causalSynchronous(a); err != nil {
-			return err
-		}
-		if len(a.Program) != 0 || len(a.Cleanup) != 0 {
-			return causalUnsupported("nested root operation %q", a.Op)
-		}
-		if mutation && a.Op != "settle" {
-			return causalUnsupported("root mutation without immediate settled witness")
-		}
-		if previousDispose != "" && a.Op != "dispose" && a.Op != "settle" {
-			return causalUnsupported("root disposal batch without settled witness")
-		}
-		if err := m.references(causalRootActor, a.Config); err != nil {
-			return err
-		}
-		if err := m.references(causalRootActor, a.Value); err != nil {
-			return err
-		}
-		context := a.Context
-		if context == "" {
-			context = "root"
-			if a.Op != "mount" && a.Fiber != "" {
-				if f := m.fibers[a.Fiber]; f != nil {
-					context = f.context
-				}
-			}
-		}
-		if _, ok := m.contexts[context]; !ok {
-			return causalUnsupported("dynamic root context %q", context)
-		}
-		target := func() error {
-			if !mounted[a.Fiber] || disposed[a.Fiber] {
-				return causalUnsupported("non-live root target %q", a.Fiber)
-			}
-			return nil
-		}
+// causalItems flattens a body into the events it must emit, in order. The
+// walker never guesses: an operation whose events cannot be placed exactly
+// clears *exact, which disables only the order/completeness check of this body.
+func causalItems(actions []Action, exact *bool) []causalItem {
+	var items []causalItem
+	for _, a := range actions {
 		switch a.Op {
-		case "mount":
-			if mounted[a.Fiber] || previousDispose != "" || observation {
-				return causalUnsupported("unwitnessed fixed mount command boundary")
-			}
-			if err := m.references(a.Fiber, a.Config); err != nil {
-				return err
-			}
-			mounted[a.Fiber] = true
-			order = append(order, a.Fiber)
-			m.pluginCommands = append(m.pluginCommands, causalPluginCommand{fiber: a.Fiber})
-			dirty, previousDispose = true, ""
-		case "settle", "snapshot":
-			if a.Op == "snapshot" && dirty {
-				return causalUnsupported("snapshot before a settled root boundary")
-			}
-			if labels[a.Label] {
-				return causalUnsupported("duplicate checkpoint label")
-			}
-			labels[a.Label] = true
-			m.cuts = append(m.cuts, causalCheckpointSpec{label: a.Label, fibers: append([]string(nil), order...), plugins: len(m.pluginCommands), commands: commands})
-			commands = make([]Action, 0)
-			dirty, mutation, previousDispose = false, false, ""
-			observation = false
-		case "update", "restart":
-			if err := target(); err != nil {
-				return err
-			}
-			if dirty || previousDispose != "" || observation || a.Mode != "" && !(a.Op == "update" && a.Mode == "noSave") {
-				return causalUnsupported("unwitnessed root mutation")
-			}
-			mutation, previousDispose = true, ""
-			// The root reads candidate config, while lifecycle/config/update
-			// events belong to the target. Shared output reads must link both.
-			if err := m.references(a.Fiber, a.Config); err != nil {
-				return err
-			}
-		case "dispose":
-			if err := target(); err != nil {
-				return err
-			}
-			if dirty {
-				return causalUnsupported("disposal before a settled root boundary")
-			}
-			disposed[a.Fiber] = true
-			m.pluginCommands = append(m.pluginCommands, causalPluginCommand{fiber: a.Fiber, disposed: true, previousDisposed: previousDispose})
-			previousDispose = a.Fiber
-		case "awaitFiber":
-			if err := target(); err != nil {
-				return err
-			}
-		case "rawConfig", "resolveConfig", "inspect":
-			rootObserved(a.Fiber)
-			if err := target(); err != nil {
-				return err
-			}
-			if dirty {
-				return causalUnsupported("config observation during unwitnessed startup")
-			}
-			if a.Op == "inspect" && a.Mode != "effects" && a.Mode != "configIdentity" {
-				return causalUnsupported("inspect mode")
-			}
-			if err := m.references(a.Fiber, a.Config); err != nil {
-				return err
-			}
-			if a.Op != "rawConfig" {
-				if err := m.output(causalRootActor, a.To); err != nil {
-					return err
-				}
-			}
-		case "read":
-			if dirty || a.Mode != "" && a.Mode != "get" {
-				return causalUnsupported("root service read without settled ordinary realm")
-			}
-			m.footprints[causalRootActor].reads[m.serviceCell(context, a.Key)] = true
-			if err := m.output(causalRootActor, a.To); err != nil {
-				return err
-			}
+		case "gate", "mark":
+			items = append(items, causalItem{a.Op, a.Label})
 		case "output":
-			if err := m.output(causalRootActor, a.To); err != nil {
-				return err
+			items = append(items, causalItem{"output", a.To})
+		case "read":
+			if a.Catch {
+				*exact = false
 			}
-		default:
-			return causalUnsupported("root operation %q", a.Op)
+			if a.To != "" {
+				items = append(items, causalItem{"output", a.To})
+			}
+		case "fail":
+			items = append(items, causalItem{"fail", ""})
+			return items
+		case "child":
+			items = append(items, causalItem{"child", a.Fiber})
+		case "effect":
+			// Only a synchronous effect with no cleanup, catch or disposer name
+			// places its program events exactly in the Apply sequence.
+			if a.Mode == "partial" || a.Catch || len(a.Cleanup) != 0 || a.To != "" || a.Await != nil && !*a.Await {
+				*exact = false
+				continue
+			}
+			items = append(items, causalItems(a.Program, exact)...)
+		case "withdraw", "when":
+			*exact = false
 		}
 	}
-	if len(m.cuts) == 0 || len(m.script.Steps) == 0 || (m.script.Steps[len(m.script.Steps)-1].Op != "settle" && m.script.Steps[len(m.script.Steps)-1].Op != "snapshot") {
-		return causalUnsupported("missing final witnessed checkpoint")
+	return items
+}
+
+// causalFields lists the JSON fields an operation may carry. An action with any
+// other field is malformed for its operation and is not interpreted.
+var causalFields = map[string]string{
+	"child": "op fiber plugin context config", "context": "op to mode key label context meta",
+	"gate": "op label", "mark": "op label value", "withdraw": "op task",
+	"effect":   "op label program cleanup to mode error catch await",
+	"waitMark": "op label count", "release": "op label", "notify": "op keys",
+	"awaitFiber": "op fiber catch", "dispose": "op fiber await task",
+}
+
+func causalFieldsOK(a Action) error {
+	allowed, ok := causalFields[a.Op]
+	if !ok {
+		return nil
 	}
-	// Root observations form one sequential command lane, even when commands
-	// target different fibers. This does not link ordinary sibling activations.
-	for a := range rootActors {
-		for b := range rootActors {
-			m.link(a, b)
+	raw, _ := json.Marshal(a) // an Action always marshals
+	var used map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &used)
+	permitted := make(map[string]bool)
+	for _, f := range strings.Fields(allowed) {
+		permitted[f] = true
+	}
+	for f := range used {
+		if !permitted[f] {
+			return causalUnsupported("field %q is not defined for operation %q", f, a.Op)
 		}
 	}
 	return nil
+}
+
+// inert reports a fiber that can never leave PENDING: one of its Needs addresses
+// has no candidate provider anywhere in the script, so it emits no body event.
+func (m *causalModel) inert(actor string) bool {
+	f := m.fibers[actor]
+	for _, key := range f.needs {
+		if len(m.providers[m.address(f.context, key)]) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// contention enforces the sequencing that gives a second provider of one
+// address (C6), a second writer of one output cell (C5) and a mounted plugin with
+// controls a defined meaning. Concurrent contention has no schedule-independent
+// winner, so it is not proved.
+func (m *causalModel) contention(plugins map[string]PluginSpec) error {
+	mountedPlugin := make(map[string]bool)
+	for _, a := range m.mountOrder {
+		mountedPlugin[m.fibers[a].plugin.ID] = true
+	}
+	for id, p := range plugins {
+		if !mountedPlugin[id] && causalUsesControls(p.Apply, p.Cleanup) {
+			return causalUnsupported("plugin %q uses controls but no fiber mounts it", id)
+		}
+	}
+	for label, defs := range m.labels {
+		for _, d := range defs {
+			if d.isGate {
+				if _, released := m.release[label]; !released {
+					return causalUnsupported("gate %q is never released", label)
+				}
+			}
+		}
+	}
+	epoch := func(actor string) int {
+		for m.fibers[actor].parent != "" {
+			actor = m.fibers[actor].parent
+		}
+		return m.mountEpoch[actor]
+	}
+	distinct := func(actors []string) bool {
+		seen := make(map[int]bool)
+		for _, a := range actors {
+			if seen[epoch(a)] {
+				return false
+			}
+			seen[epoch(a)] = true
+		}
+		return true
+	}
+	for address, candidates := range m.providers {
+		if len(candidates) > 1 && !distinct(candidates) {
+			return causalUnsupported("concurrent providers of %s/%s", address.key, address.realm)
+		}
+	}
+	for cell, writers := range m.outputs {
+		var live []string
+		for _, w := range writers {
+			if w != causalRootActor && !m.inert(w) {
+				live = append(live, w)
+			}
+		}
+		if len(live) > 1 && !distinct(live) {
+			return causalUnsupported("concurrent writers of output %q", cell)
+		}
+	}
+	return nil
+}
+
+func causalUsesControls(bodies ...[]Action) bool {
+	for _, body := range bodies {
+		for _, a := range body {
+			switch a.Op {
+			case "gate", "mark", "effect", "withdraw", "child", "context":
+				return true
+			}
+			if causalUsesControls(a.Program, a.Cleanup) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// causalEffectPlan says which effects an Apply body registers when its shape is
+// simple enough to know without guessing: only synchronous effects without catch,
+// partial mode or disposer name, whose cleanup holds only mark/gate operations, in
+// a body of effect, output, mark, provide and a final fail. For such a fiber
+// every registered effect must run its cleanup program completely at teardown.
+type causalEffectPlan struct {
+	complete bool
+	effects  []string
+	counts   []int
+}
+
+func causalPlanEffects(actor string, body []Action) causalEffectPlan {
+	plan := causalEffectPlan{complete: true}
+	n := 0
+	for _, a := range body {
+		switch a.Op {
+		case "effect":
+			if a.Mode != "" || a.Catch || a.To != "" || a.Await != nil && !*a.Await {
+				return causalEffectPlan{}
+			}
+			count := 0
+			for _, c := range a.Cleanup {
+				if c.Op != "mark" && c.Op != "gate" {
+					return causalEffectPlan{}
+				}
+				count++
+			}
+			plan.effects = append(plan.effects, fmt.Sprintf("%s#%d", actor, n))
+			plan.counts = append(plan.counts, count)
+			n++
+		case "fail":
+			return plan
+		case "output", "mark", "provide":
+		default:
+			return causalEffectPlan{}
+		}
+	}
+	return plan
+}
+
+// causalStepped says whether events of a frame are triggered by the top-level
+// operation that is executing (so their order is program order). Teardown-driven
+// effect cleanup and asynchronous setup are not.
+func causalStepped(phase string) bool {
+	return phase == "apply" || phase == "cleanup" || phase == "effect-setup"
+}
+
+// stepEffectCleanup records that the cleanup program of an effect runs at the given
+// top-level step (its own op for a partial unwind, the withdraw op otherwise).
+func (m *causalModel) stepEffectCleanup(id string, step int) {
+	for label, defs := range m.labels {
+		for i := range defs {
+			if defs[i].effect == id && defs[i].phase == "effect-cleanup" {
+				m.labels[label][i].step, m.labels[label][i].stepped = step, true
+			}
+		}
+	}
+	for cell, defs := range m.cellDefs {
+		for i := range defs {
+			if defs[i].effect == id && defs[i].phase == "effect-cleanup" {
+				m.cellDefs[cell][i].step, m.cellDefs[cell][i].stepped = step, true
+			}
+		}
+	}
 }

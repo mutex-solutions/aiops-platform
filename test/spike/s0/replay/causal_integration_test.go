@@ -24,6 +24,9 @@ const (
 	causalNodeSHA      = "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb"
 	causalAmendment    = "../../../../docs/design/s0-causal-comparison-amendment.md"
 	causalAmendmentSHA = "becf5c0634ec98c279d76db3ac3dc1c08cea70cd2d66301393c445b3df73559a"
+	// Amendment 2 (and its addendum) were recorded before the comparator change.
+	causalAmendment2    = "../../../../docs/design/s0-causal-comparison-amendment-2.md"
+	causalAmendment2SHA = "214452407b234843ddcb0a1205d81bf9c60837d6048ff21f2656155228976c35"
 )
 
 var causalBackends = []struct {
@@ -163,7 +166,7 @@ func saveCausalEvidence(t *testing.T, dir, name string, data []byte) {
 func causalSources(t *testing.T) map[string]string {
 	t.Helper()
 	sources := map[string]string{}
-	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json"} {
+	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json", causalAmendment2, "../../../../docs/design/s0-causal-comparison-amendment-2-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-2.json"} {
 		paths, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -188,40 +191,60 @@ type causalScenario struct {
 
 func corpusPath(id string) string { return "../../../differential/corpus/" + id + ".json" }
 
-// causalCovered must match on every listed backend, every run.
+// causalCovered must match on every listed backend, every run. The set is the
+// pairs the comparator accepts repeatably (amendment 2 table in
+// docs/design/s0-causal-coverage.md). Reconciler pairs that fail the frozen
+// publication-before-LOADING rule are in causalDiagnostics, not here.
 var causalCovered = []struct {
 	causalScenario
 	backends []string
 }{
 	{causalScenario{"D02", corpusPath("D02"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D04", corpusPath("D04"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D03", corpusPath("D03"), true}, []string{"graph-lock"}},
+	{causalScenario{"D07", corpusPath("D07"), true}, []string{"graph-lock"}},
+	{causalScenario{"D08", corpusPath("D08"), true}, []string{"graph-lock"}},
+	{causalScenario{"D11", corpusPath("D11"), true}, []string{"graph-lock"}},
+	{causalScenario{"D14", corpusPath("D14"), true}, []string{"graph-lock"}},
+	{causalScenario{"D15", corpusPath("D15"), true}, []string{"graph-lock"}},
+	{causalScenario{"D18", corpusPath("D18"), true}, []string{"graph-lock"}},
+	{causalScenario{"D21", corpusPath("D21"), true}, []string{"graph-lock"}},
 }
 
-// causalDiagnostics are scenarios the frozen comparator does NOT accept. The
-// wanted text is the exact comparator verdict recorded in
-// docs/design/s0-causal-coverage.md; a change (including newly accepted) fails
-// this test so the note must be revisited. No comparator exemption is involved.
+// The published-before-LOADING class: the comparator rejects a last enabling
+// provider whose notification precedes a mounted consumer's LOADING. It is the
+// known reconciler candidate defect, never excused here.
+const causalPublishFirst = "published before consumer"
+
+// causalDiagnostics are scenarios the comparator does NOT accept. wants lists
+// the verdict texts a run may produce (any one must be contained); flaky pairs
+// may additionally match on a lucky schedule, which is logged, never counted as
+// a match. A change (including a new repeatable match) fails this test so the
+// table in docs/design/s0-causal-coverage.md must be revisited.
 var causalDiagnostics = []struct {
 	causalScenario
 	backends []string
-	want     string
+	wants    []string
+	flaky    bool
 }{
-	{causalScenario{"D03", corpusPath("D03"), true}, nil, `output "joined" has ambiguous owner`},
-	{causalScenario{"D04", corpusPath("D04"), true}, nil, `non-unique provider for svc/root:svc`},
-	{causalScenario{"D06", corpusPath("D06"), true}, nil, `body operation "child"`},
-	{causalScenario{"D07", corpusPath("D07"), true}, nil, `non-ordinary provision syntax`},
-	{causalScenario{"D08", corpusPath("D08"), true}, nil, `intercept context "outer"`},
-	{causalScenario{"D09", corpusPath("D09"), true}, nil, `non-ordinary provision syntax`},
-	{causalScenario{"D11", corpusPath("D11"), true}, nil, `body operation "gate"`},
-	{causalScenario{"D13", "../../../differential/corpus/revision-3/D13.json", true}, nil, `body operation "gate"`},
-	{causalScenario{"D15", corpusPath("D15"), true}, nil, `non-unique provider for svc/root:svc`},
-	{causalScenario{"D18", corpusPath("D18"), true}, nil, `body operation "effect"`},
-	{causalScenario{"D21", corpusPath("D21"), true}, nil, `body operation "mark"`},
-	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, `body operation "child"`},
-	{causalScenario{"D23", corpusPath("D23"), true}, nil, `async/control/catch metadata on "effect"`},
+	{causalScenario{"D03", corpusPath("D03"), true}, []string{"reconciler"}, []string{causalPublishFirst}, true},
+	{causalScenario{"D06", corpusPath("D06"), true}, []string{"reconciler"}, []string{causalPublishFirst, `checkpoint "children" Needs count mismatch`}, false},
+	{causalScenario{"D06", corpusPath("D06"), true}, []string{"graph-lock"}, []string{`checkpoint "children" Needs count mismatch`}, false},
+	{causalScenario{"D07", corpusPath("D07"), true}, []string{"reconciler"}, []string{causalPublishFirst}, true},
+	{causalScenario{"D08", corpusPath("D08"), true}, []string{"reconciler"}, []string{causalPublishFirst}, true},
+	{causalScenario{"D09", corpusPath("D09"), true}, []string{"reconciler"}, []string{"record count mismatch"}, false},
+	{causalScenario{"D09", corpusPath("D09"), true}, []string{"graph-lock"}, []string{`consumer "cb" LOADING before every required provider ACTIVE and available`}, false},
+	{causalScenario{"D11", corpusPath("D11"), true}, []string{"reconciler"}, []string{causalPublishFirst}, false},
+	{causalScenario{"D13", "../../../differential/corpus/revision-3/D13.json", true}, nil, []string{"record count mismatch"}, false},
+	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler"}, []string{`last enabling provider "p" published before consumer "c" LOADING`}, false},
+	{causalScenario{"D15", corpusPath("D15"), true}, []string{"reconciler"}, []string{causalPublishFirst}, false},
+	{causalScenario{"D18", corpusPath("D18"), true}, []string{"reconciler"}, []string{causalPublishFirst}, false},
+	{causalScenario{"D21", corpusPath("D21"), true}, []string{"reconciler"}, []string{causalPublishFirst}, true},
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch"}, false},
+	{causalScenario{"D23", corpusPath("D23"), true}, nil, []string{`caught "effect" error: event outside the frame of every possible owner`}, false},
 }
 
 func requireCausalLive(t *testing.T) {
@@ -238,6 +261,9 @@ func requireCausalLive(t *testing.T) {
 	}
 	if digest(loadFixture(t, causalAmendment)) != causalAmendmentSHA {
 		t.Fatal("owner-approved immutable comparison amendment changed")
+	}
+	if digest(loadFixture(t, causalAmendment2)) != causalAmendment2SHA {
+		t.Fatal("recorded comparison amendment 2 changed")
 	}
 }
 
@@ -292,8 +318,16 @@ func TestCausalDiagnostics(t *testing.T) {
 				if other != nil {
 					t.Fatalf("harness/proof failure (verdict unusable): %v; evidence=%s", other, dir)
 				}
-				if causal == nil || !strings.Contains(causal.Error(), sc.want) {
-					t.Fatalf("verdict changed from documented non-match %q: %v; evidence=%s", sc.want, causal, dir)
+				if causal == nil && sc.flaky {
+					t.Logf("flaky pair matched on this schedule; not a repeatable match: evidence=%s", dir)
+					return
+				}
+				found := false
+				for _, want := range sc.wants {
+					found = found || causal != nil && strings.Contains(causal.Error(), want)
+				}
+				if !found {
+					t.Fatalf("verdict changed from documented non-match %q: %v; evidence=%s", sc.wants, causal, dir)
 				}
 			})
 		}

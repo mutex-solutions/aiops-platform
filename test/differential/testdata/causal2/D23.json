@@ -1,0 +1,224 @@
+{
+ "note": "fresh pinned-oracle execution of corpus/D23; cuts are the oracle's recorded checkpoint positions",
+ "cuts": [
+  {
+   "label": "active",
+   "afterEvent": 10
+  },
+  {
+   "label": "unwound",
+   "afterEvent": 11
+  },
+  {
+   "label": "disposed",
+   "afterEvent": 14
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D23",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "plugin",
+    "data": {
+     "fiber": "f",
+     "disposed": false
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "PENDING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "config",
+    "data": {
+     "fiber": "f",
+     "config": {}
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "apply",
+    "data": {
+     "fiber": "f",
+     "config": {}
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "mark",
+    "data": {
+     "label": "second",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "mark",
+    "data": {
+     "label": "first",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 7,
+    "kind": "error",
+    "data": {
+     "op": "effect",
+     "error": {
+      "name": "Error",
+      "message": "setup failed"
+     }
+    }
+   },
+   {
+    "seq": 8,
+    "kind": "output",
+    "data": {
+     "to": "setup-error",
+     "value": {
+      "name": "Error",
+      "message": "setup failed"
+     }
+    }
+   },
+   {
+    "seq": 9,
+    "kind": "mark",
+    "data": {
+     "label": "once",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 10,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "LOADING",
+     "to": "ACTIVE"
+    }
+   },
+   {
+    "seq": 11,
+    "kind": "output",
+    "data": {
+     "to": "effects",
+     "value": []
+    }
+   },
+   {
+    "seq": 12,
+    "kind": "plugin",
+    "data": {
+     "fiber": "f",
+     "disposed": true
+    }
+   },
+   {
+    "seq": 13,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "ACTIVE",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 14,
+    "kind": "status",
+    "data": {
+     "fiber": "f",
+     "from": "UNLOADING",
+     "to": "DISPOSED"
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "active",
+    "states": [
+     {
+      "fiber": "f",
+      "state": "ACTIVE",
+      "fiberUID": 1,
+      "revision": 0,
+      "epoch": {
+       "revision": 0,
+       "needs": []
+      },
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {
+     "setup-error": {
+      "name": "Error",
+      "message": "setup failed"
+     }
+    }
+   },
+   {
+    "label": "unwound",
+    "states": [
+     {
+      "fiber": "f",
+      "state": "ACTIVE",
+      "fiberUID": 1,
+      "revision": 0,
+      "epoch": {
+       "revision": 0,
+       "needs": []
+      },
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {
+     "setup-error": {
+      "name": "Error",
+      "message": "setup failed"
+     },
+     "effects": []
+    }
+   },
+   {
+    "label": "disposed",
+    "states": [
+     {
+      "fiber": "f",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {
+     "setup-error": {
+      "name": "Error",
+      "message": "setup failed"
+     },
+     "effects": []
+    }
+   }
+  ]
+ }
+}

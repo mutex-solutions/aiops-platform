@@ -39,10 +39,14 @@ type CausalCut struct {
 // private copies; input bytes and complete, totally ordered raw events remain
 // untouched. No event is sorted, dropped, coalesced, or given a new raw sequence.
 //
-// Version 1 is deliberately narrow: static ordinary realms, fixed root mounts,
-// read-only Needs, synchronous bodies, and witnessed checkpoint boundaries.
-// Gates, marks, tasks, availability, children, callbacks and dynamic contexts do
-// not silently become independent; the compiler returns ErrCausalUnsupported.
+// Scope: static realms, fixed root mounts, Needs, bodies of provide/read/output/
+// fail/when plus the capabilities of amendment 2 (gate/mark/waitMark/release,
+// child fibers, effects, intercept/service/available modes, shared output cells,
+// several providers of one address; see docs/design/
+// s0-causal-comparison-amendment-2.md and its addendum), and witnessed checkpoint
+// boundaries. Anything else (listen/dispatch, tasks, restarts of parents, dynamic
+// root contexts, unproved owners) is never made independent by guesswork: the
+// compiler or observer returns ErrCausalUnsupported.
 // Script expectations are never consulted to produce or compare observations.
 func CompareCausal(scriptJSON, expectedTraceJSON, actualTraceJSON []byte, expectedWitness, actualWitness CausalWitness) error {
 	model, err := compileCausalModel(scriptJSON)
@@ -204,11 +208,11 @@ type causalObservation struct {
 	publication           bool
 	serviceAddress        causalAddress
 	publicationActivation int
-	startupProviders      map[causalAddress]int
+	startupProviders      map[causalAddress]causalBind
 	unloadingActive       bool
 	unloadingRunning      bool
 	unloadingActivation   int
-	teardownProviders     map[causalAddress]int
+	teardownProviders     map[causalAddress]causalBind
 }
 
 // Identical occurrences are matched in arrival order, never by global first UID
