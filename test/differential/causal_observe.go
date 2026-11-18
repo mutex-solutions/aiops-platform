@@ -791,6 +791,7 @@ func (m *causalModel) observe(trace *Trace, witness CausalWitness) ([]causalObse
 					return nil, err
 				}
 				pluginCount++
+				observation.rootCmd = pluginCount
 				rootLane = true
 			} else {
 				// A child is mounted by its parent's Apply and torn down by its

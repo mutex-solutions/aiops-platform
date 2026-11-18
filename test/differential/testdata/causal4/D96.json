@@ -1,0 +1,234 @@
+{
+ "note": "fresh pinned-oracle execution; cuts are the oracle recorded checkpoint positions",
+ "cuts": [
+  {
+   "label": "after",
+   "afterEvent": 19
+  },
+  {
+   "label": "done",
+   "afterEvent": 19
+  }
+ ],
+ "trace": {
+  "schema": "s0-trace/v1",
+  "scenario": "D96",
+  "events": [
+   {
+    "seq": 1,
+    "kind": "plugin",
+    "data": {
+     "fiber": "parent",
+     "disposed": false
+    }
+   },
+   {
+    "seq": 2,
+    "kind": "status",
+    "data": {
+     "fiber": "parent",
+     "from": "PENDING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 3,
+    "kind": "config",
+    "data": {
+     "fiber": "parent",
+     "config": {}
+    }
+   },
+   {
+    "seq": 4,
+    "kind": "apply",
+    "data": {
+     "fiber": "parent",
+     "config": {}
+    }
+   },
+   {
+    "seq": 5,
+    "kind": "plugin",
+    "data": {
+     "fiber": "child",
+     "disposed": false
+    }
+   },
+   {
+    "seq": 6,
+    "kind": "status",
+    "data": {
+     "fiber": "child",
+     "from": "PENDING",
+     "to": "LOADING"
+    }
+   },
+   {
+    "seq": 7,
+    "kind": "mark",
+    "data": {
+     "label": "child-mounted",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 8,
+    "kind": "config",
+    "data": {
+     "fiber": "child",
+     "config": {}
+    }
+   },
+   {
+    "seq": 9,
+    "kind": "apply",
+    "data": {
+     "fiber": "child",
+     "config": {}
+    }
+   },
+   {
+    "seq": 10,
+    "kind": "status",
+    "data": {
+     "fiber": "parent",
+     "from": "LOADING",
+     "to": "ACTIVE"
+    }
+   },
+   {
+    "seq": 11,
+    "kind": "status",
+    "data": {
+     "fiber": "child",
+     "from": "LOADING",
+     "to": "ACTIVE"
+    }
+   },
+   {
+    "seq": 12,
+    "kind": "plugin",
+    "data": {
+     "fiber": "parent",
+     "disposed": true
+    }
+   },
+   {
+    "seq": 13,
+    "kind": "status",
+    "data": {
+     "fiber": "parent",
+     "from": "ACTIVE",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 14,
+    "kind": "cleanup",
+    "data": {
+     "fiber": "parent"
+    }
+   },
+   {
+    "seq": 15,
+    "kind": "mark",
+    "data": {
+     "label": "parent-cleanup",
+     "value": {
+      "$undefined": true
+     }
+    }
+   },
+   {
+    "seq": 16,
+    "kind": "plugin",
+    "data": {
+     "fiber": "child",
+     "disposed": true
+    }
+   },
+   {
+    "seq": 17,
+    "kind": "status",
+    "data": {
+     "fiber": "child",
+     "from": "ACTIVE",
+     "to": "UNLOADING"
+    }
+   },
+   {
+    "seq": 18,
+    "kind": "status",
+    "data": {
+     "fiber": "child",
+     "from": "UNLOADING",
+     "to": "DISPOSED"
+    }
+   },
+   {
+    "seq": 19,
+    "kind": "status",
+    "data": {
+     "fiber": "parent",
+     "from": "UNLOADING",
+     "to": "DISPOSED"
+    }
+   }
+  ],
+  "checkpoints": [
+   {
+    "label": "after",
+    "states": [
+     {
+      "fiber": "parent",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     },
+     {
+      "fiber": "child",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {}
+   },
+   {
+    "label": "done",
+    "states": [
+     {
+      "fiber": "parent",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     },
+     {
+      "fiber": "child",
+      "state": "DISPOSED",
+      "fiberUID": null,
+      "revision": 0,
+      "epoch": null,
+      "rawConfig": {},
+      "effectiveConfig": {}
+     }
+    ],
+    "provisions": [],
+    "outputs": {}
+   }
+  ]
+ }
+}

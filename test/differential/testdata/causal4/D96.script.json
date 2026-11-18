@@ -1,0 +1,67 @@
+{
+ "schema": "s0-script/v1",
+ "id": "D96",
+ "title": "awaited disposal of a parent",
+ "covers": [
+  "awaited-dispose"
+ ],
+ "plugins": [
+  {
+   "id": "parent",
+   "apply": [
+    {
+     "op": "child",
+     "fiber": "child",
+     "plugin": "child",
+     "config": {}
+    },
+    {
+     "op": "mark",
+     "label": "child-mounted"
+    }
+   ],
+   "cleanup": [
+    {
+     "op": "mark",
+     "label": "parent-cleanup"
+    }
+   ]
+  },
+  {
+   "id": "child",
+   "apply": []
+  }
+ ],
+ "steps": [
+  {
+   "op": "mount",
+   "fiber": "parent",
+   "plugin": "parent",
+   "config": {}
+  },
+  {
+   "op": "waitMark",
+   "label": "child-mounted"
+  },
+  {
+   "op": "awaitFiber",
+   "fiber": "child"
+  },
+  {
+   "op": "awaitFiber",
+   "fiber": "parent"
+  },
+  {
+   "op": "dispose",
+   "fiber": "parent"
+  },
+  {
+   "op": "snapshot",
+   "label": "after"
+  },
+  {
+   "op": "settle",
+   "label": "done"
+  }
+ ]
+}

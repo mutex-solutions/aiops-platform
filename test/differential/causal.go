@@ -86,7 +86,33 @@ func CompareCausal(scriptJSON, expectedTraceJSON, actualTraceJSON []byte, expect
 	// Compare every segment, including the tail after the final checkpoint. The
 	// multiset is only a matching index; the pair test retains all conflict order.
 	li, ri := 0, 0
+	lflags, lud, err := model.floatFlags(leftEvents, expectedWitness)
+	if err != nil {
+		return fmt.Errorf("expected: %w", err)
+	}
+	rflags, _, err := model.floatFlags(rightEvents, actualWitness)
+	if err != nil {
+		return fmt.Errorf("actual: %w", err)
+	}
 	for segment := 0; segment <= len(left.Checkpoints); segment++ {
+		if w := model.floatStart(segment); w != nil {
+			// Amendment 4, L1: pinned events per segment, the whole window in causal order.
+			ls, le := model.floatBounds(w, expectedWitness, len(leftEvents))
+			rs, re := model.floatBounds(w, actualWitness, len(rightEvents))
+			for s := w.first; s <= w.barrier; s++ {
+				a0, a1 := segmentRange(expectedWitness, len(leftEvents), s)
+				b0, b1 := segmentRange(actualWitness, len(rightEvents), s)
+				if err := causalCompareSequence(causalPinned(leftEvents, lflags, a0, a1), causalPinned(rightEvents, rflags, b0, b1), model.eventsConflict); err != nil {
+					return fmt.Errorf("event segment %d: %w", s, err)
+				}
+			}
+			if err := causalCompareSequence(leftEvents[ls:le], rightEvents[rs:re], model.eventsConflict); err != nil {
+				return fmt.Errorf("event window %d..%d: %w", w.first, w.barrier, err)
+			}
+			li, ri = le, re
+			segment = w.barrier
+			continue
+		}
 		le, re := len(leftEvents), len(rightEvents)
 		if segment < len(left.Checkpoints) {
 			le = expectedWitness.Checkpoints[segment].AfterEvent
@@ -108,7 +134,17 @@ func CompareCausal(scriptJSON, expectedTraceJSON, actualTraceJSON []byte, expect
 	}
 	for i := range left.Checkpoints {
 		l, r := &left.Checkpoints[i], &right.Checkpoints[i]
-		if !causalEqual(l.States, r.States) || !causalEqual(l.Outputs, r.Outputs) {
+		if k, w := model.floatingCut(i); w != nil {
+			// Amendment 4, L1.3: a fiber of the float set may be observed in any
+			// state of its expected lane between the disposal and the barrier.
+			_, end := model.floatBounds(w, expectedWitness, len(left.Events))
+			if err := floatStates(w, l.States, r.States, left.Events, lud[k], end); err != nil {
+				return fmt.Errorf("checkpoint %q: %w", l.Label, err)
+			}
+			if !causalEqual(l.Outputs, r.Outputs) {
+				return fmt.Errorf("checkpoint %q state/config/epoch/output mismatch", l.Label)
+			}
+		} else if !causalEqual(l.States, r.States) || !causalEqual(l.Outputs, r.Outputs) {
 			return fmt.Errorf("checkpoint %q state/config/epoch/output mismatch", l.Label)
 		}
 		lp, rp := make([]causalObservation, len(l.Provisions)), make([]causalObservation, len(r.Provisions))
@@ -210,6 +246,7 @@ type causalObservation struct {
 	publicationActivation int
 	startupProviders      map[causalAddress]causalBind
 	unloadingActive       bool
+	rootCmd               int // 1-based index of the root plugin command this event is (amendment 4)
 	unloadingRunning      bool
 	unloadingActivation   int
 	teardownProviders     map[causalAddress]causalBind

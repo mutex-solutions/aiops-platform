@@ -130,6 +130,7 @@ type causalModel struct {
 	effectPlan        map[string]causalEffectPlan
 	mountEpoch        map[string]int // settle checkpoints before a root mount (children: their root ancestor)
 	a3                causalA3
+	floats            []*causalFloat
 }
 
 // causalItem is one event a body must produce, in order (a frame's lane program).
@@ -365,6 +366,7 @@ func compileCausalModel(raw []byte) (*causalModel, error) {
 			}
 		}
 	}
+	m.computeFloats()
 	return m, nil
 }
 
