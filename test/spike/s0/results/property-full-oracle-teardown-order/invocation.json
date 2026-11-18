@@ -1,0 +1,37 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload after the teardown order and child epoch changes; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "da4a87499f394efc5858eea55f34f4ba45c4c584d9ea4ac455b0f142dc81cf4b",
+ "commit": "866570d",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 3190.63,
+ "candidateSeconds": {
+  "reconciler": 1405.31,
+  "graph-lock": 1785.12
+ },
+ "hostNote": "shared development host with other test jobs running; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "5e66baa3802437454db841726eeaf930616ca2af8123980861fb000d071ae9aa",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/oracle-teardown-order-866570d",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, scale/performance, SQL authority, restart and line/coverage gates remain open."
+ ]
+}
