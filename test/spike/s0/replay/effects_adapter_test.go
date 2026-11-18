@@ -21,12 +21,21 @@ import (
 const effectControlsMethodPath = "../../../../docs/design/s0-fixture-effect-controls.md"
 const effectRequestMethodPath = "../../../../docs/design/s0-d23-request-mapping.md"
 
+// effectFixture names the executed script. D22 runs corpus revision 4 (explicit
+// child activation barrier); the original D22 stays as the historical racy fixture.
+func effectFixture(id string) string {
+	if id == "D22" {
+		return "../../../differential/corpus/revision-4/D22.json"
+	}
+	return "../../../differential/corpus/" + id + ".json"
+}
+
 // All original assertions run unchanged. These are observed checkpoint claims,
 // not an assertion that the complete ordered oracle trace has matched.
 func TestEffectsCheckpointExecution(t *testing.T) {
 	for _, id := range []string{"D21", "D22", "D23", "D24"} {
 		t.Run(id, func(t *testing.T) {
-			data := loadFixture(t, "../../../differential/corpus/"+id+".json")
+			data := loadFixture(t, effectFixture(id))
 			eachRuntime(t, func(t *testing.T, ctx context.Context, runtime cc.Runtime) {
 				actual, err := RunComposedJSON(ctx, runtime, data)
 				if err != nil {
@@ -85,14 +94,18 @@ func TestEffectsCheckpointExecution(t *testing.T) {
 func TestEffectsActualGoldenTraceDiagnostics(t *testing.T) {
 	for _, id := range []string{"D21", "D22", "D23", "D24"} {
 		t.Run(id, func(t *testing.T) {
-			path := "../../../differential/corpus/" + id + ".json"
+			path := effectFixture(id)
 			data := loadFixture(t, path)
+			oraclePath := hookHistoricalOraclePath
+			if id == "D22" {
+				oraclePath = "../../../differential/oracle/replay.mjs" // revision-4 receipts bind the current interpreter
+			}
 			eachRuntime(t, func(t *testing.T, ctx context.Context, runtime cc.Runtime) {
 				manifest := func() map[string]string {
 					sources := causalSources(t)
 					sources[effectControlsMethodPath] = digest(loadFixture(t, effectControlsMethodPath))
 					sources[effectRequestMethodPath] = digest(loadFixture(t, effectRequestMethodPath))
-					sources[hookHistoricalOraclePath] = digest(loadFixture(t, hookHistoricalOraclePath))
+					sources[oraclePath] = digest(loadFixture(t, oraclePath))
 					return sources
 				}
 				before := manifest()
@@ -110,12 +123,15 @@ func TestEffectsActualGoldenTraceDiagnostics(t *testing.T) {
 					t.Fatal(err)
 				}
 				goldenPath := "../../../differential/results/corpus-final/" + id + ".trace.json"
+				if id == "D22" {
+					goldenPath = "../../../differential/results/corpus-revision-4/D22.replay-1.trace.json"
+				}
 				golden, recordBytes := loadFixture(t, goldenPath), loadFixture(t, goldenPath+".run.json")
 				var record differential.RunRecord
 				if err := json.Unmarshal(recordBytes, &record); err != nil {
 					t.Fatal(err)
 				}
-				if record.Scripts[id] != digest(data) || record.TraceSHA256 != digest(golden) || record.SourceCommit != differential.SourceCommit || record.CriteriaSHA256 != differential.CriteriaSHA256 || record.ExitCode != 0 || record.OracleSHA256 != before[hookHistoricalOraclePath] {
+				if record.Scripts[id] != digest(data) || record.TraceSHA256 != digest(golden) || record.SourceCommit != differential.SourceCommit || record.CriteriaSHA256 != differential.CriteriaSHA256 || record.ExitCode != 0 || record.OracleSHA256 != before[oraclePath] {
 					t.Fatal("historical oracle provenance does not bind the script, trace and source")
 				}
 				comparison := differential.Compare(golden, encoded)
@@ -146,7 +162,7 @@ func TestEffectsActualGoldenTraceDiagnostics(t *testing.T) {
 					"provenance.json": jsonBytes(t, map[string]any{
 						"schema": "s0-effect-replay-receipt/v1", "scenario": id, "backendTest": t.Name(), "receiptStatus": "valid",
 						"scriptSHA256": digest(data), "actualSHA256": digest(encoded), "goldenSHA256": digest(golden), "oracleRunRecordSHA256": digest(recordBytes),
-						"oracleHistoricalSourcePath": hookHistoricalOraclePath, "oracleHistoricalSHA256": record.OracleSHA256, "oracleSourceCommit": record.SourceCommit,
+						"oracleHistoricalSourcePath": oraclePath, "oracleHistoricalSHA256": record.OracleSHA256, "oracleSourceCommit": record.SourceCommit,
 						"criteriaSHA256": record.CriteriaSHA256, "controlsMethodPath": effectControlsMethodPath, "controlsMethodSHA256": before[effectControlsMethodPath],
 						"requestMethodPath": effectRequestMethodPath, "requestMethodSHA256": before[effectRequestMethodPath],
 						"candidateIdentity": identity, "sourcesBefore": before, "sourcesAfter": after, "strictError": fmt.Sprint(comparison),

@@ -222,7 +222,7 @@ var causalDiagnostics = []struct {
 	{causalScenario{"D15", corpusPath("D15"), true}, nil, `non-unique provider for svc/root:svc`},
 	{causalScenario{"D18", corpusPath("D18"), true}, nil, `body operation "effect"`},
 	{causalScenario{"D21", corpusPath("D21"), true}, nil, `body operation "mark"`},
-	{causalScenario{"D22", corpusPath("D22"), true}, nil, `body operation "child"`},
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, `body operation "child"`},
 	{causalScenario{"D23", corpusPath("D23"), true}, nil, `async/control/catch metadata on "effect"`},
 }
 
