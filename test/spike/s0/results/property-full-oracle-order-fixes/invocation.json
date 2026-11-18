@@ -1,0 +1,38 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload after the D14/D09 order fixes and the reconciler Close fix; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "64caceddd70128b938feb6c0ef89aced3694b135b3159467252d2212002c1668",
+ "commit": "77ab9b6",
+ "sourceClosureUnchangedThrough": "24d7f73",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 3079.11,
+ "candidateSeconds": {
+  "reconciler": 1698.75,
+  "graph-lock": 1380.14
+ },
+ "hostNote": "shared development host with other test jobs running; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "cbdfb46d16cf8fd449d5cf22907317962af1fb7c129b83a7a404383eba0681db",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/oracle-order-fixes-77ab9b6",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, scale/performance, SQL authority, restart and line/coverage gates remain open."
+ ]
+}
