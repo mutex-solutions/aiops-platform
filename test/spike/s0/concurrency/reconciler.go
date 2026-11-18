@@ -138,6 +138,15 @@ type rcCheck struct {
 	generation uint64
 	deadline   time.Time
 	timedOut   bool
+	done       bool // Result delivered to the owner; a pending service event may follow.
+}
+
+// rcPendingService is a service notification whose dependants still have
+// availability checks in flight. The checks run off the owner, so the event is
+// held (with source cleanup deferred) until their results have been applied.
+type rcPendingService struct {
+	event Event
+	waits []*rcCheck
 }
 
 type rcPhase uint8
@@ -263,6 +272,7 @@ type rcOwner struct {
 	noticeDepth   int
 	deferredDrain map[uint64]*rcFiber
 	batchDepth    int // Data commit/invalidation may not admit new callbacks.
+	pendingSvc    []rcPendingService
 }
 
 // NewReconciler starts one global state owner and no per-idle-fiber goroutine.
@@ -532,6 +542,7 @@ func (o *rcOwner) run() {
 		o.consumeNotices()
 		o.expire(time.Now())
 		o.work()
+		o.flushServices()
 		o.finishWaiters()
 		if o.closing && len(o.fibers) == 0 && (o.root == nil || o.root.act == nil) {
 			o.replyAll(&o.closers, errors.Join(o.terminal...))
@@ -551,6 +562,7 @@ func (o *rcOwner) run() {
 			reply, deferred := o.handle(msg)
 			o.consumeNotices()
 			o.work()
+			o.flushServices()
 			if !deferred && msg.ack != nil {
 				msg.ack <- reply
 			}
@@ -689,9 +701,7 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 		f.effects = append(f.effects, rcEffect{label: "provide:" + m.key, provision: p})
 		o.event(f, "provide", m.key, p.binding.uid)
 		if f.state == Active {
-			o.notifyKey(m.key)
-			o.work()
-			o.event(f, "service", m.key, p.binding.uid)
+			o.notifyService([]string{m.key}, []Event{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: f.state, Key: m.key, UID: p.binding.uid, Value: p.binding.value}})
 		}
 	case rcEffectCommand:
 		f, err := o.current(m.act)
@@ -756,13 +766,21 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 	case rcTrackedDoneCommand:
 		o.trackedDone(m)
 	case rcNotifyCommand:
+		var events []Event
 		for _, key := range m.keys {
 			for _, f := range o.byKey[key] {
 				f.checkVersion++
 				f.deniedEpoch = nil
-				o.enqueue(f)
+			}
+			// The oracle's notify refreshes dependants, then emits one service
+			// event per key carrying the current provision, whatever its state.
+			if p := o.providers[key]; p != nil {
+				if owner := o.lookup(p.binding.owner); owner != nil {
+					events = append(events, Event{Fiber: owner.id, Name: owner.spec.ID, Kind: "service", State: owner.state, Key: key, UID: p.binding.uid, Value: p.binding.value})
+				}
 			}
 		}
+		o.notifyService(m.keys, events)
 	case rcCheckComplete:
 		o.checkedResult(m)
 	case rcLoadComplete:
@@ -1164,6 +1182,7 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 }
 
 func (o *rcOwner) checkedResult(m rcMessage) {
+	m.check.done = true
 	f := o.fibers[m.id]
 	if f == nil || f.checking != m.check {
 		return
@@ -1732,29 +1751,79 @@ func (o *rcOwner) state(f *rcFiber, state State) {
 	o.appendEvent(Event{Sequence: uint64(len(o.events) + 1), Fiber: f.id, Name: f.spec.ID, Kind: "state", From: old, State: state})
 	if old == Active || state == Active {
 		for _, p := range slices.Clone(f.provisions) {
-			// Notification refreshes dependant state synchronously, but source
-			// cleanup resumes only after its service notification has completed.
-			// Do not let recursive owner work remove/reload the provider before
-			// recording the observed retained value.
-			o.noticeDepth++
-			o.notifyKey(p.key)
-			o.work()
-			o.appendEvent(Event{Sequence: uint64(len(o.events) + 1), Fiber: f.id,
-				Name: f.spec.ID, Kind: "service", State: state, Key: p.key,
-				UID: p.binding.uid, Value: p.binding.value})
-			o.noticeDepth--
-			if o.noticeDepth == 0 && len(o.deferredDrain) != 0 {
-				ids := make([]uint64, 0, len(o.deferredDrain))
-				for id := range o.deferredDrain {
-					ids = append(ids, id)
-				}
-				slices.Sort(ids)
-				for _, id := range ids {
-					o.enqueue(o.deferredDrain[id])
-				}
-				clear(o.deferredDrain)
+			o.notifyService([]string{p.key}, []Event{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: state, Key: p.key,
+				UID: p.binding.uid, Value: p.binding.value}})
+		}
+	}
+}
+
+// notifyService refreshes the dependants of key, then records the service
+// event, matching the oracle order (consumers move before the notification).
+// Source cleanup resumes only after the event, so recursive owner work cannot
+// remove or reload the provider before the observed value is recorded. An
+// availability check runs off the owner; when one was started by this refresh
+// the event waits for its result (flushServices) instead of blocking the owner.
+func (o *rcOwner) notifyService(keys []string, events []Event) {
+	inflight := make(map[*rcCheck]bool)
+	for _, key := range keys {
+		for _, f := range o.byKey[key] {
+			if f.checking != nil {
+				inflight[f.checking] = true
 			}
 		}
+	}
+	o.noticeDepth += len(events)
+	for _, key := range keys {
+		o.notifyKey(key)
+	}
+	o.work()
+	var waits []*rcCheck
+	for _, key := range keys {
+		for _, f := range o.byKey[key] {
+			if q := f.checking; q != nil && !inflight[q] {
+				waits = append(waits, q)
+			}
+		}
+	}
+	for _, e := range events {
+		if len(waits) != 0 || len(o.pendingSvc) != 0 {
+			o.pendingSvc = append(o.pendingSvc, rcPendingService{event: e, waits: waits})
+			waits = nil // Later events follow the first in queue order.
+			continue
+		}
+		o.emitService(e)
+	}
+}
+
+func (o *rcOwner) emitService(e Event) {
+	e.Sequence = uint64(len(o.events) + 1)
+	o.appendEvent(e)
+	o.noticeDepth--
+	if o.noticeDepth == 0 && len(o.deferredDrain) != 0 {
+		ids := make([]uint64, 0, len(o.deferredDrain))
+		for id := range o.deferredDrain {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
+			o.enqueue(o.deferredDrain[id])
+		}
+		clear(o.deferredDrain)
+	}
+}
+
+// flushServices emits held service events in order once their checks finished.
+func (o *rcOwner) flushServices() {
+	for len(o.pendingSvc) != 0 {
+		head := o.pendingSvc[0]
+		for _, q := range head.waits {
+			if !q.done {
+				return
+			}
+		}
+		o.pendingSvc[0] = rcPendingService{}
+		o.pendingSvc = o.pendingSvc[1:]
+		o.emitService(head.event)
 	}
 }
 

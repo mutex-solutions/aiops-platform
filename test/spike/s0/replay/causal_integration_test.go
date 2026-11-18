@@ -188,8 +188,7 @@ type causalScenario struct {
 
 func corpusPath(id string) string { return "../../../differential/corpus/" + id + ".json" }
 
-// causalCovered must match on every listed backend, every run. D14 is graph-lock
-// only: the reconciler fails the frozen comparator (see causalDiagnostics).
+// causalCovered must match on every listed backend, every run.
 var causalCovered = []struct {
 	causalScenario
 	backends []string
@@ -198,7 +197,7 @@ var causalCovered = []struct {
 	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D14", corpusPath("D14"), true}, []string{"graph-lock"}},
+	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock"}},
 }
 
 // causalDiagnostics are scenarios the frozen comparator does NOT accept. The
@@ -218,7 +217,6 @@ var causalDiagnostics = []struct {
 	{causalScenario{"D09", corpusPath("D09"), true}, nil, `non-ordinary provision syntax`},
 	{causalScenario{"D11", corpusPath("D11"), true}, nil, `body operation "gate"`},
 	{causalScenario{"D13", "../../../differential/corpus/revision-3/D13.json", true}, nil, `body operation "gate"`},
-	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler"}, `last enabling provider "p" published before consumer "c" LOADING`},
 	{causalScenario{"D15", corpusPath("D15"), true}, nil, `non-unique provider for svc/root:svc`},
 	{causalScenario{"D18", corpusPath("D18"), true}, nil, `body operation "effect"`},
 	{causalScenario{"D21", corpusPath("D21"), true}, nil, `body operation "mark"`},

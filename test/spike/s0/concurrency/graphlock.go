@@ -37,6 +37,7 @@ type GraphLock struct {
 	batchDirty []*graphFiber
 	batchSeen  map[uint64]bool
 	knobs      graphKnobs
+	pendingSvc []graphPendingService
 }
 
 // These are design knobs, not retry intervals. Cancellation is immediate;
@@ -63,6 +64,7 @@ type graphFiber struct {
 	notice    uint64
 	blocked   *graphBlocked
 	available *graphAvailability // Last accepted off-lock Check result, not the committed activation.
+	pre       *graphPre          // In-flight availability check that precedes any load.
 	parent    *graphActivation   // Structural owner: this exact parent activation, not its replacement.
 }
 
@@ -74,6 +76,24 @@ type graphRetired struct {
 type graphAvailability struct {
 	epoch  []uint64
 	notice uint64
+}
+
+// graphPre is an availability check run before a consumer leaves PENDING. A
+// consumer whose check is false never reaches LOADING, as in the oracle.
+type graphPre struct {
+	revision uint64
+	notice   uint64
+	epoch    []uint64
+	cancel   context.CancelFunc
+	timer    *time.Timer
+	done     bool
+}
+
+// graphPendingService is a service event held until the pre-checks its
+// refresh started have been applied, so dependants move first.
+type graphPendingService struct {
+	event Event
+	waits []*graphPre
 }
 
 type graphBlocked struct {
@@ -155,10 +175,62 @@ func (g *GraphLock) eventLocked(f *graphFiber, kind, key string, uid uint64) {
 }
 
 func (g *GraphLock) serviceEventLocked(f *graphFiber, kind, key string, p provision) {
-	g.appendEventLocked(Event{
+	g.queueServiceLocked(Event{
 		Fiber: f.id, Name: f.spec.ID, Kind: kind, State: f.state,
 		Key: key, UID: p.uid, Value: p.value,
-	})
+	}, nil)
+}
+
+// queueServiceLocked appends a service event now, or behind earlier held ones.
+func (g *GraphLock) queueServiceLocked(e Event, waits []*graphPre) {
+	if len(waits) == 0 && len(g.pendingSvc) == 0 {
+		g.appendEventLocked(e)
+		return
+	}
+	g.pendingSvc = append(g.pendingSvc, graphPendingService{event: e, waits: waits})
+}
+
+// flushServicesLocked emits held service events in order once their checks ended.
+func (g *GraphLock) flushServicesLocked() {
+	for len(g.pendingSvc) != 0 {
+		head := g.pendingSvc[0]
+		for _, pre := range head.waits {
+			if !pre.done {
+				return
+			}
+		}
+		g.pendingSvc[0] = graphPendingService{}
+		g.pendingSvc = g.pendingSvc[1:]
+		g.appendEventLocked(head.event)
+	}
+}
+
+// wakeServiceLocked refreshes the dependants of keys, then records the service
+// events. A refresh may start off-lock pre-checks; the events wait for them.
+func (g *GraphLock) wakeServiceLocked(keys []string, events []Event) {
+	before := make(map[*graphPre]bool)
+	for _, key := range keys {
+		for _, d := range g.indexByKey[key] {
+			if d.pre != nil {
+				before[d.pre] = true
+			}
+		}
+	}
+	for _, key := range keys {
+		g.wakeKeyLocked(key)
+	}
+	var waits []*graphPre
+	for _, key := range keys {
+		for _, d := range g.indexByKey[key] {
+			if d.pre != nil && !before[d.pre] {
+				waits = append(waits, d.pre)
+			}
+		}
+	}
+	for _, e := range events {
+		g.queueServiceLocked(e, waits)
+		waits = nil // Later events follow the first in queue order.
+	}
 }
 
 func (g *GraphLock) stateLocked(f *graphFiber, state State) {
@@ -471,6 +543,12 @@ func (g *GraphLock) Notify(ctx context.Context, keys ...string) error {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	before := make(map[*graphPre]bool)
+	for _, f := range selected {
+		if f.pre != nil {
+			before[f.pre] = true
+		}
+	}
 	for _, id := range ids {
 		f := selected[id]
 		if f.spec.Check == nil || f.wantGone {
@@ -479,6 +557,22 @@ func (g *GraphLock) Notify(ctx context.Context, keys ...string) error {
 		f.notice++
 		g.eventLocked(f, "availability:notify", "", 0)
 		g.reconcileLocked(f)
+	}
+	// The oracle's notify records one service event per key with the current
+	// provision (any state), after the dependants were refreshed. Pre-checks
+	// that the refresh started are applied first.
+	var waits []*graphPre
+	for _, id := range ids {
+		if pre := selected[id].pre; pre != nil && !before[pre] {
+			waits = append(waits, pre)
+		}
+	}
+	for _, key := range keys {
+		if service, ok := g.services[key]; ok {
+			owner := service.activation.fiber
+			g.queueServiceLocked(Event{Fiber: owner.id, Name: owner.spec.ID, Kind: "service", State: owner.state, Key: key, UID: service.uid, Value: service.value}, waits)
+			waits = nil
+		}
 	}
 	return nil
 }
@@ -920,6 +1014,12 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 		return
 	}
 	if f.wantGone {
+		if f.pre != nil {
+			// The check is read-only and canceled; its completion reconciles again.
+			f.pre.cancel()
+			g.stateLocked(f, Unloading)
+			return
+		}
 		if f.state != Unloading {
 			// Even a never-activated PENDING fiber has an asynchronous unload
 			// boundary. Do not skip directly to DISPOSED or run Apply to make one.
@@ -984,6 +1084,16 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 	if blocked := f.blocked; blocked != nil && blocked.revision == f.revision && blocked.notice == f.notice && graphSameEpoch(blocked.epoch, epoch) {
 		g.stateLocked(f, Pending)
 		return
+	}
+	if f.spec.Check != nil {
+		// A false check keeps the consumer PENDING: it is evaluated before LOADING.
+		if f.pre != nil {
+			return
+		}
+		if accepted := f.available; accepted == nil || accepted.notice != f.notice || !graphSameEpoch(accepted.epoch, epoch) {
+			g.startPreCheckLocked(f, bindings, epoch)
+			return
+		}
 	}
 	g.startLoadLocked(f, bindings, epoch)
 }
@@ -1118,8 +1228,7 @@ func (g *GraphLock) provide(a *graphActivation, key string, value any) error {
 	if !a.loading {
 		// Synchronous consumer transitions precede the service notification.
 		// Check callbacks still run off-lock and can complete after this event.
-		g.wakeKeyLocked(key)
-		g.serviceEventLocked(f, "service:publish", key, p)
+		g.wakeServiceLocked([]string{key}, []Event{{Fiber: f.id, Name: f.spec.ID, Kind: "service:publish", State: f.state, Key: key, UID: p.uid, Value: p.value}})
 	}
 	return nil
 }
@@ -1498,8 +1607,8 @@ func graphCallDispose(dispose Disposer, ctx context.Context) (err error) {
 // graphCallCheck supplies a read-only, consumer-bound view. A predicate may
 // read its captured providers, but cannot register effects, publish, self-
 // dispose, or hold a lease that would obstruct its own availability change.
-func graphCallCheck(check func(*Context) bool, a *graphActivation) (available bool, err error) {
-	c := &Context{std: a.ctx.std, fiber: a.ctx.fiber, bindings: a.ctx.bindings, dispose: func() error { return ErrInactive }}
+func graphCallCheck(check func(*Context) bool, std context.Context, fiber uint64, bindings map[string]provision) (available bool, err error) {
+	c := &Context{std: std, fiber: fiber, bindings: bindings, dispose: func() error { return ErrInactive }}
 	defer c.released.Store(true)
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -1529,7 +1638,7 @@ func (g *GraphLock) checkAvailability(a *graphActivation, force bool) bool {
 			return true
 		}
 		g.mu.Unlock()
-		available, err := graphCallCheck(f.spec.Check, a)
+		available, err := graphCallCheck(f.spec.Check, a.ctx.std, a.ctx.fiber, a.ctx.bindings)
 		g.mu.Lock()
 		if a.retiring || !g.targetMatchesLocked(a) {
 			g.retireLocked(a)
@@ -1559,6 +1668,59 @@ func (g *GraphLock) checkAvailability(a *graphActivation, force bool) bool {
 		g.mu.Unlock()
 		return true
 	}
+}
+
+func (g *GraphLock) startPreCheckLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) {
+	std, cancel := context.WithCancel(context.Background())
+	pre := &graphPre{revision: f.revision, notice: f.notice, epoch: epoch, cancel: cancel}
+	f.pre, f.worker = pre, true
+	pre.timer = time.AfterFunc(g.knobs.load, func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if f.pre != pre {
+			return
+		}
+		// The callback cannot be forced to return; abandon it as denied.
+		g.eventLocked(f, "deadline:check", "", 0)
+		g.finishPreCheckLocked(f, pre, false, errors.New("availability deadline exceeded"))
+	})
+	go func() {
+		available, err := graphCallCheck(f.spec.Check, std, f.id, bindings)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if f.pre == pre {
+			g.finishPreCheckLocked(f, pre, available, err)
+		}
+	}()
+}
+
+// finishPreCheckLocked applies one pre-check result if it is still current,
+// then reconciles, which starts the load only for an accepted result.
+func (g *GraphLock) finishPreCheckLocked(f *graphFiber, pre *graphPre, available bool, err error) {
+	pre.timer.Stop()
+	pre.cancel()
+	pre.done = true
+	f.pre, f.worker = nil, false
+	_, epoch, ready := g.bindingsLocked(f)
+	switch {
+	case f.wantGone || !ready || f.revision != pre.revision || !graphSameEpoch(epoch, pre.epoch):
+	case f.notice != pre.notice:
+		g.eventLocked(f, "availability:stale", "", 0)
+	case !available:
+		f.available = nil
+		f.blocked = &graphBlocked{revision: pre.revision, epoch: append([]uint64(nil), pre.epoch...), notice: pre.notice}
+		if err != nil {
+			f.lastErr = err
+		}
+		g.eventLocked(f, "availability:denied", "", 0)
+	default:
+		f.blocked = nil
+		f.available = &graphAvailability{epoch: append([]uint64(nil), pre.epoch...), notice: pre.notice}
+		g.eventLocked(f, "availability:accepted", "", 0)
+	}
+	g.reconcileLocked(f)
+	g.flushServicesLocked()
+	g.signalLocked()
 }
 
 func (g *GraphLock) runActiveCheck(a *graphActivation) {
@@ -1610,7 +1772,7 @@ func (g *GraphLock) prepareConfig(a *graphActivation) (bool, error) {
 
 func (g *GraphLock) runLoad(a *graphActivation) {
 	var err error
-	if g.checkAvailability(a, true) {
+	if g.checkAvailability(a, false) {
 		var prepared bool
 		prepared, err = g.prepareConfig(a)
 		if prepared && err == nil {
@@ -1666,8 +1828,7 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 			g.services[key] = graphService{provision: p, activation: a}
 			// Preserve the real synchronous recursive-notify order; do not move
 			// off-lock availability results into an invented earlier position.
-			g.wakeKeyLocked(key)
-			g.serviceEventLocked(a.fiber, "service:publish", key, p)
+			g.wakeServiceLocked([]string{key}, []Event{{Fiber: a.fiber.id, Name: a.fiber.spec.ID, Kind: "service:publish", State: a.fiber.state, Key: key, UID: p.uid, Value: p.value}})
 		}
 	}
 	g.signalLocked()
