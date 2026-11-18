@@ -7,6 +7,11 @@ worker fixtures, migrations, module pins, and original report are unchanged.
 The corrected worker log records the four existing scope/revocation cases as
 passing; it contains **no restart measurements**.
 
+**The sections up to "Full restart gate" describe the smoke
+(`TestWorkerRestartDiagnostic`); the table below is the smoke's gap list. The
+gaps are closed, with the interpretations listed under "Implementation notes", by
+the opt-in `TestWorkerRestartFullGate` (see that section).**
+
 **Default `smoke1cycle !=30/1000load`. No full S0 acceptance claim.** The original
 role-membership/writable-GUC fixture remains **UNSAFE / authority FAIL**; trusted
 jobs intentionally sees all tenants. This does not repair authority, demonstrate
@@ -71,7 +76,7 @@ ingress, proxy/TLS/network paths, body-size/cold-path acceptance, or external
 fault injection. All handler results are written by the original `recordingHandler`.
 Provider row lookup by job ID, not hostile payload tenant, supplies scope.
 
-## Explicit unsupported harness boundaries
+## Explicit unsupported harness boundaries (smoke only)
 
 - **Pool-only:** `riverpgxv5.New` binds a concrete `*pgxpool.Pool`. Replacing
   `f.callerPool` would not replace the worker's separate pool, and closing the
@@ -87,6 +92,73 @@ Provider row lookup by job ID, not hostile payload tenant, supplies scope.
 - **Combined/full-load:** not authored here. Parent review and separately
   scheduled harness work must cover the exact frozen counts and load, not
   reinterpret these smoke observations as acceptance.
+
+## Full restart gate (`TestWorkerRestartFullGate`)
+
+Opt-in with `S0_WORKER_RESTART_FULL=1` plus the fixture contract. Without the
+switch it skips with "NOT measured". With it, missing fixture environment FAILS
+(not skip). It implements S6 and the S4 protocol of
+`docs/design/s0-spike-criteria.md`: arms pool, client, listener (30 cycles each),
+then combined (10), each cycle a 30 s warm-up plus 120 s window at 100/s
+open-loop, the restart request at measured t=60 s, a controlled 200 ms hold
+before it, 1,000 new IDs at 100/s after each recovery, <=5 s recovery, <=30 s
+ack-to-completion. 3x30+10 = 100 cycles x ~150 s plus drain, about 4.3 hours.
+
+```text
+S0_ADMIN_DSN=... S0_EXPECT_DATABASE=... S0_WORKER_RESTART_FULL=1 GOMAXPROCS=8 \
+  go test -count=1 -timeout 6h -v -run '^TestWorkerRestartFullGate$' ./plugins/jobs-river/internal/s0workers
+```
+
+No race detector for the frozen run (S4: optimized performance is measured
+without it); a `-race` run is labelled not frozen-scale in its report. Reduced
+scale knobs (`S0_WORKER_RESTART_FULL_CYCLES`, `_COMBINED_CYCLES`,
+`_WARMUP_SECONDS`, `_WINDOW_SECONDS`, `_RECOVERY_IDS`, `_FAILFAST`) only shrink the
+run, the same bounds still apply, and the report then says NOT acceptance.
+Output: one `S0WORKERS_RESTART_FULL_CYCLE` JSON line per cycle (every bound with
+limit/observed/pass) and one final `S0WORKERS_RESTART_FULL_REPORT` line with
+per-arm totals, interpretations and limits. The run FAILS when any bound is
+missed, any cycle is not executed, or a ledger/scan error occurs. Pure logic
+(config, open-loop scheduler, ledgers, reconciliation, bounds) is covered by
+database-free `restart_full_unit_test.go`, which always runs.
+
+Resources (`restart_full_app_test.go`): loopback HTTP listener; caller pgx pool
+plus insert River client; trusted-jobs pgx pool plus worker River client; each
+role pool max 8 connections, worker `MaxWorkers=4`. Enqueue is one transaction
+(`InsertTx`, hold, commit) and 2xx is written only after COMMIT. While the
+caller side is being recreated the endpoint returns 503 (never counted as work)
+and worker handlers snooze.
+
+## Implementation notes (interpretations, stricter reading taken)
+
+- Pool: riverpgxv5 binds a concrete pool, so pool recreation recreates both pgx
+  pools AND the River clients on them. Client: both River clients recreated on
+  unchanged pools (dispatcher reused). Listener: HTTP listener only, same loopback
+  address. Combined: all three. "Listener" is not River's LISTEN connection.
+  The earlier "unsupported" boundaries refer to the smoke harness and are
+  superseded for the full gate only by this explicit mapping.
+- Fresh fixture (schema, roles) per arm; fresh ledger and ID prefix per cycle.
+- Recovery = request instant to the earliest durable completion (SQL: completed
+  state and result row) of an ID whose ACK carries the epoch published only by the
+  recreated resources. This includes first accepted work AND consumer completion.
+- "Previously acknowledged IDs complete <=30 s after recovery" is checked as
+  both "within 30 s of its own ACK" and "no later than ready+30 s".
+- "1,000 new IDs at 100/s per cycle": the first 1,000 IDs scheduled at/after the
+  recovery instant must ACK on the FIRST attempt with no failed attempt, complete
+  <=30 s after ACK, and start within 50 ms of schedule. Stricter than "eventually". Every arrival of the cycle must start within 50 ms of its schedule (a late one fails the cycle; lateness is recorded, the schedule is never shifted).
+- Same-ID retries are allowed only inside the S4 5 s operation timeout from
+  scheduled arrival; a timeout stays in the accounting.
+- Ack-to-completion is measured to the first SQL observation (50 ms poll plus a
+  final sweep for anything the poll missed), an upper bound by the poll interval.
+- Duplicates: zero-bound is duplicate LOGICAL results (more than one job or result
+  per ID) and a duplicate ACK on first attempt. Retries, River retries, handler
+  redeliveries are reported only.
+- Held work: held HTTP transactions are capped at half the caller pool so the
+  consumer is not starved; at least one HTTP transaction AND one worker handler
+  must be in flight at the restart request or the cycle fails. The criteria's
+  "kernel leases" hold has no kernel here and is not simulated.
+- Orphans: failed drain/stop/close/shutdown within 5 s, wrong live pool/client/
+  listener count, or idle-in-transaction sessions of the fixture login after drain.
+- 30 s completion drain after the window is counted from the last ACK.
 
 ## Evidence and review handoff
 
