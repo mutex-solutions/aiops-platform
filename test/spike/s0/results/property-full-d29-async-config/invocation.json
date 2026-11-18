@@ -1,0 +1,37 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload after the D29 async configuration change; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "358932f2cc34cc4627b816693320f1f5b62edfa8b2a64c6b01ebb136902df6f5",
+ "commit": "7c8f084fe4dfc1fbfc7a63dcdd04b203eb3478c7",
+ "commitNote": "run on the same tree before the 2026-11-18 history rewrite; summary.json may name the pre-rewrite id of this tree",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 2407.58,
+ "candidateSeconds": {
+  "reconciler": 1275.72,
+  "graph-lock": 1131.71
+ },
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=120m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "c37f42f9638d42f865fc6451c9974db3bc399c25550f180b8dc3ecc3643f93c3",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/d29-eae9fdf",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, complete differential coverage, scale/performance, SQL authority and line/coverage gates remain open."
+ ]
+}

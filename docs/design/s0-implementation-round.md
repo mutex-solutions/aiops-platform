@@ -194,6 +194,16 @@ The accepted Go Effect setup API now uses a real setup lease and native disposal
 budget for returned partial/late resources. This does not provide generator
 incremental collection, withdrawable handles or complete D23 effect-tree proof.
 
+After the D29 asynchronous configuration request landed in the shared cell and
+both candidates, a fresh full property rerun completed **PASS, exit 0**, source
+digest `358932f2cc34cc4627b816693320f1f5b62edfa8b2a64c6b01ebb136902df6f5`:
+1,000 seeds x 1,000 operations per candidate under race, 2407.58s total. Its
+[summary/log/invocation](../../test/spike/s0/results/property-full-d29-async-config/)
+are separate from earlier results. D29 now runs natively on both candidates with
+its five original assertions unchanged. Known flaky fixture: D13 revision 2 has
+no barrier for the failing fiber before its snapshot (about 3% on graph-lock);
+it needs a recorded corpus revision, not a candidate change.
+
 ## Remaining gates
 
 All current components are experimental root-module packages. Complete context,
