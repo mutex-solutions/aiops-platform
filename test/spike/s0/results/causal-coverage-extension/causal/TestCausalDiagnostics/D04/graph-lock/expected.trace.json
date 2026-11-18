@@ -1,0 +1,368 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D04",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "fiber": "p",
+        "config": {
+          "value": "first"
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "fiber": "p",
+        "config": {
+          "value": "first"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "first"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "plugin",
+      "data": {
+        "fiber": "duplicate",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "status",
+      "data": {
+        "fiber": "duplicate",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "config",
+      "data": {
+        "fiber": "duplicate",
+        "config": {
+          "value": "second"
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "apply",
+      "data": {
+        "fiber": "duplicate",
+        "config": {
+          "value": "second"
+        }
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "error",
+      "data": {
+        "fiber": "duplicate",
+        "error": {
+          "name": "Error",
+          "message": "service \"svc\" has been registered at <provider>"
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "status",
+      "data": {
+        "fiber": "duplicate",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "status",
+      "data": {
+        "fiber": "duplicate",
+        "from": "UNLOADING",
+        "to": "FAILED"
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "output",
+      "data": {
+        "to": "retained",
+        "value": "first"
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "plugin",
+      "data": {
+        "fiber": "duplicate",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "status",
+      "data": {
+        "fiber": "duplicate",
+        "from": "FAILED",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "status",
+      "data": {
+        "fiber": "duplicate",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "first"
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 22,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "first",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "value": "first"
+          },
+          "effectiveConfig": {
+            "value": "first"
+          }
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "first",
+          "active": true
+        }
+      ],
+      "outputs": {}
+    },
+    {
+      "label": "refused",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "value": "first"
+          },
+          "effectiveConfig": {
+            "value": "first"
+          }
+        },
+        {
+          "fiber": "duplicate",
+          "state": "FAILED",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "value": "second"
+          },
+          "effectiveConfig": {
+            "value": "second"
+          }
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "first",
+          "active": true
+        }
+      ],
+      "outputs": {}
+    },
+    {
+      "label": "retained",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {
+            "value": "first"
+          },
+          "effectiveConfig": {
+            "value": "first"
+          }
+        },
+        {
+          "fiber": "duplicate",
+          "state": "FAILED",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "value": "second"
+          },
+          "effectiveConfig": {
+            "value": "second"
+          }
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "p",
+          "provisionUID": 1,
+          "value": "first",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "retained": "first"
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "value": "first"
+          },
+          "effectiveConfig": {
+            "value": "first"
+          }
+        },
+        {
+          "fiber": "duplicate",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {
+            "value": "second"
+          },
+          "effectiveConfig": {
+            "value": "second"
+          }
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "retained": "first"
+      }
+    }
+  ]
+}

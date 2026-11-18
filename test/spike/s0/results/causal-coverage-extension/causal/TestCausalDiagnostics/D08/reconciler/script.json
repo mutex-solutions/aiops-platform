@@ -1,0 +1,114 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D08",
+  "title": "Intercept chain applies ancestors before descendants and NeedWith",
+  "covers": [
+    "ancestor-first-intercept-chain"
+  ],
+  "contexts": [
+    {
+      "id": "outer",
+      "parent": "root",
+      "intercept": {
+        "key": "svc",
+        "config": {
+          "outer": true,
+          "winner": "outer"
+        }
+      }
+    },
+    {
+      "id": "inner",
+      "parent": "outer",
+      "intercept": {
+        "key": "svc",
+        "config": {
+          "inner": true,
+          "winner": "inner"
+        }
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "mode": "service",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "mode": "config",
+          "base": {
+            "base": true,
+            "winner": "base"
+          },
+          "head": {
+            "head": true
+          },
+          "to": "merged"
+        }
+      ],
+      "needs": {
+        "svc": {
+          "need": true,
+          "winner": "need"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "context": "inner",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "intercept"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "intercept",
+      "path": "/outputs/merged",
+      "equals": {
+        "base": true,
+        "winner": "need",
+        "outer": true,
+        "inner": true,
+        "need": true,
+        "head": true
+      }
+    }
+  ]
+}

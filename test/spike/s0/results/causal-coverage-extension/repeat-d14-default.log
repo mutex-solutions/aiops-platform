@@ -1,0 +1,606 @@
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock477680423/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.67s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3641795871/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.65s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3661061310/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock699944823/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.60s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2975041077/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.68s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2215718318/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.46s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3899797129/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.53s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.65s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2660506750/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.62s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock580235400/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.62s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock676408580/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.54s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock213008872/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock33483434/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.44s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock583697503/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.69s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1072553106/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.44s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.59s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2768736045/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock632147419/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.58s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4272104002/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.63s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.66s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2925668465/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.61s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock759926218/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4169415804/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3669226961/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock944964916/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.46s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2503376323/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2573125311/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.44s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2924565931/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.61s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1613831040/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.53s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.66s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2689738592/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.66s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock62702065/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3843445475/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3819793005/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.48s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1153607466/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock609299972/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock191314835/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3651656160/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.48s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3677984223/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.49s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2096086764/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1722867451/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.64s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.69s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4195670678/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.53s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3055258385/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.58s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.66s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock787180596/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.66s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.67s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3209138947/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.62s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3878960754/001
+    causal_integration_test.go:407: strict=ordered semantic mismatch
+        expected: {"schema":"s0-trace/v1","scenario":"D14","events":[{"seq":1,"kind":"plugin","data":{"disposed":false,"fiber":"p"}},{"seq":2,"kind":"status","data":{"fiber":"p","from":"PENDING","to":"LOADING"}},{"seq":3,"kind":"plugin","data":{"disposed":false,"fiber":"c"}},{"seq":4,"kind":"config","data":{"config":{"v":1},"fiber":"p"}},{"seq":5,"kind":"apply","data":{"config":{"v":1},"fiber":"p"}},{"seq":6,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":7,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":8,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":9,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":10,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":11,"kind":"output","data":{"to":"seen","value":{"v":1}}},{"seq":12,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":13,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":14,"kind":"commit","data":{"config":{"v":2},"fiber":"p"}},{"seq":15,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":16,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":17,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":18,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"PENDING"}},{"seq":19,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":20,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"LOADING"}},{"seq":21,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":22,"kind":"apply","data":{"config":{"v":2},"fiber":"p"}},{"seq":23,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":24,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":25,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":26,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":27,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":28,"kind":"output","data":{"to":"seen","value":{"v":2}}},{"seq":29,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":30,"kind":"plugin","data":{"disposed":true,"fiber":"c"}},{"seq":31,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":32,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"DISPOSED"}},{"seq":33,"kind":"plugin","data":{"disposed":true,"fiber":"p"}},{"seq":34,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":35,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":36,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":37,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"DISPOSED"}}],"checkpoints":[{"label":"initial","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":0,"epoch":{"revision":0,"needs":[]},"rawConfig":{"v":1},"effectiveConfig":{"v":1}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:1"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:1","value":{"v":1},"active":true}],"outputs":{"seen":{"v":1}}},{"label":"updated","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":1,"epoch":{"revision":1,"needs":[]},"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:2"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:2","value":{"v":2},"active":true}],"outputs":{"seen":{"v":2}}},{"label":"disposed","states":[{"fiber":"p","state":"DISPOSED","fiberUID":null,"revision":1,"epoch":null,"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"DISPOSED","fiberUID":null,"revision":0,"epoch":null,"rawConfig":{},"effectiveConfig":{}}],"provisions":[],"outputs":{"seen":{"v":2}}}]}
+        actual:   {"schema":"s0-trace/v1","scenario":"D14","events":[{"seq":1,"kind":"plugin","data":{"disposed":false,"fiber":"p"}},{"seq":2,"kind":"status","data":{"fiber":"p","from":"PENDING","to":"LOADING"}},{"seq":3,"kind":"config","data":{"config":{"v":1},"fiber":"p"}},{"seq":4,"kind":"apply","data":{"config":{"v":1},"fiber":"p"}},{"seq":5,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":6,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":7,"kind":"plugin","data":{"disposed":false,"fiber":"c"}},{"seq":8,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":9,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":10,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":11,"kind":"output","data":{"to":"seen","value":{"v":1}}},{"seq":12,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":13,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":14,"kind":"commit","data":{"config":{"v":2},"fiber":"p"}},{"seq":15,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":16,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":17,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":18,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"PENDING"}},{"seq":19,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":20,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"LOADING"}},{"seq":21,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":22,"kind":"apply","data":{"config":{"v":2},"fiber":"p"}},{"seq":23,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":24,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":25,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":26,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":27,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":28,"kind":"output","data":{"to":"seen","value":{"v":2}}},{"seq":29,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":30,"kind":"plugin","data":{"disposed":true,"fiber":"c"}},{"seq":31,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":32,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"DISPOSED"}},{"seq":33,"kind":"plugin","data":{"disposed":true,"fiber":"p"}},{"seq":34,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":35,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":36,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":37,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"DISPOSED"}}],"checkpoints":[{"label":"initial","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":0,"epoch":{"revision":0,"needs":[]},"rawConfig":{"v":1},"effectiveConfig":{"v":1}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:1"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:1","value":{"v":1},"active":true}],"outputs":{"seen":{"v":1}}},{"label":"updated","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":1,"epoch":{"revision":1,"needs":[]},"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:2"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:2","value":{"v":2},"active":true}],"outputs":{"seen":{"v":2}}},{"label":"disposed","states":[{"fiber":"p","state":"DISPOSED","fiberUID":null,"revision":1,"epoch":null,"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"DISPOSED","fiberUID":null,"revision":0,"epoch":null,"rawConfig":{},"effectiveConfig":{}}],"provisions":[],"outputs":{"seen":{"v":2}}}]}; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.54s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.66s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1316278498/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2892277739/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock464853181/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2606668192/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.66s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.70s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2924491473/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.61s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1565834327/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.59s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4015312473/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.55s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.67s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3368224425/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.65s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock121765587/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1462542760/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.71s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2059443472/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.61s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3538652563/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1641874060/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.39s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4069258090/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.62s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.67s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1214680671/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock931189389/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.60s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3303326879/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.64s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2734603584/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1218908453/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock952128159/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.59s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1688160142/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.54s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.67s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4197961447/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3300883316/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3107390252/001
+    causal_integration_test.go:407: strict=ordered semantic mismatch
+        expected: {"schema":"s0-trace/v1","scenario":"D14","events":[{"seq":1,"kind":"plugin","data":{"disposed":false,"fiber":"p"}},{"seq":2,"kind":"status","data":{"fiber":"p","from":"PENDING","to":"LOADING"}},{"seq":3,"kind":"plugin","data":{"disposed":false,"fiber":"c"}},{"seq":4,"kind":"config","data":{"config":{"v":1},"fiber":"p"}},{"seq":5,"kind":"apply","data":{"config":{"v":1},"fiber":"p"}},{"seq":6,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":7,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":8,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":9,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":10,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":11,"kind":"output","data":{"to":"seen","value":{"v":1}}},{"seq":12,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":13,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":14,"kind":"commit","data":{"config":{"v":2},"fiber":"p"}},{"seq":15,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":16,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":17,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":18,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"PENDING"}},{"seq":19,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":20,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"LOADING"}},{"seq":21,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":22,"kind":"apply","data":{"config":{"v":2},"fiber":"p"}},{"seq":23,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":24,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":25,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":26,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":27,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":28,"kind":"output","data":{"to":"seen","value":{"v":2}}},{"seq":29,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":30,"kind":"plugin","data":{"disposed":true,"fiber":"c"}},{"seq":31,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":32,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"DISPOSED"}},{"seq":33,"kind":"plugin","data":{"disposed":true,"fiber":"p"}},{"seq":34,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":35,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":36,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":37,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"DISPOSED"}}],"checkpoints":[{"label":"initial","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":0,"epoch":{"revision":0,"needs":[]},"rawConfig":{"v":1},"effectiveConfig":{"v":1}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:1"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:1","value":{"v":1},"active":true}],"outputs":{"seen":{"v":1}}},{"label":"updated","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":1,"epoch":{"revision":1,"needs":[]},"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:2"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:2","value":{"v":2},"active":true}],"outputs":{"seen":{"v":2}}},{"label":"disposed","states":[{"fiber":"p","state":"DISPOSED","fiberUID":null,"revision":1,"epoch":null,"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"DISPOSED","fiberUID":null,"revision":0,"epoch":null,"rawConfig":{},"effectiveConfig":{}}],"provisions":[],"outputs":{"seen":{"v":2}}}]}
+        actual:   {"schema":"s0-trace/v1","scenario":"D14","events":[{"seq":1,"kind":"plugin","data":{"disposed":false,"fiber":"p"}},{"seq":2,"kind":"status","data":{"fiber":"p","from":"PENDING","to":"LOADING"}},{"seq":3,"kind":"config","data":{"config":{"v":1},"fiber":"p"}},{"seq":4,"kind":"plugin","data":{"disposed":false,"fiber":"c"}},{"seq":5,"kind":"apply","data":{"config":{"v":1},"fiber":"p"}},{"seq":6,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":7,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":8,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":9,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":10,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":11,"kind":"output","data":{"to":"seen","value":{"v":1}}},{"seq":12,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":13,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":14,"kind":"commit","data":{"config":{"v":2},"fiber":"p"}},{"seq":15,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":16,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":17,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":1}}},{"seq":18,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"PENDING"}},{"seq":19,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":20,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"LOADING"}},{"seq":21,"kind":"config","data":{"config":{"v":2},"fiber":"p"}},{"seq":22,"kind":"apply","data":{"config":{"v":2},"fiber":"p"}},{"seq":23,"kind":"status","data":{"fiber":"p","from":"LOADING","to":"ACTIVE"}},{"seq":24,"kind":"status","data":{"fiber":"c","from":"PENDING","to":"LOADING"}},{"seq":25,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":26,"kind":"config","data":{"config":{},"fiber":"c"}},{"seq":27,"kind":"apply","data":{"config":{},"fiber":"c"}},{"seq":28,"kind":"output","data":{"to":"seen","value":{"v":2}}},{"seq":29,"kind":"status","data":{"fiber":"c","from":"LOADING","to":"ACTIVE"}},{"seq":30,"kind":"plugin","data":{"disposed":true,"fiber":"c"}},{"seq":31,"kind":"status","data":{"fiber":"c","from":"ACTIVE","to":"UNLOADING"}},{"seq":32,"kind":"status","data":{"fiber":"c","from":"UNLOADING","to":"DISPOSED"}},{"seq":33,"kind":"plugin","data":{"disposed":true,"fiber":"p"}},{"seq":34,"kind":"status","data":{"fiber":"p","from":"ACTIVE","to":"UNLOADING"}},{"seq":35,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"v":2}}},{"seq":36,"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"$undefined":true}}},{"seq":37,"kind":"status","data":{"fiber":"p","from":"UNLOADING","to":"DISPOSED"}}],"checkpoints":[{"label":"initial","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":0,"epoch":{"revision":0,"needs":[]},"rawConfig":{"v":1},"effectiveConfig":{"v":1}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:1"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:1","value":{"v":1},"active":true}],"outputs":{"seen":{"v":1}}},{"label":"updated","states":[{"fiber":"p","state":"ACTIVE","fiberUID":"uid:1","revision":1,"epoch":{"revision":1,"needs":[]},"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"ACTIVE","fiberUID":"uid:2","revision":0,"epoch":{"revision":0,"needs":[{"key":"svc","provisionUID":"uid:2"}]},"rawConfig":{},"effectiveConfig":{}}],"provisions":[{"key":"svc","realm":"root:svc","provider":"p","provisionUID":"uid:2","value":{"v":2},"active":true}],"outputs":{"seen":{"v":2}}},{"label":"disposed","states":[{"fiber":"p","state":"DISPOSED","fiberUID":null,"revision":1,"epoch":null,"rawConfig":{"v":2},"effectiveConfig":{"v":2}},{"fiber":"c","state":"DISPOSED","fiberUID":null,"revision":0,"epoch":null,"rawConfig":{},"effectiveConfig":{}}],"provisions":[],"outputs":{"seen":{"v":2}}}]}; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.53s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock834797167/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.58s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4261009562/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.48s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock351621685/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.68s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2894501962/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock377390539/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.59s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3461903680/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.64s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1337157480/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.53s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3679554992/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.59s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.65s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2888741968/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.55s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3295186920/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock511005592/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock533077165/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock815534567/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.55s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1095504201/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.65s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3333199094/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.42s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.59s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2821644569/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.46s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2024454946/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3363271309/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock4043681311/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3702403698/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock32256200/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.48s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2585876894/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1509552268/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock1331945243/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.54s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock106079586/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.44s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.62s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock463100064/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.50s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.61s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3362292632/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.51s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3850091150/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.47s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3061049478/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.43s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock326501401/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.43s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3089821055/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.52s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock2716138191/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.45s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.58s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock246559298/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.54s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.60s)
+=== RUN   TestCausalReplayIntegration
+=== RUN   TestCausalReplayIntegration/D14/graph-lock
+    causal_integration_test.go:322: complete strict/causal evidence: /tmp/TestCausalReplayIntegrationD14graph-lock3186570432/001
+    causal_integration_test.go:407: strict=<nil>; causal=<nil>; classification=match
+--- PASS: TestCausalReplayIntegration (1.57s)
+    --- PASS: TestCausalReplayIntegration/D14/graph-lock (0.63s)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	153.571s

@@ -1,0 +1,67 @@
+{
+  "classification": "causal comparison coverage extension; differential comparison only, NOT full S0 or final SDK acceptance",
+  "baseCommit": "4a5f4c1",
+  "actualCommands": [
+    {
+      "label": "evidence run (receipts in causal/)",
+      "argv": ["go", "test", "-mod=readonly", "-race", "-count=1", "-run", "^TestCausal(ReplayIntegration|Diagnostics)$", "-v", "./test/spike/s0/replay", "-timeout=300s"],
+      "environmentWithoutCredentials": {"S0_NODE": "/tmp/aiops-s0-node-24.22.1-u4gdr6qr/bin/node", "S0_CAUSAL_RUN": "1", "S0_CAUSAL_EVIDENCE_DIR": "<evidence-root>/causal", "GOTOOLCHAIN": "local", "GOMAXPROCS": "8", "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]},
+      "log": "causal-command.log",
+      "exitCode": 0,
+      "result": "TestCausalReplayIntegration 9 subtests PASS; TestCausalDiagnostics 27 subtests PASS"
+    },
+    {
+      "label": "D14 graph-lock repeat, default GOMAXPROCS",
+      "argv": ["go", "test", "-mod=readonly", "-race", "-count=100", "-run", "^TestCausalReplayIntegration/D14/", "-v", "./test/spike/s0/replay", "-timeout=1500s"],
+      "environmentWithoutCredentials": {"S0_NODE": "/tmp/aiops-s0-node-24.22.1-u4gdr6qr/bin/node", "S0_CAUSAL_RUN": "1", "GOTOOLCHAIN": "local", "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]},
+      "log": "repeat-d14-default.log",
+      "exitCode": 0,
+      "result": "100 of 100 causal match, 0 fail"
+    },
+    {
+      "label": "D14 graph-lock repeat, GOMAXPROCS=2",
+      "argv": ["go", "test", "-mod=readonly", "-race", "-count=100", "-run", "^TestCausalReplayIntegration/D14/", "-v", "./test/spike/s0/replay", "-timeout=1500s"],
+      "environmentWithoutCredentials": {"S0_NODE": "/tmp/aiops-s0-node-24.22.1-u4gdr6qr/bin/node", "S0_CAUSAL_RUN": "1", "GOTOOLCHAIN": "local", "GOMAXPROCS": "2", "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]},
+      "log": "repeat-d14-gmp2.log",
+      "exitCode": 0,
+      "result": "100 of 100 causal match, 0 fail"
+    },
+    {
+      "label": "D14 reconciler verdict repeat (documented non-match)",
+      "argv": ["go", "test", "-mod=readonly", "-race", "-count=100", "-run", "^TestCausalDiagnostics/D14/", "-v", "./test/spike/s0/replay", "-timeout=1500s"],
+      "environmentWithoutCredentials": {"S0_NODE": "/tmp/aiops-s0-node-24.22.1-u4gdr6qr/bin/node", "S0_CAUSAL_RUN": "1", "GOTOOLCHAIN": "local", "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]},
+      "log": "repeat-d14-recon-diag.log",
+      "exitCode": 0,
+      "result": "100 of 100 runs returned exactly the documented verdict: last enabling provider \"p\" published before consumer \"c\" LOADING"
+    },
+    {
+      "label": "all documented non-match verdicts, repeated",
+      "argv": ["go", "test", "-mod=readonly", "-race", "-count=5", "-run", "^TestCausalDiagnostics$", "-v", "./test/spike/s0/replay", "-timeout=1500s"],
+      "environmentWithoutCredentials": {"S0_NODE": "/tmp/aiops-s0-node-24.22.1-u4gdr6qr/bin/node", "S0_CAUSAL_RUN": "1", "GOTOOLCHAIN": "local", "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]},
+      "log": "repeat-diag-all.log",
+      "exitCode": 0,
+      "result": "27 candidate/scenario verdicts x 5 runs, every verdict identical to the documented text"
+    }
+  ],
+  "counts": {"scenariosTargeted": 14, "candidateScenarioPairs": 28, "pairsCausalMatch": 1, "pairsNotMatching": 27, "newlyCoveredPairs": 1},
+  "ordinaryGate": "go test -race -count=1 ./test/... exit 0 (11 packages ok); gofmt -l test empty; go vet ./... clean",
+  "unrecordedObservation": {
+    "note": "20 further fresh runs of TestCausalDiagnostics for D09, D13, D22 (evidence not retained) compared raw event multisets of oracle and actual traces. This is an informal analysis, not the comparator.",
+    "D09": "20/20 on graph-lock: consumer cb goes PENDING->LOADING->UNLOADING->PENDING before availability for its context is true (absent in oracle); 20/20 on both candidates: the oracle's second service event after notify is absent",
+    "D13": "revision-3 file, fiber d (mounted then disposed without a barrier): event multiset differs from the oracle in 18/20 graph-lock and 19/20 reconciler runs; the candidate outcome varies run to run (d without Apply, or d reaches ACTIVE first)",
+    "D22": "oracle: child reaches ACTIVE before parent disposal; candidates dispose the child while LOADING in 6/20 graph-lock and 7/20 reconciler runs"
+  },
+  "limits": [
+    "oracle executed fresh per case; frozen goldens are not read",
+    "unsupported verdicts are decided by the frozen comparator and say nothing about equivalence",
+    "evidence paths were rewritten to <repo-root> and <evidence-root> after the run",
+    "not S0 acceptance"
+  ],
+  "logSHA256": {
+    "causal-command.log": "59105e2c08afb5f3ea4043afc63d39d5a6ce05e58a78910f859038d5b95da24c",
+    "repeat-d14-default.log": "c2e5c5b245ab3ef6ccbbfbe7e08a52a11f124ad3bcbfbe62fc8bd4da5c27cc4c",
+    "repeat-d14-gmp2.log": "df9cdd10e07134a01f8aaa6b435d9fffd2479b7c4e025d61a9343b67095a4d2a",
+    "repeat-d14-recon-diag.log": "17d2f63dd9486929a2e8fc1136825b6f079c617ad0bb068149b0042356802fb2",
+    "repeat-diag-all.log": "fed9a3f3cd7273f0adbf0753d98b2be1e08e0cadcb77458f6d3371e1d2cfaf0c"
+  }
+}

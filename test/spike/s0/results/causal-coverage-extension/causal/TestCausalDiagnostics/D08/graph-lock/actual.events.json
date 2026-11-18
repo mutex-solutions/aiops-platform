@@ -1,0 +1,372 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:\"svc\"@0/realm:0",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "availability:accepted",
+    "From": "",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "c"
+    }
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "c"
+    }
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "merged",
+      "value": {
+        "base": true,
+        "head": true,
+        "inner": true,
+        "need": true,
+        "outer": true,
+        "winner": "need"
+      }
+    }
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 2,
+    "Name": "c",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 23,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 24,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 25,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 26,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 27,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 28,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 29,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

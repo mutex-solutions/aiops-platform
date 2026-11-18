@@ -1,0 +1,140 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D09",
+  "title": "Availability is evaluated using each consumer context",
+  "covers": [
+    "availability-consumer-binding"
+  ],
+  "contexts": [
+    {
+      "id": "a",
+      "parent": "root",
+      "meta": {
+        "audience": "A"
+      }
+    },
+    {
+      "id": "b",
+      "parent": "root",
+      "meta": {
+        "audience": "B"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "ready": "availability"
+          },
+          "mode": "available"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "mark",
+          "label": "consumer-ready"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "output",
+      "to": "availability",
+      "value": {
+        "A": true,
+        "B": false
+      }
+    },
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "provider"
+    },
+    {
+      "op": "mount",
+      "context": "a",
+      "fiber": "ca",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "context": "b",
+      "fiber": "cb",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "split"
+    },
+    {
+      "op": "output",
+      "to": "availability",
+      "value": {
+        "A": true,
+        "B": true
+      }
+    },
+    {
+      "op": "notify",
+      "keys": [
+        "svc"
+      ]
+    },
+    {
+      "op": "settle",
+      "label": "joined"
+    },
+    {
+      "op": "dispose",
+      "fiber": "cb"
+    },
+    {
+      "op": "dispose",
+      "fiber": "ca"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "split",
+      "path": "/states/1/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "split",
+      "path": "/states/2/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "joined",
+      "path": "/states/2/state",
+      "equals": "ACTIVE"
+    }
+  ]
+}

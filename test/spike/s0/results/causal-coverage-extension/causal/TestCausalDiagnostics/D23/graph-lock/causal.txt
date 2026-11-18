@@ -1,0 +1,1 @@
+causal comparison unsupported: async/control/catch metadata on "effect"
