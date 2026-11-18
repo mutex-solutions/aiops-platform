@@ -13,16 +13,18 @@ Every scenario that fails the strict comparison on at least one candidate in the
 the frozen `CompareCausal` on both candidates against a freshly executed pinned
 oracle (Node 24.22.1). D13 used `corpus/revision-3/D13.json`.
 
-- `TestCausalReplayIntegration` now also covers D14 on `graph-lock` (see below).
-- `TestCausalDiagnostics` (new) records the 27 candidate/scenario pairs that the
+- `TestCausalReplayIntegration` now also covers D14 on both candidates (on `graph-lock` from the start, on `reconciler` after the fix of 2026-11-18 below).
+- `TestCausalDiagnostics` (new) records the candidate/scenario pairs that the
   comparator does not accept, and fails if a verdict differs from the text in this
   note, so a later comparator change forces this note to be revisited. It never
   turns a non-match into a pass.
 - Receipts: [`causal-coverage-extension`](../../test/spike/s0/results/causal-coverage-extension/invocation.json).
 
-Repetition: D14 on `graph-lock` matched 100 of 100 runs under `-race` and 100 of
-100 with `GOMAXPROCS=2` under `-race`. The D14 `reconciler` verdict was the same
-100 of 100 runs. All 27 non-match verdicts were identical in 5 further runs.
+Repetition (before the fixes of 2026-11-18): D14 on `graph-lock` matched 100 of 100
+runs under `-race` and 100 of 100 with `GOMAXPROCS=2` under `-race`. The D14
+`reconciler` verdict was a mismatch in 100 of 100 runs. All 27 non-match verdicts
+were identical in 5 further runs. The receipts under `causal-coverage-extension`
+record that state and are not rewritten.
 
 ## Per-scenario table
 
@@ -45,12 +47,12 @@ comparator or interpreter limitation.
 | D06 | failed / failed | unsupported / unsupported | (c) `body operation "child"` is not modelled. Also (b) row 8: inherited declarations are realm-local, so `retained-inherited` reads an undeclared key (one original assertion fails on both, already named in the inventory) |
 | D07 | failed / match | unsupported / unsupported | (c) `non-ordinary provision syntax`: provide mode `service`/NeedWith config view |
 | D08 | failed / match | unsupported / unsupported | (c) `intercept context "outer"`: ancestor intercept chain not modelled |
-| D09 | failed / failed | unsupported / unsupported | (c) `non-ordinary provision syntax`: provide mode `available`. Also (a) observed, see below |
+| D09 | failed / failed | unsupported / unsupported | (c) `non-ordinary provision syntax`: provide mode `available`. The (a) differences observed here are fixed, see 2026-11-18 below; the comparator still cannot judge this scenario |
 | D10 | match / match | match / match | covered earlier |
 | D11 | failed / match | unsupported / unsupported | (c) `body operation "gate"`: gates are not modelled |
 | D12 | failed / match | match / match | covered earlier |
 | D13 (rev 3) | failed / failed | unsupported / unsupported | (c) `body operation "gate"`. Also fixture race on fiber `d`, see below |
-| D14 | failed / match | mismatch / match | R: (a) `last enabling provider "p" published before consumer "c" LOADING`, 100 of 100 runs. G: match, 100 of 100 plus 100 of 100 at `GOMAXPROCS=2` |
+| D14 | failed / match | match / match (R was mismatch before 2026-11-18) | R: was (a) `last enabling provider "p" published before consumer "c" LOADING`, 100 of 100 runs; fixed 2026-11-18, see below. G: match, 100 of 100 plus 100 of 100 at `GOMAXPROCS=2` before the change |
 | D15 | failed / match | unsupported / unsupported | (c) `non-unique provider for svc/root:svc`: provider swap is not modelled |
 | D16 | failed / failed | match / match | covered earlier |
 | D17 | match / match | not run | strict match |
@@ -79,14 +81,16 @@ realms (D03); more than one provider of one address, by refusal or swap (D04, D1
 
 ## Candidate differences (category a)
 
+Owner decision, 2026-11-18: where a candidate differs from the oracle in D14 and
+D09 it is a candidate bug and is fixed to match the oracle. Items 1 to 3 below are
+therefore fixed; the observations are kept as they were first recorded.
+
 1. **D14, `reconciler`.** In the candidate's own native ledger the provider goes
    ACTIVE, then its `service` publication is recorded, then dependent consumer `c`
    goes LOADING (native sequence 7, 8, 9). The oracle and `graph-lock` move `c` to
    LOADING before the publication. The code comment at the notification site says
-   dependants refresh synchronously before the event, but the refresh runs
-   after it here. The frozen comparator rejects exactly this order. Whether it is
-   a defect or an acceptable observer order is the owner's call; the comparator
-   does not accept it.
+   dependants refresh synchronously before the event, but the refresh ran
+   after it.
 2. **D09, `graph-lock`** (20 of 20 runs, informal multiset comparison, evidence not
    retained): consumer `cb` goes PENDING, LOADING, UNLOADING, PENDING while the
    availability check for its context is still false. The oracle keeps it PENDING.
@@ -94,7 +98,49 @@ realms (D03); more than one provider of one address, by refusal or swap (D04, D1
    records after `notify` does not occur. Row 21 says `reflect.notify` is adapted
    to a key and realm index but does not say the event is dropped.
 4. **D04, both candidates:** refusal error text, see the table. Not in the
-   decision record.
+   decision record. Recorded as not carried by owner decision 2026-11-18: no
+   behaviour change.
+
+### Fixes of 2026-11-18
+
+All three were reproduced first with real traces: the replay of
+`corpus/D09.json` and `corpus/D14.json` on each candidate, compared with the
+recorded oracle traces in `results/corpus-final`.
+
+- **D14, `reconciler` (item 1).** Cause: a consumer's `Check` runs off the owner
+  goroutine, so the refresh that follows the provider going ACTIVE only started the
+  check and the consumer reached LOADING after the owner had recorded the
+  publication. Fix: the owner records the `service` event after the dependants
+  refreshed; when the refresh started a check it keeps the event, and defers the
+  provider's own cleanup, until that check result has been applied, without
+  waiting on the owner and without running any callback on it. Regression tests:
+  `TestDependantLoadingPrecedesServiceEvent` (both candidates) and
+  `TestD09D14MatchRecordedOracleOrder`. `TestCausalReplayIntegration` now covers
+  D14 on `reconciler`.
+- **D09, `graph-lock` (item 2).** Reproduced, 20 of 20 local replays. Cause:
+  `graph-lock` moved a consumer to LOADING first and evaluated its availability
+  inside the load; a false result then retired the fresh activation, giving
+  PENDING, LOADING, UNLOADING, PENDING. Fix: the check now runs off the lock
+  before the consumer leaves PENDING (with the load deadline as its bound), a false
+  result keeps it PENDING and a true result starts the load without a second
+  evaluation, and the provider's `service:publish` waits for the checks its
+  refresh started so D14 keeps its order. The `reconciler` does not have this
+  defect: it evaluates the check before LOADING and its D09 consumer stayed PENDING.
+  Regression test: `TestDeniedCheckKeepsConsumerPendingAndNotifyRecordsService`.
+- **D09, both candidates (item 3).** Reproduced: both candidates emitted one
+  `service` event where the oracle records two. Decision: carried. Row 21 adapts
+  how `reflect.notify` finds its fibers (an index by key and realm), not what it
+  emits; the oracle's `internal/service` event after the refresh is observable
+  behaviour and no row drops it. `Notify` now records one `service` event per key
+  that has a provision, after the dependants refreshed, carrying the provision's
+  value in any state, as `_getImpl(name, false)` does. A key with no provision
+  would give an oracle event with an undefined value; no scenario exercises it
+  and the candidates record nothing for it. Regression test: the same as item 2.
+- **D04.** Recorded as not carried by owner decision 2026-11-18. No change.
+
+D09 stays `unsupported` for the frozen comparator, so the fix is shown by the
+replay-level comparison with the recorded oracle trace (per-fiber statuses and
+service events), not by `CompareCausal`.
 
 ## Fixture causality gaps (category c, not candidate bugs)
 
@@ -110,10 +156,11 @@ realms (D03); more than one provider of one address, by refusal or swap (D04, D1
 
 ## What this does and does not establish
 
-- It establishes that, of the 14 targeted scenarios (28 candidate pairs), the
-  frozen comparator accepts one pair repeatably (D14 on `graph-lock`), rejects one
-  for a reproducible ordering difference (D14 on `reconciler`) and cannot judge the
-  other 26 pairs.
+- It established, before the fixes of 2026-11-18, that of the 14 targeted
+  scenarios (28 candidate pairs) the frozen comparator accepted one pair repeatably
+  (D14 on `graph-lock`), rejected one for a reproducible ordering difference (D14
+  on `reconciler`) and could not judge the other 26 pairs. After the fix it accepts
+  both D14 pairs and still cannot judge the other 26.
 - It does not establish equivalence for any unsupported scenario, nor that a
   strict failure is harmless. The informal multiset observations above are not the
   comparator and are not receipts.
