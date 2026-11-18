@@ -35,7 +35,7 @@ jobs:
       - name: Secret scan over full history
         run: |
           GOFLAGS= go install github.com/zricethezav/gitleaks/v8@v8.18.4
-          "$(go env GOPATH)/bin/gitleaks" detect --redact --no-banner --source .
+          "$(go env GOPATH)/bin/gitleaks" detect --redact --no-banner --verbose --no-color --source .
 
   test:
     name: Build, vet, race tests
