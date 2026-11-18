@@ -204,6 +204,20 @@ its five original assertions unchanged. Known flaky fixture: D13 revision 2 has
 no barrier for the failing fiber before its snapshot (about 3% on graph-lock);
 it needs a recorded corpus revision, not a candidate change.
 
+D13 now runs from [corpus revision 3](s0-corpus-revision-3.md): one external
+`awaitFiber` step orders the failing fiber before the six-state snapshot, with
+all expectations unchanged; revision 2 stays as the historical racy fixture. A
+[fresh corpus inventory](../../test/spike/s0/results/corpus-inventory-after-d29/invocation.json)
+records D29 as match on both candidates; its strict class for some scenarios
+varies from run to run with no assertion failure. The
+[callpath runner](../../test/spike/s0/callpath/README.md) is implemented and
+**not executed for acceptance**: an unrecorded reduced dry run on a shared host
+showed owner Enter+Leave p99 under 2µs with one caller and about 3.5 to 4.5µs
+with 8 and 32 callers on both candidates, so that budget is at risk and needs
+the full run on a quiet host. Continuous integration runs the race suite, the
+PostgreSQL probes, the live oracle comparison and, weekly, the full property
+workload.
+
 ## Remaining gates
 
 All current components are experimental root-module packages. Complete context,

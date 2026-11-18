@@ -484,6 +484,11 @@ func TestNativeScopeHeldCleanupRetainsTreeAndProvider(t *testing.T) {
 			t.Fatalf("native disposal deadline not retained after actual return: %v", err)
 		}
 		_ = r.Settle(ctx) // The native runtime may also report its retained deadline.
+		// Settle can return that retained deadline before the provider's own
+		// teardown has run; join the provider's actual disposal.
+		if w, ok := r.(Waiter); ok {
+			_ = w.AwaitFiber(ctx, provider)
+		}
 		if !providerCleaned.Load() || !h.effect.cleanupFinished() {
 			t.Fatal("provider did not drain after scope really returned")
 		}
