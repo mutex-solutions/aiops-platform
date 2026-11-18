@@ -29,7 +29,7 @@ func causalRateScenarios() []causalScenario {
 		path := corpusPath(id)
 		switch id {
 		case "D13":
-			path = "../../../differential/corpus/revision-3/D13.json"
+			path = "../../../differential/corpus/revision-5/D13.json"
 		case "D22":
 			path = "../../../differential/corpus/revision-4/D22.json"
 		}

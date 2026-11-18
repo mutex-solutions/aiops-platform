@@ -1,0 +1,203 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D13",
+  "title": "All six lifecycle states are observed behind causal barriers",
+  "covers": [
+    "six-states"
+  ],
+  "plugins": [
+    {
+      "id": "pending",
+      "apply": [],
+      "needs": {
+        "absent": null
+      }
+    },
+    {
+      "id": "loading",
+      "apply": [
+        {
+          "op": "gate",
+          "label": "load"
+        }
+      ]
+    },
+    {
+      "id": "active",
+      "apply": [
+        {
+          "op": "mark",
+          "label": "active-apply"
+        }
+      ]
+    },
+    {
+      "id": "failed",
+      "apply": [
+        {
+          "op": "fail",
+          "error": "deliberate-failure"
+        }
+      ]
+    },
+    {
+      "id": "unloading",
+      "apply": [
+        {
+          "op": "mark",
+          "label": "u-ready"
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "gate",
+          "label": "unload"
+        }
+      ]
+    },
+    {
+      "id": "disposed",
+      "apply": []
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "pending",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "l",
+      "plugin": "loading",
+      "config": {}
+    },
+    {
+      "op": "waitMark",
+      "label": "load"
+    },
+    {
+      "op": "mount",
+      "fiber": "a",
+      "plugin": "active",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "failed",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "u",
+      "plugin": "unloading",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "d",
+      "plugin": "disposed",
+      "config": {}
+    },
+    {
+      "op": "waitMark",
+      "label": "active-apply"
+    },
+    {
+      "op": "awaitFiber",
+      "fiber": "d"
+    },
+    {
+      "op": "dispose",
+      "fiber": "d"
+    },
+    {
+      "op": "waitMark",
+      "label": "u-ready"
+    },
+    {
+      "op": "dispose",
+      "fiber": "u",
+      "await": false
+    },
+    {
+      "op": "waitMark",
+      "label": "unload"
+    },
+    {
+      "op": "awaitFiber",
+      "fiber": "f",
+      "catch": true
+    },
+    {
+      "op": "snapshot",
+      "label": "six"
+    },
+    {
+      "op": "release",
+      "label": "load"
+    },
+    {
+      "op": "release",
+      "label": "unload"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    },
+    {
+      "op": "dispose",
+      "fiber": "a"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "dispose",
+      "fiber": "l"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "six",
+      "path": "/states/0/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "six",
+      "path": "/states/1/state",
+      "equals": "LOADING"
+    },
+    {
+      "at": "six",
+      "path": "/states/2/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "six",
+      "path": "/states/3/state",
+      "equals": "FAILED"
+    },
+    {
+      "at": "six",
+      "path": "/states/4/state",
+      "equals": "UNLOADING"
+    },
+    {
+      "at": "six",
+      "path": "/states/5/state",
+      "equals": "DISPOSED"
+    }
+  ]
+}

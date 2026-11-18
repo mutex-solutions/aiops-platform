@@ -207,6 +207,7 @@ var causalCovered = []struct {
 	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D11", corpusPath("D11"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D13", "../../../differential/corpus/revision-5/D13.json", true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D15", corpusPath("D15"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock"}},
@@ -226,8 +227,6 @@ var causalDiagnostics = []struct {
 	flaky    bool
 }{
 	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{`checkpoint "children" Needs count mismatch`}, false},
-	// D13 revision 3 leaves fiber d without a barrier (fixture race).
-	{causalScenario{"D13", "../../../differential/corpus/revision-3/D13.json", true}, nil, []string{"record count mismatch", "conflicting order reversed", "content/multiplicity mismatch", "without phase witness"}, true},
 	// D22 revision 4: the joining-setup snapshot follows a non-awaited disposal.
 	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch"}, true},
 	// D23: the caught effect error is observed after ACTIVE by the replay adapter

@@ -1,0 +1,59 @@
+{
+  "schema": "s0-corpus-freeze/v5",
+  "revision": 5,
+  "generatedUTC": "2026-11-18T15:36:09+00:00",
+  "baseFreeze": {
+    "path": "results/corpus-freeze-v4.json",
+    "sha256": "05640d1b03f73f53faa26c8d3ab86186ccd109c959e7d31e3ad8281c676c91d7"
+  },
+  "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "classification": "D13 causal fixture repair (fibers a, d and u activation barriers); oracle-only validation, not candidate equality or S0 acceptance",
+  "inheritance": "all other cases are inherited unchanged through results/corpus-freeze-v4.json and are not claimed rerun; revision-3 D13 is superseded as a racy fixture but retained; drafts 1 and 2 are preserved under results/corpus-revision-5/attempt-1 and attempt-2",
+  "preexecution": {
+    "plan": "results/corpus-revision-5/PLAN.md",
+    "planSHA256": "d03a361bd2b199f7760646ef5c273a02085ea570bcd2a724694d7191784fb1d8",
+    "record": "results/corpus-revision-5/preexecution.json",
+    "recordSHA256": "d92d5cd1047b5956684676180d334161fe72475ee20e8bee25006e8257352b82",
+    "designNote": "docs/design/s0-corpus-revision-5.md",
+    "designNoteSHA256": "4b51de5ac60cd15b507d8ff383eaa1f9956c346fac1705f4bc2dbe2642f6e54d"
+  },
+  "delta": {
+    "id": "D13",
+    "oldScript": "results/corpus-revision-5/D13-v3.script.json",
+    "oldScriptSHA256": "07438cacef25b6cdf7b9f0d825645e41fa07ecd5bd64d29c9073a0d34c2d6381",
+    "newScript": "corpus/revision-5/D13.json",
+    "newScriptSHA256": "3e3e4eb4b2ac43b01ceb8e5608f73de969259884dccb788ec7d0d8b6c650d7b6",
+    "actionsAdded": [
+      "external awaitFiber a after waitMark active-apply",
+      "external awaitFiber d before dispose d",
+      "external awaitFiber u between waitMark u-ready and dispose u"
+    ],
+    "expectationsChanged": false,
+    "interpreterChanged": "none since revision 3"
+  },
+  "executableInputs": {
+    "oracle/replay.mjs": "5f6714acf1e568d6358c08614321bfe520357dd0aee6a44c438faa25296306c4",
+    "oracle/register.mjs": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+    "oracle/manifest.json": "d5f9688c7cf138a4299efe33bfd74ce4e7213260590a70da91e17c781df65f2e"
+  },
+  "oracleReplays": [
+    {
+      "trace": "results/corpus-revision-5/D13.replay-1.trace.json",
+      "traceSHA256": "7631328d6fb1a73289bca92a41f0a39850a0b4eff3a84c091982fdd42f92647f",
+      "receipt": "results/corpus-revision-5/D13.replay-1.trace.json.run.json",
+      "receiptSHA256": "7353423b2d13c950b8f7afc49c3588d89743d80732aec2070ce9d28f9ad9bc0b"
+    },
+    {
+      "trace": "results/corpus-revision-5/D13.replay-2.trace.json",
+      "traceSHA256": "7631328d6fb1a73289bca92a41f0a39850a0b4eff3a84c091982fdd42f92647f",
+      "receipt": "results/corpus-revision-5/D13.replay-2.trace.json.run.json",
+      "receiptSHA256": "c105e973fe7d9294080eac5d75d9dac7420208dfc571700ed1533a6418763d98"
+    },
+    {
+      "trace": "results/corpus-revision-5/D13.replay-3.trace.json",
+      "traceSHA256": "7631328d6fb1a73289bca92a41f0a39850a0b4eff3a84c091982fdd42f92647f",
+      "receipt": "results/corpus-revision-5/D13.replay-3.trace.json.run.json",
+      "receiptSHA256": "a1564bb1bfed74185f6f568350ba18d6ec17230b13466d915dc53fe52d28aa06"
+    }
+  ]
+}
