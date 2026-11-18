@@ -1,0 +1,652 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D13",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "plugin",
+      "data": {
+        "fiber": "l",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "status",
+      "data": {
+        "fiber": "l",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "config",
+      "data": {
+        "fiber": "l",
+        "config": {}
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "apply",
+      "data": {
+        "fiber": "l",
+        "config": {}
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "gate",
+      "data": {
+        "label": "load",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "plugin",
+      "data": {
+        "fiber": "a",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "status",
+      "data": {
+        "fiber": "a",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "plugin",
+      "data": {
+        "fiber": "f",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "plugin",
+      "data": {
+        "fiber": "u",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "plugin",
+      "data": {
+        "fiber": "d",
+        "disposed": false
+      }
+    },
+    {
+      "seq": 14,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 15,
+      "kind": "config",
+      "data": {
+        "fiber": "a",
+        "config": {}
+      }
+    },
+    {
+      "seq": 16,
+      "kind": "apply",
+      "data": {
+        "fiber": "a",
+        "config": {}
+      }
+    },
+    {
+      "seq": 17,
+      "kind": "mark",
+      "data": {
+        "label": "active-apply",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "kind": "config",
+      "data": {
+        "fiber": "f",
+        "config": {}
+      }
+    },
+    {
+      "seq": 19,
+      "kind": "apply",
+      "data": {
+        "fiber": "f",
+        "config": {}
+      }
+    },
+    {
+      "seq": 20,
+      "kind": "error",
+      "data": {
+        "fiber": "f",
+        "error": {
+          "name": "Error",
+          "message": "deliberate-failure"
+        }
+      }
+    },
+    {
+      "seq": 21,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 22,
+      "kind": "config",
+      "data": {
+        "fiber": "u",
+        "config": {}
+      }
+    },
+    {
+      "seq": 23,
+      "kind": "apply",
+      "data": {
+        "fiber": "u",
+        "config": {}
+      }
+    },
+    {
+      "seq": 24,
+      "kind": "mark",
+      "data": {
+        "label": "u-ready",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 25,
+      "kind": "config",
+      "data": {
+        "fiber": "d",
+        "config": {}
+      }
+    },
+    {
+      "seq": 26,
+      "kind": "apply",
+      "data": {
+        "fiber": "d",
+        "config": {}
+      }
+    },
+    {
+      "seq": 27,
+      "kind": "plugin",
+      "data": {
+        "fiber": "d",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 28,
+      "kind": "status",
+      "data": {
+        "fiber": "a",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 29,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "FAILED"
+      }
+    },
+    {
+      "seq": 30,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 31,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "LOADING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 32,
+      "kind": "status",
+      "data": {
+        "fiber": "d",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 33,
+      "kind": "plugin",
+      "data": {
+        "fiber": "u",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 34,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 35,
+      "kind": "cleanup",
+      "data": {
+        "fiber": "u"
+      }
+    },
+    {
+      "seq": 36,
+      "kind": "gate",
+      "data": {
+        "label": "unload",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 37,
+      "kind": "error",
+      "data": {
+        "op": "awaitFiber",
+        "error": {
+          "name": "Error",
+          "message": "deliberate-failure"
+        }
+      }
+    },
+    {
+      "seq": 38,
+      "kind": "status",
+      "data": {
+        "fiber": "l",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 39,
+      "kind": "status",
+      "data": {
+        "fiber": "u",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 40,
+      "kind": "plugin",
+      "data": {
+        "fiber": "a",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 41,
+      "kind": "status",
+      "data": {
+        "fiber": "a",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 42,
+      "kind": "status",
+      "data": {
+        "fiber": "a",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 43,
+      "kind": "plugin",
+      "data": {
+        "fiber": "f",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 44,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "FAILED",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 45,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 46,
+      "kind": "plugin",
+      "data": {
+        "fiber": "l",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 47,
+      "kind": "status",
+      "data": {
+        "fiber": "l",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 48,
+      "kind": "status",
+      "data": {
+        "fiber": "l",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 49,
+      "kind": "plugin",
+      "data": {
+        "fiber": "p",
+        "disposed": true
+      }
+    },
+    {
+      "seq": 50,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "PENDING",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 51,
+      "kind": "status",
+      "data": {
+        "fiber": "p",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "six",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "PENDING",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {
+            "$undefined": true
+          }
+        },
+        {
+          "fiber": "l",
+          "state": "LOADING",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "a",
+          "state": "ACTIVE",
+          "fiberUID": 3,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "f",
+          "state": "FAILED",
+          "fiberUID": 4,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "UNLOADING",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "finished",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "PENDING",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {
+            "$undefined": true
+          }
+        },
+        {
+          "fiber": "l",
+          "state": "ACTIVE",
+          "fiberUID": 2,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "a",
+          "state": "ACTIVE",
+          "fiberUID": 3,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "f",
+          "state": "FAILED",
+          "fiberUID": 4,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "p",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {
+            "$undefined": true
+          }
+        },
+        {
+          "fiber": "l",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "a",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "f",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "u",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        },
+        {
+          "fiber": "d",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    }
+  ]
+}

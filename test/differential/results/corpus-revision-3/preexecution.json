@@ -1,0 +1,18 @@
+{
+  "schema": "s0-corpus-revision-plan/v1",
+  "recordedUTC": "2026-11-18T03:00:38+00:00",
+  "executionStarted": false,
+  "baseFreezeSHA256": "0f1be418539e35544e468e34a7ded084ff198cf6cc5c8e7a2b69f344fe51b82b",
+  "oldScriptSHA256": "b285c1deb72ccccefe14184cadfe8269684580e70c4c6ba8a0ecf39f3bd161c2",
+  "newScriptSHA256": "07438cacef25b6cdf7b9f0d825645e41fa07ecd5bd64d29c9073a0d34c2d6381",
+  "newScript": "corpus/revision-3/D13.json",
+  "planSHA256": "04dfa47daeeffae2c495b1cfb589cbc8d55440020b01e1d55b98333de6357221",
+  "ownerPreexecutionRecordSHA256": "5ea57c16f5865150b183ca7cdce088d7c48b2cbc9c0bf00a47e9817617d3b09d",
+  "oracleSHA256": "5f6714acf1e568d6358c08614321bfe520357dd0aee6a44c438faa25296306c4",
+  "resolverSHA256": "7c3b4714d06810d5ab2509226b181b74619850571b777751aa60de2407140c69",
+  "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "delta": [
+    "steps awaitFiber f catch:true immediately before snapshot six"
+  ],
+  "expectationsChanged": false
+}

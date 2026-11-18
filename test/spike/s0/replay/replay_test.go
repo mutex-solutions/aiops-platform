@@ -103,9 +103,9 @@ func TestUnsupportedFailsExplicitly(t *testing.T) {
 
 func TestD13NeedsFiberScopedAwait(t *testing.T) {
 	eachRuntime(t, func(t *testing.T, ctx context.Context, runtime concurrency.Runtime) {
-		// Explicit revision-2 fixture barrier; never silently replace D13 v1.
-		script := corpus(t, "revision-2/D13")
-		result, err := RunJSON(ctx, runtime, loadFixture(t, "../../../differential/corpus/revision-2/D13.json"))
+		// Explicit revision-3 fixture barrier (awaitFiber f orders FAILED before the snapshot); revision-2 stays as the historical racy fixture.
+		script := corpus(t, "revision-3/D13")
+		result, err := RunJSON(ctx, runtime, loadFixture(t, "../../../differential/corpus/revision-3/D13.json"))
 		if _, ok := runtime.(FiberAwaiter); ok {
 			if err != nil {
 				t.Fatal(err)
@@ -170,12 +170,15 @@ func TestExpectationsNeverDriveExecution(t *testing.T) {
 // are compared AFTER execution. A mismatch is diagnostic evidence, not a parity
 // pass. Every evidence record binds the raw script/golden/candidate/source hashes.
 func TestActualGoldenTraceDiagnostics(t *testing.T) {
-	for _, id := range []string{"D10", "D12", "D14", "D15", "D16", "D17", "D18", "D19", "D25", "D27", "D28", "D30", "revision-2/D13"} {
+	for _, id := range []string{"D10", "D12", "D14", "D15", "D16", "D17", "D18", "D19", "D25", "D27", "D28", "D30", "revision-2/D13", "revision-3/D13"} {
 		t.Run(id, func(t *testing.T) {
 			scriptData := loadFixture(t, "../../../differential/corpus/"+id+".json")
 			goldenPath := "../../../differential/results/corpus-final/" + id + ".trace.json"
 			if id == "revision-2/D13" {
 				goldenPath = "../../../differential/results/corpus-revision-2/D13.replay-1.trace.json"
+			}
+			if id == "revision-3/D13" {
+				goldenPath = "../../../differential/results/corpus-revision-3/D13.replay-1.trace.json"
 			}
 			// The oracle bytes are not read until each candidate has finished.
 			eachRuntime(t, func(t *testing.T, ctx context.Context, runtime concurrency.Runtime) {
