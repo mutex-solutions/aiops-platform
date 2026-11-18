@@ -1,0 +1,30 @@
+[
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-6/D22.json",
+  "backend": "reconciler",
+  "runs": 1,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 1,
+  "verdicts": {
+   "harness: step 7 waitMark fiber=\"\" label=\"parent-cleanup\": context deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded": 1
+  }
+ },
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-6/D22.json",
+  "backend": "graph-lock",
+  "runs": 1,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 1,
+  "verdicts": {
+   "harness: step 7 waitMark fiber=\"\" label=\"parent-cleanup\": context deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded\ncontext deadline exceeded": 1
+  }
+ }
+]

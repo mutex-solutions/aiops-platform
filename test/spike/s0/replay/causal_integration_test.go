@@ -227,8 +227,11 @@ var causalDiagnostics = []struct {
 	flaky    bool
 }{
 	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{`checkpoint "children" Needs count mismatch`}, false},
-	// D22 revision 4: the joining-setup snapshot follows a non-awaited disposal.
-	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch"}, true},
+	// D22 revision 4: stable (400 of 400 per candidate), not a fixture race. The oracle takes the
+	// joining-setup cut after 14 events (parent UNLOADING, child still ACTIVE); both
+	// candidates join the child before the parent's own cleanup, so the cut holds 16.
+	// No fixture barrier closes it (docs/design/s0-causal-coverage.md).
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch: 14 != 16"}, false},
 	// D23: the caught effect error is observed after ACTIVE by the replay adapter
 	// (documented in s0-d23-request-mapping.md).
 	{causalScenario{"D23", corpusPath("D23"), true}, nil, []string{`caught "effect" error: event outside the frame of every possible owner`}, false},

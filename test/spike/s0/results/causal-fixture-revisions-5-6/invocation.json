@@ -1,0 +1,291 @@
+{
+  "classification": "causal comparison of D13 (corpus revision 5) and D22 (revision 4, no revision 6) on both Go candidates under idle and loaded hosts; differential comparison only, NOT full S0 or final SDK acceptance",
+  "oracle": {
+    "node": "24.22.1",
+    "nodeSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb"
+  },
+  "fixtures": {
+    "D13": "test/differential/corpus/revision-5/D13.json",
+    "D22": "test/differential/corpus/revision-4/D22.json"
+  },
+  "comparatorChanged": false,
+  "commands": [
+    {
+      "label": "rates under -race",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "TestCausalRates",
+        "-timeout",
+        "60m",
+        "-v",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D13 D22",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/rates-race.json"
+      },
+      "concurrentLoad": false,
+      "log": "rates-race.log",
+      "table": "rates-race.json",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race with GOMAXPROCS=2",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "TestCausalRates",
+        "-timeout",
+        "60m",
+        "-v",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D13 D22",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/rates-gmp2.json",
+        "GOMAXPROCS": "2"
+      },
+      "concurrentLoad": false,
+      "log": "rates-gmp2.log",
+      "table": "rates-gmp2.json",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race while the host is loaded (two other copies running at the same time: (GOMAXPROCS=2 go test -race -count=200 -run '/D13|/D22|TestD13' ./test/spike/s0/replay) and (go test -race -count=200 -run '/D13|/D22|TestD13' ./test/spike/s0/replay); both exit 0 (loaders.log))",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "TestCausalRates",
+        "-timeout",
+        "60m",
+        "-v",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D13 D22",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/rates-race-load.json"
+      },
+      "concurrentLoad": true,
+      "log": "rates-race-load.log",
+      "table": "rates-race-load.json",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race with GOMAXPROCS=2 while the host is loaded (same loaders)",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "TestCausalRates",
+        "-timeout",
+        "60m",
+        "-v",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D13 D22",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/rates-gmp2-load.json",
+        "GOMAXPROCS": "2"
+      },
+      "concurrentLoad": true,
+      "log": "rates-gmp2-load.log",
+      "table": "rates-gmp2-load.json",
+      "exitCode": 0
+    },
+    {
+      "label": "original-expectation tests, 1000 runs",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1000",
+        "-timeout",
+        "60m",
+        "-run",
+        "/D13|/D22|TestD13",
+        "./test/spike/s0/replay"
+      ],
+      "log": "orig-1000.log",
+      "exitCode": 0
+    },
+    {
+      "label": "same with GOMAXPROCS=1, 300 runs",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=300",
+        "-timeout",
+        "60m",
+        "-run",
+        "/D13|/D22|TestD13",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "GOMAXPROCS": "1"
+      },
+      "log": "orig-gmp1-300.log",
+      "exitCode": 0
+    },
+    {
+      "label": "parallel-load command, three runs: (GOMAXPROCS=2 go test -race -count=200 ...) concurrently with (go test -race -count=300 ...)",
+      "logs": [
+        "orig-par-1-a.log",
+        "orig-par-1-b.log",
+        "orig-par-2-a.log",
+        "orig-par-2-b.log",
+        "orig-par-3-a.log",
+        "orig-par-3-b.log"
+      ],
+      "exitCode": 0
+    },
+    {
+      "label": "full race run",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=3",
+        "./test/..."
+      ],
+      "log": "test-race-count3.log",
+      "exitCode": 0
+    },
+    {
+      "label": "live oracle and causal repeat over the two packages",
+      "argv": [
+        "go",
+        "test",
+        "-count=3",
+        "./test/differential",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ]
+      },
+      "log": "live-count3.log",
+      "exitCode": 0
+    }
+  ],
+  "results": {
+    "D13 revision 5": {
+      "reconciler": "100/100 in every mode",
+      "graph-lock": "100/100 in every mode",
+      "modes": [
+        "race",
+        "GOMAXPROCS=2",
+        "race loaded",
+        "GOMAXPROCS=2 loaded"
+      ],
+      "runsPerCandidatePerMode": 100
+    },
+    "D13 revision 3 baseline (rates-d13-revision3-baseline.json, race, idle)": {
+      "reconciler": "0/100",
+      "graph-lock": "0/100"
+    },
+    "D22 revision 4": {
+      "reconciler": "0/100 in every mode",
+      "graph-lock": "0/100 in every mode",
+      "verdict": "event segment 0: record count mismatch: 14 != 16 (oracle 14, candidate 16) in 400 of 400 runs per candidate"
+    },
+    "additional loaded stress of the final D13 script": "4000 runs per candidate under -race with two loader copies running, comparing the causal verdict and the original expectations: zero failures (temporary capture harness, not committed)"
+  },
+  "d13Drafts": {
+    "attempt-1 (awaitFiber d)": "failed under load on both candidates: fiber u disposed while LOADING; failing traces in test/differential/results/corpus-revision-5/attempt-1/",
+    "attempt-2 (awaitFiber d, u)": "failed under load on both candidates and in the original expectation: fiber a still LOADING at the six snapshot; failing traces in test/differential/results/corpus-revision-5/attempt-2/"
+  },
+  "d22Drafts": {
+    "d22-drafts/": "draft a: waitMark parent-cleanup before joining-setup; draft b: a plus a child cleanup mark and waitMark child-cleanup; draft c: child cleanup mark and waitMark child-cleanup only. The oracle executed all three; both candidates ended each in 'waitMark ... context deadline exceeded' (harness error) in the first run (D22.draft-*.harness.json). They were run only through the rate harness, no oracle receipts were recorded, and none became a corpus revision.",
+    "d22-rev4-captured/": "oracle and candidate traces, witnesses and causal verdict of the revision-4 fixture from one run per candidate"
+  },
+  "limits": [
+    "a pair is match only at 100 of 100 in every mode",
+    "one fresh oracle execution per scenario is reused for the 100 candidate runs",
+    "the tables of the loaded passes of draft 1 and draft 2 of D13 were overwritten by later passes; their failing traces are retained instead",
+    "the temporary capture test used for the stress and failing-trace capture was removed before the commit",
+    "evidence paths rewritten to placeholders",
+    "not S0 acceptance"
+  ],
+  "logSHA256": {
+    "live-count3.log": "2d070390e3da9a622fa445eed739ba5b69e923519208f1bd436fcc6dcf96f8b2",
+    "loaders.log": "1f700f02573f9bf500ced8d73bb71ae775fc8d7abc260e8122c3329e52a4c26e",
+    "orig-1000.log": "2e2d36f8991cca1eb66d4b80046fe056535fa22c9e79194d84e6272d804fa78b",
+    "orig-gmp1-300.log": "ff694e642b1fc5c758027e99700409d133159147a0859652421ea6a306c87973",
+    "orig-par-1-a.log": "ed0e02bcb6d6ba2fc0b71abbf45449d353688d02ccdc7d4b10638b181056aa86",
+    "orig-par-1-b.log": "f480c6b5517413e4d62ad0c3c60ecb59748d90e0d59ae9d4b2f6c34949381d96",
+    "orig-par-2-a.log": "4ebcfa7d3e6c57d4bb536b41399b68f348da6368bd827e753f65c9d9686dc8fb",
+    "orig-par-2-b.log": "6403b99346941df2393aebcd099e0175f6bafe27d109a8444efd66e94b7a159d",
+    "orig-par-3-a.log": "b119dec948d15ff64689808a95f6cc0628426c19bc87e58fc7b5326fa7f069b0",
+    "orig-par-3-b.log": "bcc054afaae6004cc965185ebd026674c5de9f6272e9bc5b11cff9bd232314b4",
+    "rates-d13-revision3-baseline.json": "ad47c6f059af4e20a3c058dce3362bc21a3be644ed222fd77657a03be2b49896",
+    "rates-gmp2-load.json": "03231dea7e5641f222bd7ccb591c9012bead50f3d0e67b252a70f8468c77b077",
+    "rates-gmp2-load.log": "b3b5322c9fe24e8eb81416e4ac03d35687be41a1a16eee4ad095aadddeb7ba6e",
+    "rates-gmp2.json": "03231dea7e5641f222bd7ccb591c9012bead50f3d0e67b252a70f8468c77b077",
+    "rates-gmp2.log": "9ad1aacd09fe5c84c8797f78b0c7741ba0eb6214697c811465ef2d53736b24d3",
+    "rates-race-load.json": "03231dea7e5641f222bd7ccb591c9012bead50f3d0e67b252a70f8468c77b077",
+    "rates-race-load.log": "866f94fa4bdeeeb585429ca5b57377e0d4ca75eeb14c294866ce6d880736df2b",
+    "rates-race.json": "03231dea7e5641f222bd7ccb591c9012bead50f3d0e67b252a70f8468c77b077",
+    "rates-race.log": "009b838c01298dffc8935cff9d91837da0222a624b12b3d230d76a9d48793e54",
+    "test-race-count3.log": "edc68fc1dfdced8e5a6349303e79872c5b05df476a4ecddb65ff0cd64012e590"
+  }
+}

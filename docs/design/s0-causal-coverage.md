@@ -43,7 +43,7 @@ Protocol as before: every pair 100 times under `-race` and 100 times with
 | D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
-| D13 | revision-3/D13.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | fixture race on fiber `d` (see "Fixture races"); verdicts vary: record counts 35 to 38 against 37, order reversal between `d` apply and `d` disposal. |
+| D13 | revision-5/D13.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | corpus revision 5 (`awaitFiber` on `a`, `d`, `u`); also 100 of 100 in both modes while the host was loaded (see "Revisions 5 and 6 (2026-11-18)"). The revision-3 verdicts (MISMATCH, fixture race) are in the sections below. |
 | D14 | D14.json | 47+44 / 98+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D15 | D15.json | 49+60 / 100+87 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
@@ -52,7 +52,7 @@ Protocol as before: every pair 100 times under `-race` and 100 times with
 | D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D20 | D20.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
 | D21 | D21.json | 45+41 / 97+90 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
-| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | fixture race, 200 of 200 on both: record counts 14 against 16 in segment 0 (see "Fixture races"). |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (a) candidate difference, not a fixture race: oracle cut 14 events, both candidates 16, in 400 of 400 runs per candidate; no fixture barrier is expressible in both runtimes, so no revision 6 was made (see "Revisions 5 and 6 (2026-11-18)"). |
 | D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: caught `error {op:"effect"}` outside the Apply frame; documented adaptation, see "D06 and D23". |
 | D24 | D24.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
 | D25 | D25.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
@@ -138,6 +138,65 @@ differ.
   and a `mark` in a new child cleanup body with a `waitMark` on it, so both the
   parent cleanup and the child's teardown start have happened at the cut. (The
   child's effect cleanup gate cannot be waited for before `release effect-setup`.)
+
+## Revisions 5 and 6 (2026-11-18)
+
+Receipts: [`causal-fixture-revisions-5-6`](../../test/spike/s0/results/causal-fixture-revisions-5-6/invocation.json).
+Comparator, oracle harness and candidates are unchanged; this is fixture data only.
+Each rate is 100 runs per candidate against one fresh pinned-oracle (Node 24.22.1)
+execution, under `-race`, under `-race` with `GOMAXPROCS=2`, and each of those again
+while two other `go test -race -count=200` copies loaded the host.
+
+**D13 (match).** [Corpus revision 5](s0-corpus-revision-5.md) adds three
+`awaitFiber` steps to revision 3 (`a` after `waitMark active-apply`, `d` before
+`dispose d`, `u` before `dispose u`). Result: `reconciler` and `graph-lock` both
+100 of 100 in all four modes. It took three drafts, each kept with its failing
+traces: draft 1 (`d` only) failed about 1 in 100 under load because fiber `u`, whose
+only barrier is a mark inside its Apply, was disposed while LOADING; draft 2 (`d`,
+`u`) failed under load because fiber `a`, asserted ACTIVE at `six`, was still
+LOADING at the snapshot, which also failed the **original** expectation
+(`D13 six/states/2/state: actual "LOADING" != expected "ACTIVE"`). The previously
+proposed `mark` in the `disposed` Apply is not part of the final script: a mark
+inside Apply does not order the ACTIVE transition and `awaitFiber d` orders it
+alone. The pair moves from MISMATCH to match and is now in `causalCovered`.
+
+**D22 (still MISMATCH, not a fixture race).** No revision 6 was made.
+The 14 against 16 of the earlier rows was labelled the wrong way round: the
+comparator's `record count mismatch: 14 != 16` is oracle 14, candidate 16, and it
+is the same text in 400 of 400 runs per candidate (four modes, 100 each),
+not a schedule dependent race.
+
+- Oracle (run to completion): `dispose parent {await:false}` emits `plugin
+  disposed parent` and `parent UNLOADING`, and the root's `joining-setup` snapshot
+  is taken there (cut after event 14, child still ACTIVE). The parent's own cleanup
+  and `mark parent-cleanup` come after the cut, and the child's teardown after that.
+- Both candidates join the child before the parent's own disposers
+  (`test/spike/s0/concurrency/types.go`, ownership comment at line 276; `graphlock.go`
+  line 128 and 1963; `reconciler.go` line 1542). At the cut `plugin disposed child` and `child UNLOADING` are
+  already recorded (16 events); the parent cleanup follows only after the child
+  reaches DISPOSED, which waits for `release effect-setup`.
+- Every barrier the proposal named waits for an event that on the candidates happens
+  only after `release effect-setup`: `waitMark parent-cleanup` (drafts a, b) and
+  `waitMark child-cleanup` on a new child cleanup body (draft c) each ended in
+  `context deadline exceeded` on both candidates in the first run, while the oracle
+  accepted all three scripts. `settle` is held open by the gated effect. Any wait
+  that includes the child's teardown start in the oracle's cut also includes the
+  parent cleanup events there, which the candidates cannot emit before that
+  release, so no fixture barrier gives equal cuts. Releasing `effect-setup` before
+  the snapshot would change what the snapshot observes and is not a barrier.
+- Amendment 2 rule C2.3 leaves teardown order between a parent's cleanup and its
+  children unconstrained as an order relation; the difference is only visible
+  because the `joining-setup` checkpoint falls between those two orders.
+- Classification: (a), a real difference between the Go candidates (children joined
+  before the parent's ordinary cleanup) and the oracle (parent cleanup first), not
+  a fixture causality gap. Whether it is intended is an owner question; the
+  original expectations (`joining-cleanup`, `disposed`) pass either way.
+
+Counts relative to the table at the top: D13 moves two pairs from MISMATCH to
+match, giving 33 match, 7 MISMATCH (D06 both, D09 reconciler, D22 both, D23 both)
+and 28 unsupported, before any other change to the D09 rows. Drafts, harness
+verdicts and the captured oracle and candidate traces are in the evidence
+directory.
 
 ## Before the candidate fixes (receipts `causal-amendment-2`)
 

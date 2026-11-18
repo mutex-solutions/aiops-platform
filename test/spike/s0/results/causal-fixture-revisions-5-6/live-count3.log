@@ -1,0 +1,3 @@
+ok  	github.com/mutex-solutions/aiops-platform/test/differential	39.490s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	81.088s
+exit 0

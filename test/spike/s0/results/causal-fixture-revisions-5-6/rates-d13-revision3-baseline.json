@@ -1,0 +1,36 @@
+[
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-3/D13.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: conflicting order reversed between {\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"d\"}} and {\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"d\"}}": 2,
+   "event segment 0: record count mismatch: 37 != 35": 2,
+   "event segment 0: record count mismatch: 37 != 36": 29,
+   "event segment 0: record count mismatch: 37 != 38": 67
+  }
+ },
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-3/D13.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: conflicting order reversed between {\"kind\":\"apply\",\"data\":{\"config\":{},\"fiber\":\"d\"}} and {\"kind\":\"plugin\",\"data\":{\"disposed\":true,\"fiber\":\"d\"}}": 6,
+   "event segment 0: record count mismatch: 37 != 35": 20,
+   "event segment 0: record count mismatch: 37 != 36": 30,
+   "event segment 0: record count mismatch: 37 != 38": 44
+  }
+ }
+]

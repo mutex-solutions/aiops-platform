@@ -1,0 +1,58 @@
+[
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-5/D13.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-5/D13.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-4/D22.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 14 != 16": 100
+  }
+ },
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-4/D22.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 14 != 16": 100
+  }
+ }
+]

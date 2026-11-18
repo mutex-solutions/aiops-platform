@@ -1,0 +1,147 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D22",
+  "title": "Parent disposal joins child and late effect cleanup",
+  "covers": [
+    "child-teardown",
+    "late-disposer-join"
+  ],
+  "plugins": [
+    {
+      "id": "parent",
+      "apply": [
+        {
+          "op": "child",
+          "fiber": "child",
+          "plugin": "child",
+          "config": {}
+        },
+        {
+          "op": "mark",
+          "label": "child-mounted"
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "mark",
+          "label": "parent-cleanup"
+        }
+      ]
+    },
+    {
+      "id": "child",
+      "apply": [
+        {
+          "op": "effect",
+          "label": "late-setup",
+          "program": [
+            {
+              "op": "gate",
+              "label": "effect-setup"
+            }
+          ],
+          "cleanup": [
+            {
+              "op": "gate",
+              "label": "effect-cleanup"
+            },
+            {
+              "op": "mark",
+              "label": "effect-cleaned"
+            }
+          ],
+          "await": false
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "mark",
+          "label": "child-cleanup"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "parent",
+      "plugin": "parent",
+      "config": {}
+    },
+    {
+      "op": "waitMark",
+      "label": "effect-setup"
+    },
+    {
+      "op": "waitMark",
+      "label": "child-mounted"
+    },
+    {
+      "op": "awaitFiber",
+      "fiber": "child"
+    },
+    {
+      "op": "awaitFiber",
+      "fiber": "parent"
+    },
+    {
+      "op": "dispose",
+      "fiber": "parent",
+      "await": false,
+      "task": "parent-dispose"
+    },
+    {
+      "op": "waitMark",
+      "label": "child-cleanup"
+    },
+    {
+      "op": "snapshot",
+      "label": "joining-setup"
+    },
+    {
+      "op": "release",
+      "label": "effect-setup"
+    },
+    {
+      "op": "waitMark",
+      "label": "effect-cleanup"
+    },
+    {
+      "op": "snapshot",
+      "label": "joining-cleanup"
+    },
+    {
+      "op": "release",
+      "label": "effect-cleanup"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "joining-cleanup",
+      "path": "/states/0/state",
+      "equals": "UNLOADING"
+    },
+    {
+      "at": "joining-cleanup",
+      "path": "/states/1/state",
+      "equals": "UNLOADING"
+    },
+    {
+      "at": "disposed",
+      "path": "/states/0/state",
+      "equals": "DISPOSED"
+    },
+    {
+      "at": "disposed",
+      "path": "/states/1/state",
+      "equals": "DISPOSED"
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/extensions/tool-cordis/tests/cordis-lifecycle.spec.ts"
+  ]
+}

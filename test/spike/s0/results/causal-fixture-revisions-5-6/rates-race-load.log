@@ -1,0 +1,5 @@
+    causal_rates_test.go:143: D13 reconciler: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D13 graph-lock: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D22 reconciler: causal match 0/100 strict 0/100
+    causal_rates_test.go:143: D22 graph-lock: causal match 0/100 strict 0/100
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	21.301s
