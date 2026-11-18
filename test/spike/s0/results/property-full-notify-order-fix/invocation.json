@@ -1,0 +1,37 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload after the notify service order fix on both candidates; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "eb2c4f02cc0bb0b748a28d5cd8dd1d44d40e7fcf42d2a9a4ae0da0cde8f6e18b",
+ "commit": "3ffc037",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 3293.62,
+ "candidateSeconds": {
+  "reconciler": 1778.9,
+  "graph-lock": 1514.56
+ },
+ "hostNote": "shared development host with other test jobs running; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "10c3872229599a1985dd186a7343afae07f543f502665f5c8519c487245f395f",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/notify-order-fix-3ffc037",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, scale/performance, SQL authority, restart and line/coverage gates remain open."
+ ]
+}
