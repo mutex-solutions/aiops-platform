@@ -1,0 +1,188 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "provide",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "service",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "\"svc\"@0/realm:0",
+    "UID": 1,
+    "Value": {},
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "c"
+    }
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "c"
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "service",
+      "value": "root-value"
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "inherited",
+      "value": "outer"
+    }
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "shadow",
+      "value": "inner"
+    }
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "parent-name",
+      "value": "parent"
+    }
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 1,
+    "Name": "c",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

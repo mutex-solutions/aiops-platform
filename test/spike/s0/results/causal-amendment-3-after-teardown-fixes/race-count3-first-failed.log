@@ -1,0 +1,45 @@
+ok  	github.com/mutex-solutions/aiops-platform/test/differential	21.770s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/callpath	11.357s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/composition	1.269s
+--- FAIL: TestReconcilerChainDiamondInvalidationAndNoIdleWorkers (0.00s)
+    reconciler_test.go:2565: global reconciler owner stack count = 2
+panic: deadlock: main bubble goroutine has exited but blocked goroutines remain [recovered, repanicked]
+
+goroutine 29044 [running]:
+testing.tRunner.func1.2({0x8297a0, 0xc00242ea38})
+	/usr/lib/go-1.26/src/testing/testing.go:1974 +0x419
+testing.tRunner.func1()
+	/usr/lib/go-1.26/src/testing/testing.go:1977 +0x67f
+panic({0x8297a0?, 0xc00242ea38?})
+	/usr/lib/go-1.26/src/runtime/panic.go:860 +0x13a
+internal/synctest.Run(0xc000877d60)
+	/usr/lib/go-1.26/src/runtime/synctest.go:251 +0x2f4
+testing/synctest.Test(0xc002afc488, 0x879010)
+	/usr/lib/go-1.26/src/testing/synctest/synctest.go:290 +0x125
+github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency.TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(0xc002afc488)
+	<repo-root>/test/spike/s0/concurrency/reconciler_test.go:2515 +0x2e
+testing.tRunner(0xc002afc488, 0x878aa0)
+	/usr/lib/go-1.26/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 1
+	/usr/lib/go-1.26/src/testing/testing.go:2101 +0xb13
+
+goroutine 29047 [chan receive (durable), synctest bubble 36]:
+github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue.(*Dispatcher[...]).run(0x885b60)
+	<repo-root>/test/spike/s0/internal/eventqueue/dispatcher.go:355 +0x6c5
+created by github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue.New[...] in goroutine 29046
+	<repo-root>/test/spike/s0/internal/eventqueue/dispatcher.go:171 +0x40d
+
+goroutine 29048 [select (durable), synctest bubble 36]:
+github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency.(*rcOwner).run(0xc002c049a0)
+	<repo-root>/test/spike/s0/concurrency/reconciler.go:580 +0x4af
+created by github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency.NewReconciler in goroutine 29046
+	<repo-root>/test/spike/s0/concurrency/reconciler.go:298 +0x5ac
+FAIL	github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency	6.273s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/contextmodel	1.147s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/hooks	1.330s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue	1.061s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/observers	1.535s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/properties	16.353s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	23.911s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/scale	4.416s
+FAIL

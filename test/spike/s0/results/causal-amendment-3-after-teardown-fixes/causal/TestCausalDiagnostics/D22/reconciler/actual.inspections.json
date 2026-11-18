@@ -1,0 +1,132 @@
+{
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "parent",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "child",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 26
+  },
+  "joining-cleanup": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "parent",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "child",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": [
+          "effect setup late-setup"
+        ],
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 22
+  },
+  "joining-setup": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "parent",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "child",
+        "State": "UNLOADING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": [
+          "effect setup late-setup"
+        ],
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 21
+  }
+}

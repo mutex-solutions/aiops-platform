@@ -1,0 +1,64 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D36",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "listener",
+      "data": {
+        "label": "double-next"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "inner",
+      "data": {
+        "key": "repeated"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "output",
+      "data": {
+        "to": "first-next",
+        "value": 7
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "error",
+      "data": {
+        "op": "dispatch",
+        "error": {
+          "name": "Error",
+          "message": "next() called multiple times"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "output",
+      "data": {
+        "to": "repeated-error",
+        "value": {
+          "name": "Error",
+          "message": "next() called multiple times"
+        }
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "finished",
+      "states": [],
+      "provisions": [],
+      "outputs": {
+        "first-next": 7,
+        "repeated-error": {
+          "name": "Error",
+          "message": "next() called multiple times"
+        }
+      }
+    }
+  ]
+}

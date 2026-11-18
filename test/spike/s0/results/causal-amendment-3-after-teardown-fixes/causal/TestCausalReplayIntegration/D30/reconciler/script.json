@@ -1,0 +1,93 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D30",
+  "title": "Unchanged target hook vetoes restart but changed target delegates once",
+  "covers": [
+    "unchanged-target-no-restart",
+    "delegated-effective-identity"
+  ],
+  "plugins": [
+    {
+      "id": "unchanged-aware",
+      "apply": [],
+      "update": "unchanged",
+      "configTransform": {
+        "resolved": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "unchanged-aware",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "unchanged"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 2
+      }
+    },
+    {
+      "op": "settle",
+      "label": "changed"
+    },
+    {
+      "op": "inspect",
+      "fiber": "f",
+      "mode": "configIdentity",
+      "to": "identity"
+    },
+    {
+      "op": "snapshot",
+      "label": "identity"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "unchanged",
+      "path": "/states/0/revision",
+      "equals": 0
+    },
+    {
+      "at": "changed",
+      "path": "/states/0/revision",
+      "equals": 1
+    },
+    {
+      "at": "identity",
+      "path": "/outputs/identity",
+      "equals": true
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

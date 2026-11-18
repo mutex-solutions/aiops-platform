@@ -1,0 +1,15 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "6a498a57d21f30c23574823a145797ad0a810ff69362ece1a6d01a9497778229",
+  "scriptSHA256": "f0614c0393ad5feca4313e7d23c2958aa65267a54b0ef852f4d614b192f3e76e",
+  "checkpoints": [
+    {
+      "label": "in-flight",
+      "afterEvent": 3
+    },
+    {
+      "label": "finished",
+      "afterEvent": 6
+    }
+  ]
+}

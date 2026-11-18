@@ -1,0 +1,78 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D24",
+  "title": "Effects are refused while unloading and after disposal",
+  "covers": [
+    "inactive-effect-refusal"
+  ],
+  "plugins": [
+    {
+      "id": "effect-owner",
+      "apply": [
+        {
+          "op": "effect",
+          "label": "owned",
+          "cleanup": [
+            {
+              "op": "lateEffect",
+              "fiber": "f",
+              "label": "during-unload",
+              "catch": true,
+              "to": "unload-error"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "effect-owner",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "active"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "lateEffect",
+      "fiber": "f",
+      "label": "after-dispose",
+      "catch": true,
+      "to": "disposed-error"
+    },
+    {
+      "op": "settle",
+      "label": "refused"
+    }
+  ],
+  "expect": [
+    {
+      "at": "refused",
+      "path": "/outputs/unload-error",
+      "equals": {
+        "name": "Error",
+        "message": "cannot create effect on inactive context",
+        "code": "INACTIVE_EFFECT"
+      }
+    },
+    {
+      "at": "refused",
+      "path": "/outputs/disposed-error",
+      "equals": {
+        "name": "Error",
+        "message": "cannot create effect on inactive context",
+        "code": "INACTIVE_EFFECT"
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/extensions/tool-cordis/tests/cordis-lifecycle.spec.ts"
+  ]
+}

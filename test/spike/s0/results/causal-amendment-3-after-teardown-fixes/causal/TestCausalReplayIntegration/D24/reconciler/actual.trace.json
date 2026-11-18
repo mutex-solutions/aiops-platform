@@ -1,0 +1,170 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D24",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "config",
+      "data": {
+        "config": {},
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "apply",
+      "data": {
+        "config": {},
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "f"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "error",
+      "data": {
+        "error": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        },
+        "op": "lateEffect"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "output",
+      "data": {
+        "to": "unload-error",
+        "value": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "status",
+      "data": {
+        "fiber": "f",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "error",
+      "data": {
+        "error": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        },
+        "op": "lateEffect"
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "output",
+      "data": {
+        "to": "disposed-error",
+        "value": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        }
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "active",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": []
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "refused",
+      "states": [
+        {
+          "fiber": "f",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [],
+      "outputs": {
+        "disposed-error": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        },
+        "unload-error": {
+          "code": "INACTIVE_EFFECT",
+          "message": "cannot create effect on inactive context",
+          "name": "Error"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D27",
+  "title": "Raw config and transformed effective config are distinct retained values",
+  "covers": [
+    "raw-effective-config",
+    "internal-config-hooks"
+  ],
+  "plugins": [
+    {
+      "id": "configured",
+      "apply": [
+        {
+          "op": "output",
+          "to": "applied",
+          "value": {
+            "$config": ""
+          }
+        }
+      ],
+      "configTransform": {
+        "default": 9
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "configured",
+      "config": {
+        "value": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "rawConfig",
+      "fiber": "f",
+      "config": {
+        "value": 2
+      }
+    },
+    {
+      "op": "snapshot",
+      "label": "raw-retained"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "initial",
+      "path": "/states/0/rawConfig",
+      "equals": {
+        "value": 1
+      }
+    },
+    {
+      "at": "initial",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "value": 1,
+        "default": 9
+      }
+    },
+    {
+      "at": "raw-retained",
+      "path": "/states/0/rawConfig",
+      "equals": {
+        "value": 2
+      }
+    },
+    {
+      "at": "raw-retained",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "value": 1,
+        "default": 9
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

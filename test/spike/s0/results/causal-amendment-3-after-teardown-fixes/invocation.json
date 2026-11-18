@@ -1,0 +1,248 @@
+{
+  "classification": "causal comparison amendment 3 rerun of all 36 scenarios on the candidates after the teardown-order and child-epoch fixes (8a02e55, fb8295b); comparator and rules unchanged; differential comparison only, NOT S0 acceptance",
+  "ranOnCommit": "b5b7b0d (amendment 3 stack rebased onto origin/main b000473; no comparator edit between the rebase and the run)",
+  "baseCommit": "b000473",
+  "commitOrder": [
+    "aaa525e docs: amend the causal comparison method a third time",
+    "16fe79b docs: add rules amendment 3 left implicit",
+    "0c24b14 test(differential): extend the causal comparator per amendment 3",
+    "b5b7b0d test(differential): record amendment 3 rerun and coverage"
+  ],
+  "amendment3SHA256": "45ae806bd4def4f5ce0a8345aec8e6ac3233913bc2c2a46b74abace0db4ea17f",
+  "addendum3SHA256": "63f7bed867f49be270f1dd39968585d97811c9440c45a6f5d87409dff5c867d8",
+  "freeze3SHA256": "666ab92d18530ca5b0ae14edafaf08470f83455aa117a872a38f5e137b0fc069",
+  "previousEvidence": "test/spike/s0/results/causal-amendment-3 (pre-rebase candidates, unchanged)",
+  "oracle": {
+    "node": "24.22.1",
+    "nodeSHA256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb"
+  },
+  "commands": [
+    {
+      "label": "rates under -race, 100 runs per candidate and scenario",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./test/spike/s0/replay",
+        "-run",
+        "TestCausalRates",
+        "-count=1",
+        "-timeout",
+        "180m",
+        "-v"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/race.json"
+      },
+      "log": "rates-race.log",
+      "table": "rates-race.json",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race with GOMAXPROCS=2",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./test/spike/s0/replay",
+        "-run",
+        "TestCausalRates",
+        "-count=1",
+        "-timeout",
+        "180m",
+        "-v"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/gmp2.json",
+        "GOMAXPROCS": "2"
+      },
+      "log": "rates-gmp2.log",
+      "table": "rates-gmp2.json",
+      "exitCode": 0
+    },
+    {
+      "label": "integration and diagnostics with per-case receipts (causal/)",
+      "argv": [
+        "go",
+        "test",
+        "-mod=readonly",
+        "-race",
+        "-count=1",
+        "-run",
+        "^TestCausal(ReplayIntegration|Diagnostics)$",
+        "-v",
+        "./test/spike/s0/replay",
+        "-timeout=600s"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_EVIDENCE_DIR": "<evidence-root>/causal"
+      },
+      "log": "causal-command.log",
+      "exitCode": 0,
+      "receipts": "62 integration cases (31 scenarios on both candidates) and 6 diagnostic cases (D06, D22, D23 on both candidates)"
+    },
+    {
+      "label": "CI mode: the exact command of the push workflow",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ]
+      },
+      "log": "ci-mode.log",
+      "wallClock": "ci-mode.time",
+      "wallClockSeconds": 64.67,
+      "exitCode": 0
+    },
+    {
+      "label": "live repeat over the two packages, default GOMAXPROCS",
+      "argv": [
+        "go",
+        "test",
+        "-count=3",
+        "./test/differential",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ]
+      },
+      "log": "live-count3.log",
+      "exitCode": 0
+    },
+    {
+      "label": "live repeat over the two packages, GOMAXPROCS=2",
+      "argv": [
+        "go",
+        "test",
+        "-count=3",
+        "./test/differential",
+        "./test/spike/s0/replay"
+      ],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<isolated-node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "GOTOOLCHAIN": "local",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "GOMAXPROCS": "2"
+      },
+      "log": "live-count3-gmp2.log",
+      "exitCode": 0
+    },
+    {
+      "label": "race repeat over every test package (no live oracle)",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=3",
+        "./test/..."
+      ],
+      "environmentWithoutCredentials": {
+        "GOTOOLCHAIN": "local"
+      },
+      "log": "race-count3.log",
+      "exitCode": 0,
+      "note": "the first run failed once in TestReconcilerChainDiamondInvalidationAndNoIdleWorkers (concurrency package, owner-stack count check; race-count3-first-failed.log); 20 isolated repeats and a complete rerun passed (race-count3.log). Not touched by this work; reported, not explained."
+    }
+  ],
+  "counts": {
+    "candidatePairsRun": 68,
+    "runsPerPairPerMode": 100,
+    "pairsCausalMatch": 62,
+    "pairsMismatch": 6,
+    "pairsUnsupported": 0,
+    "mismatchPairs": [
+      "D06 reconciler",
+      "D06 graph-lock",
+      "D22 reconciler",
+      "D22 graph-lock",
+      "D23 reconciler",
+      "D23 graph-lock"
+    ],
+    "changedVersusPreRebase": {
+      "D06": "both: `record count mismatch: 24 != 25` (was Needs count mismatch), 100 of 100 per mode",
+      "D22": "reconciler 37+45 of 100+100, graph-lock 100+98 of 100+100 (was 0 of 200); not a match",
+      "others": "verdict and rate unchanged, 100+100 of 100+100 (strict byte-equal rates are schedule dependent and differ)"
+    },
+    "notRun": [
+      "D05",
+      "D26"
+    ]
+  },
+  "limits": [
+    "a pair is match only at 100 of 100 in both modes",
+    "one fresh oracle execution per scenario is reused for the 100 candidate runs",
+    "release has no event, so a continuation before a release in the same segment is proved only where a cut separates them",
+    "hook-lane payload values are compared with the oracle trace, not recomputed",
+    "unsupported says nothing about equivalence",
+    "evidence paths rewritten to placeholders (<repo-root>, <evidence-root>)",
+    "the development machine was loaded, so timings are an upper bound for a 4-vCPU runner",
+    "not S0 acceptance"
+  ],
+  "logSHA256": {
+    "causal-command.log": "869a790204eed2c6a003d15ec81905af18c98b507ecd02bfb6d6690e55a2ff1d",
+    "ci-mode.log": "f205aa7e87ec65c89ffc988791753d078e4ec8b197e5658865be5af9d27b3c97",
+    "live-count3-gmp2.log": "35b5c3dae9f3824da5e95d1fe687ea34159675b99c2152f8d6cffa3e80416836",
+    "live-count3.log": "f7c36d604e1752a4a8c06390a0a4d605e35fc330e38738ed479492292a36418b",
+    "race-count3-first-failed.log": "811d5157127480a43bb172e746f95086689fd4cd34ec0ba056b2510e08fa1430",
+    "race-count3.log": "c0bce00ca65ae3aeb8aab919184645b87b7eee68f5470b9c2a27cadf46df40d5",
+    "rates-gmp2.log": "da0807ced9ce92491ba6544c1a4ef5b0280b98865a8a32b6a5f8de28f8ff0179",
+    "rates-race.log": "e810d1a4f9528a5aed23385f99dd9a6cbfb51ccf2463477f4aee627cb4dda58f",
+    "rates-gmp2.json": "cf582bfc3eb1e0c2976275867758ce1821e037415783fd298618cca064c52fdd",
+    "rates-race.json": "03bf35638ae7d380ad2f20fe2be01535835942ce2a9ab84bccf6b3c38aa1f0d8"
+  }
+}

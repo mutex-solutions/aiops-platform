@@ -11,8 +11,8 @@ and [freeze 3](s0-causal-comparison-freeze-3.json)). The corpus and criteria are
 changed only by the fixes of 2026-11-18 recorded below. This note does **not** establish S0 acceptance.
 
 The first part is the result of the rerun of all 36 scenarios with the comparator
-as extended by amendment 3 (current tally: 62 pairs match, 6 are MISMATCH, none is
-unsupported). The part after it is the rerun with the comparator as extended by
+as extended by amendment 3 (current tally on the candidates with the teardown fixes: 62
+pairs match, 6 are MISMATCH, none is unsupported). The part after it is the rerun with the comparator as extended by
 amendment 2. The sections after "Before amendment 2" are the
 earlier record of the frozen comparator and are kept unchanged for history.
 
@@ -127,6 +127,93 @@ Limits of the new rules, not hidden:
 This is a differential comparison only. It is not S0 acceptance.
 
 Earlier record, kept unchanged below.
+
+## After amendment 3 on the candidates with the teardown fixes (2026-11-19)
+
+Receipts: [`causal-amendment-3-after-teardown-fixes`](../../test/spike/s0/results/causal-amendment-3-after-teardown-fixes/invocation.json).
+The four amendment-3 commits were rebased onto `origin/main` (`b000473`), which gained
+`8a02e55` (a parent's cleanup runs before its children are torn down) and `fb8295b`
+(inherited bindings stay out of a child's epoch). The comparator and its rules are
+unchanged between the rebase and this run; everything was rerun: every pair 100 times
+under `-race` and 100 times with `GOMAXPROCS=2` under `-race`, plus per-case receipts.
+The section above ("After amendment 3") stays as recorded on the earlier candidates.
+
+| ID | Fixture | Strict R / G (race + GOMAXPROCS=2, of 100 each) | Causal R | rate R | Causal G | rate G | Note |
+|---|---|---|---|---|---|---|---|
+| D01 | D01.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `$meta` static metadata (K1) and root provision (K2). |
+| D02 | D02.json | 17+9 / 7+1 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D03 | D03.json | 6+4 / 53+47 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D05 | D05.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (b) deliberate adaptation by owner decision of 2026-11-19, see "D06 classification" below; pinned verdict `record count mismatch: 24 != 25`, 100 of 100 per mode on both. |
+| D07 | D07.json | 35+23 / 79+43 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D08 | D08.json | 38+29 / 82+50 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D09 | D09.json | 55+36 / 12+1 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D13 | revision-5/D13.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | corpus revision 5. |
+| D14 | D14.json | 45+23 / 94+64 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D15 | D15.json | 54+30 / 99+56 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D17 | D17.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, one coalesced reload for two requests, revision 2 (K6). |
+| D18 | D18.json | 44+24 / 72+57 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | strict match; first causal verdict (it needs no new rule). |
+| D20 | D20.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: superseded load error, latest target applied, revision 1 (K6). |
+| D21 | D21.json | 42+28 / 91+63 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 37+45 of 100+100 | MISMATCH | 100+98 of 100+100 | see "D22" below: flaky cut, not a match; reconciler 37+45, graph-lock 100+98 of 100+100. |
+| D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | unchanged owner question: stable caught `error {op:"effect"}` outside the Apply frame, documented adaptation, see "D06 and D23" below. |
+| D24 | D24.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: late-effect refusal in teardown and after disposal (K4). |
+| D25 | D25.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: own disposal request from Apply (K3). |
+| D26 | D26.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D27 | D27.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | strict match; first causal verdict (it needs no new rule). |
+| D28 | D28.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `retain` policy, resolveConfig, noSave (K5). |
+| D29 | D29.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, `internal/update` listeners, awaitTask with rejection (K6, K7). |
+| D30 | D30.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `unchanged` policy, veto then restart (K5). |
+| D31 | D31.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `emit`, symbol key, gated listener continuation (K8). |
+| D32 | D32.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `parallel`, awaitTask rejection with AggregateError (K6, K8). |
+| D33 | D33.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `serial`, gate, bail value and error stops (K6, K8). |
+| D34 | D34.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `bail`, zero and empty string are bail values (K8). |
+| D35 | D35.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall` veto and delegation (K8). |
+| D36 | D36.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall`, second `next` throws (K8). |
+
+Counts (68 pairs run): causal match **62**, MISMATCH **6** (D06, D22, D23 on both
+candidates), unsupported **0**.
+
+What changed against the pre-rebase run:
+
+- **The 14 newly covered scenarios** (D01, D17, D20, D24, D25, D28 to D36), including those
+  with children, effects or disposal (D24, D25, D29, D31 to D36), D18 and D23: verdicts and
+  rates unchanged. All 14 are `match` at 100+100 of 100+100 on both candidates; D18 is
+  `match` and D23 is the same MISMATCH as before.
+- **Every other previously accepted pair:** still `match` at 100+100 of 100+100. Only the
+  schedule-dependent strict byte-equal counts moved.
+- **D06:** the verdict text moved from `checkpoint "children" Needs count mismatch` to
+  `record count mismatch: 24 != 25`, 100 of 100 per mode on both candidates.
+- **D22:** moved from 0 of 200 (`record count mismatch: 14 != 16`) to a flaky cut, see below.
+- **D23:** unchanged (`caught "effect" error: event outside the frame of every possible
+  owner`, 100 of 100 per mode, both candidates).
+
+### D06 classification
+
+(b), a deliberate adaptation by owner decision of 2026-11-19. The decision record,
+`docs/design/plugin-system-2026-11.md` section 15, row 8, reads: "`inject` as a list or a map;
+`ctx.inject(deps, callback)` as a child fiber. Access without inject is an error; children
+inherit within a realm | As is, with one recorded departure (owner decision 2026-11-19): a
+child in a private realm that reads a value retained from an ancestor gets the undeclared-key
+error, where Cordis returns the retained value (scenario D06). The Go port is stricter on
+purpose". The mismatch (one extra `error` record in the `children` cut, 24 against 25 events)
+is that departure; the comparator does not excuse it and D06 stays out of `causalCovered`.
+
+### D22
+
+Rates under the unchanged amendment-3 comparator: `reconciler` 37 of 100 under `-race` and
+45 of 100 with `GOMAXPROCS=2`; `graph-lock` 100 and 98. Differing texts: `record count
+mismatch: 14 != 18` (57 and 53 runs on `reconciler`), `14 != 15` (5 and 1), `14 != 16`
+(1 and 1); `graph-lock` 0 and 2 runs (`14 != 15`, `14 != 18`). Not a match. As recorded in
+"D22 and D06 fixes (2026-11-19)" below the event sequences and final states equal the
+oracle's and the only difference is where the `joining-setup` snapshot falls after the
+non-awaited `dispose parent`. It stays a flaky diagnostic in `causalDiagnostics`.
 
 ## After amendment 2 and the candidate fixes (clean run)
 

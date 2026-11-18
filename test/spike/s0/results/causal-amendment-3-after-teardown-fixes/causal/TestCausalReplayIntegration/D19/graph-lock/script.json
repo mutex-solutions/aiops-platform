@@ -1,0 +1,90 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D19",
+  "title": "Explicit Update clears sticky failure and permits recovery",
+  "covers": [
+    "explicit-update-recovery"
+  ],
+  "plugins": [
+    {
+      "id": "recoverable",
+      "apply": [
+        {
+          "op": "when",
+          "base": {
+            "$config": "fail"
+          },
+          "value": true,
+          "program": [
+            {
+              "op": "fail",
+              "error": "recoverable-startup"
+            }
+          ]
+        },
+        {
+          "op": "output",
+          "to": "version",
+          "value": {
+            "$config": "v"
+          }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "recoverable",
+      "config": {
+        "fail": true,
+        "v": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "failed"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "fail": false,
+        "v": 2
+      }
+    },
+    {
+      "op": "settle",
+      "label": "recovered"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "failed",
+      "path": "/states/0/state",
+      "equals": "FAILED"
+    },
+    {
+      "at": "recovered",
+      "path": "/states/0/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "recovered",
+      "path": "/outputs/version",
+      "equals": 2
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

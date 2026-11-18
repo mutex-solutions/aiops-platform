@@ -1,0 +1,19 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "17ae6223454748714608c74c0ec596ab8c5ea4b5fe4d1fbb0160a76caa71652b",
+  "scriptSHA256": "4acd5e0c163fa3d5a07cc4c0384c7eb827841bde55c28c3a556cec86d4636f5d",
+  "checkpoints": [
+    {
+      "label": "initial",
+      "afterEvent": 6
+    },
+    {
+      "label": "raw-retained",
+      "afterEvent": 6
+    },
+    {
+      "label": "disposed",
+      "afterEvent": 9
+    }
+  ]
+}
