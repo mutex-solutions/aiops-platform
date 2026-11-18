@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -105,6 +106,7 @@ type rcConfigBinding struct {
 // The bounded inbox provides external backpressure; intrusive coalesced notices
 // let Dispose requests and lease releases wake the owner without blocking callers.
 type reconcilerRuntime struct {
+	lateClose sync.Once // joins a late owner exit after Close returned a diagnostic
 	inbox     chan rcMessage
 	wake      chan struct{}
 	done      chan struct{}
@@ -467,6 +469,15 @@ func (r *reconcilerRuntime) Close(ctx context.Context) error {
 	default:
 	}
 	if err != nil {
+		// The diagnostic is returned while the owner may still be alive. The
+		// owner replies before it closes done, so join that exit off this call
+		// path; otherwise nobody closes the observer queue.
+		r.lateClose.Do(func() {
+			go func() {
+				<-r.done
+				_ = r.observers.close(context.Background())
+			}()
+		})
 		return err
 	}
 	select {
