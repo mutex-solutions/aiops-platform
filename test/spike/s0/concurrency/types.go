@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"unsafe"
 )
 
 // State is the observable lifecycle state shared by both candidates.
@@ -174,7 +175,7 @@ type Context struct {
 	fiber         uint64
 	live          atomic.Bool // New effects and leases are accepted only while live.
 	released      atomic.Bool // Committed reads remain valid during orderly teardown.
-	lease         atomic.Int64
+	lease         leaseCount  // Own cache lines: Enter/Leave writes never invalidate live/std/host readers.
 	bindings      map[string]provision
 	provide       func(string, any) error
 	effect        func(string, Disposer) error
@@ -290,26 +291,107 @@ func (c *Context) Dispose() error {
 	return c.dispose()
 }
 
+// leaseShards is a power of two. Sixteen padded shards cost 1 KiB per
+// activation, enough that 8 to 32 callers rarely share a line.
+const (
+	leaseShardBits = 4
+	leaseShards    = 1 << leaseShardBits
+)
+
+// leaseShard owns a full cache line, whatever the alignment of the enclosing
+// struct: counters are 64 bytes apart, so no two can share a line.
+type leaseShard struct {
+	n atomic.Int64
+	_ [56]byte
+}
+
+// leaseCount is a striped open-lease counter. A Leave may land on a different
+// shard than its Enter (the shard follows the calling goroutine's stack), so an
+// individual shard can be negative; only the sum is meaningful. The leading and
+// trailing pads keep neighbouring Context fields off the first and last shard's
+// line.
+type leaseCount struct {
+	_      [64]byte
+	shards [leaseShards]leaseShard
+	_      [64]byte
+}
+
+// shard picks a shard from the address of a local, which is distinct per
+// goroutine stack. It needs no goroutine id, allocation, lock or syscall; the
+// address is only hashed, never dereferenced. Any shard is correct, the choice
+// only spreads contention.
+func (l *leaseCount) shard() *atomic.Int64 {
+	var anchor byte
+	h := uint64(uintptr(unsafe.Pointer(&anchor))>>10) * 0x9E3779B97F4A7C15
+	return &l.shards[h>>(64-leaseShardBits)].n
+}
+
+// Load sums the shards. It reads each shard once, in order, while Enter/Leave
+// may run: a shard only ever moves towards the value it will have when the
+// system is quiet except for rolled-back Enter attempts, so once live is false
+// the sum is >= the true open-lease count (never a false zero) and is exact
+// when no Enter/Leave is in flight. See Enter for why that suffices.
+func (l *leaseCount) Load() int64 {
+	var sum int64
+	for i := range l.shards {
+		sum += l.shards[i].n.Load()
+	}
+	return sum
+}
+
 // Enter acquires a call-path lease with no graph lock and no allocation.
 // The caller must pair a successful Enter with exactly one Leave.
+//
+// Quiescence argument. A drainer (retire/quiesce) stores live=false and only
+// then reads the lease sum (graph-lock awaitLeases, reconciler drain and the
+// leaseChanged wake). Every atomic here is sequentially consistent, so the
+// operations have one total order. Enter increments, THEN re-checks live:
+//
+//   - Enter's re-check sees live=true: the increment precedes live=false in the
+//     order, so every sum read taken after live=false includes it, and the
+//     drainer waits for the matching Leave. The body runs inside the lease.
+//   - The re-check sees live=false: Enter decrements the same shard it
+//     incremented and, as the decrement may be the move that brings the sum to
+//     zero, calls leaseChanged. The body never runs.
+//   - The first live check sees false: nothing was touched.
+//
+// Leave decrements, THEN reads live; it calls leaseChanged only when live is
+// false. If the drainer's sum read saw this lease still open, that read is
+// before this decrement in the total order, and live=false is before that read,
+// so Leave's live read sees false and wakes the drainer: the last Leave cannot
+// be missed. If instead Leave's decrement came first, the drainer's read sees
+// it. If live is still true at Leave, no drainer has started: its later
+// live=false precedes its later sum read, which sees the decrement. Fast-path
+// Enter/Leave on a live activation therefore make no wake call at all.
+//
+// Shards: after live=false the only writes are decrements by Leave and
+// increment/decrement pairs by refused Enters, so every shard read in a sum is
+// >= the shard's final value, hence the sum is >= the final open count >= 0. A
+// zero sum therefore proves no lease is open (no false zero), and a transient
+// overcount is repaired by the wake that follows the decrement that fixes it
+// (the last decrement, in total order, is followed by a sum that sees all of
+// them). The wake channel (graph-lock) is buffered and sticky; the reconciler's
+// wake re-checks live and the sum on the owner.
 func (c *Context) Enter() bool {
 	if !c.live.Load() {
 		return false
 	}
-	c.lease.Add(1)
+	s := c.lease.shard()
+	s.Add(1)
 	if c.live.Load() {
 		return true
 	}
-	c.lease.Add(-1)
+	s.Add(-1)
 	if c.leaseChanged != nil {
 		c.leaseChanged()
 	}
 	return false
 }
 
+// Leave releases a lease taken by a successful Enter. See Enter for the wake rule.
 func (c *Context) Leave() {
-	c.lease.Add(-1)
-	if c.leaseChanged != nil {
+	c.lease.shard().Add(-1)
+	if !c.live.Load() && c.leaseChanged != nil {
 		c.leaseChanged()
 	}
 }

@@ -19,7 +19,7 @@ func effectCandidates() map[string]func() Runtime {
 	return map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock}
 }
 
-func effectRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, Runtime) {
+func effectRuntime(t testing.TB, makeRuntime func() Runtime) (context.Context, Runtime) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	r := makeRuntime()
@@ -33,7 +33,7 @@ func effectRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, R
 	return ctx, r
 }
 
-func effectWait[T any](t *testing.T, ctx context.Context, ch <-chan T) T {
+func effectWait[T any](t testing.TB, ctx context.Context, ch <-chan T) T {
 	t.Helper()
 	select {
 	case value := <-ch:
@@ -45,7 +45,7 @@ func effectWait[T any](t *testing.T, ctx context.Context, ch <-chan T) T {
 	}
 }
 
-func effectAwait(t *testing.T, ctx context.Context, r Runtime, id uint64) error {
+func effectAwait(t testing.TB, ctx context.Context, r Runtime, id uint64) error {
 	t.Helper()
 	waiter, ok := r.(Waiter)
 	if !ok {
@@ -54,7 +54,7 @@ func effectAwait(t *testing.T, ctx context.Context, r Runtime, id uint64) error 
 	return waiter.AwaitFiber(ctx, id)
 }
 
-func effectMount(t *testing.T, ctx context.Context, r Runtime, spec Spec) uint64 {
+func effectMount(t testing.TB, ctx context.Context, r Runtime, spec Spec) uint64 {
 	t.Helper()
 	id, err := r.Mount(ctx, spec)
 	if err != nil {

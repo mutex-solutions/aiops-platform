@@ -78,3 +78,38 @@ a new deadline, a core selection or final SDK acceptance.
   concurrency core, actual kernel size and hard line budget remain undecided.
 - A passing small lease-primitive test is not the kernel or either concurrency
   candidate. S0 is not complete.
+
+## 2026-11-18 call-path lease: wake rule and striped counter
+
+Cause of the first full callpath run missing section 8.3 at 8 and 32 callers: every
+Enter/Leave wrote one shared counter and every Leave called the scheduler wake
+(`leaseChanged`), even with nobody draining.
+
+- Ownership: a successful `Enter` is paired with exactly one `Leave` by the same
+  logical operation (Effect/Go/tracked work, composition and hook dispatch). Enter
+  refuses once `live` is false and rolls back its own increment.
+- Wake rule: Enter and Leave decrement or increment first and read `live` second.
+  `leaseChanged` is called only when `live` is already false (a drainer exists).
+  Drainers clear `live` and only then read the lease sum, so either the drainer
+  sees the decrement or the Leave sees `live=false` and wakes it; the last Leave
+  cannot be missed, and a live activation's Enter/Leave makes no wake call. The
+  full interleaving argument is the comment on `Context.Enter` in
+  `test/spike/s0/concurrency/types.go`, shared by both cores (graph-lock waits on a
+  sticky one-slot channel; the reconciler owner re-checks `live` and the sum).
+- Counter: 16 cache-line-padded shards chosen from the caller's stack address (no
+  allocation, lock or syscall), summed by the drainer after `live=false`. A Leave
+  may hit another shard than its Enter, so single shards can be negative; only the
+  sum is read. After `live=false` only decrements and rolled-back pairs occur, so a
+  sum is never below the true open count and a zero sum proves no lease is open.
+  Padding alone (tried first) did not fix graph-lock; the wake-rule change alone
+  did not move either core. Cost: about 1 KiB per activation.
+- Development-host measurement (shared, busy machine, GOMAXPROCS=8, not acceptance;
+  `BenchmarkEnterLeave`, medians of sampled single Enter+Leave latency, 0 allocs):
+
+  | callers | p50 before | p99 before | p50 after | p99 after |
+  |---|---|---|---|---|
+  | 1 | ~50 ns | 60-100 ns | ~50 ns | ~80 ns |
+  | 8 | ~800 ns | ~2.6-2.7 us | ~50 ns | 90-150 ns |
+  | 32 | ~800 ns | ~2.8 us | ~50 ns | ~470-500 ns |
+
+  The acceptance decision remains the full frozen protocol on the idle host.

@@ -80,10 +80,18 @@ func TestLeaseReleaseNotifiesOptionalScheduler(t *testing.T) {
 		t.Fatal("active context refused lease")
 	}
 	c.Leave()
-	if notified != 1 || c.lease.Load() != 0 {
-		t.Fatalf("release wake=%d leases=%d", notified, c.lease.Load())
+	// The wake serves a drainer only: a live activation's Leave never calls it.
+	if notified != 0 || c.lease.Load() != 0 {
+		t.Fatalf("live release wake=%d leases=%d", notified, c.lease.Load())
+	}
+	if !c.Enter() {
+		t.Fatal("active context refused lease")
 	}
 	c.live.Store(false)
+	c.Leave()
+	if notified != 1 || c.lease.Load() != 0 {
+		t.Fatalf("draining release wake=%d leases=%d", notified, c.lease.Load())
+	}
 	if c.Enter() || notified != 1 {
 		t.Fatal("initially inactive lease changed the ledger")
 	}
