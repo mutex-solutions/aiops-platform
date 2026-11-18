@@ -66,3 +66,5 @@ isolation, treat in-process plugins as newly sandboxed, change the River pin,
 replace atomic InsertTx with an outbox bridge, or start S1. If the restricted
 surface is unacceptable, ADR-045 remains unresolved and independent S0 work can
 continue without claiming a final authority mechanism.
+
+> Note, 2026-11-19: "forced RLS" above applies to caller-owned and provider data tables. Per the owner decision of 2026-11-18 recorded in ADR-045, River's own five tables carry no RLS and no policy: only the trusted jobs role holds privileges on them and caller roles hold none. Isolation of job data rests on the closed typed surface and those grants.

@@ -66,3 +66,5 @@ restart, final-kernel or S0 acceptance follows from source-only/unit evidence.
 Adoption requires a separately reviewed result and explicit canonical/criteria
 amendment approved by the owner. Isolation, same-transaction atomicity, forced RLS,
 unmodified River, frozen numerical gates and stop-before-S1 remain unchanged.
+
+> Note, 2026-11-19: "forced RLS" above applies to caller-owned and provider data tables. Per the owner decision of 2026-11-18 recorded in ADR-045, River's own five tables carry no RLS and no policy: only the trusted jobs role holds privileges on them and caller roles hold none.

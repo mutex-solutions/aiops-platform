@@ -379,3 +379,70 @@ sweep is reported as its own failed bound; it is never counted as completed.
 
 The results of the rerun at frozen scale and the numbers measured on the
 development host will be appended here as a separate dated section.
+
+## Effect of the jobs-role and retention change on the development host, 2026-11-19
+
+Status: **observations on a busy shared development host, reduced scale; not the
+frozen-scale rerun.** PostgreSQL 16.15, fsync and synchronous_commit on, two runs
+sharing the host at times, so absolute latencies mean nothing here and are not
+used. The change is implemented in the probe fixtures as decided above (River's
+tables owned by the migration owner, RLS disabled, no policies, jobs-only
+privileges, no caller privilege; four tests rewritten, see the package READMEs)
+and the restart gate takes River's retention as a parameter
+(`S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS`, default 900 s, refused below
+twice the cycle bound, 0 for off).
+
+**Plan.** Same table, same role, same statement (River's fetch shape, 150,006
+retained rows, freshly analyzed), only the row-level security switched:
+
+| Fixture design | Plan | Cost | Buffers | Execution |
+|---|---|---|---|---|
+| No RLS on `river_job` (now) | Index scan, `river_job_prioritized_fetching_index` | 0.42..6.20 | 3 | 0.08 ms |
+| Forced RLS plus `provider_jobs USING (true)` (before) | Seq Scan, Sort, LockRows | 9,424.70 | 3,183 | 104.7 ms |
+
+Inside the gate, the plan printed as the jobs role was the fetching index at
+150,000 rows (cost 0.42..8.46, 3 buffers, 0.08 ms) and again after twelve cycles at
+179,963 rows (0.15 ms).
+
+**Scans and completion, retention off, 150,000 pre-grown rows, 12 pool cycles at
+100 ids/s** (5 s warm-up, 20 s window, 100 recovery IDs, no
+`DIAG_JOBS_NO_SEQSCAN`): every cycle durably completed 2,500 of 2,500
+acknowledged IDs (30,000 of 30,000), every frozen bound of every cycle passed at
+this scale (ack-to-completion at most 0.56 s, recovery 0.10 to 0.41 s), `river_job`
+grew from 150,000 to 179,963 rows. Sequential scans of `river_job` per cycle:
+one in cycle 1 reading exactly 150,000 tuples (the observer's own seeding scan of
+the pre-grown rows, whose counters arrived after the baseline read), and **0 scans,
+0 tuples in cycles 2 to 12**; totals at the end: 16 scans, 150,000 tuples read,
+196,516 index scans. The first frozen run had read 97,389 scans and 6.59 billion
+tuples. Below roughly 7,500 rows the planner does choose a sequential scan for the
+fetch on its own (small table); from about 10,000 rows it did not.
+
+**Retention on, 30 pool cycles, retention 240 s (the minimum for these shortened
+cycles is 230 s):** 75,000 of 75,000 acknowledged IDs completed, every bound passed,
+`jobs_removed_before_final_sweep` was 0 in every cycle. Live rows rose to about
+24,600 by cycle 10 and stayed between about 22,200 and 24,800 to cycle 30 (rows written
+would otherwise be 75,000). Table plus index size went from 3.2 MB to 22.7 MB by
+cycle 10 and then crept to 34.3 MB by cycle 30 while live rows stayed flat: dead
+tuples wait for autovacuum (13 runs, 9,075 dead tuples at the end), so the size is
+bounded by churn, not by history, but it is not constant over this short window.
+River's fetch averaged 0.27 ms and 25 buffers per call over 33,888 calls (max
+5.5 ms); the old design needed about 4,900 buffers per call at 160,000 rows. River's
+own delete (`JobDeleteBefore`) averaged 16.7 ms and 4,803 buffers per call and reads
+the retained table sequentially, about once per 30 s pass (1 sequential scan of
+about 26,200 tuples per cycle from cycle 10): bounded by the retained size, so at
+the 900 s default roughly 90,000 rows per pass.
+
+**Retention on over pre-grown history** (150,000 rows finished an hour earlier,
+retention 240 s, 6 cycles): the cleaner removed most of them in the first
+cycle (live rows 12,441 after cycle 1, 4,906 after cycle 2), 15,000 of 15,000 IDs
+completed and every bound passed; file size stayed at 66 to 72 MB (space is reused,
+not returned).
+
+**Not shown.** No frozen-scale run (30 + 30 + 30 + 10 cycles, 30 s warm-up, 120 s
+window, 1,000 recovery IDs, about 4.3 hours) was made here; the restart gate
+remains failed at frozen scale until it is rerun on an idle host with this change.
+The SQL-boundary probe (`s0probe`, `TestSQLViewBoundary`) was not touched and
+still fails for its recorded reason (a caller's `set_config` of the scope followed by
+a scoped read of the other scope's row under FORCE RLS on its own tables, along with
+the role-switch escapes). The role/GUC mechanism, the transaction-authority
+decision and the S0 status are unchanged by this section.
