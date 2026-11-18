@@ -5,14 +5,145 @@ Status: evidence record for the owner-approved causal comparison
 [amendment](s0-causal-comparison-amendment.md),
 [amendment 2](s0-causal-comparison-amendment-2.md),
 [its addendum](s0-causal-comparison-amendment-2-addendum.md) and
-[freeze 2](s0-causal-comparison-freeze-2.json)). The corpus, criteria and
-candidates are unchanged. This note does **not** establish S0 acceptance.
+[freeze 2](s0-causal-comparison-freeze-2.json)). The corpus and criteria are unchanged; the candidates
+changed only by the fixes of 2026-11-18 recorded below. This note does **not** establish S0 acceptance.
 
 The first part is the result of the rerun of all 36 scenarios with the comparator
 as extended by amendment 2. The sections after "Before amendment 2" are the
 earlier record of the frozen comparator and are kept unchanged for history.
 
-## After amendment 2
+## After amendment 2 and the candidate fixes (clean run)
+
+Process note, stated plainly. The six addendum rules were named **after**
+development probes of a half-written comparator (their results were discarded and
+no receipt comes from them). The pre-fix run in the next section was made after the
+amendment, addendum and implementation were committed, but on candidates that
+still had the defects below. The run in this section, receipts
+[`causal-amendment-2-after-fixes`](../../test/spike/s0/results/causal-amendment-2-after-fixes/invocation.json),
+is the first one made with amendment 2, its addendum and the implementation all
+fixed beforehand and with the candidate fixes of 2026-11-18 in place. No comparator
+code or rule changed between the rebase onto those fixes and this run. The
+pre-fix receipts under `causal-amendment-2` are kept as recorded.
+
+Protocol as before: every pair 100 times under `-race` and 100 times with
+`GOMAXPROCS=2` under `-race`, one fresh pinned-oracle execution per scenario;
+"match" only at 100 of 100 in both modes.
+
+| ID | Fixture | Strict R / G (race + GOMAXPROCS=2, of 100 each) | Causal R | rate R | Causal G | rate G | Note |
+|---|---|---|---|---|---|---|---|
+| D01 | D01.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D02 | D02.json | 16+18 / 16+11 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D03 | D03.json | 3+6 / 70+52 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | match on both; the refusal text is compared by class (C6.5). Not carried by owner decision 2026-11-18. |
+| D05 | D05.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: `checkpoint "children" Needs count mismatch`; classification in "D06 and D23" below. |
+| D07 | D07.json | 35+31 / 89+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D08 | D08.json | 43+39 / 95+81 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D09 | D09.json | 75+53 / 23+29 | MISMATCH | 98+93 of 100+100 | match | 100+100 of 100+100 | R: MISMATCH in 9 of 200 runs: `conflicting order reversed between service {ready:availability} and config of cb` (the second `service` event after `notify` is sometimes recorded after the consumer's `config` event; the oracle has it before). G: match. |
+| D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D13 | revision-3/D13.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | fixture race on fiber `d` (see "Fixture races"); verdicts vary: record counts 35 to 38 against 37, order reversal between `d` apply and `d` disposal. |
+| D14 | D14.json | 47+44 / 98+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D15 | D15.json | 49+60 / 100+87 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D17 | D17.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D18 | D18.json | 47+49 / 99+95 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D20 | D20.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D21 | D21.json | 45+41 / 97+90 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | fixture race, 200 of 200 on both: record counts 14 against 16 in segment 0 (see "Fixture races"). |
+| D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: caught `error {op:"effect"}` outside the Apply frame; documented adaptation, see "D06 and D23". |
+| D24 | D24.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D25 | D25.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D26 | D26.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D27 | D27.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D28 | D28.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D29 | D29.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D30 | D30.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D31 | D31.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D32 | D32.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D33 | D33.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D34 | D34.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D35 | D35.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+| D36 | D36.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
+
+Counts (68 pairs run): causal match 31, MISMATCH 9, unsupported 28. Pre-fix:
+22, 18, 28.
+
+What changed with the candidate fixes (reconciler pairs attributed to the
+publication-order defect, and D09):
+
+| Pair | Before | After |
+|---|---|---|
+| D03, D07, D08, D11, D14, D15, D18, D21 reconciler | MISMATCH, publication before consumer LOADING (D11, D14, D15 200 of 200; the rest 112 to 137 of 200) | match, 100 of 100 in both modes |
+| D06 reconciler | MISMATCH, publication order in 126 of 200 plus Needs count | MISMATCH, only `Needs count mismatch`, 200 of 200 (same as graph-lock) |
+| D09 graph-lock | MISMATCH, consumer `cb` loads while unavailable, 200 of 200 | match, 100 of 100 in both modes |
+| D09 reconciler | MISMATCH, missing second `service` event, 200 of 200 | **still MISMATCH, flaky**: matches in 191 of 200 runs; 9 of 200 fail with `event segment 2: conflicting order reversed between {"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"ready":"availability"}}} and {"kind":"config","data":{"config":{},"fiber":"cb"}}`. The oracle records `service` after `cb` LOADING and before `cb` `config`; in those runs the reconciler's `Notify` event follows the consumer's `config`. Not a known defect, not excused. |
+
+### D06 and D23 (classification with evidence)
+
+**D06, both candidates: `checkpoint "children" Needs count mismatch`.** The
+candidate epoch of fiber `child` lists a binding for `svc`; the oracle epoch of
+`child` has none (its plugin declares no needs). Two separate facts:
+
+- The original D06 assertion that fails on both candidates (`retained-inherited`
+  reads an `undeclared key` error instead of `outer`) is (b), documented: decision
+  record `docs/design/plugin-system-2026-11.md` section 15 row 8, "`inject` as a
+  list or a map; `ctx.inject(deps, callback)` as a child fiber. Access without
+  inject is an error; children inherit within a realm", status "As is". The
+  private child lives in another realm, so by that row access there is an error.
+- The extra `svc` binding in the child's epoch is **not** named by any row.
+  Row 8 says children inherit within a realm; it does not say an inherited
+  declaration enters the child's epoch. No row of
+  `docs/architecture/00-decisions.md` mentions it either. The needs are read in
+  the replay front end from `context.Metadata().Dependencies()` of the native child
+  context (`test/spike/s0/replay/composed.go`), so the cause sits in the shared
+  composition/context model that both candidates use, not in either scheduling
+  core. Classification: (a), an undocumented difference in that shared model;
+  uncertain whether the owner intends it as the realisation of "children inherit".
+
+**D23, both candidates: caught effect `error` after ACTIVE, `mark once` before
+`output setup-error`.** Documented adaptation, not a candidate difference.
+`docs/design/s0-d23-request-mapping.md`, section "Evidence classification and
+limits": "The approved adaptation is **callback request / external completion
+observation**. Its caught error/output can appear later than the synchronous source
+generator's error, including after the native ACTIVE transition or single-shot
+cleanup. That is an honest raw ordered-semantic mismatch." The cause is the shared
+replay adapter: `observer ... AwaitSetup` after a successful external `Settle`
+(`flushEffectCompletions`) and `catchEffect` in
+`test/spike/s0/replay/effects_adapter.go` emit the `error` and the output only
+after setup and rollback completed. Candidates never see the event. The comparator
+reports it as a mismatch, as that note says it must; `s0-effect-shape-adaptation.md`
+only says D23 stays unsupported and does not itself declare the ordering.
+
+### Fixture races (D13 revision 3, D22 revision 4)
+
+Fixtures were not changed. Original expectations are not affected: D13 revision 3
+asserts only the six states at `six` (`d` DISPOSED, which holds either way), and
+D22 revision 4 asserts only states at `joining-cleanup` and `disposed`; none looks
+at `joining-setup` or at how `d` got to DISPOSED. Only the causal record counts
+differ.
+
+- **D13 revision 3, fiber `d`.** `d` is mounted and disposed with no wait on its
+  Apply or ACTIVE, so the oracle (run to completion) shows `d` disposed while
+  LOADING and the candidates sometimes show it ACTIVE first. Proposed barrier (not tried): a
+  `mark` in the `disposed` plugin's Apply, a root `waitMark` on it and an
+  `awaitFiber d` (to ACTIVE) before `dispose d`, so that `d` is ACTIVE in both
+  runtimes before its disposal.
+- **D22 revision 4, `joining-setup` snapshot.** It follows `dispose parent
+  {await:false}` with no wait, so the cut position and the state of the child
+  (ACTIVE or already UNLOADING) are schedule dependent. Proposed barriers (not tried): a `mark`
+  in the parent cleanup plus a root `waitMark parent-cleanup` before the snapshot,
+  and a `mark` in a new child cleanup body with a `waitMark` on it, so both the
+  parent cleanup and the child's teardown start have happened at the cut. (The
+  child's effect cleanup gate cannot be waited for before `release effect-setup`.)
+
+## Before the candidate fixes (receipts `causal-amendment-2`)
+
+The text of this section is as first recorded.
+
+### After amendment 2, before the candidate fixes
 
 Receipts: [`causal-amendment-2`](../../test/spike/s0/results/causal-amendment-2/invocation.json).
 Each scenario was replayed 100 times per candidate under `-race` and 100 times

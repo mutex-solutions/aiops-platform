@@ -1,0 +1,101 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D18",
+  "title": "Failure is sticky across dependency loss and replacement",
+  "covers": [
+    "sticky-failure"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": "provided"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "effect",
+          "label": "owned",
+          "cleanup": [
+            {
+              "op": "mark",
+              "label": "unwound"
+            }
+          ]
+        },
+        {
+          "op": "fail",
+          "error": "sticky-startup"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p1",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "failed"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p1"
+    },
+    {
+      "op": "mount",
+      "fiber": "p2",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "still-failed"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p2"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "failed",
+      "path": "/states/1/state",
+      "equals": "FAILED"
+    },
+    {
+      "at": "still-failed",
+      "path": "/states/1/state",
+      "equals": "FAILED"
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

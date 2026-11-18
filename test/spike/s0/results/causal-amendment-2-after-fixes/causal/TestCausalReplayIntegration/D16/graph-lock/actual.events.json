@@ -1,0 +1,1484 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 1
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 1
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "a",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:a",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "a",
+    "UID": 1,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 14,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "r"
+    }
+  },
+  {
+    "Sequence": 15,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "r"
+    }
+  },
+  {
+    "Sequence": 16,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "right",
+      "value": 1
+    }
+  },
+  {
+    "Sequence": 17,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "c",
+    "UID": 2,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 18,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:c",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 19,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "l"
+    }
+  },
+  {
+    "Sequence": 20,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "l"
+    }
+  },
+  {
+    "Sequence": 21,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "left",
+      "value": 1
+    }
+  },
+  {
+    "Sequence": 22,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "b",
+    "UID": 3,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 23,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:b",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 24,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 25,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "b",
+    "UID": 3,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 26,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 27,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 28,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "c",
+    "UID": 2,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 29,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "leaf"
+    }
+  },
+  {
+    "Sequence": 30,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "leaf"
+    }
+  },
+  {
+    "Sequence": 31,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "leaf-left",
+      "value": 1
+    }
+  },
+  {
+    "Sequence": 32,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "leaf-right",
+      "value": 1
+    }
+  },
+  {
+    "Sequence": 33,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 34,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 2
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 35,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "commit",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 2
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 36,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "update",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 37,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 38,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 39,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 40,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 41,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 42,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 43,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "b",
+    "UID": 3,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 44,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 45,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 46,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "c",
+    "UID": 2,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 47,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "a",
+    "UID": 1,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 48,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 49,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 50,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "b",
+    "UID": 3,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 51,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 52,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 53,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "c",
+    "UID": 2,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 54,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 55,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 56,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "a",
+    "UID": 1,
+    "Value": 1,
+    "Data": null
+  },
+  {
+    "Sequence": 57,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 58,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 59,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 2
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 60,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {
+        "v": 2
+      },
+      "fiber": "p"
+    }
+  },
+  {
+    "Sequence": 61,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "a",
+    "UID": 4,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 62,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:a",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 63,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 64,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 65,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 66,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "a",
+    "UID": 4,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 67,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "l"
+    }
+  },
+  {
+    "Sequence": 68,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "l"
+    }
+  },
+  {
+    "Sequence": 69,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "left",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 70,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "b",
+    "UID": 5,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 71,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:b",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 72,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 73,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "b",
+    "UID": 5,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 74,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "r"
+    }
+  },
+  {
+    "Sequence": 75,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "r"
+    }
+  },
+  {
+    "Sequence": 76,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "right",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 77,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "provide",
+    "From": "",
+    "State": "LOADING",
+    "Key": "c",
+    "UID": 6,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 78,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "LOADING",
+    "Key": "provide:c",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 79,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 80,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 81,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:publish",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "c",
+    "UID": 6,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 82,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "leaf"
+    }
+  },
+  {
+    "Sequence": 83,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "leaf"
+    }
+  },
+  {
+    "Sequence": 84,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "leaf-left",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 85,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "leaf-right",
+      "value": 2
+    }
+  },
+  {
+    "Sequence": 86,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 87,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 88,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 89,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 90,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 91,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 92,
+    "Fiber": 4,
+    "Name": "leaf",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 93,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 94,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 95,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 96,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "c",
+    "UID": 6,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 97,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "c",
+    "UID": 6,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 98,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 99,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 100,
+    "Fiber": 3,
+    "Name": "r",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 101,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 102,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 103,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 104,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "b",
+    "UID": 5,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 105,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "b",
+    "UID": 5,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 106,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 107,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 108,
+    "Fiber": 2,
+    "Name": "l",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 109,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 110,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "ACTIVE",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 111,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "invalidate",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 112,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:withdraw",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "a",
+    "UID": 4,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 113,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "service:remove",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "a",
+    "UID": 4,
+    "Value": 2,
+    "Data": null
+  },
+  {
+    "Sequence": 114,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "effects:gone",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 115,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 116,
+    "Fiber": 1,
+    "Name": "p",
+    "Kind": "dispose:complete",
+    "From": "",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]
