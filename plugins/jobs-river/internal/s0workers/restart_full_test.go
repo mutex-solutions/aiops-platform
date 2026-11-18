@@ -19,9 +19,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type fullCycleSummary struct {
@@ -52,6 +56,11 @@ type fullCycleSummary struct {
 	RecoveryMs          float64         `json:"recovery_ms"`
 	PriorAckWorstMs     float64         `json:"prior_ack_completion_after_recovery_worst_ms"`
 	AckToCompleteMaxMs  float64         `json:"ack_to_completion_max_ms"`
+	JobsRemoved         int             `json:"jobs_removed_before_final_sweep"`
+	RiverSeqScans       int64           `json:"river_job_seq_scans_in_cycle"`
+	RiverSeqTupRead     int64           `json:"river_job_seq_tuples_read_in_cycle"`
+	RiverLiveRows       int64           `json:"river_job_live_rows_after_cycle"`
+	RiverTotalBytes     int64           `json:"river_job_total_bytes_after_cycle"`
 	AckLatencyP50Ms     float64         `json:"ack_latency_from_scheduled_p50_ms"`
 	AckLatencyP95Ms     float64         `json:"ack_latency_from_scheduled_p95_ms"`
 	AckLatencyP99Ms     float64         `json:"ack_latency_from_scheduled_p99_ms"`
@@ -141,7 +150,7 @@ func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
 		Started: time.Now().UTC(), PID: os.Getpid(), GoVersion: runtime.Version(), GOMAXPROCS: runtime.GOMAXPROCS(0), RaceInstrumented: raceInstrumented,
 		AcceptanceScale: cfg.Acceptance() && !raceInstrumented && runtime.GOMAXPROCS(0) == fullGOMAXPROCS, Before: fullSource(t),
 		Config: map[string]any{"cycles_per_kind": cfg.CyclesPerKind, "combined_cycles": cfg.Combined, "warmup_s": cfg.Warmup.Seconds(), "window_s": cfg.Window.Seconds(),
-			"restart_at_s_from_start": cfg.RestartAt().Seconds(), "recovery_ids": cfg.RecoveryIDs, "diagnostic_pregrow_rows": cfg.PregrowRows, "diagnostic_login_role_enable_seqscan_off": cfg.JobsNoSeqScan, "rate_per_s": fullRate, "hold_ms": fullHold.Milliseconds(),
+			"restart_at_s_from_start": cfg.RestartAt().Seconds(), "recovery_ids": cfg.RecoveryIDs, "diagnostic_pregrow_rows": cfg.PregrowRows, "diagnostic_login_role_enable_seqscan_off": cfg.JobsNoSeqScan, "job_retention_s": cfg.JobRetention.Seconds(), "rate_per_s": fullRate, "hold_ms": fullHold.Milliseconds(),
 			"operation_timeout_s": fullOpTimeout.Seconds(), "pool_conns": fullPoolConns, "worker_max": fullWorkers},
 		Frozen: map[string]any{"cycles_each_pool_client_listener": frozenCyclesPerKind, "combined_cycles": frozenCombinedCycles, "recovery_seconds": 5,
 			"ack_to_completion_seconds": 30, "new_ids_per_recovery": frozenRecoveryIDs, "new_ids_per_second": fullRate, "warmup_s": 30, "window_s": 120, "restart_at_s": 60, "hold_ms": 200},
@@ -371,6 +380,8 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 	prefix := fmt.Sprintf("fk-%s-%s-c%02d-", a.f.id, arm, cycle)
 	floor, floorErr := a.idFloor(ctx)
 	must(t, floorErr)
+	stats0, statsErr := a.riverStats(ctx)
+	must(t, statsErr)
 	start := time.Now().UTC().Add(100 * time.Millisecond)
 	deferred0 := a.gate.deferred.Load()
 	stopScan := a.scanner(ctx, l, start)
@@ -472,6 +483,11 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 	sum.ScannerMissed, sum.ScanErrors = missed, scanErrors
 	sum.RestartRequestedAt = rs.Requested.Format(time.RFC3339Nano)
 	sum.ResourceReadyMs, sum.RecoveryMs, sum.PriorAckWorstMs, sum.AckToCompleteMaxMs = ms(rs.ResourceReady.Sub(rs.Requested)), ms(recovery), ms(priorWorst), ms(rec.AckToCompleteMax)
+	sum.JobsRemoved = len(rec.JobRemoved)
+	if stats1, err := a.riverStats(ctx); err == nil {
+		sum.RiverSeqScans, sum.RiverSeqTupRead = stats1.SeqScan-stats0.SeqScan, stats1.SeqTupRead-stats0.SeqTupRead
+		sum.RiverLiveRows, sum.RiverTotalBytes = stats1.LiveTup, stats1.TotalBytes
+	}
 	sum.AckLatencyP50Ms, sum.AckLatencyP95Ms, sum.AckLatencyP99Ms = ms(nearestRank(lat, 0.5)), ms(nearestRank(lat, 0.95)), ms(nearestRank(lat, 0.99))
 	if len(lat) > 0 {
 		sum.AckLatencyMaxMs = ms(lat[len(lat)-1])
@@ -483,6 +499,80 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 	sum.Goroutines, sum.OpenFDs = runtime.NumGoroutine(), openFDs()
 	sum.Bounds, sum.Pass = bounds, allPass(bounds)
 	return sum
+}
+
+// riverStats reads the planner-independent counters of river_job: sequential and
+// index scan counts, live row estimate and total size. Read by the admin observer
+// in autocommit statements; it never scans river_job itself.
+type riverStats struct{ SeqScan, SeqTupRead, IdxScan, LiveTup, TotalBytes int64 }
+
+func (a *fullApp) riverStats(ctx context.Context) (riverStats, error) {
+	var s riverStats
+	err := a.f.admin.QueryRow(ctx, `SELECT coalesce(s.seq_scan,0), coalesce(s.seq_tup_read,0), coalesce(s.idx_scan,0), coalesce(s.n_live_tup,0), pg_total_relation_size(c.oid)
+		FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_stat_user_tables s ON s.relid=c.oid WHERE n.nspname=$1 AND c.relname='river_job'`, a.f.jobs).Scan(&s.SeqScan, &s.SeqTupRead, &s.IdxScan, &s.LiveTup, &s.TotalBytes)
+	return s, safeError("river_job stats", err)
+}
+
+// planUsesFetchIndex reports whether an EXPLAIN of River's fetch shape reads
+// river_job through its prioritized fetching index and never by sequential scan.
+func planUsesFetchIndex(lines []string) bool {
+	index, seq := false, false
+	for _, l := range lines {
+		index = index || strings.Contains(l, "river_job_prioritized_fetching_index")
+		seq = seq || strings.Contains(l, "Seq Scan on river_job")
+	}
+	return index && !seq
+}
+
+// fetchPlan runs EXPLAIN (ANALYZE, BUFFERS) of the SELECT inside River's
+// JobGetAvailable (v0.51.2) as the jobs role, in a rolled-back transaction.
+func (a *fullApp) fetchPlan(ctx context.Context) ([]string, error) {
+	wc := a.f.base.Copy()
+	wc.MaxConns = 1
+	wc.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET ROLE "+ident(a.f.jobs))
+		return safeError("trusted jobs session", err)
+	}
+	p, err := pgxpool.NewWithConfig(ctx, wc)
+	if err != nil {
+		return nil, safeError("plan pool", err)
+	}
+	defer p.Close()
+	tx, err := p.Begin(ctx)
+	if err != nil {
+		return nil, safeError("plan begin", err)
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+	rows, err := tx.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) SELECT id, args FROM "+table(a.f.jobs, "river_job")+" WHERE state = 'available' AND queue = $1::text AND ($2::text[] IS NULL OR kind = ANY($2::text[])) AND scheduled_at <= coalesce($3::timestamptz, now()) ORDER BY priority ASC, scheduled_at ASC, id ASC LIMIT $4::integer FOR UPDATE SKIP LOCKED", queue, []string(nil), (*time.Time)(nil), 10)
+	if err != nil {
+		return nil, safeError("plan explain", err)
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var l string
+		if err := rows.Scan(&l); err != nil {
+			return nil, safeError("plan scan", err)
+		}
+		lines = append(lines, l)
+	}
+	return lines, safeError("plan rows", rows.Err())
+}
+
+// checkFetchPlan prints the plan and, once the table is large enough for the
+// planner to have a real choice, fails the run if River's fetch is not an index scan.
+func (a *fullApp) checkFetchPlan(t *testing.T, ctx context.Context, phase string) {
+	t.Helper()
+	lines, err := a.fetchPlan(ctx)
+	must(t, err)
+	stats, err := a.riverStats(ctx)
+	must(t, err)
+	uses := planUsesFetchIndex(lines)
+	line, _ := json.Marshal(map[string]any{"phase": phase, "river_job_live_rows": stats.LiveTup, "uses_fetching_index": uses, "plan": lines})
+	fmt.Printf("S0WORKERS_RESTART_FULL_FETCH_PLAN %s\n", line)
+	if stats.LiveTup >= 10_000 && !uses {
+		t.Errorf("River's fetch as the jobs role does not use the fetching index (%s, %d rows)", phase, stats.LiveTup)
+	}
 }
 
 var fullPID = os.Getpid()
@@ -504,7 +594,7 @@ func TestWorkerRestartFullGate(t *testing.T) {
 		name   string
 		cycles int
 	}{{"pool", cfg.CyclesPerKind}, {"client", cfg.CyclesPerKind}, {"listener", cfg.CyclesPerKind}, {"combined", cfg.Combined}}
-	perCycle := cfg.Warmup + cfg.Window + 2*restartCompletionBudget + 30*time.Second
+	perCycle := cfg.CycleBound()
 	for _, arm := range arms {
 		runDiagnostic(t, "restart_full_"+arm.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(arm.cycles)*perCycle+10*time.Minute)
@@ -514,13 +604,14 @@ func TestWorkerRestartFullGate(t *testing.T) {
 				_, err := f.admin.Exec(ctx, "ALTER ROLE "+ident(f.login)+" SET enable_seqscan = off")
 				must(t, safeError("diagnostic jobs role setting", err))
 			}
-			app := newFullApp(f)
+			app := newFullApp(f, cfg.JobRetention)
 			t.Cleanup(app.teardown)
 			must(t, safeError("full app start", app.start(ctx)))
 			report.WorkerStarted = true
 			if cfg.PregrowRows > 0 {
 				must(t, app.pregrow(ctx, cfg.PregrowRows))
 			}
+			app.checkFetchPlan(t, ctx, "before_cycles")
 			sum := fullArmSummary{Arm: arm.name, CyclesPlanned: arm.cycles}
 			rep.Arms = append(rep.Arms, sum)
 			idx := len(rep.Arms) - 1
@@ -556,6 +647,7 @@ func TestWorkerRestartFullGate(t *testing.T) {
 					t.FailNow()
 				}
 			}
+			app.checkFetchPlan(t, ctx, "after_cycles")
 			if rep.Arms[idx].CyclesExecuted != arm.cycles {
 				t.Errorf("%s executed %d of %d cycles", arm.name, rep.Arms[idx].CyclesExecuted, arm.cycles)
 			}

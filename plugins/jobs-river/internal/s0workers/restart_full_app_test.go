@@ -61,6 +61,7 @@ type fullApp struct {
 	inflightReq, maxInflight   atomic.Int64
 	livePools, liveClients     atomic.Int64
 	liveListeners              atomic.Int64
+	retention                  time.Duration // River cleaner retention; 0 = deletion off
 	httpHoldSlots              chan struct{}
 	gate                       *capGate // structural S4 cap on concurrent requests
 
@@ -82,8 +83,8 @@ type fullApp struct {
 	w         *workerGen // owned by the single controller goroutine
 }
 
-func newFullApp(f *fixture) *fullApp {
-	a := &fullApp{f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2), gate: newCapGate(fullMaxConcurrent)}
+func newFullApp(f *fixture, retention time.Duration) *fullApp {
+	a := &fullApp{retention: retention, f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2), gate: newCapGate(fullMaxConcurrent)}
 	a.httpClient = &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 64, IdleConnTimeout: 30 * time.Second}}
 	go func() {
 		defer close(a.drainDone)
@@ -204,6 +205,15 @@ func (a *fullApp) workerHandler(d *dispatcher) handlerFunc {
 	}
 }
 
+// riverRetention maps the probe parameter to River's option: -1 disables deletion.
+// The cleaner itself runs only in the client that holds leadership.
+func riverRetention(d time.Duration) time.Duration {
+	if d <= 0 {
+		return -1
+	}
+	return d
+}
+
 // makeWorker builds and STARTS a worker client. d is reused for client-only recreation.
 func (a *fullApp) makeWorker(pool *pgxpool.Pool, d *dispatcher) (*workerGen, error) {
 	if d == nil {
@@ -220,7 +230,7 @@ func (a *fullApp) makeWorker(pool *pgxpool.Pool, d *dispatcher) (*workerGen, err
 		FetchCooldown: time.Millisecond, FetchPollInterval: 5 * time.Millisecond,
 		JobTimeout: 10 * time.Second, SoftStopTimeout: 2 * time.Second,
 		RescueStuckJobsAfter: time.Minute, TestOnly: true,
-		CancelledJobRetentionPeriod: -1, CompletedJobRetentionPeriod: -1, DiscardedJobRetentionPeriod: -1,
+		CancelledJobRetentionPeriod: riverRetention(a.retention), CompletedJobRetentionPeriod: riverRetention(a.retention), DiscardedJobRetentionPeriod: riverRetention(a.retention),
 		ReindexerIndexNames: []string{},
 	})
 	if err != nil {

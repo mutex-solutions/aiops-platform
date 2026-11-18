@@ -258,6 +258,7 @@ func TestEvaluateBoundsEachFrozenLimit(t *testing.T) {
 		"ack_to_completion_seconds":                  func(c *cycleInputs) { c.Rec.AckToCompleteOver = []string{"x"} },
 		"lost_acknowledged_work":                     func(c *cycleInputs) { c.Rec.LostAcknowledged = []string{"x"} },
 		"false_2xx":                                  func(c *cycleInputs) { c.Rec.False2xx = []string{"x"} },
+		"job_removed_before_final_sweep":             func(c *cycleInputs) { c.Rec.JobRemoved = []string{"x"} },
 		"duplicate_logical_result":                   func(c *cycleInputs) { c.Rec.DuplicateLogical = []string{"x"} },
 		"prior_acks_complete_after_recovery":         func(c *cycleInputs) { c.PriorLate = []string{"x"} },
 		"recovery_new_ids_acked_completed":           func(c *cycleInputs) { c.RecIDs.Have = 99 },
@@ -356,5 +357,73 @@ func TestFullConfigDiagnosticsAreNeverAcceptance(t *testing.T) {
 		if err != nil || c.Acceptance() {
 			t.Fatalf("%v: diagnostic knobs must make the run non-acceptance: %v", env, err)
 		}
+	}
+}
+
+// Retention must never be able to race observation (ADR-045, 2026-11-18): the
+// parameter is refused below twice the cycle bound, the frozen default is far
+// above it, 0 turns deletion off, and a diagnostic or retention-off run is never
+// acceptance.
+func TestJobRetentionParameter(t *testing.T) {
+	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	const name = "S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS"
+	frozen, err := fullConfigFromEnv(get(nil))
+	if err != nil || frozen.JobRetention != defaultJobRetentionSeconds*time.Second || frozen.CycleBound() != 240*time.Second || frozen.JobRetention < 2*frozen.CycleBound() {
+		t.Fatalf("default retention must be %ds and at least twice the %v cycle bound: %+v %v", defaultJobRetentionSeconds, frozen.CycleBound(), frozen, err)
+	}
+	if c, err := fullConfigFromEnv(get(map[string]string{name: "480"})); err != nil || c.JobRetention != 480*time.Second || !c.Acceptance() {
+		t.Fatalf("exactly twice the frozen cycle bound must be accepted: %v", err)
+	}
+	if c, err := fullConfigFromEnv(get(map[string]string{name: "0"})); err != nil || c.JobRetention != 0 || c.Acceptance() {
+		t.Fatalf("0 must mean cleaner off and never be acceptance: %v", err)
+	}
+	for _, bad := range []map[string]string{{name: "479"}, {name: "1"}, {name: "-1"}, {name: "x"}, {name: "604801"},
+		// A reduced window lowers the bound, never the factor: 5+20+60+30 = 115 s.
+		{"S0_WORKER_RESTART_FULL_WARMUP_SECONDS": "5", "S0_WORKER_RESTART_FULL_WINDOW_SECONDS": "20", "S0_WORKER_RESTART_FULL_RECOVERY_IDS": "100", name: "229"}} {
+		if _, err := fullConfigFromEnv(get(bad)); err == nil {
+			t.Fatalf("must reject %v", bad)
+		}
+	}
+	reduced := map[string]string{"S0_WORKER_RESTART_FULL_WARMUP_SECONDS": "5", "S0_WORKER_RESTART_FULL_WINDOW_SECONDS": "20", "S0_WORKER_RESTART_FULL_RECOVERY_IDS": "100"}
+	if _, err := fullConfigFromEnv(get(reduced)); err != nil {
+		t.Fatalf("the reduced CI invocation with the default retention must stay valid: %v", err)
+	}
+	if riverRetention(0) != -1 || riverRetention(15*time.Minute) != 15*time.Minute {
+		t.Fatal("River option mapping: 0 must be -1 (disabled)")
+	}
+}
+
+// A job the cleaner removed before the final sweep is never counted as completed
+// and never hidden as a false 2xx: it is its own failed bound.
+func TestReconcileJobRemovedBeforeSweep(t *testing.T) {
+	l := newLedger()
+	l.register("gone", 0, at(0), at(0))
+	l.attempt("gone")
+	l.ack("gone", fullACK{restartACK: restartACK{JobID: 7, Observed: at(10)}, Gen: 1, Attempt: 1})
+	l.register("never", 1, at(0), at(0))
+	l.attempt("never")
+	l.ack("never", fullACK{restartACK: restartACK{JobID: 8, Observed: at(10)}, Gen: 1, Attempt: 1})
+	recs, mismatch := l.snapshot()
+	// "gone": result row survives (caller-owned table), job row removed. "never": no rows at all.
+	r := reconcile(recs, map[string]dbRow{"gone": {Results: 1}}, mismatch, restartCompletionBudget)
+	if len(r.JobRemoved) != 1 || r.JobRemoved[0] != "gone" || len(r.False2xx) != 1 || r.False2xx[0] != "never" || r.Durable != 0 || len(r.AckToCompleteOver) != 0 {
+		t.Fatalf("removed=%v false2xx=%v durable=%d", r.JobRemoved, r.False2xx, r.Durable)
+	}
+	failed := ""
+	for _, b := range evaluateBounds(cycleInputs{Cfg: fullConfig{Window: 20 * time.Second}, Rec: r}) {
+		if b.Name == "job_removed_before_final_sweep" && !b.Pass {
+			failed = b.Name
+		}
+	}
+	if failed == "" {
+		t.Fatal("a removed job must fail its own bound")
+	}
+}
+
+func TestPlanUsesFetchIndex(t *testing.T) {
+	good := []string{"Limit", "  ->  LockRows", "        ->  Index Scan using river_job_prioritized_fetching_index on river_job"}
+	bad := []string{"Limit", "  ->  LockRows", "        ->  Sort", "              ->  Seq Scan on river_job"}
+	if !planUsesFetchIndex(good) || planUsesFetchIndex(bad) || planUsesFetchIndex(nil) {
+		t.Fatal("plan classification")
 	}
 }

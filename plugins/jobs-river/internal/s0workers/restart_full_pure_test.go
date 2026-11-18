@@ -40,6 +40,13 @@ const (
 	frozenWarmup         = 30 * time.Second
 	frozenWindow         = 120 * time.Second
 	frozenRecoveryIDs    = 1000
+
+	// River's cleaner retention for finished jobs (ADR-045, 2026-11-18). Default 15
+	// minutes: at 100 ids/s and about 150 s per cycle that keeps roughly six cycles
+	// (about 90,000 rows) instead of every row of an arm (450,000), and it is far
+	// above the guard below, so no cycle's job can leave before its final sweep.
+	defaultJobRetentionSeconds = 900
+	maxJobRetentionSeconds     = 7 * 24 * 3600
 )
 
 // fullConfig only ever shrinks the frozen scale; acceptance requires all frozen values.
@@ -47,6 +54,10 @@ type fullConfig struct {
 	CyclesPerKind, Combined int
 	Warmup, Window          time.Duration
 	RecoveryIDs             int
+	// JobRetention is River's CompletedJobRetentionPeriod, CancelledJobRetentionPeriod
+	// and DiscardedJobRetentionPeriod for the worker client; 0 turns the cleaner's
+	// deletion off (-1 in River). It is refused unless at least twice CycleBound.
+	JobRetention time.Duration
 	// Diagnostics only; either one makes the run non-conforming (never acceptance).
 	PregrowRows   int  // completed jobs+results seeded before the cycles (retained-history reproduction)
 	JobsNoSeqScan bool // ALTER ROLE <login> SET enable_seqscan=off, to prove the planner finding
@@ -87,7 +98,18 @@ func fullConfigFromEnv(get func(string) string) (fullConfig, error) {
 		return c, err
 	}
 	c.JobsNoSeqScan = get("S0_WORKER_RESTART_FULL_DIAG_JOBS_NO_SEQSCAN") == "1"
+	retention, err := envInt(get, "S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS", defaultJobRetentionSeconds, 0, maxJobRetentionSeconds)
+	if err != nil {
+		return c, err
+	}
+	c.JobRetention = time.Duration(retention) * time.Second
 	c.Warmup, c.Window = time.Duration(warm)*time.Second, time.Duration(win)*time.Second
+	// Observation must complete for a cycle's jobs before River's cleaner may remove
+	// them: the final sweep of a cycle happens within CycleBound of its start, and a
+	// job is only eligible a full retention after it finished.
+	if c.JobRetention > 0 && c.JobRetention < 2*c.CycleBound() {
+		return c, fmt.Errorf("S0_WORKER_RESTART_FULL_JOB_RETENTION_SECONDS must be 0 (cleaner off) or at least %d (twice the cycle bound)", int((2*c.CycleBound())/time.Second))
+	}
 	// After the restart request the schedule must still hold recovery (<=5 s) plus the new IDs.
 	if c.Window/2 < restartRecoveryBudget+time.Duration(c.RecoveryIDs)*fullInterval {
 		return c, errors.New("window too short to contain recovery plus the requested new IDs")
@@ -96,7 +118,14 @@ func fullConfigFromEnv(get func(string) string) (fullConfig, error) {
 }
 
 func (c fullConfig) Acceptance() bool {
-	return c.CyclesPerKind == frozenCyclesPerKind && c.Combined == frozenCombinedCycles && c.Warmup == frozenWarmup && c.Window == frozenWindow && c.RecoveryIDs == frozenRecoveryIDs && c.PregrowRows == 0 && !c.JobsNoSeqScan
+	return c.CyclesPerKind == frozenCyclesPerKind && c.Combined == frozenCombinedCycles && c.Warmup == frozenWarmup && c.Window == frozenWindow && c.RecoveryIDs == frozenRecoveryIDs && c.PregrowRows == 0 && !c.JobsNoSeqScan && c.JobRetention > 0
+}
+
+// CycleBound is an upper bound on one cycle from its start to its final sweep:
+// warm-up, window, the recovery and completion budgets of the restart and of the
+// drain, and slack for the sweep itself.
+func (c fullConfig) CycleBound() time.Duration {
+	return c.Warmup + c.Window + 2*restartCompletionBudget + 30*time.Second
 }
 func (c fullConfig) Arrivals() int            { return int((c.Warmup + c.Window) / fullInterval) }
 func (c fullConfig) RestartAt() time.Duration { return c.Warmup + c.Window/2 } // S6: measured t=60 s
@@ -311,6 +340,7 @@ type reconcileResult struct {
 	LostAcknowledged, False2xx                         []string
 	DuplicateLogical, FirstAttemptDuplicateAck         []string
 	JobMismatch                                        []string
+	JobRemoved                                         []string // acked, result row present, job row gone before the final sweep
 	AckToCompleteMax                                   time.Duration
 	AckToCompleteOver                                  []string
 	CompletedBeforeAck                                 int
@@ -365,6 +395,10 @@ func reconcile(recs []opRecord, db map[string]dbRow, mismatch []string, completi
 			}
 		}
 		switch {
+		case row.Jobs == 0 && row.Results >= 1:
+			// The cleaner (or anything else) removed the job before the final sweep.
+			// Never counted as completed; reported as its own failed bound.
+			out.JobRemoved = append(out.JobRemoved, r.Key)
 		case row.Jobs == 0:
 			out.False2xx = append(out.False2xx, r.Key)
 		case r.Durable == nil || !row.Completed || row.Results < 1:
@@ -490,6 +524,7 @@ func evaluateBounds(in cycleInputs) []boundResult {
 	add("lost_acknowledged_work", "0", len(r.LostAcknowledged), len(r.LostAcknowledged) == 0)
 	add("false_2xx", "0", len(r.False2xx), len(r.False2xx) == 0)
 	add("duplicate_logical_result", "0", len(r.DuplicateLogical), len(r.DuplicateLogical) == 0)
+	add("job_removed_before_final_sweep", "0 (cleaner retention must not race observation)", len(r.JobRemoved), len(r.JobRemoved) == 0)
 	add("ack_job_id_matches_durable_job_id", "0 mismatches", len(r.JobMismatch), len(r.JobMismatch) == 0)
 	add("duplicate_ack_on_first_attempt", "0 (strict)", len(r.FirstAttemptDuplicateAck), len(r.FirstAttemptDuplicateAck) == 0)
 	add("recovery_seconds", "<=5s and observed", fmt.Sprintf("%.3f ready=%v", in.Recovery.Seconds(), in.ReadyOK), in.ReadyOK && in.Recovery <= restartRecoveryBudget)
