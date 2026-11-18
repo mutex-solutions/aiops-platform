@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: -mod=readonly
+
+jobs:
+  hygiene:
+    name: Hygiene and secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Local paths, private addresses, denylist
+        env:
+          HYGIENE_DENYLIST: ${{ secrets.HYGIENE_DENYLIST }}
+        run: scripts/ci/hygiene.sh
+      - name: Secret scan over full history
+        run: |
+          GOFLAGS= go install github.com/zricethezav/gitleaks/v8@v8.18.4
+          "$(go env GOPATH)/bin/gitleaks" detect --redact --no-banner --source .
+
+  test:
+    name: Build, vet, race tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l . | tee /dev/stderr)"
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  postgres:
+    name: PostgreSQL probes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        # Pin from docs/design/s0-reference-pins.md. Trust auth on a throwaway
+        # service container: no credential exists to leak.
+        image: postgres:16.15-trixie@sha256:43f9275df91e012c3da3d86bea5d7bb5e67a473296cc906c5f9e80b8176b1a37
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DSN_BASE: postgres://postgres@127.0.0.1:5432
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Create one dedicated database per probe
+        run: |
+          for db in s0tx s0workers s0typed s0probe; do
+            psql "$DSN_BASE/postgres" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"
+          done
+      - name: Transaction atomicity probe
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0tx?sslmode=disable
+          S0_EXPECT_DATABASE: s0tx
+        run: go test -race -count=1 -v ./plugins/jobs-river/internal/s0txprobe
+      - name: Worker probe
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0workers?sslmode=disable
+          S0_EXPECT_DATABASE: s0workers
+        run: go test -race -count=1 -v ./plugins/jobs-river/internal/s0workers
+      - name: Typed operations probe
+        env:
+          S0_TYPED_DSN: ${{ env.DSN_BASE }}/s0typed?sslmode=disable
+          S0_TYPED_EXPECT_DATABASE: s0typed
+        run: go test -race -count=1 -v ./plugins/jobs-river/internal/s0typedops
+      - name: SQL authority boundary (known open S0 gate, expected to fail)
+        # Recorded as failed in docs/design/s0-progress.md. Kept visible here
+        # and not allowed to hide a regression in the steps above.
+        continue-on-error: true
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0probe?sslmode=disable
+          S0_EXPECT_DATABASE: s0probe
+        run: go test -race -count=1 -v ./plugins/jobs-river/internal/s0probe
+
+  oracle:
+    name: Reference oracle comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # ponytail: the witness tests hard-code this path; make it configurable
+      # when a second environment needs a different location.
+      NODE_HOME: /tmp/aiops-s0-node-24.22.1-u4gdr6qr
+      NODE_SHA256: 6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Install the pinned Node.js runtime
+        run: |
+          curl -fsSLO https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz
+          echo "$NODE_SHA256  node-v24.22.1-linux-x64.tar.xz" | sha256sum -c -
+          mkdir -p "$NODE_HOME"
+          tar -xJf node-v24.22.1-linux-x64.tar.xz -C "$NODE_HOME" --strip-components=1
+          echo "S0_NODE=$NODE_HOME/bin/node" >> "$GITHUB_ENV"
+      - name: Live oracle replay of the scenario corpus
+        env:
+          S0_ORACLE_RUN: "1"
+        run: go test -race -count=1 ./test/differential
+      - name: Causal comparison of both candidates against the oracle
+        env:
+          S0_ORACLE_RUN: "1"
+          S0_CAUSAL_RUN: "1"
+        run: go test -race -count=1 ./test/spike/s0/replay
