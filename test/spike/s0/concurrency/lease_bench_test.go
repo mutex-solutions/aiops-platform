@@ -19,7 +19,7 @@ func leaseOwner(tb testing.TB, makeRuntime func() Runtime) (context.Context, Run
 	tb.Cleanup(func() {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer closeCancel()
-		_ = r.Close(closeCtx)
+		_ = closeRuntime(closeCtx, r)
 		cancel()
 	})
 	contexts := make(chan *Context, 1)

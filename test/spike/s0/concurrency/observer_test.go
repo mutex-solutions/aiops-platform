@@ -31,7 +31,7 @@ func nativeObserverTestRuntime(t *testing.T, makeRuntime func() Runtime) (contex
 	t.Cleanup(func() {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer closeCancel()
-		if err := r.Close(closeCtx); err != nil {
+		if err := closeRuntime(closeCtx, r); err != nil {
 			t.Errorf("close native runtime: %v", err)
 		}
 	})

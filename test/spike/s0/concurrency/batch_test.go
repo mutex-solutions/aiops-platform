@@ -35,7 +35,7 @@ func batchRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, Ru
 	t.Cleanup(func() {
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer closeCancel()
-		if err := r.Close(closeCtx); err != nil {
+		if err := closeRuntime(closeCtx, r); err != nil {
 			t.Errorf("Close actual batch runtime: %v", err)
 		}
 	})

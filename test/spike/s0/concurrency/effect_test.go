@@ -27,7 +27,7 @@ func effectRuntime(t testing.TB, makeRuntime func() Runtime) (context.Context, R
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer closeCancel()
 		// Startup failures are asserted at AwaitFiber; Close can report them again.
-		_ = r.Close(closeCtx)
+		_ = closeRuntime(closeCtx, r)
 		cancel()
 	})
 	return ctx, r

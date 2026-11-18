@@ -222,7 +222,7 @@ func TestConfigurationActualCoreSameVersionPreparationSurvivesOldVeto(t *testing
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			initial := &struct{ Name string }{"initial"}
 			candidate := &struct{ Name string }{"candidate"}
 			activation := &struct{ Name string }{"activation"}

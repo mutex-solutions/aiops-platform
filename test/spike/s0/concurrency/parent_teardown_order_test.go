@@ -38,7 +38,7 @@ func ptRuntime(t *testing.T, c ptCandidate) Runtime {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = r.Close(ctx)
+		_ = closeRuntime(ctx, r)
 	})
 	return r
 }

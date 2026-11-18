@@ -11,13 +11,44 @@ import (
 	"time"
 )
 
+// joinOwner waits until the reconciler owner goroutine of r has finished (a
+// graph-lock runtime has no such goroutine). Close can return before that: it
+// returns a lifecycle diagnostic or a bounded wait's error while the owner is
+// still alive. A test must not return while its owner runs, or the owner leaks
+// into the next test. done closes as the owner returns; the few instructions
+// between that close and the frame disappearing cannot be joined, so a test
+// that inspects goroutine stacks must scope them to its own bubble
+// (bubbleStacks) rather than rely on this join alone.
+func joinOwner(ctx context.Context, r Runtime) error {
+	rr, ok := r.(*reconcilerRuntime)
+	if !ok {
+		return nil
+	}
+	select {
+	case <-rr.done:
+		return nil
+	default:
+	}
+	select {
+	case <-rr.done:
+		return nil
+	case <-ctx.Done():
+		return errors.New("reconciler owner still running after Close: " + ctx.Err().Error())
+	}
+}
+
+// closeRuntime is Close followed by joinOwner; it returns Close's error first.
+func closeRuntime(ctx context.Context, r Runtime) error {
+	return errors.Join(r.Close(ctx), joinOwner(ctx, r))
+}
+
 func TestSharedAvailabilityContract(t *testing.T) {
 	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			notifier, ok := r.(Notifier)
 			if !ok {
 				t.Fatal("candidate does not support explicit availability notification")
@@ -97,7 +128,7 @@ func TestSharedConfigRequestPrefixDoesNotJoinOwnTeardown(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once sync.Once
 			var applied atomic.Int64
@@ -156,7 +187,7 @@ func TestSharedLifecycleContract(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			var mu sync.Mutex
 			var cleanup []string
 			add := func(label string) {

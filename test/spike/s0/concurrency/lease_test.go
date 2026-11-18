@@ -19,6 +19,7 @@ type leaseFixture struct {
 	cleaned atomic.Bool
 	inBody  atomic.Int64 // Leased bodies currently running.
 	openAt  atomic.Int64 // Leases plus bodies observed open when cleanup ran.
+	bodyAt  atomic.Int64 // Leased bodies alone, observed when cleanup ran.
 }
 
 func mountLeaseFixture(t testing.TB, makeRuntime func() Runtime) *leaseFixture {
@@ -29,6 +30,7 @@ func mountLeaseFixture(t testing.TB, makeRuntime func() Runtime) *leaseFixture {
 	f.id = effectMount(t, f.ctx, f.r, Spec{ID: "lease-owner", Apply: func(c *Context) error {
 		contexts <- c
 		return c.Defer("probe", func(context.Context) error {
+			f.bodyAt.Store(f.inBody.Load())
 			f.openAt.Store(f.inBody.Load() + c.lease.Load())
 			f.cleaned.Store(true)
 			return nil
@@ -126,8 +128,15 @@ func TestLeaseDrainWaitsForLastLeaveUnderChurn(t *testing.T) {
 				if v := violation.Load(); v != nil {
 					t.Fatalf("round %d: %v", round, v)
 				}
-				if got := f.openAt.Load(); got != 0 {
-					t.Fatalf("round %d: cleanup ran with %d open leases", round, got)
+				// Not openAt: the lease sum read at cleanup can include the +1 of a
+				// refused Enter that is still in flight, because one of the 32
+				// workers passed its first live check before the unload and was
+				// descheduled until now. That transient is rolled back by the same
+				// Enter and cannot be told from an open lease, so only the bodies
+				// are checked here; the exact lease count is checked below, after
+				// every worker has returned.
+				if got := f.bodyAt.Load(); got != 0 {
+					t.Fatalf("round %d: cleanup ran with %d leased bodies running", round, got)
 				}
 				if got := f.c.lease.Load(); got != 0 {
 					t.Fatalf("round %d: lease count = %d after quiescence", round, got)

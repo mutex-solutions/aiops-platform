@@ -29,7 +29,7 @@ func trackedRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, 
 		defer closeCancel()
 		// A failed activation may make Close report its sticky failure. Tests
 		// assert that failure explicitly instead of treating it as cleanup loss.
-		_ = r.Close(closeCtx)
+		_ = closeRuntime(closeCtx, r)
 		cancel()
 	})
 	return ctx, r

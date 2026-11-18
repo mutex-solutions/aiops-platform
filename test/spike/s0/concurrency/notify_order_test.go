@@ -55,7 +55,7 @@ func TestDeniedCheckKeepsConsumerPendingAndNotifyRecordsService(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			var allow, applied atomic.Int64
 			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Context) error { return c.Provide("svc", "v") }}); err != nil {
 				t.Fatal(err)
@@ -120,7 +120,7 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 			gate, entered := make(chan struct{}), make(chan struct{})
 			var once, release sync.Once
 			// Deferred last-in first-out: the gate opens before Close, even on failure.
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			defer release.Do(func() { close(gate) })
 			// The consumer is mounted first, so the provider's activation is what
 			// refreshes it, whatever the scheduling of the two mounts.
@@ -178,7 +178,7 @@ func TestServiceEventPrecedesDependantLoadRecords(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			noop := func(context.Context) error { return nil }
 			if _, err := r.Mount(ctx, Spec{ID: "fast", Needs: []string{"svc"}, Apply: func(c *Context) error { return c.Defer("fast-load", noop) }}); err != nil {
 				t.Fatal(err)

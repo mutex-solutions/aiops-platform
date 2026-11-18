@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,11 +27,42 @@ func rcGuard(t *testing.T) context.Context {
 	return ctx
 }
 
+// bubbleStacks returns the stack dump of the goroutines in the calling
+// goroutine's synctest bubble only. runtime.Stack(all) is process-wide, so a
+// count taken from it also sees an owner of an earlier test that has closed its
+// done channel but not yet returned (the close precedes the return, and the
+// goroutine can be descheduled in between). Goroutines of other tests are never
+// in this bubble, which is the isolation the idle-worker assertions mean.
+func bubbleStacks(t testing.TB) string {
+	t.Helper()
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	for n == len(buf) {
+		buf = make([]byte, 2*len(buf))
+		n = runtime.Stack(buf, true)
+	}
+	blocks := strings.Split(string(buf[:n]), "\n\n")
+	tag := bubbleTag.FindString(blocks[0]) // The calling goroutine is first.
+	if tag == "" {
+		t.Fatal("bubbleStacks must run inside synctest.Test")
+	}
+	var mine []string
+	for _, b := range blocks {
+		header, _, _ := strings.Cut(b, "\n")
+		if strings.HasSuffix(header, ", "+tag+"]:") {
+			mine = append(mine, b)
+		}
+	}
+	return strings.Join(mine, "\n\n")
+}
+
+var bubbleTag = regexp.MustCompile(`synctest bubble \d+`)
+
 func rcRuntime(t *testing.T) Runtime {
 	t.Helper()
 	r := NewReconciler()
 	t.Cleanup(func() {
-		if err := r.Close(rcGuard(t)); err != nil {
+		if err := closeRuntime(rcGuard(t), r); err != nil {
 			t.Errorf("Close: %v", err)
 		}
 	})
@@ -722,7 +755,7 @@ func TestReconcilerObserverQueueRemainsOpenUntilNativeCloseActuallyFinishes(t *t
 func TestReconcilerRootIsNativeHiddenAnchorWithActualProvisionRecords(t *testing.T) {
 	r := NewReconciler()
 	t.Cleanup(func() {
-		if err := r.Close(rcGuard(t)); err != nil {
+		if err := closeRuntime(rcGuard(t), r); err != nil {
 			t.Error(err)
 		}
 	})
@@ -2194,9 +2227,8 @@ func TestReconcilerChildOwnershipHasNoIdleWatchers(t *testing.T) {
 		}})
 		rcSettle(t, r)
 		synctest.Wait()
-		stacks := make([]byte, 1<<20)
-		n := runtime.Stack(stacks, true)
-		if bytes.Count(stacks[:n], []byte(".(*rcOwner).run(")) != 1 || bytes.Contains(stacks[:n], []byte(".(*rcOwner).load.func")) || bytes.Contains(stacks[:n], []byte(".(*rcOwner).disposeNext.func")) {
+		stacks := bubbleStacks(t)
+		if strings.Count(stacks, ".(*rcOwner).run(") != 1 || strings.Contains(stacks, ".(*rcOwner).load.func") || strings.Contains(stacks, ".(*rcOwner).disposeNext.func") {
 			t.Fatal("idle structural graph retained transition/watcher goroutines")
 		}
 		if err := r.Close(rcGuard(t)); err != nil {
@@ -2559,12 +2591,11 @@ func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 		synctest.Wait()
 		// All transition goroutines have returned: the only candidate goroutine
 		// left inside this isolated bubble is its global inbox owner.
-		stacks := make([]byte, 1<<20)
-		n := runtime.Stack(stacks, true)
-		if got := bytes.Count(stacks[:n], []byte(".(*rcOwner).run(")); got != 1 {
-			t.Fatalf("global reconciler owner stack count = %d", got)
+		stacks := bubbleStacks(t)
+		if got := strings.Count(stacks, ".(*rcOwner).run("); got != 1 {
+			t.Fatalf("reconciler owner stack count in this bubble = %d", got)
 		}
-		if bytes.Contains(stacks[:n], []byte(".(*rcOwner).load.func")) || bytes.Contains(stacks[:n], []byte(".(*rcOwner).disposeNext.func")) {
+		if strings.Contains(stacks, ".(*rcOwner).load.func") || strings.Contains(stacks, ".(*rcOwner).disposeNext.func") {
 			t.Fatal("idle activation retains a transition goroutine")
 		}
 		if err := r.Close(rcGuard(t)); err != nil {
@@ -2666,10 +2697,10 @@ func TestReconcilerCanceledWaitersAndClosedCommands(t *testing.T) {
 	}
 	close(release)
 	rcSettle(t, r)
-	if err := r.Close(rcGuard(t)); err != nil {
+	if err := closeRuntime(rcGuard(t), r); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Close(rcGuard(t)); err != nil {
+	if err := closeRuntime(rcGuard(t), r); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Mount(rcGuard(t), Spec{}); !errors.Is(err, ErrClosed) {
@@ -2724,6 +2755,9 @@ func TestReconcilerCleanupDiagnosticDoesNotBecomeAwaitFailure(t *testing.T) {
 	}
 	if err := r.Close(rcGuard(t)); !errors.Is(err, cleanupErr) {
 		t.Fatalf("runtime lost cleanup diagnostic: %v", err)
+	}
+	if err := joinOwner(rcGuard(t), r); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -3123,4 +3157,33 @@ func TestReconcilerDeadlinesBoundIgnoredCancellation(t *testing.T) {
 			})
 		})
 	}
+}
+
+// An owner running outside the bubble (as a leftover of an earlier test would be)
+// must not be counted, and a second owner inside it must be.
+func TestBubbleStacksCountsOnlyThisBubblesOwners(t *testing.T) {
+	outside := rcRuntime(t)
+	rcSettle(t, outside)
+	synctest.Test(t, func(t *testing.T) {
+		first := NewReconciler()
+		synctest.Wait()
+		if got := strings.Count(bubbleStacks(t), ".(*rcOwner).run("); got != 1 {
+			t.Fatalf("owners in bubble with one runtime and one outside = %d, want 1", got)
+		}
+		// The process-wide dump the two idle-worker tests used to count sees both.
+		all := make([]byte, 1<<20)
+		if got := bytes.Count(all[:runtime.Stack(all, true)], []byte(".(*rcOwner).run(")); got < 2 {
+			t.Fatalf("process-wide dump saw %d owners, want the outside one too", got)
+		}
+		second := NewReconciler()
+		synctest.Wait()
+		if got := strings.Count(bubbleStacks(t), ".(*rcOwner).run("); got != 2 {
+			t.Fatalf("owners in bubble with two runtimes = %d, want 2", got)
+		}
+		for _, r := range []Runtime{first, second} {
+			if err := closeRuntime(rcGuard(t), r); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
 }

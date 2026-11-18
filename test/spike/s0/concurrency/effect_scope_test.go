@@ -232,7 +232,7 @@ func scopeRuntimeTest(t *testing.T, run func(*testing.T, context.Context, Runtim
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			r := makeRuntime()
-			defer r.Close(ctx)
+			defer closeRuntime(ctx, r)
 			run(t, ctx, r)
 		})
 	}
