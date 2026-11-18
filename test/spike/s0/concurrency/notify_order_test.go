@@ -4,6 +4,7 @@ package concurrency
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -161,6 +162,53 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 			published := firstEvent(events, func(e Event) bool { return isServiceEvent(e, "svc") })
 			if loading < 0 || published < 0 || loading > published {
 				t.Fatalf("consumer LOADING at %d must precede the service event at %d", loading, published)
+			}
+		})
+	}
+}
+
+// D09: a dependant without a check starts loading in the same owner step that
+// holds the provider's service event for another dependant's check. Its load
+// must not record anything before that event: LOADING, service event, then the
+// load's own records. The slow dependant's check calls back into the runtime
+// (the owner is free to answer) so the loader goroutine can run meanwhile.
+func TestServiceEventPrecedesDependantLoadRecords(t *testing.T) {
+	for name, makeRuntime := range orderCandidates() {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			r := makeRuntime()
+			defer r.Close(ctx)
+			noop := func(context.Context) error { return nil }
+			if _, err := r.Mount(ctx, Spec{ID: "fast", Needs: []string{"svc"}, Apply: func(c *Context) error { return c.Defer("fast-load", noop) }}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Mount(ctx, Spec{ID: "slow", Needs: []string{"svc"}, Check: func(*Context) bool {
+				// Owner round trips: the fast loader has been launched by now.
+				for range 8 {
+					if _, err := r.Events(ctx); err != nil {
+						return false
+					}
+				}
+				return true
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Context) error { return c.Provide("svc", "v") }}); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Settle(ctx); err != nil {
+				t.Fatal(err)
+			}
+			events, err := r.Events(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loading := firstEvent(events, stateEvent("fast", Loading))
+			service := firstEvent(events, func(e Event) bool { return isServiceEvent(e, "svc") })
+			record := firstEvent(events, func(e Event) bool { return e.Name == "fast" && strings.HasPrefix(e.Kind, "effect") })
+			if loading < 0 || service < 0 || record < 0 || !(loading < service && service < record) {
+				t.Fatalf("want LOADING < service event < load record: loading=%d service=%d record=%d\n%+v", loading, service, record, events)
 			}
 		})
 	}

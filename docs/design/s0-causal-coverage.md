@@ -39,7 +39,7 @@ Protocol as before: every pair 100 times under `-race` and 100 times with
 | D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: `checkpoint "children" Needs count mismatch`; classification in "D06 and D23" below. |
 | D07 | D07.json | 35+31 / 89+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D08 | D08.json | 43+39 / 95+81 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
-| D09 | D09.json | 75+53 / 23+29 | MISMATCH | 98+93 of 100+100 | match | 100+100 of 100+100 | R: MISMATCH in 9 of 200 runs: `conflicting order reversed between service {ready:availability} and config of cb` (the second `service` event after `notify` is sometimes recorded after the consumer's `config` event; the oracle has it before). G: match. |
+| D09 | D09.json | 75+53 / 23+29 | MISMATCH | 98+93 of 100+100 | match | 100+100 of 100+100 | R: was MISMATCH in 9 of 200 runs (second `service` event after the consumer's `config`); fixed 2026-11-18, now match in 100 of 100 under `-race` and 100 of 100 at `GOMAXPROCS=2`, see [`causal-d09-reconciler-fix`](../../test/spike/s0/results/causal-d09-reconciler-fix/invocation.json). G: match. |
 | D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
@@ -79,7 +79,7 @@ publication-order defect, and D09):
 | D03, D07, D08, D11, D14, D15, D18, D21 reconciler | MISMATCH, publication before consumer LOADING (D11, D14, D15 200 of 200; the rest 112 to 137 of 200) | match, 100 of 100 in both modes |
 | D06 reconciler | MISMATCH, publication order in 126 of 200 plus Needs count | MISMATCH, only `Needs count mismatch`, 200 of 200 (same as graph-lock) |
 | D09 graph-lock | MISMATCH, consumer `cb` loads while unavailable, 200 of 200 | match, 100 of 100 in both modes |
-| D09 reconciler | MISMATCH, missing second `service` event, 200 of 200 | **still MISMATCH, flaky**: matches in 191 of 200 runs; 9 of 200 fail with `event segment 2: conflicting order reversed between {"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"ready":"availability"}}} and {"kind":"config","data":{"config":{},"fiber":"cb"}}`. The oracle records `service` after `cb` LOADING and before `cb` `config`; in those runs the reconciler's `Notify` event follows the consumer's `config`. Not a known defect, not excused. |
+| D09 reconciler | MISMATCH, missing second `service` event, 200 of 200 | **was still MISMATCH, flaky (fixed 2026-11-18, see the entry below)**: matches in 191 of 200 runs; 9 of 200 fail with `event segment 2: conflicting order reversed between {"kind":"service","data":{"key":"svc","realm":"root:svc","value":{"ready":"availability"}}} and {"kind":"config","data":{"config":{},"fiber":"cb"}}`. The oracle records `service` after `cb` LOADING and before `cb` `config`; in those runs the reconciler's `Notify` event follows the consumer's `config`. Not a known defect, not excused. |
 
 ### D06 and D23 (classification with evidence)
 
@@ -367,6 +367,29 @@ recorded oracle traces in `results/corpus-final`.
 D09 stays `unsupported` for the frozen comparator, so the fix is shown by the
 replay-level comparison with the recorded oracle trace (per-fiber statuses and
 service events), not by `CompareCausal`.
+
+### Fix of 2026-11-18: D09, `reconciler` (notify order)
+
+Reproduced with real traces (5 of 100 runs failed under `-race`: 95 of 100
+matched before the change). In a failing run the candidate recorded `cb` PENDING,
+LOADING, config, apply, mark, ACTIVE and only then the `Notify` `service` event;
+the oracle records LOADING, `service`, config, apply. Cause: `Notify` rechecks every
+dependant, so the held `service` event waits for the checks of `ca` and `cb`. When
+`cb`'s check finished first, its load worker was started at once and recorded
+before `ca`'s check result released the event. Fix, in both candidates (the
+`graph-lock` has the same defect for a dependant that starts loading while the
+event is held by another dependant's check, shown by the new regression test; the
+corpus D09 did not hit it): a load worker is not started while a service event for
+one of its fiber's needs is held or being produced; it starts when that event has
+been recorded. LOADING is still recorded when the transition happens. No callback
+runs on the owner or under the lock, and nothing blocks. Regression test:
+`TestServiceEventPrecedesDependantLoadRecords` (both candidates; before the fix it
+failed on 200 of 200 `reconciler` runs and about 130 of 200 `graph-lock` runs under
+`-race`). Rates after the fix, all 16 accepted scenarios, both candidates, 100
+runs each, `-race` and `GOMAXPROCS=2`: causal match 100 of 100 in every pair
+(receipts
+[`causal-d09-reconciler-fix`](../../test/spike/s0/results/causal-d09-reconciler-fix/invocation.json)).
+`TestCausalReplayIntegration` now lists D09 on both candidates as covered.
 
 ### Fixture causality gaps (category c, not candidate bugs)
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -38,6 +39,16 @@ type GraphLock struct {
 	batchSeen  map[uint64]bool
 	knobs      graphKnobs
 	pendingSvc []graphPendingService
+	// A load worker whose fiber needs a key with a held (or being produced)
+	// service event starts only after that event: the oracle records it after
+	// the fiber's LOADING and before anything its load does.
+	pendingLoads []graphPendingLoad
+	waking       map[string]int
+}
+
+type graphPendingLoad struct {
+	needs []string
+	start func()
 }
 
 // These are design knobs, not retry intervals. Cancellation is immediate;
@@ -192,6 +203,7 @@ func (g *GraphLock) queueServiceLocked(e Event, waits []*graphPre) {
 
 // flushServicesLocked emits held service events in order once their checks ended.
 func (g *GraphLock) flushServicesLocked() {
+	defer g.startLoadsLocked()
 	for len(g.pendingSvc) != 0 {
 		head := g.pendingSvc[0]
 		for _, pre := range head.waits {
@@ -205,6 +217,33 @@ func (g *GraphLock) flushServicesLocked() {
 	}
 }
 
+func (g *GraphLock) serviceHeldLocked(keys []string) bool {
+	for _, k := range keys {
+		if g.waking[k] != 0 {
+			return true
+		}
+	}
+	for _, p := range g.pendingSvc {
+		if slices.Contains(keys, p.event.Key) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GraphLock) startLoadsLocked() {
+	kept := g.pendingLoads[:0]
+	for _, l := range g.pendingLoads {
+		if g.serviceHeldLocked(l.needs) {
+			kept = append(kept, l)
+			continue
+		}
+		l.start()
+	}
+	clear(g.pendingLoads[len(kept):])
+	g.pendingLoads = kept
+}
+
 // wakeServiceLocked refreshes the dependants of keys, then records the service
 // events. A refresh may start off-lock pre-checks; the events wait for them.
 func (g *GraphLock) wakeServiceLocked(keys []string, events []Event) {
@@ -216,7 +255,11 @@ func (g *GraphLock) wakeServiceLocked(keys []string, events []Event) {
 			}
 		}
 	}
+	if g.waking == nil {
+		g.waking = make(map[string]int)
+	}
 	for _, key := range keys {
+		g.waking[key]++
 		g.wakeKeyLocked(key)
 	}
 	var waits []*graphPre
@@ -231,6 +274,12 @@ func (g *GraphLock) wakeServiceLocked(keys []string, events []Event) {
 		g.queueServiceLocked(e, waits)
 		waits = nil // Later events follow the first in queue order.
 	}
+	for _, key := range keys {
+		if g.waking[key]--; g.waking[key] == 0 {
+			delete(g.waking, key)
+		}
+	}
+	g.startLoadsLocked()
 }
 
 func (g *GraphLock) stateLocked(f *graphFiber, state State) {
@@ -1181,6 +1230,10 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 		g.retireLocked(a)
 		g.stateLocked(f, Unloading)
 	})
+	if g.serviceHeldLocked(f.spec.Needs) {
+		g.pendingLoads = append(g.pendingLoads, graphPendingLoad{needs: f.spec.Needs, start: func() { go g.runLoad(a) }})
+		return
+	}
 	go g.runLoad(a)
 }
 

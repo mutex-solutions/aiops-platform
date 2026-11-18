@@ -203,7 +203,7 @@ var causalCovered = []struct {
 	{causalScenario{"D04", corpusPath("D04"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D07", corpusPath("D07"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D08", corpusPath("D08"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D09", corpusPath("D09"), true}, []string{"graph-lock"}},
+	{causalScenario{"D09", corpusPath("D09"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D11", corpusPath("D11"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock"}},
@@ -226,9 +226,6 @@ var causalDiagnostics = []struct {
 	flaky    bool
 }{
 	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{`checkpoint "children" Needs count mismatch`}, false},
-	// reconciler Notify: the second service event is sometimes recorded after the
-	// consumer's config event (9 of 200 runs after the fixes).
-	{causalScenario{"D09", corpusPath("D09"), true}, []string{"reconciler"}, []string{"conflicting order reversed"}, true},
 	// D13 revision 3 leaves fiber d without a barrier (fixture race).
 	{causalScenario{"D13", "../../../differential/corpus/revision-3/D13.json", true}, nil, []string{"record count mismatch", "conflicting order reversed", "content/multiplicity mismatch", "without phase witness"}, true},
 	// D22 revision 4: the joining-setup snapshot follows a non-awaited disposal.

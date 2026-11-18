@@ -151,6 +151,14 @@ type rcPendingService struct {
 	waits []*rcCheck
 }
 
+// rcPendingLoad is a load worker not yet started: its fiber needs a key whose
+// service event is still held, and the oracle records that event after the
+// fiber's LOADING and before anything its load does.
+type rcPendingLoad struct {
+	needs []string
+	start func()
+}
+
 type rcPhase uint8
 
 const (
@@ -275,6 +283,8 @@ type rcOwner struct {
 	deferredDrain map[uint64]*rcFiber
 	batchDepth    int // Data commit/invalidation may not admit new callbacks.
 	pendingSvc    []rcPendingService
+	pendingLoads  []rcPendingLoad // Load workers held back by pendingSvc.
+	notifying     map[string]int  // Keys whose service event is being produced by notifyService.
 }
 
 // NewReconciler starts one global state owner and no per-idle-fiber goroutine.
@@ -1319,33 +1329,55 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 	o.deadline(f, time.Now().Add(rcLoadBudget))
 	o.state(f, Loading)
 	apply, applyEffect, config := f.spec.Apply, f.spec.ApplyEffect, f.spec.Config
-	go func() {
-		var returned Disposer
-		var stale bool
-		err := rcInvoke(func() error {
-			if config != nil {
-				prepared, err := config.Prepare(std)
-				if err != nil {
+	start := func() {
+		go func() {
+			var returned Disposer
+			var stale bool
+			err := rcInvoke(func() error {
+				if config != nil {
+					prepared, err := config.Prepare(std)
+					if err != nil {
+						return err
+					}
+					if !prepared.Published {
+						stale = true
+						return nil
+					}
+					c.config, c.configVersion = prepared.Value, prepared.Version
+				}
+				if applyEffect != nil {
+					var err error
+					returned, err = applyEffect(c)
 					return err
 				}
-				if !prepared.Published {
-					stale = true
+				if apply == nil {
 					return nil
 				}
-				c.config, c.configVersion = prepared.Value, prepared.Version
-			}
-			if applyEffect != nil {
-				var err error
-				returned, err = applyEffect(c)
-				return err
-			}
-			if apply == nil {
-				return nil
-			}
-			return apply(c)
-		})
-		o.r.completed(rcMessage{kind: rcLoadComplete, id: c.fiber, act: a, dispose: returned, stale: stale, err: err, errText: rcErrorText(err)})
-	}()
+				return apply(c)
+			})
+			o.r.completed(rcMessage{kind: rcLoadComplete, id: c.fiber, act: a, dispose: returned, stale: stale, err: err, errText: rcErrorText(err)})
+		}()
+	}
+	if o.serviceHeld(f.spec.Needs) {
+		o.pendingLoads = append(o.pendingLoads, rcPendingLoad{needs: f.spec.Needs, start: start})
+		return
+	}
+	start()
+}
+
+// serviceHeld reports whether a held service event is for one of keys.
+func (o *rcOwner) serviceHeld(keys []string) bool {
+	for _, k := range keys {
+		if o.notifying[k] != 0 {
+			return true
+		}
+	}
+	for _, p := range o.pendingSvc {
+		if slices.Contains(keys, p.event.Key) {
+			return true
+		}
+	}
+	return false
 }
 
 // Error formatting can invoke plugin methods just like Check or Apply. Cache it
@@ -1784,10 +1816,19 @@ func (o *rcOwner) notifyService(keys []string, events []Event) {
 		}
 	}
 	o.noticeDepth += len(events)
+	if o.notifying == nil {
+		o.notifying = make(map[string]int)
+	}
 	for _, key := range keys {
+		o.notifying[key]++
 		o.notifyKey(key)
 	}
 	o.work()
+	for _, key := range keys {
+		if o.notifying[key]--; o.notifying[key] == 0 {
+			delete(o.notifying, key)
+		}
+	}
 	var waits []*rcCheck
 	for _, key := range keys {
 		for _, f := range o.byKey[key] {
@@ -1804,6 +1845,7 @@ func (o *rcOwner) notifyService(keys []string, events []Event) {
 		}
 		o.emitService(e)
 	}
+	o.startLoads()
 }
 
 func (o *rcOwner) emitService(e Event) {
@@ -1825,6 +1867,7 @@ func (o *rcOwner) emitService(e Event) {
 
 // flushServices emits held service events in order once their checks finished.
 func (o *rcOwner) flushServices() {
+	defer o.startLoads()
 	for len(o.pendingSvc) != 0 {
 		head := o.pendingSvc[0]
 		for _, q := range head.waits {
@@ -1836,6 +1879,20 @@ func (o *rcOwner) flushServices() {
 		o.pendingSvc = o.pendingSvc[1:]
 		o.emitService(head.event)
 	}
+}
+
+// startLoads launches the load workers whose held service events are out.
+func (o *rcOwner) startLoads() {
+	kept := o.pendingLoads[:0]
+	for _, l := range o.pendingLoads {
+		if o.serviceHeld(l.needs) {
+			kept = append(kept, l)
+			continue
+		}
+		l.start()
+	}
+	clear(o.pendingLoads[len(kept):])
+	o.pendingLoads = kept
 }
 
 func (o *rcOwner) event(f *rcFiber, kind, key string, uid uint64) {

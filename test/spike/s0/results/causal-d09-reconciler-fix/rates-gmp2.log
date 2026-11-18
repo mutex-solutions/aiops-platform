@@ -1,0 +1,36 @@
+=== RUN   TestCausalRates
+    causal_rates_test.go:143: D02 reconciler: causal match 100/100 strict 16/100
+    causal_rates_test.go:143: D02 graph-lock: causal match 100/100 strict 11/100
+    causal_rates_test.go:143: D03 reconciler: causal match 100/100 strict 2/100
+    causal_rates_test.go:143: D03 graph-lock: causal match 100/100 strict 61/100
+    causal_rates_test.go:143: D04 reconciler: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D04 graph-lock: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D07 reconciler: causal match 100/100 strict 32/100
+    causal_rates_test.go:143: D07 graph-lock: causal match 100/100 strict 95/100
+    causal_rates_test.go:143: D08 reconciler: causal match 100/100 strict 49/100
+    causal_rates_test.go:143: D08 graph-lock: causal match 100/100 strict 93/100
+    causal_rates_test.go:143: D09 reconciler: causal match 100/100 strict 64/100
+    causal_rates_test.go:143: D09 graph-lock: causal match 100/100 strict 32/100
+    causal_rates_test.go:143: D10 reconciler: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D10 graph-lock: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D11 reconciler: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D11 graph-lock: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D12 reconciler: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D12 graph-lock: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D14 reconciler: causal match 100/100 strict 50/100
+    causal_rates_test.go:143: D14 graph-lock: causal match 100/100 strict 96/100
+    causal_rates_test.go:143: D15 reconciler: causal match 100/100 strict 40/100
+    causal_rates_test.go:143: D15 graph-lock: causal match 100/100 strict 97/100
+    causal_rates_test.go:143: D16 reconciler: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D16 graph-lock: causal match 100/100 strict 0/100
+    causal_rates_test.go:143: D18 reconciler: causal match 100/100 strict 38/100
+    causal_rates_test.go:143: D18 graph-lock: causal match 100/100 strict 93/100
+    causal_rates_test.go:143: D19 reconciler: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D19 graph-lock: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D21 reconciler: causal match 100/100 strict 47/100
+    causal_rates_test.go:143: D21 graph-lock: causal match 100/100 strict 99/100
+    causal_rates_test.go:143: D27 reconciler: causal match 100/100 strict 100/100
+    causal_rates_test.go:143: D27 graph-lock: causal match 100/100 strict 100/100
+--- PASS: TestCausalRates (91.41s)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	92.435s

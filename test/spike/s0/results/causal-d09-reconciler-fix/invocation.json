@@ -1,0 +1,46 @@
+{
+  "classification": "D09 reconciler notify-order fix; differential comparison only, NOT full S0 or final SDK acceptance",
+  "baseCommit": "124468c",
+  "fixCommit": "the commit that adds this directory",
+  "before": "D09 reconciler causal match 95/100 under -race (5 failures: second service event after cb config); D09 graph-lock 100/100",
+  "oracle": {"node": "24.22.1"},
+  "commands": [
+    {
+      "label": "rates under -race, 100 runs per candidate and scenario",
+      "argv": ["go", "test", "-race", "./test/spike/s0/replay", "-run", "TestCausalRates", "-count=1", "-timeout", "60m", "-v"],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "S0_CAUSAL_ONLY": "D02 D03 D04 D07 D08 D09 D10 D11 D12 D14 D15 D16 D18 D19 D21 D27",
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/race.json",
+        "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]
+      },
+      "log": "rates-race.log",
+      "table": "rates-race.json",
+      "result": "32 of 32 pairs causal match 100/100",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race with GOMAXPROCS=2",
+      "argv": ["go", "test", "-race", "./test/spike/s0/replay", "-run", "TestCausalRates", "-count=1", "-timeout", "60m", "-v"],
+      "environmentWithoutCredentials": {
+        "S0_NODE": "<node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "S0_CAUSAL_ONLY": "D02 D03 D04 D07 D08 D09 D10 D11 D12 D14 D15 D16 D18 D19 D21 D27",
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_RATE_OUT": "<rates-root>/gmp2.json",
+        "GOMAXPROCS": "2",
+        "unset": ["NODE_OPTIONS", "NODE_PATH", "CORDIS_SHARED"]
+      },
+      "log": "rates-gmp2.log",
+      "table": "rates-gmp2.json",
+      "result": "32 of 32 pairs causal match 100/100",
+      "exitCode": 0
+    }
+  ],
+  "d09": {"reconciler": "100/100 race, 100/100 GOMAXPROCS=2", "graph-lock": "100/100 race, 100/100 GOMAXPROCS=2"},
+  "d14": {"reconciler": "100/100 race, 100/100 GOMAXPROCS=2", "graph-lock": "100/100 race, 100/100 GOMAXPROCS=2"}
+}
