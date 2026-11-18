@@ -1,0 +1,143 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D21",
+  "title": "An isolated provider is retained through blocked consumer teardown",
+  "covers": [
+    "provider-retained-through-consumer-teardown"
+  ],
+  "contexts": [
+    {
+      "id": "realm",
+      "parent": "root",
+      "isolate": {
+        "key": "svc",
+        "label": "shared"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "alive": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "mark",
+          "label": "provider-cleanup"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "initial"
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "gate",
+          "label": "consumer-unload"
+        },
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "during-teardown"
+        },
+        {
+          "op": "mark",
+          "label": "consumer-cleanup"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "context": "realm",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "context": "realm",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "active"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p",
+      "await": false,
+      "task": "provider-dispose"
+    },
+    {
+      "op": "waitMark",
+      "label": "consumer-unload"
+    },
+    {
+      "op": "snapshot",
+      "label": "retained"
+    },
+    {
+      "op": "release",
+      "label": "consumer-unload"
+    },
+    {
+      "op": "settle",
+      "label": "released"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "retained",
+      "path": "/states/0/state",
+      "equals": "UNLOADING"
+    },
+    {
+      "at": "retained",
+      "path": "/states/1/state",
+      "equals": "UNLOADING"
+    },
+    {
+      "at": "released",
+      "path": "/outputs/during-teardown",
+      "equals": {
+        "alive": true
+      }
+    },
+    {
+      "at": "released",
+      "path": "/states/0/state",
+      "equals": "DISPOSED"
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

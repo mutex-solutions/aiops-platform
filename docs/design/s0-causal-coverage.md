@@ -2,10 +2,105 @@
 
 Status: evidence record for the owner-approved causal comparison
 ([ADR-035](../adr/ADR-035-cordis-tracking.md),
-[amendment](s0-causal-comparison-amendment.md)). The comparator, corpus, criteria
-and candidates are unchanged. This note does **not** establish S0 acceptance.
+[amendment](s0-causal-comparison-amendment.md),
+[amendment 2](s0-causal-comparison-amendment-2.md),
+[its addendum](s0-causal-comparison-amendment-2-addendum.md) and
+[freeze 2](s0-causal-comparison-freeze-2.json)). The corpus, criteria and
+candidates are unchanged. This note does **not** establish S0 acceptance.
 
-## What was done
+The first part is the result of the rerun of all 36 scenarios with the comparator
+as extended by amendment 2. The sections after "Before amendment 2" are the
+earlier record of the frozen comparator and are kept unchanged for history.
+
+## After amendment 2
+
+Receipts: [`causal-amendment-2`](../../test/spike/s0/results/causal-amendment-2/invocation.json).
+Each scenario was replayed 100 times per candidate under `-race` and 100 times
+per candidate with `GOMAXPROCS=2` under `-race`, against one fresh pinned-oracle
+(Node 24.22.1) execution per scenario. D13 uses `corpus/revision-3`, D22 uses
+`corpus/revision-4`, D10, D12 and D16 run without the composed front end as in
+the existing test. D05 and D26 are not-carried boundaries and are not run.
+
+A pair is **match** only when it matched 100 of 100 in both modes, **unsupported**
+when the comparator could not prove the construct in every run, and **MISMATCH**
+otherwise. Rates are `race + GOMAXPROCS=2` causal matches over runs. Strict is the
+existing byte comparison, schedule dependent. Categories: (a) real candidate
+difference, (b) decision-record adaptation, (c) fixture or comparator limitation.
+
+| ID | Fixture | Strict R+G (race + GOMAXPROCS=2 of 100 each) | Causal R | rate R | Causal G | rate G | Category and evidence |
+|---|---|---|---|---|---|---|---|
+| D01 | D01.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match on both. Unsupported: `$meta` runtime metadata expression (not added). |
+| D02 | D02.json | 14+13 / 2+10 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier; strict fails on schedule (see note), causal match. |
+| D03 | D03.json | 0+0 / 48+63 | MISMATCH | 45+41 of 100+100 | match | 100+100 of 100+100 | R: (a) known R defect class, publication before consumer LOADING. G: match. Shared output cell "joined" proved by frame (C5). |
+| D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | both match. Refusal text compared by class (C6.5); strict fails only on that text. |
+| D05 | D05.json | - / - | not run | - | not run | - | (b) `ctx.get` not carried, not run. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (a) both: `checkpoint "children" Needs count mismatch`: the candidate child epoch lists the inherited `svc` need that the oracle does not (decision record row 8, inherited declarations are realm-local); R also shows the publication-order defect in 126 of 200 runs. |
+| D07 | D07.json | 0+0 / 58+49 | MISMATCH | 39+47 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect. G: match (NeedWith, service mode, C4). |
+| D08 | D08.json | 0+0 / 63+49 | MISMATCH | 30+49 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect. G: match (ancestor intercepts, C4). |
+| D09 | D09.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (a) known: G `consumer "cb" LOADING before every required provider ACTIVE and available` 200 of 200 (consumer churn while availability false); R `record count mismatch: 7 != 6` 200 of 200 (second `service` event missing). |
+| D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier. |
+| D11 | D11.json | 0+0 / 100+100 | MISMATCH | 0+0 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect 200 of 200. G: match (gate, mark, release, C1). |
+| D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier. |
+| D13 | revision-3/D13.json | 0+0 / 0+0 | MISMATCH | 2+0 of 100+100 | MISMATCH | 0+1 of 100+100 | (c) fixture race on fiber `d` (no barrier on its Apply/ACTIVE): record counts 34..38 vs the oracle 37, order reversal between `d` apply and `d` disposal; a match in 3 of 400 runs by luck is not a match. |
+| D14 | D14.json | 0+0 / 35+81 | MISMATCH | 0+0 of 100+100 | match | 100+100 of 100+100 | R: (a) known defect, 200 of 200. G: match. |
+| D15 | D15.json | 0+0 / 54+80 | MISMATCH | 0+0 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect 200 of 200. G: match (provider swap, C6). |
+| D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier; strict fails on schedule. |
+| D17 | D17.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: async `update` with `task` (not added). |
+| D18 | D18.json | 0+0 / 35+65 | MISMATCH | 46+42 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect in 112 of 200 runs, flaky. G: match (effects, C3). |
+| D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier. |
+| D20 | D20.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: async `update` with `task`. |
+| D21 | D21.json | 0+0 / 82+59 | MISMATCH | 25+38 of 100+100 | match | 100+100 of 100+100 | R: (a) publication order defect in 137 of 200 runs, flaky. G: match (cleanup gate, retained provider, C1). |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (c) fixture race: the `joining-setup` snapshot follows a non-awaited disposal with no wait, record counts 14 vs 16 on both candidates, 200 of 200. |
+| D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (a) new, both: the caught `error {op:"effect"}` event is recorded after the fiber is already ACTIVE (and `mark once` before `output setup-error`), outside the Apply frame; the oracle records it inside the body. Same on both candidates, so it is likely in the shared replay adapter, not in candidate scheduling. |
+| D24 | D24.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `lateEffect` (not added). |
+| D25 | D25.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `selfDispose` (not added). |
+| D26 | D26.json | - / - | not run | - | not run | - | (b) awaited self-dispose, not run. |
+| D27 | D27.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | covered earlier. |
+| D28 | D28.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: update veto policy. |
+| D29 | D29.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`. |
+| D30 | D30.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: update veto policy. |
+| D31 | D31.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+| D32 | D32.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+| D33 | D33.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+| D34 | D34.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+| D35 | D35.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+| D36 | D36.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match. Unsupported: `listen`/`dispatch` (not added). |
+
+Counts, 36 scenarios, 68 candidate/scenario pairs run (D05 and D26 not run):
+
+- causal match: 22 pairs (D02, D04, D10, D12, D16, D19, D27 on both candidates; D03, D07, D08, D11, D14, D15, D18, D21 on graph-lock only). Before this round 9 pairs were accepted by the comparator (D02, D10, D12, D16 on both, D14 on graph-lock; D19 and D27 were strict matches and not run through it);
+- MISMATCH: 18 pairs (reconciler D03, D06, D07, D08, D09, D11, D13, D14, D15, D18, D21, D22, D23; graph-lock D06, D09, D13, D22, D23);
+- unsupported: 28 pairs (D01, D17, D20, D24, D25, D28 to D36 on both candidates). All 14 scenarios are strict matches, so this is a comparator scope statement, not a finding.
+
+Reading the mismatches:
+
+1. **Reconciler publication order (known defect, D14 class).** Every reconciler
+   MISMATCH of the form `last enabling provider ... published before consumer ... LOADING`
+   (D03, D07, D08, D11, D14, D15, D18, D21, and D06 in part) is the defect already
+   named for D14: the provider's `service` publication is recorded before a mounted
+   consumer reaches LOADING. It is reported, not excused. D03, D07, D08, D18, D21 are
+   flaky (the candidate sometimes orders it correctly), D11, D14 and D15 failed in every run.
+2. **D09 (known).** graph-lock consumer `cb` loads while its availability is false;
+   reconciler lacks the second `service` event after `notify`.
+3. **D06 (new, with row 8).** Both candidates show a child epoch with the inherited
+   `svc` need the oracle does not have. The inventory already records one failing original
+   assertion of D06 on both candidates (row 8); whether this epoch difference is the same
+   adaptation is not established here.
+4. **D23 (new).** Both candidates emit the caught effect `error` after the fiber is
+   ACTIVE. Identical on both, so probably the shared replay adapter.
+5. **D13 and D22 (fixture races).** See the section "Fixture causality gaps"; the
+   comparator reports the race, it does not repair it.
+
+What amendment 2 does not establish: it does not show equivalence for any unsupported
+scenario, it does not recompute values (NeedWith/intercept merges and effect error
+payloads are compared between traces), it asserts at most one `service` event per
+`notify` command and not that each `notify` produces one, and it does not assert a
+cleanup order between different effects of one fiber (it compares that order with the
+oracle). None of this is S0 acceptance.
+
+## Before amendment 2 (frozen comparator)
+
+### What was done
 
 Every scenario that fails the strict comparison on at least one candidate in the
 [inventory after D29](../../test/spike/s0/results/corpus-inventory-after-d29/results/inventory.json)
@@ -26,7 +121,7 @@ runs under `-race` and 100 of 100 with `GOMAXPROCS=2` under `-race`. The D14
 were identical in 5 further runs. The receipts under `causal-coverage-extension`
 record that state and are not rewritten.
 
-## Per-scenario table
+### Per-scenario table
 
 Strict status is the inventory class (R reconciler, G graph-lock). Strict status
 is schedule dependent: the inventory records that D02 flips between match and
@@ -70,7 +165,7 @@ first operation it cannot prove independent, so it says nothing about whether th
 candidate is equivalent. The reason is the first one hit; a scenario may contain
 further unsupported operations.
 
-## What the comparator is missing (category c)
+### What the comparator is missing (category c)
 
 Each missing capability is general; none was added, because the methodology is
 frozen. Required to cover the scenarios above: gate/mark/release continuations
@@ -79,7 +174,7 @@ async/catch metadata (D18, D23); ancestor intercepts and NeedWith/service/availa
 provision modes (D07, D08, D09); proof of the owner of an output cell shared across
 realms (D03); more than one provider of one address, by refusal or swap (D04, D15).
 
-## Candidate differences (category a)
+### Candidate differences (category a)
 
 Owner decision, 2026-11-18: where a candidate differs from the oracle in D14 and
 D09 it is a candidate bug and is fixed to match the oracle. Items 1 to 3 below are
@@ -142,7 +237,7 @@ D09 stays `unsupported` for the frozen comparator, so the fix is shown by the
 replay-level comparison with the recorded oracle trace (per-fiber statuses and
 service events), not by `CompareCausal`.
 
-## Fixture causality gaps (category c, not candidate bugs)
+### Fixture causality gaps (category c, not candidate bugs)
 
 - **D13 revision 3** fixes the barrier for fiber `f` only. Fiber `d` is mounted and
   disposed with no wait on its Apply or ACTIVE. In 20 further fresh runs the
@@ -154,7 +249,7 @@ service events), not by `CompareCausal`.
   and 7 of 20 `reconciler` runs, and ACTIVE first in the rest. This follows from
   row 22 (run to completion not carried).
 
-## What this does and does not establish
+### What this does and does not establish
 
 - It established, before the fixes of 2026-11-18, that of the 14 targeted
   scenarios (28 candidate pairs) the frozen comparator accepted one pair repeatably

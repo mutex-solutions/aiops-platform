@@ -1,0 +1,157 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D16",
+  "title": "Diamond dependency invalidation propagates through both branches",
+  "covers": [
+    "chain-invalidation",
+    "diamond-invalidation"
+  ],
+  "plugins": [
+    {
+      "id": "root-provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "a",
+          "value": {
+            "$config": "v"
+          }
+        }
+      ]
+    },
+    {
+      "id": "left",
+      "apply": [
+        {
+          "op": "read",
+          "key": "a",
+          "to": "left"
+        },
+        {
+          "op": "provide",
+          "key": "b",
+          "value": {
+            "$output": "left"
+          }
+        }
+      ],
+      "needs": {
+        "a": null
+      }
+    },
+    {
+      "id": "right",
+      "apply": [
+        {
+          "op": "read",
+          "key": "a",
+          "to": "right"
+        },
+        {
+          "op": "provide",
+          "key": "c",
+          "value": {
+            "$output": "right"
+          }
+        }
+      ],
+      "needs": {
+        "a": null
+      }
+    },
+    {
+      "id": "leaf",
+      "apply": [
+        {
+          "op": "read",
+          "key": "b",
+          "to": "leaf-left"
+        },
+        {
+          "op": "read",
+          "key": "c",
+          "to": "leaf-right"
+        }
+      ],
+      "needs": {
+        "b": null,
+        "c": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "root-provider",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "mount",
+      "fiber": "l",
+      "plugin": "left",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "r",
+      "plugin": "right",
+      "config": {}
+    },
+    {
+      "op": "mount",
+      "fiber": "leaf",
+      "plugin": "leaf",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "before"
+    },
+    {
+      "op": "update",
+      "fiber": "p",
+      "config": {
+        "v": 2
+      }
+    },
+    {
+      "op": "settle",
+      "label": "after"
+    },
+    {
+      "op": "dispose",
+      "fiber": "leaf"
+    },
+    {
+      "op": "dispose",
+      "fiber": "r"
+    },
+    {
+      "op": "dispose",
+      "fiber": "l"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "after",
+      "path": "/outputs/leaf-left",
+      "equals": 2
+    },
+    {
+      "at": "after",
+      "path": "/outputs/leaf-right",
+      "equals": 2
+    }
+  ]
+}
