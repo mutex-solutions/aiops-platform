@@ -1,0 +1,53 @@
+name: Property workload (full)
+
+# 1,000 seeds x 1,000 operations per candidate under the race detector.
+# Too long for every push: weekly, on demand, and when this file changes.
+on:
+  schedule:
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/property-full.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: property-full
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  GOMAXPROCS: "8" # frozen by the property protocol
+
+jobs:
+  property:
+    name: Full property workload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - name: Freeze the source digest
+        run: |
+          digest=$(go test -mod=readonly -race -count=1 -v -run '^TestRuntimeProperties$' ./test/spike/s0/properties \
+            | grep -o 'source=[0-9a-f]\{64\}' | head -1 | cut -d= -f2)
+          test -n "$digest"
+          echo "S0_PROPERTY_SOURCE_SHA256=$digest" >> "$GITHUB_ENV"
+      - name: Run the full workload
+        env:
+          S0_PROPERTY_FULL: "1"
+          S0_PROPERTY_RESULTS: ${{ runner.temp }}/property
+        run: |
+          mkdir -p "$S0_PROPERTY_RESULTS"
+          go test -mod=readonly -race -count=1 -timeout=320m -v \
+            -run '^TestRuntimeProperties$' ./test/spike/s0/properties
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: property-full
+          path: ${{ runner.temp }}/property
+          if-no-files-found: warn
