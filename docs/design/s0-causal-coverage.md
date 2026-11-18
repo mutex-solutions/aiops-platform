@@ -198,6 +198,9 @@ and 28 unsupported, before any other change to the D09 rows. Drafts, harness
 verdicts and the captured oracle and candidate traces are in the evidence
 directory.
 
+Current tally with the D09 reconciler fix of the same day included: 34 pairs match,
+6 are MISMATCH (D06, D22 and D23 on both candidates) and 28 are unsupported.
+
 ## Before the candidate fixes (receipts `causal-amendment-2`)
 
 The text of this section is as first recorded.
