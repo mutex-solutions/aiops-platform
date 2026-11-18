@@ -1,0 +1,303 @@
+{
+ "classification": "FAIL: first full frozen-protocol callpath run; not acceptance (finalParityCompleted false)",
+ "commit": "77ab9b6",
+ "elapsedSeconds": 7222.297,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "4h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "host": "dedicated KVM guest, 24 vCPU, idle before start; no swap movement or cgroup throttling observed",
+ "failedBound": "owner Enter+Leave p99 <= 2000 ns: about 5500 ns at 8 and 32 callers on both candidates; 99 to 158 ns at 1 caller; zero allocation met",
+ "otherReasons": [
+  "throughput CV above 10% for several 8 and 32 caller baseline arms (invalid, repeat required)",
+  "finalParityCompleted is not true (inconclusive)"
+ ],
+ "stress": "all 60 stress runs: 12,000 scheduled updates each, zero overflow, zero failed, zero timed out, zero inactive-body executions",
+ "aggregates": [
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 1,
+   "p50NS": 352,
+   "p95NS": 536,
+   "p99NS": 1286
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 385,
+   "p95NS": 602,
+   "p99NS": 1389
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 1,
+   "p50NS": 84,
+   "p95NS": 86,
+   "p99NS": 99
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 8,
+   "p50NS": 357,
+   "p95NS": 922,
+   "p99NS": 2530
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 1134,
+   "p95NS": 2798,
+   "p99NS": 4717
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 8,
+   "p50NS": 1021,
+   "p95NS": 3385,
+   "p99NS": 5624
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 32,
+   "p50NS": 357,
+   "p95NS": 789,
+   "p99NS": 2341
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 1122,
+   "p95NS": 2826,
+   "p99NS": 4618
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 32,
+   "p50NS": 996,
+   "p95NS": 3327,
+   "p99NS": 5511
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 1,
+   "p50NS": 353,
+   "p95NS": 549,
+   "p99NS": 1357
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 382,
+   "p95NS": 643,
+   "p99NS": 1392
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 1,
+   "p50NS": 82,
+   "p95NS": 84,
+   "p99NS": 158
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 8,
+   "p50NS": 364,
+   "p95NS": 925,
+   "p99NS": 2365
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 1136,
+   "p95NS": 2869,
+   "p99NS": 4788
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 8,
+   "p50NS": 1028,
+   "p95NS": 3416,
+   "p99NS": 5504
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 32,
+   "p50NS": 361,
+   "p95NS": 868,
+   "p99NS": 2407
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 1102,
+   "p95NS": 2796,
+   "p99NS": 4611
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 32,
+   "p50NS": 1014,
+   "p95NS": 3454,
+   "p99NS": 5624
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 2580,
+   "p95NS": 4849,
+   "p99NS": 11425
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 2194,
+   "p95NS": 4256,
+   "p99NS": 9973
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 2108,
+   "p95NS": 4360,
+   "p99NS": 10609
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 2520,
+   "p95NS": 4753,
+   "p99NS": 16059
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 2133,
+   "p95NS": 4567,
+   "p99NS": 10645
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 2169,
+   "p95NS": 4406,
+   "p99NS": 9789
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 1,
+   "p50NS": 54,
+   "p95NS": 57,
+   "p99NS": 76
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 8,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 32,
+   "p50NS": 54,
+   "p95NS": 135,
+   "p99NS": 139
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 1,
+   "p50NS": 54,
+   "p95NS": 57,
+   "p99NS": 77
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 8,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 32,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139
+  }
+ ],
+ "rawRecords": "83 raw files (about 450 MB) are retained on the measurement host, outside the repository",
+ "logSHA256": "033f03bc999bcf879d774e173b1d81b727d295ffc6eb73e0e847bf0ff7a75df0",
+ "reportSHA256": "16d9dbf7c1fcc890a6b536129b2945045aa75beba8052c2d1e48d122de11af60"
+}
