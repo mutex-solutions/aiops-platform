@@ -55,7 +55,7 @@ jobs:
   postgres:
     name: PostgreSQL probes
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         # Pin from docs/design/s0-reference-pins.md. Trust auth on a throwaway
@@ -79,7 +79,7 @@ jobs:
           go-version: "1.26.8" # toolchain directive in go.mod
       - name: Create one dedicated database per probe
         run: |
-          for db in s0tx s0workers s0typed s0probe; do
+          for db in s0tx s0workers s0restart s0typed s0probe; do
             psql "$DSN_BASE/postgres" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"
           done
       - name: Transaction atomicity probe
@@ -92,6 +92,13 @@ jobs:
           S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0workers?sslmode=disable
           S0_EXPECT_DATABASE: s0workers
         run: go test -race -count=1 -v ./plugins/jobs-river/internal/s0workers
+      - name: Worker client restart, 30 cycles (smoke, not the full restart gate)
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0restart?sslmode=disable
+          S0_EXPECT_DATABASE: s0restart
+          S0_WORKER_RESTART_RUN: "1"
+          S0_WORKER_RESTART_CLIENT_CYCLES: "30"
+        run: go test -race -count=1 -v -timeout 25m -run '^TestWorkerRestartDiagnostic$' ./plugins/jobs-river/internal/s0workers
       - name: Typed operations probe
         env:
           S0_TYPED_DSN: ${{ env.DSN_BASE }}/s0typed?sslmode=disable
