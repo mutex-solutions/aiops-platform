@@ -141,6 +141,11 @@ func (w *dispatcher) Work(ctx context.Context, job *river.Job[workerArgs]) error
 	// scope comes from the schema's row by job ID over this worker's OWN pool.
 	err := w.pool.QueryRow(ctx, "SELECT tenant,scope_id FROM "+table(w.schema, "river_job")+" WHERE id=$1", job.ID).Scan(&scope.tenant, &scope.id)
 	if err != nil {
+		if ctx.Err() != nil {
+			// Stop canceled this fetch before admission: snooze like any other
+			// revocation instead of spending an attempt on the cancellation.
+			return river.JobSnooze(w.snooze)
+		}
 		return safeError("provider job scope lookup", err)
 	}
 	if scope.tenant == "" || scope.id == "" || job.Args.IdempotencyID == "" {
