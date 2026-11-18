@@ -79,7 +79,7 @@ jobs:
           go-version: "1.26.8" # toolchain directive in go.mod
       - name: Create one dedicated database per probe
         run: |
-          for db in s0tx s0workers s0restart s0typed s0probe; do
+          for db in s0tx s0workers s0restart s0restartfull s0typed s0probe; do
             psql "$DSN_BASE/postgres" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"
           done
       - name: Transaction atomicity probe
@@ -99,6 +99,21 @@ jobs:
           S0_WORKER_RESTART_RUN: "1"
           S0_WORKER_RESTART_CLIENT_CYCLES: "30"
         run: go test -race -count=1 -v -timeout 25m -run '^TestWorkerRestartDiagnostic$' ./plugins/jobs-river/internal/s0workers
+      - name: Full restart gate at reduced scale (informational, not acceptance)
+        # Timing bounds on a shared runner are noisy; this only shows the
+        # harness still runs end to end. The frozen-scale run is restart-full.yml.
+        continue-on-error: true
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0restartfull?sslmode=disable
+          S0_EXPECT_DATABASE: s0restartfull
+          S0_WORKER_RESTART_FULL: "1"
+          S0_WORKER_RESTART_FULL_CYCLES: "1"
+          S0_WORKER_RESTART_FULL_COMBINED_CYCLES: "1"
+          S0_WORKER_RESTART_FULL_WARMUP_SECONDS: "5"
+          S0_WORKER_RESTART_FULL_WINDOW_SECONDS: "20"
+          S0_WORKER_RESTART_FULL_RECOVERY_IDS: "100"
+          GOMAXPROCS: "8"
+        run: go test -count=1 -v -timeout 15m -run '^TestWorkerRestartFullGate$' ./plugins/jobs-river/internal/s0workers
       - name: Typed operations probe
         env:
           S0_TYPED_DSN: ${{ env.DSN_BASE }}/s0typed?sslmode=disable

@@ -1,0 +1,51 @@
+name: Restart gate (frozen scale)
+
+# About 4.3 hours. Manual only. A hosted runner is a noisy host: treat a result
+# from here as a rehearsal, not as acceptance evidence.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GOMAXPROCS: "8"
+
+jobs:
+  restart:
+    name: Full restart gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    services:
+      postgres:
+        image: postgres:16.15-trixie@sha256:43f9275df91e012c3da3d86bea5d7bb5e67a473296cc906c5f9e80b8176b1a37
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: psql postgres://postgres@127.0.0.1:5432/postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE s0restartfull"
+      - name: Run the gate
+        env:
+          S0_ADMIN_DSN: postgres://postgres@127.0.0.1:5432/s0restartfull?sslmode=disable
+          S0_EXPECT_DATABASE: s0restartfull
+          S0_WORKER_RESTART_FULL: "1"
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout 340m -v -run '^TestWorkerRestartFullGate$' \
+            ./plugins/jobs-river/internal/s0workers | tee "$RUNNER_TEMP/restart-full.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: restart-full
+          path: ${{ runner.temp }}/restart-full.log
