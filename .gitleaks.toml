@@ -1,0 +1,9 @@
+title = "aiops-platform"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "SHA-256 source manifests in recorded evidence: a file name mapped to its digest"
+regexTarget = "line"
+regexes = ['''"[^"]+\.go"\s*:\s*"[0-9a-f]{64}"''']
