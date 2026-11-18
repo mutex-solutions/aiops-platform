@@ -325,11 +325,12 @@ func (r *reconcilerRuntime) RequestUpdateConfig(ctx context.Context, id uint64, 
 		return request, reply.err
 	}
 	binding := reply.binding
-	err := binding.cell.ApplyUpdate(ctx, raw, noSave, binding.loaded, func() error {
+	var restarted atomic.Bool
+	wait, err := binding.cell.RequestApplyUpdate(ctx, raw, noSave, binding.loaded, func() error {
 		if err := r.Update(ctx, id); err != nil {
 			return err
 		}
-		request.Await = func(wait context.Context) error { return r.AwaitFiber(wait, id) }
+		restarted.Store(true)
 		return nil
 	}, func() bool {
 		reply := r.exchange(ctx, rcMessage{kind: rcConfigCurrentCommand, id: id, binding: binding})
@@ -339,6 +340,17 @@ func (r *reconcilerRuntime) RequestUpdateConfig(ctx context.Context, id uint64, 
 		// even if that callback canceled its own request context.
 		return r.exchange(context.WithoutCancel(ctx), rcMessage{kind: rcConfigClearCommand, id: id, binding: binding}).err
 	})
+	request.Await = func(w context.Context) error {
+		if wait != nil {
+			if err := wait(w); err != nil {
+				return err
+			}
+		}
+		if restarted.Load() {
+			return r.AwaitFiber(w, id)
+		}
+		return nil
+	}
 	return request, err
 }
 

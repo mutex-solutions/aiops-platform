@@ -77,6 +77,7 @@ type composedFrontend struct {
 	r            *interpreter
 	root         *co.RootAuthority
 	hooks        *hookBundle
+	updates      *updateHookAdapter
 	effects      *effectRequests
 	keys         map[string]cm.Key[any]
 	keyOrder     []string
@@ -262,6 +263,12 @@ func (f *composedFrontend) derive(id string, parent *composedActivation, meta ma
 
 func (f *composedFrontend) validate(actions []differential.Action) error {
 	for _, action := range actions {
+		if handled, err := f.validateUpdateHook(action); handled {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if handled, err := f.validateHook(action); handled {
 			if err != nil {
 				return err

@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/mutex-solutions/aiops-platform/test/differential"
-	cc "github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency"
 	cm "github.com/mutex-solutions/aiops-platform/test/spike/s0/contextmodel"
 	hk "github.com/mutex-solutions/aiops-platform/test/spike/s0/hooks"
 )
@@ -22,7 +21,6 @@ import (
 type updateHookAdapter struct {
 	mu          sync.Mutex
 	definitions map[*fiber]*hk.Waterfall[updateHookInput, any]
-	tasks       map[string]cc.ConfigRequest
 }
 
 type updateHookInput struct {
@@ -31,10 +29,7 @@ type updateHookInput struct {
 }
 
 func newUpdateHookAdapter() *updateHookAdapter {
-	return &updateHookAdapter{
-		definitions: make(map[*fiber]*hk.Waterfall[updateHookInput, any]),
-		tasks:       make(map[string]cc.ConfigRequest),
-	}
+	return &updateHookAdapter{definitions: make(map[*fiber]*hk.Waterfall[updateHookInput, any])}
 }
 
 func (u *updateHookAdapter) definition(b *hookBundle, target *fiber) (*hk.Waterfall[updateHookInput, any], error) {

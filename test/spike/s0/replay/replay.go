@@ -69,8 +69,9 @@ type fiber struct {
 }
 
 type task struct {
-	fiber *fiber
-	op    string
+	fiber   *fiber
+	op      string
+	request *concurrency.ConfigRequest // Set only for update.
 }
 
 type gate struct {
@@ -563,6 +564,10 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 			return fmt.Errorf("unknown fiber/task %q/%q", a.Fiber, a.Task)
 		}
 		var err error
+		var request *concurrency.ConfigRequest
+		if a.Op == "awaitTask" {
+			request = r.tasks[a.Task].request
+		}
 		if a.Op == "update" {
 			updater, ok := r.runtime.(concurrency.ConfigRequester)
 			if !ok {
@@ -571,7 +576,9 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 			// The prefix is synchronous just like the source update call. Only
 			// its lifecycle completion is deferred by await:false; spawning the
 			// whole prefix would reorder commit/raw retention and lose coalescing.
-			_, err = updater.RequestUpdateConfig(r.ctx, f.id, clone(r.evaluate(a.Config, env)), a.Mode == "noSave")
+			var requested concurrency.ConfigRequest
+			requested, err = updater.RequestUpdateConfig(r.ctx, f.id, clone(r.evaluate(a.Config, env)), a.Mode == "noSave")
+			request = &requested
 		} else if a.Op == "dispose" {
 			err = r.runtime.Dispose(r.ctx, f.id)
 		}
@@ -580,10 +587,23 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 		}
 		if a.Task != "" && a.Op != "awaitTask" {
 			r.mu.Lock()
-			r.tasks[a.Task] = task{fiber: f, op: a.Op}
+			r.tasks[a.Task] = task{fiber: f, op: a.Op, request: request}
 			r.mu.Unlock()
 		}
 		if a.Await == nil || *a.Await {
+			if request != nil && request.Await != nil {
+				// Joins actual hook completion (and any restart) before the fiber join.
+				if err := request.Await(r.ctx); err != nil {
+					r.mu.Lock()
+					r.result.RuntimeErrors = append(r.result.RuntimeErrors, RuntimeFailure{joinMode, err})
+					r.mu.Unlock()
+					if r.frontend != nil {
+						// Same explicit fixture error codec as the hook bundle.
+						return r.frontend.catchHook(a, err)
+					}
+					return err
+				}
+			}
 			return r.await(f, joinMode)
 		}
 	default:
@@ -631,7 +651,7 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 		}
 	}
 	collect(plugin.Apply)
-	f.config = concurrency.NewConfiguration(clone(config), concurrency.ConfigHooks{
+	hooks := concurrency.ConfigHooks{
 		Resolve: func(_ context.Context, raw any) (any, error) {
 			// This is an actual native Prepare/ResolveCandidate callback, not a
 			// surrogate event at Apply. The oracle's observer is inside the
@@ -680,7 +700,17 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 			}
 			return next()
 		},
-	})
+	}
+	if r.frontend != nil && r.frontend.updates != nil && hasUpdateListener(plugin.Apply) {
+		if plugin.Update != "" {
+			return unsupported("plugin update hook", "a plugin cannot combine an update mode with an internal/update listener")
+		}
+		hooks.Update = nil
+		hooks.UpdateAsync = func(ctx context.Context, candidate any, next func() error) (func(context.Context) error, error) {
+			return r.frontend.updates.request(r.frontend, f, ctx, candidate, next)
+		}
+	}
+	f.config = concurrency.NewConfiguration(clone(config), hooks)
 	apply := func(c activation) (concurrency.Disposer, error) {
 		config := c.Config() // Actual immutable native preparation for this activation.
 		r.mu.Lock()
@@ -1026,4 +1056,13 @@ func clone(value any) any {
 		panic(err)
 	}
 	return out
+}
+
+func hasUpdateListener(actions []differential.Action) bool {
+	for _, a := range actions {
+		if isUpdateListener(a) || hasUpdateListener(a.Program) || hasUpdateListener(a.Cleanup) {
+			return true
+		}
+	}
+	return false
 }

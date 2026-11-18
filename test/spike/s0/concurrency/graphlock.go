@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -380,12 +381,13 @@ func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any,
 	target := g.targetLocked(f)
 	revision := f.revision
 	g.mu.Unlock()
-	err := cell.ApplyUpdate(ctx, raw, noSave, target != nil,
+	var restarted atomic.Bool
+	wait, err := cell.RequestApplyUpdate(ctx, raw, noSave, target != nil,
 		func() error {
 			if err := g.Update(ctx, id); err != nil {
 				return err
 			}
-			request.Await = func(wait context.Context) error { return g.AwaitFiber(wait, id) }
+			restarted.Store(true)
 			return nil
 		},
 		func() bool {
@@ -408,6 +410,17 @@ func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any,
 			g.signalLocked()
 			return nil
 		})
+	request.Await = func(w context.Context) error {
+		if wait != nil {
+			if err := wait(w); err != nil {
+				return err
+			}
+		}
+		if restarted.Load() {
+			return g.AwaitFiber(w, id)
+		}
+		return nil
+	}
 	return request, err
 }
 

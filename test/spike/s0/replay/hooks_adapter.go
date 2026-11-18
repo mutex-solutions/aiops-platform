@@ -53,7 +53,11 @@ func (f *composedFrontend) hookKeys() []cm.AnyKey {
 	var collect func([]differential.Action)
 	collect = func(program []differential.Action) {
 		for _, a := range program {
-			if a.Op == "listen" || a.Op == "dispatch" {
+			if isUpdateListener(a) {
+				if f.updates == nil {
+					f.updates = newUpdateHookAdapter()
+				}
+			} else if a.Op == "listen" || a.Op == "dispatch" {
 				id := hookIdentity{a.Key, a.Symbol}
 				if b.definitions[id] == nil {
 					spec := hk.Definition{Name: a.Key, Owner: b.key.Any(), Stages: []string{"default"}}
@@ -74,7 +78,7 @@ func (f *composedFrontend) hookKeys() []cm.AnyKey {
 		}
 	}
 	collect(actions)
-	if len(b.definitions) == 0 {
+	if len(b.definitions) == 0 && f.updates == nil {
 		return nil
 	}
 	f.hooks = b
@@ -158,6 +162,9 @@ func (f *composedFrontend) executeHook(a differential.Action, env environment) (
 	}
 	if b.closed.Load() {
 		return true, hk.ErrInactive
+	}
+	if isUpdateListener(a) {
+		return true, f.catchHook(a, f.updates.listen(f, a, env))
 	}
 	if a.Op == "awaitTask" {
 		b.mu.Lock()

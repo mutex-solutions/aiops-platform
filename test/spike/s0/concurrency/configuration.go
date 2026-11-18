@@ -34,6 +34,11 @@ type ConfigHooks struct {
 	Resolve func(context.Context, any) (any, error)
 	Commit  func(context.Context, any) error
 	Update  func(context.Context, any, func() error) error
+	// UpdateAsync, when set, replaces Update. It runs only the synchronous prefix
+	// of the hook and returns a waiter for the actual completion; the waiter may
+	// be called repeatedly. next must be called at most once and never after the
+	// waiter reports completion. The hook runs without the cell lock.
+	UpdateAsync func(context.Context, any, func() error) (func(context.Context) error, error)
 }
 
 // Configuration stores retained raw input and the last published effective
@@ -175,33 +180,47 @@ func (c *Configuration) Prepare(ctx context.Context) (PreparedConfig, error) {
 // successful Update is not retroactively rejected if its context was canceled:
 // publication follows the version and runtime-binding guards, as in the source.
 func (c *Configuration) ApplyUpdate(ctx context.Context, raw any, noSave, loaded bool, restart func() error, stillCurrent func() bool, clearFailure func() error) error {
-	if err := ctx.Err(); err != nil {
+	wait, err := c.RequestApplyUpdate(ctx, raw, noSave, loaded, restart, stillCurrent, clearFailure)
+	if err != nil {
 		return err
+	}
+	return wait(ctx)
+}
+
+// RequestApplyUpdate is ApplyUpdate split at the hook boundary: it returns after
+// the synchronous prefix (resolve, persist, retain, clear failure, hook prefix)
+// with a waiter for completion. A veto publishes in the first waiter call that
+// observes successful completion; repeated calls return that same result and
+// never rerun the hook or publish twice. A waiter canceled before completion
+// returns its context error and publishes nothing.
+func (c *Configuration) RequestApplyUpdate(ctx context.Context, raw any, noSave, loaded bool, restart func() error, stillCurrent func() bool, clearFailure func() error) (func(context.Context) error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	var resolved any
 	if loaded {
 		var err error
 		resolved, err = c.ResolveCandidate(ctx, raw)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	if !noSave && c.hooks.Commit != nil {
 		if err := c.hooks.Commit(ctx, raw); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	version, publication := c.retain(raw)
 	if clearFailure != nil {
 		if err := clearFailure(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
 	// This small independent guard protects concurrent next calls without ever
@@ -227,30 +246,50 @@ func (c *Configuration) ApplyUpdate(ctx context.Context, raw any, noSave, loaded
 		}
 		return restart()
 	}
-	if !loaded || c.hooks.Update == nil {
-		return next()
+	synchronous := func(context.Context) error { return nil }
+	if !loaded || (c.hooks.Update == nil && c.hooks.UpdateAsync == nil) {
+		return synchronous, next()
 	}
-	if err := c.hooks.Update(ctx, resolved, next); err != nil {
-		return err
-	}
-	nextMu.Lock()
-	didRestart := restarted
-	nextMu.Unlock()
-	if didRestart {
+	finish := func(err error) error {
+		if err != nil {
+			return err
+		}
+		nextMu.Lock()
+		didRestart := restarted
+		nextMu.Unlock()
+		if didRestart {
+			return nil
+		}
+		c.mu.Lock()
+		current := c.version == version && c.publication == publication
+		c.mu.Unlock()
+		if !current || (stillCurrent != nil && !stillCurrent()) {
+			return nil
+		}
+		c.mu.Lock()
+		if c.version == version && c.publication == publication {
+			c.effective = resolved
+			c.prepared = true
+			c.publication++
+		}
+		c.mu.Unlock()
 		return nil
 	}
-	c.mu.Lock()
-	current := c.version == version && c.publication == publication
-	c.mu.Unlock()
-	if !current || (stillCurrent != nil && !stillCurrent()) {
-		return nil
+	if c.hooks.UpdateAsync == nil {
+		return synchronous, finish(c.hooks.Update(ctx, resolved, next))
 	}
-	c.mu.Lock()
-	if c.version == version && c.publication == publication {
-		c.effective = resolved
-		c.prepared = true
-		c.publication++
+	hookWait, err := c.hooks.UpdateAsync(ctx, resolved, next)
+	if err != nil {
+		return nil, err
 	}
-	c.mu.Unlock()
-	return nil
+	var once sync.Once
+	var result error
+	return func(wait context.Context) error {
+		err := hookWait(wait)
+		if err != nil && wait.Err() != nil {
+			return err // Wait cancellation is not completion; nothing is finalized.
+		}
+		once.Do(func() { result = finish(err) })
+		return result
+	}, nil
 }

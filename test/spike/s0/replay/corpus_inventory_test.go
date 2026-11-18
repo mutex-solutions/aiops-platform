@@ -281,8 +281,6 @@ func TestCorpusInventory(t *testing.T) {
 				knownBoundary = "not-carried unchecked ctx.get; incomplete, never raw parity"
 			} else if id == "D26" {
 				knownBoundary = "not-carried awaited own-dispose; separate saved oracle diagnostic, never synthesized in Go"
-			} else if id == "D29" {
-				knownBoundary = "missing native integration: plugin internal/update hooks; unsupported remains a failure"
 			} else if id == "D13" && variant == "original" {
 				knownBoundary = "original missing causal activation barrier; nondeterministic timeout retained; revision-2 is a separate execution"
 			}

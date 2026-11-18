@@ -860,3 +860,46 @@ func TestConfigurationParallelRawSnapshotsRemainCoherent(t *testing.T) {
 	writers.Wait()
 	configSnapshotIs(t, cell, uint64(1000), nil, 1000)
 }
+
+func TestRequestApplyUpdateAsyncPublishesOnceAfterCompletion(t *testing.T) {
+	release := make(chan struct{})
+	cell := NewConfiguration("old", ConfigHooks{
+		UpdateAsync: func(context.Context, any, func() error) (func(context.Context) error, error) {
+			return func(wait context.Context) error {
+				select {
+				case <-release:
+					return nil
+				case <-wait.Done():
+					return wait.Err()
+				}
+			}, nil
+		},
+	})
+	wait, err := cell.RequestApplyUpdate(context.Background(), "new", false, true, func() error { return nil }, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cell.Snapshot(); got.Raw != "new" || got.Effective != nil {
+		t.Fatalf("prefix must retain raw only: %+v", got)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := wait(canceled); !errors.Is(err, context.Canceled) || cell.Snapshot().Effective != nil {
+		t.Fatalf("canceled wait must not publish: %v", err)
+	}
+	close(release)
+	for range 2 {
+		if err := wait(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := cell.Snapshot(); got.Effective != "new" || !got.Prepared {
+		t.Fatalf("completed veto must publish: %+v", got)
+	}
+	cell.mu.Lock()
+	publication := cell.publication
+	cell.mu.Unlock()
+	if publication != 1 {
+		t.Fatalf("repeated waits published %d times", publication)
+	}
+}

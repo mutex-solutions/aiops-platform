@@ -125,6 +125,22 @@ func TestD13NeedsFiberScopedAwait(t *testing.T) {
 	})
 }
 
+func TestD29UpdateHooksRunNatively(t *testing.T) {
+	eachRuntime(t, func(t *testing.T, ctx context.Context, runtime concurrency.Runtime) {
+		script := corpus(t, "D29")
+		result, err := RunComposedJSON(ctx, runtime, loadFixture(t, "../../../differential/corpus/D29.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := differential.CheckExpectations(script, result.Trace); err != nil {
+			t.Fatal(err)
+		}
+		if result.ComparisonError != nil {
+			t.Fatal(result.ComparisonError)
+		}
+	})
+}
+
 func TestExpectationsNeverDriveExecution(t *testing.T) {
 	script := corpus(t, "D14")
 	script.Expect = []differential.Assertion{
