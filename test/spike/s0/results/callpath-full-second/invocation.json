@@ -1,0 +1,339 @@
+{
+ "classification": "FAIL: second full frozen-protocol callpath run, with the striped lease counter; not acceptance (finalParityCompleted false)",
+ "commit": "6405117",
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "4h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "host": "dedicated KVM guest, 24 vCPU, idle before start; no swap movement or cgroup throttling observed",
+ "latencyBound": "owner Enter+Leave p99 <= 2000 ns: MET in every run at 1, 8 and 32 callers on both candidates (aggregate p99 89 to 840 ns, worst single run 1661 ns)",
+ "failedBound": "zero allocation: 4 of 60 owner Enter+Leave baseline runs recorded one object allocated process-wide during 100,000 operations (reconciler 1 caller run 0, reconciler 32 callers runs 6 and 9, graph-lock 32 callers run 3)",
+ "otherReasons": [
+  "INCONCLUSIVE: finalParityCompleted is not true",
+  "INVALID: baseline graph-lock/lookup_view_lease_call/c8: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline graph-lock/owner_enter_leave/c32: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline graph-lock/owner_enter_leave/c8: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline reconciler/lookup_view/c8: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline reconciler/lookup_view_lease_call/c32: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline reconciler/lookup_view_lease_call/c8: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline reconciler/owner_enter_leave/c32: throughput CV N% > N%; repeat the unchanged protocol",
+  "INVALID: baseline reconciler/owner_enter_leave/c8: throughput CV N% > N%; repeat the unchanged protocol"
+ ],
+ "aggregates": [
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 1,
+   "p50NS": 353,
+   "p95NS": 550,
+   "p99NS": 1383,
+   "worstRunP99NS": 1539
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 379,
+   "p95NS": 577,
+   "p99NS": 1460,
+   "worstRunP99NS": 1769
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 1,
+   "p50NS": 82,
+   "p95NS": 84,
+   "p99NS": 204,
+   "worstRunP99NS": 364
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 8,
+   "p50NS": 360,
+   "p95NS": 881,
+   "p99NS": 3202,
+   "worstRunP99NS": 4298
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 403,
+   "p95NS": 906,
+   "p99NS": 2987,
+   "worstRunP99NS": 3428
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 8,
+   "p50NS": 108,
+   "p95NS": 657,
+   "p99NS": 707,
+   "worstRunP99NS": 802
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 32,
+   "p50NS": 356,
+   "p95NS": 765,
+   "p99NS": 3237,
+   "worstRunP99NS": 3721
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 403,
+   "p95NS": 972,
+   "p99NS": 3090,
+   "worstRunP99NS": 4008
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 32,
+   "p50NS": 85,
+   "p95NS": 722,
+   "p99NS": 840,
+   "worstRunP99NS": 1661
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 1,
+   "p50NS": 353,
+   "p95NS": 560,
+   "p99NS": 1421,
+   "worstRunP99NS": 1688
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 382,
+   "p95NS": 578,
+   "p99NS": 1428,
+   "worstRunP99NS": 1735
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 1,
+   "p50NS": 82,
+   "p95NS": 84,
+   "p99NS": 89,
+   "worstRunP99NS": 194
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 8,
+   "p50NS": 358,
+   "p95NS": 879,
+   "p99NS": 3144,
+   "worstRunP99NS": 5982
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 400,
+   "p95NS": 906,
+   "p99NS": 2928,
+   "worstRunP99NS": 5082
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 8,
+   "p50NS": 85,
+   "p95NS": 679,
+   "p99NS": 753,
+   "worstRunP99NS": 862
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view",
+   "callers": 32,
+   "p50NS": 356,
+   "p95NS": 708,
+   "p99NS": 3204,
+   "worstRunP99NS": 5394
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 416,
+   "p95NS": 1020,
+   "p99NS": 3214,
+   "worstRunP99NS": 7440
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "baseline",
+   "operation": "owner_enter_leave",
+   "callers": 32,
+   "p50NS": 83,
+   "p95NS": 566,
+   "p99NS": 755,
+   "worstRunP99NS": 1124
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 2379,
+   "p95NS": 4970,
+   "p99NS": 11610,
+   "worstRunP99NS": 14900
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 2160,
+   "p95NS": 4779,
+   "p99NS": 10314,
+   "worstRunP99NS": 12295
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 2049,
+   "p95NS": 4724,
+   "p99NS": 10468,
+   "worstRunP99NS": 12445
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 1,
+   "p50NS": 2381,
+   "p95NS": 5472,
+   "p99NS": 15948,
+   "worstRunP99NS": 19506
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 8,
+   "p50NS": 2126,
+   "p95NS": 4920,
+   "p99NS": 9975,
+   "worstRunP99NS": 13045
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "stress",
+   "operation": "lookup_view_lease_call",
+   "callers": 32,
+   "p50NS": 2131,
+   "p95NS": 4829,
+   "p99NS": 9709,
+   "worstRunP99NS": 11414
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 1,
+   "p50NS": 54,
+   "p95NS": 57,
+   "p99NS": 74,
+   "worstRunP99NS": 136
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 8,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139,
+   "worstRunP99NS": 140
+  },
+  {
+   "candidate": "graph-lock",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 32,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139,
+   "worstRunP99NS": 141
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 1,
+   "p50NS": 54,
+   "p95NS": 57,
+   "p99NS": 79,
+   "worstRunP99NS": 139
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 8,
+   "p50NS": 55,
+   "p95NS": 120,
+   "p99NS": 136,
+   "worstRunP99NS": 140
+  },
+  {
+   "candidate": "reconciler",
+   "arm": "timer",
+   "operation": "timer_overhead",
+   "callers": 32,
+   "p50NS": 55,
+   "p95NS": 135,
+   "p99NS": 139,
+   "worstRunP99NS": 140
+  }
+ ],
+ "rawRecords": "raw per-observation files are retained on the measurement host, outside the repository",
+ "logSHA256": "148d927629ce503a3a3f9864400b229e98528135709bfafeb2a749eda3f3b765",
+ "reportSHA256": "81afd0f8028519ee91666c513e48946c03c3eeb108c1d8dfdd0da3c0a5248e34"
+}

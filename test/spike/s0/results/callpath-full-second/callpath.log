@@ -1,0 +1,99 @@
+=== RUN   TestFullCallpath
+    harness_test.go:51: rep 0 baseline reconciler
+    harness_test.go:51: rep 0 baseline graph-lock
+    harness_test.go:51: rep 0 stress reconciler callers 1
+    harness_test.go:51: rep 0 stress reconciler callers 8
+    harness_test.go:51: rep 0 stress reconciler callers 32
+    harness_test.go:51: rep 0 stress graph-lock callers 1
+    harness_test.go:51: rep 0 stress graph-lock callers 8
+    harness_test.go:51: rep 0 stress graph-lock callers 32
+    harness_test.go:51: rep 1 stress graph-lock callers 1
+    harness_test.go:51: rep 1 stress graph-lock callers 8
+    harness_test.go:51: rep 1 stress graph-lock callers 32
+    harness_test.go:51: rep 1 stress reconciler callers 1
+    harness_test.go:51: rep 1 stress reconciler callers 8
+    harness_test.go:51: rep 1 stress reconciler callers 32
+    harness_test.go:51: rep 1 baseline graph-lock
+    harness_test.go:51: rep 1 baseline reconciler
+    harness_test.go:51: rep 2 baseline reconciler
+    harness_test.go:51: rep 2 baseline graph-lock
+    harness_test.go:51: rep 2 stress reconciler callers 1
+    harness_test.go:51: rep 2 stress reconciler callers 8
+    harness_test.go:51: rep 2 stress reconciler callers 32
+    harness_test.go:51: rep 2 stress graph-lock callers 1
+    harness_test.go:51: rep 2 stress graph-lock callers 8
+    harness_test.go:51: rep 2 stress graph-lock callers 32
+    harness_test.go:51: rep 3 stress graph-lock callers 1
+    harness_test.go:51: rep 3 stress graph-lock callers 8
+    harness_test.go:51: rep 3 stress graph-lock callers 32
+    harness_test.go:51: rep 3 stress reconciler callers 1
+    harness_test.go:51: rep 3 stress reconciler callers 8
+    harness_test.go:51: rep 3 stress reconciler callers 32
+    harness_test.go:51: rep 3 baseline graph-lock
+    harness_test.go:51: rep 3 baseline reconciler
+    harness_test.go:51: rep 4 baseline reconciler
+    harness_test.go:51: rep 4 baseline graph-lock
+    harness_test.go:51: rep 4 stress reconciler callers 1
+    harness_test.go:51: rep 4 stress reconciler callers 8
+    harness_test.go:51: rep 4 stress reconciler callers 32
+    harness_test.go:51: rep 4 stress graph-lock callers 1
+    harness_test.go:51: rep 4 stress graph-lock callers 8
+    harness_test.go:51: rep 4 stress graph-lock callers 32
+    harness_test.go:51: rep 5 stress graph-lock callers 1
+    harness_test.go:51: rep 5 stress graph-lock callers 8
+    harness_test.go:51: rep 5 stress graph-lock callers 32
+    harness_test.go:51: rep 5 stress reconciler callers 1
+    harness_test.go:51: rep 5 stress reconciler callers 8
+    harness_test.go:51: rep 5 stress reconciler callers 32
+    harness_test.go:51: rep 5 baseline graph-lock
+    harness_test.go:51: rep 5 baseline reconciler
+    harness_test.go:51: rep 6 baseline reconciler
+    harness_test.go:51: rep 6 baseline graph-lock
+    harness_test.go:51: rep 6 stress reconciler callers 1
+    harness_test.go:51: rep 6 stress reconciler callers 8
+    harness_test.go:51: rep 6 stress reconciler callers 32
+    harness_test.go:51: rep 6 stress graph-lock callers 1
+    harness_test.go:51: rep 6 stress graph-lock callers 8
+    harness_test.go:51: rep 6 stress graph-lock callers 32
+    harness_test.go:51: rep 7 stress graph-lock callers 1
+    harness_test.go:51: rep 7 stress graph-lock callers 8
+    harness_test.go:51: rep 7 stress graph-lock callers 32
+    harness_test.go:51: rep 7 stress reconciler callers 1
+    harness_test.go:51: rep 7 stress reconciler callers 8
+    harness_test.go:51: rep 7 stress reconciler callers 32
+    harness_test.go:51: rep 7 baseline graph-lock
+    harness_test.go:51: rep 7 baseline reconciler
+    harness_test.go:51: rep 8 baseline reconciler
+    harness_test.go:51: rep 8 baseline graph-lock
+    harness_test.go:51: rep 8 stress reconciler callers 1
+    harness_test.go:51: rep 8 stress reconciler callers 8
+    harness_test.go:51: rep 8 stress reconciler callers 32
+    harness_test.go:51: rep 8 stress graph-lock callers 1
+    harness_test.go:51: rep 8 stress graph-lock callers 8
+    harness_test.go:51: rep 8 stress graph-lock callers 32
+    harness_test.go:51: rep 9 stress graph-lock callers 1
+    harness_test.go:51: rep 9 stress graph-lock callers 8
+    harness_test.go:51: rep 9 stress graph-lock callers 32
+    harness_test.go:51: rep 9 stress reconciler callers 1
+    harness_test.go:51: rep 9 stress reconciler callers 8
+    harness_test.go:51: rep 9 stress reconciler callers 32
+    harness_test.go:51: rep 9 baseline graph-lock
+    harness_test.go:51: rep 9 baseline reconciler
+    harness_test.go:56: callpath classification fail (raw records in the output directory):
+        FAIL: baseline reconciler/owner_enter_leave/c1: run 0 allocated 1 objects; budget is zero
+        FAIL: baseline reconciler/owner_enter_leave/c32: run 6 allocated 1 objects; budget is zero
+        FAIL: baseline reconciler/owner_enter_leave/c32: run 9 allocated 1 objects; budget is zero
+        FAIL: baseline graph-lock/owner_enter_leave/c32: run 3 allocated 1 objects; budget is zero
+        INVALID: baseline reconciler/lookup_view/c8: throughput CV 10.9% > 10%; repeat the unchanged protocol
+        INVALID: baseline reconciler/owner_enter_leave/c8: throughput CV 31.9% > 10%; repeat the unchanged protocol
+        INVALID: baseline reconciler/lookup_view_lease_call/c8: throughput CV 15.1% > 10%; repeat the unchanged protocol
+        INVALID: baseline graph-lock/owner_enter_leave/c8: throughput CV 35.6% > 10%; repeat the unchanged protocol
+        INVALID: baseline graph-lock/lookup_view_lease_call/c8: throughput CV 14.8% > 10%; repeat the unchanged protocol
+        INVALID: baseline reconciler/owner_enter_leave/c32: throughput CV 11.9% > 10%; repeat the unchanged protocol
+        INVALID: baseline reconciler/lookup_view_lease_call/c32: throughput CV 10.5% > 10%; repeat the unchanged protocol
+        INVALID: baseline graph-lock/owner_enter_leave/c32: throughput CV 13.4% > 10%; repeat the unchanged protocol
+        INCONCLUSIVE: finalParityCompleted is not true
+--- FAIL: TestFullCallpath (7219.94s)
+FAIL
+FAIL	github.com/mutex-solutions/aiops-platform/test/spike/s0/callpath	7219.980s
+FAIL
