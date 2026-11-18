@@ -1,0 +1,73 @@
+{
+  "schema": "s0-causal-comparison-amendment-3/v1",
+  "approval": "Repository owner decision of 2026-11-18: the comparator may be extended only through a written amendment recorded before execution, naming each added capability and why it does not loosen the criteria, followed by a rerun of all scenarios",
+  "extends": {
+    "amendment": "docs/design/s0-causal-comparison-amendment.md",
+    "amendmentSHA256": "becf5c0634ec98c279d76db3ac3dc1c08cea70cd2d66301393c445b3df73559a",
+    "freeze": "docs/design/s0-causal-comparison-freeze.json",
+    "freezeSHA256": "cd6cd53e1b67a3f74561bdc10c224ccc5ae99f8f7f0af15aae1a00c70dede4e0",
+    "amendment2": "docs/design/s0-causal-comparison-amendment-2.md",
+    "amendment2SHA256": "214452407b234843ddcb0a1205d81bf9c60837d6048ff21f2656155228976c35",
+    "addendum2": "docs/design/s0-causal-comparison-amendment-2-addendum.md",
+    "addendum2SHA256": "6cc82b1d0b83d9c1299253e88c49df68b9cf91bf06ed93dfb7f875198ac37a95",
+    "freeze2": "docs/design/s0-causal-comparison-freeze-2.json",
+    "freeze2SHA256": "33d7f4a573739907482d1b716f22e115611a027ce4d153f0082e0775538169e0"
+  },
+  "amendment": {
+    "path": "docs/design/s0-causal-comparison-amendment-3.md",
+    "sha256": "45ae806bd4def4f5ce0a8345aec8e6ac3233913bc2c2a46b74abace0db4ea17f"
+  },
+  "originalCriteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+  "recordedBeforeComparatorChange": true,
+  "baseCommit": "6405117",
+  "frozenComparatorSHA256": {
+    "test/differential/causal.go": "72c7ffcdd5dd8838eeaadca084b4964c6b38cda604301b8a93a683f62c1923c4",
+    "test/differential/causal_model.go": "c8a25e4af1b7ad79f275bfe1d58985d1cdc261a87ff7fe697df0b368c06b8d3f",
+    "test/differential/causal_observe.go": "f266f933397d2e92187daf34f4b12d6af60959c6e00d22aab8ce3907ed07913b",
+    "test/differential/causal_root.go": "eeee3cf3511e26eec4d20b83b7d941e8841c9d80ac64a0e491387c5663ce0587",
+    "test/differential/causal_identity.go": "05d303c3ba9cb9db5571c9b67683de7fecd751878bd8b9be1691484614c23202",
+    "test/differential/causal_test.go": "08f9a3822d988785fb25f5ccdf774083c9a4b3a769677463fcf74d73102e8d10",
+    "test/differential/causal_amendment2_test.go": "8205ae83f9c8bbcebc2a9b8f727aae7a732a148e52c61f715f2ff5caea920265",
+    "test/differential/causal_amendment2_more_test.go": "96206b927c3619c023cfd7fc9f4332ca1bba4f415ce9ccc08605f9a52b07295c"
+  },
+  "targets": ["D01", "D17", "D20", "D24", "D25", "D28", "D29", "D30", "D31", "D32", "D33", "D34", "D35", "D36"],
+  "capabilities": [
+    {"id": "K1", "name": "static context metadata ($meta)", "status": "added", "scenarios": ["D01"]},
+    {"id": "K2", "name": "root provision command", "status": "added", "scenarios": ["D01"]},
+    {"id": "K3", "name": "self-disposal request from Apply (await false)", "status": "added", "scenarios": ["D25"]},
+    {"id": "K4", "name": "late-effect refusal", "status": "added", "scenarios": ["D24"]},
+    {"id": "K5", "name": "update continuation policies retain and unchanged", "status": "added", "scenarios": ["D28", "D30"]},
+    {"id": "K6", "name": "asynchronous root updates, request coalescing, latest target, tasks and awaitTask", "status": "added", "scenarios": ["D17", "D20", "D29", "D32", "D33"]},
+    {"id": "K7", "name": "internal/update listeners installed by Apply", "status": "added", "scenarios": ["D29"]},
+    {"id": "K8", "name": "host hook dispatch: listen, dispatch, return, next in emit, parallel, serial, bail and waterfall", "status": "added", "scenarios": ["D31", "D32", "D33", "D34", "D35", "D36"]}
+  ],
+  "notAdded": [
+    "update policies reject and next, update listeners with next or with a configTransform plugin",
+    "selfDispose with await true (D26 boundary) or outside the top level of Apply",
+    "gate in bail or waterfall listeners, failing emit listeners, catch inside listener programs, listen/dispatch in plugin bodies other than the internal/update listener, a key dispatched twice, global or prepend listeners, async restart, awaitTask of a restart-capable update task",
+    "root provide with to, a service mode, a non-pure value or a second provider"
+  ],
+  "outOfScope": {
+    "D05": "unchecked ctx.get is a not-carried boundary",
+    "D26": "awaited self-dispose is a not-carried boundary",
+    "D06": "owner question, unchanged",
+    "D22": "owner question, unchanged",
+    "D23": "owner question, unchanged",
+    "errorText": "all error text is compared verbatim; only the duplicate-provision refusal class of amendment 2 (C6.5) is folded"
+  },
+  "rules": {
+    "weakensExistingCheck": false,
+    "scenarioSpecificCodePaths": false,
+    "eventSortingOrDropping": false,
+    "toleranceKnobs": false,
+    "unprovedConstructResult": "ErrCausalUnsupported",
+    "violationProvedByTraceResult": "mismatch, never ErrCausalUnsupported"
+  },
+  "rerun": {
+    "scenarios": 36,
+    "revisions": {"D13": "corpus/revision-5", "D22": "corpus/revision-4"},
+    "matchRequires": "100 of 100 runs under -race and 100 of 100 with GOMAXPROCS=2"
+  },
+  "implementationVerified": false,
+  "s0Complete": false
+}
