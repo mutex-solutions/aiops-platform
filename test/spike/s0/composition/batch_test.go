@@ -82,6 +82,9 @@ func TestBatchStartReturnsActualTypedBindings(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
+		// The first await can return while the consumer is still PENDING on the
+		// provider. Its Apply has now run; join the LOADING to ACTIVE transition.
+		await(t, ctx, fibers[0])
 		inspection, err := backend.(cc.Inspector).Inspect(ctx)
 		if err != nil || len(inspection.Provisions) != 1 || len(inspection.Fibers) != 2 {
 			t.Fatalf("actual graph incomplete: %v %+v", err, inspection)
