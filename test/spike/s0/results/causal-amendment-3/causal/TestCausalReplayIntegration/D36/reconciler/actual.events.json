@@ -1,0 +1,117 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "builtin:hooks",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook repeated/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook repeated/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "double-next"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "inner",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "key": "repeated"
+    }
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "first-next",
+      "value": 7
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "error",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "error": {
+        "message": "next() called multiple times",
+        "name": "Error"
+      },
+      "op": "dispatch"
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "repeated-error",
+      "value": {
+        "message": "next() called multiple times",
+        "name": "Error"
+      }
+    }
+  }
+]

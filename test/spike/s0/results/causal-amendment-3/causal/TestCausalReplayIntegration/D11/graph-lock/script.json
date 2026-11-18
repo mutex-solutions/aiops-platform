@@ -1,0 +1,122 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D11",
+  "title": "A provision from a LOADING provider is not strictly visible",
+  "covers": [
+    "active-only-provider",
+    "loading-provider"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": "ready"
+        },
+        {
+          "op": "gate",
+          "label": "load"
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "consumer"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {}
+    },
+    {
+      "op": "waitMark",
+      "label": "load"
+    },
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "read",
+      "key": "svc",
+      "mode": "get",
+      "to": "strict"
+    },
+    {
+      "op": "read",
+      "key": "svc",
+      "mode": "get",
+      "strict": false,
+      "to": "retained"
+    },
+    {
+      "op": "snapshot",
+      "label": "loading"
+    },
+    {
+      "op": "release",
+      "label": "load"
+    },
+    {
+      "op": "settle",
+      "label": "active"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "loading",
+      "path": "/states/0/state",
+      "equals": "LOADING"
+    },
+    {
+      "at": "loading",
+      "path": "/states/1/state",
+      "equals": "PENDING"
+    },
+    {
+      "at": "loading",
+      "path": "/outputs/strict",
+      "equals": {
+        "$undefined": true
+      }
+    },
+    {
+      "at": "loading",
+      "path": "/outputs/retained",
+      "equals": "ready"
+    },
+    {
+      "at": "active",
+      "path": "/states/1/state",
+      "equals": "ACTIVE"
+    }
+  ]
+}

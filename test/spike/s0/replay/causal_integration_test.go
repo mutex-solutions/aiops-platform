@@ -204,6 +204,7 @@ var causalCovered = []struct {
 	causalScenario
 	backends []string
 }{
+	{causalScenario{"D01", corpusPath("D01"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D02", corpusPath("D02"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D03", corpusPath("D03"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D04", corpusPath("D04"), true}, []string{"reconciler", "graph-lock"}},
@@ -217,8 +218,25 @@ var causalCovered = []struct {
 	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D15", corpusPath("D15"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D17", corpusPath("D17"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D18", corpusPath("D18"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D19", corpusPath("D19"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D20", corpusPath("D20"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D21", corpusPath("D21"), true}, []string{"reconciler", "graph-lock"}},
+	// Amendment 3 (docs/design/s0-causal-comparison-amendment-3.md): each pair below
+	// matched 100 of 100 under -race and 100 of 100 with GOMAXPROCS=2 under -race.
+	{causalScenario{"D24", corpusPath("D24"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D27", corpusPath("D27"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D28", corpusPath("D28"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D29", corpusPath("D29"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D30", corpusPath("D30"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D31", corpusPath("D31"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D32", corpusPath("D32"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D33", corpusPath("D33"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D34", corpusPath("D34"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D35", corpusPath("D35"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D36", corpusPath("D36"), true}, []string{"reconciler", "graph-lock"}},
 }
 
 // causalDiagnostics are pairs the comparator does NOT accept. A pair marked flaky

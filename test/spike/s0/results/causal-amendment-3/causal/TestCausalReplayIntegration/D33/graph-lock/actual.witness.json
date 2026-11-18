@@ -1,0 +1,15 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "e9b9dc37807335e0d4b25692a2e4fc4bb9cdd2a3e7c196df9c0badcf5023ba7c",
+  "scriptSHA256": "3c7794a92f11c2badf035ef86ed496911edaab2cdd8878a7960b1db5fc3bec6a",
+  "checkpoints": [
+    {
+      "label": "serial-waiting",
+      "afterEvent": 2
+    },
+    {
+      "label": "finished",
+      "afterEvent": 7
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D35",
+  "title": "Waterfall listener may wrap next or veto inner behavior",
+  "covers": [
+    "waterfall-veto",
+    "waterfall-wrap-order"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "waterfall-veto",
+      "label": "outer",
+      "program": [
+        {
+          "op": "mark",
+          "label": "outer-before"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "mark",
+          "label": "outer-after"
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "waterfall-veto",
+      "label": "veto",
+      "program": [
+        {
+          "op": "return",
+          "value": "vetoed"
+        }
+      ]
+    },
+    {
+      "op": "listen",
+      "key": "waterfall-veto",
+      "label": "not-after-veto",
+      "program": [
+        {
+          "op": "next"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "waterfall-veto",
+      "mode": "waterfall",
+      "to": "veto-result",
+      "value": "inner-value"
+    },
+    {
+      "op": "listen",
+      "key": "waterfall-value",
+      "label": "delegates",
+      "program": [
+        {
+          "op": "next",
+          "to": "inner-result"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "waterfall-value",
+      "mode": "waterfall",
+      "to": "delegated",
+      "value": "inner-value"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "finished",
+      "path": "/outputs/inner-result",
+      "equals": "inner-value"
+    },
+    {
+      "at": "finished",
+      "path": "/outputs/delegated",
+      "equals": "inner-value"
+    }
+  ]
+}

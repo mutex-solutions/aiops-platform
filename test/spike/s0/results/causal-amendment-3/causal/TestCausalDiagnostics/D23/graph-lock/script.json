@@ -1,0 +1,106 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D23",
+  "title": "Partial effect setup unwinds collected disposers without retaining ownership",
+  "covers": [
+    "partial-effect-unwind",
+    "single-shot-effect"
+  ],
+  "plugins": [
+    {
+      "id": "partial",
+      "apply": [
+        {
+          "op": "effect",
+          "label": "throwing-setup",
+          "mode": "partial",
+          "cleanup": [
+            {
+              "op": "mark",
+              "label": "first"
+            },
+            {
+              "op": "mark",
+              "label": "second"
+            }
+          ],
+          "error": "setup failed",
+          "catch": true,
+          "to": "setup-error"
+        },
+        {
+          "op": "effect",
+          "label": "single-shot",
+          "cleanup": [
+            {
+              "op": "mark",
+              "label": "once"
+            }
+          ],
+          "to": "single"
+        },
+        {
+          "op": "withdraw",
+          "task": "single"
+        },
+        {
+          "op": "withdraw",
+          "task": "single"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "partial",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "active"
+    },
+    {
+      "op": "inspect",
+      "fiber": "f",
+      "mode": "effects",
+      "to": "effects"
+    },
+    {
+      "op": "snapshot",
+      "label": "unwound"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "unwound",
+      "path": "/states/0/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "unwound",
+      "path": "/outputs/effects",
+      "equals": []
+    },
+    {
+      "at": "unwound",
+      "path": "/outputs/setup-error",
+      "equals": {
+        "name": "Error",
+        "message": "setup failed"
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/extensions/tool-cordis/tests/cordis-lifecycle.spec.ts"
+  ]
+}

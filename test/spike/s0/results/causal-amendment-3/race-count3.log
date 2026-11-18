@@ -1,0 +1,11 @@
+ok  	github.com/mutex-solutions/aiops-platform/test/differential	14.713s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/callpath	9.315s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/composition	1.196s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency	17.044s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/contextmodel	1.082s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/hooks	1.197s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue	1.049s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/observers	1.329s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/properties	12.390s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	16.880s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/scale	3.095s

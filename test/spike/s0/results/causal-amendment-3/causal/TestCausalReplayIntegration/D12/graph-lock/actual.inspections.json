@@ -1,0 +1,139 @@
+{
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "c",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "p",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 28
+  },
+  "ready": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "c",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            1
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "p",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:svc"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:svc",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "svc",
+        "UID": 1,
+        "Owner": 2,
+        "Name": "p",
+        "Value": "late",
+        "Active": true
+      }
+    ],
+    "Sequence": 14
+  },
+  "waiting": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "c",
+        "State": "PENDING",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": false,
+        "RawConfig": {},
+        "EffectiveConfig": null,
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 1
+  }
+}

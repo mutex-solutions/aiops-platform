@@ -1,0 +1,102 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D17",
+  "title": "Updates coalesce to latest target while teardown is blocked",
+  "covers": [
+    "coalesced-updates"
+  ],
+  "plugins": [
+    {
+      "id": "changing",
+      "apply": [
+        {
+          "op": "mark",
+          "label": "apply",
+          "value": {
+            "$config": "v"
+          }
+        },
+        {
+          "op": "output",
+          "to": "latest",
+          "value": {
+            "$config": "v"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "op": "gate",
+          "label": "teardown"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "changing",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 2
+      },
+      "await": false,
+      "task": "u2"
+    },
+    {
+      "op": "waitMark",
+      "label": "teardown"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 3
+      },
+      "await": false,
+      "task": "u3"
+    },
+    {
+      "op": "release",
+      "label": "teardown"
+    },
+    {
+      "op": "settle",
+      "label": "latest"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "latest",
+      "path": "/states/0/state",
+      "equals": "ACTIVE"
+    },
+    {
+      "at": "latest",
+      "path": "/outputs/latest",
+      "equals": 3
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

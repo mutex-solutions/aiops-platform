@@ -1,0 +1,222 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D01",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "service",
+      "data": {
+        "key": "svc",
+        "realm": "root:svc",
+        "value": "root-value"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "plugin",
+      "data": {
+        "disposed": false,
+        "fiber": "c"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "PENDING",
+        "to": "LOADING"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "config",
+      "data": {
+        "config": {},
+        "fiber": "c"
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "apply",
+      "data": {
+        "config": {},
+        "fiber": "c"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "output",
+      "data": {
+        "to": "service",
+        "value": "root-value"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "output",
+      "data": {
+        "to": "inherited",
+        "value": "outer"
+      }
+    },
+    {
+      "seq": 8,
+      "kind": "output",
+      "data": {
+        "to": "shadow",
+        "value": "inner"
+      }
+    },
+    {
+      "seq": 9,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "LOADING",
+        "to": "ACTIVE"
+      }
+    },
+    {
+      "seq": 10,
+      "kind": "output",
+      "data": {
+        "to": "parent-name",
+        "value": "parent"
+      }
+    },
+    {
+      "seq": 11,
+      "kind": "plugin",
+      "data": {
+        "disposed": true,
+        "fiber": "c"
+      }
+    },
+    {
+      "seq": 12,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "ACTIVE",
+        "to": "UNLOADING"
+      }
+    },
+    {
+      "seq": 13,
+      "kind": "status",
+      "data": {
+        "fiber": "c",
+        "from": "UNLOADING",
+        "to": "DISPOSED"
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "active",
+      "states": [
+        {
+          "fiber": "c",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": [
+              {
+                "key": "svc",
+                "provisionUID": 1
+              }
+            ]
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "root",
+          "provisionUID": 1,
+          "value": "root-value",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "inherited": "outer",
+        "service": "root-value",
+        "shadow": "inner"
+      }
+    },
+    {
+      "label": "metadata",
+      "states": [
+        {
+          "fiber": "c",
+          "state": "ACTIVE",
+          "fiberUID": 1,
+          "revision": 0,
+          "epoch": {
+            "revision": 0,
+            "needs": [
+              {
+                "key": "svc",
+                "provisionUID": 1
+              }
+            ]
+          },
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "root",
+          "provisionUID": 1,
+          "value": "root-value",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "inherited": "outer",
+        "parent-name": "parent",
+        "service": "root-value",
+        "shadow": "inner"
+      }
+    },
+    {
+      "label": "disposed",
+      "states": [
+        {
+          "fiber": "c",
+          "state": "DISPOSED",
+          "fiberUID": null,
+          "revision": 0,
+          "epoch": null,
+          "rawConfig": {},
+          "effectiveConfig": {}
+        }
+      ],
+      "provisions": [
+        {
+          "key": "svc",
+          "realm": "root:svc",
+          "provider": "root",
+          "provisionUID": 1,
+          "value": "root-value",
+          "active": true
+        }
+      ],
+      "outputs": {
+        "inherited": "outer",
+        "parent-name": "parent",
+        "service": "root-value",
+        "shadow": "inner"
+      }
+    }
+  ]
+}

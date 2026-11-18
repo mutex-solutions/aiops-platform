@@ -1,0 +1,179 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "mount",
+    "From": "",
+    "State": "PENDING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "state",
+    "From": "PENDING",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "config",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "self"
+    }
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "config": {},
+      "fiber": "self"
+    }
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "selfDispose",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "await": false,
+      "fiber": "self"
+    }
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "dispose:request",
+    "From": "",
+    "State": "LOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "apply-returned",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "effect",
+    "From": "",
+    "State": "LOADING",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "state",
+    "From": "LOADING",
+    "State": "UNLOADING",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "dispose-effect",
+    "From": "",
+    "State": "UNLOADING",
+    "Key": "apply",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "cleanup",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "fiber": "self"
+    }
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "cleanup-complete",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 1,
+    "Name": "self",
+    "Kind": "state",
+    "From": "UNLOADING",
+    "State": "DISPOSED",
+    "Key": "",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  }
+]

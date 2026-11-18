@@ -4,13 +4,129 @@ Status: evidence record for the owner-approved causal comparison
 ([ADR-035](../adr/ADR-035-cordis-tracking.md),
 [amendment](s0-causal-comparison-amendment.md),
 [amendment 2](s0-causal-comparison-amendment-2.md),
-[its addendum](s0-causal-comparison-amendment-2-addendum.md) and
-[freeze 2](s0-causal-comparison-freeze-2.json)). The corpus and criteria are unchanged; the candidates
+[its addendum](s0-causal-comparison-amendment-2-addendum.md),
+[freeze 2](s0-causal-comparison-freeze-2.json),
+[amendment 3](s0-causal-comparison-amendment-3.md), [its addendum](s0-causal-comparison-amendment-3-addendum.md)
+and [freeze 3](s0-causal-comparison-freeze-3.json)). The corpus and criteria are unchanged; the candidates
 changed only by the fixes of 2026-11-18 recorded below. This note does **not** establish S0 acceptance.
 
 The first part is the result of the rerun of all 36 scenarios with the comparator
-as extended by amendment 2. The sections after "Before amendment 2" are the
+as extended by amendment 3 (current tally: 62 pairs match, 6 are MISMATCH, none is
+unsupported). The part after it is the rerun with the comparator as extended by
+amendment 2. The sections after "Before amendment 2" are the
 earlier record of the frozen comparator and are kept unchanged for history.
+
+## After amendment 3 (2026-11-19)
+
+Receipts: [`causal-amendment-3`](../../test/spike/s0/results/causal-amendment-3/invocation.json).
+Method: [amendment 3](s0-causal-comparison-amendment-3.md), its
+[addendum](s0-causal-comparison-amendment-3-addendum.md) and
+[freeze 3](s0-causal-comparison-freeze-3.json), committed before the comparator
+change and before this run. The corpus, the oracle, the candidates and the replay
+interpreter are unchanged; only the comparator and its tests changed.
+
+Process note, stated plainly. The amendment was written from the oracle, the Go hook
+engine and the comparator's unsupported reasons, with no probe of a half-written
+comparator, but writing the code still showed one misstated rule (the completion
+events of an unawaited dispatch) and several unnamed ones. They are in the addendum,
+committed before the implementation and before any recorded run. Unrecorded probes
+(3 to 5 runs per scenario, discarded) ran before the addendum was committed; no
+probe changed a rule, and no receipt comes from one.
+
+Protocol as before: every pair 100 times under `-race` and 100 times with
+`GOMAXPROCS=2` under `-race`, one fresh pinned-oracle (Node 24.22.1) execution per
+scenario; "match" only at 100 of 100 in both modes. D13 uses `corpus/revision-5`,
+D22 `corpus/revision-4`. Columns R and G are `reconciler` and `graph-lock`.
+
+| ID | Fixture | Strict R / G (race + GOMAXPROCS=2, of 100 each) | Causal R | rate R | Causal G | rate G | Note |
+|---|---|---|---|---|---|---|---|
+| D01 | D01.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `$meta` static metadata (K1) and root provision (K2). |
+| D02 | D02.json | 11+8 / 12+16 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D03 | D03.json | 4+1 / 65+71 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D05 | D05.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | unchanged owner question: stable `checkpoint "children" Needs count mismatch` on both, 400 of 400 runs per candidate; see "D06 and D23" below. |
+| D07 | D07.json | 45+36 / 98+97 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D08 | D08.json | 50+35 / 99+97 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D09 | D09.json | 70+67 / 27+25 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D13 | revision-5/D13.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | corpus revision 5. |
+| D14 | D14.json | 49+33 / 99+99 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D15 | D15.json | 43+37 / 98+95 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D17 | D17.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, one coalesced reload for two requests, revision 2 (K6). |
+| D18 | D18.json | 51+43 / 99+88 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | |
+| D20 | D20.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: superseded load error, latest target applied, revision 1 (K6). |
+| D21 | D21.json | 52+53 / 100+92 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | unchanged owner question: stable `record count mismatch: 14 != 16` (oracle 14, candidates 16), class (a) in "Revisions 5 and 6" below. |
+| D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | unchanged owner question: stable caught `error {op:"effect"}` outside the Apply frame, documented adaptation, see "D06 and D23" below. |
+| D24 | D24.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: late-effect refusal in teardown and after disposal (K4). |
+| D25 | D25.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: own disposal request from Apply (K3). |
+| D26 | D26.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D27 | D27.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | |
+| D28 | D28.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `retain` policy, resolveConfig, noSave (K5). |
+| D29 | D29.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, `internal/update` listeners, awaitTask with rejection (K6, K7). |
+| D30 | D30.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `unchanged` policy, veto then restart (K5). |
+| D31 | D31.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `emit`, symbol key, gated listener continuation (K8). |
+| D32 | D32.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `parallel`, awaitTask rejection with AggregateError (K6, K8). |
+| D33 | D33.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `serial`, gate, bail value and error stops (K6, K8). |
+| D34 | D34.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `bail`, zero and empty string are bail values (K8). |
+| D35 | D35.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall` veto and delegation (K8). |
+| D36 | D36.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall`, second `next` throws (K8). |
+
+Counts (68 pairs run, D05 and D26 not run): causal match **62**, MISMATCH **6**,
+unsupported **0**. Before this round: 34, 6, 28. The 34 pairs accepted before are
+accepted again, 100 of 100 in both modes (D02, D03, D04, D07 to D16, D18, D19, D21, D27
+on both candidates). The 6 MISMATCH pairs are D06, D22 and D23 on both candidates,
+with the same verdicts and the same classification as in the sections below; they
+are owner questions and were not touched. No new MISMATCH exists.
+
+The 28 pairs that became decidable are D01, D17, D20, D24, D25, D28 to D36 on both
+candidates (14 scenarios), and all are `match`: 100 of 100 under `-race` and 100 of
+100 with `GOMAXPROCS=2`, both candidates. All 14 were strict matches, so the new
+verdict agrees with the byte comparison; what changed is that the comparator can now
+prove it.
+
+What each capability decides (rules in the amendment, K1 to K8):
+
+| Capability | Scenarios |
+|---|---|
+| K1 static `$meta`, K2 root provision | D01 |
+| K3 self-disposal request | D25 |
+| K4 late-effect refusal | D24 |
+| K5 `retain` and `unchanged` update policies | D28, D30 |
+| K6 asynchronous updates, request coalescing, tasks, awaitTask | D17, D20, D29, D32, D33 |
+| K7 `internal/update` listeners from Apply | D29 |
+| K8 host hook dispatch (emit, parallel, serial, bail, waterfall) | D31 to D36 |
+
+Limits of the new rules, not hidden:
+
+- **Release is proved only by cuts.** A `release` has no event. A continuation that
+  runs after the gate arrival but before a release issued in the same segment cannot
+  be told from a correct one by the trace (same limit as amendment 2). Where a cut
+  separates them it is rejected (tests `continuation-before-release`).
+- **Values inside hook lanes are compared by content with the oracle trace, not
+  recomputed.** Events, order and multiplicity of hook, chain and waterfall lanes are
+  validated on each trace alone; payload values (a bail value, an inner value, an
+  error payload) are compared between the traces. An identical wrong value on both
+  sides is not detectable (tests state this as one-sided).
+- **K7 effective configuration** is not recomputed: it must be a configuration the
+  fiber applied or resolved, and is then compared between the traces.
+- **Emit and parallel listener continuations** after a gate are unordered against the
+  other listeners and the root by design (nothing awaits them in `emit`); they are
+  still bounded by their gate arrival, the release cut and the end of the trace.
+- Not added: update policies `reject` and `next`, update listeners that call `next`,
+  `selfDispose` with `await:true` (D26), gates in `bail` and `waterfall` listeners,
+  failing `emit` listeners, `catch` inside listener programs, a key dispatched twice,
+  `global`/`prepend` listeners, asynchronous `restart`, `awaitTask` of a
+  restart-capable update task. None of the 14 scenarios needs one.
+
+This is a differential comparison only. It is not S0 acceptance.
+
+Earlier record, kept unchanged below.
 
 ## After amendment 2 and the candidate fixes (clean run)
 

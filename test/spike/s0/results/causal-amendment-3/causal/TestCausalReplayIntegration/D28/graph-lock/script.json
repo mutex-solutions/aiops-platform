@@ -1,0 +1,110 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D28",
+  "title": "Candidate config resolution does not publish; retained update commits raw input",
+  "covers": [
+    "resolve-config-no-publication",
+    "internal-update-retain",
+    "internal-commit-nosave"
+  ],
+  "plugins": [
+    {
+      "id": "retained",
+      "apply": [],
+      "update": "retain",
+      "configTransform": {
+        "normalized": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "retained",
+      "config": {
+        "v": 0
+      }
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "resolveConfig",
+      "fiber": "f",
+      "config": {
+        "v": 99
+      },
+      "to": "candidate"
+    },
+    {
+      "op": "snapshot",
+      "label": "resolved-only"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "settle",
+      "label": "committed"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 2
+      },
+      "mode": "noSave"
+    },
+    {
+      "op": "settle",
+      "label": "no-save"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "resolved-only",
+      "path": "/states/0/rawConfig",
+      "equals": {
+        "v": 0
+      }
+    },
+    {
+      "at": "resolved-only",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "v": 0,
+        "normalized": true
+      }
+    },
+    {
+      "at": "committed",
+      "path": "/states/0/revision",
+      "equals": 0
+    },
+    {
+      "at": "no-save",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "v": 2,
+        "normalized": true
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

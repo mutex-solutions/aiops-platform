@@ -1,0 +1,27 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "a5d2b9fa90836d7050509ab9e3817d14f2081a5180b6f78822098ca8dc6eb64e",
+  "scriptSHA256": "0e93ee8035b88a669fc0c63ff2ac672e70f430172cbfbdcd7b6e4a58522d799c",
+  "checkpoints": [
+    {
+      "label": "initial",
+      "afterEvent": 5
+    },
+    {
+      "label": "pending-update",
+      "afterEvent": 9
+    },
+    {
+      "label": "current",
+      "afterEvent": 12
+    },
+    {
+      "label": "rejected",
+      "afterEvent": 18
+    },
+    {
+      "label": "disposed",
+      "afterEvent": 21
+    }
+  ]
+}
