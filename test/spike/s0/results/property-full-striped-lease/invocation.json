@@ -1,0 +1,38 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload with the striped lease counter; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "a38c972b75220ec956b469b5d42ffbd8724fddd46f97eb8278e671094f4c4a8e",
+ "commit": "6405117",
+ "note": "the teardown-order change that follows this commit alters the core again and needs its own rerun",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 2651.02,
+ "candidateSeconds": {
+  "reconciler": 1303.25,
+  "graph-lock": 1347.61
+ },
+ "hostNote": "shared development host with other test jobs running; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "abd1852f30219ff2936ef7fe5099281f349325e49428dcd569a36c6a909f3b4f",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/striped-lease-6405117",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, scale/performance, SQL authority, restart and line/coverage gates remain open."
+ ]
+}
