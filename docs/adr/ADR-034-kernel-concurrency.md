@@ -167,3 +167,41 @@ top-level disposers of a fiber concurrently, one microtask apart), the service
 dependency retention rules, lease drain, and deadline budgets. Evidence:
 `test/spike/s0/results/causal-d22-d06-fixes` and the D22 row of
 `docs/design/s0-causal-coverage.md`.
+
+## Second full callpath run and what it cannot yet decide, 2026-11-19
+
+The [second full run](../../test/spike/s0/results/callpath-full-second/invocation.json)
+on an idle dedicated host, with the striped lease counter, met the latency bound
+in every run: owner Enter+Leave p99 was 89 to 840 ns in aggregate at 1, 8 and 32
+callers on both candidates, worst single run 1661 ns, against 2000 ns. The run is
+still classified failed and invalid, for two reasons that an analysis on a
+development host attributes to the measurement, not to the lease. Neither the
+harness nor the criteria were changed.
+
+- **One object in 4 of 60 runs.** The harness requires a process-wide allocation
+  delta of exactly zero across each window. Replicating the window 1,500 times per
+  configuration showed the empty timer-only control loop records a non-zero delta
+  as often as the lease loop (for example 164 against 168 windows at 32 callers on
+  one candidate). A heap-profile diff attributes the object to the wait-queue
+  record the coordinator goroutine allocates when it parks to wait for the callers
+  to finish. With that wait replaced by a non-parking one, non-zero windows fell
+  to zero in 10 of 12 configurations. The lease path itself allocates nothing.
+- **Throughput variation above 10% at 8 and 32 callers.** The timer-only control,
+  which touches no lease, shows the same variation in both full runs (12 to 18% at
+  8 callers). A window of 100,000 operations lasts a few milliseconds; callers
+  start through a channel close and finish at different times, and throughput
+  follows that finish skew (correlation about -0.8) in every variant including the
+  control. Shard collisions correlate weakly with throughput in this window shape
+  (-0.19 at 8 callers). No lease design can bring this metric under 10% with the
+  present window.
+
+A 64-shard counter was evaluated: it lowers p99 further and makes collisions
+rarer, but costs about 4 KiB per activation (about 40 MiB at 10,000 activations,
+against a 128 MiB retained-heap limit) and does not change either finding above.
+The counter stays at 16 shards.
+
+Open for the owner: whether the callpath protocol is amended, in writing and
+before another run, so that the coordinator does not allocate inside the window
+and the noise check uses a window in which callers start together and throughput
+is taken from the callers' own timestamps. Until then the call-path gate is
+recorded as: latency bound met, allocation and noise readings unresolved.
