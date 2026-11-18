@@ -45,6 +45,7 @@ var report = diagnosticReport{
 		"No jobs worker, fetch/completion/rescue/uniqueness/leader or background identity-delivery test; no 500 Tx/s performance acceptance.",
 		"Cancellation uses an explicitly canceled operation then owner rollback; not in-flight cancellation or automatic-abort proof.",
 		"Connection-loss case closes its own connection before commit; commit acknowledgement loss/ambiguous commit is NOT covered.",
+		"river_job has no RLS and no policy (ADR-045, 2026-11-18): the jobs role is not scope-filtered there and a direct jobs-role insert with a forged tenant column is no longer rejected by a policy check; the caller role has no privilege on it.",
 		"Bootstrap observer may bypass RLS for retained row counting; all four transaction writes use only the fresh runtime login and declared roles.",
 		"No automatic schema/role cleanup; retain fixture_id for owner inspection and manual cleanup.",
 		"Report requires orderly TestMain return; panic, kill, or crash may prevent emission. Source hashes identify on-disk source at report time, not an attested binary build.",

@@ -20,7 +20,9 @@ The original **SQL gate FAIL remains unchanged**.
 - Separate non-login table/migration owner with no superuser/BYPASSRLS; fresh
   nonowner login and caller/jobs/events/audit roles with `NOINHERIT`,
   `NOSUPERUSER`, `NOBYPASSRLS`, no role/database creation or replication.
-  Every tenant table uses forced RLS. Live checks verify these facts plus actual
+  The state, outbox and audit tables use forced RLS. River's `river_job` has **no
+  RLS and no policy** and only the jobs role holds privileges on it; the caller
+  role has none (ADR-045, 2026-11-18), checked live. Live checks verify these facts plus actual
   `fsync=on`, `synchronous_commit=on` and narrow definer-function ACL/search path.
 - The runtime login is a member of caller and jobs with `INHERIT FALSE,
   SET TRUE`: **exactly the original known-failed role-switch mechanism**.

@@ -67,14 +67,18 @@ fixture requires an exact catalog-name match to those five, not an assumption
 based on every historical CREATE. Missing/unexpected tables fail closed; there
 is no conditional table skip or recreation of removed upstream tables.
 
-All five migrated tables and the result table have ENABLE+FORCE RLS, with a
-separate NOLOGIN owner. The explicit `TO jobs USING(true) WITH CHECK(true)` policy
-and SELECT/INSERT/UPDATE/DELETE grants cover `river_job`, `river_leader`,
-`river_queue`, `river_notification`. `river_migration` has the same policy but
-SELECT-only runtime grant. Jobs gets sequence USAGE/SELECT. Runtime has no schema
-CREATE or migration/owner membership. Post-setup verification requires the exact
-five River names plus exactly `result` in the data schema, separate owner and
-FORCE RLS on all six tables; count alone cannot satisfy that verification.
+Only the `result` table has ENABLE+FORCE RLS (with a separate NOLOGIN owner). The
+five migrated River tables have **no RLS and no policy** since ADR-045
+(2026-11-18): forced RLS made River's fetch (`JobGetAvailable`) lose its index plan
+once the table was large, and the jobs role never needed filtering. The jobs role
+holds SELECT/INSERT/UPDATE/DELETE on `river_job`, `river_leader`, `river_queue`,
+`river_notification`, SELECT-only on `river_migration`, plus sequence USAGE/SELECT
+and schema USAGE. The caller role holds **no privilege at all** on the River schema
+or tables (it enqueues only through `InsertTx` under `SET LOCAL ROLE jobs`). Runtime
+has no schema CREATE or migration/owner membership. Post-setup verification
+requires the exact five River names plus exactly `result` in the data schema, the
+separate owner, RLS off with zero policies and jobs-only privileges on River's
+objects, and FORCE RLS on `result`; count alone cannot satisfy that verification.
 
 This intentionally enables all-row fetch, completion, snooze metadata, unique
 conflict metadata, leader election/resignation, rescue/cleanup/scheduler scans,
@@ -82,8 +86,10 @@ queue metadata and notification-outbox paths. **Granting policies is not
 proof each path executed.** Only actual handler fetch, snooze, completion,
 sequential uniqueness and explicit redelivery are asserted. No distinct leader,
 rescue, scheduled-job, cleanup, metadata isolation or unique-race acceptance is
-claimed. Frontend caller SELECT on `river_job` and SELECT/INSERT on `result` are
-still tenant-GUC-filtered (known unsafe to raw SQL). Jobs has no result grants.
+claimed. Frontend caller SELECT/INSERT on `result` is still tenant-GUC-filtered
+(known unsafe to raw SQL); the caller cannot read `river_job` at all
+(`assertCallerHasNoRiverAccess`: SELECT, INSERT, UPDATE, DELETE, TRUNCATE each fail
+with 42501). Jobs has no result grants.
 The result writer sets LOCAL caller role and LOCAL scope in a fresh transaction.
 
 Logs use `slog` to `io.Discard`; SQL errors are classified by SQLSTATE, not raw

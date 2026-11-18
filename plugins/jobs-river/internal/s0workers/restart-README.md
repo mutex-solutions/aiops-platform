@@ -207,11 +207,13 @@ the harness, and it is reported, not hidden: every cycle of a table of 160,000
 retained rows fails (cycle 1: 3,647 of 5,000 acked ids durable, ack-to-completion
 about 50 s, recovery 35 s; from cycle 4 on none of the cycle's own ids complete).
 
-Product-level fix candidates (not applied here): give the jobs role a policy-free
-path to River's tables (owner without FORCE, or BYPASSRLS if the authority design
-allows it), or keep RLS and accept the River fetch cost grows with table size, or
-bound the retained `river_job` history (River's cleaner retention) so the fetch
-stays small; per-role `enable_seqscan=off` is a diagnostic only.
+Fix candidates were: give the jobs role a policy-free path to River's tables
+(owner without FORCE, or BYPASSRLS), or keep RLS and accept the growing fetch cost,
+or bound the retained history; per-role `enable_seqscan=off` is a diagnostic only.
+**Applied 2026-11-18 (ADR-045): River's tables have no RLS and no policy, only the
+jobs role holds privileges on them (no BYPASSRLS, no ownership), and finished jobs
+are bounded by River's cleaner (see "Bounded retention").** The text above is the
+measurement that led to that decision, taken with the previous fixture.
 
 Proof that this is the only cause: `S0_WORKER_RESTART_FULL_DIAG_JOBS_NO_SEQSCAN=1`
 (diagnostic, makes the run non-acceptance) sets `enable_seqscan=off` on the fixture

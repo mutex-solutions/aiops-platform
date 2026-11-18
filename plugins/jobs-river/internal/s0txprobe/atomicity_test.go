@@ -39,6 +39,27 @@ func (f *fixture) assertIdentity(t testing.TB, ctx context.Context, scope callSc
 		}
 	}
 }
+
+// assertCallerRefusedOnRiverJob runs each statement as the caller role in its own
+// savepoint and requires insufficient_privilege (42501) for all of them.
+func (f *fixture) assertCallerRefusedOnRiverJob(t testing.TB, ctx context.Context, tx pgx.Tx) {
+	t.Helper()
+	job := qualified(f.jobs, "river_job")
+	for _, statement := range []string{
+		"SELECT count(*) FROM " + job,
+		"INSERT INTO " + job + " (kind,args) VALUES ('x','{}')",
+		"UPDATE " + job + " SET priority=priority",
+		"DELETE FROM " + job,
+	} {
+		sp, err := tx.Begin(ctx)
+		must(t, err)
+		_, err = sp.Exec(ctx, statement)
+		_ = sp.Rollback(ctx)
+		if sqlState(err) != "42501" {
+			t.Errorf("caller statement on river_job not refused with insufficient_privilege: SQLSTATE=%s", sqlState(err))
+		}
+	}
+}
 func (f *fixture) assertCleanReuse(t testing.TB, ctx context.Context) {
 	t.Helper()
 	var user, tenant, id, path string
@@ -146,7 +167,7 @@ func TestAtomicityDiagnostic(t *testing.T) {
 	runCase(t, "InsertTx_error_restore_is_not_success", func(t *testing.T) {
 		s := callScope{"scope-a", "insert-error"}
 		tx := f.tx(t, ctx, nil)
-		// Missing handle creates an ordinary NOT NULL/RLS insert failure.
+		// Missing handle creates an ordinary NOT NULL insert failure (no RLS on river_job).
 		// No setting-tamper or authority-elevation operation is exercised.
 		err := f.insertJob(ctx, tx)
 		var failure *insertFailure
@@ -194,6 +215,10 @@ func TestAtomicityDiagnostic(t *testing.T) {
 		f.assertRows(t, ctx, s, 0)
 		f.assertCleanReuse(t, ctx)
 	})
+	// Rewritten for ADR-045 (2026-11-18): river_job has no RLS, so the jobs role is
+	// no longer scope-filtered there (it sees both committed jobs, as the trusted
+	// provider must). The caller-owned state table stays scope-filtered, and the
+	// caller role has no privilege at all on river_job.
 	runCase(t, "scope_reads_are_context_filtered", func(t *testing.T) {
 		for _, tenant := range []string{"scope-a", "scope-b"} {
 			s := callScope{tenant, "read-" + tenant}
@@ -203,15 +228,18 @@ func TestAtomicityDiagnostic(t *testing.T) {
 			if n != 1 {
 				t.Errorf("scoped state count=%d want 1", n)
 			}
-			_, err := tx.Exec(ctx, "SET LOCAL ROLE "+ident(f.jobs))
-			must(t, err)
-			must(t, tx.QueryRow(ctx, "SELECT count(*) FROM "+qualified(f.jobs, "river_job")).Scan(&n))
-			if n != 1 {
-				t.Errorf("scoped jobs count=%d want 1", n)
-			}
-			must(t, f.restoreCaller(ctx, tx))
+			f.assertCallerRefusedOnRiverJob(t, ctx, tx)
 			must(t, tx.Rollback(ctx))
 		}
+		tx := f.tx(t, ctx, &callScope{"scope-a", "read-jobs-role"})
+		_, err := tx.Exec(ctx, "SET LOCAL ROLE "+ident(f.jobs))
+		must(t, err)
+		var n int
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM "+qualified(f.jobs, "river_job")).Scan(&n))
+		if n != 2 {
+			t.Errorf("trusted jobs role sees %d job rows, want both committed tenants (2)", n)
+		}
+		must(t, tx.Rollback(ctx))
 	})
 	runCase(t, "no_handle_reads_zero_writes_rejected", func(t *testing.T) {
 		tx := f.tx(t, ctx, nil)
@@ -220,16 +248,13 @@ func TestAtomicityDiagnostic(t *testing.T) {
 		if n != 0 {
 			t.Error("no-handle state read exposed rows")
 		}
-		_, err := tx.Exec(ctx, "SET LOCAL ROLE "+ident(f.jobs))
-		must(t, err)
-		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM "+qualified(f.jobs, "river_job")).Scan(&n))
-		if n != 0 {
-			t.Error("no-handle jobs read exposed rows")
-		}
+		// river_job has no RLS (ADR-045, 2026-11-18): without a handle the caller role
+		// is refused outright instead of reading zero rows.
+		f.assertCallerRefusedOnRiverJob(t, ctx, tx)
 		must(t, tx.Rollback(ctx))
 		for i := 0; i < 4; i++ {
 			tx = f.tx(t, ctx, nil)
-			err = f.write(ctx, tx, i)
+			err := f.write(ctx, tx, i)
 			if err == nil {
 				t.Fatalf("no-handle participant %d write allowed", i)
 			}

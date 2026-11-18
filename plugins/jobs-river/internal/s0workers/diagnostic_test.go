@@ -140,19 +140,11 @@ func TestWorkerScopeDataDiagnostic(t *testing.T) {
 				t.Fatal("provider columns were not transaction-default stamped")
 			}
 		}
-		// Caller visibility is tenant-filtered by the original custom GUCs.
-		// This is NOT a defense against their known tampering/membership escape.
-		for i, scope := range scopes {
-			tx, err := f.beginCaller(ctx, scope)
-			must(t, err)
-			defer tx.Rollback(context.Background())
-			var got int64
-			var count int
-			must(t, tx.QueryRow(ctx, "SELECT count(*),coalesce(min(id),0) FROM "+table(f.jobs, "river_job")).Scan(&count, &got))
-			if count != 1 || got != ids[i] {
-				t.Error("caller scoped read returned wrong jobs")
-			}
-			must(t, tx.Rollback(ctx))
+		// Replaces the former tenant-filtered caller read of river_job (ADR-045,
+		// 2026-11-18): River's tables carry no RLS and the caller role holds no
+		// privilege on them at all, whichever tenant it is scoped to.
+		for _, scope := range scopes {
+			f.assertCallerHasNoRiverAccess(t, ctx, scope)
 		}
 		c := f.newWorker(t, ctx, "scope-data", 10*time.Millisecond)
 		must(t, c.worker.registry.install(f.recordingHandler(c.worker)))
@@ -196,6 +188,19 @@ func TestWorkerScopeDataDiagnostic(t *testing.T) {
 		for i, id := range ids {
 			f.assertState(t, ctx, id, "completed")
 			f.assertResult(t, ctx, id, scopes[i], keys[i], 1)
+		}
+		// The caller-owned result table stays under FORCE RLS: each scope reads
+		// exactly its own result row through the caller role, not the other's.
+		for i, scope := range scopes {
+			tx, err := f.beginCaller(ctx, scope)
+			must(t, err)
+			var count int
+			var got int64
+			must(t, tx.QueryRow(ctx, "SELECT count(*),coalesce(min(job_id),0) FROM "+table(f.data, "result")).Scan(&count, &got))
+			_ = tx.Rollback(context.Background())
+			if count != 1 || got != ids[i] {
+				t.Error("caller scoped read of the result table returned wrong rows")
+			}
 		}
 		// Explicit redelivery, NOT rescue/crash simulation. Real worker invokes
 		// the same handler again, while ON CONFLICT(job_id) prevents reapplying.

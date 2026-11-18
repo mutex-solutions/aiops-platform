@@ -38,7 +38,7 @@ var report = diagnosticReport{
 	Limits: []string{
 		"Ordinary-functional worker scope-data/revocation DIAGNOSTIC, NOT authority-gate acceptance, NOT full S0, NOT a product implementation.",
 		"Custom GUC tampering and SET-role membership escape remain known UNSAFE; no denied operation, capability repair, or bypass test.",
-		"Trusted jobs role intentionally sees/writes all tenants for River background paths. It does not change frontend caller RLS.",
+		"Trusted jobs role intentionally sees/writes all tenants for River background paths; River's tables have no RLS and the caller role has no privilege on them (ADR-045, 2026-11-18). Caller-owned result-table RLS is unchanged.",
 		"Provider extra columns/defaults, opaque callScope context, and result ledger are test fixtures, not stock River tenant APIs, SDK definitions, or an S3 schema decision.",
 		"Only selected completed cases are functional observations. Starting background services does not individually prove leader election, rescue, cleanup, scheduler, uniqueness races, or notification-only wakeup.",
 		"Two concurrent clients are two in-process replicas sharing one schema; no cross-process, crash/restart, timing/fairness guarantee, or performance acceptance.",

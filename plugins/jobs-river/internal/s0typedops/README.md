@@ -36,10 +36,14 @@ never receives this closure, `Host`, or native transaction.
 The fixture creates two independent entry schemas/roles and separate migration
 ownership. Its runtime login and runtime roles are NOSUPERUSER, NOBYPASSRLS,
 NOINHERIT nonowners. Record grants target only each entry's own schema/table.
-Every table is FORCE RLS: two records tables, two provider tables and the exact
-five final River main tables (`river_job`, `river_leader`, `river_migration`,
-`river_notification`, `river_queue`). Trusted jobs policies intentionally see all
-rows; this is provider authority, not tenant-specific background-worker evidence.
+Four tables are FORCE RLS: two records tables and the two provider tables. The
+exact five final River main tables (`river_job`, `river_leader`, `river_migration`,
+`river_notification`, `river_queue`) have **no RLS and no policy** (ADR-045,
+2026-11-18): only the trusted jobs role holds privileges on them and sees all
+rows (provider authority, not tenant-specific background-worker evidence); entry
+roles hold no privilege on them or on their schema. `TestPGEntryRolesHaveNoRiverPrivileges`
+asserts that, and `TestPGCatalogChecks` refuses RLS, a policy or a caller grant
+put back on a River table.
 Only the fixture-owned `river_job` receives extra tenant/scope/writer-xid columns.
 Actual upstream migrations run through `rivermigrate.Config.Schema`; no copied or
 modified upstream SQL is executed. Migration 007 removes its own transient client
@@ -88,7 +92,7 @@ is added to the exported domain API.
   timing guarantee. Unexpected rollback failure cannot be safely forced here;
   its observable error-joining path remains a separate unit/control concern.
 - `TestPGCatalogChecks`: reviewed fixed columns/types/nullability/defaults and
-  primary keys, one exact role/expression policy per table, nonowner table grants,
+  primary keys, one exact role/expression policy per owned table (none on River's), nonowner table grants,
   schema/sequence ownership and grants, exact narrow append-function definitions
   and ACLs, and zero triggers on the nine owned tables are checked before the
   fixture admits a view. A trusted bootstrap transaction changes one record

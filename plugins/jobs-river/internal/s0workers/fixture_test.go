@@ -191,28 +191,29 @@ func (f *fixture) setup(ctx context.Context) error {
 		"ALTER TABLE " + job + " ADD COLUMN tenant text NOT NULL DEFAULT nullif(current_setting('s0wk.tenant',true),''), ADD COLUMN scope_id text NOT NULL DEFAULT nullif(current_setting('s0wk.scope_id',true),''), ADD COLUMN writer_xid xid8 NOT NULL DEFAULT pg_current_xact_id()",
 		"CREATE TABLE " + result + " (job_id bigint PRIMARY KEY, tenant text NOT NULL DEFAULT nullif(current_setting('s0wk.tenant',true),''), scope_id text NOT NULL DEFAULT nullif(current_setting('s0wk.scope_id',true),''), writer_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), idempotency_id text NOT NULL)",
 		"ALTER TABLE " + result + " OWNER TO " + ident(f.owner),
-		"GRANT USAGE ON SCHEMA " + ident(f.jobs) + " TO " + ident(f.jobs) + "," + ident(f.caller),
+		"GRANT USAGE ON SCHEMA " + ident(f.jobs) + " TO " + ident(f.jobs),
 		"GRANT USAGE ON SCHEMA " + ident(f.data) + " TO " + ident(f.caller),
 		"GRANT SELECT, INSERT ON " + result + " TO " + ident(f.caller),
-		"GRANT SELECT ON " + job + " TO " + ident(f.caller),
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA " + ident(f.jobs) + " TO " + ident(f.jobs),
 	}
-	// Every migrated table is forced, including metadata. Trusted jobs access is
+	// ADR-045 (2026-11-18): River's tables have NO row-level security and no
+	// policies; the caller role has no privilege on them. Trusted jobs access is
 	// intentionally global: fetch/completion/snooze, leader/rescue/cleanup, queue,
 	// notification outbox, and migration metadata. Dropped client tables are NOT
-	// recreated or conditionally skipped. Providing these policies does NOT
-	// claim each background path has been individually exercised.
+	// recreated or conditionally skipped. Granting these privileges does NOT
+	// claim each background path has been individually exercised. A policy on
+	// these tables would make the planner ignore non-leakproof statistics for the
+	// jobs role and turn River's fetch into a sequential scan.
 	for _, name := range riverTables {
 		q := table(f.jobs, name)
 		priv := "SELECT, INSERT, UPDATE, DELETE"
 		if name == "river_migration" {
 			priv = "SELECT"
 		}
-		statements = append(statements, "ALTER TABLE "+q+" ENABLE ROW LEVEL SECURITY", "ALTER TABLE "+q+" FORCE ROW LEVEL SECURITY", "GRANT "+priv+" ON "+q+" TO "+ident(f.jobs), "CREATE POLICY provider_jobs ON "+q+" TO "+ident(f.jobs)+" USING (true) WITH CHECK (true)")
+		statements = append(statements, "GRANT "+priv+" ON "+q+" TO "+ident(f.jobs))
 	}
 	using := "tenant=nullif(current_setting('s0wk.tenant',true),'') AND nullif(current_setting('s0wk.scope_id',true),'') IS NOT NULL"
 	statements = append(statements,
-		"CREATE POLICY caller_rows ON "+job+" FOR SELECT TO "+ident(f.caller)+" USING ("+using+")",
 		"ALTER TABLE "+result+" ENABLE ROW LEVEL SECURITY", "ALTER TABLE "+result+" FORCE ROW LEVEL SECURITY",
 		"CREATE POLICY caller_scope ON "+result+" TO "+ident(f.caller)+" USING ("+using+") WITH CHECK ("+using+" AND scope_id=nullif(current_setting('s0wk.scope_id',true),'') AND writer_xid=pg_current_xact_id())")
 	for i, sql := range statements {
@@ -245,14 +246,27 @@ func (f *fixture) verify(ctx context.Context) error {
 	err = f.admin.QueryRow(ctx, `SELECT
 	 coalesce(array_agg(c.relname::text ORDER BY c.relname::text) FILTER (WHERE n.nspname=$1),ARRAY[]::text[]),
 	 coalesce(array_agg(c.relname::text ORDER BY c.relname::text) FILTER (WHERE n.nspname=$3),ARRAY[]::text[]),
-	 coalesce(bool_and(c.relrowsecurity AND c.relforcerowsecurity AND r.rolname=$2 AND NOT r.rolsuper AND NOT r.rolbypassrls AND NOT r.rolcanlogin),false)
+	 coalesce(bool_and(r.rolname=$2 AND NOT r.rolsuper AND NOT r.rolbypassrls AND NOT r.rolcanlogin AND CASE WHEN n.nspname=$3 THEN c.relrowsecurity AND c.relforcerowsecurity ELSE NOT c.relrowsecurity AND NOT c.relforcerowsecurity END),false)
 	 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner
 	 WHERE n.nspname IN ($1,$3) AND c.relkind IN ('r','p')`, f.jobs, f.owner, f.data).Scan(&actualRiver, &actualData, &good)
 	if err != nil {
 		return safeError("forced tables", err)
 	}
 	if !good || !slices.Equal(actualRiver, riverTables) || !slices.Equal(actualData, []string{"result"}) {
-		return &redactedError{stage: "forced tables: exact five River plus result", state: "unexpected_table_owner_or_rls"}
+		return &redactedError{stage: "tables: exact five River (no RLS) plus forced result", state: "unexpected_table_owner_or_rls"}
+	}
+	// River's tables: no policy at all and no privilege for anyone but the jobs
+	// role (the owner's implicit ACL excluded): no PUBLIC, caller or login grant on
+	// tables, sequences or the schema. The jobs role is also the jobs schema name.
+	err = f.admin.QueryRow(ctx, `SELECT
+	 NOT EXISTS(SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1)
+	 AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault((CASE WHEN c.relkind='S' THEN 'S' ELSE 'r' END)::"char",c.relowner))) a LEFT JOIN pg_roles g ON g.oid=a.grantee WHERE n.nspname=$1 AND c.relkind IN ('r','S') AND a.grantee<>c.relowner AND coalesce(g.rolname,'PUBLIC')<>$2)
+	 AND NOT EXISTS(SELECT 1 FROM pg_namespace n CROSS JOIN LATERAL aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a LEFT JOIN pg_roles g ON g.oid=a.grantee WHERE n.nspname=$1 AND a.grantee<>n.nspowner AND coalesce(g.rolname,'PUBLIC')<>$2)`, f.jobs, f.jobs).Scan(&good)
+	if err != nil {
+		return safeError("river grants", err)
+	}
+	if !good {
+		return &redactedError{stage: "river tables: policy-free and jobs-only privileges", state: "unexpected_policy_or_grant"}
 	}
 	var user, fsync, sync string
 	if err := f.callerPool.QueryRow(ctx, "SELECT current_user,current_setting('fsync'),current_setting('synchronous_commit')").Scan(&user, &fsync, &sync); err != nil {
@@ -319,4 +333,36 @@ func caseContext(t *testing.T) (context.Context, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	return ctx, cancel
+}
+
+// assertCallerHasNoRiverAccess asserts the guarantee that replaced row-level
+// security on River's tables (ADR-045, 2026-11-18): the caller role has no
+// privilege of any kind on the River schema or tables, so the same SQL a caller
+// could issue is refused with insufficient_privilege (42501), whatever tenant
+// scope it holds. The catalog check covers table-level privileges separately
+// from the schema USAGE denial that fires first in the live statements.
+func (f *fixture) assertCallerHasNoRiverAccess(t *testing.T, ctx context.Context, scope callScope) {
+	t.Helper()
+	var schemaUsage bool
+	var leaked []string
+	must(t, safeError("caller privilege catalog", f.admin.QueryRow(ctx, `SELECT has_schema_privilege($1,$2,'USAGE'), coalesce((SELECT array_agg(t ORDER BY t) FROM unnest($3::text[]) t WHERE has_table_privilege($1, quote_ident($2)||'.'||quote_ident(t), 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),ARRAY[]::text[])`, f.caller, f.jobs, riverTables).Scan(&schemaUsage, &leaked)))
+	if schemaUsage || len(leaked) != 0 {
+		t.Fatalf("caller role holds privileges on River objects: schema_usage=%v tables=%v", schemaUsage, leaked)
+	}
+	job := table(f.jobs, "river_job")
+	for _, statement := range []string{
+		"SELECT count(*) FROM " + job,
+		"INSERT INTO " + job + " (kind,args) VALUES ('x','{}')",
+		"UPDATE " + job + " SET priority=priority",
+		"DELETE FROM " + job,
+		"TRUNCATE " + job,
+	} {
+		tx, err := f.beginCaller(ctx, scope)
+		must(t, err)
+		_, err = tx.Exec(ctx, statement)
+		_ = tx.Rollback(context.Background())
+		if sqlState(err) != "42501" {
+			t.Fatalf("caller statement on river_job not refused with insufficient_privilege: SQLSTATE=%s", sqlState(err))
+		}
+	}
 }

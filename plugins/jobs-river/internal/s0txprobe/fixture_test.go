@@ -188,7 +188,9 @@ func (f *fixture) setupTables(ctx context.Context) error {
 	// and no stock tenant API / accepted S3 schema is implied by these columns.
 	job := qualified(f.jobs, "river_job")
 	statements = append(statements, "ALTER TABLE "+job+" ADD COLUMN tenant text NOT NULL DEFAULT nullif(current_setting('s0.tenant',true),''), ADD COLUMN scope_id text NOT NULL DEFAULT nullif(current_setting('s0.scope_id',true),''), ADD COLUMN writer_xid xid8 NOT NULL DEFAULT pg_current_xact_id()")
-	for _, spec := range []struct{ schema, table string }{{f.caller, "state"}, {f.jobs, "river_job"}, {f.events, "outbox"}, {f.audit, "audit"}} {
+	// ADR-045 (2026-11-18): River's own tables carry no RLS and no policy; only the
+	// jobs role holds privileges on them and the caller role holds none.
+	for _, spec := range []struct{ schema, table string }{{f.caller, "state"}, {f.events, "outbox"}, {f.audit, "audit"}} {
 		q := qualified(spec.schema, spec.table)
 		statements = append(statements, "ALTER TABLE "+q+" ENABLE ROW LEVEL SECURITY", "ALTER TABLE "+q+" FORCE ROW LEVEL SECURITY", "CREATE POLICY scope ON "+q+" USING (tenant=nullif(current_setting('s0.tenant',true),'') AND nullif(current_setting('s0.scope_id',true),'') IS NOT NULL) WITH CHECK (tenant=nullif(current_setting('s0.tenant',true),'') AND scope_id=nullif(current_setting('s0.scope_id',true),'') AND writer_xid=pg_current_xact_id())")
 	}
@@ -288,11 +290,17 @@ func (f *fixture) verifyRuntime(ctx context.Context) error {
 	}
 	report.Fsync, report.SynchronousCommit = fsync, sync
 	var good bool
-	if err := f.admin.QueryRow(ctx, `SELECT count(*)=4 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND r.rolname=$2 AND NOT r.rolcanlogin AND NOT r.rolbypassrls AND NOT r.rolsuper) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner WHERE n.nspname=ANY($1) AND c.relname IN ('state','river_job','outbox','audit')`, []string{f.caller, f.jobs, f.events, f.audit}, f.owner).Scan(&good); err != nil {
-		return dbError("verify FORCE RLS owners", err)
+	if err := f.admin.QueryRow(ctx, `SELECT count(*)=4 AND bool_and(CASE WHEN c.relname='river_job' THEN NOT c.relrowsecurity AND NOT c.relforcerowsecurity ELSE c.relrowsecurity AND c.relforcerowsecurity END AND r.rolname=$2 AND NOT r.rolcanlogin AND NOT r.rolbypassrls AND NOT r.rolsuper) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner WHERE n.nspname=ANY($1) AND c.relname IN ('state','river_job','outbox','audit')`, []string{f.caller, f.jobs, f.events, f.audit}, f.owner).Scan(&good); err != nil {
+		return dbError("verify RLS/owners", err)
 	}
 	if !good {
-		return errors.New("tenant tables lack separate confined owner/FORCE RLS")
+		return errors.New("tenant tables lack separate confined owner/FORCE RLS, or river_job is not RLS-free")
+	}
+	if err := f.admin.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='river_job') AND NOT has_schema_privilege($2,$1,'USAGE') AND NOT has_table_privilege($2,quote_ident($1)||'.river_job','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')`, f.jobs, f.caller).Scan(&good); err != nil {
+		return dbError("verify river_job policy-free and caller-free", err)
+	}
+	if !good {
+		return errors.New("river_job has a policy or the caller role holds privileges on the River schema")
 	}
 	if err := f.admin.QueryRow(ctx, `SELECT count(*)=2 AND bool_and(p.prosecdef AND p.proowner=r.oid AND NOT r.rolcanlogin AND NOT r.rolbypassrls AND NOT r.rolsuper AND p.proconfig=ARRAY['search_path=pg_catalog, pg_temp'] AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_roles r ON r.rolname=n.nspname WHERE n.nspname=ANY($1) AND p.proname='append_scoped'`, []string{f.events, f.audit}).Scan(&good); err != nil {
 		return dbError("verify narrow definer functions", err)

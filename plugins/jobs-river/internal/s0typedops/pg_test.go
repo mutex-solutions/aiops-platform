@@ -294,8 +294,10 @@ func (f *typedPGFixture) setup(t *testing.T, ctx context.Context) {
 		if name == "river_migration" {
 			privileges = "SELECT"
 		}
-		// Trusted jobs may see all rows. No worker/background path is exercised.
-		sql = append(sql, "ALTER TABLE "+q+" ENABLE ROW LEVEL SECURITY", "ALTER TABLE "+q+" FORCE ROW LEVEL SECURITY", "GRANT "+privileges+" ON "+q+" TO "+typedIdent(f.jobs), "CREATE POLICY provider_jobs ON "+q+" TO "+typedIdent(f.jobs)+" USING (true) WITH CHECK (true)")
+		// ADR-045 (2026-11-18): River's tables have no RLS and no policy. Only the
+		// trusted jobs role holds privileges and it may see all rows; entry roles hold
+		// none. No worker/background path is exercised here.
+		sql = append(sql, "GRANT "+privileges+" ON "+q+" TO "+typedIdent(f.jobs))
 	}
 	for _, spec := range []struct{ schema, name string }{{f.outbox, "outbox"}, {f.audit, "audit"}} {
 		q := typedTable(spec.schema, spec.name)
@@ -356,9 +358,9 @@ func (f *typedPGFixture) verify(t *testing.T, ctx context.Context) {
 		t.Fatal("unexpected known-unsafe runtime membership shape")
 	}
 	schemas := []string{f.jobs, f.outbox, f.audit, f.entries[0].token.schema, f.entries[1].token.schema}
-	typedMust(t, f.admin.QueryRow(ctx, `SELECT count(*)=9 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND r.rolname=$2 AND NOT r.rolsuper AND NOT r.rolbypassrls AND NOT r.rolcanlogin) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner WHERE n.nspname=ANY($1) AND c.relkind IN ('r','p')`, schemas, f.owner).Scan(&good))
+	typedMust(t, f.admin.QueryRow(ctx, `SELECT count(*)=9 AND count(*) FILTER (WHERE n.nspname=$3)=5 AND bool_and(CASE WHEN n.nspname=$3 THEN NOT c.relrowsecurity AND NOT c.relforcerowsecurity ELSE c.relrowsecurity AND c.relforcerowsecurity END AND r.rolname=$2 AND NOT r.rolsuper AND NOT r.rolbypassrls AND NOT r.rolcanlogin) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner WHERE n.nspname=ANY($1) AND c.relkind IN ('r','p')`, schemas, f.owner, f.jobs).Scan(&good))
 	if !good {
-		t.Fatal("require exact nine forced tables with separate confined owner")
+		t.Fatal("require exact four forced tables, five River tables without RLS, and a separate confined owner")
 	}
 	typedMust(t, f.admin.QueryRow(ctx, `SELECT count(*)=2 AND bool_and(p.prosecdef AND p.proowner=r.oid AND NOT r.rolcanlogin AND NOT r.rolbypassrls AND NOT r.rolsuper AND p.proconfig=ARRAY['search_path=pg_catalog, pg_temp'] AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_roles r ON r.rolname=n.nspname WHERE n.nspname=ANY($1) AND p.proname='append_scoped'`, []string{f.outbox, f.audit}).Scan(&good))
 	if !good {
@@ -484,7 +486,7 @@ func (f *typedPGFixture) verifyCatalog(ctx context.Context, reader typedCatalogR
 		if !slices.Equal(key, table.key) {
 			return mismatch("primary_key")
 		}
-		rows, err = reader.Query(ctx, `SELECT p.polname,p.polcmd::text,p.polpermissive,ARRAY(SELECT r.rolname::text FROM pg_roles r WHERE r.oid=ANY(p.polroles) ORDER BY r.rolname),pg_get_expr(p.polqual,p.polrelid),pg_get_expr(p.polwithcheck,p.polrelid) FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2`, table.schema, table.name)
+		rows, err = reader.Query(ctx, `SELECT p.polname,p.polcmd::text,p.polpermissive,ARRAY(SELECT r.rolname::text FROM pg_roles r WHERE r.oid=ANY(p.polroles) ORDER BY r.rolname),coalesce(pg_get_expr(p.polqual,p.polrelid),''),coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'') FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2`, table.schema, table.name)
 		if err != nil {
 			return err
 		}
@@ -497,12 +499,14 @@ func (f *typedPGFixture) verifyCatalog(ctx context.Context, reader typedCatalogR
 				rows.Close()
 				return err
 			}
-			wantName, wantUsing, wantCheck := "provider_jobs", "true", "true"
-			if table.schema != f.jobs {
-				wantName = "provider_scope"
-				wantUsing = "((tenant = NULLIF(current_setting('s0typed.tenant'::text, true), ''::text)) AND (scope_id = NULLIF(current_setting('s0typed.scope_id'::text, true), ''::text)))"
-				wantCheck = "((tenant = NULLIF(current_setting('s0typed.tenant'::text, true), ''::text)) AND (scope_id = NULLIF(current_setting('s0typed.scope_id'::text, true), ''::text)) AND (writer_xid = pg_current_xact_id()))"
+			if table.schema == f.jobs {
+				// River's tables must carry no policy at all (ADR-045, 2026-11-18).
+				rows.Close()
+				return mismatch("river_table_has_policy")
 			}
+			wantName := "provider_scope"
+			wantUsing := "((tenant = NULLIF(current_setting('s0typed.tenant'::text, true), ''::text)) AND (scope_id = NULLIF(current_setting('s0typed.scope_id'::text, true), ''::text)))"
+			wantCheck := "((tenant = NULLIF(current_setting('s0typed.tenant'::text, true), ''::text)) AND (scope_id = NULLIF(current_setting('s0typed.scope_id'::text, true), ''::text)) AND (writer_xid = pg_current_xact_id()))"
 			if name != wantName || command != "*" || !permissive || !slices.Equal(roles, []string{table.role}) || using != wantUsing || check != wantCheck {
 				rows.Close()
 				return mismatch("policy_expression_role_command")
@@ -514,8 +518,29 @@ func (f *typedPGFixture) verifyCatalog(ctx context.Context, reader typedCatalogR
 		if err != nil {
 			return err
 		}
-		if i != 1 {
+		wantPolicies := 1
+		if table.schema == f.jobs {
+			wantPolicies = 0
+		}
+		if i != wantPolicies {
 			return mismatch("policy_inventory")
+		}
+		var rls, forced bool
+		rows, err = reader.Query(ctx, `SELECT c.relrowsecurity,c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2`, table.schema, table.name)
+		if err != nil {
+			return err
+		}
+		if !rows.Next() {
+			rows.Close()
+			return mismatch("rls_flags")
+		}
+		err = rows.Scan(&rls, &forced)
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if rls != (table.schema != f.jobs) || forced != rls {
+			return mismatch("rls_flags")
 		}
 		rows, err = reader.Query(ctx, `SELECT r.rolname,a.privilege_type,a.is_grantable FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a LEFT JOIN pg_roles r ON r.oid=a.grantee WHERE n.nspname=$1 AND c.relname=$2 AND a.grantee<>c.relowner ORDER BY r.rolname,a.privilege_type`, table.schema, table.name)
 		if err != nil {
@@ -991,6 +1016,31 @@ func TestPGCatalogChecks(t *testing.T) {
 	typedMust(t, tx.Rollback(cleanup))
 	cancel()
 	typedMust(t, f.verifyCatalog(ctx, f.admin))
+	// ADR-045 (2026-11-18): each way of putting RLS or a caller privilege back on
+	// River's tables is a catalog mismatch, found before any view is admitted.
+	entry := typedIdent(f.entries[0].token.schema)
+	job := typedTable(f.jobs, "river_job")
+	for _, fault := range []struct{ sql, check string }{
+		{"ALTER TABLE " + job + " ENABLE ROW LEVEL SECURITY", "rls_flags"},
+		{"ALTER TABLE " + job + " ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY", "rls_flags"},
+		{"CREATE POLICY stray ON " + job + " USING (true)", "river_table_has_policy"},
+		{"GRANT SELECT ON " + job + " TO " + entry, "table_acl_principal"},
+		{"GRANT SELECT ON " + typedTable(f.jobs, "river_queue") + " TO PUBLIC", "table_acl_principal"},
+		{"GRANT USAGE ON SCHEMA " + typedIdent(f.jobs) + " TO " + entry, "schema_owner_acl"},
+	} {
+		ftx, err := f.admin.Begin(ctx)
+		typedMust(t, err)
+		_, err = ftx.Exec(ctx, fault.sql)
+		typedMust(t, err)
+		err = f.verifyCatalog(ctx, ftx)
+		fclean, fcancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		typedMust(t, ftx.Rollback(fclean))
+		fcancel()
+		if !errors.Is(err, ErrCatalog) || !errors.As(err, &mismatch) || mismatch.check != fault.check {
+			t.Fatalf("river fault %q not rejected as %s: got %v", fault.sql, fault.check, err)
+		}
+	}
+	typedMust(t, f.verifyCatalog(ctx, f.admin))
 	v, _ := f.view(t, 0, "catalog-followup", "tenant-a")
 	typedFollowup(t, ctx, f, v)
 	if f.total(t, ctx) != 1 {
@@ -1033,5 +1083,52 @@ func TestPGBeginCleanupAndReuse(t *testing.T) {
 				t.Fatal("positive setup-cleanup follow-up missing or duplicated")
 			}
 		})
+	}
+}
+
+// TestPGEntryRolesHaveNoRiverPrivileges asserts the guarantee that replaced
+// row-level security on River's tables (ADR-045, 2026-11-18): an entry (caller)
+// role holds no privilege on any River table or on the River schema, so SELECT,
+// INSERT, UPDATE and DELETE are each refused with insufficient_privilege, while
+// the trusted jobs role (positive control) can read the same tables. Together
+// with TestPGScopeRecords, which refuses zero and foreign scopes through the
+// typed surface, a caller reaches no other tenant's job row. The statements here
+// are fixture-level SQL under the entry role, not an operation of the Tx surface.
+func TestPGEntryRolesHaveNoRiverPrivileges(t *testing.T) {
+	typedTrack(t)
+	ctx := typedContext(t)
+	f := openTypedPG(t, ctx)
+	column := map[string]string{"river_job": "priority", "river_leader": "name", "river_migration": "version", "river_notification": "topic", "river_queue": "name"}
+	refused := func(role, statement string) string {
+		tx, err := f.runtime.Begin(ctx)
+		typedMust(t, err)
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = tx.Rollback(cleanup)
+		}()
+		_, err = tx.Exec(ctx, "SET LOCAL ROLE "+typedIdent(role))
+		typedMust(t, err)
+		_, err = tx.Exec(ctx, statement)
+		return typedSQLState(err)
+	}
+	for _, name := range typedRiverTables {
+		q := typedTable(f.jobs, name)
+		if got := refused(f.jobs, "SELECT count(*) FROM "+q); got != "" {
+			t.Fatalf("positive control: jobs role cannot read %s: SQLSTATE=%s", name, got)
+		}
+		for _, e := range f.entries {
+			role := e.token.schema
+			for op, statement := range map[string]string{
+				"select": "SELECT count(*) FROM " + q,
+				"insert": "INSERT INTO " + q + " DEFAULT VALUES",
+				"update": "UPDATE " + q + " SET " + column[name] + "=" + column[name],
+				"delete": "DELETE FROM " + q,
+			} {
+				if got := refused(role, statement); got != "42501" {
+					t.Fatalf("entry role %s on %s not refused with insufficient_privilege: SQLSTATE=%s", op, name, got)
+				}
+			}
+		}
 	}
 }
