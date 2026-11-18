@@ -113,3 +113,57 @@ Enter/Leave wrote one shared counter and every Leave called the scheduler wake
   | 32 | ~800 ns | ~2.8 us | ~50 ns | ~470-500 ns |
 
   The acceptance decision remains the full frozen protocol on the idle host.
+
+## 2026-11-19 teardown order of a parent and its children, carried from the oracle
+
+Owner decision (2026-11-18): where a Go candidate differs from the oracle it is
+fixed to match. Both candidates used to quiesce and join a parent's children before
+any of the parent's ordinary disposers. The oracle (vendored Cordis,
+`Fiber` in `fiber.ts`) does not: a child's disposer is one effect on its parent
+(`parent.fiber.effect(...)`), so a parent unload disposes it like any other effect.
+
+Order now implemented by both `reconciler` and `graph-lock`, and the oracle's:
+
+1. The parent is disposed (`plugin disposed parent`) and enters UNLOADING. Its
+   context stops accepting new children, effects and leases.
+2. The parent first waits for its service dependants (a provider keeps its
+   implementation until every fiber bound to it has finished unloading). This is
+   the unchanged service axis; a child that is a service dependant leaves here,
+   through the withdrawal, not through a disposal request.
+3. The parent's effects are disposed in reverse registration order. The child is
+   one entry of that list at the slot where it was mounted. Reaching it only
+   requests its disposal (`plugin disposed child`, child UNLOADING, its own
+   cleanup) and does not wait for it. An effect registered after the child
+   (including the Apply-returned disposer) therefore runs before the child is
+   touched; an effect registered before it runs right after the request, while the
+   child is still unloading. Parent disposers stay sequential in both candidates.
+4. After the walk the parent waits until every child is DISPOSED, then it is
+   DISPOSED itself. A parent is never DISPOSED before its children, and no disposer
+   runs twice. Deadline diagnostics are unchanged: the join has its own bounded
+   wait, and an ignored child cleanup is reported on the child.
+
+Consequences for plugin authors (carried semantics, not guarded):
+
+- A child can still be ACTIVE, with a live context, running goroutines and
+  accepting new effects, children and leases, while its parent's cleanup runs.
+  Nothing cancels the child before its slot in the parent's walk is reached.
+- A resource a parent registered after a child (or returned from Apply) is
+  released before the child is told to stop. A child must not rely on such a
+  resource, or on one registered before the child, being open during its own
+  cleanup: the child can run its disposer after, or concurrently with, the
+  parent's. A resource the child needs must be a service the child injects
+  (retained until the child has unloaded) or be owned by the child itself.
+- The parent's own context refuses new children and effects from the moment it is
+  disposed; a child's context does so only from the moment its disposal is
+  requested. A child may therefore start new work in the window between the
+  parent's UNLOADING and the child's slot, as in the oracle; that work is cleaned
+  by the child's own unload and joined before the parent is DISPOSED.
+- Reads of an inherited dependency keep working during that window and the
+  child's own teardown: the declaring ancestor's binding is retained until that
+  ancestor is released, which now follows the join of its children.
+
+Not changed: sequential disposers within one parent (the oracle starts the
+top-level disposers of a fiber concurrently, one microtask apart), the service
+dependency retention rules, lease drain, and deadline budgets. Evidence:
+`test/spike/s0/results/causal-d22-d06-fixes` and the D22 row of
+`docs/design/s0-causal-coverage.md`.

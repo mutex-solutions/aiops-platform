@@ -2327,6 +2327,9 @@ func TestGraphLockChildCanRunDuringParentLoadUnlessItsProviderIsPending(t *testi
 	}
 }
 
+// With a service dependency the child leaves first (the provider retains its
+// effects until its dependants unload). Without one, the oracle order applies:
+// the parent's earlier-registered effect runs while the child is unloading.
 func TestGraphLockParentJoinsChildBeforeEffectsWithoutDependencyDeadlock(t *testing.T) {
 	for _, depends := range []bool{false, true} {
 		t.Run(map[bool]string{false: "no-needs", true: "parent-service"}[depends], func(t *testing.T) {
@@ -2337,12 +2340,13 @@ func TestGraphLockParentJoinsChildBeforeEffectsWithoutDependencyDeadlock(t *test
 			t.Cleanup(func() { once.Do(func() { close(release) }) })
 			children, contexts := make(chan uint64, 1), make(chan *Context, 1)
 			var parentCleaned atomic.Bool
+			parentCleanedCh := make(chan struct{})
 			parent := graphMount(t, ctx, g, Spec{ID: "parent", Provides: []string{"service"}, Apply: func(c *Context) error {
 				contexts <- c
 				if err := c.Provide("service", "retained"); err != nil {
 					return err
 				}
-				if err := c.Defer("parent-effect", func(context.Context) error { parentCleaned.Store(true); return nil }); err != nil {
+				if err := c.Defer("parent-effect", func(context.Context) error { parentCleaned.Store(true); close(parentCleanedCh); return nil }); err != nil {
 					return err
 				}
 				var needs []string
@@ -2353,7 +2357,7 @@ func TestGraphLockParentJoinsChildBeforeEffectsWithoutDependencyDeadlock(t *test
 					return child.Defer("child-effect", func(context.Context) error {
 						close(started)
 						<-release
-						if parentCleaned.Load() {
+						if depends && parentCleaned.Load() {
 							return errors.New("parent effect released before structural child cleanup")
 						}
 						if depends {
@@ -2378,12 +2382,22 @@ func TestGraphLockParentJoinsChildBeforeEffectsWithoutDependencyDeadlock(t *test
 				t.Fatal(err)
 			}
 			graphReceive(t, ctx, started)
-			if parentCleaned.Load() {
-				t.Fatal("parent cleanup started before child completed")
-			}
-			held := graphInspect(t, ctx, g)
-			if p, c := graphInspectedFiber(t, held, parent), graphInspectedFiber(t, held, child); p.State != Unloading || c.State != Unloading || p.Alive || c.Alive || len(p.Effects) != 3 || len(held.Provisions) != 1 || held.Provisions[0].Active {
-				t.Fatalf("structural teardown falsely completed: %+v", held)
+			if depends {
+				if parentCleaned.Load() {
+					t.Fatal("parent cleanup started before child completed")
+				}
+				held := graphInspect(t, ctx, g)
+				// The child unloaded through the withdrawn service, not through a
+				// disposal request, so it stays Alive until the parent's walk.
+				if p, c := graphInspectedFiber(t, held, parent), graphInspectedFiber(t, held, child); p.State != Unloading || c.State != Unloading || p.Alive || !c.Alive || len(p.Effects) != 3 || len(held.Provisions) != 1 || held.Provisions[0].Active {
+					t.Fatalf("structural teardown falsely completed: %+v", held)
+				}
+			} else {
+				graphReceive(t, ctx, parentCleanedCh)
+				held := graphInspect(t, ctx, g)
+				if p, c := graphInspectedFiber(t, held, parent), graphInspectedFiber(t, held, child); p.State != Unloading || c.State != Unloading || p.Alive || c.Alive {
+					t.Fatalf("parent left UNLOADING while its child still unloads: %+v", held)
+				}
 			}
 			if _, err := old.MountChild(Spec{ID: "stale-child"}); !errors.Is(err, ErrInactive) {
 				t.Fatalf("retiring parent accepted child: %v", err)
@@ -2478,7 +2492,9 @@ func TestGraphLockLoadingParentSelfDisposeRetiresLoadingChild(t *testing.T) {
 		synctest.Wait()
 		inspection := graphInspect(t, ctx, g)
 		p, c := graphInspectedFiber(t, inspection, parent), graphInspectedFiber(t, inspection, child)
-		if p.State != Unloading || c.State != Unloading || p.Alive || c.Alive || c.Error == "" || parentCleaned.Load() {
+		// Oracle order: parent-effect was registered before the child, so it runs
+		// right after the child's disposal is requested and need not wait for it.
+		if p.State != Unloading || c.State != Unloading || p.Alive || c.Alive || c.Error == "" || !parentCleaned.Load() {
 			t.Fatalf("loading child falsely released parent: %+v", inspection)
 		}
 		once.Do(func() { close(release) })

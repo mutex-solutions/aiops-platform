@@ -54,6 +54,17 @@ func TestEffectsCheckpointExecution(t *testing.T) {
 				if id != "D22" {
 					return
 				}
+				// Oracle order: the parent's own cleanup runs before the child is
+				// torn down, so the child is normally still ACTIVE when the gated
+				// effect setup is released and the effect registers normally (no
+				// runtime error). The parent's walk is unsynchronised with the
+				// script, so it may reach the child first; then the setup finishes
+				// late and its registration is refused with the inactive sentinels.
+				// Each outcome has its own exact expectations; nothing in between.
+				late := len(actual.RuntimeErrors) == 1
+				if late && !inactiveEffectOnly(actual.RuntimeErrors[0].Error) || !late && len(actual.RuntimeErrors) != 0 {
+					t.Fatalf("late registration refusal was mixed with an unexpected error: %+v", actual.RuntimeErrors)
+				}
 				for _, label := range []string{"joining-setup", "joining-cleanup"} {
 					native := actual.RuntimeInspections[label]
 					found := false
@@ -63,20 +74,29 @@ func TestEffectsCheckpointExecution(t *testing.T) {
 						}
 						found = true
 						// The setup checkpoint can race Apply's native completion:
-						// LOADING is legitimate there. Only the original cleanup
-						// assertion requires UNLOADING; ownership must persist at both.
-						if label == "joining-cleanup" && snapshot.State != cc.Unloading ||
-							snapshot.Alive || snapshot.Target != nil ||
-							!reflect.DeepEqual(snapshot.Tracked, []string{"effect setup late-setup"}) {
-							t.Fatalf("late setup/cleanup lost actual native tracked ownership at %s: %+v", label, snapshot)
+						// LOADING is legitimate there. At joining-setup the child is
+						// either not yet requested (alive with a target, the oracle's
+						// cut) or already requested by the walk; a mixed view is not
+						// allowed. At joining-cleanup teardown has necessarily started.
+						requested := !snapshot.Alive && snapshot.Target == nil
+						pristine := snapshot.Alive && snapshot.Target != nil
+						trackedSetup := reflect.DeepEqual(snapshot.Tracked, []string{"effect setup late-setup"})
+						bad := label == "joining-setup" && (!requested && !pristine || !trackedSetup)
+						if label == "joining-cleanup" {
+							bad = snapshot.State != cc.Unloading || !requested
+							if late {
+								bad = bad || !trackedSetup
+							} else {
+								bad = bad || len(snapshot.Tracked) != 0 || !reflect.DeepEqual(snapshot.Effects, []string{"late-setup"})
+							}
+						}
+						if bad {
+							t.Fatalf("effect setup/cleanup lost actual native ownership at %s (late=%v): %+v", label, late, snapshot)
 						}
 					}
 					if !found {
 						t.Fatalf("native child inspection missing at %s", label)
 					}
-				}
-				if len(actual.RuntimeErrors) != 1 || !inactiveEffectOnly(actual.RuntimeErrors[0].Error) {
-					t.Fatalf("late registration refusal was lost or mixed with an unexpected error: %+v", actual.RuntimeErrors)
 				}
 				for _, event := range actual.Trace.Events {
 					if event.Kind == "error" || event.Kind == "status" && event.Data["to"] == "FAILED" {

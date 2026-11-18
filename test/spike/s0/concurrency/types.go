@@ -273,9 +273,13 @@ func (c *Context) Defer(label string, dispose Disposer) error {
 	return c.effect(label, dispose)
 }
 
-// MountChild creates a real lifecycle child of this exact activation. Native
-// ownership invalidates and joins the child before releasing the parent's effects;
-// an old context cannot attach children to a replacement activation.
+// MountChild creates a real lifecycle child of this exact activation. The child
+// is one ordered effect of the parent, as in the oracle: when the parent unloads,
+// its cleanup registered after the child runs first, the child is invalidated and
+// unloaded when the walk reaches its slot, an effect registered before the child
+// runs without waiting for it (the child may still be using those resources), and
+// the parent is DISPOSED only after the child is. An old context cannot attach
+// children to a replacement activation.
 func (c *Context) MountChild(spec Spec) (uint64, error) {
 	if !c.live.Load() || c.child == nil {
 		return 0, ErrInactive

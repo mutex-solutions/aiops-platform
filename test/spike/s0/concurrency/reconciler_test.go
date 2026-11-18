@@ -2025,7 +2025,7 @@ func TestReconcilerConfigurationLatestRawWinsGatedCleanup(t *testing.T) {
 	}
 }
 
-func TestReconcilerChildLoadsDuringParentLoadingAndJoinsBeforeParentCleanup(t *testing.T) {
+func TestReconcilerChildLoadsDuringParentLoadingAndIsJoinedAfterParentCleanup(t *testing.T) {
 	r := rcRuntime(t)
 	parentEntered, releaseParent := make(chan struct{}), make(chan struct{})
 	childEntered, releaseChild := make(chan struct{}), make(chan struct{})
@@ -2035,6 +2035,7 @@ func TestReconcilerChildLoadsDuringParentLoadingAndJoinsBeforeParentCleanup(t *t
 	children := make(chan uint64, 1)
 	contexts := make(chan *Context, 1)
 	var parentCleaned atomic.Bool
+	parentCleanedCh := make(chan struct{})
 	parent := rcMount(t, r, Spec{ID: "parent", ApplyEffect: func(c *Context) (Disposer, error) {
 		contexts <- c
 		child, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
@@ -2046,7 +2047,7 @@ func TestReconcilerChildLoadsDuringParentLoadingAndJoinsBeforeParentCleanup(t *t
 		children <- child
 		close(parentEntered)
 		<-releaseParent
-		return func(context.Context) error { parentCleaned.Store(true); return nil }, nil
+		return func(context.Context) error { parentCleaned.Store(true); close(parentCleanedCh); return nil }, nil
 	}})
 	<-parentEntered
 	child, old := <-children, <-contexts
@@ -2065,11 +2066,15 @@ func TestReconcilerChildLoadsDuringParentLoadingAndJoinsBeforeParentCleanup(t *t
 		t.Fatal(err)
 	}
 	<-childEntered
-	if parentCleaned.Load() {
-		t.Fatal("parent cleaned resources before non-injecting child finished")
-	}
+	// Oracle order: the parent's own cleanup (registered after the child) runs
+	// first; the child is invalidated and unloaded after it, and the parent stays
+	// UNLOADING until the child is DISPOSED.
+	<-parentCleanedCh
 	if s := rcSnapshot(t, r, child); s.Alive || s.Target != nil || s.State != Unloading {
-		t.Fatalf("parent quiescence did not invalidate child: %+v", s)
+		t.Fatalf("parent teardown did not invalidate child: %+v", s)
+	}
+	if s := rcSnapshot(t, r, parent); s.State != Unloading {
+		t.Fatalf("parent left UNLOADING before its child was DISPOSED: %+v", s)
 	}
 	if _, err := old.MountChild(Spec{ID: "late"}); !errors.Is(err, ErrInactive) {
 		t.Fatalf("stale parent mounted a child: %v", err)

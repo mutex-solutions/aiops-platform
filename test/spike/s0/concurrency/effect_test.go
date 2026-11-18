@@ -250,6 +250,7 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 			var cleanupCalls atomic.Int64
 			var mu sync.Mutex
 			var cleanup []string
+			parentCleaned := make(chan struct{})
 			add := func(label string) {
 				mu.Lock()
 				cleanup = append(cleanup, label)
@@ -265,7 +266,7 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 			}})
 			parent := effectMount(t, ctx, r, Spec{ID: "parent", Needs: []string{"sample"}, Apply: func(c *Context) error {
 				parentCtx = c
-				if err := c.Defer("parent-cleanup", func(context.Context) error { add("parent"); return nil }); err != nil {
+				if err := c.Defer("parent-cleanup", func(context.Context) error { add("parent"); close(parentCleaned); return nil }); err != nil {
 					return err
 				}
 				var err error
@@ -336,8 +337,13 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 				mu.Lock()
 				premature := append([]string(nil), cleanup...)
 				mu.Unlock()
-				if len(premature) != 0 {
-					t.Fatalf("%s ran premature cleanup: %v", stage, premature)
+				// Oracle order: the parent's own effect (registered before the
+				// child) may already have run while the child's late work is
+				// held; the child's cleanup and the provider's must not have.
+				for _, label := range premature {
+					if label != "parent" {
+						t.Fatalf("%s ran premature cleanup: %v", stage, premature)
+					}
 				}
 				select {
 				case err := <-closeReturned:
@@ -346,6 +352,8 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 				}
 			}
 			assertRetained("held setup")
+			effectWait(t, ctx, parentCleaned)
+			assertRetained("parent cleaned during child teardown")
 			setupOnce.Do(func() { close(releaseSetup) })
 			cleanupCtx := effectWait(t, ctx, cleanupEntered)
 			if _, ok := cleanupCtx.Deadline(); !ok || cleanupCtx.Err() != nil || c.Std().Err() == nil {
@@ -370,8 +378,8 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 			mu.Lock()
 			got := append([]string(nil), cleanup...)
 			mu.Unlock()
-			if cleanupCalls.Load() != 1 || !reflect.DeepEqual(got, []string{"late", "parent", "provider"}) {
-				t.Fatalf("late/parent/provider cleanup count and order = %d %v", cleanupCalls.Load(), got)
+			if cleanupCalls.Load() != 1 || !reflect.DeepEqual(got, []string{"parent", "late", "provider"}) {
+				t.Fatalf("parent/late/provider cleanup count and order = %d %v", cleanupCalls.Load(), got)
 			}
 			if c.lease.Load() != 0 || !c.released.Load() || !parentCtx.released.Load() || !providerCtx.released.Load() {
 				t.Fatal("actual completion failed to release the child, parent, or provider")

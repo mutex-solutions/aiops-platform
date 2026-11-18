@@ -136,7 +136,7 @@ type graphActivation struct {
 type graphEffect struct {
 	label        string
 	dispose      Disposer
-	child        uint64 // Structural membership only; joined before any ordinary disposer.
+	child        uint64 // Structural membership only; its disposal is requested at this effect's LIFO slot, joined after the walk.
 	provisionKey string
 	provisionUID uint64       // Native reservation ownership, ordered with ordinary effects.
 	scope        *scopeEffect // Exact native scope identity, never identified by label.
@@ -1572,17 +1572,12 @@ func (g *GraphLock) retireLocked(a *graphActivation) {
 		g.stateLocked(a.fiber, Unloading)
 	}
 	g.eventLocked(a.fiber, "invalidate", "", 0)
-	// Structural children retire even when they hold none of our provisions.
-	// Request every child before waiting on retained dependency bindings, or a
-	// child awaiting its parent's service could deadlock parent teardown.
-	children := make([]uint64, 0, len(a.children))
-	for id := range a.children {
-		children = append(children, id)
-	}
-	sort.Slice(children, func(i, j int) bool { return children[i] < children[j] })
-	for _, id := range children {
-		g.requestDisposeLocked(a.children[id])
-	}
+	// Structural children are NOT requested here. As in the oracle, a child's
+	// disposer is one effect in the parent's ordered list: runUnload requests it
+	// at its LIFO slot, after any effect registered later and before any earlier
+	// one, and joins it only after the walk. Until then the child stays live.
+	// A child that holds one of our service bindings still retires now, by the
+	// withdrawal below, which is the separate service-dependency axis.
 	for _, key := range a.fiber.spec.Provides {
 		if provided, exists := a.provided[key]; exists {
 			g.wakeKeyLocked(key)
@@ -1897,9 +1892,8 @@ func (g *GraphLock) hasDependantsLocked(a *graphActivation) bool {
 		// A contained root failure is narrower: g.closed is still false there.
 		return true
 	}
-	if len(a.children) != 0 {
-		return true
-	}
+	// Structural children are a different axis: they do not retain the
+	// provider's effects (awaitChildren joins them after the effect walk).
 	for key, provided := range a.provided {
 		for _, dependant := range g.indexByKey[key] {
 			if dependant.current == nil {
@@ -1941,6 +1935,22 @@ func (g *GraphLock) awaitDependants(a *graphActivation) {
 		// Predicate and channel version share mu with every actual release.
 		// A release before this check is observed; one afterward closes this
 		// exact channel. Neither path can miss the last dependency going away.
+		changed := a.dependantsChanged
+		g.mu.Unlock()
+		<-changed
+	}
+}
+
+// awaitChildren joins every structural child after the parent's own effects
+// ran. Disposal of each was requested at its slot in the walk; the last child's
+// removal signals this activation.
+func (g *GraphLock) awaitChildren(a *graphActivation) {
+	for {
+		g.mu.Lock()
+		if len(a.children) == 0 {
+			g.mu.Unlock()
+			return
+		}
 		changed := a.dependantsChanged
 		g.mu.Unlock()
 		<-changed
@@ -2012,8 +2022,15 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	})
 	var disposeErr error
 	for i := len(effects) - 1; i >= 0; i-- {
-		if effects[i].child != 0 {
-			continue // Structural children were already joined before ordinary effects.
+		if id := effects[i].child; id != 0 {
+			// The child's disposer in the parent's LIFO order: invalidate and
+			// unload it now, without waiting for it (it is joined below).
+			g.mu.Lock()
+			if child := g.fibers[id]; child != nil && child.parent == a {
+				g.requestDisposeLocked(child)
+			}
+			g.mu.Unlock()
+			continue
 		}
 		if effects[i].provisionUID != 0 {
 			g.removeProvision(a, effects[i])
@@ -2037,6 +2054,7 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	}
 	timer.Stop()
 	cancel()
+	g.awaitChildren(a)
 	g.mu.Lock()
 	a.cleanupErr = errors.Join(a.cleanupErr, disposeErr)
 	if a.cleanupErr != nil {

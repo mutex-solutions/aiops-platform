@@ -24,7 +24,10 @@ ownership and an activation lease; a `Provides` declaration alone is insufficien
 
 Child ownership is a native activation relation, not an idle watcher goroutine,
 fake provision, or a cleanup callback that would deadlock behind its own dependants.
-Parent quiescence invalidates children before joining them and releasing effects.
+Parent teardown follows the oracle order: each child is one ordered effect of its
+parent, requested for disposal at its slot in the parent's LIFO cleanup (after any
+effect registered later, before any registered earlier) and joined after the walk,
+so the parent is DISPOSED only after its children.
 The gated child/provider cleanup test verifies that captured reads remain usable
 while the child's teardown holds the parent in UNLOADING, and an inherited-dependency
 child can start while its parent is still LOADING. All tests use target

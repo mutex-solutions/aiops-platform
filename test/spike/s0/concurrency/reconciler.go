@@ -180,6 +180,7 @@ type rcEffect struct {
 	dispose   Disposer
 	provision *rcProvision
 	scope     *scopeEffect
+	child     uint64 // Structural child: disposal is requested at this slot of the LIFO walk. Not observable as an effect.
 }
 
 // None of these fields are written by Apply, disposers, or call-path users.
@@ -212,6 +213,7 @@ type rcFiber struct {
 	cleanupCtx      context.Context
 	cleanupCancel   context.CancelFunc
 	effectRunning   bool
+	joining         bool // Effect walk finished; waiting for structural children to be DISPOSED.
 	scopeRunning    *scopeEffect
 	publishActive   bool // Apply completed; queued scope work precedes ACTIVE.
 	checking        *rcCheck
@@ -883,11 +885,6 @@ func (o *rcOwner) invalidateBatch(queue []*rcFiber) {
 				queue = append(queue, consumer)
 			}
 		}
-		if f.act != nil {
-			for id := range f.act.children {
-				queue = append(queue, o.fibers[id])
-			}
-		}
 	}
 }
 
@@ -929,6 +926,11 @@ func (o *rcOwner) mount(spec Spec, parent *rcActivation) (*rcFiber, error) {
 			parent.children = make(map[uint64]struct{})
 		}
 		parent.children[f.id] = struct{}{}
+		// The child is one ordered effect of its parent, as in the oracle, so
+		// its teardown starts at its LIFO slot (see disposeNext).
+		if owner := o.lookup(parent.ctx.fiber); owner != nil && owner.act == parent {
+			owner.effects = append(owner.effects, rcEffect{label: "child", child: f.id})
+		}
 	}
 	for _, key := range f.spec.Needs {
 		if o.byKey[key] == nil {
@@ -1027,6 +1029,8 @@ func (o *rcOwner) work() {
 				} else {
 					o.drain(f)
 				}
+			} else if f.phase == rcDisposing && f.joining {
+				o.disposeNext(f)
 			}
 			continue
 		}
@@ -1050,6 +1054,8 @@ func (o *rcOwner) work() {
 				} else {
 					o.drain(f)
 				}
+			} else if f.phase == rcDisposing && f.joining {
+				o.disposeNext(f)
 			} else if f.phase == rcIdle && !f.invalid && !f.remove {
 				if !o.scopeWork(f) && f.publishActive {
 					f.publishActive = false
@@ -1570,19 +1576,12 @@ func (o *rcOwner) quiesce(f *rcFiber) {
 			effect.scope.cancelPending(ErrInactive)
 		}
 	}
-	// Structural ownership is independent of service dependencies. Invalidate
-	// children before joining dependents, otherwise a child that never injected a
-	// parent service could outlive (or deadlock behind) the parent's cleanup.
-	childIDs := make([]uint64, 0, len(f.act.children))
-	for id := range f.act.children {
-		childIDs = append(childIDs, id)
-	}
-	slices.Sort(childIDs)
-	for _, id := range childIDs {
-		if child := o.fibers[id]; child != nil {
-			o.requestDispose(child)
-		}
-	}
+	// Structural ownership is independent of service dependencies and is NOT
+	// invalidated here. As in the oracle, each child is one effect of this
+	// activation: disposeNext requests its disposal at its LIFO slot, after any
+	// later-registered effect and before any earlier one, and joins it only
+	// after the walk. A child holding one of our service bindings still leaves
+	// first through the service withdrawal, which is the separate dependency axis.
 	if f.phase == rcIdle {
 		o.busy++
 		f.phase = rcDraining
@@ -1597,7 +1596,7 @@ func (o *rcOwner) drain(f *rcFiber) {
 	if f.id == 0 && o.closing && len(o.fibers) != 0 {
 		return
 	}
-	if len(f.act.children) != 0 || len(f.act.tracked) != 0 {
+	if len(f.act.tracked) != 0 {
 		return
 	}
 	if f.act.ctx.lease.Load() != 0 {
@@ -1621,6 +1620,14 @@ func (o *rcOwner) drain(f *rcFiber) {
 func (o *rcOwner) disposeNext(f *rcFiber) {
 	for len(f.effects) != 0 {
 		e := f.effects[len(f.effects)-1]
+		if e.child != 0 {
+			f.effects[len(f.effects)-1] = rcEffect{}
+			f.effects = f.effects[:len(f.effects)-1]
+			if child := o.fibers[e.child]; child != nil && child.parent == f.act {
+				o.requestDispose(child)
+			}
+			continue
+		}
 		o.event(f, "dispose-effect", e.label, 0)
 		if e.scope != nil && e.scope.cleanupFinished() {
 			// Quiescence can cancel an admitted scope before setup starts. Its
@@ -1656,6 +1663,17 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 		}()
 		return
 	}
+	if len(f.act.children) != 0 {
+		// Join after the walk. The last child's remove() enqueues this owner and
+		// work() re-enters here. The join has its own drain budget.
+		if !f.joining {
+			f.joining = true
+			o.block(f, nil)
+			o.deadline(f, time.Now().Add(rcDrainBudget))
+		}
+		return
+	}
+	f.joining = false
 	o.unloaded(f)
 }
 
@@ -1761,6 +1779,8 @@ func (o *rcOwner) remove(f *rcFiber) {
 	if parent := f.parent; parent != nil {
 		delete(parent.children, f.id)
 		if owner := o.lookup(parent.ctx.fiber); owner != nil && owner.act == parent {
+			// Not the running effect: only unpopped child slots are removed.
+			owner.effects = slices.DeleteFunc(owner.effects, func(e rcEffect) bool { return e.child == f.id })
 			o.enqueue(owner)
 		}
 		f.parent = nil
@@ -1941,6 +1961,9 @@ func (o *rcOwner) snapshot(f *rcFiber) Snapshot {
 		}
 	}
 	for _, e := range f.effects {
+		if e.child != 0 {
+			continue
+		}
 		s.Effects = append(s.Effects, e.label)
 		if e.scope != nil {
 			s.EffectTree = append(s.EffectTree, e.scope.metadata())
@@ -2145,6 +2168,9 @@ func (o *rcOwner) expire(now time.Time) {
 		}
 		if f.phase == rcDisposing {
 			stage = "dispose"
+			if f.joining {
+				stage = "drain"
+			}
 		}
 		o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		if f.phase == rcApplying {
