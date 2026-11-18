@@ -1,0 +1,398 @@
+{
+  "after": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "ACTIVE",
+        "Revision": 1,
+        "Epoch": null,
+        "Effects": [
+          "provide:a"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:a",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 1,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 2
+        },
+        "EffectiveConfig": {
+          "v": 2
+        },
+        "ConfigVersion": 1
+      },
+      {
+        "ID": 2,
+        "Name": "l",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          4
+        ],
+        "Effects": [
+          "provide:b"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:b",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            4
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 3,
+        "Name": "r",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          4
+        ],
+        "Effects": [
+          "provide:c"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:c",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            4
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 4,
+        "Name": "leaf",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          5,
+          6
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            5,
+            6
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "a",
+        "UID": 4,
+        "Owner": 1,
+        "Name": "p",
+        "Value": 2,
+        "Active": true
+      },
+      {
+        "Key": "b",
+        "UID": 5,
+        "Owner": 2,
+        "Name": "l",
+        "Value": 2,
+        "Active": true
+      },
+      {
+        "Key": "c",
+        "UID": 6,
+        "Owner": 3,
+        "Name": "r",
+        "Value": 2,
+        "Active": true
+      }
+    ],
+    "Sequence": 74
+  },
+  "before": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:a"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:a",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 1
+        },
+        "EffectiveConfig": {
+          "v": 1
+        },
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "l",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": [
+          "provide:b"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:b",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            1
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 3,
+        "Name": "r",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": [
+          "provide:c"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:c",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            1
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 4,
+        "Name": "leaf",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          3,
+          2
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            3,
+            2
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "a",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "p",
+        "Value": 1,
+        "Active": true
+      },
+      {
+        "Key": "c",
+        "UID": 2,
+        "Owner": 3,
+        "Name": "r",
+        "Value": 1,
+        "Active": true
+      },
+      {
+        "Key": "b",
+        "UID": 3,
+        "Owner": 2,
+        "Name": "l",
+        "Value": 1,
+        "Active": true
+      }
+    ],
+    "Sequence": 30
+  },
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "DISPOSED",
+        "Revision": 1,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {
+          "v": 2
+        },
+        "EffectiveConfig": {
+          "v": 2
+        },
+        "ConfigVersion": 1
+      },
+      {
+        "ID": 2,
+        "Name": "l",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 3,
+        "Name": "r",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 4,
+        "Name": "leaf",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 95
+  }
+}

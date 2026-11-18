@@ -7,14 +7,96 @@ Status: evidence record for the owner-approved causal comparison
 [its addendum](s0-causal-comparison-amendment-2-addendum.md),
 [freeze 2](s0-causal-comparison-freeze-2.json),
 [amendment 3](s0-causal-comparison-amendment-3.md), [its addendum](s0-causal-comparison-amendment-3-addendum.md)
-and [freeze 3](s0-causal-comparison-freeze-3.json)). The corpus and criteria are unchanged; the candidates
+and [freeze 3](s0-causal-comparison-freeze-3.json),
+[amendment 4](s0-causal-comparison-amendment-4.md) and [freeze 4](s0-causal-comparison-freeze-4.json)). The corpus and criteria are unchanged; the candidates
 changed only by the fixes of 2026-11-18 recorded below. This note does **not** establish S0 acceptance.
 
 The first part is the result of the rerun of all 36 scenarios with the comparator
-as extended by amendment 3 (current tally on the candidates with the teardown fixes: 62
-pairs match, 6 are MISMATCH, none is unsupported). The part after it is the rerun with the comparator as extended by
+as extended by amendment 3 (and amendment 4; current tally: 64 pairs match, 4 are MISMATCH, none is
+unsupported). The part after it is the rerun with the comparator as extended by
 amendment 2. The sections after "Before amendment 2" are the
 earlier record of the frozen comparator and are kept unchanged for history.
+
+## After amendment 4 (2026-11-19)
+
+Receipts: [`causal-amendment-4`](../../test/spike/s0/results/causal-amendment-4/invocation.json).
+Method: [amendment 4](s0-causal-comparison-amendment-4.md) and
+[freeze 4](s0-causal-comparison-freeze-4.json), committed alone before the comparator
+change (no addendum was needed). The owner decided on 2026-11-19 that the remaining D22
+difference is a measurement matter. Rule L1, in short: a cut taken after a root `dispose`
+issued with `await:false` does not order the teardown the disposal started. Events of the
+target and of the fibers it structurally owns that come after the disposal's own event
+may fall on either side of that cut, up to the next ordered cut (a `settle`, an
+`awaitFiber` of the float set, or a `waitMark` on a label only the float set produces).
+All other events stay on their side of every cut; the whole window must have the same
+events and the same order for every conflicting pair; a floating fiber may be observed
+only in a state its expected lane holds between the disposal and the barrier; the barrier
+and everything after are exact. It applies only when the float set provides nothing,
+writes no output cell and is the target of no other root command, and not to an awaited
+disposal. The comparator, corpus, oracle and candidates are otherwise unchanged; the
+candidates are those of the rebased branch (teardown fixes `8a02e55`, `fb8295b`).
+
+Protocol as before: every pair 100 times under `-race` and 100 times with
+`GOMAXPROCS=2` under `-race`; "match" only at 100 of 100 in both modes.
+
+| ID | Fixture | Strict R / G (race + GOMAXPROCS=2, of 100 each) | Causal R | rate R | Causal G | rate G | Note |
+|---|---|---|---|---|---|---|---|
+| D01 | D01.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `$meta` static metadata (K1) and root provision (K2). |
+| D02 | D02.json | 8+24 / 7+8 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D03 | D03.json | 6+4 / 69+68 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D05 | D05.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (b) deliberate adaptation by owner decision of 2026-11-19 (row 8 of the decision record); pinned `record count mismatch: 24 != 25`, not excused. |
+| D07 | D07.json | 43+46 / 87+95 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D08 | D08.json | 46+42 / 85+96 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D09 | D09.json | 40+54 / 4+13 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D10 | D10.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D11 | D11.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D12 | D12.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D13 | revision-5/D13.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | corpus revision 5. |
+| D14 | D14.json | 40+34 / 65+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D15 | D15.json | 35+41 / 71+71 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D16 | D16.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D17 | D17.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, one coalesced reload for two requests, revision 2 (K6). |
+| D18 | D18.json | 34+35 / 71+62 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | strict match; first causal verdict (it needs no new rule). |
+| D20 | D20.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: superseded load error, latest target applied, revision 1 (K6). |
+| D21 | D21.json | 37+30 / 95+66 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: the `joining-setup` cut after the un-awaited `dispose parent` floats (L1); 14, 15 or 18 events in the candidates. |
+| D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | unchanged owner question: stable caught `error {op:"effect"}` outside the Apply frame, documented adaptation, see "D06 and D23" below. |
+| D24 | D24.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: late-effect refusal in teardown and after disposal (K4). |
+| D25 | D25.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: own disposal request from Apply (K3). |
+| D26 | D26.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
+| D27 | D27.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | strict match; first causal verdict (it needs no new rule). |
+| D28 | D28.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `retain` policy, resolveConfig, noSave (K5). |
+| D29 | D29.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: asynchronous updates, `internal/update` listeners, awaitTask with rejection (K6, K7). |
+| D30 | D30.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `unchanged` policy, veto then restart (K5). |
+| D31 | D31.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `emit`, symbol key, gated listener continuation (K8). |
+| D32 | D32.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `parallel`, awaitTask rejection with AggregateError (K6, K8). |
+| D33 | D33.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `serial`, gate, bail value and error stops (K6, K8). |
+| D34 | D34.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `bail`, zero and empty string are bail values (K8). |
+| D35 | D35.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall` veto and delegation (K8). |
+| D36 | D36.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | new: `waterfall`, second `next` throws (K8). |
+
+Counts (68 pairs run): causal match **64**, MISMATCH **4** (D06 and D23 on both
+candidates), unsupported **0**. Before this round: 62, 6, 0 (D22 mismatching on both).
+
+- **D22 now matches** 100+100 of 100+100 on both candidates, `reconciler` included
+  (37 and 45 of 100 under amendment 3), with the cut at 14, 15 or 18 events. It is in
+  `causalCovered`; its diagnostic row is removed.
+- **Every other pair** is accepted or rejected exactly as in the amendment-3 rerun on the
+  same candidates, for the same reasons. D06 is class (b), a deliberate adaptation (see
+  "D06 classification" in the section for the teardown-fixed candidates); D23 is
+  unchanged.
+- The false-green tests (`causal_amendment4_test.go`) reject an unrelated lane's event
+  across the cut, missing, duplicated, reordered and late downstream events, a fiber in a
+  state off its lane, work incomplete at the ordered cut, and the same cut shift after an
+  **awaited** disposal.
+
+Limit: L1 decides downstream-ness structurally from the script (the target and its
+children), not from the trace; a float set that provides a service, writes an output
+cell or has another root command is out of scope and keeps the strict comparison. This
+is a differential comparison only, not S0 acceptance.
 
 ## After amendment 3 (2026-11-19)
 

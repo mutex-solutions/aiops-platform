@@ -1,0 +1,99 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D32",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "listener",
+      "data": {
+        "label": "fails"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "listener",
+      "data": {
+        "label": "slow"
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "gate",
+      "data": {
+        "label": "parallel-slow",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "mark",
+      "data": {
+        "label": "parallel-complete",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "error",
+      "data": {
+        "op": "awaitTask",
+        "error": {
+          "name": "AggregateError",
+          "message": "",
+          "errors": [
+            {
+              "name": "Error",
+              "message": "parallel failure"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "output",
+      "data": {
+        "to": "aggregate",
+        "value": {
+          "name": "AggregateError",
+          "message": "",
+          "errors": [
+            {
+              "name": "Error",
+              "message": "parallel failure"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "in-flight",
+      "states": [],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "finished",
+      "states": [],
+      "provisions": [],
+      "outputs": {
+        "aggregate": {
+          "name": "AggregateError",
+          "message": "",
+          "errors": [
+            {
+              "name": "Error",
+              "message": "parallel failure"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

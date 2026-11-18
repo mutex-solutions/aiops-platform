@@ -1,0 +1,115 @@
+{
+  "disposed": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "DISPOSED",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": false,
+        "Target": null,
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [],
+    "Sequence": 29
+  },
+  "needwith": {
+    "Fibers": [
+      {
+        "ID": 1,
+        "Name": "p",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": null,
+        "Effects": [
+          "provide:\"svc\"@0/realm:0"
+        ],
+        "EffectTree": [
+          {
+            "Label": "provide:\"svc\"@0/realm:0",
+            "State": "ready",
+            "Children": null
+          }
+        ],
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": null
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      },
+      {
+        "ID": 2,
+        "Name": "c",
+        "State": "ACTIVE",
+        "Revision": 0,
+        "Epoch": [
+          1
+        ],
+        "Effects": null,
+        "EffectTree": null,
+        "Tracked": null,
+        "Error": "",
+        "Alive": true,
+        "Target": {
+          "Revision": 0,
+          "UIDs": [
+            1
+          ]
+        },
+        "Configured": true,
+        "ConfigPrepared": true,
+        "RawConfig": {},
+        "EffectiveConfig": {},
+        "ConfigVersion": 0
+      }
+    ],
+    "Provisions": [
+      {
+        "Key": "\"svc\"@0/realm:0",
+        "UID": 1,
+        "Owner": 1,
+        "Name": "p",
+        "Value": {},
+        "Active": true
+      }
+    ],
+    "Sequence": 15
+  }
+}

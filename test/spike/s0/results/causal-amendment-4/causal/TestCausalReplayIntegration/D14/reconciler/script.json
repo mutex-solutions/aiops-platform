@@ -1,0 +1,100 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D14",
+  "title": "Revision changes independently from provision identity epochs",
+  "covers": [
+    "revision-epochs",
+    "provision-uid-epochs"
+  ],
+  "plugins": [
+    {
+      "id": "provider",
+      "apply": [
+        {
+          "op": "provide",
+          "key": "svc",
+          "value": {
+            "$config": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "seen"
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "p",
+      "plugin": "provider",
+      "config": {
+        "v": 1
+      }
+    },
+    {
+      "op": "mount",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "update",
+      "fiber": "p",
+      "config": {
+        "v": 2
+      }
+    },
+    {
+      "op": "settle",
+      "label": "updated"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "dispose",
+      "fiber": "p"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "initial",
+      "path": "/outputs/seen",
+      "equals": {
+        "v": 1
+      }
+    },
+    {
+      "at": "updated",
+      "path": "/outputs/seen",
+      "equals": {
+        "v": 2
+      }
+    },
+    {
+      "at": "updated",
+      "path": "/states/0/revision",
+      "equals": 1
+    }
+  ]
+}

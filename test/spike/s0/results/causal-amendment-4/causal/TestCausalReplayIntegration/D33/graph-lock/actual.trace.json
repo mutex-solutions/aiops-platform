@@ -1,0 +1,87 @@
+{
+  "schema": "s0-trace/v1",
+  "scenario": "D33",
+  "events": [
+    {
+      "seq": 1,
+      "kind": "listener",
+      "data": {
+        "label": "first"
+      }
+    },
+    {
+      "seq": 2,
+      "kind": "gate",
+      "data": {
+        "label": "serial-gate",
+        "value": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "kind": "listener",
+      "data": {
+        "label": "zero"
+      }
+    },
+    {
+      "seq": 4,
+      "kind": "output",
+      "data": {
+        "to": "zero-result",
+        "value": 0
+      }
+    },
+    {
+      "seq": 5,
+      "kind": "listener",
+      "data": {
+        "label": "throws"
+      }
+    },
+    {
+      "seq": 6,
+      "kind": "error",
+      "data": {
+        "error": {
+          "message": "serial failure",
+          "name": "Error"
+        },
+        "op": "dispatch"
+      }
+    },
+    {
+      "seq": 7,
+      "kind": "output",
+      "data": {
+        "to": "serial-error",
+        "value": {
+          "message": "serial failure",
+          "name": "Error"
+        }
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "serial-waiting",
+      "states": [],
+      "provisions": [],
+      "outputs": {}
+    },
+    {
+      "label": "finished",
+      "states": [],
+      "provisions": [],
+      "outputs": {
+        "serial-error": {
+          "message": "serial failure",
+          "name": "Error"
+        },
+        "zero-result": 0
+      }
+    }
+  ]
+}

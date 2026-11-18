@@ -1,0 +1,57 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D36",
+  "title": "Repeated next in a Waterfall listener throws exactly once",
+  "covers": [
+    "waterfall-repeated-next-error"
+  ],
+  "plugins": [],
+  "steps": [
+    {
+      "op": "listen",
+      "key": "repeated",
+      "symbol": true,
+      "label": "double-next",
+      "program": [
+        {
+          "op": "next",
+          "to": "first-next"
+        },
+        {
+          "op": "next"
+        }
+      ]
+    },
+    {
+      "op": "dispatch",
+      "key": "repeated",
+      "symbol": true,
+      "mode": "waterfall",
+      "value": 7,
+      "catch": true,
+      "to": "repeated-error"
+    },
+    {
+      "op": "settle",
+      "label": "finished"
+    }
+  ],
+  "expect": [
+    {
+      "at": "finished",
+      "path": "/outputs/first-next",
+      "equals": 7
+    },
+    {
+      "at": "finished",
+      "path": "/outputs/repeated-error",
+      "equals": {
+        "name": "Error",
+        "message": "next() called multiple times"
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

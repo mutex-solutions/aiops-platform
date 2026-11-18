@@ -1,0 +1,179 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D29",
+  "title": "Stale or rejected retained updates cannot publish effective config",
+  "covers": [
+    "stale-update-not-published",
+    "rejected-update-not-published"
+  ],
+  "plugins": [
+    {
+      "id": "retained",
+      "apply": [
+        {
+          "op": "listen",
+          "key": "internal/update",
+          "label": "update-owner",
+          "program": [
+            {
+              "op": "when",
+              "base": {
+                "$config": "v"
+              },
+              "value": 1,
+              "program": [
+                {
+                  "op": "gate",
+                  "label": "old-update"
+                }
+              ]
+            },
+            {
+              "op": "when",
+              "base": {
+                "$config": "v"
+              },
+              "value": 3,
+              "program": [
+                {
+                  "op": "gate",
+                  "label": "reject-update"
+                },
+                {
+                  "op": "fail",
+                  "error": "update rejected"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "mount",
+      "fiber": "f",
+      "plugin": "retained",
+      "config": {
+        "v": 0
+      }
+    },
+    {
+      "op": "settle",
+      "label": "initial"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 1
+      },
+      "await": false,
+      "task": "old-update"
+    },
+    {
+      "op": "waitMark",
+      "label": "old-update"
+    },
+    {
+      "op": "snapshot",
+      "label": "pending-update"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 2
+      }
+    },
+    {
+      "op": "release",
+      "label": "old-update"
+    },
+    {
+      "op": "awaitTask",
+      "task": "old-update"
+    },
+    {
+      "op": "settle",
+      "label": "current"
+    },
+    {
+      "op": "update",
+      "fiber": "f",
+      "config": {
+        "v": 3
+      },
+      "await": false,
+      "task": "reject-update"
+    },
+    {
+      "op": "waitMark",
+      "label": "reject-update"
+    },
+    {
+      "op": "release",
+      "label": "reject-update"
+    },
+    {
+      "op": "awaitTask",
+      "task": "reject-update",
+      "catch": true,
+      "to": "rejection"
+    },
+    {
+      "op": "settle",
+      "label": "rejected"
+    },
+    {
+      "op": "dispose",
+      "fiber": "f"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "pending-update",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "v": 0
+      }
+    },
+    {
+      "at": "current",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "v": 2
+      }
+    },
+    {
+      "at": "rejected",
+      "path": "/states/0/rawConfig",
+      "equals": {
+        "v": 3
+      }
+    },
+    {
+      "at": "rejected",
+      "path": "/states/0/effectiveConfig",
+      "equals": {
+        "v": 2
+      }
+    },
+    {
+      "at": "rejected",
+      "path": "/outputs/rejection",
+      "equals": {
+        "name": "Error",
+        "message": "update rejected"
+      }
+    }
+  ],
+  "attribution": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/scripts/cordis-core-lifecycle.spec.ts"
+  ]
+}

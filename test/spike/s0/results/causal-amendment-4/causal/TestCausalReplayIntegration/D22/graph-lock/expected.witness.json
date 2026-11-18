@@ -1,0 +1,19 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "a8bbe02c693dde341897ca9ed48be4d7c75bb7d5e3fa4f4454dd93e8ee6acb95",
+  "scriptSHA256": "a4f8ac158c4c53f5935d5152db168cdd25bf952ba9a34f0331aaaf426c5a203b",
+  "checkpoints": [
+    {
+      "label": "joining-setup",
+      "afterEvent": 14
+    },
+    {
+      "label": "joining-cleanup",
+      "afterEvent": 19
+    },
+    {
+      "label": "disposed",
+      "afterEvent": 22
+    }
+  ]
+}

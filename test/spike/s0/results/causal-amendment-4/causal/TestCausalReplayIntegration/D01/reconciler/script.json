@@ -1,0 +1,114 @@
+{
+  "schema": "s0-script/v1",
+  "id": "D01",
+  "title": "Extend inherits metadata and services without mutating its ancestor",
+  "covers": [
+    "extend-inheritance"
+  ],
+  "contexts": [
+    {
+      "id": "parent",
+      "parent": "root",
+      "meta": {
+        "scope": "outer",
+        "name": "parent"
+      }
+    },
+    {
+      "id": "grandchild",
+      "parent": "parent",
+      "meta": {
+        "name": "inner"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "consumer",
+      "apply": [
+        {
+          "op": "read",
+          "key": "svc",
+          "to": "service"
+        },
+        {
+          "op": "output",
+          "to": "inherited",
+          "value": {
+            "$meta": "scope"
+          }
+        },
+        {
+          "op": "output",
+          "to": "shadow",
+          "value": {
+            "$meta": "name"
+          }
+        }
+      ],
+      "needs": {
+        "svc": null
+      }
+    }
+  ],
+  "steps": [
+    {
+      "op": "provide",
+      "key": "svc",
+      "value": "root-value"
+    },
+    {
+      "op": "mount",
+      "context": "grandchild",
+      "fiber": "c",
+      "plugin": "consumer",
+      "config": {}
+    },
+    {
+      "op": "settle",
+      "label": "active"
+    },
+    {
+      "op": "output",
+      "context": "parent",
+      "to": "parent-name",
+      "value": {
+        "$meta": "name"
+      }
+    },
+    {
+      "op": "snapshot",
+      "label": "metadata"
+    },
+    {
+      "op": "dispose",
+      "fiber": "c"
+    },
+    {
+      "op": "settle",
+      "label": "disposed"
+    }
+  ],
+  "expect": [
+    {
+      "at": "metadata",
+      "path": "/outputs/inherited",
+      "equals": "outer"
+    },
+    {
+      "at": "metadata",
+      "path": "/outputs/shadow",
+      "equals": "inner"
+    },
+    {
+      "at": "metadata",
+      "path": "/outputs/parent-name",
+      "equals": "parent"
+    },
+    {
+      "at": "active",
+      "path": "/outputs/service",
+      "equals": "root-value"
+    }
+  ]
+}

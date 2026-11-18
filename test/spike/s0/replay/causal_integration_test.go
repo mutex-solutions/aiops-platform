@@ -33,6 +33,9 @@ const (
 	causalAmendment3SHA       = "45ae806bd4def4f5ce0a8345aec8e6ac3233913bc2c2a46b74abace0db4ea17f"
 	causalAmendment3Addendum  = "../../../../docs/design/s0-causal-comparison-amendment-3-addendum.md"
 	causalAmendment3AddendSHA = "63f7bed867f49be270f1dd39968585d97811c9440c45a6f5d87409dff5c867d8"
+	// Amendment 4 was recorded before the comparator change for the un-awaited disposal.
+	causalAmendment4    = "../../../../docs/design/s0-causal-comparison-amendment-4.md"
+	causalAmendment4SHA = "b1fc5c87d77d25e5e7061442b4a22b4b286af373fc1c574076341740da7e5e16"
 )
 
 var causalBackends = []struct {
@@ -172,7 +175,7 @@ func saveCausalEvidence(t *testing.T, dir, name string, data []byte) {
 func causalSources(t *testing.T) map[string]string {
 	t.Helper()
 	sources := map[string]string{}
-	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json", causalAmendment2, "../../../../docs/design/s0-causal-comparison-amendment-2-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-2.json", causalAmendment3, "../../../../docs/design/s0-causal-comparison-amendment-3-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-3.json"} {
+	for _, pattern := range []string{"*.go", "../concurrency/*.go", "../composition/*.go", "../contextmodel/*.go", "../hooks/*.go", "../observers/*.go", "../internal/*/*.go", "../../../differential/*.go", "../../../differential/oracle/*.*", "../../../../go.mod", "../../../../go.sum", "../../../../docs/design/s0-spike-criteria.md", "../../../../docs/design/s0-reference-pins.md", causalAmendment, "../../../../docs/design/s0-causal-comparison-freeze.json", causalAmendment2, "../../../../docs/design/s0-causal-comparison-amendment-2-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-2.json", causalAmendment3, "../../../../docs/design/s0-causal-comparison-amendment-3-addendum.md", "../../../../docs/design/s0-causal-comparison-freeze-3.json", causalAmendment4, "../../../../docs/design/s0-causal-comparison-freeze-4.json"} {
 		paths, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -225,6 +228,9 @@ var causalCovered = []struct {
 	{causalScenario{"D21", corpusPath("D21"), true}, []string{"reconciler", "graph-lock"}},
 	// Amendment 3 (docs/design/s0-causal-comparison-amendment-3.md): each pair below
 	// matched 100 of 100 under -race and 100 of 100 with GOMAXPROCS=2 under -race.
+	// Amendment 4: the joining-setup cut after the un-awaited disposal floats (14, 15 or 18
+	// events); matched 100 of 100 in both modes on both candidates.
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D24", corpusPath("D24"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D27", corpusPath("D27"), true}, []string{"reconciler", "graph-lock"}},
@@ -255,12 +261,6 @@ var causalDiagnostics = []struct {
 	// realm rule, row 8: the private child's `retained-inherited` read is `undeclared key`
 	// where the oracle reads `outer`, one extra `error` record (24 != 25).
 	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{"record count mismatch: 24 != 25"}, false},
-	// D22 revision 4: both candidates now follow the oracle's teardown order (parent cleanup,
-	// then the child, then the parent DISPOSED). The joining-setup cut after the non-awaited
-	// disposal is unsynchronised with the candidates' unload goroutine, so it holds 14 events
-	// (the oracle's cut) in some runs and 15 or 18 in others: flaky, not a stable verdict
-	// (docs/design/s0-causal-coverage.md).
-	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch: 14 != 15", "record count mismatch: 14 != 18"}, true},
 	// D23: the caught effect error is observed after ACTIVE by the replay adapter
 	// (documented in s0-d23-request-mapping.md).
 	{causalScenario{"D23", corpusPath("D23"), true}, nil, []string{`caught "effect" error: event outside the frame of every possible owner`}, false},
@@ -286,6 +286,9 @@ func requireCausalLive(t *testing.T) {
 	}
 	if digest(loadFixture(t, causalAmendment3)) != causalAmendment3SHA || digest(loadFixture(t, causalAmendment3Addendum)) != causalAmendment3AddendSHA {
 		t.Fatal("recorded comparison amendment 3 or its addendum changed")
+	}
+	if digest(loadFixture(t, causalAmendment4)) != causalAmendment4SHA {
+		t.Fatal("recorded comparison amendment 4 changed")
 	}
 }
 

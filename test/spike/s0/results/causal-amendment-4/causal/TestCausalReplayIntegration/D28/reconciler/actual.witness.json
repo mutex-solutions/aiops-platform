@@ -1,0 +1,27 @@
+{
+  "schema": "s0-causal-witness/v1",
+  "traceSHA256": "c9f7e7a2c82615ae885746d9b3658a4ef7cbed1bd314bf0525c6ad1dc7780ff4",
+  "scriptSHA256": "64e855b40bf3ea180ed1b58b6ea235348e66003396ebf023cf4501d84efd8503",
+  "checkpoints": [
+    {
+      "label": "initial",
+      "afterEvent": 5
+    },
+    {
+      "label": "resolved-only",
+      "afterEvent": 7
+    },
+    {
+      "label": "committed",
+      "afterEvent": 10
+    },
+    {
+      "label": "no-save",
+      "afterEvent": 12
+    },
+    {
+      "label": "disposed",
+      "afterEvent": 15
+    }
+  ]
+}

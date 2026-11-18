@@ -1,0 +1,182 @@
+[
+  {
+    "Sequence": 1,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "builtin:hooks",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 2,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook symbol-event/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 3,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook symbol-event/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 4,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook symbol-event/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 5,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "effect:add",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook symbol-event/default",
+    "UID": 0,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 6,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "async-first"
+    }
+  },
+  {
+    "Sequence": 7,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "gate",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "emit-listener",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 8,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:start",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook listener async-first",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  },
+  {
+    "Sequence": 9,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "listener",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "sync-second"
+    }
+  },
+  {
+    "Sequence": 10,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "second-called",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 11,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "output",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "to": "emit-result",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 12,
+    "Fiber": 0,
+    "Name": "",
+    "Kind": "fixture",
+    "From": "",
+    "State": "",
+    "Key": "mark",
+    "UID": 0,
+    "Value": null,
+    "Data": {
+      "label": "emit-finished",
+      "value": {
+        "$undefined": true
+      }
+    }
+  },
+  {
+    "Sequence": 13,
+    "Fiber": 0,
+    "Name": "root",
+    "Kind": "go:done",
+    "From": "",
+    "State": "ACTIVE",
+    "Key": "hook listener async-first",
+    "UID": 1,
+    "Value": null,
+    "Data": null
+  }
+]
