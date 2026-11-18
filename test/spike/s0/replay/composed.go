@@ -503,7 +503,7 @@ func (f *composedFrontend) mount(action differential.Action, env environment, ta
 		}
 		caller := &composedActivation{frontend: f, context: context, owner: target}
 		var needs []string
-		for _, dep := range context.Metadata().Dependencies() {
+		for _, dep := range context.Metadata().OwnDependencies() {
 			if !dep.Optional() {
 				needs = append(needs, dep.Key().Name())
 			}

@@ -231,9 +231,11 @@ func (r *RootAuthority) Start(ctx context.Context, parent *Context, entry cm.Plu
 	return &Fiber{ID: id, Context: template, backend: r.backend}, nil
 }
 
-// Native ownership must invalidate children at parent quiescence, before waiting
-// for service dependants or running provider cleanup. No idle watcher goroutine,
-// fake parent service, or package-wide Settle substitutes for this relation.
+// Native ownership makes a child one ordered effect of its parent: the parent's
+// teardown requests its disposal at its slot in the LIFO walk (after any effect
+// registered later) and joins it before the parent is DISPOSED, never before the
+// parent's service dependants. No idle watcher goroutine, fake parent service, or
+// package-wide Settle substitutes for this relation.
 func (c *Context) Child(spec Spec) (*Fiber, error) {
 	if c.raw == nil {
 		return nil, cc.ErrInactive
@@ -266,7 +268,10 @@ func (r *RootAuthority) compile(parent *Context, metadata *cm.Context, spec Spec
 	}
 	native := cc.Spec{ID: metadata.Spec().ID, Config: spec.Config}
 	var required []cm.AnyKey
-	for _, dep := range metadata.Dependencies() {
+	// Only the fiber's own declarations enter its native needs, epoch and
+	// availability gate, as in the oracle. Inherited ones are read through the
+	// declaring ancestor (see read) and neither gate nor retain this fiber.
+	for _, dep := range metadata.OwnDependencies() {
 		if err := metadata.AuthorizeRead(dep.Key(), true); err != nil {
 			return nil, cc.Spec{}, err
 		}
@@ -316,7 +321,8 @@ func (c *Context) read(key cm.AnyKey) (*provision, error) {
 	if c.raw == nil {
 		return nil, cc.ErrInactive
 	}
-	value, err := c.raw.Read(c.addresses[key])
+	owner := c.declarer(key)
+	value, err := owner.raw.Read(owner.addresses[key])
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +331,25 @@ func (c *Context) read(key cm.AnyKey) (*provision, error) {
 		return nil, cm.ErrKey
 	}
 	return p, nil
+}
+
+// declarer is the nearest activation, this one first, whose own frame requires
+// key in the same realm: the oracle's walk up the fiber chain, which stops at the
+// first fiber that declares it. That activation's captured binding stays valid
+// until it is released, which a parent's teardown holds off until its children
+// are DISPOSED. Without a declaring ancestor the read stays on this activation.
+func (c *Context) declarer(key cm.AnyKey) *Context {
+	for node := c; node != nil; node = node.parent {
+		if node.raw == nil {
+			continue
+		}
+		for _, dep := range node.metadata.OwnDependencies() {
+			if !dep.Optional() && dep.Key() == key {
+				return node
+			}
+		}
+	}
+	return c
 }
 
 // Resolve invokes the typed view with the actual resolving wrapper after per-call

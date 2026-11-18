@@ -592,6 +592,28 @@ func (c *Context) Dependencies() []Dep {
 	return result
 }
 
+// OwnDependencies returns only what this context's own frame declared, in
+// declaration order, for the current realms. The oracle lists exactly this as a
+// fiber's inject and epoch: a child reaches a declaration of an ancestor by
+// walking up the fiber chain within one realm and does not own it. Dependencies
+// stays the effective list that authorises reads.
+func (c *Context) OwnDependencies() []Dep {
+	node := c
+	for node != nil && node.parent != nil && node.parent.frame == node.frame {
+		node = node.parent
+	}
+	if node == nil || node.frame == nil {
+		return nil
+	}
+	var result []Dep
+	for _, dep := range node.frame.spec.Inject {
+		if node.realm(dep.key.id) == c.realm(dep.key.id) {
+			result = append(result, dep)
+		}
+	}
+	return result
+}
+
 func (c *Context) declared(key AnyKey, optional bool) bool {
 	for _, dep := range c.Dependencies() {
 		if dep.key.id == key.id && (optional || !dep.optional) {
