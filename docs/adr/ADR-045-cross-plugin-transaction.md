@@ -240,3 +240,142 @@ scale with retained history. Options not yet chosen: a jobs role that is not
 subject to row-level security on River's tables, bounded retention of finished
 jobs, or both. No mitigation is implemented. The restart gate remains failed at
 frozen scale.
+
+## Owner decision on River's tables: jobs role outside row-level security, bounded retention, 2026-11-18
+
+Status: **decision recorded before implementation.** It answers the finding above
+for the probe fixtures. It does not accept the transaction-authority design, does
+not change the failed SQL authority gate, and the restart gate stays failed at
+frozen scale until it is rerun on the idle host.
+
+The owner decided:
+
+1. The jobs role is **not** subject to row-level security on River's own tables.
+   Tenant isolation for job data rests on the typed-operations surface (callers
+   never get raw SQL on those tables) and on grants, not on policies over
+   `river_job`.
+2. Finished jobs get bounded retention through River's own cleaner instead of
+   being kept forever.
+
+### Role and ownership design
+
+Smallest change that implements (1): **River's five tables stay owned by the
+separate NOLOGIN migration owner, row-level security is disabled on them (never
+enabled, so also not forced), and they carry no policies.** The jobs role stays a
+NOLOGIN, NOSUPERUSER, NOBYPASSRLS nonowner with exactly the table grants it has
+today. Nothing else about the role topology changes.
+
+| Principal | Access to River's schema and tables |
+|---|---|
+| Migration owner (NOLOGIN) | Owns the five tables and their sequences; used only by the migration session. The runtime login is not a member. |
+| Jobs role | USAGE on the River schema; SELECT, INSERT, UPDATE, DELETE on `river_job`, `river_leader`, `river_queue`, `river_notification`; SELECT on `river_migration`; USAGE and SELECT on the sequences. No other privilege, no ownership, no BYPASSRLS. |
+| Caller roles (per plugin) | **None.** No schema USAGE and no table privilege of any kind. |
+| Runtime login | None of its own. It still holds SET-only, NOINHERIT membership in the caller and jobs roles; that is the recorded known-unsafe mechanism and is unchanged here. |
+| PUBLIC | None. |
+
+Because RLS is disabled on those tables, the planner has no security-barrier
+qualifier to apply to the jobs role and may use column statistics, which is what
+restores the index plan for River's fetch. The five tables are checked in the
+fixtures as `relrowsecurity = false`, `relforcerowsecurity = false`, zero rows in
+`pg_policy`, owner equals the migration owner.
+
+Where `river_job` gets the experimental `tenant`, `scope_id` and `writer_xid`
+columns, they remain defaults stamped from the transaction setting and
+`pg_current_xact_id()`. They are provenance written by trusted infrastructure,
+no longer filtered by a policy.
+
+### What now carries the isolation guarantee
+
+A caller cannot read or write another tenant's job rows because it cannot touch
+`river_job` at all, by three layers that do not depend on RLS: (a) the closed
+typed-operations surface in `s0typedops` has no operation that names a River
+table, accepts SQL text or returns the underlying transaction, and the River
+insert runs only from private infrastructure code; (b) the caller role has no
+USAGE on the River schema and no privilege on any River table, so the same SQL
+issued under the caller role is refused with SQLSTATE 42501; (c) the only role
+with privileges on River's tables is the trusted jobs role, which by design sees
+all tenants because fetch, completion, rescue and cleanup must.
+
+Say plainly what RLS did and did not protect on these tables. Only the worker
+fixture gave the caller role anything on River tables (a SELECT on `river_job`
+filtered by the tenant setting, plus schema USAGE); that grant is removed, since
+no caller needs it, and the caller role now has no privilege at all. With no
+privilege, a policy for it protects nothing that the grants do not already
+refuse. The jobs role needs every row, so its policy was
+`USING (true)` in the worker and typed-operations fixtures: it filtered nothing.
+The only place a policy constrained the jobs role was the atomicity fixture
+(`s0txprobe`), where it was keyed to the same writable transaction setting whose
+rewriting is the recorded failed gate.
+
+### What is given up compared with forced RLS
+
+- Defence in depth against a caller that obtains raw SQL **as its own caller
+  role**: none was provided by RLS on River tables and none is lost, since the
+  grants deny everything first. Isolation of the caller-owned tables is not
+  affected (below).
+- In fixtures that retain the known-unsafe SET membership, a caller with raw SQL
+  can `SET ROLE` to the jobs role and then read and write **all** tenants' job
+  rows. Before this change, in `s0txprobe` that additionally required rewriting
+  the writable scope setting (which is itself a recorded escape); in the worker
+  and typed-operations fixtures it was already possible. This is one fewer step
+  in one fixture, not a new class of escape, and it is the same weakness as the
+  failed gate: a real design must not let callers enter the jobs role at all.
+- In `s0txprobe` the policy `WITH CHECK` on `river_job` (tenant and writer
+  transaction equal to the current transaction's) no longer rejects a direct
+  insert by the jobs role with a forged tenant column. The integrity of those
+  columns now rests on the defaults and on only trusted infrastructure running
+  the insert.
+- A bug in trusted infrastructure that makes it query another tenant's job row
+  as the jobs role would not have been caught by RLS either (the jobs policy
+  has to admit every row).
+
+### What stays under row-level security
+
+Nothing outside River's five tables changes. The caller-owned result table
+(`result`), the typed-operations records, outbox and audit tables, the
+atomicity fixture's state, outbox and audit tables and the SQL-boundary probe's
+tables keep ENABLE and FORCE ROW LEVEL SECURITY with their tenant/scope policies,
+and the existing tests that assert caller isolation there stay.
+
+### Alternatives rejected
+
+- **Grant BYPASSRLS to the jobs role.** It is a role attribute: it applies to
+  every table the role is or will be granted, in the whole cluster, and silently
+  disables any policy on them. A later grant to the jobs role on a caller-owned
+  table would then expose that table. The fixtures assert NOBYPASSRLS on every
+  role and that invariant is kept.
+- **Make the jobs role the owner of River's tables, RLS not forced.** It fixes the
+  plan too, but turns the runtime role into one that can ALTER, DROP, TRUNCATE,
+  GRANT, create triggers and turn RLS back on, and merges the migration and
+  runtime roles. The login can SET to it in these fixtures. It buys nothing over
+  disabling RLS.
+- **Keep policies and make them cheaper.** The policy shape does not matter (see
+  the finding): any policy applying to the role disables use of non-leakproof
+  statistics.
+- **Per-role `enable_seqscan = off`.** Diagnostic only; it hides the symptom and
+  disables the index-less plan for legitimate scans.
+
+### Bounded retention
+
+River's cleaner is a maintenance service of the client that holds leadership
+(elected through `river_leader`); it is not run by a client that is not leader.
+At the pinned v0.51.2 its options on `river.Config` are
+`CompletedJobRetentionPeriod`, `CancelledJobRetentionPeriod` and
+`DiscardedJobRetentionPeriod` (defaults 24 h, 24 h, 7 d; `-1` disables deletion of
+that state; the fixtures so far set `-1`) and `JobCleanerTimeout` (default 30 s).
+The pass interval is fixed at 30 s, and each pass deletes in batches of 10,000
+rows ordered by `id`, with a short pause between full batches. A job becomes
+eligible once `finalized_at` is older than its state's retention.
+
+Harness rule, so that observation cannot race the cleaner: the restart gate reads
+durable completion by SQL (a poll joining `river_job` and the caller-owned
+`result` table, then a final sweep per cycle). The cleaner deletes only
+`river_job` rows; it never touches `result`. The probe app takes the retention
+period as a parameter and **refuses a value shorter than twice the upper bound of
+one cycle** (warm-up, window, completion budgets and the sweep), so a cycle's final
+sweep always precedes any deletion of that cycle's jobs. As a second line, an
+acknowledged ID whose result row exists but whose job row is gone at the final
+sweep is reported as its own failed bound; it is never counted as completed.
+
+The results of the rerun at frozen scale and the numbers measured on the
+development host will be appended here as a separate dated section.
