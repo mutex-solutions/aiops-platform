@@ -1,0 +1,537 @@
+[
+ {
+  "scenario": "D02",
+  "fixture": "corpus/D02.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 17,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D02",
+  "fixture": "corpus/D02.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 20,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D03",
+  "fixture": "corpus/D03.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 2,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D03",
+  "fixture": "corpus/D03.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 69,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D04",
+  "fixture": "corpus/D04.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D04",
+  "fixture": "corpus/D04.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D06",
+  "fixture": "corpus/D06.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 24 != 25": 100
+  }
+ },
+ {
+  "scenario": "D06",
+  "fixture": "corpus/D06.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 0,
+  "causalMismatch": 100,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 24 != 25": 100
+  }
+ },
+ {
+  "scenario": "D07",
+  "fixture": "corpus/D07.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 39,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D07",
+  "fixture": "corpus/D07.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 97,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D08",
+  "fixture": "corpus/D08.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 45,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D08",
+  "fixture": "corpus/D08.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 99,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D09",
+  "fixture": "corpus/D09.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 58,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D09",
+  "fixture": "corpus/D09.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 30,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D10",
+  "fixture": "corpus/D10.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D10",
+  "fixture": "corpus/D10.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D11",
+  "fixture": "corpus/D11.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D11",
+  "fixture": "corpus/D11.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D12",
+  "fixture": "corpus/D12.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D12",
+  "fixture": "corpus/D12.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-5/D13.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D13",
+  "fixture": "corpus/revision-5/D13.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D14",
+  "fixture": "corpus/D14.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 47,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D14",
+  "fixture": "corpus/D14.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 97,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D15",
+  "fixture": "corpus/D15.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 42,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D15",
+  "fixture": "corpus/D15.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 94,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D16",
+  "fixture": "corpus/D16.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D16",
+  "fixture": "corpus/D16.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D18",
+  "fixture": "corpus/D18.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 46,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D18",
+  "fixture": "corpus/D18.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 91,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D19",
+  "fixture": "corpus/D19.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D19",
+  "fixture": "corpus/D19.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D21",
+  "fixture": "corpus/D21.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 30,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D21",
+  "fixture": "corpus/D21.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 97,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-4/D22.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 35,
+  "causalMismatch": 65,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 14 != 15": 3,
+   "event segment 0: record count mismatch: 14 != 18": 62,
+   "match": 35
+  }
+ },
+ {
+  "scenario": "D22",
+  "fixture": "corpus/revision-4/D22.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 0,
+  "causalMatch": 99,
+  "causalMismatch": 1,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "event segment 0: record count mismatch: 14 != 18": 1,
+   "match": 99
+  }
+ },
+ {
+  "scenario": "D27",
+  "fixture": "corpus/D27.json",
+  "backend": "reconciler",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ },
+ {
+  "scenario": "D27",
+  "fixture": "corpus/D27.json",
+  "backend": "graph-lock",
+  "runs": 100,
+  "strictMatch": 100,
+  "causalMatch": 100,
+  "causalMismatch": 0,
+  "causalUnsupported": 0,
+  "harnessErrors": 0,
+  "verdicts": {
+   "match": 100
+  }
+ }
+]

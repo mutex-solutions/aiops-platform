@@ -226,12 +226,17 @@ var causalDiagnostics = []struct {
 	wants    []string
 	flaky    bool
 }{
-	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{`checkpoint "children" Needs count mismatch`}, false},
-	// D22 revision 4: stable (400 of 400 per candidate), not a fixture race. The oracle takes the
-	// joining-setup cut after 14 events (parent UNLOADING, child still ACTIVE); both
-	// candidates join the child before the parent's own cleanup, so the cut holds 16.
-	// No fixture barrier closes it (docs/design/s0-causal-coverage.md).
-	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch: 14 != 16"}, false},
+	// D06: the child epoch no longer lists the inherited `svc` (checkpoint Needs now agree).
+	// The remaining stable difference (100 of 100 per candidate and mode) is the documented
+	// realm rule, row 8: the private child's `retained-inherited` read is `undeclared key`
+	// where the oracle reads `outer`, one extra `error` record (24 != 25).
+	{causalScenario{"D06", corpusPath("D06"), true}, nil, []string{"record count mismatch: 24 != 25"}, false},
+	// D22 revision 4: both candidates now follow the oracle's teardown order (parent cleanup,
+	// then the child, then the parent DISPOSED). The joining-setup cut after the non-awaited
+	// disposal is unsynchronised with the candidates' unload goroutine, so it holds 14 events
+	// (the oracle's cut) in some runs and 15 or 18 in others: flaky, not a stable verdict
+	// (docs/design/s0-causal-coverage.md).
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, nil, []string{"record count mismatch: 14 != 15", "record count mismatch: 14 != 18"}, true},
 	// D23: the caught effect error is observed after ACTIVE by the replay adapter
 	// (documented in s0-d23-request-mapping.md).
 	{causalScenario{"D23", corpusPath("D23"), true}, nil, []string{`caught "effect" error: event outside the frame of every possible owner`}, false},

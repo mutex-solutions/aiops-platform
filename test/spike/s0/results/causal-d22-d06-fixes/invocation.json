@@ -1,0 +1,312 @@
+{
+  "classification": "candidate fixes for D22 teardown order and D06 child epoch; differential comparison only, NOT S0 acceptance",
+  "baseCommit": "6405117",
+  "oracle": {
+    "node": "24.22.1"
+  },
+  "commands": [
+    {
+      "label": "rates under -race (100 per pair)",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "^TestCausalRates$",
+        "-v",
+        "-timeout",
+        "60m",
+        "./test/spike/s0/replay"
+      ],
+      "env": {
+        "S0_NODE": "<node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D02,D03,D04,D06,D07,D08,D09,D10,D11,D12,D13,D14,D15,D16,D18,D19,D21,D22,D27",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "S0_CAUSAL_RATE_OUT": "<repo-root>/test/spike/s0/results/causal-d22-d06-fixes/rates-race.json"
+      },
+      "log": "rates-race.log",
+      "table": "rates-race.json",
+      "exitCode": 0
+    },
+    {
+      "label": "rates under -race with GOMAXPROCS=2 (100 per pair)",
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-run",
+        "^TestCausalRates$",
+        "-v",
+        "-timeout",
+        "60m",
+        "./test/spike/s0/replay"
+      ],
+      "env": {
+        "S0_NODE": "<node-24.22.1>/bin/node",
+        "S0_ORACLE_RUN": "1",
+        "S0_CAUSAL_RUN": "1",
+        "S0_CAUSAL_RATE": "100",
+        "S0_CAUSAL_ONLY": "D02,D03,D04,D06,D07,D08,D09,D10,D11,D12,D13,D14,D15,D16,D18,D19,D21,D22,D27",
+        "unset": [
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "CORDIS_SHARED"
+        ],
+        "GOMAXPROCS": "2",
+        "S0_CAUSAL_RATE_OUT": "<repo-root>/test/spike/s0/results/causal-d22-d06-fixes/rates-gmp2.json"
+      },
+      "log": "rates-gmp2.log",
+      "table": "rates-gmp2.json",
+      "exitCode": 0
+    },
+    {
+      "label": "corpus inventory (scratch output outside the repository)",
+      "argv": [
+        "go",
+        "test",
+        "-mod=readonly",
+        "-race",
+        "-count=1",
+        "-run",
+        "^TestCorpusInventory$",
+        "-v",
+        "./test/spike/s0/replay"
+      ],
+      "env": {
+        "S0_CORPUS_INVENTORY": "1",
+        "S0_CORPUS_REQUIRE_ASSERTIONS": "1",
+        "S0_CORPUS_OUT": "<scratch>",
+        "GOMAXPROCS": "8"
+      },
+      "log": "inventory.log",
+      "exitCode": 0
+    }
+  ],
+  "counts": {
+    "causalMatchOf100PerMode": {
+      "D02/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D02/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D03/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D03/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D04/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D04/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D06/graph-lock": {
+        "race": 0,
+        "gomaxprocs2": 0,
+        "runs": 100
+      },
+      "D06/reconciler": {
+        "race": 0,
+        "gomaxprocs2": 0,
+        "runs": 100
+      },
+      "D07/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D07/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D08/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D08/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D09/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D09/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D10/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D10/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D11/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D11/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D12/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D12/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D13/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D13/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D14/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D14/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D15/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D15/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D16/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D16/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D18/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D18/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D19/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D19/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D21/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D21/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D22/graph-lock": {
+        "race": 99,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D22/reconciler": {
+        "race": 35,
+        "gomaxprocs2": 38,
+        "runs": 100
+      },
+      "D27/graph-lock": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      },
+      "D27/reconciler": {
+        "race": 100,
+        "gomaxprocs2": 100,
+        "runs": 100
+      }
+    },
+    "acceptedPairsAll100InBothModes": true,
+    "inventoryAfter": {
+      "executions": 74,
+      "match": 50,
+      "failed": 20,
+      "incomplete": 4
+    },
+    "inventoryBeforeRecorded": {
+      "source": "test/spike/s0/results/corpus-inventory-after-d29",
+      "executions": 74,
+      "match": 43,
+      "failed": 27,
+      "incomplete": 4
+    }
+  },
+  "notMovedToCausalCovered": {
+    "D06": "stable MISMATCH, record count mismatch 24 != 25 (documented realm rule, one extra error record); pinned verdict text updated",
+    "D22": "flaky: reconciler 35 and 38 of 100, graph-lock 99 and 100 of 100; kept in causalDiagnostics as flaky"
+  },
+  "otherChecks": "gofmt -l test; go vet ./...; go test -race -count=5 ./test/...; -count=30 concurrency; -count=3 properties; -count=10 composition contextmodel callpath scale hooks observers; live oracle and causal -count=3 over ./test/differential ./test/spike/s0/replay at default GOMAXPROCS and GOMAXPROCS=2: all exit 0",
+  "fixCommits": {
+    "teardownOrder": "8a02e55",
+    "childEpoch": "fb8295b"
+  },
+  "ranOn": "working tree whose code equals the two fix commits; only comments and documentation changed after the rate runs"
+}

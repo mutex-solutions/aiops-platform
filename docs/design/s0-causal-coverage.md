@@ -36,7 +36,7 @@ Protocol as before: every pair 100 times under `-race` and 100 times with
 | D03 | D03.json | 3+6 / 70+52 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D04 | D04.json | 0+0 / 0+0 | match | 100+100 of 100+100 | match | 100+100 of 100+100 | match on both; the refusal text is compared by class (C6.5). Not carried by owner decision 2026-11-18. |
 | D05 | D05.json | - / - | not run | - | not run | - | not-carried boundary, not run. |
-| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: `checkpoint "children" Needs count mismatch`; classification in "D06 and D23" below. |
+| D06 | D06.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (b) both, stable (100 of 100 in both modes, 2026-11-19): the child epoch no longer lists the inherited `svc` (fixed, see "D22 and D06 fixes (2026-11-19)"); the remaining difference is the documented realm rule, row 8: the private child's `retained-inherited` reads `undeclared key` where the oracle reads `outer`, one extra `error` record (`record count mismatch: 24 != 25`). |
 | D07 | D07.json | 35+31 / 89+86 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D08 | D08.json | 43+39 / 95+81 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D09 | D09.json | 75+53 / 23+29 | MISMATCH | 98+93 of 100+100 | match | 100+100 of 100+100 | R: was MISMATCH in 9 of 200 runs (second `service` event after the consumer's `config`); fixed 2026-11-18, now match in 100 of 100 under `-race` and 100 of 100 at `GOMAXPROCS=2`, see [`causal-d09-reconciler-fix`](../../test/spike/s0/results/causal-d09-reconciler-fix/invocation.json). G: match. |
@@ -52,7 +52,7 @@ Protocol as before: every pair 100 times under `-race` and 100 times with
 | D19 | D19.json | 100+100 / 100+100 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
 | D20 | D20.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
 | D21 | D21.json | 45+41 / 97+90 | match | 100+100 of 100+100 | match | 100+100 of 100+100 |  |
-| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | (a) candidate difference, not a fixture race: oracle cut 14 events, both candidates 16, in 400 of 400 runs per candidate; no fixture barrier is expressible in both runtimes, so no revision 6 was made (see "Revisions 5 and 6 (2026-11-18)"). |
+| D22 | revision-4/D22.json | 0+0 / 0+0 | MISMATCH, flaky | 35+38 of 100+100 | MISMATCH, flaky | 99+100 of 100+100 | both candidates now follow the oracle's teardown order (fixed 2026-11-19, see "D22 and D06 fixes (2026-11-19)"); what remains is an unsynchronised `joining-setup` cut: 14 events (the oracle's) in some runs, 15 or 18 in others. |
 | D23 | D23.json | 0+0 / 0+0 | MISMATCH | 0+0 of 100+100 | MISMATCH | 0+0 of 100+100 | both MISMATCH, stable: caught `error {op:"effect"}` outside the Apply frame; documented adaptation, see "D06 and D23". |
 | D24 | D24.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
 | D25 | D25.json | 100+100 / 100+100 | unsupported | 0+0 of 100+100 | unsupported | 0+0 of 100+100 | strict match; unsupported (comparator scope). |
@@ -102,6 +102,8 @@ candidate epoch of fiber `child` lists a binding for `svc`; the oracle epoch of
   composition/context model that both candidates use, not in either scheduling
   core. Classification: (a), an undocumented difference in that shared model;
   uncertain whether the owner intends it as the realisation of "children inherit".
+  Update 2026-11-19: the owner confirmed the oracle behaviour; the extra binding is
+  fixed (see "D22 and D06 fixes (2026-11-19)"), only the (b) realm difference remains.
 
 **D23, both candidates: caught effect `error` after ACTIVE, `mark once` before
 `output setup-error`.** Documented adaptation, not a candidate difference.
@@ -138,6 +140,55 @@ differ.
   and a `mark` in a new child cleanup body with a `waitMark` on it, so both the
   parent cleanup and the child's teardown start have happened at the cut. (The
   child's effect cleanup gate cannot be waited for before `release effect-setup`.)
+
+## D22 and D06 fixes (2026-11-19)
+
+Receipts: [`causal-d22-d06-fixes`](../../test/spike/s0/results/causal-d22-d06-fixes/invocation.json).
+Owner decision of 2026-11-18: where a candidate differs from the oracle it is fixed
+to match. Both differences below were such cases.
+
+**D22, teardown order (both candidates).** Oracle (`vendor/cordis/src/fiber.ts`:
+`this.dispose = parent.fiber.effect(...)`, `_unload`): a child's disposer is one
+effect of its parent, so a parent unload runs the parent's disposers in reverse
+registration order and the child is disposed when the walk reaches its slot; the
+parent is DISPOSED after its children. Recorded trace (events 13 to 22): `plugin
+disposed parent`, parent UNLOADING, `cleanup parent`, `mark parent-cleanup`,
+`plugin disposed child`, child UNLOADING, effect cleanup gate and mark, child
+DISPOSED, parent DISPOSED. Before the fix both candidates requested disposal of
+every child when the parent's activation was invalidated and joined it before the
+parent's disposers (16 events at the cut, parent cleanup only after the child was
+DISPOSED). Now each child is an ordered effect entry on its parent in both cores:
+disposal is requested at its slot in the LIFO walk and joined after it. Candidate
+mismatch text moved from `record count mismatch: 14 != 16` (400 of 400) to a flaky
+cut, and 100-run rates under `-race` are reconciler 35/100 and graph-lock 99/100,
+with `GOMAXPROCS=2` reconciler 38/100 and graph-lock 100/100 (receipts). The
+event sequences and final states equal the oracle's; the rest is the
+`joining-setup` snapshot, taken after a non-awaited disposal with no barrier that
+exists in both runtimes. The candidates unload on their own goroutines, the
+oracle's cut is synchronous, so the snapshot sees 14, 15 or 18 events. The pair is
+therefore not moved into `causalCovered`: it stays a flaky diagnostic with its
+verdict text updated.
+
+**D06, child epoch (both candidates).** The oracle's epoch lists
+`Object.keys(fiber.inject)` of the fiber itself; a child without its own `inject`
+has no needs and reaches a parent's committed binding by walking up the fiber chain
+(`reflect.ts`, the `internal/get` handler: `fiber.committed`, `prop in fiber.inject`,
+then `fiber.parent.fiber` while the realm label is unchanged). The Go model took
+the needs from `Metadata().Dependencies()`, the effective ancestor-first list, which
+put the inherited `svc` into the child's native needs, epoch and availability gate.
+`contextmodel.Context.OwnDependencies` now returns the frame's own declarations (same
+realm filter) and `composition` uses it for native needs and for the replay's epoch;
+the read walks to the nearest activation that declares the key (`declarer`), whose
+binding is retained until its children are DISPOSED. Cross-realm reads still fail
+with `undeclared key`. The `Needs count mismatch` is gone; D06 is still MISMATCH,
+stable, because of the realm rule (b) above, one extra `error` record in the
+`children` cut (24 against 25 events). It cannot be moved into `causalCovered`.
+
+Accepted pairs (D02, D03, D04, D07, D08, D09, D10, D11, D12, D13, D14, D15, D16, D18,
+D19, D21, D27) were re-measured: see the receipts for the counts.
+
+Consequence for plugin authors: [ADR-034](../adr/ADR-034-kernel-concurrency.md),
+section "2026-11-19 teardown order of a parent and its children".
 
 ## Revisions 5 and 6 (2026-11-18)
 
@@ -189,7 +240,7 @@ not a schedule dependent race.
   because the `joining-setup` checkpoint falls between those two orders.
 - Classification: (a), a real difference between the Go candidates (children joined
   before the parent's ordinary cleanup) and the oracle (parent cleanup first), not
-  a fixture causality gap. Whether it is intended is an owner question; the
+  a fixture causality gap. Fixed 2026-11-19, see "D22 and D06 fixes (2026-11-19)". Whether it is intended is an owner question; the
   original expectations (`joining-cleanup`, `disposed`) pass either way.
 
 Counts relative to the table at the top: D13 moves two pairs from MISMATCH to
