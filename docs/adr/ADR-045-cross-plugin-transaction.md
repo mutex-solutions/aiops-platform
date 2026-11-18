@@ -213,3 +213,30 @@ retroactively convert the original raw-SQL gate failure into a pass.
   presented as already enforced.
 - S0 remains incomplete. Later S3 ratification of definitions/providers and all
   previously open legal/product decisions remain open.
+
+## Restart gate observation, 2026-11-18
+
+The first frozen-scale run of the [full restart gate](../../plugins/jobs-river/internal/s0workers/restart-README.md)
+on an idle dedicated host failed and was stopped in pool cycle 20 of 30. Every
+acknowledged ID completed in cycles 1 to 6; from cycle 7 completion fell behind,
+and from cycle 10 none of a cycle's own IDs completed in time. The retained job
+table grows by 15,000 rows per cycle.
+
+Attribution on PostgreSQL 16.15: River's fetch (`JobGetAvailable`) run as the
+jobs role is subject to forced row-level security on `river_job`. For a role
+subject to a policy the planner may use column statistics only through leakproof
+operators; the enum equality on `state` is not leakproof, so the selectivity of
+`state = 'available'` is overestimated and, once the table is large, the plan
+changes from the prioritized fetching index to a sequential scan with a sort on
+every fetch. The same statement uses the index for a superuser, for a role that
+bypasses row-level security, and for an owner without forced row-level security.
+The policy shape does not matter. With sequential scans disabled for that role as
+a diagnostic, twelve cycles on a 160,000-row table each completed all IDs within
+one second.
+
+This is a finding about the transaction-authority design under evaluation here,
+not about the harness: forced row-level security on River's own tables does not
+scale with retained history. Options not yet chosen: a jobs role that is not
+subject to row-level security on River's tables, bounded retention of finished
+jobs, or both. No mitigation is implemented. The restart gate remains failed at
+frozen scale.
