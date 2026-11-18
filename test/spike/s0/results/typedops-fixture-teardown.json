@@ -1,0 +1,32 @@
+{
+  "classification": "parent-verified teardown of three disposable typed-operation fixtures only",
+  "containers": [
+    {
+      "id": "6ebee1ef1478695114fe80197f1b4484a5ca48c91e3cb3120af16e1856e2d0a7",
+      "name": "/aiops-s0typed-72fd9123f5ff",
+      "verifiedScope": "s0-typed-operation-isolated",
+      "stoppedBeforeRemoval": true,
+      "removed": true,
+      "anonymousVolumesRemoved": [
+        "95e8ef829802083b7af84a4fbc27cee07b1fc6a38b00f26033a62757191cf36d"
+      ]
+    },
+    {
+      "id": "91fde461f4bf911dab4180c86473a7944aea0916d887ed2ccfdc7c33f5efe0d2",
+      "name": "/aiops-s0typed-identity-68433a2324",
+      "verifiedScope": "s0-typed-operation-isolated",
+      "stoppedBeforeRemoval": true,
+      "removed": true,
+      "anonymousVolumesRemoved": []
+    },
+    {
+      "id": "ba398c7524ac1f99f36d34b4a6fe3eeb10d18232d29cdd6de329f3ffef154ec8",
+      "name": "/aiops-s0typed-qualified-6f7e328d71",
+      "verifiedScope": "s0-typed-operation-isolated",
+      "stoppedBeforeRemoval": true,
+      "removed": true,
+      "anonymousVolumesRemoved": []
+    }
+  ],
+  "sharedOriginalS0DatabaseTouched": false
+}

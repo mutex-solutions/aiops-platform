@@ -1,0 +1,49 @@
+S0 closed typed-operation PostgreSQL fixture dependencies
+
+This test-only package links these five unmodified modules at v0.51.2 under
+Mozilla Public License 2.0 (complete license: RIVER-LICENSE.txt):
+  github.com/riverqueue/river
+  github.com/riverqueue/river/riverdriver
+  github.com/riverqueue/river/riverdriver/riverpgxv5
+  github.com/riverqueue/river/rivershared
+  github.com/riverqueue/river/rivertype
+Exact release source origin:
+  https://github.com/riverqueue/river/tree/8468ff25e2cc7afd790d7037703ae72d8b2138cb
+Exact versioned source archives, including their own original notices:
+  https://proxy.golang.org/github.com/riverqueue/river/@v/v0.51.2.zip
+  https://proxy.golang.org/github.com/riverqueue/river/riverdriver/@v/v0.51.2.zip
+  https://proxy.golang.org/github.com/riverqueue/river/riverdriver/riverpgxv5/@v/v0.51.2.zip
+  https://proxy.golang.org/github.com/riverqueue/river/rivershared/@v/v0.51.2.zip
+  https://proxy.golang.org/github.com/riverqueue/river/rivertype/@v/v0.51.2.zip
+Upstream source, migration SQL and module LICENSE files are unmodified and are
+not vendored here. The first-party provider calls pinned rivermigrate with its
+Schema option; no upstream migration is replaced or copied into first-party SQL.
+For distribution of a compiled diagnostic, preserve the precise covered source
+closure and notices and make those source archives available to recipients under
+the MPL terms. No product distribution or blanket compliance claim is made.
+
+River rivershared/levenshtein adapts source from:
+  https://github.com/agnivade/levenshtein
+MIT, Copyright (c) 2015 Agniva De Sarker.
+Its complete original notice is retained unchanged as LEVENSHTEIN-LICENSE.txt;
+module-level MPL terms do not erase these nested terms. The copy was read from
+the existing first-party s0workers notice without changing that original.
+
+Pinned pgx v5.11.0 source origin:
+  https://github.com/jackc/pgx/tree/5e583fa7aabfa88b796292f849fc9d7d75ac159d
+  https://proxy.golang.org/github.com/jackc/pgx/v5/@v/v5.11.0.zip
+
+The root go.mod/go.sum retain the exact additional module pins (pgpassfile,
+pgservicefile, puddle/v2, tidwall gjson/match/pretty/sjson, x/sync and x/text).
+Their exact compiled closure, individual original license files and hashes must
+be collected from the current offline build by the parent before execution or
+distribution. No old compile-metadata.json is copied or claimed current here.
+The Go standard library/toolchain and PostgreSQL/container image have separate
+upstream licenses; the parent records its actual image/toolchain/closure.
+
+The first-party typed API, adapter and test scaffolding are Apache-2.0. Original
+identifier quoting, redacted-error and fresh-role conventions reference the
+existing first-party s0txprobe/s0workers helpers; neither package is imported.
+This package does not import production company, kernel or SDK packages.
+Only new owned helper copies were written; original source/license files were
+not changed. Scope, limitations and execution contract are in README.md.

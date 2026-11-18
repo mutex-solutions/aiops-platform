@@ -1,0 +1,211 @@
+=== RUN   TestUnitClosedSurfaceAndInertData
+--- PASS: TestUnitClosedSurfaceAndInertData (0.00s)
+=== RUN   TestUnitIdentityAndCatalogRefusals
+=== RUN   TestUnitIdentityAndCatalogRefusals/zero_entry
+=== RUN   TestUnitIdentityAndCatalogRefusals/zero_scope
+=== RUN   TestUnitIdentityAndCatalogRefusals/foreign_entry
+=== RUN   TestUnitIdentityAndCatalogRefusals/foreign_scope
+=== RUN   TestUnitIdentityAndCatalogRefusals/same-name_unissued
+=== RUN   TestUnitIdentityAndCatalogRefusals/unissued_scope
+--- PASS: TestUnitIdentityAndCatalogRefusals (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/zero_entry (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/zero_scope (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/foreign_entry (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/foreign_scope (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/same-name_unissued (0.00s)
+    --- PASS: TestUnitIdentityAndCatalogRefusals/unissued_scope (0.00s)
+=== RUN   TestUnitEntryScopeRoutingAndLifetime
+--- PASS: TestUnitEntryScopeRoutingAndLifetime (0.00s)
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/callback
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/write
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/read
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/participant
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/commit
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/panic
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/cancel
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/revoke
+=== RUN   TestUnitRollbackFailuresPanicAndCancellation/dispose
+--- PASS: TestUnitRollbackFailuresPanicAndCancellation (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/callback (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/write (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/read (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/participant (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/commit (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/panic (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/cancel (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/revoke (0.00s)
+    --- PASS: TestUnitRollbackFailuresPanicAndCancellation/dispose (0.00s)
+=== RUN   TestUnitRollbackErrorObservability
+=== RUN   TestUnitRollbackErrorObservability/callback
+=== RUN   TestUnitRollbackErrorObservability/write
+=== RUN   TestUnitRollbackErrorObservability/commit
+=== RUN   TestUnitRollbackErrorObservability/cancel
+=== RUN   TestUnitRollbackErrorObservability/panic
+--- PASS: TestUnitRollbackErrorObservability (0.00s)
+    --- PASS: TestUnitRollbackErrorObservability/callback (0.00s)
+    --- PASS: TestUnitRollbackErrorObservability/write (0.00s)
+    --- PASS: TestUnitRollbackErrorObservability/commit (0.00s)
+    --- PASS: TestUnitRollbackErrorObservability/cancel (0.00s)
+    --- PASS: TestUnitRollbackErrorObservability/panic (0.00s)
+=== RUN   TestUnitParticipantCommitAndConcurrentCalls
+--- PASS: TestUnitParticipantCommitAndConcurrentCalls (0.00s)
+=== RUN   TestUnitInvalidContexts
+--- PASS: TestUnitInvalidContexts (0.00s)
+=== RUN   TestUnitRevocationWinsFinalCommitAdmission
+=== RUN   TestUnitRevocationWinsFinalCommitAdmission/entry
+=== RUN   TestUnitRevocationWinsFinalCommitAdmission/scope
+=== RUN   TestUnitRevocationWinsFinalCommitAdmission/view
+--- PASS: TestUnitRevocationWinsFinalCommitAdmission (0.00s)
+    --- PASS: TestUnitRevocationWinsFinalCommitAdmission/entry (0.00s)
+    --- PASS: TestUnitRevocationWinsFinalCommitAdmission/scope (0.00s)
+    --- PASS: TestUnitRevocationWinsFinalCommitAdmission/view (0.00s)
+=== RUN   TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap
+=== RUN   TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/entry
+=== RUN   TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/scope
+=== RUN   TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/view
+--- PASS: TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap (0.00s)
+    --- PASS: TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/entry (0.00s)
+    --- PASS: TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/scope (0.00s)
+    --- PASS: TestUnitCommitAdmissionWinsAndWaitClosesOldCheckCommitGap/view (0.00s)
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/success
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/error
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/cleanup-error
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/success
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/error
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/cleanup-error
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/success
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/error
+=== RUN   TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/cleanup-error
+--- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/success (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/error (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/entry/cleanup-error (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/success (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/error (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/scope/cleanup-error (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/success (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/error (0.00s)
+    --- PASS: TestUnitWaitIncludesBeginAndProviderBeginFailureCleanup/view/cleanup-error (0.00s)
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/entry/return
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/entry/panic
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/scope/return
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/scope/panic
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/view/return
+=== RUN   TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/view/panic
+--- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/entry/return (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/entry/panic (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/scope/return (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/scope/panic (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/view/return (0.00s)
+    --- PASS: TestUnitCallbackCanRequestRevocationAndPanicCleanupStaysVisible/view/panic (0.00s)
+=== RUN   TestUnitWaitValidatesExactClosedTarget
+=== RUN   TestUnitWaitValidatesExactClosedTarget/zero-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/zero-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/zero-view
+=== RUN   TestUnitWaitValidatesExactClosedTarget/foreign-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/foreign-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/foreign-view
+=== RUN   TestUnitWaitValidatesExactClosedTarget/unissued-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/unissued-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/unissued-view
+=== RUN   TestUnitWaitValidatesExactClosedTarget/live-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/live-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/live-view
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-context-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-context-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-context-view
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-host-entry
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-host-scope
+=== RUN   TestUnitWaitValidatesExactClosedTarget/nil-host-view
+--- PASS: TestUnitWaitValidatesExactClosedTarget (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/zero-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/zero-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/zero-view (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/foreign-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/foreign-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/foreign-view (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/unissued-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/unissued-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/unissued-view (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/live-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/live-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/live-view (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-context-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-context-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-context-view (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-host-entry (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-host-scope (0.00s)
+    --- PASS: TestUnitWaitValidatesExactClosedTarget/nil-host-view (0.00s)
+=== RUN   TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters
+=== RUN   TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/entry
+=== RUN   TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/scope
+=== RUN   TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/view
+--- PASS: TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters (0.00s)
+    --- PASS: TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/entry (0.00s)
+    --- PASS: TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/scope (0.00s)
+    --- PASS: TestUnitTargetedWaitIgnoresUnrelatedViewAndWakesAllWaiters/view (0.00s)
+=== RUN   TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome
+=== RUN   TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/commit-error
+=== RUN   TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/unknown-after-effect
+=== RUN   TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/caller-canceled
+--- PASS: TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome (0.00s)
+    --- PASS: TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/commit-error (0.00s)
+    --- PASS: TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/unknown-after-effect (0.00s)
+    --- PASS: TestUnitCommitAdmissionDoesNotConfirmDatabaseOutcome/caller-canceled (0.00s)
+=== RUN   TestPgRevocationArbitration
+=== RUN   TestPgRevocationArbitration/entry/revoke-first
+    pg_arbitration_test.go:84: disposable fixture id=95b162081add; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPgRevocationArbitration/entry/commit-first
+    pg_arbitration_test.go:84: disposable fixture id=3f8709993ea4; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPgRevocationArbitration/scope/revoke-first
+    pg_arbitration_test.go:84: disposable fixture id=b0432aa3227c; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPgRevocationArbitration/scope/commit-first
+    pg_arbitration_test.go:84: disposable fixture id=cc745515e871; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPgRevocationArbitration/view/revoke-first
+    pg_arbitration_test.go:84: disposable fixture id=6426f210292f; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPgRevocationArbitration/view/commit-first
+    pg_arbitration_test.go:84: disposable fixture id=d4a5e6a9d22a; no fixture-authored DROP, container teardown is parent-owned
+--- PASS: TestPgRevocationArbitration (0.65s)
+    --- PASS: TestPgRevocationArbitration/entry/revoke-first (0.11s)
+    --- PASS: TestPgRevocationArbitration/entry/commit-first (0.11s)
+    --- PASS: TestPgRevocationArbitration/scope/revoke-first (0.10s)
+    --- PASS: TestPgRevocationArbitration/scope/commit-first (0.11s)
+    --- PASS: TestPgRevocationArbitration/view/revoke-first (0.10s)
+    --- PASS: TestPgRevocationArbitration/view/commit-first (0.13s)
+=== RUN   TestPGScopeRecords
+    pg_test.go:709: disposable fixture id=ad9f4d343f8b; no fixture-authored DROP, container teardown is parent-owned
+--- PASS: TestPGScopeRecords (0.11s)
+=== RUN   TestPGAllParticipantsCommit
+    pg_test.go:786: disposable fixture id=b17af9f7f9fc; no fixture-authored DROP, container teardown is parent-owned
+--- PASS: TestPGAllParticipantsCommit (0.11s)
+=== RUN   TestPGRollbackAfterEachBoundary
+    pg_test.go:837: disposable fixture id=0917b0c2dfb3; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPGRollbackAfterEachBoundary/state
+=== RUN   TestPGRollbackAfterEachBoundary/river
+=== RUN   TestPGRollbackAfterEachBoundary/outbox
+=== RUN   TestPGRollbackAfterEachBoundary/audit
+--- PASS: TestPGRollbackAfterEachBoundary (0.11s)
+    --- PASS: TestPGRollbackAfterEachBoundary/state (0.00s)
+    --- PASS: TestPGRollbackAfterEachBoundary/river (0.01s)
+    --- PASS: TestPGRollbackAfterEachBoundary/outbox (0.00s)
+    --- PASS: TestPGRollbackAfterEachBoundary/audit (0.00s)
+=== RUN   TestPGLifetimeAndCatalogRefusals
+    pg_test.go:900: disposable fixture id=5a04142b0c08; no fixture-authored DROP, container teardown is parent-owned
+--- PASS: TestPGLifetimeAndCatalogRefusals (0.11s)
+=== RUN   TestPGCatalogChecks
+    pg_test.go:966: disposable fixture id=4ac0c7113645; no fixture-authored DROP, container teardown is parent-owned
+--- PASS: TestPGCatalogChecks (0.14s)
+=== RUN   TestPGBeginCleanupAndReuse
+    pg_test.go:1004: disposable fixture id=15a2024f8ec1; no fixture-authored DROP, container teardown is parent-owned
+=== RUN   TestPGBeginCleanupAndReuse/sql-after-role
+=== RUN   TestPGBeginCleanupAndReuse/cancel-after-scope
+--- PASS: TestPGBeginCleanupAndReuse (0.11s)
+    --- PASS: TestPGBeginCleanupAndReuse/sql-after-role (0.00s)
+    --- PASS: TestPGBeginCleanupAndReuse/cancel-after-scope (0.00s)
+PASS
+S0TYPEDOPS_REPORT {"classification":"closed-surface fixture diagnostic: selected PG cases passed; NOT adopted or original raw-SQL gate pass","original_sql_gate":"FAIL unchanged; raw SQL role/GUC authority escape not re-run by this package","canonical_command_not_invocation_capture":"go test -mod=readonly -count=1 -v ./plugins/jobs-river/internal/s0typedops","go_version":"go1.26.8","exit_code":0,"disposable_fixture_ids":["95b162081add","3f8709993ea4","b0432aa3227c","cc745515e871","6426f210292f","d4a5e6a9d22a","ad9f4d343f8b","b17af9f7f9fc","0917b0c2dfb3","5a04142b0c08","4ac0c7113645","15a2024f8ec1"],"cases":[{"name":"TestPgRevocationArbitration","status":"PASS"},{"name":"TestPGScopeRecords","status":"PASS"},{"name":"TestPGAllParticipantsCommit","status":"PASS"},{"name":"TestPGRollbackAfterEachBoundary","status":"PASS"},{"name":"TestPGLifetimeAndCatalogRefusals","status":"PASS"},{"name":"TestPGCatalogChecks","status":"PASS"},{"name":"TestPGBeginCleanupAndReuse","status":"PASS"}],"provider_operation_counts_by_fixture":{"0917b0c2dfb3":{"begin_attempts":9,"begin_setup_rollback_attempts":0,"commit_attempts":1,"get_attempts":5,"private_driver_call_attempts_not_expanded_River_SQL":62,"put_attempts":9,"rollback_attempts":8},"15a2024f8ec1":{"begin_attempts":4,"begin_setup_rollback_attempts":2,"commit_attempts":2,"get_attempts":2,"private_driver_call_attempts_not_expanded_River_SQL":21,"put_attempts":2,"rollback_attempts":0},"3f8709993ea4":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":2,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":16,"put_attempts":2,"rollback_attempts":0},"4ac0c7113645":{"begin_attempts":1,"begin_setup_rollback_attempts":0,"commit_attempts":1,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":6,"put_attempts":1,"rollback_attempts":0},"5a04142b0c08":{"begin_attempts":7,"begin_setup_rollback_attempts":0,"commit_attempts":7,"get_attempts":5,"private_driver_call_attempts_not_expanded_River_SQL":40,"put_attempts":7,"rollback_attempts":0},"6426f210292f":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":1,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":11,"put_attempts":2,"rollback_attempts":1},"95b162081add":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":1,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":11,"put_attempts":2,"rollback_attempts":1},"ad9f4d343f8b":{"begin_attempts":13,"begin_setup_rollback_attempts":0,"commit_attempts":13,"get_attempts":13,"private_driver_call_attempts_not_expanded_River_SQL":70,"put_attempts":5,"rollback_attempts":0},"b0432aa3227c":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":1,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":11,"put_attempts":2,"rollback_attempts":1},"b17af9f7f9fc":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":2,"get_attempts":0,"private_driver_call_attempts_not_expanded_River_SQL":20,"put_attempts":2,"rollback_attempts":0},"cc745515e871":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":2,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":16,"put_attempts":2,"rollback_attempts":0},"d4a5e6a9d22a":{"begin_attempts":2,"begin_setup_rollback_attempts":0,"commit_attempts":2,"get_attempts":1,"private_driver_call_attempts_not_expanded_River_SQL":16,"put_attempts":2,"rollback_attempts":0}},"source_before_sha256":{"LEVENSHTEIN-LICENSE.txt":"911d0fb30ff3345e4df60da21c2f2340a69bd98c0e3d1e79d27ae6177ebeb617","NOTICE":"9a60a24661cc9ad5b6b1a8d434728c29968692ca3172e9290d2ce93121ac66fb","README.md":"f0a5689b83855b044d1129d0e46354db4ea08e38b5ef2154bf0d66cc46329a53","RIVER-LICENSE.txt":"393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd","api.go":"fd4dd91cf1b4d8682068c3046dbd8d41a68efff98cfe5892d720f54ea6abd6d6","api_test.go":"b36e9c9d23f7b79274260a4006dd65ab9e70f894edb6d5b53158402968ef883c","docs/design/s0-sql-typed-operations-proposal.md":"959a0ebb9df057393b2f68af223ac9ec2371f3de75a7c2060be9fc717bf04919","docs/design/s0-typed-operations-correctness-followup.md":"f27f69f830cb075142af1f1c55126c61878d20a216e35516b8d74ba699540485","docs/design/s0-typed-operations-protocol.md":"10af36811fa2a455b2bc312ec4e73598ce98533536f3b1802ae3438db209798b","go.mod":"03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2","go.sum":"a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5","pg_arbitration_test.go":"a290d03eb5faeccebf3af2eb9340c768243c7c430b2d4b1bbc7c74979b724dad","pg_report_test.go":"a973823b4081d6fa814259859ba2e6b704ec66e30ba5b044a44405f73add6ed4","pg_test.go":"58ecab2b6817793050f442491453c29e12b48b6743bba21045387c4b68dd684d"},"source_after_sha256":{"LEVENSHTEIN-LICENSE.txt":"911d0fb30ff3345e4df60da21c2f2340a69bd98c0e3d1e79d27ae6177ebeb617","NOTICE":"9a60a24661cc9ad5b6b1a8d434728c29968692ca3172e9290d2ce93121ac66fb","README.md":"f0a5689b83855b044d1129d0e46354db4ea08e38b5ef2154bf0d66cc46329a53","RIVER-LICENSE.txt":"393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd","api.go":"fd4dd91cf1b4d8682068c3046dbd8d41a68efff98cfe5892d720f54ea6abd6d6","api_test.go":"b36e9c9d23f7b79274260a4006dd65ab9e70f894edb6d5b53158402968ef883c","docs/design/s0-sql-typed-operations-proposal.md":"959a0ebb9df057393b2f68af223ac9ec2371f3de75a7c2060be9fc717bf04919","docs/design/s0-typed-operations-correctness-followup.md":"f27f69f830cb075142af1f1c55126c61878d20a216e35516b8d74ba699540485","docs/design/s0-typed-operations-protocol.md":"10af36811fa2a455b2bc312ec4e73598ce98533536f3b1802ae3438db209798b","go.mod":"03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2","go.sum":"a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5","pg_arbitration_test.go":"a290d03eb5faeccebf3af2eb9340c768243c7c430b2d4b1bbc7c74979b724dad","pg_report_test.go":"a973823b4081d6fa814259859ba2e6b704ec66e30ba5b044a44405f73add6ed4","pg_test.go":"58ecab2b6817793050f442491453c29e12b48b6743bba21045387c4b68dd684d"},"executable_sha256":"2e7c27154e708eba26658a75df4d75bf0217d88104e2cda1ae831211db60e407","identity_error":false,"limits":["Closed-surface fixture diagnostic only; not an adopted mechanism, original raw-SQL gate pass, S0 acceptance, performance/restart evidence, or S1 approval.","Caller authority is only exported Tx.Put/Get with opaque View; trusted Host/provider/participant code alone holds issuance and native pgx.Tx. This is not protection against arbitrary native Go, unsafe/reflection, independent raw SQL or stolen host references.","Custom GUC stamps and SET-role memberships remain known unsafe if raw SQL is independently available. Trusted jobs policy intentionally sees all rows. No worker or background River service is started.","Fixed fixture catalog preflight checks reviewed columns/types/defaults/keys, policy expressions/roles, table/schema/sequence grants, append definitions/ACLs and absent triggers; one trusted transactional policy fault is rejected. This is not production migration admission, concurrent DDL invalidation, caller DDL or unrestricted query grammar.","Begin-failure controls check SQLSTATE 22012 or context cancellation, fresh five-second cleanup, same physical PID, ReadyForQuery idle, cleared role/scope and own-operation recovery. Unexpected cleanup errors are joined; a live cleanup-failure fault is not forced or claimed measured.","Selected commit/revocation schedules use actual PostgreSQL transactions and trusted barrier wrappers; quiescence waits must include real commit/rollback return. These bounded schedules do not establish every concurrency case, server-side unforgeability or S0 acceptance; first identity failure and original raw-SQL failure remain unchanged history.","Parent must enforce a fresh network-none OS sandbox, empty allowlisted environment, read-only sources/toolchain, scratch-only writes, bounded CPU/memory/PIDs/file/disk/wall time and disposable dummy database. Go cannot attest those controls.","No Go server/container provisioning or process spawning; no fixture-authored DROP or cleanup. Unmodified River migration 007 removes only its own transient fresh-schema client tables. Go closes pools; parent destroys the entire disposable container/server and records remaining resources/teardown.","Before/after source hashes plus executable hash identify on-disk inputs and executable, not an attested build. Full module/SQL source closure, licenses, actual invocation and sandbox limits are recorded independently by the parent.","Only passing non-skipped named PG cases are measured. Missing explicit dummy DSN is SKIP, never SQL evidence. Raw errors, DSNs, credentials, environment dumps and server details are never serialized."]}
+ISOLATED_TYPED_TEST_EXIT=0
