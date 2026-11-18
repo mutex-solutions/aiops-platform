@@ -19,12 +19,12 @@ const TrialGuard = 15 * time.Second // NOT the frozen 2s mount performance limit
 // authorization; DefaultMeasure is opt-in. This helper does not mark a single
 // run passed: sample floors, repetitions, host noise and hashes are suite gates.
 // Graphs: mount+Settle, leaf Update+Settle, node-0 Update+Settle, teardown.
-// Realms additionally restart every provider before a single Settle, explicitly
-// not an atomic Batch: neither prototype exposes Batch. Trees execute ten cycles.
+// Mount/dispose groups and realm/shared-provider restarts use actual data-only
+// native Batch. Observer completion is explicit, never part of Runtime.Settle.
+// Trees execute ten cycles.
 func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 	result = RunResult{Backend: backend.Name, StartedUTC: time.Now().UTC(), GOMAXPROCS: runtime.GOMAXPROCS(0), Classification: Inconclusive,
-		Workload: Workload{Name: f.Name, Topology: f.Topology, Fibers: len(f.Nodes), Trees: f.TreeCount, TreeWidth: f.TreeWidth, Seed: f.Seed, PRNG: "none; fixed declaration and operation order"},
-		Gaps:     []string{"pending event/observer backlog unavailable; Events measures retained history only"}}
+		Workload: Workload{Name: f.Name, Topology: f.Topology, Fibers: len(f.Nodes), Trees: f.TreeCount, TreeWidth: f.TreeWidth, Seed: f.Seed, PRNG: "none; fixed declaration and operation order"}}
 	result.HarnessBaseline = checkpoint(nil, true)
 	r, err := NewRealCandidateRuntime(backend, f)
 	if err != nil {
@@ -53,11 +53,19 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 		if err != nil {
 			result.Errors = append(result.Errors, "final event ledger: "+err.Error())
 		}
-		result.DisposedWithArchives = checkpoint(&r.Resources, true)
+		result.DisposedWithArchives, err = r.Checkpoint(cleanup, true)
+		if err != nil {
+			result.Errors = append(result.Errors, "disposed observer/GC checkpoint: "+err.Error())
+		}
 		if err := r.Runtime.Close(cleanup); err != nil {
 			result.Errors = append(result.Errors, "root Close: "+err.Error())
 		}
-		result.PostClose = checkpoint(&r.Resources, true)
+		result.PostClose, err = r.Checkpoint(cleanup, true)
+		if err != nil {
+			result.Errors = append(result.Errors, "closed observer/GC checkpoint: "+err.Error())
+		}
+		result.BatchCalls, result.MountBatches = r.BatchCalls, r.MountBatches
+		result.UpdateBatches, result.DisposeBatches = r.UpdateBatches, r.DisposeBatches
 		for owner, count := range result.PostClose.Goroutines.Counts {
 			if owner != "external" && count > result.HarnessBaseline.Goroutines.Counts[owner] {
 				result.Errors = append(result.Errors, fmt.Sprintf("candidate goroutine owner remains after root Close: %s count=%d baseline=%d", owner, count, result.HarnessBaseline.Goroutines.Counts[owner]))
@@ -69,7 +77,7 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 		}
 	}()
 	if f.Topology == Trees {
-		result.Gaps = append(result.Gaps, "native Batch unavailable: shared provider uses one Update; tree disposal uses reverse tree order and one Settle")
+		result.Gaps = append(result.Gaps, "actual provider-written composition.Scope value is not propagated to precompiled sibling contexts; opaque realm/index isolation only")
 		runTrees(ctx, r, &result)
 		return
 	}
@@ -78,7 +86,9 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 	}, func(op context.Context) error { return inspectActive(op, r, &result, 0, len(f.Nodes)) }) {
 		return
 	}
-	result.Retained = append(result.Retained, checkpoint(&r.Resources, true))
+	if !retainCheckpoint(ctx, r, &result) {
+		return
+	}
 	if !measure(ctx, r, &result, "leaf-update-settle", 0, -1, func(op context.Context) error {
 		return errors.Join(r.Runtime.Update(op, r.IDs[f.Leaf]), r.Runtime.Settle(op))
 	}, func(op context.Context) error { return inspectActive(op, r, &result, 0, len(f.Nodes)) }) {
@@ -91,22 +101,18 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 	}, func(op context.Context) error { return inspectActive(op, r, &result, 0, len(f.Nodes)) }) {
 		return
 	}
-	result.Retained = append(result.Retained, checkpoint(&r.Resources, true))
+	if !retainCheckpoint(ctx, r, &result) {
+		return
+	}
 	if f.Topology == Realms {
-		result.Gaps = append(result.Gaps, "native Batch unavailable: all-provider restart submits ordinary Updates then Settle, not a Batch acceptance result")
-		if !measure(ctx, r, &result, "all-providers-update-loop-settle", 0, -1, func(op context.Context) error {
-			for _, index := range f.RootProviders {
-				if err := r.Runtime.Update(op, r.IDs[index]); err != nil {
-					return err
-				}
-			}
-			return r.Runtime.Settle(op)
+		if !measure(ctx, r, &result, "all-providers-batch-restart-settle", 0, -1, func(op context.Context) error {
+			return errors.Join(r.BatchUpdate(op, f.RootProviders), r.Runtime.Settle(op))
 		}, func(op context.Context) error { return inspectActive(op, r, &result, 0, len(f.Nodes)) }) {
 			return
 		}
 	}
 	measure(ctx, r, &result, "teardown", 0, -1, func(op context.Context) error {
-		return errors.Join(r.RequestDisposal(op, 0, len(f.Nodes)), r.Runtime.Settle(op))
+		return errors.Join(r.BatchDisposal(op, nodeIndexes(0, len(f.Nodes))), r.Runtime.Settle(op))
 	}, func(op context.Context) error { return inspectDisposed(op, r, &result) })
 	return
 }
@@ -130,7 +136,11 @@ func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
 		result.Errors = append(result.Errors, fmt.Sprintf("eager local runtime mount before cold phase: snapshots=%d, want shared=%d, error=%v", len(initial), f.Shared, err))
 		return
 	}
-	baseline := checkpoint(&r.Resources, true)
+	baseline, err := r.Checkpoint(ctx, true)
+	if err != nil {
+		result.Errors = append(result.Errors, "shared observer/GC checkpoint: "+err.Error())
+		return
+	}
 	result.SharedOnly = &baseline
 	// No local runtime fiber exists until its own explicit cold mount.
 	for cycle := 0; cycle < MinimumRepetitions; cycle++ {
@@ -146,24 +156,25 @@ func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
 			result.Errors = append(result.Errors, err.Error())
 			return
 		}
-		result.Retained = append(result.Retained, checkpoint(&r.Resources, true))
+		if !retainCheckpoint(ctx, r, result) {
+			return
+		}
 		if !measure(ctx, r, result, "hot-tree-lookup", cycle, -1, func(context.Context) error { return r.HotLookup() }, nil) {
 			return
 		}
 		if !measure(ctx, r, result, "shared-provider-restart-settle", cycle, -1, func(op context.Context) error {
-			// Exactly one provider: one ordinary Update has the entire closure.
-			return errors.Join(r.Runtime.Update(op, r.IDs[0]), r.Runtime.Settle(op))
+			// Exactly one provider, committed through the actual native Batch.
+			return errors.Join(r.BatchUpdate(op, []int{0}), r.Runtime.Settle(op))
 		}, func(op context.Context) error { return inspectActive(op, r, result, 0, len(f.Nodes)) }) {
 			return
 		}
 		if !measure(ctx, r, result, "reverse-trees-dispose-settle", cycle, -1, func(op context.Context) error {
+			var indexes []int
 			for tree := f.TreeCount - 1; tree >= 0; tree-- {
 				start := f.Shared + tree*f.TreeWidth
-				if err := r.RequestDisposal(op, start, start+f.TreeWidth); err != nil {
-					return err
-				}
+				indexes = append(indexes, nodeIndexes(start, start+f.TreeWidth)...)
 			}
-			return r.Runtime.Settle(op)
+			return errors.Join(r.BatchDisposal(op, indexes), r.Runtime.Settle(op))
 		}, func(op context.Context) error {
 			if r.Resources.Active.Load() != int64(f.Shared) || r.Resources.Leases.Load() != 0 {
 				return fmt.Errorf("tree disposal resources = %d leases = %d", r.Resources.Active.Load(), r.Resources.Leases.Load())
@@ -175,20 +186,58 @@ func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
 	}
 }
 
+func nodeIndexes(start, end int) []int {
+	indexes := make([]int, 0, end-start)
+	for i := start; i < end; i++ {
+		indexes = append(indexes, i)
+	}
+	return indexes
+}
+
+func retainCheckpoint(ctx context.Context, r *RealCandidateRuntime, result *RunResult) bool {
+	retained, err := r.Checkpoint(ctx, true)
+	result.Retained = append(result.Retained, retained)
+	if err != nil {
+		result.Errors = append(result.Errors, "retained observer/GC checkpoint: "+err.Error())
+	}
+	return err == nil
+}
+
 func measure(ctx context.Context, r *RealCandidateRuntime, result *RunResult, operation string, cycle, tree int, action, validate func(context.Context) error) bool {
-	sample := Sample{Operation: operation, Cycle: cycle, Tree: tree, BacklogNote: "not exposed; history count is not backlog"}
-	events, eventErr := r.Runtime.Events(ctx)
-	sample.EventsBefore = len(events)
-	sample.Before = checkpoint(&r.Resources, false)
+	sample := Sample{Operation: operation, Cycle: cycle, Tree: tree, BacklogNote: "actual ObserverStatus Accepted-Delivered includes in-flight; not native owner inbox depth or retained Events history"}
 	op, cancel := context.WithTimeout(ctx, TrialGuard)
 	defer cancel()
+	var beforeErr error
+	sample.Before, beforeErr = r.Checkpoint(op, false)
+	events, eventErr := r.Runtime.Events(op)
+	sample.EventsBefore = len(events)
 	start := time.Now()
 	sample.ScheduledUTC, sample.StartedUTC = start.UTC(), start.UTC() // sequential closed-loop graph operation
-	err := errors.Join(eventErr, action(op))
+	err := errors.Join(beforeErr, eventErr, action(op))
 	end := time.Now()
 	sample.EndedUTC, sample.LatencyNS = end.UTC(), end.Sub(start).Nanoseconds()
+	// This is deliberately BEFORE AwaitObservers: Settle alone does not join an
+	// off-owner callback. Keep both the pending cut and the explicit join cost.
+	status := r.Runtime.(cc.ObserverRuntime).ObserverStatus()
+	sample.AfterSettle = &status
+	err = errors.Join(err, validateObserverStatus(status))
+	if status.Delivered <= status.Accepted {
+		pending := status.Accepted - status.Delivered
+		if pending <= uint64(^uint(0)>>1) {
+			backlog := int(pending)
+			sample.EventBacklog = &backlog
+		} else {
+			err = errors.Join(err, fmt.Errorf("observer backlog %d overflows int sample schema", pending))
+		}
+	}
+	observerStart := time.Now()
+	err = errors.Join(err, r.AwaitObservers(op))
+	observerEnd := time.Now()
+	sample.ObserversEndedUTC = observerEnd.UTC()
+	sample.ObserverWaitNS = observerEnd.Sub(observerStart).Nanoseconds()
+	sample.SettleObserversLatencyNS = observerEnd.Sub(start).Nanoseconds()
 	if validate != nil {
-		err = errors.Join(err, validate(op)) // correctness inspection outside latency
+		err = errors.Join(err, validate(op)) // correctness inspection outside both latencies
 	}
 	events, eventErr = r.Runtime.Events(op)
 	sample.EventsAfter = len(events)
@@ -202,6 +251,9 @@ func measure(ctx context.Context, r *RealCandidateRuntime, result *RunResult, op
 		}
 	}
 	sample.After = checkpoint(&r.Resources, false)
+	afterStatus := r.Runtime.(cc.ObserverRuntime).ObserverStatus()
+	sample.After.Observers = &afterStatus
+	err = errors.Join(err, validateObserverStatus(afterStatus))
 	if err != nil {
 		sample.Error = err.Error()
 		result.Errors = append(result.Errors, operation+": "+err.Error())

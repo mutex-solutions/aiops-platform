@@ -185,6 +185,23 @@ experimental result. Public-source reasoning and drafted code are not feasibilit
 acceptance. This ADR authorizes no workaround for tool restrictions and selects
 no new authority mechanism.
 
+## Owner-approved typed-operation investigation (not adoption)
+
+After the existing role/GUC limitations and ordinary-functional evidence were
+reported, the owner explicitly approved the bounded
+[typed-operation surface spike](../design/s0-sql-typed-operations-proposal.md),
+selecting “Duyệt spike typed operations, giữ nguyên guarantee”. This permits
+investigating a caller Tx without unrestricted SQL-string Exec/Query, while
+infrastructure retains its private raw-driver access for the same transaction
+and unmodified River InsertTx. It does not approve a new canonical Tx definition
+or a final authority mechanism; adoption requires results and a separate explicit
+amendment/confirmation. Isolation, atomicity and all unchanged budgets remain.
+
+The rejected capability operation and local drafts remain excluded and unexecuted.
+The new investigation must have its own preexecution protocol and reviewed
+closed operation surface, with no raw-SQL escape hatch or blacklist. It cannot
+retroactively convert the original raw-SQL gate failure into a pass.
+
 ## Consequences while proposed
 
 - The bounded transaction-authority correctness spike may resume under option A;

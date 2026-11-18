@@ -52,27 +52,33 @@ const (
 	rcRootCommand
 	rcBatchCommand
 	rcSelfDisposeCommand
+	rcScopeRequestCommand
+	rcScopeWithdrawCommand
+	rcScopeComplete
 )
 
 type rcMessage struct {
-	kind    rcCommand
-	ctx     context.Context
-	ack     chan rcReply
-	id      uint64
-	spec    Spec
-	act     *rcActivation
-	key     string
-	value   any
-	dispose Disposer
-	err     error
-	errText string // Rendered by the callback worker, never by the graph owner.
-	keys    []string
-	check   *rcCheck
-	allowed bool
-	data    map[string]any
-	binding *rcConfigBinding
-	stale   bool
-	batch   []BatchOperation
+	kind     rcCommand
+	ctx      context.Context
+	ack      chan rcReply
+	id       uint64
+	spec     Spec
+	act      *rcActivation
+	key      string
+	value    any
+	dispose  Disposer
+	err      error
+	errText  string // Rendered by the callback worker, never by the graph owner.
+	keys     []string
+	check    *rcCheck
+	allowed  bool
+	data     map[string]any
+	binding  *rcConfigBinding
+	stale    bool
+	batch    []BatchOperation
+	scope    *scopeEffect
+	setup    func(*EffectScope) error
+	withdraw bool
 }
 
 type rcReply struct {
@@ -85,6 +91,7 @@ type rcReply struct {
 	current    bool
 	root       *Context
 	ids        []uint64
+	handle     *EffectHandle
 }
 
 type rcConfigBinding struct {
@@ -140,6 +147,7 @@ const (
 	rcApplying
 	rcDraining
 	rcDisposing
+	rcScoping
 )
 
 type rcProvision struct {
@@ -152,6 +160,7 @@ type rcEffect struct {
 	label     string
 	dispose   Disposer
 	provision *rcProvision
+	scope     *scopeEffect
 }
 
 // None of these fields are written by Apply, disposers, or call-path users.
@@ -177,12 +186,15 @@ type rcFiber struct {
 	awaitText       string
 	blockedText     string
 	checkText       string
+	scopeText       string // Cached operation diagnostics do not fail the activation.
 	blocked         error
 	deadline        time.Time
 	deadlineIndex   int
 	cleanupCtx      context.Context
 	cleanupCancel   context.CancelFunc
 	effectRunning   bool
+	scopeRunning    *scopeEffect
+	publishActive   bool // Apply completed; queued scope work precedes ACTIVE.
 	checking        *rcCheck
 	checkVersion    uint64
 	checked         uint64
@@ -679,6 +691,41 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 		}
 		f.effects = append(f.effects, rcEffect{label: m.key, dispose: m.dispose})
 		o.event(f, "effect", m.key, 0)
+	case rcScopeRequestCommand:
+		f, err := o.current(m.act)
+		if err != nil {
+			return rcReply{err: err}, false
+		}
+		if err := validateScope(m.key, m.setup); err != nil {
+			return rcReply{err: err}, false
+		}
+		e := newScopeEffect(m.key, m.setup)
+		e.requestWithdraw = func() error {
+			if e.cleanupFinished() {
+				return nil
+			}
+			reply := o.r.exchange(context.Background(), rcMessage{kind: rcScopeWithdrawCommand, act: m.act, scope: e})
+			if reply.err != nil && e.cleanupFinished() {
+				return nil
+			}
+			return reply.err
+		}
+		f.effects = append(f.effects, rcEffect{label: m.key, scope: e})
+		o.event(f, "scope:request", m.key, 0)
+		o.enqueue(f)
+		return rcReply{handle: e.handle}, false
+	case rcScopeWithdrawCommand:
+		f := o.lookup(m.act.ctx.fiber)
+		if f == nil || f.act != m.act || !slices.ContainsFunc(f.effects, func(e rcEffect) bool { return e.scope == m.scope }) {
+			if m.scope != nil && m.scope.cleanupFinished() {
+				return rcReply{}, false
+			}
+			return rcReply{err: ErrInactive}, false
+		}
+		m.scope.markWithdraw()
+		o.enqueue(f)
+	case rcScopeComplete:
+		o.scopeDone(m)
 	case rcTrackedStartCommand:
 		f, err := o.current(m.act)
 		if err != nil || m.act.selfDispose.Load() {
@@ -917,6 +964,9 @@ func (o *rcOwner) work() {
 		}
 		f.queued = false
 		if f.id == 0 {
+			if f.phase == rcIdle && !f.invalid && !f.remove {
+				o.scopeWork(f)
+			}
 			if f.phase == rcDraining {
 				if o.noticeDepth != 0 {
 					if o.deferredDrain == nil {
@@ -948,6 +998,11 @@ func (o *rcOwner) work() {
 					o.deferredDrain[f.id] = f
 				} else {
 					o.drain(f)
+				}
+			} else if f.phase == rcIdle && !f.invalid && !f.remove {
+				if !o.scopeWork(f) && f.publishActive {
+					f.publishActive = false
+					o.state(f, Active)
 				}
 			}
 			continue
@@ -1161,6 +1216,10 @@ func (o *rcOwner) activation(f *rcFiber, epoch []uint64, bindings map[string]*rc
 		// owned rollback and cause both paths to invoke the same disposer.
 		return o.r.exchange(context.Background(), rcMessage{kind: rcEffectCommand, act: a, key: label, dispose: dispose}).err
 	}
+	c.scopeRequest = func(label string, setup func(*EffectScope) error) (*EffectHandle, error) {
+		reply := o.r.exchange(context.Background(), rcMessage{kind: rcScopeRequestCommand, act: a, key: label, setup: setup})
+		return reply.handle, reply.err
+	}
 	c.cleanupEffect = func(dispose Disposer) error {
 		// Setup rollback is not a new activation effect. Its caller still holds
 		// the real setup lease, so even a cancellation-ignoring disposer cannot
@@ -1302,7 +1361,11 @@ func (o *rcOwner) loaded(m rcMessage) {
 	if current && !m.stale && m.err == nil {
 		f.phase = rcIdle
 		o.busy--
-		o.state(f, Active)
+		f.publishActive = true
+		if !o.scopeWork(f) {
+			f.publishActive = false
+			o.state(f, Active)
+		}
 		return
 	}
 	if current && m.err != nil {
@@ -1313,6 +1376,80 @@ func (o *rcOwner) loaded(m rcMessage) {
 	f.phase = rcDraining
 	o.state(f, Unloading)
 	o.deadline(f, time.Now().Add(rcDrainBudget))
+	o.enqueue(f)
+}
+
+func (o *rcOwner) scopeWork(f *rcFiber) bool {
+	if f.phase != rcIdle || f.invalid || f.remove {
+		return false
+	}
+	for _, effect := range f.effects {
+		e := effect.scope
+		if e == nil || e.cleanupFinished() {
+			continue
+		}
+		withdraw := e.setupFinished() && e.pendingWithdraw()
+		if e.setupFinished() && !withdraw {
+			continue
+		}
+		f.phase, f.scopeRunning = rcScoping, e
+		o.busy++
+		budget := rcLoadBudget
+		if withdraw {
+			budget = rcDisposeBudget
+		}
+		o.deadline(f, time.Now().Add(budget))
+		a, id := f.act, f.id
+		o.event(f, "scope:start", effect.label, 0)
+		go func() {
+			var err error
+			if withdraw {
+				ctx, cancel := context.WithTimeout(context.Background(), rcDisposeBudget)
+				err = e.runCleanup(ctx)
+				cancel()
+			} else {
+				err = e.runSetup(a.ctx.std, func() (context.Context, context.CancelFunc) {
+					return context.WithTimeout(context.Background(), rcDisposeBudget)
+				})
+				if err == ErrScopeStarted && e.cleanupFinished() {
+					// Quiescence can seal this admitted slot between scheduling
+					// and worker entry. No setup callback ran or failed here.
+					err = nil
+				}
+			}
+			o.r.completed(rcMessage{kind: rcScopeComplete, id: id, act: a, scope: e, withdraw: withdraw, err: err, errText: rcErrorText(err)})
+		}()
+		return true
+	}
+	return false
+}
+
+func (o *rcOwner) scopeDone(m rcMessage) {
+	f := o.lookup(m.id)
+	if f == nil || f.act != m.act || f.phase != rcScoping || f.scopeRunning != m.scope {
+		return
+	}
+	f.scopeRunning = nil
+	f.phase = rcIdle
+	o.busy--
+	o.deadline(f, time.Time{})
+	o.block(f, nil)
+	if m.err != nil {
+		f.scopeText = rcJoinText(f.scopeText, m.errText)
+		o.event(f, "scope:failed", m.scope.metadata().Label, 0)
+	} else {
+		o.event(f, "scope:complete", m.scope.metadata().Label, 0)
+	}
+	if m.scope.cleanupFinished() {
+		f.effects = slices.DeleteFunc(f.effects, func(e rcEffect) bool { return e.scope == m.scope })
+	}
+	if f.invalid || f.remove || f.failure != nil {
+		f.publishActive = false
+		f.phase = rcDraining
+		o.busy++
+		o.state(f, Unloading)
+		o.deadline(f, time.Now().Add(rcDrainBudget))
+	}
 	o.enqueue(f)
 }
 
@@ -1354,6 +1491,11 @@ func (o *rcOwner) quiesce(f *rcFiber) {
 	f.invalid = true
 	f.act.ctx.live.Store(false)
 	f.act.cancel()
+	for _, effect := range f.effects {
+		if effect.scope != nil {
+			effect.scope.cancelPending(ErrInactive)
+		}
+	}
 	// Structural ownership is independent of service dependencies. Invalidate
 	// children before joining dependents, otherwise a child that never injected a
 	// parent service could outlive (or deadlock behind) the parent's cleanup.
@@ -1406,6 +1548,13 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 	for len(f.effects) != 0 {
 		e := f.effects[len(f.effects)-1]
 		o.event(f, "dispose-effect", e.label, 0)
+		if e.scope != nil && e.scope.cleanupFinished() {
+			// Quiescence can cancel an admitted scope before setup starts. Its
+			// handle reports inactivity, but no cleanup callback failed here.
+			f.effects[len(f.effects)-1] = rcEffect{}
+			f.effects = f.effects[:len(f.effects)-1]
+			continue
+		}
 		if e.provision != nil {
 			p := e.provision
 			if o.providers[p.key] == p {
@@ -1422,7 +1571,13 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 		f.effectRunning = true
 		act, cleanupCtx, id := f.act, f.cleanupCtx, f.id
 		go func() {
-			err := rcInvoke(func() error { return e.dispose(cleanupCtx) })
+			err := rcInvoke(func() error {
+				if e.scope != nil {
+					e.scope.cancelPending(ErrInactive)
+					return e.scope.runCleanup(cleanupCtx)
+				}
+				return e.dispose(cleanupCtx)
+			})
 			o.r.completed(rcMessage{kind: rcEffectComplete, id: id, act: act, err: err, errText: rcErrorText(err)})
 		}()
 		return
@@ -1439,7 +1594,14 @@ func (o *rcOwner) effectDone(m rcMessage) {
 	// Disposal has one total deadline for this activation, not a fresh budget
 	// per effect. Once it expires, retain the blocked diagnostic until all
 	// remaining LIFO cleanup actually returns; the owner timer is already spent.
-	if f.cleanupCtx == nil || f.cleanupCtx.Err() == nil {
+	// Compare the clock, not only Err: the owner no longer cancels the cleanup
+	// context at expiry, so the context's own timer may not have run yet.
+	expired := false
+	if f.cleanupCtx != nil {
+		at, _ := f.cleanupCtx.Deadline()
+		expired = f.cleanupCtx.Err() != nil || !time.Now().Before(at)
+	}
+	if !expired {
 		o.block(f, nil)
 	}
 	if m.err != nil {
@@ -1516,7 +1678,7 @@ func (o *rcOwner) remove(f *rcFiber) {
 	o.state(f, Disposed)
 	archive := o.snapshot(f)
 	archive.Error = diagnostic
-	archive.Epoch, archive.Effects = nil, nil
+	archive.Epoch, archive.Effects, archive.EffectTree = nil, nil, nil
 	o.retired[f.id] = archive
 	if f.awaitErr != nil {
 		o.retiredErr[f.id] = f.awaitErr
@@ -1631,8 +1793,13 @@ func (o *rcOwner) snapshot(f *rcFiber) Snapshot {
 	}
 	for _, e := range f.effects {
 		s.Effects = append(s.Effects, e.label)
+		if e.scope != nil {
+			s.EffectTree = append(s.EffectTree, e.scope.metadata())
+		} else {
+			s.EffectTree = append(s.EffectTree, EffectMeta{Label: e.label, State: ScopeReady})
+		}
 	}
-	s.Error = rcJoinText(f.failureText, f.blockedText, f.checkText, f.awaitText)
+	s.Error = rcJoinText(f.failureText, f.blockedText, f.checkText, f.awaitText, f.scopeText)
 	return s
 }
 
@@ -1644,6 +1811,10 @@ func (o *rcOwner) snapshots() []Snapshot {
 	for _, archived := range o.retired {
 		archived.Epoch = slices.Clone(archived.Epoch)
 		archived.Effects = slices.Clone(archived.Effects)
+		archived.EffectTree = slices.Clone(archived.EffectTree)
+		for i := range archived.EffectTree {
+			archived.EffectTree[i] = cloneEffectMeta(archived.EffectTree[i])
+		}
 		archived.Tracked = slices.Clone(archived.Tracked)
 		if archived.Target != nil {
 			archived.Target = &EpochSnapshot{Revision: archived.Target.Revision, UIDs: slices.Clone(archived.Target.UIDs)}
@@ -1817,6 +1988,9 @@ func (o *rcOwner) expire(now time.Time) {
 			f.checking.timedOut = true
 			f.checking.cancel()
 		}
+		if f.phase == rcScoping {
+			stage = "scope"
+		}
 		if f.phase == rcDraining {
 			stage = "drain"
 		}
@@ -1832,9 +2006,10 @@ func (o *rcOwner) expire(now time.Time) {
 			o.quiesce(f)
 			o.state(f, Unloading)
 		}
-		if f.cleanupCancel != nil {
-			f.cleanupCancel()
-		}
+		// Native cleanup contexts already own this exact deadline. Calling their
+		// plain cancel function here races that timer and changes the observable
+		// cause from DeadlineExceeded to Canceled. Keep ownership/diagnostics;
+		// the context's own deadline cancels blocked disposer work truthfully.
 		o.event(f, "deadline", stage, 0)
 	}
 }

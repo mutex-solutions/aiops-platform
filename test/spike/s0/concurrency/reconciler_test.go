@@ -80,6 +80,166 @@ func rcSnapshot(t *testing.T, r Runtime, id uint64) Snapshot {
 	return Snapshot{}
 }
 
+func TestReconcilerScopeUnloadDeadlineRetainsDeadlineExceededCause(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := NewReconciler()
+		handles := make(chan *EffectHandle, 1)
+		id := rcMount(t, r, Spec{ID: "scope-deadline", Apply: func(c *Context) error {
+			h, err := c.RequestEffectScope("deadline", func(s *EffectScope) error {
+				return s.Defer("wait-for-budget", func(ctx context.Context) error {
+					<-ctx.Done()
+					return ctx.Err()
+				})
+			})
+			if err == nil {
+				handles <- h
+			}
+			return err
+		}})
+		h := <-handles
+		if err := h.AwaitSetup(rcGuard(t)); err != nil {
+			t.Fatal(err)
+		}
+		rcSettle(t, r)
+		if err := r.Dispose(rcGuard(t), id); err != nil {
+			t.Fatal(err)
+		}
+		before := time.Now()
+		if err := h.Await(rcGuard(t)); !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || time.Since(before) != rcDisposeBudget {
+			t.Fatalf("native cleanup deadline cause = %v after %s", err, time.Since(before))
+		}
+		synctest.Wait()
+		_ = r.Settle(rcGuard(t))
+		if err := r.Close(rcGuard(t)); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("unload deadline diagnostic lost: %v", err)
+		}
+	})
+}
+
+func TestReconcilerScopeIncrementalPanicRollsBackOnNativeLane(t *testing.T) {
+	r := rcRuntime(t)
+	var mu sync.Mutex
+	var order []string
+	appendOrder := func(label string) { mu.Lock(); order = append(order, label); mu.Unlock() }
+	panicErr := errors.New("scope setup panic")
+	handles := make(chan *EffectHandle, 1)
+	var applyReturned atomic.Bool
+	id := rcMount(t, r, Spec{ID: "incremental-scope", Apply: func(c *Context) error {
+		defer applyReturned.Store(true)
+		h, err := c.RequestEffectScope("outer", func(s *EffectScope) error {
+			if !applyReturned.Load() {
+				return errors.New("scope setup overlapped Apply")
+			}
+			if err := s.Defer("first", func(context.Context) error { appendOrder("first"); return nil }); err != nil {
+				return err
+			}
+			if err := s.Scope("nested", func(child *EffectScope) error {
+				return child.Defer("second", func(ctx context.Context) error {
+					if _, err := r.(Inspector).Inspect(ctx); err != nil {
+						return err
+					}
+					appendOrder("second")
+					return nil
+				})
+			}); err != nil {
+				return err
+			}
+			panic(panicErr)
+		})
+		if err == nil {
+			handles <- h
+		}
+		return err
+	}})
+	h := <-handles
+	if err := h.AwaitSetup(rcGuard(t)); !errors.Is(err, panicErr) {
+		t.Fatalf("scope rollback lost typed panic cause: %v", err)
+	} else {
+		var typed *ScopePanicError
+		if !errors.As(err, &typed) || typed.Value != panicErr {
+			t.Fatalf("scope panic identity = %#v", typed)
+		}
+	}
+	rcSettle(t, r)
+	mu.Lock()
+	if !slices.Equal(order, []string{"second", "first"}) {
+		t.Errorf("incremental rollback order = %v", order)
+	}
+	mu.Unlock()
+	if s := rcSnapshot(t, r, id); s.State != Active || s.Target == nil || len(s.EffectTree) != 0 || s.Error == "" {
+		t.Fatalf("scope failure changed activation or lost cached diagnostic: %+v", s)
+	}
+}
+
+func TestReconcilerScopePendingQuiescenceNeverRunsSetup(t *testing.T) {
+	r := rcRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	handles := make(chan *EffectHandle, 1)
+	var called atomic.Bool
+	id := rcMount(t, r, Spec{ID: "pending-scope", Apply: func(c *Context) error {
+		h, err := c.RequestEffectScope("never-started", func(*EffectScope) error { called.Store(true); return nil })
+		if err != nil {
+			return err
+		}
+		handles <- h
+		close(entered)
+		<-release
+		return nil
+	}})
+	<-entered
+	h := <-handles
+	if err := r.Dispose(rcGuard(t), id); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AwaitSetup(rcGuard(t)); !errors.Is(err, ErrInactive) || !errors.Is(err, ErrInactiveEffect) {
+		t.Fatalf("never-started scope cancellation = %v", err)
+	}
+	if called.Load() || h.Metadata().State != ScopeDone {
+		t.Fatal("quiescence ran late scope setup")
+	}
+	releaseOnce.Do(func() { close(release) })
+	rcSettle(t, r)
+	if err := h.RequestWithdraw(); err != nil {
+		t.Fatalf("completed scope withdrawal not idempotent: %v", err)
+	}
+	if s := rcSnapshot(t, r, id); s.State != Disposed || s.Error != "" || len(s.EffectTree) != 0 {
+		t.Fatalf("expected pending cancellation became runtime failure: %+v", s)
+	}
+}
+
+func TestReconcilerScopeManualCleanupFailureRemainsHandleLocal(t *testing.T) {
+	r := rcRuntime(t)
+	contexts := make(chan *Context, 1)
+	id := rcMount(t, r, Spec{ID: "active-scope", Apply: func(c *Context) error { contexts <- c; return nil }})
+	rcSettle(t, r)
+	c := <-contexts
+	cleanupErr := errors.New("manual cleanup diagnostic")
+	h, err := c.RequestEffectScope("manual", func(s *EffectScope) error {
+		return s.Defer("resource", func(context.Context) error { return cleanupErr })
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AwaitSetup(rcGuard(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.RequestWithdraw(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.RequestWithdraw(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Await(rcGuard(t)); !errors.Is(err, cleanupErr) {
+		t.Fatalf("manual scope cleanup error identity = %v", err)
+	}
+	rcSettle(t, r)
+	if s := rcSnapshot(t, r, id); s.State != Active || !s.Alive || s.Target == nil || len(s.EffectTree) != 0 || s.Error != cleanupErr.Error() {
+		t.Fatalf("manual scope failure retired activation or lost diagnostic: %+v", s)
+	}
+}
+
 func TestReconcilerContextOwnershipAckSurvivesCancellationAfterAdmission(t *testing.T) {
 	for _, operation := range []string{"provide", "child"} {
 		t.Run(operation, func(t *testing.T) {

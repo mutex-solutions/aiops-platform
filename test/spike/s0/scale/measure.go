@@ -185,7 +185,7 @@ func Measure(ctx context.Context, identity Identity, plan Plan, consume func(Run
 		}
 		budgetMiss := (label[2] == "mount-settle" && summary.Aggregate.P99 > int64(2*time.Second)) ||
 			(label[2] == "leaf-update-settle" && summary.Aggregate.P99 > int64(10*time.Millisecond)) ||
-			((label[2] == "root-restart-settle" || label[2] == "shared-provider-restart-settle" || label[2] == "all-providers-update-loop-settle") && summary.Aggregate.Max > int64(5*time.Second)) ||
+			((label[2] == "root-restart-settle" || label[2] == "shared-provider-restart-settle" || label[2] == "all-providers-batch-restart-settle") && summary.Aggregate.Max > int64(5*time.Second)) ||
 			(label[2] == "cold-tree-mount-settle" && summary.Aggregate.Max >= int64(50*time.Millisecond))
 		if budgetMiss {
 			failed = true
@@ -193,9 +193,9 @@ func Measure(ctx context.Context, identity Identity, plan Plan, consume func(Run
 		}
 		report.Summaries = append(report.Summaries, summary)
 	}
-	// No source-owner backlog or native Batch can be proved by the public
-	// prototype contract. Those are real gaps; a full §8 pass must remain withheld.
-	report.Reasons = append(report.Reasons, "prototype has no native Batch or observable pending event backlog; §8 all-provider Batch acceptance not measured", "§8.3 call-path and §9 acknowledgement/churn are not executed by this graph/tree harness")
+	// Native Batch and actual observer backlog are now measured. Full acceptance
+	// remains withheld for the following distinct unexercised obligations.
+	report.Reasons = append(report.Reasons, "actual provider-written composition.Scope value is not propagated to precompiled tree sibling contexts", "§8.3 call-path and §9 acknowledgement/churn are not executed by this graph/tree harness")
 	if invalid {
 		report.Classification = Invalid
 	}

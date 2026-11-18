@@ -106,7 +106,8 @@ type graphEffect struct {
 	dispose      Disposer
 	child        uint64 // Structural membership only; joined before any ordinary disposer.
 	provisionKey string
-	provisionUID uint64 // Native reservation ownership, ordered with ordinary effects.
+	provisionUID uint64       // Native reservation ownership, ordered with ordinary effects.
+	scope        *scopeEffect // Exact native scope identity, never identified by label.
 }
 
 type graphService struct {
@@ -608,6 +609,11 @@ func (g *GraphLock) snapshotsLocked() ([]Snapshot, []error) {
 		if f.current != nil {
 			for _, effect := range f.current.effects {
 				s.Effects = append(s.Effects, effect.label)
+				if effect.scope != nil {
+					s.EffectTree = append(s.EffectTree, effect.scope.metadata())
+				} else {
+					s.EffectTree = append(s.EffectTree, EffectMeta{Label: effect.label, State: ScopeReady})
+				}
 			}
 			tokens := make([]uint64, 0, len(f.current.tracked))
 			for token := range f.current.tracked {
@@ -876,6 +882,9 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 			} else {
 				g.stateLocked(f, Failed)
 			}
+		} else if !f.worker && !f.current.retiring && g.scopeWorkLocked(f.current) {
+			f.worker = true
+			go g.runScopeLane(f.current)
 		}
 		return
 	}
@@ -886,9 +895,14 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 		a := f.current
 		if !a.retiring && !g.targetMatchesLocked(a) {
 			g.retireLocked(a)
-		} else if !a.retiring && !a.loading && f.spec.Check != nil && a.checked != f.notice && !f.worker {
-			f.worker = true
-			go g.runActiveCheck(a)
+		} else if !a.retiring && !a.loading && !f.worker {
+			if f.spec.Check != nil && a.checked != f.notice {
+				f.worker = true
+				go g.runActiveCheck(a)
+			} else if g.scopeWorkLocked(a) {
+				f.worker = true
+				go g.runScopeLane(a)
+			}
 		}
 		return
 	}
@@ -992,6 +1006,9 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 	c.provide = func(key string, value any) error { return g.provide(a, key, value) }
 	c.effect = func(label string, dispose Disposer) error { return g.deferEffect(a, label, dispose) }
 	c.cleanupEffect = func(dispose Disposer) error { return g.cleanupEffect(a, dispose) }
+	c.scopeRequest = func(label string, setup func(*EffectScope) error) (*EffectHandle, error) {
+		return g.requestScope(a, label, setup)
+	}
 	c.trackedStart = func(label string) (func(error), error) { return g.startTracked(a, label) }
 	c.child = func(spec Spec) (uint64, error) {
 		g.mu.Lock()
@@ -1108,6 +1125,174 @@ func (g *GraphLock) deferEffect(a *graphActivation, label string, dispose Dispos
 	return nil
 }
 
+// requestScope reserves an actual ownership slot before exposing its handle.
+// Scope callbacks run only on this activation's existing transition lane.
+func (g *GraphLock) requestScope(a *graphActivation, label string, setup func(*EffectScope) error) (*EffectHandle, error) {
+	if err := validateScope(label, setup); err != nil {
+		return nil, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if a.fiber.current != a || a.retiring || !a.ctx.live.Load() {
+		return nil, errors.Join(ErrInactiveEffect, ErrInactive)
+	}
+	effect := newScopeEffect(label, setup)
+	effect.requestWithdraw = func() error {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if effect.cleanupFinished() {
+			return nil
+		}
+		if a.fiber.current != a {
+			return errors.Join(ErrInactiveEffect, ErrInactive)
+		}
+		if !effect.pendingWithdraw() {
+			effect.markWithdraw()
+			g.eventLocked(a.fiber, "scope:withdraw", label, 0)
+		}
+		// A retiring activation already has an owning worker; its unload
+		// performs the same scope cleanup rather than starting another worker.
+		g.reconcileLocked(a.fiber)
+		return nil
+	}
+	a.effects = append(a.effects, graphEffect{label: label, scope: effect})
+	g.eventLocked(a.fiber, "effect:add", label, 0)
+	g.reconcileLocked(a.fiber)
+	return effect.handle, nil
+}
+
+func (g *GraphLock) scopeWorkLocked(a *graphActivation) bool {
+	for _, effect := range a.effects {
+		if effect.scope != nil && (!effect.scope.setupFinished() || (effect.scope.pendingWithdraw() && !effect.scope.cleanupFinished())) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GraphLock) removeScopeLocked(a *graphActivation, scope *scopeEffect) {
+	if !scope.cleanupFinished() {
+		return
+	}
+	for i, effect := range a.effects {
+		if effect.scope == scope {
+			copy(a.effects[i:], a.effects[i+1:])
+			a.effects[len(a.effects)-1] = graphEffect{}
+			a.effects = a.effects[:len(a.effects)-1]
+			g.eventLocked(a.fiber, "scope:gone", effect.label, 0)
+			return
+		}
+	}
+}
+
+// scopeCleanupContext supplies the existing native cleanup budget once per
+// scope rollback/withdrawal, not once per nested disposer. Expiry is diagnostic;
+// the same transition worker and ownership tree remain until real callbacks exit.
+func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, context.CancelFunc) {
+	g.mu.Lock()
+	budget := g.knobs.cleanup
+	g.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	pending, recorded := true, false // Protected by mu, including the timer.
+	recordLocked := func() {
+		if recorded || a.fiber.current != a {
+			return
+		}
+		recorded = true
+		diagnostic := errors.New("scope cleanup deadline exceeded; still awaiting disposer")
+		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
+		a.fiber.lastErr = errors.Join(a.fiber.lastErr, diagnostic)
+		g.eventLocked(a.fiber, "deadline:scopeCleanup", "", 0)
+	}
+	timer := time.AfterFunc(budget, func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if pending {
+			recordLocked()
+		}
+	})
+	return ctx, func() {
+		timer.Stop()
+		g.mu.Lock()
+		pending = false
+		if ctx.Err() != nil {
+			recordLocked()
+		}
+		g.mu.Unlock()
+		cancel()
+	}
+}
+
+// runScopeWork is called only by the activation's one transition worker. During
+// load it runs after Apply and before ACTIVE; while ACTIVE it uses the same lane
+// as availability checks and unload. It never acquires an explicit call lease.
+func (g *GraphLock) runScopeWork(a *graphActivation) {
+	for {
+		g.mu.Lock()
+		if a.retiring {
+			g.mu.Unlock()
+			return
+		}
+		var selected graphEffect
+		for _, effect := range a.effects {
+			if effect.scope != nil && (!effect.scope.setupFinished() || (effect.scope.pendingWithdraw() && !effect.scope.cleanupFinished())) {
+				selected = effect
+				break
+			}
+		}
+		if selected.scope == nil {
+			g.mu.Unlock()
+			return
+		}
+		setup := !selected.scope.setupFinished()
+		if setup {
+			g.eventLocked(a.fiber, "scope:setup", selected.label, 0)
+		} else {
+			g.eventLocked(a.fiber, "scope:cleanup", selected.label, 0)
+		}
+		g.mu.Unlock()
+		var err error
+		if setup {
+			err = selected.scope.runSetup(a.ctx.std, func() (context.Context, context.CancelFunc) { return g.scopeCleanupContext(a) })
+		} else {
+			ctx, cancel := g.scopeCleanupContext(a)
+			err = selected.scope.runCleanup(ctx)
+			cancel()
+		}
+		g.mu.Lock()
+		if setup && err == ErrScopeStarted && a.retiring && selected.scope.cleanupFinished() {
+			// Retirement can cancel an unstarted slot after lane selection but
+			// before runSetup claims it. Its handle already owns the exact
+			// inactive result; do not invent a setup failure for this race.
+			err = nil
+		}
+		if err != nil {
+			a.fiber.lastErr = errors.Join(a.fiber.lastErr, err)
+			if !setup || a.retiring {
+				a.cleanupErr = errors.Join(a.cleanupErr, err)
+			}
+			g.eventLocked(a.fiber, "scope:failed", selected.label, 0)
+		}
+		g.removeScopeLocked(a, selected.scope)
+		g.signalLocked()
+		g.mu.Unlock()
+	}
+}
+
+func (g *GraphLock) runScopeLane(a *graphActivation) {
+	g.runScopeWork(a)
+	g.mu.Lock()
+	if a.retiring {
+		g.mu.Unlock()
+		g.runUnload(a)
+		return
+	}
+	a.fiber.worker = false
+	g.reconcileLocked(a.fiber)
+	g.signalLocked()
+	g.mu.Unlock()
+}
+
 // cleanupEffect joins one partial or late setup disposer outside the graph
 // owner. The Effect helper retains its actual lease until this function returns;
 // a deadline records blocked work, never permission to release that ownership.
@@ -1203,6 +1388,11 @@ func (g *GraphLock) retireLocked(a *graphActivation) {
 	// Invalidate before canceling: reentrant calls cannot acquire new leases.
 	a.ctx.live.Store(false)
 	a.cancel()
+	for _, effect := range a.effects {
+		if effect.scope != nil && !effect.scope.started.Load() {
+			effect.scope.cancelPending(errors.Join(ErrInactiveEffect, ErrInactive))
+		}
+	}
 	if !a.loading {
 		g.stateLocked(a.fiber, Unloading)
 	}
@@ -1414,13 +1604,22 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 			err = g.callApply(a)
 			if err == nil {
 				g.checkAvailability(a, false)
+				g.runScopeWork(a)
 			}
 		}
 	}
 	g.mu.Lock()
-	for !a.retiring && err == nil && a.fiber.spec.Check != nil && a.checked != a.fiber.notice {
+	for !a.retiring && err == nil {
+		check := a.fiber.spec.Check != nil && a.checked != a.fiber.notice
+		scopes := g.scopeWorkLocked(a)
+		if !check && !scopes {
+			break
+		}
 		g.mu.Unlock()
-		g.checkAvailability(a, false)
+		if check {
+			g.checkAvailability(a, false)
+		}
+		g.runScopeWork(a)
 		g.mu.Lock()
 	}
 	a.loading = false
@@ -1591,6 +1790,20 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 		}
 		if effects[i].provisionUID != 0 {
 			g.removeProvision(a, effects[i])
+			continue
+		}
+		if scope := effects[i].scope; scope != nil {
+			if !scope.setupFinished() {
+				scope.cancelPending(errors.Join(ErrInactiveEffect, ErrInactive))
+			}
+			// A never-started canceled slot has no acquired resources and no
+			// cleanup error to add to normal unload diagnostics.
+			if !scope.cleanupFinished() {
+				disposeErr = errors.Join(disposeErr, scope.runCleanup(cleanupCtx))
+			}
+			g.mu.Lock()
+			g.removeScopeLocked(a, scope)
+			g.mu.Unlock()
 			continue
 		}
 		disposeErr = errors.Join(disposeErr, graphCallDispose(effects[i].dispose, cleanupCtx))

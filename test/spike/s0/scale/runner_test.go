@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	cc "github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency"
 )
 
 // This is deliberately ONE tiny real lifecycle, not a 10k budget run. The same
@@ -37,12 +39,53 @@ func TestSmallRealLifecycleSmoke(t *testing.T) {
 					t.Fatalf("raw final event order at %d: %d", i, event.Sequence)
 				}
 			}
+			if result.BatchCalls != 3 || result.MountBatches != 1 || result.UpdateBatches != 1 || result.DisposeBatches != 1 {
+				t.Fatalf("native batch provenance = total:%d mount:%d update:%d dispose:%d", result.BatchCalls, result.MountBatches, result.UpdateBatches, result.DisposeBatches)
+			}
+			if result.Samples[3].Operation != "all-providers-batch-restart-settle" {
+				t.Fatalf("realm restart is not labeled actual native Batch: %s", result.Samples[3].Operation)
+			}
 			for _, sample := range result.Samples {
-				if sample.Error != "" || sample.EventBacklog != nil || sample.LatencyNS <= 0 {
+				if sample.Error != "" || sample.EventBacklog == nil || sample.AfterSettle == nil || sample.LatencyNS <= 0 || sample.SettleObserversLatencyNS < sample.LatencyNS || sample.ObserverWaitNS < 0 {
 					t.Fatalf("bad raw observation: %+v", sample)
+				}
+				if err := validateObserverStatus(*sample.AfterSettle); err != nil || uint64(*sample.EventBacklog) != sample.AfterSettle.Remaining {
+					t.Fatalf("actual after-Settle pending cut: %+v %v", sample.AfterSettle, err)
+				}
+				if status := sample.After.Observers; status == nil || status.Remaining != 0 || status.InFlight || status.Accepted != status.Delivered {
+					t.Fatalf("explicit observer barrier incomplete: %+v", status)
+				}
+			}
+			for _, cut := range []Checkpoint{result.EmptyRoot, result.DisposedWithArchives, result.PostClose} {
+				if cut.Observers == nil || cut.Observers.Remaining != 0 || cut.Observers.InFlight {
+					t.Fatalf("GC checkpoint without observer completion: %+v", cut.Observers)
 				}
 			}
 		})
+	}
+}
+
+func TestObserverBacklogArithmetic(t *testing.T) {
+	pending := cc.ObserverStatus{Accepted: 8, Delivered: 5, Remaining: 3, Queued: 2, InFlight: true}
+	if err := validateObserverStatus(pending); err != nil {
+		t.Fatal(err)
+	}
+	// Removing an in-flight event from the backlog would falsely claim progress.
+	bad := pending
+	bad.Remaining = 2
+	if err := validateObserverStatus(bad); err == nil {
+		t.Fatal("in-flight observer work was omitted")
+	}
+	bad = pending
+	bad.Delivered = 9
+	if err := validateObserverStatus(bad); err == nil {
+		t.Fatal("delivered beyond accepted was accepted")
+	}
+	backlog := int(pending.Accepted - pending.Delivered)
+	var csv bytes.Buffer
+	raw := RunResult{Samples: []Sample{{AfterSettle: &pending, EventBacklog: &backlog}}}
+	if err := WriteCSV(&csv, []RunResult{raw}); err != nil || !strings.Contains(csv.String(), ",3,8,5,2,true,") {
+		t.Fatalf("actual queued/in-flight CSV: %q %v", csv.String(), err)
 	}
 }
 

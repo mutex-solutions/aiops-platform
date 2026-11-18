@@ -426,6 +426,22 @@ func (c *Context) Go(label string, run func(context.Context) error) error {
 	return c.raw.Go(label, run)
 }
 
+// RequestEffectScope delegates native scope ownership and scheduling. Completion
+// is awaited externally; a callback must never join its own transition lane.
+func (c *Context) RequestEffectScope(label string, setup func(*cc.EffectScope) error) (*cc.EffectHandle, error) {
+	if c == nil || c.raw == nil {
+		return nil, errors.Join(cc.ErrInactiveEffect, cc.ErrInactive)
+	}
+	return c.raw.RequestEffectScope(label, setup)
+}
+
+func (c *Context) Effect(label string, setup func() (cc.Disposer, error)) error {
+	if c == nil || c.raw == nil {
+		return cc.ErrInactiveEffect
+	}
+	return c.raw.Effect(label, setup)
+}
+
 func (c *Context) Defer(label string, cleanup cc.Disposer) error {
 	if c.raw == nil {
 		return cc.ErrInactive

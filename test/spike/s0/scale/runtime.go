@@ -46,11 +46,15 @@ type liveContext struct {
 // composition; graph keys use the native string boundary to avoid a 10k-key
 // context registry per chain node. There is no parallel mock lifecycle model.
 type RealCandidateRuntime struct {
-	Runtime   cc.Runtime
-	Fixture   Fixture
-	Resources Resources
-	EmptyRoot Checkpoint // After real root creation, before spec/realm compilation.
-	IDs       []uint64
+	Runtime        cc.Runtime
+	Fixture        Fixture
+	Resources      Resources
+	EmptyRoot      Checkpoint // After real root creation, before spec/realm compilation.
+	IDs            []uint64
+	BatchCalls     int // Successfully acknowledged native data-only batches.
+	MountBatches   int // Real BatchMount groups, including composed starts.
+	UpdateBatches  int
+	DisposeBatches int
 
 	specs     []cc.Spec
 	composed  []co.Spec
@@ -72,7 +76,23 @@ func NewRealCandidateRuntime(backend Backend, f Fixture) (*RealCandidateRuntime,
 	}
 	r := &RealCandidateRuntime{Runtime: backend.New(), Fixture: f, IDs: make([]uint64, len(f.Nodes)),
 		providers: make(map[RawKey]int), live: make([]liveContext, len(f.Nodes))}
-	r.EmptyRoot = checkpoint(&r.Resources, true)
+	if _, ok := r.Runtime.(cc.Batcher); !ok {
+		cleanup, cancel := context.WithTimeout(context.Background(), TrialGuard)
+		defer cancel()
+		return nil, errors.Join(errors.New("real candidate lacks native Batch"), r.Runtime.Close(cleanup))
+	}
+	if _, ok := r.Runtime.(cc.ObserverRuntime); !ok {
+		cleanup, cancel := context.WithTimeout(context.Background(), TrialGuard)
+		defer cancel()
+		return nil, errors.Join(errors.New("real candidate lacks ObserverRuntime"), r.Runtime.Close(cleanup))
+	}
+	baseline, err := r.Checkpoint(context.Background(), true)
+	if err != nil {
+		cleanup, cancel := context.WithTimeout(context.Background(), TrialGuard)
+		defer cancel()
+		return nil, errors.Join(err, r.Runtime.Close(cleanup))
+	}
+	r.EmptyRoot = baseline
 	for _, node := range f.Nodes {
 		for _, key := range node.Provides {
 			r.providers[key] = node.Index
@@ -250,30 +270,134 @@ func (r *RealCandidateRuntime) activate(node Node, read func(RawKey) error, regi
 	return nil
 }
 
+// Mount compiles the selected real fixture declarations and admits them through
+// ONE actual native Batch. Composition BatchStart preserves its own entry/realm
+// compilation; no temporary backend, staging error or provisional ID is used.
 func (r *RealCandidateRuntime) Mount(ctx context.Context, start, end int) error {
-	for i := start; i < end; i++ {
-		var id uint64
+	if start < 0 || end < start || end > len(r.IDs) {
+		return fmt.Errorf("invalid mount interval [%d,%d)", start, end)
+	}
+	if start == end {
+		return nil
+	}
+	var ids []uint64
+	if r.authority == nil {
+		operations := make([]cc.BatchOperation, end-start)
+		for i := start; i < end; i++ {
+			operations[i-start] = cc.BatchOperation{Kind: cc.BatchMount, Spec: r.specs[i]}
+		}
 		var err error
-		if r.authority == nil {
-			id, err = r.Runtime.Mount(ctx, r.specs[i])
-		} else {
-			var fiber *co.Fiber
-			fiber, err = r.authority.Start(ctx, r.parents[r.Fixture.Nodes[i].Realm], r.entry, r.composed[i])
-			if err == nil {
-				id = fiber.ID
-			}
-		}
+		ids, err = r.Runtime.(cc.Batcher).Batch(ctx, operations)
 		if err != nil {
-			return fmt.Errorf("mount node %d: %w", i, err)
+			return err
 		}
-		r.IDs[i] = id
+	} else {
+		requests := make([]co.MountRequest, end-start)
+		for i := start; i < end; i++ {
+			requests[i-start] = co.MountRequest{Parent: r.parents[r.Fixture.Nodes[i].Realm], Entry: r.entry, Spec: r.composed[i]}
+		}
+		fibers, err := r.authority.BatchStart(ctx, requests)
+		if err != nil {
+			return err
+		}
+		for _, fiber := range fibers {
+			ids = append(ids, fiber.ID)
+		}
+	}
+	if len(ids) != end-start {
+		return fmt.Errorf("native Batch returned %d IDs for %d mounts", len(ids), end-start)
+	}
+	for offset, id := range ids {
+		if id == 0 {
+			return fmt.Errorf("native Batch omitted real mount ID at node %d", start+offset)
+		}
+		r.IDs[start+offset] = id
+	}
+	r.BatchCalls++
+	r.MountBatches++
+	return nil
+}
+
+// BatchUpdate commits every selected desired revision through ONE real native
+// Batch. It never substitutes an Update loop or joins lifecycle/observer work.
+func (r *RealCandidateRuntime) BatchUpdate(ctx context.Context, indexes []int) error {
+	operations := make([]cc.BatchOperation, 0, len(indexes))
+	for _, index := range indexes {
+		if index < 0 || index >= len(r.IDs) || r.IDs[index] == 0 {
+			return fmt.Errorf("invalid BatchUpdate node %d", index)
+		}
+		operations = append(operations, cc.BatchOperation{Kind: cc.BatchUpdate, Fiber: r.IDs[index]})
+	}
+	if len(operations) == 0 {
+		return nil
+	}
+	if _, err := r.Runtime.(cc.Batcher).Batch(ctx, operations); err != nil {
+		return err
+	}
+	r.BatchCalls++
+	r.UpdateBatches++
+	return nil
+}
+
+// BatchDisposal commits one real native BatchDispose prefix, in the supplied
+// fixture-node order. Lifecycle Settle and observer completion stay explicit.
+func (r *RealCandidateRuntime) BatchDisposal(ctx context.Context, indexes []int) error {
+	operations := make([]cc.BatchOperation, 0, len(indexes))
+	for _, index := range indexes {
+		if index < 0 || index >= len(r.IDs) || r.IDs[index] == 0 {
+			return fmt.Errorf("invalid BatchDispose node %d", index)
+		}
+		operations = append(operations, cc.BatchOperation{Kind: cc.BatchDispose, Fiber: r.IDs[index]})
+	}
+	if len(operations) == 0 {
+		return nil
+	}
+	if _, err := r.Runtime.(cc.Batcher).Batch(ctx, operations); err != nil {
+		return err
+	}
+	r.BatchCalls++
+	r.DisposeBatches++
+	return nil
+}
+
+// AwaitObservers joins the actual native dispatcher watermark only. It does not
+// alter Runtime.Settle or pretend that retained Events history is queue backlog.
+func (r *RealCandidateRuntime) AwaitObservers(ctx context.Context) error {
+	observer := r.Runtime.(cc.ObserverRuntime)
+	if err := observer.AwaitObservers(ctx); err != nil {
+		return err
+	}
+	status := observer.ObserverStatus()
+	if err := validateObserverStatus(status); err != nil {
+		return err
+	}
+	if status.Accepted != status.Delivered || status.Remaining != 0 || status.Queued != 0 || status.InFlight {
+		return fmt.Errorf("observer checkpoint still pending after explicit watermark join: %+v", status)
+	}
+	if status.ObserverErrors != 0 || status.LoggerPanics != 0 || status.FormattingPanics != 0 {
+		return fmt.Errorf("observer checkpoint contains callback/logger diagnostics: %+v", status)
 	}
 	return nil
 }
 
-// RequestDisposal submits ALL acknowledgements before joining cleanup. Provider
-// first is safe because the runtime retains dependent bindings while draining;
-// Settle per provider would instead leave undisposed consumers PENDING.
+// Checkpoint explicitly completes observers BEFORE any requested GC. Caller
+// separately owns lifecycle Settle; a checkpoint never changes its semantics.
+func (r *RealCandidateRuntime) Checkpoint(ctx context.Context, gc bool) (Checkpoint, error) {
+	guard, cancel := context.WithTimeout(ctx, TrialGuard)
+	defer cancel()
+	err := r.AwaitObservers(guard)
+	// On a failed barrier record the actual live counters without forcing GC or
+	// presenting an observer-completed retained-heap checkpoint.
+	out := checkpoint(&r.Resources, gc && err == nil)
+	status := r.Runtime.(cc.ObserverRuntime).ObserverStatus()
+	out.Observers = &status
+	return out, errors.Join(err, validateObserverStatus(status))
+}
+
+// RequestDisposal is failure-path cleanup: submit ALL individual idempotent
+// acknowledgements before joining. A partially mounted/already archived graph
+// cannot be passed to native Batch's live-target preflight. Normal teardown uses
+// BatchDisposal; this fallback is never counted as a measured successful batch.
 func (r *RealCandidateRuntime) RequestDisposal(ctx context.Context, start, end int) error {
 	var errs []error
 	for i := start; i < end; i++ {

@@ -99,7 +99,8 @@ type Snapshot struct {
 	Revision        uint64
 	Epoch           []uint64 // Retained activation dependencies, not the desired target.
 	Effects         []string
-	Tracked         []string // Native labels for work that has not actually returned.
+	EffectTree      []EffectMeta // Actual native ownership subtrees, detached on inspection.
+	Tracked         []string     // Native labels for work that has not actually returned.
 	Error           string
 	Alive           bool           // False once disposal is requested, before cleanup.
 	Target          *EpochSnapshot // Nil when the desired epoch is inactive.
@@ -178,6 +179,7 @@ type Context struct {
 	provide       func(string, any) error
 	effect        func(string, Disposer) error
 	cleanupEffect func(Disposer) error // Native off-owner dispose budget for partial/late setup results.
+	scopeRequest  func(string, func(*EffectScope) error) (*EffectHandle, error)
 	dispose       func() error
 	child         func(Spec) (uint64, error)
 	trackedStart  func(string) (func(error), error)

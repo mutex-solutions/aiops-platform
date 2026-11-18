@@ -54,6 +54,19 @@ as nonblocking requests. Completion inside Apply is not an accepted alternative.
 A future change would require a deliberate adaptation, owner approval and a new
 proof against deadlock.
 
+## Accepted native effect-scope request/handle extension
+
+The owner subsequently approved the concrete
+[native effect-scope/handle contract](../design/s0-native-effect-scope-proposal.md),
+selecting “Duyệt request/handle cùng lane” before implementation. Existing Effect,
+Defer and Go remain. Scope admission and withdrawal are nonblocking requests;
+setup, incremental rollback and cleanup execute in the fiber's one transition
+lane. External AwaitSetup/Await observes actual completion, never an early
+metadata deletion. Nested effect metadata, strict reverse single-shot cleanup,
+error/panic rollback and Settle participation are required on both candidates.
+This does not approve synchronous self-await, a provision-withdrawal capability,
+a new deadline, a core selection or final SDK acceptance.
+
 ## Consequences of the partial decision
 
 - Canonical self-disposal wording is clarified in the same change; no concurrency

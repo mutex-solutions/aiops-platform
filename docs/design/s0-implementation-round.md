@@ -181,8 +181,14 @@ Precommit native review then found and corrected three further races: effective
 config could overwrite a newer same-version preparation; Provide/MountChild could
 lose an admitted ownership acknowledgment during cancellation; and a quiescing
 old context could dispose its replacement revision. Regression tests and current
-package race/vet passed after the fixes. Neither earlier full property pass is
-attributed to these changes; a fresh full current-closure rerun remains required.
+package race/vet passed after the fixes. A separate full rerun then completed
+**PASS, exit 0**, on reviewed checkpoint `ad2fa95`, source digest
+`8d6834ef1e4b3f1c4dcff8fe5581f56869b34757fca1c47dc1204a1d23833395`:
+1,000 seeds x 1,000 operations per candidate under race, 2474.86s total. Its
+[summary/log/invocation](../../test/spike/s0/results/property-full-reviewed-ad2fa95/)
+cover those native changes. Older passes remain historical; future core/SDK
+changes still need affected reruns. This does not establish full corpus,
+performance, SQL authority, coverage/line-budget or S0 acceptance.
 
 The accepted Go Effect setup API now uses a real setup lease and native disposal
 budget for returned partial/late resources. This does not provide generator

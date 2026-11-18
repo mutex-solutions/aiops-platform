@@ -77,6 +77,7 @@ type composedFrontend struct {
 	r            *interpreter
 	root         *co.RootAuthority
 	hooks        *hookBundle
+	effects      *effectRequests
 	keys         map[string]cm.Key[any]
 	keyOrder     []string
 	entries      map[string]cm.Plugin
@@ -267,6 +268,12 @@ func (f *composedFrontend) validate(actions []differential.Action) error {
 			}
 			continue
 		}
+		if handled, err := f.validateEffect(action); handled {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		switch action.Op {
 		case "child", "notify":
 		case "context":
@@ -322,6 +329,9 @@ func (f *composedFrontend) selected(action differential.Action, env environment)
 
 func (f *composedFrontend) execute(action differential.Action, env environment) (bool, error) {
 	if handled, err := f.executeHook(action, env); handled {
+		return true, err
+	}
+	if handled, err := f.executeEffect(action, env); handled {
 		return true, err
 	}
 	switch action.Op {
@@ -556,6 +566,15 @@ type composedActivation struct {
 
 func (c *composedActivation) Config() any          { return c.context.Config() }
 func (c *composedActivation) Std() context.Context { return c.context.Std() }
+func (c *composedActivation) RequestEffectScope(label string, setup func(*cc.EffectScope) error) (*cc.EffectHandle, error) {
+	return c.context.RequestEffectScope(label, setup)
+}
+func (c *composedActivation) Effect(label string, setup func() (cc.Disposer, error)) error {
+	return c.context.Effect(label, setup)
+}
+func (c *composedActivation) Go(label string, run func(context.Context) error) error {
+	return c.context.Go(label, run)
+}
 func (c *composedActivation) Defer(label string, disposer cc.Disposer) error {
 	return c.context.Defer(label, disposer)
 }

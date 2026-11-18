@@ -54,6 +54,17 @@ the actual activation lease, using native `Enter`/`Leave` for graphs and the
 composition bridge for realms/trees; the fixture counter tracks those leases.
 This is not a zero-allocation or p99 call-path claim.
 
+Precise remaining scope seam: local consumer specs currently start as siblings
+under the precompiled metadata-only realm context. `Scope.With` must run on the
+actual local provider **after successful native Provide**, and its derived
+context must then become the metadata parent used to compile those consumers.
+Changing to native children would add inherited dependencies/lifetime behavior;
+adding a scope/container provider would violate the frozen two/four-fiber total.
+Neither change is made here. A future approved harness-only two-phase composition
+construction can derive the provider-written parent and still mount the declared
+consumers as roots, but needs explicit dependency/restart propagation validation.
+No fixture node, edge, key, count or scope-writer success is invented to close it.
+
 Seed is fixed at `0x53000000`. This harness uses no PRNG: fixture and operation
 orders are deterministic and recorded. The property corpus's SplitMix64/random
 stream is a separate parent-owned test. Candidate order alternates by repetition.
@@ -70,11 +81,16 @@ resource/lease counts, memory checkpoints and goroutine stacks. It performs:
 2. Leaf `Update` + `Settle`, checked ACTIVE again.
 3. Root-provider `Update` of fixture node **0** + `Settle`; for independent this
    restarts node 0 only, not fictitious dependents.
-4. For realms, all provider `Update` acknowledgements followed by one `Settle`.
-   This is labeled `all-providers-update-loop-settle`, **not native Batch**.
-5. Teardown submits **all** disposal requests before `Settle`. Providers may be
-   requested first: the actual runtime must retain dependent bindings until
-   cleanup drains. The check requires DISPOSED archives with no live effects,
+4. For realms, one real native `Batch` containing every provider's `BatchUpdate`,
+   followed by `Settle`, labeled `all-providers-batch-restart-settle`. Graph mounts
+   use `BatchMount`; composed mounts use `RootAuthority.BatchStart`, which compiles
+   the actual metadata/specs and commits one native Batch with real returned IDs.
+   No temporary backend, staging error, fake ID or Update-loop fallback is used.
+5. Normal teardown submits **all** disposal requests in one native `BatchDispose`
+   prefix before `Settle`. Providers may be requested first: the runtime must
+   retain dependent bindings until cleanup drains. Only final failure/idempotent
+   cleanup uses individual Dispose acknowledgements, never reported as a measured
+   successful Batch. The check requires DISPOSED archives with no live effects,
    tracked work or target, no provision entries (ACTIVE or reserved), and zero
    fixture-owned active resources and open leases. Archives are not live fibers.
 6. Always close the real root under a fresh cleanup context, even if the operation
@@ -84,11 +100,12 @@ resource/lease counts, memory checkpoints and goroutine stacks. It performs:
 
 Trees first mount exactly 97 shared fibers, capturing the shared-only baseline
 before any local mount. A run then executes ten cycles of individual tree cold
-mount + `Settle`, hot actual lookup, **one Update of the shared provider** +
-`Settle`, reverse-tree-order disposal, and remount at the next cycle. One Update
-really invalidates the complete shared dependency closure; it is not a fake loop
-or an invented Batch API. Every cold mount has its own sample. The parent must
-still withhold native-Batch-specific acceptance.
+mount in one actual `BatchStart` + `Settle`, hot actual lookup, **one native Batch
+containing the shared provider's Update** + `Settle`, reverse-tree-order disposal
+in one native BatchDispose prefix, and remount at the next cycle. The shared
+provider really invalidates its complete dependency closure. Every cold mount
+has its own sample. Native Batch calls and mount/update/dispose group counts are
+recorded in each `RunResult`; this helper does not claim sample-floor acceptance.
 
 The prototype deadlines stay **load 2s, drain 5s, dispose 2s**. The outer
 operation/cleanup guard is **15s**, not a changed kernel policy or a 2s whole
@@ -98,14 +115,28 @@ failed samples. There are no bare sleeps, retries or unlimited waits.
 
 ## Measurement and accounting
 
-- Operation latency includes the actual action plus `Settle`, using monotonic
-  `time.Now` differences. UTC scheduled/start/end timestamps accompany it.
-  Graph operations are sequential closed-loop operations, not the open-loop
-  HTTP/churn scheduler of §9. Correctness inspection is outside the timed action.
+- `LatencyNS` includes the actual action plus **lifecycle `Settle` only**, using
+  monotonic `time.Now` differences. Immediately afterward `AfterSettle` records
+  native `ObserverStatus` **before** the separate explicit `AwaitObservers` join.
+  `ObserverWaitNS`, `ObserversEndedUTC` and `SettleObserversLatencyNS` preserve that
+  extra wait and the complete start-through-observers envelope; no existing
+  lifecycle sample is silently relabeled to include it. Runtime.Settle is never
+  changed to join callbacks. Correctness inspection is outside both timings.
+  Graph operations remain sequential closed-loop, not §9's open-loop scheduler.
 - Each operation records before/after heap/allocation/GC counters, resource/lease
-  counts, full observed goroutine stacks and ownership groups, and event-history
-  counts. The candidates expose **no pending event/observer backlog**. JSON uses
-  `eventBacklog: null`; CSV says `unavailable`. History length is never queue depth.
+  counts, full goroutine stacks/ownership and retained event-history counts.
+  `eventBacklog` is the actual native dispatcher `Accepted - Delivered`, including
+  an **in-flight** event, alongside raw `Remaining`, `Queued` and `InFlight`. The
+  counters are checked for consistency with overflow protection. Post-join
+  checkpoints record observed completion; no constant zero is substituted.
+  Native owner inbox/work-queue depth is still not exposed and is **not** inferred
+  from this dispatcher status. Retained history length is never backlog.
+- Before every runtime GC checkpoint, observers are explicitly completed. A failed
+  observer barrier records its actual live counters and an error, without forcing
+  GC or presenting a completed retained-heap checkpoint. The empty harness cut has
+  no runtime; empty-root/shared/retained/disposed/post-Close cuts name the actual
+  native observer status. No listener body is added solely for scale accounting;
+  the dispatcher still accepts/delivers the actual native event stream.
 - Heap comparisons after GC include runtime archives and event history, plus any
   retained result/frontend references. Caller-owned declarative `Fixture` data,
   handle/context slices and the harness itself already exist at empty-root time;
@@ -115,6 +146,10 @@ failed samples. There are no bare sleeps, retries or unlimited waits.
 - Capturing per-operation stacks/history is diagnostic overhead outside the clock
   interval but can affect cache/GC scheduling; no observer-disabled optimized
   claim is made. Final raw events preserve total order, never sorted for equality.
+  Composition provision values are private wrappers: ordinary JSON may encode an
+  event's `Value` as `{}` rather than its provided integer. The parent diagnostic
+  writer separately records actual `composition.ProvisionObservation` results;
+  this harness never replaces an opaque value with an expected fixture value.
 - `DisposedWithArchives` is before root Close; `PostClose` deliberately still
   references that Go root/result. Neither is claimed to be a zero-byte heap after
   removing all evidence. The next fresh trial does not reuse a closed root.
@@ -138,9 +173,9 @@ include actual before/after limits, swapping/throttling and background-load fact
 these are not discovered or invented by this package.
 
 Current aggregate classification can be **fail**, **invalid**, or
-**inconclusive**, never a whole-S0 acceptance pass: required native Batch/backlog
-and separate scope-value gaps are explicit; §8.3 call path and §9 acknowledgement arms
-are not implemented here. `RunT` success alone remains inconclusive regardless of
+**inconclusive**, never a whole-S0 acceptance pass: native Batch and dispatcher
+backlog now use the real APIs, but the separate provider-written scope-value gap
+is explicit; §8.3 call path and §9 acknowledgement arms are not implemented here. `RunT` success alone remains inconclusive regardless of
 how fast a small graph runs. The defined `pass` schema value is reserved for later
 complete, parent-validated evidence, not emitted to bless missing probes.
 
@@ -149,14 +184,16 @@ complete, parent-validated evidence, not emitted to bless missing probes.
 Safe author checks (no full-scale runtime performance):
 
 ```sh
-go test ./test/spike/s0/scale -count=1 -v
+go test ./test/spike/s0/scale -run '^Test(SmallRealLifecycleSmoke|ObserverBacklogArithmetic|NearestRankAndCV|StackOwnershipAndRawWriters|MeasurementPreconditionsNoRuntime|DefaultMeasure)$' -count=1 -v
 go vet ./test/spike/s0/scale
-go test -race -count=3 ./test/spike/s0/scale
+go test -race ./test/spike/s0/scale -run '^Test(SmallRealLifecycleSmoke|ObserverBacklogArithmetic|NearestRankAndCV|StackOwnershipAndRawWriters|MeasurementPreconditionsNoRuntime|DefaultMeasure)$' -count=3
 ```
 
-Tests generate exact 10k/500/300 shapes **as data only**. The one real smoke uses
-16 fibers (four actual opaque realms × four fibers), once per candidate per
-requested `-count`. Do not confuse those helper passes with frozen budgets.
+The explicit filter above exercises only helper arithmetic/serialization, driver
+preconditions, the default SKIP, and the real 16-fiber smoke (four opaque realms ×
+four fibers) per candidate per requested `-count`. It does not execute diagnostic
+or performance tests. Separate fixture unit tests can generate exact 10k/500/300
+shapes **as data only**. Do not confuse helper passes with frozen budgets.
 
 The following is a **future parent-managed command template, NOT executed**.
 First complete full final-source parity, stop competing full-property/race jobs,

@@ -76,10 +76,11 @@ func parseGoroutines(raw string) Goroutines {
 }
 
 type Checkpoint struct {
-	Memory          Memory     `json:"memory"`
-	Goroutines      Goroutines `json:"goroutines"`
-	ResourcesActive int64      `json:"resourcesActive"`
-	Leases          int64      `json:"leases"`
+	Memory          Memory             `json:"memory"`
+	Goroutines      Goroutines         `json:"goroutines"`
+	ResourcesActive int64              `json:"resourcesActive"`
+	Leases          int64              `json:"leases"`
+	Observers       *cc.ObserverStatus `json:"observers,omitempty"`
 }
 
 func checkpoint(resources *Resources, gc bool) Checkpoint {
@@ -109,10 +110,15 @@ type Sample struct {
 	Error        string     `json:"error,omitempty"`
 	EventsBefore int        `json:"eventHistoryBefore"`
 	EventsAfter  int        `json:"eventHistoryAfter"`
-	// Neither candidate exposes its pending observer/owner queue. A nil value is
-	// unavailable, NOT an assertion that Settle guarantees a zero event backlog.
-	EventBacklog *int   `json:"eventBacklog"`
-	BacklogNote  string `json:"backlogNote"`
+	// AfterSettle is the actual control-path cut BEFORE the explicit observer
+	// barrier. EventBacklog is Accepted-Delivered, including an in-flight event;
+	// After.Observers is captured only after AwaitObservers completes.
+	AfterSettle              *cc.ObserverStatus `json:"afterSettleObservers"`
+	EventBacklog             *int               `json:"eventBacklog"`
+	BacklogNote              string             `json:"backlogNote"`
+	ObserversEndedUTC        time.Time          `json:"observersEndedUTC"`
+	ObserverWaitNS           int64              `json:"observerWaitNS"`
+	SettleObserversLatencyNS int64              `json:"settleObserversLatencyNS"`
 }
 
 type Workload struct {
@@ -154,6 +160,10 @@ type RunResult struct {
 	Errors               []string               `json:"errors,omitempty"`
 	Gaps                 []string               `json:"gaps,omitempty"`
 	Classification       Classification         `json:"classification"`
+	BatchCalls           int                    `json:"nativeBatchCalls"`
+	MountBatches         int                    `json:"nativeMountBatches"`
+	UpdateBatches        int                    `json:"nativeUpdateBatches"`
+	DisposeBatches       int                    `json:"nativeDisposeBatches"`
 }
 
 type Distribution struct {
@@ -205,6 +215,20 @@ func CV(values []float64) (float64, error) {
 	return math.Sqrt(variance) / mean, nil
 }
 
+func validateObserverStatus(status cc.ObserverStatus) error {
+	if status.Delivered > status.Accepted || status.Remaining != status.Accepted-status.Delivered || status.Queued < 0 {
+		return fmt.Errorf("inconsistent native observer counters: %+v", status)
+	}
+	work := uint64(status.Queued)
+	if status.InFlight {
+		work++
+	}
+	if status.Remaining != work {
+		return fmt.Errorf("native observer pending count excludes queued/in-flight work: %+v", status)
+	}
+	return nil
+}
+
 func WriteJSON(w io.Writer, value any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -213,7 +237,7 @@ func WriteJSON(w io.Writer, value any) error {
 
 func WriteCSV(w io.Writer, results []RunResult) error {
 	out := csv.NewWriter(w)
-	if err := out.Write([]string{"backend", "workload", "repetition", "trial", "operation", "cycle", "tree", "scheduled_utc", "started_utc", "ended_utc", "latency_ns", "heap_before", "heap_after", "mallocs_before", "mallocs_after", "resources_after", "leases_after", "events_before", "events_after", "event_backlog", "error"}); err != nil {
+	if err := out.Write([]string{"backend", "workload", "repetition", "trial", "operation", "cycle", "tree", "scheduled_utc", "started_utc", "ended_utc", "latency_ns", "heap_before", "heap_after", "mallocs_before", "mallocs_after", "resources_after", "leases_after", "events_before", "events_after", "event_backlog", "observers_accepted_after_settle", "observers_delivered_after_settle", "observers_queued_after_settle", "observers_in_flight_after_settle", "observer_wait_ns", "settle_observers_latency_ns", "observers_ended_utc", "error"}); err != nil {
 		return err
 	}
 	for _, result := range results {
@@ -226,7 +250,12 @@ func WriteCSV(w io.Writer, results []RunResult) error {
 			if sample.EventBacklog != nil {
 				backlog = strconv.Itoa(*sample.EventBacklog)
 			}
-			fields = append(fields, backlog, sample.Error)
+			accepted, delivered, queued, inFlight := "unavailable", "unavailable", "unavailable", "unavailable"
+			if status := sample.AfterSettle; status != nil {
+				accepted, delivered = strconv.FormatUint(status.Accepted, 10), strconv.FormatUint(status.Delivered, 10)
+				queued, inFlight = strconv.Itoa(status.Queued), strconv.FormatBool(status.InFlight)
+			}
+			fields = append(fields, backlog, accepted, delivered, queued, inFlight, strconv.FormatInt(sample.ObserverWaitNS, 10), strconv.FormatInt(sample.SettleObserversLatencyNS, 10), sample.ObserversEndedUTC.Format(time.RFC3339Nano), sample.Error)
 			if err := out.Write(fields); err != nil {
 				return err
 			}

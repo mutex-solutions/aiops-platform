@@ -3970,3 +3970,222 @@ func TestGraphLockEffectCleanupDeadlineRecordsWithoutFakingReturn(t *testing.T) 
 		}
 	})
 }
+
+func TestGraphLockScopeIncrementalRollbackRetainsNestedOwnership(t *testing.T) {
+	for _, panics := range []bool{false, true} {
+		t.Run(map[bool]string{false: "error", true: "panic"}[panics], func(t *testing.T) {
+			ctx := graphTestContext(t)
+			g := graphTestRuntime(t).(*GraphLock)
+			failure := errors.New("incremental scope failure")
+			started, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			t.Cleanup(func() { once.Do(func() { close(release) }) })
+			handles := make(chan *EffectHandle, 1)
+			var order []string
+			id := graphMount(t, ctx, g, Spec{ID: "scope-rollback", Apply: func(c *Context) error {
+				handle, err := c.RequestEffectScope("owned-scope", func(scope *EffectScope) error {
+					if _, err := g.Inspect(ctx); err != nil {
+						return err
+					}
+					if err := scope.Defer("first", func(context.Context) error { order = append(order, "first"); return nil }); err != nil {
+						return err
+					}
+					if err := scope.Scope("nested", func(child *EffectScope) error {
+						return child.Defer("held-last", func(context.Context) error { close(started); <-release; order = append(order, "last"); return nil })
+					}); err != nil {
+						return err
+					}
+					if panics {
+						panic(failure)
+					}
+					return failure
+				})
+				if err == nil {
+					handles <- handle
+				}
+				return err
+			}})
+			handle := graphReceive(t, ctx, handles)
+			graphReceive(t, ctx, started)
+			held := graphSnapshot(t, ctx, g, id)
+			if held.State != Loading || len(held.EffectTree) != 1 || held.EffectTree[0].Label != "owned-scope" || held.EffectTree[0].State != ScopeCleaning || len(held.EffectTree[0].Children) != 2 || held.EffectTree[0].Children[1].Children[0].State != ScopeCleaning {
+				t.Fatalf("rollback removed actual nested resources before return: %+v", held)
+			}
+			held.EffectTree[0].Children[0].Label = "reader mutation"
+			if got := graphSnapshot(t, ctx, g, id); got.EffectTree[0].Children[0].Label != "first" {
+				t.Fatal("scope metadata returned shared mutable storage")
+			}
+			once.Do(func() { close(release) })
+			if err := handle.AwaitSetup(ctx); !errors.Is(err, failure) {
+				t.Fatalf("scope setup lost actual failure identity: %v", err)
+			}
+			graphSettle(t, ctx, g)
+			got := graphSnapshot(t, ctx, g, id)
+			if got.State != Active || len(got.EffectTree) != 0 || len(got.Effects) != 0 || !reflect.DeepEqual(order, []string{"last", "first"}) {
+				t.Fatalf("handle-only rollback poisoned activation or lost LIFO: %+v order %v", got, order)
+			}
+			if panics {
+				var panicErr *ScopePanicError
+				if err := handle.AwaitSetup(ctx); !errors.As(err, &panicErr) {
+					t.Fatalf("panic not preserved as typed scope error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestGraphLockScopeWithdrawalsShareApplyLaneAndExactIdentity(t *testing.T) {
+	ctx := graphTestContext(t)
+	g := graphTestRuntime(t).(*GraphLock)
+	type pair struct{ first, second *EffectHandle }
+	handles := make(chan pair, 1)
+	var running atomic.Int64
+	var order []string
+	id := graphMount(t, ctx, g, Spec{ID: "scope-lane", Apply: func(c *Context) error {
+		if running.Add(1) != 1 {
+			return errors.New("Apply lane already busy")
+		}
+		defer running.Add(-1)
+		makeScope := func(name string) (*EffectHandle, error) {
+			return c.RequestEffectScope("same-label", func(scope *EffectScope) error {
+				if running.Add(1) != 1 {
+					return errors.New("scope setup overlapped Apply or another scope")
+				}
+				defer running.Add(-1)
+				order = append(order, "setup-"+name)
+				return scope.Defer(name, func(context.Context) error {
+					if running.Add(1) != 1 {
+						return errors.New("scope cleanup overlapped transition lane")
+					}
+					defer running.Add(-1)
+					order = append(order, "cleanup-"+name)
+					return nil
+				})
+			})
+		}
+		first, err := makeScope("first")
+		if err != nil {
+			return err
+		}
+		second, err := makeScope("second")
+		if err != nil {
+			return err
+		}
+		if err := first.RequestWithdraw(); err != nil {
+			return err
+		}
+		if err := first.RequestWithdraw(); err != nil {
+			return err
+		}
+		handles <- pair{first, second}
+		return nil
+	}})
+	h := graphReceive(t, ctx, handles)
+	graphSettle(t, ctx, g)
+	if err := h.first.Await(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.second.AwaitSetup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := graphSnapshot(t, ctx, g, id)
+	if got.State != Active || len(got.EffectTree) != 1 || got.EffectTree[0].Children[0].Label != "second" || !reflect.DeepEqual(order, []string{"setup-first", "cleanup-first", "setup-second"}) {
+		t.Fatalf("same-label handle affected wrong slot or lane: %+v order %v", got, order)
+	}
+	if err := h.second.RequestWithdraw(); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Dispose(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	graphSettle(t, ctx, g)
+	if err := h.second.Await(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.second.RequestWithdraw(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(order, []string{"setup-first", "cleanup-first", "setup-second", "cleanup-second"}) || running.Load() != 0 {
+		t.Fatalf("withdraw/unload duplicated or overlapped cleanup: %v", order)
+	}
+}
+
+func TestGraphLockScopeQueuedCancellationAndHeldCleanupAreReal(t *testing.T) {
+	t.Run("never-started", func(t *testing.T) {
+		ctx := graphTestContext(t)
+		g := graphTestRuntime(t).(*GraphLock)
+		handles, requested, release := make(chan *EffectHandle, 1), make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		t.Cleanup(func() { once.Do(func() { close(release) }) })
+		var calls atomic.Int64
+		id := graphMount(t, ctx, g, Spec{ID: "cancel-queued", Apply: func(c *Context) error {
+			h, err := c.RequestEffectScope("queued", func(*EffectScope) error { calls.Add(1); return nil })
+			if err != nil {
+				return err
+			}
+			handles <- h
+			err = c.Dispose()
+			close(requested)
+			<-release
+			return err
+		}})
+		h := graphReceive(t, ctx, handles)
+		graphReceive(t, ctx, requested)
+		once.Do(func() { close(release) })
+		graphSettle(t, ctx, g)
+		if err := h.AwaitSetup(ctx); !errors.Is(err, ErrInactiveEffect) || !errors.Is(err, ErrInactive) {
+			t.Fatalf("queued setup cancellation: %v", err)
+		}
+		if calls.Load() != 0 || graphSnapshot(t, ctx, g, id).State != Disposed {
+			t.Fatal("quiesced queued scope ran setup or blocked owner disposal")
+		}
+	})
+	t.Run("held-root-cleanup", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := graphTestContext(t)
+			g := graphTestRuntime(t).(*GraphLock)
+			g.knobs.cleanup = time.Second
+			root, err := g.RootContext(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			started, release := make(chan context.Context, 1), make(chan struct{})
+			var once sync.Once
+			t.Cleanup(func() { once.Do(func() { close(release) }) })
+			h, err := root.RequestEffectScope("held", func(scope *EffectScope) error {
+				return scope.Defer("resource", func(cleanup context.Context) error { started <- cleanup; <-release; return nil })
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := h.AwaitSetup(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.RequestWithdraw(); err != nil {
+				t.Fatal(err)
+			}
+			cleanup := graphReceive(t, ctx, started)
+			graphReceive(t, ctx, cleanup.Done())
+			synctest.Wait()
+			if meta := h.Metadata(); meta.State != ScopeCleaning || len(meta.Children) != 1 {
+				t.Fatalf("deadline hid actual held scope resources: %+v", meta)
+			}
+			select {
+			case <-h.effect.done:
+				t.Fatal("cleanup deadline falsely completed handle")
+			default:
+			}
+			g.mu.Lock()
+			busy, effects := g.root.worker, len(g.root.current.effects)
+			g.mu.Unlock()
+			if !busy || effects != 1 {
+				t.Fatal("held scope lost native lane or ownership slot")
+			}
+			once.Do(func() { close(release) })
+			if err := h.Await(ctx); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("native scope budget diagnostic: %v", err)
+			}
+			graphSettle(t, ctx, g)
+		})
+	})
+}

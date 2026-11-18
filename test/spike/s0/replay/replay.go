@@ -440,8 +440,8 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 			r.mu.Unlock()
 			select {
 			case <-done:
-			case <-env.std.Done():
-				return env.std.Err()
+			case <-r.ctx.Done():
+				return r.ctx.Err()
 			}
 		}
 	case "release":
@@ -477,6 +477,11 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 		if err := r.settle(); err != nil {
 			return err
 		}
+		if r.frontend != nil {
+			if err := r.frontend.flushEffectCompletions(); err != nil {
+				return err
+			}
+		}
 		return r.checkpoint(a.Label)
 	case "snapshot":
 		return r.checkpoint(a.Label)
@@ -499,17 +504,7 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 		}
 		r.put(a.To, result)
 	case "effect":
-		if env.ctx == nil {
-			return unsupported(a.Op, "effect outside Apply")
-		}
-		if err := r.run(a.Program, env); err != nil {
-			return err
-		}
-		return env.ctx.Defer(a.Label, func(ctx context.Context) error {
-			cleanup := env
-			cleanup.std = ctx
-			return r.run(a.Cleanup, cleanup)
-		})
+		return r.executeNativeEffect(a, env)
 	case "fail":
 		message := a.Error
 		if message == "" {
@@ -928,6 +923,18 @@ func (r *interpreter) checkpoint(label string) error {
 	return nil
 }
 
+func copyEffectTree(in []concurrency.EffectMeta) []concurrency.EffectMeta {
+	if in == nil {
+		return nil
+	}
+	out := make([]concurrency.EffectMeta, len(in))
+	for i, node := range in {
+		out[i] = node
+		out[i].Children = copyEffectTree(node.Children)
+	}
+	return out
+}
+
 // copyInspection preserves committed Epoch separately from desired Target and
 // owns every mutable container. Service values in this adapter are neutral JSON.
 func copyInspection(in concurrency.Inspection) concurrency.Inspection {
@@ -936,6 +943,7 @@ func copyInspection(in concurrency.Inspection) concurrency.Inspection {
 	for i, snapshot := range in.Fibers {
 		snapshot.Epoch = append([]uint64(nil), snapshot.Epoch...)
 		snapshot.Effects = append([]string(nil), snapshot.Effects...)
+		snapshot.EffectTree = copyEffectTree(snapshot.EffectTree)
 		snapshot.Tracked = append([]string(nil), snapshot.Tracked...)
 		snapshot.RawConfig = clone(snapshot.RawConfig)
 		snapshot.EffectiveConfig = clone(snapshot.EffectiveConfig)
