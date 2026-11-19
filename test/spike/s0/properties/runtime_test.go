@@ -744,7 +744,7 @@ func TestRuntimeProperties(t *testing.T) {
 	backends := []struct {
 		name string
 		make func() concurrency.Runtime
-	}{{"reconciler", concurrency.NewReconciler}, {"graph-lock", concurrency.NewGraphLock}}
+	}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}}
 	var replay *failureRecord
 	if path := os.Getenv("S0_PROPERTY_REPLAY"); path != "" {
 		if full {

@@ -20,7 +20,7 @@ func batchCandidates(t *testing.T, test func(*testing.T, func() Runtime)) {
 	for _, candidate := range []struct {
 		name string
 		make func() Runtime
-	}{{"reconciler", NewReconciler}, {"graph-lock", NewGraphLock}} {
+	}{{"reconciler", NewRecordingReconciler}, {"graph-lock", NewRecordingGraphLock}} {
 		t.Run(candidate.name, func(t *testing.T) { test(t, candidate.make) })
 	}
 }

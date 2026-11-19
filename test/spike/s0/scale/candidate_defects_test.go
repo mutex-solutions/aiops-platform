@@ -9,16 +9,15 @@ import (
 	"time"
 )
 
-// Minimal reproductions of candidate behaviour found while preparing the scale
-// run. The first is fixed in the candidates and now passes; the second still
-// FAILS by design. Both are skipped unless S0_SCALE_REPRO=1, because they are
-// timing/heap based. They are development-host observations, not acceptance
-// evidence.
+// Regression checks for two candidate defects found while preparing the scale
+// run, both fixed in test/spike/s0/concurrency (see ADR-034). They are timing and
+// heap based, so they stay opt-in (S0_SCALE_REPRO=1) and are development-host
+// observations, not acceptance evidence.
 
 func requireRepro(t *testing.T) {
 	t.Helper()
 	if os.Getenv("S0_SCALE_REPRO") != "1" {
-		t.Skip("timing/heap-based candidate check; set S0_SCALE_REPRO=1 to run it")
+		t.Skip("timing/heap-based candidate regression check; set S0_SCALE_REPRO=1 to run it")
 	}
 }
 
@@ -78,12 +77,63 @@ func TestReproHeldServiceScanGrowsWithProviders(t *testing.T) {
 	}
 }
 
-// Retained heap grows by several MiB per churn cycle at a constant tree count:
-// every disposed incarnation leaves its archive and its events in the runtime,
-// which never truncates them (the harness also keeps them on purpose). The
-// section 8.2 limit (32 MiB over the shared-only baseline for 500 trees) is
-// therefore exceeded from about the third cycle even though the live set is
-// constant; the first checkpoint, before any history exists, is well inside it.
+// churnRetained mounts and disposes every tree of f, cycles times, on one real
+// candidate root and returns the heap retained over the shared-only baseline
+// after each cycle's mount-all (with the same GC checkpoint the harness uses). It
+// keeps no per-sample trace, so what it measures is the candidate and the
+// fixture, not the harness's own growing result.
+func churnRetained(t *testing.T, backend Backend, f Fixture, cycles int) []int64 {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	r, err := NewRealCandidateRuntime(backend, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = r.RequestDisposal(ctx, 0, len(f.Nodes))
+		_ = r.Runtime.Settle(ctx)
+		_ = r.Runtime.Close(ctx)
+	}()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(r.Mount(ctx, 0, f.Shared))
+	must(r.Runtime.Settle(ctx))
+	base, err := r.Checkpoint(ctx, true)
+	must(err)
+	var deltas []int64
+	for cycle := 0; cycle < cycles; cycle++ {
+		for tree := 0; tree < f.TreeCount; tree++ {
+			start := f.Shared + tree*f.TreeWidth
+			must(r.Mount(ctx, start, start+f.TreeWidth))
+			must(r.Runtime.Settle(ctx))
+		}
+		retained, err := r.Checkpoint(ctx, true)
+		must(err)
+		deltas = append(deltas, int64(retained.Memory.HeapAlloc)-int64(base.Memory.HeapAlloc))
+		must(r.BatchUpdate(ctx, []int{0}))
+		must(r.Runtime.Settle(ctx))
+		var all []int
+		for tree := f.TreeCount - 1; tree >= 0; tree-- {
+			start := f.Shared + tree*f.TreeWidth
+			all = append(all, nodeIndexes(start, start+f.TreeWidth)...)
+		}
+		must(r.BatchDisposal(ctx, all))
+		must(r.Runtime.Settle(ctx))
+	}
+	return deltas
+}
+
+// Retained heap used to grow by about 2.3 MiB per churn cycle per 100 four-fiber
+// trees at a constant live set, because every disposed incarnation left an
+// archive record and its events in the runtime forever. The runtime now keeps a
+// bounded archive and a bounded event tail (concurrency/retention.go), so the
+// retained heap is flat once those fill. The first checkpoints still rise while
+// the archive and the tail fill, so the comparison starts at the third cycle.
 func TestReproRetainedHeapGrowsWithChurnHistory(t *testing.T) {
 	requireRepro(t)
 	f, err := TreeFixture(100, 4)
@@ -92,15 +142,34 @@ func TestReproRetainedHeapGrowsWithChurnHistory(t *testing.T) {
 	}
 	for _, backend := range Candidates() {
 		t.Run(backend.Name, func(t *testing.T) {
+			deltas := churnRetained(t, backend, f, 8)
+			t.Logf("%s: retained over shared-only per cycle %v bytes", backend.Name, deltas)
+			settled := deltas[2:]
+			first, last := settled[0], settled[len(settled)-1]
+			if limit := max(int64(1<<20), first/20); last-first > limit {
+				t.Errorf("retained heap grew %d bytes over %d cycles with a constant live set (tolerance %d)", last-first, len(settled)-1, limit)
+			}
+		})
+	}
+}
+
+// The sampled run of the same churn must stay inside the runtime's explicit
+// bounds and report them: bounded archive and tail, no recorder overflow.
+func TestReproChurnStaysInsideRetentionBounds(t *testing.T) {
+	requireRepro(t)
+	f, err := TreeFixture(100, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range Candidates() {
+		t.Run(backend.Name, func(t *testing.T) {
 			result := RunCycles(context.Background(), backend, f, 6)
-			m := retainedMetrics(result)
-			if len(result.Errors) != 0 || len(m.DeltaBytes) != 6 {
+			if len(result.Errors) != 0 {
 				t.Fatalf("run failed: %v", result.Errors)
 			}
-			first, last := m.DeltaBytes[0], m.DeltaBytes[len(m.DeltaBytes)-1]
-			t.Logf("%s: retained over shared-only per cycle %v bytes (slope %.0f B/cycle)", backend.Name, m.DeltaBytes, m.SlopeBytesPerCP)
-			if limit := max(int64(1<<20), first/20); last-first > limit {
-				t.Errorf("retained heap grew %d bytes over five cycles with a constant live set (tolerance %d)", last-first, limit)
+			status := result.Retention
+			if status == nil || status.Archived > status.ArchiveLimit || status.Windowed > status.EventWindow || status.RecorderOverflow || status.ArchiveEvicted == 0 {
+				t.Fatalf("history not bounded or not reported: %+v", status)
 			}
 		})
 	}

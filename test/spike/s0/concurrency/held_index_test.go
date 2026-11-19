@@ -13,9 +13,10 @@ import (
 	"time"
 )
 
-// indexCandidates build each candidate; the ordering checks below read the ledger.
+// indexCandidates build each candidate with complete event history: the
+// ordering checks below read the ledger.
 func indexCandidates() map[string]func() Runtime {
-	return map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock}
+	return map[string]func() Runtime{"reconciler": NewRecordingReconciler, "graph-lock": NewRecordingGraphLock}
 }
 
 // TestHeldServiceIndexConsistency drives randomised interleavings of provide
@@ -56,7 +57,7 @@ func runIndexScenario(t *testing.T, name string, build func() Runtime, seed int6
 		// Same construction as NewReconcilerWith, keeping the owner so the test can
 		// read its indexes after the owner goroutine has exited.
 		rt := &reconcilerRuntime{inbox: make(chan rcMessage, 256), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
-		owner = &rcOwner{r: rt, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter), heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
+		owner = newRcOwner(rt, Recording())
 		go owner.run()
 		r = rt
 	} else {

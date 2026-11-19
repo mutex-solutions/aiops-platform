@@ -23,7 +23,7 @@ type ptCandidate struct {
 	make func() Runtime
 }
 
-var ptCandidates = []ptCandidate{{"reconciler", NewReconciler}, {"graph-lock", NewGraphLock}}
+var ptCandidates = []ptCandidate{{"reconciler", NewRecordingReconciler}, {"graph-lock", NewRecordingGraphLock}}
 
 func ptContext(t *testing.T) context.Context {
 	t.Helper()

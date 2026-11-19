@@ -19,8 +19,8 @@ var nativeObserverConstructors = []struct {
 	name string
 	make func() Runtime
 }{
-	{"reconciler", NewReconciler},
-	{"graph-lock", NewGraphLock},
+	{"reconciler", NewRecordingReconciler},
+	{"graph-lock", NewRecordingGraphLock},
 }
 
 func nativeObserverTestRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, Runtime, ObserverRuntime, *Context) {

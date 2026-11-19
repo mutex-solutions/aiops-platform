@@ -35,7 +35,7 @@ func corpus(t *testing.T, id string) differential.Script {
 func eachRuntime(t *testing.T, test func(*testing.T, context.Context, concurrency.Runtime)) {
 	t.Helper()
 	for name, makeRuntime := range map[string]func() concurrency.Runtime{
-		"reconciler": concurrency.NewReconciler, "graph-lock": concurrency.NewGraphLock,
+		"reconciler": concurrency.NewRecordingReconciler, "graph-lock": concurrency.NewRecordingGraphLock,
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -114,6 +114,19 @@ type reconcilerRuntime struct {
 	notices   atomic.Pointer[rcNotice]
 	rootErr   error // Published before done closes; retained host-lifetime failure.
 	observers *nativeObservers
+	// History bounds (retention.go). The owner is the only writer; status
+	// readers use the atomic counters inside these values.
+	retention Retention
+	ledger    *eventLedger
+	archive   *recordArchive[rcRetired]
+	// terminalDropped counts failed-incarnation diagnostics beyond rcTerminalLimit.
+	terminalDropped atomic.Uint64
+}
+
+// rcRetired is the bounded record of one disposed incarnation.
+type rcRetired struct {
+	snapshot Snapshot
+	awaitErr error // Sticky startup-error identity for AwaitFiber after disposal.
 }
 
 type rcNotice struct {
@@ -256,9 +269,10 @@ func (d *rcDeadlines) Pop() any {
 }
 
 type rcWaiter struct {
-	ctx  context.Context
-	ack  chan rcReply
-	stop func() bool
+	ctx   context.Context
+	ack   chan rcReply
+	stop  func() bool
+	fiber *rcFiber // AwaitFiber only: the waiter's own reference, so disposal never loses the error.
 }
 
 type rcOwner struct {
@@ -274,13 +288,10 @@ type rcOwner struct {
 	blocked       map[uint64]error
 	nextFiber     uint64
 	nextUID       uint64
-	events        []Event
 	settlers      []rcWaiter
 	closers       []rcWaiter
 	closing       bool
 	terminal      []error
-	retired       map[uint64]Snapshot
-	retiredErr    map[uint64]error
 	awaiting      map[uint64][]rcWaiter
 	workHead      int
 	working       bool
@@ -299,12 +310,33 @@ type rcOwner struct {
 // NewReconciler starts one global state owner and no per-idle-fiber goroutine.
 // Mount, Update and Dispose acknowledge graph commands; Settle joins lifecycle
 // work. Context.Dispose is a separate nonblocking request, never its own join.
-func NewReconciler() Runtime {
+func NewReconciler() Runtime { return NewReconcilerWith(Retention{}) }
+
+// NewReconcilerWith is NewReconciler with explicit history bounds (see Retention).
+func NewReconcilerWith(retention Retention) Runtime {
 	r := &reconcilerRuntime{inbox: make(chan rcMessage, 256), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
-	o := &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter), heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
+	o := newRcOwner(r, retention)
 	go o.run()
 	return r
 }
+
+// newRcOwner builds the owner state and installs the history bounds on r.
+func newRcOwner(r *reconcilerRuntime, retention Retention) *rcOwner {
+	retention = retention.normalized()
+	r.retention, r.ledger, r.archive = retention, newEventLedger(retention), newRecordArchive[rcRetired](retention.ArchiveLimit)
+	return &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber),
+		failures: make(map[uint64]error), blocked: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter),
+		heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
+}
+
+// RetentionStatus reports the history bounds and their use without entering the owner.
+func (r *reconcilerRuntime) RetentionStatus() RetentionStatus {
+	status := retentionStatus(r.retention, r.archive, r.ledger)
+	status.TerminalDropped = r.terminalDropped.Load()
+	return status
+}
+
+var _ RetentionReporter = (*reconcilerRuntime)(nil)
 
 // RootContext returns the one native host activation, not a mounted plugin.
 // It is intentionally optional: only trusted host construction needs this anchor.
@@ -430,9 +462,10 @@ func (r *reconcilerRuntime) Inspect(ctx context.Context) (Inspection, error) {
 
 func (r *reconcilerRuntime) Events(ctx context.Context) ([]Event, error) {
 	reply := r.exchange(ctx, rcMessage{kind: rcEventsCommand})
-	if reply.err != nil {
+	if reply.err != nil && !errors.Is(reply.err, ErrEventsTruncated) {
 		return nil, reply.err
 	}
+	ledgerErr := reply.err
 	// Ledger envelopes contain JSON values only; clone outside the owner so a
 	// caller cannot mutate a future Events response or stall graph mutation.
 	for i := range reply.events {
@@ -451,7 +484,7 @@ func (r *reconcilerRuntime) Events(ctx context.Context) ([]Event, error) {
 		}
 		reply.events[i].Data = data
 	}
-	return reply.events, nil
+	return reply.events, ledgerErr
 }
 
 func (r *reconcilerRuntime) ObserveEvents(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {
@@ -472,7 +505,7 @@ func (r *reconcilerRuntime) ObserverStatus() ObserverStatus {
 func (r *reconcilerRuntime) Close(ctx context.Context) error {
 	select {
 	case <-r.done:
-		return errors.Join(r.rootErr, r.observers.close(ctx))
+		return errors.Join(r.rootErr, r.ledger.failure(), r.observers.close(ctx))
 	default:
 	}
 	err := r.exchange(ctx, rcMessage{kind: rcCloseCommand}).err
@@ -484,7 +517,7 @@ func (r *reconcilerRuntime) Close(ctx context.Context) error {
 	// to this same native ledger and must not be dropped by an early Close.
 	select {
 	case <-r.done:
-		return errors.Join(err, r.rootErr, r.observers.close(ctx))
+		return errors.Join(err, r.rootErr, r.ledger.failure(), r.observers.close(ctx))
 	default:
 	}
 	if err != nil {
@@ -501,7 +534,7 @@ func (r *reconcilerRuntime) Close(ctx context.Context) error {
 	}
 	select {
 	case <-r.done:
-		return errors.Join(r.rootErr, r.observers.close(ctx))
+		return errors.Join(r.rootErr, r.ledger.failure(), r.observers.close(ctx))
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -575,7 +608,7 @@ func (o *rcOwner) run() {
 		o.flushServices()
 		o.finishWaiters()
 		if o.closing && len(o.fibers) == 0 && (o.root == nil || o.root.act == nil) {
-			o.replyAll(&o.closers, errors.Join(o.terminal...))
+			o.replyAll(&o.closers, errors.Join(o.terminalErrors()...))
 			close(o.r.done)
 			return
 		}
@@ -689,16 +722,22 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 			o.requestDispose(f)
 		}
 	case rcAwaitCommand:
-		if _, retired := o.retired[m.id]; retired {
-			return rcReply{err: o.retiredErr[m.id]}, false
+		if record, retired := o.r.archive.get(m.id); retired {
+			return rcReply{err: record.awaitErr}, false
 		}
-		if o.fibers[m.id] == nil {
+		f := o.fibers[m.id]
+		if f == nil {
+			if o.issued(m.id) {
+				return rcReply{err: ErrExpired}, false
+			}
 			return rcReply{err: ErrUnknown}, false
 		}
-		o.awaiting[m.id] = append(o.awaiting[m.id], o.waiter(m))
+		w := o.waiter(m)
+		w.fiber = f
+		o.awaiting[m.id] = append(o.awaiting[m.id], w)
 		return rcReply{}, true
 	case rcRecordCommand:
-		o.appendEvent(Event{Sequence: uint64(len(o.events) + 1), Kind: "fixture", Key: m.key, Data: m.data})
+		o.appendEvent(Event{Kind: "fixture", Key: m.key, Data: m.data})
 	case rcSettleCommand:
 		o.settlers = append(o.settlers, o.waiter(m))
 		return rcReply{}, true
@@ -711,7 +750,8 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 	case rcInspectCommand:
 		return rcReply{inspection: o.inspect()}, false
 	case rcEventsCommand:
-		return rcReply{events: slices.Clone(o.events)}, false
+		events, err := o.r.ledger.events()
+		return rcReply{events: events, err: err}, false
 	case rcProvideCommand:
 		f, err := o.current(m.act)
 		if err != nil {
@@ -1392,6 +1432,11 @@ func (o *rcOwner) serviceHeld(keys []string) bool {
 	return false
 }
 
+// issued reports whether id was ever issued to a user fiber. IDs are monotonic
+// and never reused, so an issued id that is not live is disposed, whether or
+// not its archive record is still held.
+func (o *rcOwner) issued(id uint64) bool { return id != 0 && id <= o.nextFiber }
+
 // Error formatting can invoke plugin methods just like Check or Apply. Cache it
 // on the worker that obtained the error; keep the original object for errors.Is.
 func rcErrorText(err error) (text string) {
@@ -1728,7 +1773,7 @@ func (o *rcOwner) unloaded(f *rcFiber) {
 		// snapshot or restarting its lifetime. All user fibers are already gone.
 		if f.failure != nil {
 			diagnostic := &rcDiagnostic{text: f.failureText, cause: f.failure}
-			o.terminal = append(o.terminal, diagnostic)
+			o.addTerminal(diagnostic)
 			o.r.rootErr = diagnostic
 		}
 		o.fail(f, nil)
@@ -1759,10 +1804,34 @@ func (o *rcOwner) releaseDependencies(f *rcFiber) {
 	f.releasing, f.releaseBindings = nil, nil
 }
 
+// rcTerminalLimit bounds the diagnostics of past failed incarnations that every
+// later Settle and Close still reports. Beyond it only a count is kept, and the
+// reported error says so: a failing plugin restarted forever must not grow the
+// owner without bound.
+const rcTerminalLimit = 64
+
+func (o *rcOwner) addTerminal(err error) {
+	if len(o.terminal) < rcTerminalLimit {
+		o.terminal = append(o.terminal, err)
+		return
+	}
+	o.r.terminalDropped.Add(1)
+}
+
+// terminalErrors is the retained diagnostics plus, past the cap, one error that
+// states how many were dropped.
+func (o *rcOwner) terminalErrors() []error {
+	dropped := o.r.terminalDropped.Load()
+	if dropped == 0 {
+		return o.terminal
+	}
+	return append(slices.Clone(o.terminal), fmt.Errorf("%d further terminal diagnostics dropped (cap %d)", dropped, rcTerminalLimit))
+}
+
 func (o *rcOwner) remove(f *rcFiber) {
 	diagnostic := o.snapshot(f).Error
 	if f.failure != nil {
-		o.terminal = append(o.terminal, &rcDiagnostic{text: f.failureText, cause: f.failure})
+		o.addTerminal(&rcDiagnostic{text: f.failureText, cause: f.failure})
 	}
 	o.fail(f, nil)
 	o.block(f, nil)
@@ -1777,10 +1846,7 @@ func (o *rcOwner) remove(f *rcFiber) {
 	archive := o.snapshot(f)
 	archive.Error = diagnostic
 	archive.Epoch, archive.Effects, archive.EffectTree = nil, nil, nil
-	o.retired[f.id] = archive
-	if f.awaitErr != nil {
-		o.retiredErr[f.id] = f.awaitErr
-	}
+	o.r.archive.put(f.id, rcRetired{snapshot: archive, awaitErr: f.awaitErr})
 	delete(o.fibers, f.id)
 	if parent := f.parent; parent != nil {
 		delete(parent.children, f.id)
@@ -1817,7 +1883,7 @@ func (o *rcOwner) state(f *rcFiber, state State) {
 		return
 	}
 	f.state = state
-	o.appendEvent(Event{Sequence: uint64(len(o.events) + 1), Fiber: f.id, Name: f.spec.ID, Kind: "state", From: old, State: state})
+	o.appendEvent(Event{Fiber: f.id, Name: f.spec.ID, Kind: "state", From: old, State: state})
 	if old == Active || state == Active {
 		for _, p := range slices.Clone(f.provisions) {
 			o.notifyService([]string{p.key}, []Event{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: state, Key: p.key,
@@ -1883,7 +1949,6 @@ func (o *rcOwner) notifyService(keys []string, events []Event) {
 }
 
 func (o *rcOwner) emitService(e Event) {
-	e.Sequence = uint64(len(o.events) + 1)
 	o.appendEvent(e)
 	o.noticeDepth--
 	if o.noticeDepth == 0 && len(o.deferredDrain) != 0 {
@@ -1972,7 +2037,7 @@ func (o *rcOwner) releaseLoads(keys []string) {
 }
 
 func (o *rcOwner) event(f *rcFiber, kind, key string, uid uint64) {
-	e := Event{Sequence: uint64(len(o.events) + 1), Fiber: f.id, Name: f.spec.ID, Kind: kind, State: f.state, Key: key, UID: uid}
+	e := Event{Fiber: f.id, Name: f.spec.ID, Kind: kind, State: f.state, Key: key, UID: uid}
 	if kind == "service" || kind == "provide" {
 		if p := o.providers[key]; p != nil && p.binding.uid == uid {
 			e.Value = p.binding.value
@@ -1981,8 +2046,10 @@ func (o *rcOwner) event(f *rcFiber, kind, key string, uid uint64) {
 	o.appendEvent(e)
 }
 
+// appendEvent assigns the next sequence number; callers never choose it.
 func (o *rcOwner) appendEvent(event Event) {
-	o.events = append(o.events, event)
+	event.Sequence = o.r.ledger.next()
+	o.r.ledger.append(event)
 	o.r.observers.append(event)
 }
 
@@ -2032,11 +2099,12 @@ func (o *rcOwner) snapshot(f *rcFiber) Snapshot {
 }
 
 func (o *rcOwner) snapshots() []Snapshot {
-	ss := make([]Snapshot, 0, len(o.fibers)+len(o.retired))
+	ss := make([]Snapshot, 0, len(o.fibers)+int(o.r.archive.n.Load()))
 	for _, id := range o.ids() {
 		ss = append(ss, o.snapshot(o.fibers[id]))
 	}
-	for _, archived := range o.retired {
+	o.r.archive.each(func(_ uint64, record rcRetired) {
+		archived := record.snapshot
 		archived.Epoch = slices.Clone(archived.Epoch)
 		archived.Effects = slices.Clone(archived.Effects)
 		archived.EffectTree = slices.Clone(archived.EffectTree)
@@ -2048,7 +2116,7 @@ func (o *rcOwner) snapshots() []Snapshot {
 			archived.Target = &EpochSnapshot{Revision: archived.Target.Revision, UIDs: slices.Clone(archived.Target.UIDs)}
 		}
 		ss = append(ss, archived)
-	}
+	})
 	slices.SortFunc(ss, func(a, b Snapshot) int {
 		if a.ID < b.ID {
 			return -1
@@ -2062,7 +2130,7 @@ func (o *rcOwner) snapshots() []Snapshot {
 }
 
 func (o *rcOwner) inspect() Inspection {
-	inspection := Inspection{Sequence: uint64(len(o.events)), Fibers: o.snapshots(), Provisions: make([]ProvisionSnapshot, 0, len(o.providers))}
+	inspection := Inspection{Sequence: o.r.ledger.total.Load(), Fibers: o.snapshots(), Provisions: make([]ProvisionSnapshot, 0, len(o.providers))}
 	for key, p := range o.providers {
 		owner := o.lookup(p.binding.owner)
 		// The provider table owns each record until its real provision effect
@@ -2096,8 +2164,8 @@ func (o *rcOwner) finishWaiters() {
 			var err error
 			if f != nil {
 				err = errors.Join(f.awaitErr, f.blocked)
-			} else {
-				err = o.retiredErr[id]
+			} else if len(waiters) != 0 {
+				err = waiters[0].fiber.awaitErr // The waiter's own reference: exact even after archive eviction.
 			}
 			o.replyAll(&waiters, err)
 			delete(o.awaiting, id)
@@ -2123,7 +2191,7 @@ func (o *rcOwner) finishWaiters() {
 		}
 		// Sort diagnostics only: lifecycle events are never reordered.
 		sort.Slice(failures, func(i, j int) bool { return failures[i].Error() < failures[j].Error() })
-		err := errors.Join(append(failures, o.terminal...)...)
+		err := errors.Join(append(failures, o.terminalErrors()...)...)
 		o.replyAll(&o.settlers, err)
 		if len(o.blocked) != 0 {
 			o.replyAll(&o.closers, err)

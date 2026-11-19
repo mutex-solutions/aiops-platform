@@ -41,7 +41,7 @@ const (
 var causalBackends = []struct {
 	name string
 	make func() concurrency.Runtime
-}{{"reconciler", concurrency.NewReconciler}, {"graph-lock", concurrency.NewGraphLock}}
+}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}}
 
 // actualWitness binds exact emitted bytes, not a remarshal or a desired cut.
 func actualWitness(script, trace []byte, cuts []differential.CausalCut) differential.CausalWitness {

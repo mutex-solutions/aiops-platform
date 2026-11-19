@@ -21,10 +21,33 @@ import (
 type Backend struct {
 	Name string
 	New  func() cc.Runtime
+	// WithRetention builds the same candidate with explicit history bounds. The
+	// harness uses it to size the archive to its fixture and, for graph runs, to
+	// opt into complete event recording (see harnessRetention).
+	WithRetention func(cc.Retention) cc.Runtime
 }
 
 func Candidates() []Backend {
-	return []Backend{{Name: "reconciler", New: cc.NewReconciler}, {Name: "graph-lock", New: cc.NewGraphLock}}
+	return []Backend{
+		{Name: "reconciler", New: cc.NewReconciler, WithRetention: cc.NewReconcilerWith},
+		{Name: "graph-lock", New: cc.NewGraphLock, WithRetention: cc.NewGraphLockWith},
+	}
+}
+
+// harnessRetention is this harness's explicit opt-in to history. The archive
+// holds every fiber of one fixture instance, so the final teardown check can
+// inspect every handle it generated (earlier tree incarnations are evicted: that
+// is the bound under test). Graph runs mount once and never churn, so they also
+// record complete event history, as their raw trace needs it. Tree churn does
+// not record: a recorder would hold the whole history and make the retained heap
+// grow with it, which is exactly what section 8.2 forbids. A tree run's trace is
+// the runtime's bounded tail, and its length is checked against the status.
+func harnessRetention(f Fixture) cc.Retention {
+	retention := cc.Retention{ArchiveLimit: len(f.Nodes) + 1}
+	if f.Topology != Trees {
+		retention.RecordLimit = cc.DefaultRecordLimit
+	}
+	return retention
 }
 
 // Resources is fixture-owned accounting, not inferred from state or queue sizes.
@@ -84,7 +107,11 @@ func NewRealCandidateRuntime(backend Backend, f Fixture) (*RealCandidateRuntime,
 	if backend.New == nil || backend.Name == "" {
 		return nil, errors.New("named real backend factory required")
 	}
-	r := &RealCandidateRuntime{Runtime: backend.New(), Fixture: f, IDs: make([]uint64, len(f.Nodes)),
+	runtime := backend.New
+	if backend.WithRetention != nil {
+		runtime = func() cc.Runtime { return backend.WithRetention(harnessRetention(f)) }
+	}
+	r := &RealCandidateRuntime{Runtime: runtime(), Fixture: f, IDs: make([]uint64, len(f.Nodes)),
 		providers: make(map[RawKey]int), live: make([]liveContext, len(f.Nodes))}
 	if _, ok := r.Runtime.(cc.Batcher); !ok {
 		cleanup, cancel := context.WithTimeout(context.Background(), TrialGuard)

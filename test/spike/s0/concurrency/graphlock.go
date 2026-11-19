@@ -23,15 +23,15 @@ import (
 type GraphLock struct {
 	mu         sync.Mutex
 	fibers     map[uint64]*graphFiber
-	root       *graphFiber             // Lazy native ID-0 owner, never a user fiber or snapshot row.
-	retired    map[uint64]graphRetired // Inspection history; no activation/effect references.
-	retiredErr map[uint64]error        // Preserve sticky startup-error identity for AwaitFiber after disposal.
+	root       *graphFiber                  // Lazy native ID-0 owner, never a user fiber or snapshot row.
+	retired    *recordArchive[graphRetired] // Bounded archive of recently disposed incarnations (see retention.go).
+	retention  Retention
+	ledger     *eventLedger
 	services   map[string]graphService
 	indexByKey map[string]map[uint64]*graphFiber
 	nextFiber  uint64
 	nextUID    uint64
 	totalSeq   uint64
-	events     []Event
 	observers  *nativeObservers
 	changed    chan struct{}
 	closed     bool
@@ -91,6 +91,7 @@ type graphFiber struct {
 type graphRetired struct {
 	snapshot   Snapshot
 	diagnostic error // Format caller-defined Error methods only after releasing mu.
+	awaitErr   error // Sticky startup-error identity for AwaitFiber after disposal.
 }
 
 type graphAvailability struct {
@@ -158,11 +159,16 @@ type graphService struct {
 }
 
 // NewGraphLock returns the second independent S0 scheduler candidate.
-func NewGraphLock() Runtime {
+func NewGraphLock() Runtime { return NewGraphLockWith(Retention{}) }
+
+// NewGraphLockWith is NewGraphLock with explicit history bounds (see Retention).
+func NewGraphLockWith(retention Retention) Runtime {
+	retention = retention.normalized()
 	return &GraphLock{
 		fibers:     make(map[uint64]*graphFiber),
-		retired:    make(map[uint64]graphRetired),
-		retiredErr: make(map[uint64]error),
+		retired:    newRecordArchive[graphRetired](retention.ArchiveLimit),
+		retention:  retention,
+		ledger:     newEventLedger(retention),
 		services:   make(map[string]graphService),
 		indexByKey: make(map[string]map[uint64]*graphFiber),
 		heldSvc:    make(map[string]int),
@@ -185,7 +191,7 @@ func (g *GraphLock) signalLocked() {
 func (g *GraphLock) appendEventLocked(event Event) {
 	g.totalSeq++
 	event.Sequence = g.totalSeq
-	g.events = append(g.events, event)
+	g.ledger.append(event)
 	g.observers.append(event)
 	g.signalLocked()
 }
@@ -566,7 +572,7 @@ func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any,
 	}
 	f, ok := g.fibers[id]
 	if !ok {
-		_, disposed := g.retired[id]
+		disposed := g.issuedLocked(id) // Archived or expired: either way no longer live.
 		g.mu.Unlock()
 		if disposed {
 			return request, ErrInactive
@@ -637,8 +643,8 @@ func (g *GraphLock) Dispose(ctx context.Context, id uint64) error {
 	defer g.mu.Unlock()
 	f, ok := g.fibers[id]
 	if !ok {
-		if _, disposed := g.retired[id]; disposed {
-			return nil
+		if g.issuedLocked(id) {
+			return nil // Disposed, archived or expired: idempotent.
 		}
 		return ErrUnknown
 	}
@@ -733,6 +739,7 @@ func (g *GraphLock) Settle(ctx context.Context) error {
 // archive and retain that same startup-error identity, not cleanup diagnostics.
 // Like Settle, it must not be used to self-join an executing callback or lease.
 func (g *GraphLock) AwaitFiber(ctx context.Context, id uint64) error {
+	var held *graphFiber // The waiter's own reference, like a Cordis caller's fiber handle.
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -740,14 +747,21 @@ func (g *GraphLock) AwaitFiber(ctx context.Context, id uint64) error {
 		g.mu.Lock()
 		f, exists := g.fibers[id]
 		if !exists {
-			_, disposed := g.retired[id]
-			err := g.retiredErr[id]
-			g.mu.Unlock()
-			if disposed {
-				return err
+			var err error
+			switch record, archived := g.retired.get(id); {
+			case held != nil:
+				err = held.awaitErr // Exact even if the archive evicted the record meanwhile.
+			case archived:
+				err = record.awaitErr
+			case g.issuedLocked(id):
+				err = ErrExpired
+			default:
+				err = ErrUnknown
 			}
-			return ErrUnknown
+			g.mu.Unlock()
+			return err
 		}
+		held = f
 		if !f.worker && f.state != Loading && f.state != Unloading {
 			err := f.awaitErr
 			g.mu.Unlock()
@@ -819,18 +833,16 @@ func (g *GraphLock) Inspect(ctx context.Context) (Inspection, error) {
 }
 
 func (g *GraphLock) snapshotsLocked() ([]Snapshot, []error) {
-	ids := make([]uint64, 0, len(g.fibers)+len(g.retired))
+	ids := make([]uint64, 0, len(g.fibers)+int(g.retired.n.Load()))
 	for id := range g.fibers {
 		ids = append(ids, id)
 	}
-	for id := range g.retired {
-		ids = append(ids, id)
-	}
+	g.retired.each(func(id uint64, _ graphRetired) { ids = append(ids, id) })
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	out := make([]Snapshot, 0, len(ids))
 	diagnostics := make([]error, 0, len(ids))
 	for _, id := range ids {
-		if archived, disposed := g.retired[id]; disposed {
+		if archived, disposed := g.retired.get(id); disposed {
 			s := archived.snapshot
 			s.Epoch = append([]uint64(nil), s.Epoch...)
 			out = append(out, s)
@@ -952,7 +964,7 @@ func (g *GraphLock) Events(ctx context.Context) ([]Event, error) {
 		return nil, err
 	}
 	g.mu.Lock()
-	out := append([]Event(nil), g.events...)
+	out, ledgerErr := g.ledger.events()
 	g.mu.Unlock()
 	// Payloads are immutable after append, so readers can copy off-lock too.
 	// Service Value retains its actual identity rather than invoking user code.
@@ -961,8 +973,18 @@ func (g *GraphLock) Events(ctx context.Context) ([]Event, error) {
 			out[i].Data = graphCopyJSONValue(out[i].Data).(map[string]any)
 		}
 	}
-	return out, nil
+	return out, ledgerErr
 }
+
+// RetentionStatus reports the history bounds and their use without the graph lock.
+func (g *GraphLock) RetentionStatus() RetentionStatus {
+	return retentionStatus(g.retention, g.retired, g.ledger)
+}
+
+// issuedLocked reports whether id was ever issued to a user fiber. IDs are
+// monotonic and never reused, so an issued id that is not live is disposed,
+// whether or not its archive record is still held.
+func (g *GraphLock) issuedLocked(id uint64) bool { return id != 0 && id <= g.nextFiber }
 
 // ObserveEvents registers activation-owned observation, never a callback on the
 // graph owner. The helper owns its subscription lease and Defer registration, so
@@ -1018,7 +1040,7 @@ func (g *GraphLock) Close(ctx context.Context) error {
 	g.mu.Unlock()
 	// All actual lifecycle events have now been published. Even a failed root
 	// must drain and close the dispatcher; a lifecycle timeout above must not.
-	return errors.Join(rootErr, g.observers.close(ctx))
+	return errors.Join(rootErr, g.ledger.failure(), g.observers.close(ctx))
 }
 
 // Transition machinery below deliberately never calls Apply or a disposer
@@ -1033,6 +1055,7 @@ var _ Inspector = (*GraphLock)(nil)
 var _ ConfigUpdater = (*GraphLock)(nil)
 var _ RootProvider = (*GraphLock)(nil)
 var _ ObserverRuntime = (*GraphLock)(nil)
+var _ RetentionReporter = (*GraphLock)(nil)
 var _ Batcher = (*GraphLock)(nil)
 
 // targetLocked describes the desired future activation, not the activation
@@ -1172,10 +1195,7 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 		g.eventLocked(f, "dispose:complete", "", 0)
 		archive := Snapshot{ID: f.id, Name: f.spec.ID, State: Disposed, Revision: f.revision, Epoch: append([]uint64(nil), f.epoch...)}
 		graphCaptureConfig(&archive, f.spec.Config)
-		g.retired[f.id] = graphRetired{snapshot: archive, diagnostic: f.lastErr}
-		if f.awaitErr != nil {
-			g.retiredErr[f.id] = f.awaitErr
-		}
+		g.retired.put(f.id, graphRetired{snapshot: archive, diagnostic: f.lastErr, awaitErr: f.awaitErr})
 		for _, key := range f.spec.Needs {
 			delete(g.indexByKey[key], f.id)
 			if len(g.indexByKey[key]) == 0 {

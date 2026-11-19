@@ -26,9 +26,15 @@ func TestTreeScopeConstruction(t *testing.T) {
 				if len(result.Errors) != 0 || result.Classification != Inconclusive {
 					t.Fatalf("width %d: %v", width, result.Errors)
 				}
-				// Every incarnation is archived: 97 shared + ten cycles of every tree.
-				if got, want := len(result.FinalFibers), SharedFibers+result.Cycles*6*width; got != want {
-					t.Fatalf("archived fibers %d, want %d (no container fiber)", got, want)
+				// The archive is bounded (harnessRetention): it keeps the newest
+				// len(f.Nodes)+1 incarnations, which include every handle of the final
+				// teardown. Records held plus records evicted still count every
+				// incarnation: 97 shared + ten cycles of every tree, no container fiber.
+				if result.Retention == nil || len(result.FinalFibers) != result.Retention.Archived || result.Retention.Archived != min(SharedFibers+result.Cycles*6*width, len(f.Nodes)+1) {
+					t.Fatalf("archived fibers %d, retention %+v", len(result.FinalFibers), result.Retention)
+				}
+				if got, want := result.Retention.Archived+int(result.Retention.ArchiveEvicted), SharedFibers+result.Cycles*6*width; got != want {
+					t.Fatalf("incarnations %d, want %d (no container fiber)", got, want)
 				}
 				// One shared batch, then per cycle and tree: provider batch + consumer batch.
 				if want := 1 + result.Cycles*6*2; result.MountBatches != want {

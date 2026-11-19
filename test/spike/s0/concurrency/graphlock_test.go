@@ -25,7 +25,7 @@ func graphTestContext(t *testing.T) context.Context {
 // per-test gate cleanups so those gates release first, including in synctest.
 func graphTestRuntime(t *testing.T) Runtime {
 	t.Helper()
-	g := NewGraphLock()
+	g := NewRecordingGraphLock()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

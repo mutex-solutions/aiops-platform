@@ -64,6 +64,10 @@ type RootProvider interface {
 }
 
 // Waiter joins one fiber's lifecycle without waiting for unrelated transitions.
+// For a fiber that is no longer live the result follows the retention contract
+// (retention.go): a recently disposed fiber returns its retained startup error,
+// an ID whose archive record was evicted returns ErrExpired, and an ID that was
+// never issued returns ErrUnknown.
 type Waiter interface {
 	AwaitFiber(context.Context, uint64) error
 }
@@ -163,7 +167,11 @@ type Runtime interface {
 	Update(context.Context, uint64) error
 	Dispose(context.Context, uint64) error
 	Settle(context.Context) error
+	// Snapshots lists live fibers and the bounded archive of recently disposed ones.
 	Snapshots(context.Context) ([]Snapshot, error)
+	// Events returns complete history only for a runtime built with a recorder
+	// (Retention.RecordLimit); otherwise the bounded tail with ErrEventsTruncated
+	// once older events were dropped. See retention.go.
 	Events(context.Context) ([]Event, error)
 	Close(context.Context) error
 }

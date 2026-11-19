@@ -56,11 +56,18 @@ func RunCycles(ctx context.Context, backend Backend, f Fixture, cycles int) (res
 		}
 		result.ResourcesEnd = r.Resources.Active.Load()
 		result.Events, err = r.Runtime.Events(cleanup)
-		if err != nil {
+		// A tree run does not record complete history by design (harnessRetention):
+		// its trace is the bounded tail, verified against the accepted count.
+		tail := errors.Is(err, cc.ErrEventsTruncated) && f.Topology == Trees
+		if err != nil && !tail {
 			result.Errors = append(result.Errors, "final event ledger: "+err.Error())
 		}
-		if err := verifyLedger(result.Events, r.Runtime.(cc.ObserverRuntime).ObserverStatus()); err != nil {
+		if err := verifyLedger(result.Events, r.Runtime.(cc.ObserverRuntime).ObserverStatus(), tail); err != nil {
 			result.Errors = append(result.Errors, err.Error())
+		}
+		if reporter, ok := r.Runtime.(cc.RetentionReporter); ok {
+			status := reporter.RetentionStatus()
+			result.Retention = &status
 		}
 		result.DisposedWithArchives, err = r.Checkpoint(cleanup, true)
 		if err != nil {
@@ -377,17 +384,26 @@ func inspectDisposed(ctx context.Context, r *RealCandidateRuntime, result *RunRe
 	return nil
 }
 
-// verifyLedger checks the complete retained event history once: contiguous
-// sequence numbers from one, and a length equal to the dispatcher's accepted
-// count (so the per-sample history lengths are the real ledger lengths).
-func verifyLedger(events []cc.Event, status cc.ObserverStatus) error {
+// verifyLedger checks the retained event history once: contiguous sequence
+// numbers, and a last sequence equal to the dispatcher's accepted count (so the
+// per-sample history lengths are the real ledger lengths). Complete history also
+// starts at one, so its length is the accepted count. A tail (bounded history)
+// must end at the accepted count.
+func verifyLedger(events []cc.Event, status cc.ObserverStatus, tail bool) error {
+	first := uint64(1)
+	if tail && len(events) != 0 {
+		first = events[0].Sequence
+	}
 	for i, event := range events {
-		if event.Sequence != uint64(i+1) {
+		if event.Sequence != first+uint64(i) {
 			return fmt.Errorf("event sequence %d at offset %d", event.Sequence, i)
 		}
 	}
-	if uint64(len(events)) != status.Accepted {
+	if !tail && uint64(len(events)) != status.Accepted {
 		return fmt.Errorf("event ledger holds %d events but the dispatcher accepted %d", len(events), status.Accepted)
+	}
+	if tail && (len(events) == 0 || events[len(events)-1].Sequence != status.Accepted) {
+		return fmt.Errorf("event tail of %d events does not end at the dispatcher's accepted count %d", len(events), status.Accepted)
 	}
 	return nil
 }

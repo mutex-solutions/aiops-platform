@@ -117,7 +117,8 @@ Validated (`tree_scope_test.go`, both candidates, 2/4-fiber trees):
   `runTrees`), while one tree provider's restart reloads only that tree;
 - each consumer observes `Scope.From == its tree` and its own tree's provider
   value under the identical key name; a consumer's `Scope.With` is refused;
-- the archived fiber count is exactly shared + cycles × locals (no hidden fiber);
+- archived records held plus archive evictions (`RunResult.Retention`) equal shared
+  + cycles × locals (no hidden fiber); the archive itself is bounded (note 1);
 - a stale incarnation's derived context is never reused (`MountTree` clears it).
 
 One consequence is part of the measurement: a tree's cold mount is **two** native
@@ -131,12 +132,16 @@ That interval is what is compared with 50 ms.
    The table says "Retained heap above shared-only baseline for 500 trees ≤32 MiB".
    The harness checks every retained checkpoint (one per cycle, archives and event
    history included) against 32 MiB, for all four tree fixtures including the
-   300-tree runs. The runtime keeps the archive and the events of every disposed
-   incarnation, so the same 500 trees retain more each cycle. The first checkpoint
-   (500 trees loaded, no history) is reported next to the worst
-   (`HeapSummary.MaxFirstBytes`, `RetainedMetrics.FirstDeltaBytes`) so the owner can
-   decide whether the budget is the first checkpoint, or whether the candidates
-   must bound their history. Nothing here relaxes it.
+   300-tree runs. The candidates used to keep the archive and the events of every
+   disposed incarnation, so the same 500 trees retained more each cycle; they now
+   keep a bounded archive and a bounded event tail (ADR-034, 2026-11-19 retention
+   section; `concurrency/retention.go`). The harness opts in explicitly
+   (`harnessRetention`): an archive sized to one fixture instance so the final
+   teardown check sees every handle, complete event recording for graph runs (their
+   trace needs it, and they never churn), and no recorder for tree churn, whose
+   trace is the runtime's bounded tail checked against the accepted count. The first
+   checkpoint is still reported next to the worst (`HeapSummary.MaxFirstBytes`,
+   `RetainedMetrics.FirstDeltaBytes`). Nothing here relaxes the limit.
 2. Restarts (`root-restart-settle`, `shared-provider-restart-settle`,
    `all-providers-batch-restart-settle`) are held to 5 s at the **maximum**, not
    p99; the criteria give a plain bound. Cold tree mounts are held strictly below
@@ -311,13 +316,21 @@ S0_SCALE_DEV=chain/graph-lock/10000 "$EXE" -test.run '^TestDevObserve$' -test.co
 S0_SCALE_DEV=trees/reconciler/500/4 "$EXE" -test.run '^TestDevObserve$' -test.count=1 -test.v
 ```
 
-## Known candidate behaviour (reproductions, not fixed here)
+## Candidate defects found by this harness (fixed in the candidates)
 
-`candidate_defects_test.go` holds two skipped, deliberately failing reproductions
-(`S0_SCALE_REPRO=1`): graph-lock mount cost that grows with the number of
-providers at a fixed fiber count (held service events rescanned per pending load
-and per composed pre-check), and retained heap that grows with churn history at a
-constant live set. See the report that accompanied this change for numbers.
+`candidate_defects_test.go` holds regression checks for two candidate defects found
+while preparing the scale run, both fixed in `test/spike/s0/concurrency`
+(opt-in with `S0_SCALE_REPRO=1` because they are timing and heap based):
+
+- mount cost that grew with the number of providers at a fixed fiber count (held
+  service events rescanned per pending load and per composed pre-check), now
+  indexed by key in both candidates;
+- retained heap that grew with churn history at a constant live set (an archive of
+  every disposed incarnation and an append-only event ledger), now bounded.
+
+The heap check measures the candidate and the fixture without the harness's own
+per-sample trace (`churnRetained`); a sampled run's `Samples` are harness memory
+and still grow with the number of samples. See ADR-034 for numbers.
 
 No performance output file has been produced by the author checks. No candidate
 selection or S0-complete claim is made.

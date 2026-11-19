@@ -17,7 +17,7 @@ import (
 // service event after refreshing dependants.
 
 func orderCandidates() map[string]func() Runtime {
-	return map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock}
+	return map[string]func() Runtime{"reconciler": NewRecordingReconciler, "graph-lock": NewRecordingGraphLock}
 }
 
 func isServiceEvent(e Event, key string) bool {

@@ -43,7 +43,7 @@ func closeRuntime(ctx context.Context, r Runtime) error {
 }
 
 func TestSharedAvailabilityContract(t *testing.T) {
-	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
+	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewRecordingReconciler, "graph-lock": NewRecordingGraphLock} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -123,7 +123,7 @@ func TestSharedAvailabilityContract(t *testing.T) {
 }
 
 func TestSharedConfigRequestPrefixDoesNotJoinOwnTeardown(t *testing.T) {
-	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
+	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewRecordingReconciler, "graph-lock": NewRecordingGraphLock} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -182,7 +182,7 @@ func TestSharedConfigRequestPrefixDoesNotJoinOwnTeardown(t *testing.T) {
 }
 
 func TestSharedLifecycleContract(t *testing.T) {
-	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewReconciler, "graph-lock": NewGraphLock} {
+	for name, makeRuntime := range map[string]func() Runtime{"reconciler": NewRecordingReconciler, "graph-lock": NewRecordingGraphLock} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

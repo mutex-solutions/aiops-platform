@@ -16,8 +16,8 @@ import (
 )
 
 var candidates = map[string]func() cc.Runtime{
-	"graph-lock": cc.NewGraphLock,
-	"reconciler": cc.NewReconciler,
+	"graph-lock": cc.NewRecordingGraphLock,
+	"reconciler": cc.NewRecordingReconciler,
 }
 
 // Only an adapter to actual native contexts, never a replacement/fake host.

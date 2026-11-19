@@ -60,7 +60,7 @@ var bubbleTag = regexp.MustCompile(`synctest bubble \d+`)
 
 func rcRuntime(t *testing.T) Runtime {
 	t.Helper()
-	r := NewReconciler()
+	r := NewRecordingReconciler()
 	t.Cleanup(func() {
 		if err := closeRuntime(rcGuard(t), r); err != nil {
 			t.Errorf("Close: %v", err)
@@ -115,7 +115,7 @@ func rcSnapshot(t *testing.T, r Runtime, id uint64) Snapshot {
 
 func TestReconcilerScopeUnloadDeadlineRetainsDeadlineExceededCause(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		handles := make(chan *EffectHandle, 1)
 		id := rcMount(t, r, Spec{ID: "scope-deadline", Apply: func(c *Context) error {
 			h, err := c.RequestEffectScope("deadline", func(s *EffectScope) error {
@@ -280,7 +280,7 @@ func TestReconcilerContextOwnershipAckSurvivesCancellationAfterAdmission(t *test
 			// transport acknowledgment until after native quiescence. This makes
 			// the accepted-command/canceled-context race deterministic.
 			r := &reconcilerRuntime{inbox: make(chan rcMessage, 1), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
-			o := &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter)}
+			o := newRcOwner(r, Retention{})
 			o.startRoot()
 			c := o.root.act.ctx
 			if !c.Enter() {
@@ -442,7 +442,7 @@ func TestReconcilerRetiringContextCannotDisposeDesiredReplacement(t *testing.T) 
 
 func TestReconcilerPartialEffectCleanupUsesFreshNativeDisposeBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		contexts := make(chan *Context, 1)
 		id := rcMount(t, r, Spec{ID: "rollback", Apply: func(c *Context) error { contexts <- c; return nil }})
 		rcSettle(t, r)
@@ -720,7 +720,7 @@ func TestReconcilerDiamondProviderRemovalFollowsBothConsumerStableTransitions(t 
 
 func TestReconcilerObserverQueueRemainsOpenUntilNativeCloseActuallyFinishes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		observers := r.(ObserverRuntime)
 		entered, release := make(chan struct{}), make(chan struct{})
 		id := rcMount(t, r, Spec{ID: "blocked-cleanup", ApplyEffect: func(*Context) (Disposer, error) {
@@ -753,7 +753,7 @@ func TestReconcilerObserverQueueRemainsOpenUntilNativeCloseActuallyFinishes(t *t
 }
 
 func TestReconcilerRootIsNativeHiddenAnchorWithActualProvisionRecords(t *testing.T) {
-	r := NewReconciler()
+	r := NewRecordingReconciler()
 	t.Cleanup(func() {
 		if err := closeRuntime(rcGuard(t), r); err != nil {
 			t.Error(err)
@@ -836,7 +836,7 @@ func TestReconcilerRootIsNativeHiddenAnchorWithActualProvisionRecords(t *testing
 
 func TestReconcilerRootCloseJoinsChildrenUsersAndRootWorkBeforeLIFOCleanup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		root, err := r.(RootProvider).RootContext(rcGuard(t))
 		if err != nil {
 			t.Fatal(err)
@@ -937,7 +937,7 @@ func TestReconcilerRootCloseJoinsChildrenUsersAndRootWorkBeforeLIFOCleanup(t *te
 
 func TestReconcilerRootIgnoredTrackedCancellationKeepsOwnerAlive(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		root, err := r.(RootProvider).RootContext(rcGuard(t))
 		if err != nil {
 			t.Fatal(err)
@@ -973,7 +973,7 @@ func TestReconcilerRootIgnoredTrackedCancellationKeepsOwnerAlive(t *testing.T) {
 
 func TestReconcilerRootTrackedFailureRetiresOnlyOwnedLifetimeUntilExplicitClose(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		root, err := r.(RootProvider).RootContext(rcGuard(t))
 		if err != nil {
 			t.Fatal(err)
@@ -1039,7 +1039,7 @@ func TestReconcilerRootTrackedFailureRetiresOnlyOwnedLifetimeUntilExplicitClose(
 
 func TestReconcilerTrackedRecordsNativeOrderAndRetainsCleanupUntilExit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		first, second := make(chan struct{}), make(chan struct{})
 		var cleaned atomic.Bool
 		contexts := make(chan *Context, 1)
@@ -1105,7 +1105,7 @@ func TestReconcilerTrackedRecordsNativeOrderAndRetainsCleanupUntilExit(t *testin
 
 func TestReconcilerTrackedActiveErrorFailsAndInvalidatesConsumers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		workerErr := &rcInspectingError{r: r}
 		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
@@ -1151,7 +1151,7 @@ func TestReconcilerTrackedActiveErrorFailsAndInvalidatesConsumers(t *testing.T) 
 
 func TestReconcilerTrackedFailureDuringApplyWaitsForSingleTransition(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		applyEntered, releaseApply, releaseWork := make(chan struct{}), make(chan struct{}), make(chan struct{})
 		contexts := make(chan *Context, 1)
 		workerErr := errors.New("worker failed while Apply running")
@@ -1195,7 +1195,7 @@ func TestReconcilerTrackedFailureDuringApplyWaitsForSingleTransition(t *testing.
 
 func TestReconcilerTrackedSupersededErrorCannotPoisonNewTarget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		var loads atomic.Int32
 		id := rcMount(t, r, Spec{ID: "updated", Apply: func(c *Context) error {
@@ -1225,7 +1225,7 @@ func TestReconcilerTrackedSupersededErrorCannotPoisonNewTarget(t *testing.T) {
 
 func TestReconcilerTrackedIgnoredCancellationKeepsRecordAfterDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		var cleaned atomic.Bool
 		id := rcMount(t, r, Spec{ID: "blocked-worker", Apply: func(c *Context) error {
@@ -1256,7 +1256,7 @@ func TestReconcilerTrackedCancellationPanicAndDeadlineClassification(t *testing.
 	for _, result := range []string{"canceled", "panic", "deadline"} {
 		t.Run(result, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				r := NewReconciler()
+				r := NewRecordingReconciler()
 				release := make(chan struct{})
 				id := rcMount(t, r, Spec{ID: result, Apply: func(c *Context) error {
 					return c.Go(result, func(ctx context.Context) error {
@@ -2216,7 +2216,7 @@ func TestReconcilerChildPendingAndOldActivationCannotOwnReplacementChildren(t *t
 
 func TestReconcilerChildOwnershipHasNoIdleWatchers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
 			for range 16 {
 				if _, err := c.MountChild(Spec{ID: "child"}); err != nil {
@@ -2239,7 +2239,7 @@ func TestReconcilerChildOwnershipHasNoIdleWatchers(t *testing.T) {
 
 func TestReconcilerChildCleanupHasBoundedParentJoin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		entered, release := make(chan struct{}), make(chan struct{})
 		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
 			_, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
@@ -2545,7 +2545,7 @@ func TestReconcilerLeaseDrainAndSnapshotIsolation(t *testing.T) {
 
 func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		contexts := make(map[string]chan *Context)
 		var ids []uint64
 		for _, spec := range []Spec{
@@ -2680,7 +2680,7 @@ func TestReconcilerOwnerAvailableDuringReentrantCallbacks(t *testing.T) {
 }
 
 func TestReconcilerCanceledWaitersAndClosedCommands(t *testing.T) {
-	r := NewReconciler()
+	r := NewRecordingReconciler()
 	entered, release := make(chan struct{}), make(chan struct{})
 	id := rcMount(t, r, Spec{ID: "blocked", Apply: func(*Context) error { close(entered); <-release; return nil }})
 	<-entered
@@ -2735,7 +2735,7 @@ func TestReconcilerAwaitRetainsFailedErrorAfterDisposal(t *testing.T) {
 }
 
 func TestReconcilerCleanupDiagnosticDoesNotBecomeAwaitFailure(t *testing.T) {
-	r := NewReconciler()
+	r := NewRecordingReconciler()
 	cleanupErr := errors.New("cleanup diagnostic")
 	id := rcMount(t, r, Spec{ID: "cleanup", Apply: func(c *Context) error { return c.Defer("cleanup", func(context.Context) error { return cleanupErr }) }})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); err != nil {
@@ -3045,7 +3045,7 @@ func TestReconcilerPredicatePanicIsPendingNotStickyFailure(t *testing.T) {
 
 func TestReconcilerDisposeDeadlinePersistsAcrossLaterEffects(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := NewReconciler()
+		r := NewRecordingReconciler()
 		firstEntered, firstRelease := make(chan struct{}), make(chan struct{})
 		laterEntered, laterRelease := make(chan struct{}), make(chan struct{})
 		id := rcMount(t, r, Spec{ID: "cleanup-chain", Apply: func(c *Context) error {
@@ -3093,7 +3093,7 @@ func TestReconcilerDeadlinesBoundIgnoredCancellation(t *testing.T) {
 	for _, stage := range []string{"load", "drain", "dispose"} {
 		t.Run(stage, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				r := NewReconciler()
+				r := NewRecordingReconciler()
 				contexts := make(chan *Context, 1)
 				blocked, release := make(chan struct{}), make(chan struct{})
 				id := rcMount(t, r, Spec{ID: "deadline", Apply: func(c *Context) error {
@@ -3165,7 +3165,7 @@ func TestBubbleStacksCountsOnlyThisBubblesOwners(t *testing.T) {
 	outside := rcRuntime(t)
 	rcSettle(t, outside)
 	synctest.Test(t, func(t *testing.T) {
-		first := NewReconciler()
+		first := NewRecordingReconciler()
 		synctest.Wait()
 		if got := strings.Count(bubbleStacks(t), ".(*rcOwner).run("); got != 1 {
 			t.Fatalf("owners in bubble with one runtime and one outside = %d, want 1", got)
@@ -3175,7 +3175,7 @@ func TestBubbleStacksCountsOnlyThisBubblesOwners(t *testing.T) {
 		if got := bytes.Count(all[:runtime.Stack(all, true)], []byte(".(*rcOwner).run(")); got < 2 {
 			t.Fatalf("process-wide dump saw %d owners, want the outside one too", got)
 		}
-		second := NewReconciler()
+		second := NewRecordingReconciler()
 		synctest.Wait()
 		if got := strings.Count(bubbleStacks(t), ".(*rcOwner).run("); got != 2 {
 			t.Fatalf("owners in bubble with two runtimes = %d, want 2", got)

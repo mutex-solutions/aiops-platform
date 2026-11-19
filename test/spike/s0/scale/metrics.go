@@ -157,6 +157,7 @@ type RunResult struct {
 	FinalFibers          []cc.Snapshot          `json:"finalFibers"`
 	FinalProvisions      []cc.ProvisionSnapshot `json:"finalProvisions"`
 	Events               []cc.Event             `json:"events"`
+	Retention            *cc.RetentionStatus    `json:"retention,omitempty"` // Candidate history bounds and their use at the end of the run.
 	DisposedArchives     int                    `json:"disposedArchives"`
 	ActiveProvisionsEnd  int                    `json:"activeProvisionsEnd"`
 	ResourcesEnd         int64                  `json:"resourcesEnd"`
