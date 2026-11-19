@@ -34,8 +34,11 @@ type BatchOperation struct {
 //
 // No callbacks, configuration resolve/commit/veto hooks or native-root operations
 // run in this data-only API. UpdateConfig batching is NOT established by this
-// prototype. Cancellation before commit makes no changes; cancellation after
-// admission can lose an acknowledgment, not undo a committed prefix.
+// prototype. Batch either returns the ids of a committed prefix or has no effect:
+// cancellation before the core takes the command makes no changes and returns the
+// context error, and once the core has taken it the caller receives the result
+// (the reconciler claims each command atomically, see reconcilerRuntime.exchange;
+// the graph-lock commits under its only check of the context).
 type Batcher interface {
 	Batch(context.Context, []BatchOperation) ([]uint64, error)
 }

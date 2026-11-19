@@ -212,10 +212,13 @@ func TestHazardR1LostAckMount(t *testing.T) {
 	}
 }
 
-// TestHazardR1UpdateDisposeEffectDespiteError records the mirror effect: the
-// command takes effect although the call returned the context error. For Update
-// and Dispose this is at-least-once semantics (the caller can retry; Dispose is
-// idempotent), so it is pinned as behaviour, not as a hazard.
+// TestHazardR1UpdateDisposeEffectDespiteError records what a late cancellation
+// does to Update and Dispose. Both cores now give the same atomic outcome: the
+// context is cancelled after the core took the command, so the command is applied
+// and the call reports it (nil), never a context error with the effect applied.
+// The reconciler used to return the context error with the effect applied
+// (at-least-once); its claim-based admission removed that window for every
+// non-wait command, not only Mount and Batch.
 func TestHazardR1UpdateDisposeEffectDespiteError(t *testing.T) {
 	for core, c := range hazardCores {
 		t.Run(c.name, func(t *testing.T) {
@@ -234,20 +237,9 @@ func TestHazardR1UpdateDisposeEffectDespiteError(t *testing.T) {
 				synctest.Wait()
 				s2 := graphSnapshotByID(t, r, id)
 				t.Logf("Update err=%v revision=%d; Dispose err=%v state=%s alive=%v", uerr, rev, derr, s2.State, s2.Alive)
-				switch c.name {
-				case "reconciler":
-					// Late cancellation: the error is returned, the effect happened.
-					if !errors.Is(uerr, context.Canceled) || rev != 1 {
-						t.Fatalf("reconciler Update: err=%v revision=%d, want Canceled and revision 1", uerr, rev)
-					}
-					if !errors.Is(derr, context.Canceled) || s2.Alive || s2.State != Disposed {
-						t.Fatalf("reconciler Dispose: err=%v state=%s alive=%v, want Canceled and disposed", derr, s2.State, s2.Alive)
-					}
-				default:
-					// The graph-lock checks ctx once, then commits and reports it.
-					if uerr != nil || rev != 1 || derr != nil || s2.State != Disposed {
-						t.Fatalf("graph-lock: Update err=%v revision=%d Dispose err=%v state=%s", uerr, rev, derr, s2.State)
-					}
+				// Applied means reported: an error implies no effect and vice versa.
+				if uerr != nil || rev != 1 || derr != nil || s2.State != Disposed {
+					t.Fatalf("%s: Update err=%v revision=%d Dispose err=%v state=%s", c.name, uerr, rev, derr, s2.State)
 				}
 			})
 		})

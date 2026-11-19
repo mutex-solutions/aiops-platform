@@ -63,6 +63,7 @@ type rcMessage struct {
 	kind     rcCommand
 	ctx      context.Context
 	ack      chan rcReply
+	claim    *atomic.Uint32 // Admission word of an abandonable command; nil for waits and completions.
 	id       uint64
 	spec     Spec
 	act      *rcActivation
@@ -550,11 +551,42 @@ func (r *reconcilerRuntime) Close(ctx context.Context) error {
 	}
 }
 
+// Admission states of one command, the only word shared by caller and owner.
+const (
+	rcQueued    uint32 = iota // Sent; neither side has decided.
+	rcClaimed                 // The owner took it: it will apply it and reply.
+	rcAbandoned               // The caller gave up first: the owner must not apply it.
+)
+
+// rcWaits reports the commands whose reply is a wait for lifecycle progress.
+// They admit no mutation, may be answered long after the owner dequeued them,
+// and so stay cancellable at any time.
+func rcWaits(kind rcCommand) bool {
+	return kind == rcSettleCommand || kind == rcCloseCommand || kind == rcAwaitCommand
+}
+
+// exchange sends one command and waits for its reply.
+//
+// Admission is atomic between caller and owner. Every command that is not a wait
+// carries a claim word that moves out of rcQueued exactly once: the owner CASes
+// it to rcClaimed immediately before it applies the command, and a caller that
+// gives up (context done, runtime closed) CASes it to rcAbandoned. Whoever wins
+// decides the outcome for both: if the caller wins the owner drops the message
+// untouched, so the caller's error means "no effect"; if the owner wins the
+// caller no longer abandons but takes the reply, so "applied" always comes with
+// the real result and never with a context error. The wait after a claim is
+// bounded because the owner runs no callbacks and replies in the same turn,
+// before it can close done. A command is therefore cancellable exactly while it
+// is still queued, and there is no instant at which both "the caller got an
+// error" and "the command was applied" hold.
 func (r *reconcilerRuntime) exchange(ctx context.Context, msg rcMessage) rcReply {
 	if err := ctx.Err(); err != nil {
 		return rcReply{err: err}
 	}
 	msg.ctx, msg.ack = ctx, make(chan rcReply, 1)
+	if !rcWaits(msg.kind) {
+		msg.claim = new(atomic.Uint32)
+	}
 	select {
 	case r.inbox <- msg:
 	case <-ctx.Done():
@@ -566,14 +598,26 @@ func (r *reconcilerRuntime) exchange(ctx context.Context, msg rcMessage) rcReply
 	case reply := <-msg.ack:
 		return reply
 	case <-ctx.Done():
-		return rcReply{err: ctx.Err()}
+		return r.abandon(msg, ctx.Err())
 	case <-r.done:
-		select {
-		case reply := <-msg.ack:
-			return reply
-		default:
-			return rcReply{err: ErrClosed}
+		return r.abandon(msg, ErrClosed)
+	}
+}
+
+// abandon ends the caller's wait with cause, unless the owner already claimed
+// the command, in which case its reply is the outcome.
+func (r *reconcilerRuntime) abandon(msg rcMessage, cause error) rcReply {
+	if msg.claim != nil {
+		if msg.claim.CompareAndSwap(rcQueued, rcAbandoned) {
+			return rcReply{err: cause}
 		}
+		return <-msg.ack // Claimed: the owner replies in the turn it claimed it.
+	}
+	select {
+	case reply := <-msg.ack:
+		return reply
+	default:
+		return rcReply{err: cause}
 	}
 }
 
@@ -631,6 +675,9 @@ func (o *rcOwner) run() {
 		case msg := <-o.r.inbox:
 			if tick != nil {
 				timer.Stop()
+			}
+			if msg.claim != nil && !msg.claim.CompareAndSwap(rcQueued, rcClaimed) {
+				break // The caller abandoned it while queued: no effect, nobody waits.
 			}
 			reply, deferred := o.handle(msg)
 			o.consumeNotices()
