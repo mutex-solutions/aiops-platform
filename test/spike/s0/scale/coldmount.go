@@ -204,6 +204,7 @@ type AckResult struct {
 	Snoozed    bool          // the simulated job was snoozed instead of acknowledged.
 	Committed  bool
 	MountNS    int64
+	Ensures    int // cold ensure calls made by this request itself.
 }
 
 // coldProbe is the simulated acknowledgement path over one fresh real root.
@@ -331,12 +332,15 @@ func (p *coldProbe) AckPinned(ctx context.Context, seq int) (AckResult, error) {
 // request, mounted inline BEFORE the commit. budget > 0 bounds the cold ensure;
 // when it expires the request answers 503 with Retry-After (job=false) or is
 // snoozed (job=true). It never commits and never reads another scope's contribution.
-func (p *coldProbe) AckCold(ctx context.Context, seq int, budget time.Duration, job bool) (AckResult, error) {
+func (p *coldProbe) AckCold(ctx context.Context, seq int, budget time.Duration, job bool) (res AckResult, err error) {
 	label := seq % p.plan.Labels
 	if !p.busy[label].CompareAndSwap(false, true) {
 		return AckResult{}, fmt.Errorf("scope label %d still has a live incarnation", label)
 	}
 	p.ensures.Add(1)
+	// Per-request attribution: a delta of the shared counter would also count
+	// the ensures of requests that overlap this one.
+	defer func() { res.Ensures = 1 }()
 	ensure := ctx
 	if budget > 0 {
 		var cancel context.CancelFunc
@@ -344,7 +348,7 @@ func (p *coldProbe) AckCold(ctx context.Context, seq int, budget time.Duration, 
 		defer cancel()
 	}
 	mountStart := time.Now()
-	err := p.r.MountTreeAwait(ensure, label)
+	err = p.r.MountTreeAwait(ensure, label)
 	mount := time.Since(mountStart).Nanoseconds()
 	if err != nil {
 		p.release(label)
@@ -474,7 +478,6 @@ func RunColdArm(ctx context.Context, backend Backend, plan ColdPlan, body BodySi
 			defer cancel()
 			var res AckResult
 			var err error
-			before := p.ensures.Load()
 			if arm == ArmA {
 				res, err = p.AckCold(deadline, i, 0, false)
 			} else {
@@ -483,7 +486,7 @@ func RunColdArm(ctx context.Context, backend Backend, plan ColdPlan, body BodySi
 			end := time.Now()
 			rec.EndedNS, rec.LatencyNS = off(end), end.Sub(scheduled).Nanoseconds()
 			rec.Status, rec.Committed, rec.MountNS = res.Status, res.Committed, res.MountNS
-			rec.ColdEnsures = int(p.ensures.Load() - before)
+			rec.ColdEnsures = res.Ensures
 			switch {
 			case err != nil:
 				rec.Outcome, rec.Error = "error", err.Error()
