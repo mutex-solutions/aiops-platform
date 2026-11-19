@@ -1,6 +1,6 @@
 # ADR-045: Caller transactions and SQL authority — S0 findings
 
-- Status: **S0 continuation scope approved by the owner, 2026-11-12; implementation decision remains proposed.** Option A is authorized for further evidence only.
+- Status: **S0 continuation scope approved by the owner, 2026-11-12; typed operations adopted as the plugin transaction surface by the owner, 2026-11-19 (decision section at the end).** The original raw-SQL gate remains recorded as failed.
 - Date: 2026-11-12.
 - Scope: S0 correctness evidence and the next experiment, not an accepted change
   to the canonical SQL contract or the later S3 definitions.
@@ -469,3 +469,54 @@ teardown check against the harness baseline; see `plugins/jobs-river/internal/s0
 binary without it, so it does not cover section 10: for section 10 it is "not evaluated", and the
 per-cycle goroutine and descriptor counts in its log are observations only. Section 10 needs a rerun
 of the gate with this accounting.
+
+## Decision: typed operations are the plugin transaction surface, 2026-11-19
+
+Status: **accepted by the project owner on 2026-11-19.** This is the adoption that
+the typed-operation investigation above left open.
+
+1. The transaction a plugin receives carries no SQL-string method. `Exec`,
+   `Query` and `QueryRow` are removed from the plugin-facing `Tx`.
+2. A plugin reads and writes through a closed set of typed operations declared
+   with its schema and reviewed with the plugin, or through opaque query
+   capabilities the provider issues. The provider generates the statements and
+   binds every caller value as a parameter. A caller value can never choose a
+   role, a setting, a statement, a function or a schema.
+3. Infrastructure participants (jobs, events, audit, kv) keep a private
+   raw-driver path on the same transaction, so a state change, its job, its
+   event and its audit row still commit together or not at all, with River's
+   `InsertTx` unmodified.
+4. Role switching and row-level security on plugin-owned tables remain as
+   defence in depth. They are not the authority boundary: the first probe showed
+   they cannot be, and that result stays recorded as a failed gate. It is not
+   converted into a pass.
+5. A free-form query is not available to a plugin. It needs a reviewed catalog
+   extension or a separately scoped privileged provider.
+
+Why: the escape the first probe found is a property of PostgreSQL sessions, not
+of a configuration, so no role or setting arrangement closes it while a caller
+can submit SQL text. With typed operations a defect in a first-party plugin
+cannot cross tenants through the database, because no path carries SQL text
+from the plugin. Third-party plugins in a hosted profile run remote and hold no
+transaction at all.
+
+Evidence the decision rests on: the typed-operation probe
+(`plugins/jobs-river/internal/s0typedops`) commits and rolls back all
+participants atomically, refuses cross-scope access, arbitrates revocation
+against commit, and rejects each injected catalog fault; it runs against
+PostgreSQL 16 on every push. The restart gate passed at frozen scale with the
+jobs role outside row-level security on River's tables.
+
+What this does not settle, and is owed at S3 with the `sql` definition: the
+concrete Go shape of an operation catalog and how a plugin declares it; the
+review and versioning rule for a catalog change; whether the SDK still needs the
+driver's row and tag types; the fake and the conformance suite of the typed
+surface; migration admission. The limits recorded for the probe still apply: it
+is a closed-surface fixture, and it does not protect against native code that
+bypasses the surface, which is why in-process plugins stay inside the signed
+distribution.
+
+Canonical record changed with this decision, in the same commit: `00-decisions.md`
+(transaction contract), `07-c4-plugin-sdk.md` §4.4 (interface, example and rule
+2) and the plugin record's transaction contract (interface).
+

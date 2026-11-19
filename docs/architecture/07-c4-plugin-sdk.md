@@ -825,9 +825,8 @@ One `Tx` type sits behind `sql`, `sql.Bound` and `platformSql`, and its home is 
 package sql // sdk/def/sql/v0; imports pgx v5 for row and tag types: the SDK takes this one dependency
 
 type Tx interface {
-	Exec(ctx context.Context, q string, args ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, q string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, q string, args ...any) pgx.Row
+	// No SQL-string methods (ADR-045, owner decision 2026-11-19). A plugin reads and writes through the typed
+	// operations of its own reviewed catalog; the provider generates and binds the statements. API ratified at S3.
 	AfterCommit(fn func())
 	OnRollback(fn func())   // participant hooks: how an in-memory fake of jobs, events or audit joins
 	Tenant() tenants.Handle // what the transaction was opened with; EnqueueTx and EmitTx stamp from it, never from an argument
@@ -839,7 +838,7 @@ type Tx interface {
 ```go
 // A state change, its event, its job and its audit row commit together or not at all (principle 8).
 err := sql.Key.Of(c).InTx(ctx, func(tx sql.Tx) error {
-	if _, err := tx.Exec(ctx, `insert into page (incident_id, state) values ($1, 'sent')`, id); err != nil {
+	if err := pageOps.MarkSent(ctx, tx, id); err != nil { // a typed operation of this plugin's catalog; no SQL text crosses the boundary
 		return err
 	}
 	if err := events.Key.Of(c).EmitTx(tx, "page.sent", data); err != nil { // outbox row, stamped with tx.Tenant()
@@ -855,7 +854,7 @@ err := sql.Key.Of(c).InTx(ctx, func(tx sql.Tx) error {
 | # | Rule |
 |---|---|
 | 1 | Only the infrastructure definitions `jobs`, `events`, `audit` and `kv` take a caller's `Tx`. Each suite asserts that a rollback leaves nothing enqueued, emitted or appended. Domain plugins never pass a `Tx` to each other: they coordinate through the outbox with idempotent handlers |
-| 2 | Every plugin has its own PostgreSQL role, limited to its schema and applied by the `sql` view with `SET LOCAL ROLE`. `events` and `audit` write through `SECURITY DEFINER` functions their providers own, and `jobs-river` switches to its own role around River's unmodified `InsertTx`. A plugin therefore cannot write approval, change, audit, outbox or River rows through `sql` (§5.2; ADR-045) |
+| 2 | A plugin holds no SQL-string capability: its `Tx` runs only the typed operations of its reviewed catalog, and a free-form query needs a catalog extension or a separately scoped privileged provider (ADR-045, 2026-11-19). Every plugin has its own PostgreSQL role, limited to its schema and applied by the `sql` view with `SET LOCAL ROLE`; that role switch is an implementation mechanism, not the authority boundary. `events` and `audit` write through `SECURITY DEFINER` functions their providers own, and `jobs-river` switches to its own role around River's unmodified `InsertTx`. A plugin therefore cannot write approval, change, audit, outbox or River rows through `sql` (§5.2; ADR-045) |
 | 3 | `events` is durable in the caller's transaction. Every provider writes the same outbox table and differs only in the relay, which is what replacing the `events` provider means |
 | 4 | A cross-tenant or tenant-less enqueue, emit or fan-out needs the platform transaction, `platformSql`, which is consumer-bound |
 | 5 | A remote contribution joins no transaction. It returns a result and its dispatcher commits state, event and audit in one transaction. A remote plugin's own `kv` write and audit append are separate commits |

@@ -242,9 +242,8 @@ Where the allowed set has more than one entry (`kek`, `events`), layers 1 to 4 c
 ```go
 package sql // sdk/def/sql/v1; imports pgx v5 for row and tag types, said plainly: the SDK takes this one dependency
 type Tx interface {
-	Exec(ctx context.Context, q string, args ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, q string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, q string, args ...any) pgx.Row
+	// No SQL-string methods (ADR-045, owner decision 2026-11-19). A plugin reads and writes through the typed
+	// operations of its own reviewed catalog; the provider generates and binds the statements. API ratified at S3.
 	AfterCommit(fn func()); OnRollback(fn func()) // participant hooks: how an in-memory fake of jobs, events or audit joins
 	Tenant() tenants.Handle // what the transaction was opened with; EnqueueTx and EmitTx stamp from it, never from an argument
 }
