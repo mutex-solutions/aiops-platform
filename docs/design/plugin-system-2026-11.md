@@ -104,8 +104,8 @@ func (c *Context) Enter() (leave func(), ok bool)                   // in-flight
 type Fiber struct{ /* State, Await, Update, Dispose, Effects */ }
 type Scope[V any] struct{ /* From(c) (V, bool) for anyone; With(c, v) only from the fiber providing the owning key */ }
 type Audience struct{ /* a predicate over a listener's context, built by the owner of a scope; Unscoped is the zero value */ }
-type Event[A any] struct{ /* On; Emit, Parallel, Serial, Bail: each takes (ctx, Audience, a) */ }
-type Waterfall[A, R any] struct{ /* On(c, stage, fn(ctx, a, next)); Run(ctx, Audience, a); no next vetoes, next twice is an error */ }
+type Event[A any] struct{ /* On; Bind(c) returns the dispatcher, for the fiber that provides the owning key only: Emit, Parallel, Serial, Bail, each takes (ctx, Audience, a) */ }
+type Waterfall[A, R any] struct{ /* On(c, stage, fn(ctx, a, next)); Bind(c) returns the dispatcher with Run(ctx, Audience, a); no next vetoes, next twice is an error */ }
 
 package plugin // module sdk/def: what an author writes
 type Spec[C any] struct {
