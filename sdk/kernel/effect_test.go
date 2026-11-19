@@ -84,7 +84,7 @@ func TestEffectSuccessfulSetupUsesNativeLIFO(t *testing.T) {
 	for name, makeRuntime := range effectCandidates() {
 		t.Run(name, func(t *testing.T) {
 			ctx, r := effectRuntime(t, makeRuntime)
-			contexts := make(chan *Context, 1)
+			contexts := make(chan *Handle, 1)
 			var mu sync.Mutex
 			var cleanup []string
 			add := func(label string) {
@@ -92,7 +92,7 @@ func TestEffectSuccessfulSetupUsesNativeLIFO(t *testing.T) {
 				cleanup = append(cleanup, label)
 				mu.Unlock()
 			}
-			id := effectMount(t, ctx, r, Spec{ID: "effect-owner", Apply: func(c *Context) error {
+			id := effectMount(t, ctx, r, Spec{ID: "effect-owner", Apply: func(c *Handle) error {
 				contexts <- c
 				if err := c.Defer("older", func(context.Context) error { add("older"); return nil }); err != nil {
 					return err
@@ -150,7 +150,7 @@ func TestEffectPartialSetupCleansImmediatelyWithoutRetainedSlot(t *testing.T) {
 			}
 			t.Run(name+"/"+caseName, func(t *testing.T) {
 				ctx, r := effectRuntime(t, makeRuntime)
-				contexts, results := make(chan *Context, 1), make(chan error, 1)
+				contexts, results := make(chan *Handle, 1), make(chan error, 1)
 				var calls atomic.Int64
 				var mu sync.Mutex
 				var cleanup []string
@@ -159,7 +159,7 @@ func TestEffectPartialSetupCleansImmediatelyWithoutRetainedSlot(t *testing.T) {
 					cleanup = append(cleanup, label)
 					mu.Unlock()
 				}
-				id, err := r.Mount(ctx, Spec{ID: "partial-effect", Apply: func(c *Context) error {
+				id, err := r.Mount(ctx, Spec{ID: "partial-effect", Apply: func(c *Handle) error {
 					contexts <- c
 					if err := c.Defer("older", func(context.Context) error { add("older"); return nil }); err != nil {
 						return err
@@ -241,10 +241,10 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 				setupOnce.Do(func() { close(releaseSetup) })
 				cleanupOnce.Do(func() { close(releaseCleanup) })
 			})
-			setupEntered := make(chan *Context, 1)
+			setupEntered := make(chan *Handle, 1)
 			cleanupEntered := make(chan context.Context, 1)
 			results, closeReturned := make(chan error, 1), make(chan error, 1)
-			var parentCtx, providerCtx *Context
+			var parentCtx, providerCtx *Handle
 			var child uint64
 			var cleanupCalls atomic.Int64
 			var mu sync.Mutex
@@ -256,20 +256,20 @@ func TestEffectLateCleanupRetainsChildParentAndProviderThroughClose(t *testing.T
 				mu.Unlock()
 			}
 			token := &struct{ value string }{"retained"}
-			provider := effectMount(t, ctx, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			provider := effectMount(t, ctx, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				providerCtx = c
 				if err := c.Defer("provider-cleanup", func(context.Context) error { add("provider"); return nil }); err != nil {
 					return err
 				}
 				return c.Provide("sample", token)
 			}})
-			parent := effectMount(t, ctx, r, Spec{ID: "parent", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			parent := effectMount(t, ctx, r, Spec{ID: "parent", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				parentCtx = c
 				if err := c.Defer("parent-cleanup", func(context.Context) error { add("parent"); close(parentCleaned); return nil }); err != nil {
 					return err
 				}
 				var err error
-				child, err = c.MountChild(Spec{ID: "child", Needs: []string{"sample"}, Apply: func(c *Context) error {
+				child, err = c.MountChild(Spec{ID: "child", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 					return c.Go("late-setup", func(context.Context) error {
 						err := c.Effect("late-result", func() (Disposer, error) {
 							setupEntered <- c
@@ -391,9 +391,9 @@ func TestEffectSetupPanicReleasesLeaseBeforeNativeUnwind(t *testing.T) {
 	for name, makeRuntime := range effectCandidates() {
 		t.Run(name, func(t *testing.T) {
 			ctx, r := effectRuntime(t, makeRuntime)
-			contexts := make(chan *Context, 1)
+			contexts := make(chan *Handle, 1)
 			var cleanup atomic.Int64
-			id, err := r.Mount(ctx, Spec{ID: "panicking-effect", Apply: func(c *Context) error {
+			id, err := r.Mount(ctx, Spec{ID: "panicking-effect", Apply: func(c *Handle) error {
 				contexts <- c
 				return c.Effect("unreturned", func() (Disposer, error) {
 					if err := c.Defer("actual-owned-resource", func(context.Context) error {
@@ -429,10 +429,10 @@ func TestEffectArgumentsMissingHookAndInactiveContext(t *testing.T) {
 	for name, makeRuntime := range effectCandidates() {
 		t.Run(name, func(t *testing.T) {
 			ctx, r := effectRuntime(t, makeRuntime)
-			contexts := make(chan *Context, 1)
+			contexts := make(chan *Handle, 1)
 			var setups atomic.Int64
 			setup := func() (Disposer, error) { setups.Add(1); return nil, nil }
-			id := effectMount(t, ctx, r, Spec{ID: "effect-arguments", Apply: func(c *Context) error {
+			id := effectMount(t, ctx, r, Spec{ID: "effect-arguments", Apply: func(c *Handle) error {
 				contexts <- c
 				if err := c.Effect("", setup); err == nil || errors.Is(err, ErrInactive) {
 					return errors.New("empty Effect label was not a programming error")

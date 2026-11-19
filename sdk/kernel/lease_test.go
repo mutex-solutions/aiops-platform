@@ -16,7 +16,7 @@ type leaseFixture struct {
 	ctx     context.Context
 	r       Runtime
 	id      uint64
-	c       *Context
+	c       *Handle
 	cleaned atomic.Bool
 	inBody  atomic.Int64 // Leased bodies currently running.
 	openAt  atomic.Int64 // Leases plus bodies observed open when cleanup ran.
@@ -27,8 +27,8 @@ func mountLeaseFixture(t testing.TB, makeRuntime func() Runtime) *leaseFixture {
 	t.Helper()
 	f := &leaseFixture{}
 	f.ctx, f.r = effectRuntime(t, makeRuntime)
-	contexts := make(chan *Context, 1)
-	f.id = effectMount(t, f.ctx, f.r, Spec{ID: "lease-owner", Apply: func(c *Context) error {
+	contexts := make(chan *Handle, 1)
+	f.id = effectMount(t, f.ctx, f.r, Spec{ID: "lease-owner", Apply: func(c *Handle) error {
 		contexts <- c
 		return c.Defer("probe", func(context.Context) error {
 			f.bodyAt.Store(f.inBody.Load())

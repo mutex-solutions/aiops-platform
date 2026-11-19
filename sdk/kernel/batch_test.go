@@ -147,7 +147,7 @@ func batchUnchanged(t *testing.T, ctx context.Context, r Runtime, before Inspect
 	}
 }
 
-func batchQuiesced(t *testing.T, ctx context.Context, c *Context) {
+func batchQuiesced(t *testing.T, ctx context.Context, c *Handle) {
 	t.Helper()
 	batchReceive(t, ctx, c.Std().Done())
 	if c.Enter() {
@@ -168,7 +168,7 @@ func TestSharedBatchPreflightAndOwnedMountDeclarations(t *testing.T) {
 			t.Fatal(err)
 		}
 		var baselineApplies, forbiddenCallbacks atomic.Int64
-		baseline := mountFixture(t, ctx, r, Spec{ID: "baseline", Provides: []string{"baseline-service"}, Apply: func(c *Context) error {
+		baseline := mountFixture(t, ctx, r, Spec{ID: "baseline", Provides: []string{"baseline-service"}, Apply: func(c *Handle) error {
 			return c.Provide("baseline-service", baselineApplies.Add(1))
 		}})
 		batchSettle(t, ctx, r)
@@ -179,10 +179,10 @@ func TestSharedBatchPreflightAndOwnedMountDeclarations(t *testing.T) {
 		if fiber := batchFiber(t, before, baseline); fiber.State != Active || baselineApplies.Load() != 1 {
 			t.Fatalf("baseline is not stable before validation: %+v", fiber)
 		}
-		probe := Spec{ID: "must-not-commit", Check: func(*Context) bool {
+		probe := Spec{ID: "must-not-commit", Check: func(*Handle) bool {
 			forbiddenCallbacks.Add(1)
 			return true
-		}, Apply: func(*Context) error { forbiddenCallbacks.Add(1); return nil }}
+		}, Apply: func(*Handle) error { forbiddenCallbacks.Add(1); return nil }}
 		// Every invalid operation is LAST. A valid first Mount must not consume an
 		// ID, emit an event, or schedule Check/Apply before suffix validation ends.
 		for _, invalid := range []struct {
@@ -197,7 +197,7 @@ func TestSharedBatchPreflightAndOwnedMountDeclarations(t *testing.T) {
 			{"empty-provide", []BatchOperation{{Kind: BatchMount, Spec: Spec{ID: "bad", Provides: []string{""}}}}},
 			{"mount-with-target", []BatchOperation{{Kind: BatchMount, Fiber: baseline, Spec: Spec{ID: "bad"}}}},
 			{"unused-update-spec", []BatchOperation{{Kind: BatchUpdate, Fiber: baseline, Spec: Spec{ID: "unused"}}}},
-			{"two-apply-forms", []BatchOperation{{Kind: BatchMount, Spec: Spec{ID: "bad", Apply: probe.Apply, ApplyEffect: func(*Context) (Disposer, error) {
+			{"two-apply-forms", []BatchOperation{{Kind: BatchMount, Spec: Spec{ID: "bad", Apply: probe.Apply, ApplyEffect: func(*Handle) (Disposer, error) {
 				forbiddenCallbacks.Add(1)
 				return nil, nil
 			}}}}},
@@ -240,14 +240,14 @@ func TestSharedBatchPreflightAndOwnedMountDeclarations(t *testing.T) {
 		var consumerApplies, checks atomic.Int64
 		var seen atomic.Int64
 		ops := []BatchOperation{
-			{Kind: BatchMount, Spec: Spec{ID: "consumer", Needs: consumerNeeds, Check: func(c *Context) bool {
+			{Kind: BatchMount, Spec: Spec{ID: "consumer", Needs: consumerNeeds, Check: func(c *Handle) bool {
 				checks.Add(1)
 				if _, err := r.Snapshots(ctx); err != nil { // Must run off the native owner.
 					return false
 				}
 				value, err := c.Read("service")
 				return err == nil && value == int64(17)
-			}, Apply: func(c *Context) error {
+			}, Apply: func(c *Handle) error {
 				consumerApplies.Add(1)
 				value, err := c.Read("service")
 				if err != nil {
@@ -257,7 +257,7 @@ func TestSharedBatchPreflightAndOwnedMountDeclarations(t *testing.T) {
 				return nil
 			}}},
 			{Kind: BatchUpdate, Fiber: baseline},
-			{Kind: BatchMount, Spec: Spec{ID: "provider", Needs: needs, Provides: provides, Apply: func(c *Context) error {
+			{Kind: BatchMount, Spec: Spec{ID: "provider", Needs: needs, Provides: provides, Apply: func(c *Handle) error {
 				value, err := c.Read("seed")
 				if err != nil {
 					return err
@@ -308,11 +308,11 @@ func TestSharedBatchDoubleUpdateCommitsLatestRevisionAndOneReplacement(t *testin
 	batchCandidates(t, func(t *testing.T, makeRuntime func() Runtime) {
 		ctx, r, batcher := batchRuntime(t, makeRuntime)
 		release, open := batchGate(t)
-		cleanupEntered, oldContext := make(chan struct{}), make(chan *Context, 1)
+		cleanupEntered, oldContext := make(chan struct{}), make(chan *Handle, 1)
 		var providerApplies, consumerApplies atomic.Int64
 		var mu sync.Mutex
 		var seen []int64
-		provider := mountFixture(t, ctx, r, Spec{ID: "provider", Provides: []string{"service"}, Apply: func(c *Context) error {
+		provider := mountFixture(t, ctx, r, Spec{ID: "provider", Provides: []string{"service"}, Apply: func(c *Handle) error {
 			generation := providerApplies.Add(1)
 			if err := c.Provide("service", generation); err != nil {
 				return err
@@ -323,11 +323,11 @@ func TestSharedBatchDoubleUpdateCommitsLatestRevisionAndOneReplacement(t *testin
 			oldContext <- c
 			return c.Defer("held-provider", func(context.Context) error { close(cleanupEntered); <-release; return nil })
 		}})
-		consumer := mountFixture(t, ctx, r, Spec{ID: "consumer", Needs: []string{"service"}, Check: func(c *Context) bool {
+		consumer := mountFixture(t, ctx, r, Spec{ID: "consumer", Needs: []string{"service"}, Check: func(c *Handle) bool {
 			_, err := r.Snapshots(ctx)
 			_, readErr := c.Read("service")
 			return err == nil && readErr == nil
-		}, Apply: func(c *Context) error {
+		}, Apply: func(c *Handle) error {
 			consumerApplies.Add(1)
 			value, err := c.Read("service")
 			if err != nil {
@@ -379,10 +379,10 @@ func TestSharedBatchColdConsumerNeverChecksOrAppliesAgainstOldProvider(t *testin
 	batchCandidates(t, func(t *testing.T, makeRuntime func() Runtime) {
 		ctx, r, batcher := batchRuntime(t, makeRuntime)
 		release, open := batchGate(t)
-		cleanupEntered, oldContext := make(chan struct{}), make(chan *Context, 1)
+		cleanupEntered, oldContext := make(chan struct{}), make(chan *Handle, 1)
 		var nextValue, providerApplies, consumerApplies atomic.Int64
 		nextValue.Store(1)
-		provider := mountFixture(t, ctx, r, Spec{ID: "provider", Provides: []string{"service"}, Apply: func(c *Context) error {
+		provider := mountFixture(t, ctx, r, Spec{ID: "provider", Provides: []string{"service"}, Apply: func(c *Handle) error {
 			value := nextValue.Load() // A real immutable value, not a pointer changed by the caller.
 			generation := providerApplies.Add(1)
 			if err := c.Provide("service", value); err != nil {
@@ -406,7 +406,7 @@ func TestSharedBatchColdConsumerNeverChecksOrAppliesAgainstOldProvider(t *testin
 		var mu sync.Mutex
 		var checked []observation
 		var applied []int64
-		consumerSpec := Spec{ID: "cold-consumer", Needs: []string{"service"}, Check: func(c *Context) bool {
+		consumerSpec := Spec{ID: "cold-consumer", Needs: []string{"service"}, Check: func(c *Handle) bool {
 			value, readErr := c.Read("service")
 			// Reentrant full native snapshots detect callbacks incorrectly executed
 			// on the state owner, without trying to join lifecycle work from Check.
@@ -415,7 +415,7 @@ func TestSharedBatchColdConsumerNeverChecksOrAppliesAgainstOldProvider(t *testin
 			checked = append(checked, observation{value, errors.Join(readErr, err), snapshots})
 			mu.Unlock()
 			return readErr == nil && err == nil
-		}, Apply: func(c *Context) error {
+		}, Apply: func(c *Handle) error {
 			consumerApplies.Add(1)
 			value, err := c.Read("service")
 			if err != nil {
@@ -468,10 +468,10 @@ func TestSharedBatchInflightApplyAndRepeatedDispose(t *testing.T) {
 		t.Run("inflight-apply", func(t *testing.T) {
 			ctx, r, batcher := batchRuntime(t, makeRuntime)
 			release, open := batchGate(t)
-			started := make(chan *Context, 1)
+			started := make(chan *Handle, 1)
 			var attempts, bodies, peak, cleanups atomic.Int64
 			var oldReturned, overlap atomic.Bool
-			id := mountFixture(t, ctx, r, Spec{ID: "inflight", Apply: func(c *Context) error {
+			id := mountFixture(t, ctx, r, Spec{ID: "inflight", Apply: func(c *Handle) error {
 				n := bodies.Add(1)
 				defer bodies.Add(-1)
 				for current := peak.Load(); n > current && !peak.CompareAndSwap(current, n); current = peak.Load() {
@@ -512,9 +512,9 @@ func TestSharedBatchInflightApplyAndRepeatedDispose(t *testing.T) {
 		t.Run("repeated-dispose", func(t *testing.T) {
 			ctx, r, batcher := batchRuntime(t, makeRuntime)
 			release, open := batchGate(t)
-			cleanupEntered, activated := make(chan struct{}), make(chan *Context, 1)
+			cleanupEntered, activated := make(chan struct{}), make(chan *Handle, 1)
 			var applies, cleanups, forbidden atomic.Int64
-			id := mountFixture(t, ctx, r, Spec{ID: "dispose-once", Apply: func(c *Context) error {
+			id := mountFixture(t, ctx, r, Spec{ID: "dispose-once", Apply: func(c *Handle) error {
 				applies.Add(1)
 				activated <- c
 				return c.Defer("held-once", func(context.Context) error {
@@ -529,7 +529,7 @@ func TestSharedBatchInflightApplyAndRepeatedDispose(t *testing.T) {
 			ids, err := batcher.Batch(ctx, []BatchOperation{
 				{Kind: BatchDispose, Fiber: id},
 				{Kind: BatchDispose, Fiber: id},
-				{Kind: BatchMount, Spec: Spec{ID: "still-cold", Needs: []string{"missing"}, Apply: func(*Context) error { forbidden.Add(1); return nil }}},
+				{Kind: BatchMount, Spec: Spec{ID: "still-cold", Needs: []string{"missing"}, Apply: func(*Handle) error { forbidden.Add(1); return nil }}},
 			})
 			if err != nil || !slices.Equal(ids, []uint64{0, 0, 2}) {
 				t.Fatalf("live repeated Dispose was not idempotent inside one batch: ids=%v error=%v", ids, err)

@@ -20,14 +20,14 @@ import (
 func rcGatedSpec(stage string, gate chan struct{}) Spec {
 	switch stage {
 	case "check":
-		return Spec{ID: "w", Check: func(*Context) bool { <-gate; return true }}
+		return Spec{ID: "w", Check: func(*Handle) bool { <-gate; return true }}
 	case "scope":
-		return Spec{ID: "w", Apply: func(c *Context) error {
+		return Spec{ID: "w", Apply: func(c *Handle) error {
 			_, err := c.RequestEffectScope("scope", func(*EffectScope) error { <-gate; return nil })
 			return err
 		}}
 	}
-	return Spec{ID: "w", Apply: func(*Context) error { <-gate; return nil }}
+	return Spec{ID: "w", Apply: func(*Handle) error { <-gate; return nil }}
 }
 
 // rcDeadlineRun mounts one gated fiber, optionally stalls the owner, opens the
@@ -109,7 +109,7 @@ func TestReconcilerDeadlineDisposeBudgetStaysArmedAcrossEffects(t *testing.T) {
 			var once sync.Once
 			open := func() { once.Do(func() { close(gate) }) }
 			t.Cleanup(open)
-			id := rcMount(t, r, Spec{ID: "w", Apply: func(c *Context) error {
+			id := rcMount(t, r, Spec{ID: "w", Apply: func(c *Handle) error {
 				if second {
 					if err := c.Defer("later", func(context.Context) error { return nil }); err != nil {
 						return err
@@ -160,7 +160,7 @@ func TestReconcilerDeadlineDrainJudgesTrackedWorkByReturnInstant(t *testing.T) {
 			var once sync.Once
 			open := func() { once.Do(func() { close(gate) }) }
 			t.Cleanup(open)
-			id := rcMount(t, r, Spec{ID: "w", Apply: func(c *Context) error {
+			id := rcMount(t, r, Spec{ID: "w", Apply: func(c *Handle) error {
 				return c.Go("work", func(context.Context) error { <-gate; return nil })
 			}})
 			rcSettle(t, r)

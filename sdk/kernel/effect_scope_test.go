@@ -276,7 +276,7 @@ func TestNativeScopeRollbackIsHandleLocalAndActualTree(t *testing.T) {
 		var orderMu sync.Mutex
 		var order []string
 		appendOrder := func(value string) { orderMu.Lock(); order = append(order, value); orderMu.Unlock() }
-		id, err := r.Mount(ctx, Spec{ID: "scope rollback", Apply: func(c *Context) error {
+		id, err := r.Mount(ctx, Spec{ID: "scope rollback", Apply: func(c *Handle) error {
 			h, err := c.RequestEffectScope("actual scope", func(s *EffectScope) error {
 				if err := s.Defer("first", func(context.Context) error { appendOrder("first"); return cleanupErr }); err != nil {
 					return err
@@ -338,11 +338,11 @@ func TestNativeScopeRollbackIsHandleLocalAndActualTree(t *testing.T) {
 
 func TestNativeScopeRequestsInsideApplyStayOnOneLane(t *testing.T) {
 	scopeRuntimeTest(t, func(t *testing.T, ctx context.Context, r Runtime) {
-		contexts := make(chan *Context, 1)
+		contexts := make(chan *Handle, 1)
 		handles := make(chan []*EffectHandle, 1)
 		var applyReturned atomic.Bool
 		var callbacks, overlap, acquired, disposed atomic.Int64
-		id, err := r.Mount(ctx, Spec{ID: "same lane", Apply: func(c *Context) error {
+		id, err := r.Mount(ctx, Spec{ID: "same lane", Apply: func(c *Handle) error {
 			contexts <- c
 			defer applyReturned.Store(true)
 			var accepted []*EffectHandle
@@ -424,7 +424,7 @@ func TestNativeScopeRequestsInsideApplyStayOnOneLane(t *testing.T) {
 func TestNativeScopeHeldCleanupRetainsTreeAndProvider(t *testing.T) {
 	scopeRuntimeTest(t, func(t *testing.T, ctx context.Context, r Runtime) {
 		var providerCleaned atomic.Bool
-		provider, err := r.Mount(ctx, Spec{ID: "scope provider", Provides: []string{"scope service"}, Apply: func(c *Context) error {
+		provider, err := r.Mount(ctx, Spec{ID: "scope provider", Provides: []string{"scope service"}, Apply: func(c *Handle) error {
 			if err := c.Defer("provider resource", func(context.Context) error { providerCleaned.Store(true); return nil }); err != nil {
 				return err
 			}
@@ -440,7 +440,7 @@ func TestNativeScopeHeldCleanupRetainsTreeAndProvider(t *testing.T) {
 		entered, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 		var releaseOnce sync.Once
 		defer releaseOnce.Do(func() { close(release) })
-		consumer, err := r.Mount(ctx, Spec{ID: "scope consumer", Needs: []string{"scope service"}, Apply: func(c *Context) error {
+		consumer, err := r.Mount(ctx, Spec{ID: "scope consumer", Needs: []string{"scope service"}, Apply: func(c *Handle) error {
 			h, err := c.RequestEffectScope("provider-bound scope", func(s *EffectScope) error {
 				return s.Defer("held resource", func(cleanup context.Context) error {
 					close(entered)
@@ -497,7 +497,7 @@ func TestNativeScopeHeldCleanupRetainsTreeAndProvider(t *testing.T) {
 }
 
 func TestScopeRequestValidationWithoutNativeBridge(t *testing.T) {
-	c := &Context{}
+	c := &Handle{}
 	var setup atomic.Bool
 	callback := func(*EffectScope) error { setup.Store(true); return nil }
 	if _, err := c.RequestEffectScope("", callback); err == nil || errors.Is(err, ErrScopeUnavailable) {
@@ -509,7 +509,7 @@ func TestScopeRequestValidationWithoutNativeBridge(t *testing.T) {
 	if _, err := c.RequestEffectScope("label", callback); !errors.Is(err, ErrScopeUnavailable) || setup.Load() {
 		t.Fatal("context without native scope hook ran setup")
 	}
-	var nilContext *Context
+	var nilContext *Handle
 	if _, err := nilContext.RequestEffectScope("label", callback); !errors.Is(err, ErrScopeUnavailable) {
 		t.Fatal("nil context fabricated native ownership")
 	}

@@ -24,13 +24,13 @@ func TestSharedAvailabilityContract(t *testing.T) {
 				t.Fatal("candidate does not support explicit availability notification")
 			}
 			var allow, loads, checks atomic.Int64
-			_, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			_, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				return c.Provide("sample", "value")
 			}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			id, err := r.Mount(ctx, Spec{ID: "checked", Needs: []string{"sample"}, Check: func(c *Context) bool {
+			id, err := r.Mount(ctx, Spec{ID: "checked", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 				checks.Add(1)
 				// Reentrant inspection must not execute inside the state-owner lock.
 				if _, err := r.Snapshots(ctx); err != nil {
@@ -41,7 +41,7 @@ func TestSharedAvailabilityContract(t *testing.T) {
 				}
 				value, err := c.Read("sample")
 				return err == nil && value == "value" && allow.Load() == 1
-			}, Apply: func(*Context) error { loads.Add(1); return nil }})
+			}, Apply: func(*Handle) error { loads.Add(1); return nil }})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -106,8 +106,8 @@ func TestSharedLifecycleContract(t *testing.T) {
 				cleanup = append(cleanup, label)
 				mu.Unlock()
 			}
-			var providerCtx, consumerCtx *Context
-			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			var providerCtx, consumerCtx *Handle
+			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				providerCtx = c
 				if err := c.Defer("provider", func(context.Context) error { add("provider"); return nil }); err != nil {
 					return err
@@ -117,7 +117,7 @@ func TestSharedLifecycleContract(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			consumer, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			consumer, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				consumerCtx = c
 				if _, err := c.Read("sample"); err != nil {
 					return err

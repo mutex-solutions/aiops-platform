@@ -21,7 +21,7 @@ var nativeObserverConstructors = []struct {
 	{"reconciler", NewRecordingReconciler},
 }
 
-func nativeObserverTestRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, Runtime, ObserverRuntime, *Context) {
+func nativeObserverTestRuntime(t *testing.T, makeRuntime func() Runtime) (context.Context, Runtime, ObserverRuntime, *Handle) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
@@ -100,13 +100,13 @@ func TestNativeObserversDeliverVerbatimLedgerInTotalSequenceOrder(t *testing.T) 
 			// fabricated cross-backend vocabulary or a filtered event-kind list.
 			start := observers.ObserverStatus().Accepted
 			value := &struct{ name string }{"actual native value"}
-			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				return c.Provide("sample", value)
 			}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			consumer, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			consumer, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				got, err := c.Read("sample")
 				if err != nil {
 					return err
@@ -268,7 +268,7 @@ func TestNativeObserversRequireExactRuntimeOwnerAndLiveActivation(t *testing.T) 
 		t.Run(candidate.name, func(t *testing.T) {
 			ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
 			callback := func(context.Context, Event) error { return nil }
-			for _, owner := range []*Context{nil, {}} {
+			for _, owner := range []*Handle{nil, {}} {
 				if dispose, err := observers.ObserveEvents(owner, "invalid", callback); !errors.Is(err, ErrObserverBinding) || dispose != nil {
 					t.Fatalf("nil/zero owner registration = %v, disposer nil=%t", err, dispose == nil)
 				}
@@ -288,8 +288,8 @@ func TestNativeObserversRequireExactRuntimeOwnerAndLiveActivation(t *testing.T) 
 			if _, err := observers.ObserveEvents(root, "nil callback", nil); !errors.Is(err, errObserverArgs) {
 				t.Fatalf("nil listener callback = %v", err)
 			}
-			owners := make(chan *Context, 1)
-			id, err := r.Mount(ctx, Spec{ID: "retired owner", Apply: func(c *Context) error { owners <- c; return nil }})
+			owners := make(chan *Handle, 1)
+			id, err := r.Mount(ctx, Spec{ID: "retired owner", Apply: func(c *Handle) error { owners <- c; return nil }})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -315,12 +315,12 @@ func TestNativeObserversLeaseDelaysDependentAndProviderCleanup(t *testing.T) {
 			release, unblock := nativeObserverRelease(t)
 			started := make(chan struct{}, 1)
 			callbackResult := make(chan error, 1)
-			owners := make(chan *Context, 1)
+			owners := make(chan *Handle, 1)
 			var queuedCalls atomic.Int64
 			var mu sync.Mutex
 			var cleanup []string
 			addCleanup := func(label string) { mu.Lock(); cleanup = append(cleanup, label); mu.Unlock() }
-			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"leased"}, Apply: func(c *Context) error {
+			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"leased"}, Apply: func(c *Handle) error {
 				if err := c.Defer("provider cleanup", func(context.Context) error { addCleanup("provider"); return nil }); err != nil {
 					return err
 				}
@@ -329,7 +329,7 @@ func TestNativeObserversLeaseDelaysDependentAndProviderCleanup(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = r.Mount(ctx, Spec{ID: "listener", Needs: []string{"leased"}, Apply: func(c *Context) error {
+			_, err = r.Mount(ctx, Spec{ID: "listener", Needs: []string{"leased"}, Apply: func(c *Handle) error {
 				if err := c.Defer("listener cleanup", func(context.Context) error {
 					value, err := c.Read("leased")
 					if err != nil || value != "retained native provision" {
@@ -616,7 +616,7 @@ func TestNativeObserversDisposeCancelsCallbackBeforeJoiningLease(t *testing.T) {
 				closing    bool
 			}
 			finished := make(chan callbackResult, 1)
-			id, err := r.Mount(ctx, Spec{ID: "cooperative observer", Apply: func(owner *Context) error {
+			id, err := r.Mount(ctx, Spec{ID: "cooperative observer", Apply: func(owner *Handle) error {
 				_, err := observers.ObserveEvents(owner, "cancel on dispose", func(callbackCtx context.Context, event Event) error {
 					if markerOf(event) != "cooperative dispose" {
 						return nil

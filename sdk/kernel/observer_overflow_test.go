@@ -27,7 +27,7 @@ type overflowRig struct {
 	ctx  context.Context
 	r    Runtime
 	obs  OverflowObserverRuntime
-	root *Context
+	root *Handle
 }
 
 func newOverflowRig(t *testing.T, make func(func(*coreConfig)) Runtime, backlog int) *overflowRig {
@@ -70,7 +70,7 @@ func (rig *overflowRig) mountStalled(label string, cooperative bool) *stalledObs
 	var once sync.Once
 	s.release = func() { once.Do(func() { close(s.gate) }) }
 	rig.t.Cleanup(s.release)
-	id, err := rig.r.Mount(rig.ctx, Spec{ID: label, Apply: func(owner *Context) error {
+	id, err := rig.r.Mount(rig.ctx, Spec{ID: label, Apply: func(owner *Handle) error {
 		_, err := rig.obs.ObserveEventsWith(owner, label, func(callbackCtx context.Context, event Event) error {
 			s.calls.Add(1)
 			if markerOf(event) == "stall" {

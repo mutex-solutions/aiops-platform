@@ -57,7 +57,7 @@ func activeHandle(t *testing.T, r *rt) (*handle, uint64) {
 	t.Helper()
 	ctx := rcGuard(t)
 	got := make(chan *handle, 1)
-	id, err := r.Mount(ctx, Spec{ID: "holder", Apply: func(c *Context) error { got <- c; return nil }})
+	id, err := r.Mount(ctx, Spec{ID: "holder", Apply: func(c *Handle) error { got <- c; return nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestDisposerPastTheDeadlineMarksTheFiberLeaked(t *testing.T) {
 		r := NewReconciler().(*rt)
 		ctx := context.Background()
 		gate := make(chan struct{})
-		id, err := r.Mount(ctx, Spec{ID: "leaker", Apply: func(c *Context) error {
+		id, err := r.Mount(ctx, Spec{ID: "leaker", Apply: func(c *Handle) error {
 			return c.Defer("stuck", func(context.Context) error { <-gate; return nil })
 		}})
 		if err != nil {
@@ -399,7 +399,7 @@ func TestApplyPastTheLoadDeadlineIsNotLeaked(t *testing.T) {
 		r := NewReconciler().(*rt)
 		ctx := context.Background()
 		gate := make(chan struct{})
-		id, err := r.Mount(ctx, Spec{ID: "slow", Apply: func(*Context) error { <-gate; return nil }})
+		id, err := r.Mount(ctx, Spec{ID: "slow", Apply: func(*Handle) error { <-gate; return nil }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -429,7 +429,7 @@ func TestTerminalDiagnosticsAreBoundedByTheConfiguredLimit(t *testing.T) {
 	ctx := rcGuard(t)
 	// A failed cleanup is the diagnostic every later Settle keeps.
 	for i := range 5 {
-		id, err := r.Mount(ctx, Spec{ID: fmt.Sprintf("bad%d", i), Apply: func(c *Context) error {
+		id, err := r.Mount(ctx, Spec{ID: fmt.Sprintf("bad%d", i), Apply: func(c *Handle) error {
 			return c.Defer("failing cleanup", func(context.Context) error { return errors.New("cleanup boom") })
 		}})
 		if err != nil {

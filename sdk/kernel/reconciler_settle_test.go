@@ -25,9 +25,9 @@ func TestReconcilerSettleWaitsForHealthyFiberBesideBlockedOne(t *testing.T) {
 		var h, s sync.Once
 		t.Cleanup(func() { h.Do(func() { close(hang) }) })
 		t.Cleanup(func() { s.Do(func() { close(slow) }) })
-		hung := rcMount(t, r, Spec{ID: "hung", Apply: func(*Context) error { <-hang; return nil }})
+		hung := rcMount(t, r, Spec{ID: "hung", Apply: func(*Handle) error { <-hang; return nil }})
 		time.Sleep(1500 * time.Millisecond)
-		healthy := rcMount(t, r, Spec{ID: "healthy", Apply: func(*Context) error { <-slow; return nil }})
+		healthy := rcMount(t, r, Spec{ID: "healthy", Apply: func(*Handle) error { <-slow; return nil }})
 		time.Sleep(600 * time.Millisecond) // hung is past its budget, healthy is mid-load
 
 		done := make(chan error, 1)
@@ -60,9 +60,9 @@ func TestReconcilerSettleCancelledReturnsContextErrorWithDiagnostics(t *testing.
 		var h, s sync.Once
 		t.Cleanup(func() { h.Do(func() { close(hang) }) })
 		t.Cleanup(func() { s.Do(func() { close(slow) }) })
-		rcMount(t, r, Spec{ID: "hung", Apply: func(*Context) error { <-hang; return nil }})
+		rcMount(t, r, Spec{ID: "hung", Apply: func(*Handle) error { <-hang; return nil }})
 		time.Sleep(1500 * time.Millisecond)
-		rcMount(t, r, Spec{ID: "healthy", Apply: func(*Context) error { <-slow; return nil }})
+		rcMount(t, r, Spec{ID: "healthy", Apply: func(*Handle) error { <-slow; return nil }})
 		time.Sleep(600 * time.Millisecond)
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
@@ -87,8 +87,8 @@ func TestReconcilerSettleReturnsForWaitersOfBlockedFiber(t *testing.T) {
 		hang := make(chan struct{})
 		var once sync.Once
 		t.Cleanup(func() { once.Do(func() { close(hang) }) })
-		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Context) error { return c.Provide("k", 1) }})
-		rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Context) error {
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Handle) error { return c.Provide("k", 1) }})
+		rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Handle) error {
 			return c.Defer("hang", func(context.Context) error { <-hang; return nil })
 		}})
 		rcSettle(t, r)
@@ -117,7 +117,7 @@ func TestReconcilerCloseReleasesObserversAfterContextEnds(t *testing.T) {
 		var once sync.Once
 		t.Cleanup(func() { once.Do(func() { close(gate) }) })
 		var ran atomic.Bool
-		rcMount(t, r, Spec{ID: "slow", Apply: func(c *Context) error {
+		rcMount(t, r, Spec{ID: "slow", Apply: func(c *Handle) error {
 			return c.Defer("wait", func(context.Context) error { <-gate; ran.Store(true); return nil })
 		}})
 		rcSettle(t, r)

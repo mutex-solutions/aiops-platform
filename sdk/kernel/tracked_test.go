@@ -85,7 +85,7 @@ func trackedSnapshot(t *testing.T, ctx context.Context, r Runtime, id uint64) Sn
 // Instrument only completion delivery on an actual runtime-created Context.
 // Every registration and completion still goes through its original native hook;
 // this barrier observes owner acknowledgement without timing-based polling.
-func trackedCompletions(c *Context, capacity int) <-chan error {
+func trackedCompletions(c *Handle, capacity int) <-chan error {
 	completed := make(chan error, capacity)
 	native := c.trackedFn
 	c.trackedFn = func(label string) (func(error), error) {
@@ -109,7 +109,7 @@ func TestTrackedGoDrainsActualWorkBeforeEffectsAndDependencies(t *testing.T) {
 			var releaseOnce sync.Once
 			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
 			started, canceled := make(chan context.Context, 1), make(chan struct{})
-			contexts := make(chan *Context, 1)
+			contexts := make(chan *Handle, 1)
 			var workerExited atomic.Bool
 			var mu sync.Mutex
 			var cleanup []string
@@ -119,13 +119,13 @@ func TestTrackedGoDrainsActualWorkBeforeEffectsAndDependencies(t *testing.T) {
 				mu.Unlock()
 			}
 			token := &struct{ Value string }{"retained dependency"}
-			provider := trackedMount(t, ctx, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			provider := trackedMount(t, ctx, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				if err := c.Defer("provider-cleanup", func(context.Context) error { addCleanup("provider"); return nil }); err != nil {
 					return err
 				}
 				return c.Provide("sample", token)
 			}})
-			consumer := trackedMount(t, ctx, r, Spec{ID: "worker", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			consumer := trackedMount(t, ctx, r, Spec{ID: "worker", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				contexts <- c
 				if err := c.Defer("worker-cleanup", func(context.Context) error {
 					if !workerExited.Load() {
@@ -252,7 +252,7 @@ func TestTrackedGoDuplicateLabelsRetireIndividuallyWhileActive(t *testing.T) {
 			})
 			var completed <-chan error
 			started := make(chan struct{}, 2)
-			id := trackedMount(t, ctx, r, Spec{ID: "duplicate-labels", Apply: func(c *Context) error {
+			id := trackedMount(t, ctx, r, Spec{ID: "duplicate-labels", Apply: func(c *Handle) error {
 				completed = trackedCompletions(c, 2)
 				for _, release := range releases {
 					if err := c.Go("same-label", func(context.Context) error {
@@ -305,7 +305,7 @@ func TestTrackedGoFailureUnloadsActiveOwnerAndDependents(t *testing.T) {
 					failOnce.Do(func() { close(fail) })
 					siblingOnce.Do(func() { close(releaseSibling) })
 				})
-				contexts, dependents := make(chan *Context, 1), make(chan *Context, 1)
+				contexts, dependents := make(chan *Handle, 1), make(chan *Handle, 1)
 				var mu sync.Mutex
 				var cleanup []string
 				addCleanup := func(label string) {
@@ -313,7 +313,7 @@ func TestTrackedGoFailureUnloadsActiveOwnerAndDependents(t *testing.T) {
 					cleanup = append(cleanup, label)
 					mu.Unlock()
 				}
-				id := trackedMount(t, ctx, r, Spec{ID: "owner", Provides: []string{"sample"}, Apply: func(c *Context) error {
+				id := trackedMount(t, ctx, r, Spec{ID: "owner", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 					contexts <- c
 					if err := c.Defer("owner-cleanup", func(context.Context) error { addCleanup("owner"); return nil }); err != nil {
 						return err
@@ -330,7 +330,7 @@ func TestTrackedGoFailureUnloadsActiveOwnerAndDependents(t *testing.T) {
 					}
 					return c.Go("failing-work", func(context.Context) error { <-fail; return test.run() })
 				}})
-				dependent := trackedMount(t, ctx, r, Spec{ID: "dependent", Needs: []string{"sample"}, Apply: func(c *Context) error {
+				dependent := trackedMount(t, ctx, r, Spec{ID: "dependent", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 					dependents <- c
 					return c.Defer("dependent-cleanup", func(context.Context) error { addCleanup("dependent"); return nil })
 				}})
@@ -373,8 +373,8 @@ func TestTrackedGoRejectsMissingBridgeAndQuiescenceRaceWithoutLeakingLease(t *te
 	for name, makeRuntime := range trackedCandidates() {
 		t.Run(name, func(t *testing.T) {
 			ctx, r := trackedRuntime(t, makeRuntime)
-			contexts := make(chan *Context, 1)
-			id := trackedMount(t, ctx, r, Spec{ID: "start-guards", Apply: func(c *Context) error { contexts <- c; return nil }})
+			contexts := make(chan *Handle, 1)
+			id := trackedMount(t, ctx, r, Spec{ID: "start-guards", Apply: func(c *Handle) error { contexts <- c; return nil }})
 			c := trackedWait(t, ctx, contexts)
 			var ran atomic.Bool
 			run := func(context.Context) error { ran.Store(true); return nil }

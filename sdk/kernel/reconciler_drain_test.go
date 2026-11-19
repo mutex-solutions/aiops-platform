@@ -31,8 +31,8 @@ func TestReconcilerDrainWaitingOnHungDependantNamesIt(t *testing.T) {
 		hang := make(chan struct{})
 		var once sync.Once
 		t.Cleanup(func() { once.Do(func() { close(hang) }) })
-		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Context) error { return c.Provide("k", 1) }})
-		dependant := rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Context) error {
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Handle) error { return c.Provide("k", 1) }})
+		dependant := rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Handle) error {
 			return c.Go("hung", func(context.Context) error { <-hang; return nil })
 		}})
 		rcSettle(t, r)
@@ -71,8 +71,8 @@ func TestReconcilerDrainWaitingOnHungDependantNamesIt(t *testing.T) {
 func TestReconcilerDrainOwnLeaseOverrunStillReported(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := hazardReconciler(t)
-		var held *Context
-		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Context) error { held = c; return c.Provide("k", 1) }})
+		var held *Handle
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Handle) error { held = c; return c.Provide("k", 1) }})
 		rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}})
 		rcSettle(t, r)
 		if !held.Enter() {
@@ -103,8 +103,8 @@ func TestReconcilerDrainParentJoinNamesHungChild(t *testing.T) {
 		var once sync.Once
 		t.Cleanup(func() { once.Do(func() { close(hang) }) })
 		var child uint64
-		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
-			id, err := c.MountChild(Spec{ID: "child", Apply: func(cc *Context) error {
+		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Handle) error {
+			id, err := c.MountChild(Spec{ID: "child", Apply: func(cc *Handle) error {
 				return cc.Go("hung", func(context.Context) error { <-hang; return nil })
 			}})
 			child = id

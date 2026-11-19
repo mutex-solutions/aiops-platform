@@ -117,7 +117,7 @@ func TestReconcilerScopeUnloadDeadlineRetainsDeadlineExceededCause(t *testing.T)
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
 		handles := make(chan *EffectHandle, 1)
-		id := rcMount(t, r, Spec{ID: "scope-deadline", Apply: func(c *Context) error {
+		id := rcMount(t, r, Spec{ID: "scope-deadline", Apply: func(c *Handle) error {
 			h, err := c.RequestEffectScope("deadline", func(s *EffectScope) error {
 				return s.Defer("wait-for-budget", func(ctx context.Context) error {
 					<-ctx.Done()
@@ -157,7 +157,7 @@ func TestReconcilerScopeIncrementalPanicRollsBackOnNativeLane(t *testing.T) {
 	panicErr := errors.New("scope setup panic")
 	handles := make(chan *EffectHandle, 1)
 	var applyReturned atomic.Bool
-	id := rcMount(t, r, Spec{ID: "incremental-scope", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "incremental-scope", Apply: func(c *Handle) error {
 		defer applyReturned.Store(true)
 		h, err := c.RequestEffectScope("outer", func(s *EffectScope) error {
 			if !applyReturned.Load() {
@@ -211,7 +211,7 @@ func TestReconcilerScopePendingQuiescenceNeverRunsSetup(t *testing.T) {
 	defer releaseOnce.Do(func() { close(release) })
 	handles := make(chan *EffectHandle, 1)
 	var called atomic.Bool
-	id := rcMount(t, r, Spec{ID: "pending-scope", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "pending-scope", Apply: func(c *Handle) error {
 		h, err := c.RequestEffectScope("never-started", func(*EffectScope) error { called.Store(true); return nil })
 		if err != nil {
 			return err
@@ -244,8 +244,8 @@ func TestReconcilerScopePendingQuiescenceNeverRunsSetup(t *testing.T) {
 
 func TestReconcilerScopeManualCleanupFailureRemainsHandleLocal(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 1)
-	id := rcMount(t, r, Spec{ID: "active-scope", Apply: func(c *Context) error { contexts <- c; return nil }})
+	contexts := make(chan *Handle, 1)
+	id := rcMount(t, r, Spec{ID: "active-scope", Apply: func(c *Handle) error { contexts <- c; return nil }})
 	rcSettle(t, r)
 	c := <-contexts
 	cleanupErr := errors.New("manual cleanup diagnostic")
@@ -328,14 +328,14 @@ func TestReconcilerContextOwnershipAckSurvivesCancellationAfterAdmission(t *test
 
 func TestReconcilerProvideCancellationRaceNeverReportsFailureForReservedUID(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 1)
+	contexts := make(chan *Handle, 1)
 	const count = 64
 	keys := make([]string, count)
 	resources := make([]*atomic.Bool, count)
 	for i := range count {
 		keys[i], resources[i] = "resource-"+strconv.Itoa(i), new(atomic.Bool)
 	}
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: keys, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: keys, Apply: func(c *Handle) error {
 		contexts <- c
 		if err := c.Defer("resources", func(context.Context) error {
 			for _, resource := range resources {
@@ -352,7 +352,7 @@ func TestReconcilerProvideCancellationRaceNeverReportsFailureForReservedUID(t *t
 	entered, release := make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	rcMount(t, r, Spec{ID: "consumer", Needs: keys[:1], Apply: func(c *Context) error {
+	rcMount(t, r, Spec{ID: "consumer", Needs: keys[:1], Apply: func(c *Handle) error {
 		return c.Defer("gated-consumer", func(context.Context) error {
 			value, err := c.Read(keys[0])
 			if err != nil || value.(*atomic.Bool).Load() {
@@ -408,12 +408,12 @@ func TestReconcilerProvideCancellationRaceNeverReportsFailureForReservedUID(t *t
 
 func TestReconcilerRetiringContextCannotDisposeDesiredReplacement(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 2)
+	contexts := make(chan *Handle, 2)
 	cleanupEntered, release := make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var loads atomic.Int32
-	id := rcMount(t, r, Spec{ID: "replacement", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "replacement", Apply: func(c *Handle) error {
 		contexts <- c
 		if loads.Add(1) != 1 {
 			return nil
@@ -443,8 +443,8 @@ func TestReconcilerRetiringContextCannotDisposeDesiredReplacement(t *testing.T) 
 func TestReconcilerPartialEffectCleanupUsesFreshNativeDisposeBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
-		contexts := make(chan *Context, 1)
-		id := rcMount(t, r, Spec{ID: "rollback", Apply: func(c *Context) error { contexts <- c; return nil }})
+		contexts := make(chan *Handle, 1)
+		id := rcMount(t, r, Spec{ID: "rollback", Apply: func(c *Handle) error { contexts <- c; return nil }})
 		rcSettle(t, r)
 		c := <-contexts
 		if !c.Enter() {
@@ -491,8 +491,8 @@ func TestReconcilerPartialEffectCleanupUsesFreshNativeDisposeBudget(t *testing.T
 
 func TestReconcilerEffectRegistrationCancellationTransfersOwnershipExactlyOnce(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 1)
-	id := rcMount(t, r, Spec{ID: "effect-ack", Apply: func(c *Context) error { contexts <- c; return nil }})
+	contexts := make(chan *Handle, 1)
+	id := rcMount(t, r, Spec{ID: "effect-ack", Apply: func(c *Handle) error { contexts <- c; return nil }})
 	rcSettle(t, r)
 	c := <-contexts
 	const count = 128
@@ -543,7 +543,7 @@ func TestReconcilerBatchInvalidSuffixHasNoPrefixOrIDEffects(t *testing.T) {
 	}
 	var callbacks atomic.Int32
 	operations := []BatchOperation{
-		{Kind: BatchMount, Spec: Spec{ID: "not-mounted", Apply: func(*Context) error { callbacks.Add(1); return nil }}},
+		{Kind: BatchMount, Spec: Spec{ID: "not-mounted", Apply: func(*Handle) error { callbacks.Add(1); return nil }}},
 		{Kind: BatchUpdate, Fiber: id},
 		{Kind: BatchDispose, Fiber: id},
 		{Kind: BatchUpdate, Fiber: id},
@@ -566,7 +566,7 @@ func TestReconcilerBatchInvalidSuffixHasNoPrefixOrIDEffects(t *testing.T) {
 func TestReconcilerBatchRepeatedUpdatesPublishOnlyLatestRevision(t *testing.T) {
 	r := rcRuntime(t)
 	var loads atomic.Int32
-	id := rcMount(t, r, Spec{ID: "updated", Apply: func(*Context) error { loads.Add(1); return nil }})
+	id := rcMount(t, r, Spec{ID: "updated", Apply: func(*Handle) error { loads.Add(1); return nil }})
 	rcSettle(t, r)
 	ids, err := r.(Batcher).Batch(rcGuard(t), []BatchOperation{
 		{Kind: BatchUpdate, Fiber: id},
@@ -603,16 +603,16 @@ func TestReconcilerBatchRepeatedUpdatesPublishOnlyLatestRevision(t *testing.T) {
 func TestReconcilerBatchColdConsumerBeforeProviderUpdateNeverBindsOldUID(t *testing.T) {
 	r := rcRuntime(t)
 	var providerLoads, checks atomic.Int32
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", providerLoads.Add(1)) }})
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", providerLoads.Add(1)) }})
 	rcSettle(t, r)
 	oldUID := rcInspect(t, r).Provisions[0].UID
 	seen := make(chan any, 1)
 	ids, err := r.(Batcher).Batch(rcGuard(t), []BatchOperation{
-		{Kind: BatchMount, Spec: Spec{ID: "cold", Needs: []string{"sample"}, Check: func(c *Context) bool {
+		{Kind: BatchMount, Spec: Spec{ID: "cold", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 			checks.Add(1)
 			value, err := c.Read("sample")
 			return err == nil && value == int32(2)
-		}, Apply: func(c *Context) error { value, err := c.Read("sample"); seen <- value; return err }}},
+		}, Apply: func(c *Handle) error { value, err := c.Read("sample"); seen <- value; return err }}},
 		{Kind: BatchUpdate, Fiber: provider},
 	})
 	if err != nil {
@@ -633,7 +633,7 @@ func TestReconcilerBatchHeldApplyJoinsBeforeLatestActivation(t *testing.T) {
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var loads, running, peak atomic.Int32
-	id := rcMount(t, r, Spec{ID: "held", Apply: func(*Context) error {
+	id := rcMount(t, r, Spec{ID: "held", Apply: func(*Handle) error {
 		current := running.Add(1)
 		defer running.Add(-1)
 		for previous := peak.Load(); current > previous && !peak.CompareAndSwap(previous, current); previous = peak.Load() {
@@ -661,10 +661,10 @@ func TestReconcilerBatchHeldApplyJoinsBeforeLatestActivation(t *testing.T) {
 
 func TestReconcilerDiamondProviderRemovalFollowsBothConsumerStableTransitions(t *testing.T) {
 	r := rcRuntime(t)
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"a"}, Apply: func(c *Context) error { return c.Provide("a", "retained") }})
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"a"}, Apply: func(c *Handle) error { return c.Provide("a", "retained") }})
 	branches := make([]uint64, 0, 2)
 	for _, key := range []string{"b", "c"} {
-		branches = append(branches, rcMount(t, r, Spec{ID: "branch-" + key, Needs: []string{"a"}, Provides: []string{key}, Apply: func(c *Context) error {
+		branches = append(branches, rcMount(t, r, Spec{ID: "branch-" + key, Needs: []string{"a"}, Provides: []string{key}, Apply: func(c *Handle) error {
 			value, err := c.Read("a")
 			if err != nil {
 				return err
@@ -676,7 +676,7 @@ func TestReconcilerDiamondProviderRemovalFollowsBothConsumerStableTransitions(t 
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var loads atomic.Int32
-	leaf := rcMount(t, r, Spec{ID: "leaf", Needs: []string{"b", "c"}, Apply: func(c *Context) error {
+	leaf := rcMount(t, r, Spec{ID: "leaf", Needs: []string{"b", "c"}, Apply: func(c *Handle) error {
 		if loads.Add(1) != 1 {
 			return nil
 		}
@@ -723,7 +723,7 @@ func TestReconcilerObserverQueueRemainsOpenUntilNativeCloseActuallyFinishes(t *t
 		r := NewRecordingReconciler()
 		observers := r.(ObserverRuntime)
 		entered, release := make(chan struct{}), make(chan struct{})
-		id := rcMount(t, r, Spec{ID: "blocked-cleanup", ApplyEffect: func(*Context) (Disposer, error) {
+		id := rcMount(t, r, Spec{ID: "blocked-cleanup", ApplyEffect: func(*Handle) (Disposer, error) {
 			return func(context.Context) error { close(entered); <-release; return nil }, nil
 		}})
 		rcSettle(t, r)
@@ -798,7 +798,7 @@ func TestReconcilerRootIsNativeHiddenAnchorWithActualProvisionRecords(t *testing
 		t.Fatal("root provisions not native Context ownership")
 	}
 	var seen any
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"zeta"}, Apply: func(c *Context) error { var err error; seen, err = c.Read("zeta"); return err }})
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"zeta"}, Apply: func(c *Handle) error { var err error; seen, err = c.Read("zeta"); return err }})
 	rcSettle(t, r)
 	inspection := rcInspect(t, r)
 	if seen != firstValue || len(inspection.Fibers) != 1 || inspection.Fibers[0].ID != consumer || len(inspection.Provisions) != 2 {
@@ -861,13 +861,13 @@ func TestReconcilerRootCloseJoinsChildrenUsersAndRootWorkBeforeLIFOCleanup(t *te
 		}
 		childEntered, userEntered := make(chan struct{}), make(chan struct{})
 		childRelease, userRelease, workRelease := make(chan struct{}), make(chan struct{}), make(chan struct{})
-		child, err := root.MountChild(Spec{ID: "structural-child", ApplyEffect: func(*Context) (Disposer, error) {
+		child, err := root.MountChild(Spec{ID: "structural-child", ApplyEffect: func(*Handle) (Disposer, error) {
 			return func(context.Context) error { close(childEntered); <-childRelease; return nil }, nil
 		}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		user := rcMount(t, r, Spec{ID: "ordinary-user", Needs: []string{"host"}, ApplyEffect: func(c *Context) (Disposer, error) {
+		user := rcMount(t, r, Spec{ID: "ordinary-user", Needs: []string{"host"}, ApplyEffect: func(c *Handle) (Disposer, error) {
 			return func(context.Context) error {
 				value, err := c.Read("host")
 				if err != nil || value != "retained" {
@@ -991,7 +991,7 @@ func TestReconcilerRootTrackedFailureRetiresOnlyOwnedLifetimeUntilExplicitClose(
 			t.Fatal(err)
 		}
 		var consumerCleaned atomic.Bool
-		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"host"}, Apply: func(c *Context) error {
+		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"host"}, Apply: func(c *Handle) error {
 			return c.Defer("consumer", func(context.Context) error {
 				if _, err := c.Read("host"); err != nil {
 					return err
@@ -1042,8 +1042,8 @@ func TestReconcilerTrackedRecordsNativeOrderAndRetainsCleanupUntilExit(t *testin
 		r := NewRecordingReconciler()
 		first, second := make(chan struct{}), make(chan struct{})
 		var cleaned atomic.Bool
-		contexts := make(chan *Context, 1)
-		id := rcMount(t, r, Spec{ID: "tracked", Apply: func(c *Context) error {
+		contexts := make(chan *Handle, 1)
+		id := rcMount(t, r, Spec{ID: "tracked", Apply: func(c *Handle) error {
 			contexts <- c
 			if err := c.Go("zeta-first", func(context.Context) error { <-first; return nil }); err != nil {
 				return err
@@ -1108,14 +1108,14 @@ func TestReconcilerTrackedActiveErrorFailsAndInvalidatesConsumers(t *testing.T) 
 		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		workerErr := &rcInspectingError{r: r}
-		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 			if err := c.Go("failing", func(context.Context) error { <-release; return workerErr }); err != nil {
 				return err
 			}
 			return c.Provide("sample", "retained")
 		}})
 		var consumerCleaned atomic.Bool
-		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+		consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 			return c.Defer("consumer", func(context.Context) error { consumerCleaned.Store(true); return nil })
 		}})
 		rcSettle(t, r)
@@ -1153,10 +1153,10 @@ func TestReconcilerTrackedFailureDuringApplyWaitsForSingleTransition(t *testing.
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
 		applyEntered, releaseApply, releaseWork := make(chan struct{}), make(chan struct{}), make(chan struct{})
-		contexts := make(chan *Context, 1)
+		contexts := make(chan *Handle, 1)
 		workerErr := errors.New("worker failed while Apply running")
 		var cleaned atomic.Bool
-		id := rcMount(t, r, Spec{ID: "loading", ApplyEffect: func(c *Context) (Disposer, error) {
+		id := rcMount(t, r, Spec{ID: "loading", ApplyEffect: func(c *Handle) (Disposer, error) {
 			contexts <- c
 			if err := c.Go("early-error", func(context.Context) error { <-releaseWork; return workerErr }); err != nil {
 				return nil, err
@@ -1198,7 +1198,7 @@ func TestReconcilerTrackedSupersededErrorCannotPoisonNewTarget(t *testing.T) {
 		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		var loads atomic.Int32
-		id := rcMount(t, r, Spec{ID: "updated", Apply: func(c *Context) error {
+		id := rcMount(t, r, Spec{ID: "updated", Apply: func(c *Handle) error {
 			if loads.Add(1) != 1 {
 				return nil
 			}
@@ -1228,7 +1228,7 @@ func TestReconcilerTrackedIgnoredCancellationKeepsRecordAfterDeadline(t *testing
 		r := NewRecordingReconciler()
 		release := make(chan struct{})
 		var cleaned atomic.Bool
-		id := rcMount(t, r, Spec{ID: "blocked-worker", Apply: func(c *Context) error {
+		id := rcMount(t, r, Spec{ID: "blocked-worker", Apply: func(c *Handle) error {
 			if err := c.Go("blocked", func(context.Context) error { <-release; return nil }); err != nil {
 				return err
 			}
@@ -1258,7 +1258,7 @@ func TestReconcilerTrackedCancellationPanicAndDeadlineClassification(t *testing.
 			synctest.Test(t, func(t *testing.T) {
 				r := NewRecordingReconciler()
 				release := make(chan struct{})
-				id := rcMount(t, r, Spec{ID: result, Apply: func(c *Context) error {
+				id := rcMount(t, r, Spec{ID: result, Apply: func(c *Handle) error {
 					return c.Go(result, func(ctx context.Context) error {
 						if result == "canceled" {
 							<-ctx.Done()
@@ -1306,8 +1306,8 @@ func TestReconcilerTrackedCancellationPanicAndDeadlineClassification(t *testing.
 
 func TestReconcilerTrackedAdmissionRaceLeavesNoReservationOrLease(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 2)
-	id := rcMount(t, r, Spec{ID: "admission", Apply: func(c *Context) error { contexts <- c; return nil }})
+	contexts := make(chan *Handle, 2)
+	id := rcMount(t, r, Spec{ID: "admission", Apply: func(c *Handle) error { contexts <- c; return nil }})
 	rcSettle(t, r)
 	old := <-contexts
 	start := make(chan struct{})
@@ -1341,10 +1341,10 @@ func TestReconcilerTrackedAdmissionRaceLeavesNoReservationOrLease(t *testing.T) 
 
 func TestReconcilerWithdrawalValuePrecedesActualRemovalAndReload(t *testing.T) {
 	r := rcRuntime(t)
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		return c.Provide("sample", "retained")
 	}})
-	rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(*Context) error { return nil }})
+	rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(*Handle) error { return nil }})
 	rcSettle(t, r)
 	if err := r.Update(rcGuard(t), provider); err != nil {
 		t.Fatal(err)
@@ -1379,12 +1379,12 @@ func TestReconcilerWithdrawalValuePrecedesActualRemovalAndReload(t *testing.T) {
 
 func TestReconcilerTargetRevisionWhileCommittedCleanupIsGated(t *testing.T) {
 	r := rcRuntime(t)
-	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "retained") }})
+	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", "retained") }})
 	cleanupEntered, releaseCleanup := make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(releaseCleanup) })
 	var loads atomic.Int32
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(*Context) bool { return true }, Apply: func(c *Context) error {
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(*Handle) bool { return true }, Apply: func(c *Handle) error {
 		if loads.Add(1) != 1 {
 			return nil
 		}
@@ -1438,7 +1438,7 @@ func TestReconcilerNativeProvisionReservationsAndUIDOrder(t *testing.T) {
 	var applyOnce, cleanupOnce sync.Once
 	defer applyOnce.Do(func() { close(releaseApply) })
 	defer cleanupOnce.Do(func() { close(releaseCleanup) })
-	provider := rcMount(t, r, Spec{ID: "owner-name", Provides: []string{"alpha", "zeta"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "owner-name", Provides: []string{"alpha", "zeta"}, Apply: func(c *Handle) error {
 		// Actual reservation order deliberately differs from key and declaration order.
 		if err := c.Provide("zeta", "actual-zeta"); err != nil {
 			return err
@@ -1511,13 +1511,13 @@ func TestReconcilerNativeProvisionReservationsAndUIDOrder(t *testing.T) {
 
 func TestReconcilerInspectUsesCachedAvailabilityWithoutCallbacks(t *testing.T) {
 	r := rcRuntime(t)
-	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "value") }})
+	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", "value") }})
 	var allowed atomic.Bool
 	var checks atomic.Int32
 	entered, release := make(chan struct{}, 1), make(chan struct{})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(c *Context) bool {
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 		attempt := checks.Add(1)
 		// Reenter inspection from the predicate. An owner-invoked predicate
 		// would deadlock here; inspection cannot recursively invoke it either.
@@ -1589,7 +1589,7 @@ func (e *rcInspectingError) Error() string {
 func TestReconcilerInspectNeverFormatsPluginErrorOnOwner(t *testing.T) {
 	r := rcRuntime(t)
 	startupErr := &rcInspectingError{r: r}
-	id := rcMount(t, r, Spec{ID: "failed", Apply: func(*Context) error { return startupErr }})
+	id := rcMount(t, r, Spec{ID: "failed", Apply: func(*Handle) error { return startupErr }})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
 		t.Fatalf("Await lost startup error identity: %v", err)
 	}
@@ -1622,8 +1622,8 @@ func TestReconcilerInspectNeverFormatsPluginErrorOnOwner(t *testing.T) {
 
 func TestReconcilerMissingDependencyAndActiveVisibility(t *testing.T) {
 	r := rcRuntime(t)
-	entered := make(chan *Context, 1)
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+	entered := make(chan *Handle, 1)
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 		entered <- c
 		return nil
 	}})
@@ -1639,7 +1639,7 @@ func TestReconcilerMissingDependencyAndActiveVisibility(t *testing.T) {
 			close(release)
 		}
 	}()
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		if err := c.Provide("sample", "value"); err != nil {
 			return err
 		}
@@ -1673,7 +1673,7 @@ func TestReconcilerMissingDependencyAndActiveVisibility(t *testing.T) {
 func TestReconcilerRetainsProviderThroughConsumerCleanup(t *testing.T) {
 	r := rcRuntime(t)
 	var providerDisposed atomic.Bool
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		if err := c.Defer("release-resource", func(context.Context) error { providerDisposed.Store(true); return nil }); err != nil {
 			return err
 		}
@@ -1688,8 +1688,8 @@ func TestReconcilerRetainsProviderThroughConsumerCleanup(t *testing.T) {
 			close(releaseCleanup)
 		}
 	}()
-	consumerCtx := make(chan *Context, 1)
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+	consumerCtx := make(chan *Handle, 1)
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 		consumerCtx <- c
 		return c.Defer("consumer", func(context.Context) error {
 			value, err := c.Read("sample")
@@ -1746,7 +1746,7 @@ func TestReconcilerRetainsProviderThroughConsumerCleanup(t *testing.T) {
 func TestReconcilerEpochRevisionAndProviderUID(t *testing.T) {
 	r := rcRuntime(t)
 	var loads atomic.Int32
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		return c.Provide("sample", loads.Add(1))
 	}})
 	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}})
@@ -1772,9 +1772,9 @@ func TestReconcilerEpochRevisionAndProviderUID(t *testing.T) {
 
 func TestReconcilerStickyFailureRequiresExplicitUpdate(t *testing.T) {
 	r := rcRuntime(t)
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", 1) }})
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", 1) }})
 	var attempts atomic.Int32
-	id := rcMount(t, r, Spec{ID: "failing", Needs: []string{"sample"}, Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "failing", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 		if attempts.Add(1) == 1 {
 			return errors.New("sticky failure")
 		}
@@ -1818,7 +1818,7 @@ func TestReconcilerSupersededLoadErrorAndCoalescing(t *testing.T) {
 		}
 	}()
 	var attempts atomic.Int32
-	id := rcMount(t, r, Spec{ID: "superseded", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "superseded", Apply: func(c *Handle) error {
 		if attempts.Add(1) == 1 {
 			close(entered)
 			<-release
@@ -1849,7 +1849,7 @@ func TestReconcilerSelfDisposeDoesNotAwaitOwnApply(t *testing.T) {
 	r := rcRuntime(t)
 	var cleaned atomic.Bool
 	requested := make(chan error, 1)
-	id := rcMount(t, r, Spec{ID: "self-dispose", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "self-dispose", Apply: func(c *Handle) error {
 		if err := c.Defer("partial", func(context.Context) error { cleaned.Store(true); return nil }); err != nil {
 			return err
 		}
@@ -1889,12 +1889,12 @@ func TestReconcilerChildLoadsDuringParentLoadingAndIsJoinedAfterParentCleanup(t 
 	defer parentOnce.Do(func() { close(releaseParent) })
 	defer childOnce.Do(func() { close(releaseChild) })
 	children := make(chan uint64, 1)
-	contexts := make(chan *Context, 1)
+	contexts := make(chan *Handle, 1)
 	var parentCleaned atomic.Bool
 	parentCleanedCh := make(chan struct{})
-	parent := rcMount(t, r, Spec{ID: "parent", ApplyEffect: func(c *Context) (Disposer, error) {
+	parent := rcMount(t, r, Spec{ID: "parent", ApplyEffect: func(c *Handle) (Disposer, error) {
 		contexts <- c
-		child, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+		child, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Handle) (Disposer, error) {
 			return func(context.Context) error { close(childEntered); <-releaseChild; return nil }, nil
 		}})
 		if err != nil {
@@ -1950,11 +1950,11 @@ func TestReconcilerChildNeedsParentServiceWithoutDependencyDeadlock(t *testing.T
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var parentCleaned atomic.Bool
-	parent := rcMount(t, r, Spec{ID: "parent-provider", Provides: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+	parent := rcMount(t, r, Spec{ID: "parent-provider", Provides: []string{"sample"}, ApplyEffect: func(c *Handle) (Disposer, error) {
 		if err := c.Provide("sample", "parent-value"); err != nil {
 			return nil, err
 		}
-		child, err := c.MountChild(Spec{ID: "child-consumer", Needs: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+		child, err := c.MountChild(Spec{ID: "child-consumer", Needs: []string{"sample"}, ApplyEffect: func(c *Handle) (Disposer, error) {
 			value, err := c.Read("sample")
 			if err != nil {
 				return nil, err
@@ -2001,10 +2001,10 @@ func TestReconcilerChildNeedsParentServiceWithoutDependencyDeadlock(t *testing.T
 func TestReconcilerChildPendingAndOldActivationCannotOwnReplacementChildren(t *testing.T) {
 	r := rcRuntime(t)
 	children := make(chan uint64, 2)
-	contexts := make(chan *Context, 2)
-	parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
+	contexts := make(chan *Handle, 2)
+	parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Handle) error {
 		contexts <- c
-		child, err := c.MountChild(Spec{ID: "pending-child", Needs: []string{"absent"}, Apply: func(*Context) error { t.Error("missing-service child applied"); return nil }})
+		child, err := c.MountChild(Spec{ID: "pending-child", Needs: []string{"absent"}, Apply: func(*Handle) error { t.Error("missing-service child applied"); return nil }})
 		if err != nil {
 			return err
 		}
@@ -2040,7 +2040,7 @@ func TestReconcilerChildPendingAndOldActivationCannotOwnReplacementChildren(t *t
 func TestReconcilerChildOwnershipHasNoIdleWatchers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
-		rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
+		rcMount(t, r, Spec{ID: "parent", Apply: func(c *Handle) error {
 			for range 16 {
 				if _, err := c.MountChild(Spec{ID: "child"}); err != nil {
 					return err
@@ -2064,8 +2064,8 @@ func TestReconcilerChildCleanupHasBoundedParentJoin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
 		entered, release := make(chan struct{}), make(chan struct{})
-		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Context) error {
-			_, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+		parent := rcMount(t, r, Spec{ID: "parent", Apply: func(c *Handle) error {
+			_, err := c.MountChild(Spec{ID: "child", ApplyEffect: func(*Handle) (Disposer, error) {
 				return func(context.Context) error { close(entered); <-release; return nil }, nil
 			}})
 			return err
@@ -2089,7 +2089,7 @@ func TestReconcilerChildCleanupHasBoundedParentJoin(t *testing.T) {
 
 func TestReconcilerPendingDisposeHasUnloadingHistory(t *testing.T) {
 	r := rcRuntime(t)
-	id := rcMount(t, r, Spec{ID: "pending", Needs: []string{"absent"}, Apply: func(*Context) error { t.Fatal("pending Apply ran"); return nil }})
+	id := rcMount(t, r, Spec{ID: "pending", Needs: []string{"absent"}, Apply: func(*Handle) error { t.Fatal("pending Apply ran"); return nil }})
 	rcSettle(t, r)
 	if err := r.Dispose(rcGuard(t), id); err != nil {
 		t.Fatal(err)
@@ -2118,7 +2118,7 @@ func TestReconcilerApplyEffectOwnsReturnedCleanupAfterBodyProvisions(t *testing.
 	entered, release := make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	id := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, ApplyEffect: func(c *Context) (Disposer, error) {
+	id := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, ApplyEffect: func(c *Handle) (Disposer, error) {
 		if err := c.Provide("sample", "retained"); err != nil {
 			return nil, err
 		}
@@ -2155,7 +2155,7 @@ func TestReconcilerApplyEffectCollectsSupersededAndSelfDisposeResults(t *testing
 			var releaseOnce sync.Once
 			defer releaseOnce.Do(func() { close(release) })
 			var loads, cleaned atomic.Int32
-			id := rcMount(t, r, Spec{ID: "late-result", ApplyEffect: func(c *Context) (Disposer, error) {
+			id := rcMount(t, r, Spec{ID: "late-result", ApplyEffect: func(c *Handle) (Disposer, error) {
 				if loads.Add(1) != 1 {
 					return nil, nil
 				}
@@ -2188,12 +2188,12 @@ func TestReconcilerApplyEffectCollectsSupersededAndSelfDisposeResults(t *testing
 
 func TestReconcilerApplyEffectRejectsAmbiguityAndFailedReturnedCleanup(t *testing.T) {
 	r := rcRuntime(t)
-	if _, err := r.Mount(rcGuard(t), Spec{Apply: func(*Context) error { return nil }, ApplyEffect: func(*Context) (Disposer, error) { return nil, nil }}); err == nil {
+	if _, err := r.Mount(rcGuard(t), Spec{Apply: func(*Handle) error { return nil }, ApplyEffect: func(*Handle) (Disposer, error) { return nil, nil }}); err == nil {
 		t.Fatal("accepted both Apply and ApplyEffect")
 	}
 	var cleaned atomic.Bool
 	startupErr := errors.New("failed return")
-	id := rcMount(t, r, Spec{ID: "failed-effect", ApplyEffect: func(*Context) (Disposer, error) {
+	id := rcMount(t, r, Spec{ID: "failed-effect", ApplyEffect: func(*Handle) (Disposer, error) {
 		return func(context.Context) error { cleaned.Store(true); return nil }, startupErr
 	}})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
@@ -2221,7 +2221,7 @@ func TestReconcilerSequentialLIFOPartialFailure(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	appendOrder := func(s string) { mu.Lock(); defer mu.Unlock(); order = append(order, s) }
-	id := rcMount(t, r, Spec{ID: "partial", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "partial", Apply: func(c *Handle) error {
 		if err := c.Defer("first", func(context.Context) error { appendOrder("first"); return nil }); err != nil {
 			return err
 		}
@@ -2264,8 +2264,8 @@ func TestReconcilerSequentialLIFOPartialFailure(t *testing.T) {
 
 func TestReconcilerDeclaredDuplicateAndLateEffects(t *testing.T) {
 	r := rcRuntime(t)
-	ctxs := make(chan *Context, 2)
-	id := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	ctxs := make(chan *Handle, 2)
+	id := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		ctxs <- c
 		if err := c.Provide("undeclared", nil); err == nil {
 			return errors.New("undeclared provision accepted")
@@ -2308,9 +2308,9 @@ func TestReconcilerDeclaredDuplicateAndLateEffects(t *testing.T) {
 
 func TestReconcilerLeaseDrainAndSnapshotIsolation(t *testing.T) {
 	r := rcRuntime(t)
-	ctxs := make(chan *Context, 2)
+	ctxs := make(chan *Handle, 2)
 	var disposed atomic.Bool
-	id := rcMount(t, r, Spec{ID: "leased", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "leased", Apply: func(c *Handle) error {
 		ctxs <- c
 		return c.Defer("resource", func(context.Context) error { disposed.Store(true); return nil })
 	}})
@@ -2369,7 +2369,7 @@ func TestReconcilerLeaseDrainAndSnapshotIsolation(t *testing.T) {
 func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := NewRecordingReconciler()
-		contexts := make(map[string]chan *Context)
+		contexts := make(map[string]chan *Handle)
 		var ids []uint64
 		for _, spec := range []Spec{
 			{ID: "root", Provides: []string{"root"}},
@@ -2378,10 +2378,10 @@ func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 			{ID: "leaf", Needs: []string{"left", "right"}, Provides: []string{"leaf"}},
 			{ID: "tail", Needs: []string{"leaf"}},
 		} {
-			captured := make(chan *Context, 2)
+			captured := make(chan *Handle, 2)
 			contexts[spec.ID] = captured
 			provides := slices.Clone(spec.Provides)
-			spec.Apply = func(c *Context) error {
+			spec.Apply = func(c *Handle) error {
 				captured <- c
 				for _, key := range provides {
 					if err := c.Provide(key, c); err != nil {
@@ -2393,7 +2393,7 @@ func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 			ids = append(ids, rcMount(t, r, spec))
 		}
 		rcSettle(t, r)
-		old := make([]*Context, 0, len(ids))
+		old := make([]*Handle, 0, len(ids))
 		for _, name := range []string{"root", "left", "right", "leaf", "tail"} {
 			old = append(old, <-contexts[name])
 		}
@@ -2429,8 +2429,8 @@ func TestReconcilerChainDiamondInvalidationAndNoIdleWorkers(t *testing.T) {
 
 func TestReconcilerConcurrentLeaseQuiesceAndRequestWake(t *testing.T) {
 	r := rcRuntime(t)
-	contexts := make(chan *Context, 2)
-	id := rcMount(t, r, Spec{ID: "race", Apply: func(c *Context) error {
+	contexts := make(chan *Handle, 2)
+	id := rcMount(t, r, Spec{ID: "race", Apply: func(c *Handle) error {
 		contexts <- c
 		return c.Defer("cleanup", func(context.Context) error { return nil })
 	}})
@@ -2475,7 +2475,7 @@ func TestReconcilerConcurrentLeaseQuiesceAndRequestWake(t *testing.T) {
 func TestReconcilerOwnerAvailableDuringReentrantCallbacks(t *testing.T) {
 	r := rcRuntime(t)
 	child := make(chan uint64, 1)
-	id := rcMount(t, r, Spec{ID: "outer", Apply: func(c *Context) error {
+	id := rcMount(t, r, Spec{ID: "outer", Apply: func(c *Handle) error {
 		id, err := r.Mount(c.Std(), Spec{ID: "child"})
 		if err != nil {
 			return err
@@ -2505,7 +2505,7 @@ func TestReconcilerOwnerAvailableDuringReentrantCallbacks(t *testing.T) {
 func TestReconcilerCanceledWaitersAndClosedCommands(t *testing.T) {
 	r := NewRecordingReconciler()
 	entered, release := make(chan struct{}), make(chan struct{})
-	id := rcMount(t, r, Spec{ID: "blocked", Apply: func(*Context) error { close(entered); <-release; return nil }})
+	id := rcMount(t, r, Spec{ID: "blocked", Apply: func(*Handle) error { close(entered); <-release; return nil }})
 	<-entered
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -2534,7 +2534,7 @@ func TestReconcilerCanceledWaitersAndClosedCommands(t *testing.T) {
 func TestReconcilerAwaitRetainsFailedErrorAfterDisposal(t *testing.T) {
 	r := rcRuntime(t)
 	startupErr := errors.New("retained startup failure")
-	id := rcMount(t, r, Spec{ID: "failed", Apply: func(*Context) error { return startupErr }})
+	id := rcMount(t, r, Spec{ID: "failed", Apply: func(*Handle) error { return startupErr }})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); !errors.Is(err, startupErr) {
 		t.Fatalf("initial AwaitFiber lost error identity: %v", err)
 	}
@@ -2560,7 +2560,7 @@ func TestReconcilerAwaitRetainsFailedErrorAfterDisposal(t *testing.T) {
 func TestReconcilerCleanupDiagnosticDoesNotBecomeAwaitFailure(t *testing.T) {
 	r := NewRecordingReconciler()
 	cleanupErr := errors.New("cleanup diagnostic")
-	id := rcMount(t, r, Spec{ID: "cleanup", Apply: func(c *Context) error { return c.Defer("cleanup", func(context.Context) error { return cleanupErr }) }})
+	id := rcMount(t, r, Spec{ID: "cleanup", Apply: func(c *Handle) error { return c.Defer("cleanup", func(context.Context) error { return cleanupErr }) }})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), id); err != nil {
 		t.Fatal(err)
 	}
@@ -2594,7 +2594,7 @@ func TestReconcilerAwaitFiberDoesNotJoinUnrelatedTransitions(t *testing.T) {
 			close(release)
 		}
 	}()
-	unrelated := rcMount(t, r, Spec{ID: "blocked", Apply: func(*Context) error { close(entered); <-release; return nil }})
+	unrelated := rcMount(t, r, Spec{ID: "blocked", Apply: func(*Handle) error { close(entered); <-release; return nil }})
 	<-entered
 	target := rcMount(t, r, Spec{ID: "target"})
 	if err := r.(Waiter).AwaitFiber(rcGuard(t), target); err != nil {
@@ -2622,7 +2622,7 @@ func TestReconcilerAwaitFiberDoesNotJoinUnrelatedTransitions(t *testing.T) {
 func TestReconcilerConsumerStatePrecedesProviderServiceNotice(t *testing.T) {
 	r := rcRuntime(t)
 	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}})
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "value") }})
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", "value") }})
 	rcSettle(t, r)
 	events, err := r.Events(rcGuard(t))
 	if err != nil {
@@ -2644,14 +2644,14 @@ func TestReconcilerConsumerStatePrecedesProviderServiceNotice(t *testing.T) {
 
 func TestReconcilerConsumerBoundAvailabilityNotify(t *testing.T) {
 	r := rcRuntime(t)
-	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error { return c.Provide("sample", "value") }})
+	rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error { return c.Provide("sample", "value") }})
 	var allowed atomic.Bool
 	var checks, applies atomic.Int32
-	first := rcMount(t, r, Spec{ID: "allowed", Needs: []string{"sample"}, Check: func(c *Context) bool {
+	first := rcMount(t, r, Spec{ID: "allowed", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 		v, err := c.Read("sample")
 		return err == nil && v == "value"
 	}})
-	second := rcMount(t, r, Spec{ID: "gated", Needs: []string{"sample"}, Check: func(c *Context) bool {
+	second := rcMount(t, r, Spec{ID: "gated", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 		checks.Add(1)
 		if _, err := r.Snapshots(c.Std()); err != nil {
 			return false
@@ -2667,7 +2667,7 @@ func TestReconcilerConsumerBoundAvailabilityNotify(t *testing.T) {
 			panic("predicate accepted disposal")
 		}
 		return allowed.Load()
-	}, Apply: func(*Context) error { applies.Add(1); return nil }})
+	}, Apply: func(*Handle) error { applies.Add(1); return nil }})
 	rcSettle(t, r)
 	if s := rcSnapshot(t, r, first); s.State != Active {
 		t.Fatalf("independent consumer = %+v", s)
@@ -2716,7 +2716,7 @@ func TestReconcilerConsumerBoundAvailabilityNotify(t *testing.T) {
 func TestReconcilerStalePredicateRetainsProviderAndDiscardsResult(t *testing.T) {
 	r := rcRuntime(t)
 	var released atomic.Bool
-	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+	provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 		if err := c.Defer("resource", func(context.Context) error { released.Store(true); return nil }); err != nil {
 			return err
 		}
@@ -2732,12 +2732,12 @@ func TestReconcilerStalePredicateRetainsProviderAndDiscardsResult(t *testing.T) 
 		}
 	}()
 	var applies atomic.Int32
-	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(c *Context) bool {
+	consumer := rcMount(t, r, Spec{ID: "consumer", Needs: []string{"sample"}, Check: func(c *Handle) bool {
 		close(entered)
 		<-release
 		value, err := c.Read("sample")
 		return err == nil && !value.(*atomic.Bool).Load()
-	}, Apply: func(*Context) error { applies.Add(1); return nil }})
+	}, Apply: func(*Handle) error { applies.Add(1); return nil }})
 	<-entered
 	if err := r.Dispose(rcGuard(t), provider); err != nil {
 		t.Fatal(err)
@@ -2759,7 +2759,7 @@ func TestReconcilerPredicatePanicIsPendingNotStickyFailure(t *testing.T) {
 	r := rcRuntime(t)
 	var panics atomic.Bool
 	panics.Store(true)
-	id := rcMount(t, r, Spec{ID: "predicate", Check: func(*Context) bool {
+	id := rcMount(t, r, Spec{ID: "predicate", Check: func(*Handle) bool {
 		if panics.Load() {
 			panic("unavailable")
 		}
@@ -2784,7 +2784,7 @@ func TestReconcilerDisposeDeadlinePersistsAcrossLaterEffects(t *testing.T) {
 		r := NewRecordingReconciler()
 		firstEntered, firstRelease := make(chan struct{}), make(chan struct{})
 		laterEntered, laterRelease := make(chan struct{}), make(chan struct{})
-		id := rcMount(t, r, Spec{ID: "cleanup-chain", Apply: func(c *Context) error {
+		id := rcMount(t, r, Spec{ID: "cleanup-chain", Apply: func(c *Handle) error {
 			if err := c.Defer("earlier", func(context.Context) error {
 				close(laterEntered)
 				<-laterRelease
@@ -2830,9 +2830,9 @@ func TestReconcilerDeadlinesBoundIgnoredCancellation(t *testing.T) {
 		t.Run(stage, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				r := NewRecordingReconciler()
-				contexts := make(chan *Context, 1)
+				contexts := make(chan *Handle, 1)
 				blocked, release := make(chan struct{}), make(chan struct{})
-				id := rcMount(t, r, Spec{ID: "deadline", Apply: func(c *Context) error {
+				id := rcMount(t, r, Spec{ID: "deadline", Apply: func(c *Handle) error {
 					contexts <- c
 					if stage == "load" {
 						close(blocked)

@@ -134,7 +134,7 @@ func TestRetainedStartupErrorSurvivesDisposalUntilExpiry(t *testing.T) {
 			r := build(func(c *coreConfig) { c.archiveLimit = 2 })
 			defer closeRuntime(ctx, r)
 			boom := errors.New("startup refused")
-			id, err := r.Mount(ctx, Spec{ID: "failing", Apply: func(*Context) error { return boom }})
+			id, err := r.Mount(ctx, Spec{ID: "failing", Apply: func(*Handle) error { return boom }})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -181,7 +181,7 @@ func TestInFlightWaiterSurvivesArchiveEviction(t *testing.T) {
 			ids := mountAll(t, ctx, r, fibers, func(i int) Spec {
 				// The body fails at once; the disposer then blocks, so the fiber stays
 				// UNLOADING and its waiter blocked until the whole group is released.
-				return Spec{ID: fmt.Sprintf("w%d", i), Apply: func(c *Context) error {
+				return Spec{ID: fmt.Sprintf("w%d", i), Apply: func(c *Handle) error {
 					if err := c.Defer("hold", func(context.Context) error { <-gate; return nil }); err != nil {
 						return err
 					}
@@ -254,7 +254,7 @@ func mountAll(t *testing.T, ctx context.Context, r Runtime, n int, spec func(int
 func churn(t *testing.T, ctx context.Context, r Runtime, n int) {
 	t.Helper()
 	for i := range n {
-		id, err := r.Mount(ctx, Spec{ID: fmt.Sprintf("c%d", i), Apply: func(c *Context) error { return c.Defer("x", func(context.Context) error { return nil }) }})
+		id, err := r.Mount(ctx, Spec{ID: fmt.Sprintf("c%d", i), Apply: func(c *Handle) error { return c.Defer("x", func(context.Context) error { return nil }) }})
 		if err != nil {
 			t.Fatal(err)
 		}

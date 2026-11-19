@@ -111,10 +111,10 @@ func TestParentCleanupRunsBeforeChildTeardown(t *testing.T) {
 			t.Cleanup(func() { releaseOnce.Do(func() { close(releaseChild) }) })
 			parentCleanup := make(chan struct{})
 			var atParentCleanup Snapshot
-			var oldContext *Context
-			parent, err := r.Mount(ctx, Spec{ID: "parent", ApplyEffect: func(pc *Context) (Disposer, error) {
+			var oldContext *Handle
+			parent, err := r.Mount(ctx, Spec{ID: "parent", ApplyEffect: func(pc *Handle) (Disposer, error) {
 				oldContext = pc
-				id, err := pc.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+				id, err := pc.MountChild(Spec{ID: "child", ApplyEffect: func(*Handle) (Disposer, error) {
 					return func(context.Context) error {
 						close(childGate)
 						<-releaseChild
@@ -202,7 +202,7 @@ func TestParentEffectRegisteredBeforeChildDoesNotWaitForChild(t *testing.T) {
 			var releaseOnce sync.Once
 			t.Cleanup(func() { releaseOnce.Do(func() { close(releaseChild) }) })
 			earlyCleaned := make(chan struct{})
-			parent, err := r.Mount(ctx, Spec{ID: "parent", Apply: func(pc *Context) error {
+			parent, err := r.Mount(ctx, Spec{ID: "parent", Apply: func(pc *Handle) error {
 				if err := pc.Defer("early", func(context.Context) error {
 					log.add("early-cleanup")
 					close(earlyCleaned)
@@ -210,7 +210,7 @@ func TestParentEffectRegisteredBeforeChildDoesNotWaitForChild(t *testing.T) {
 				}); err != nil {
 					return err
 				}
-				_, err := pc.MountChild(Spec{ID: "child", ApplyEffect: func(*Context) (Disposer, error) {
+				_, err := pc.MountChild(Spec{ID: "child", ApplyEffect: func(*Handle) (Disposer, error) {
 					return func(context.Context) error {
 						close(childGate)
 						<-releaseChild

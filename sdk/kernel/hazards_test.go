@@ -153,7 +153,7 @@ func r1Mount(t *testing.T, core int, batch bool) r1Obs {
 	synctest.Test(t, func(t *testing.T) {
 		r := hazardCores[core].make(t)
 		var applied atomic.Int32
-		spec := Spec{ID: "orphan", Apply: func(*Context) error { applied.Add(1); return nil }}
+		spec := Spec{ID: "orphan", Apply: func(*Handle) error { applied.Add(1); return nil }}
 		// Err calls before the commit: Mount: exchange, handle. Batch: Batch,
 		// exchange, handle, owner batch.
 		var ctx *lateCancelCtx
@@ -280,11 +280,11 @@ func r2Stage(t *testing.T, stage string) r2Obs {
 		var spec Spec
 		switch stage {
 		case "load":
-			spec = Spec{ID: "healthy", Apply: func(*Context) error { <-gate; returned.Store(true); return nil }}
+			spec = Spec{ID: "healthy", Apply: func(*Handle) error { <-gate; returned.Store(true); return nil }}
 		case "check":
-			spec = Spec{ID: "healthy", Check: func(*Context) bool { <-gate; returned.Store(true); return true }}
+			spec = Spec{ID: "healthy", Check: func(*Handle) bool { <-gate; returned.Store(true); return true }}
 		case "scope":
-			spec = Spec{ID: "healthy", Apply: func(c *Context) error {
+			spec = Spec{ID: "healthy", Apply: func(c *Handle) error {
 				_, err := c.RequestEffectScope("scope", func(*EffectScope) error { <-gate; returned.Store(true); return nil })
 				return err
 			}}
@@ -350,9 +350,9 @@ func r3Scenario(t *testing.T) r3Obs {
 		var once sync.Once
 		open := func() { once.Do(func() { close(disposeGate) }) }
 		t.Cleanup(open)
-		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Context) error { return c.Provide("k", 1) }})
-		var dep *Context
-		rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Context) error {
+		provider := rcMount(t, r, Spec{ID: "provider", Provides: []string{"k"}, Apply: func(c *Handle) error { return c.Provide("k", 1) }})
+		var dep *Handle
+		rcMount(t, r, Spec{ID: "dependant", Needs: []string{"k"}, Apply: func(c *Handle) error {
 			dep = c
 			return c.Defer("slow", func(context.Context) error { <-disposeGate; return nil })
 		}})
@@ -415,13 +415,13 @@ func r4Scenario(t *testing.T, core int) r4Obs {
 		var h, s sync.Once
 		t.Cleanup(func() { h.Do(func() { close(hang) }) })
 		t.Cleanup(func() { s.Do(func() { close(slow) }) })
-		hung, err := r.Mount(context.Background(), Spec{ID: "hung", Apply: func(*Context) error { <-hang; return nil }})
+		hung, err := r.Mount(context.Background(), Spec{ID: "hung", Apply: func(*Handle) error { <-hang; return nil }})
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = hung
 		time.Sleep(1500 * time.Millisecond)
-		healthy, err := r.Mount(context.Background(), Spec{ID: "healthy", Apply: func(*Context) error { <-slow; return nil }})
+		healthy, err := r.Mount(context.Background(), Spec{ID: "healthy", Apply: func(*Handle) error { <-slow; return nil }})
 		if err != nil {
 			t.Fatal(err)
 		}

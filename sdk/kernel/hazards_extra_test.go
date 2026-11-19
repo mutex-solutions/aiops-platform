@@ -27,7 +27,7 @@ func TestHazardX1ErrorMethodPanicsOnSnapshotCaller(t *testing.T) {
 			var locked bool
 			synctest.Test(t, func(t *testing.T) {
 				r := hazardCores[core].make(t)
-				id, err := r.Mount(context.Background(), Spec{ID: "bad-error", Apply: func(*Context) error { return panicValue{} }})
+				id, err := r.Mount(context.Background(), Spec{ID: "bad-error", Apply: func(*Handle) error { return panicValue{} }})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -90,7 +90,7 @@ func g3Count(t *testing.T, core int, kind string, waiters, events int) g3Obs {
 		gate := make(chan struct{})
 		var once sync.Once
 		t.Cleanup(func() { once.Do(func() { close(gate) }) })
-		id, err := r.Mount(context.Background(), Spec{ID: "slow", Apply: func(*Context) error { <-gate; return nil }})
+		id, err := r.Mount(context.Background(), Spec{ID: "slow", Apply: func(*Handle) error { <-gate; return nil }})
 		if err != nil {
 			t.Fatal(err)
 		}

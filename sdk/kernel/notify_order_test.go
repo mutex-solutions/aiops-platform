@@ -58,15 +58,15 @@ func TestDeniedCheckKeepsConsumerPendingAndNotifyRecordsService(t *testing.T) {
 			r := makeRuntime()
 			defer closeRuntime(ctx, r)
 			var allow, applied atomic.Int64
-			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Context) error { return c.Provide("svc", "v") }}); err != nil {
+			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Handle) error { return c.Provide("svc", "v") }}); err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Settle(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"svc"},
-				Check: func(*Context) bool { return allow.Load() == 1 },
-				Apply: func(*Context) error { applied.Add(1); return nil }}); err != nil {
+				Check: func(*Handle) bool { return allow.Load() == 1 },
+				Apply: func(*Handle) error { applied.Add(1); return nil }}); err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Settle(ctx); err != nil {
@@ -125,7 +125,7 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 			defer release.Do(func() { close(gate) })
 			// The consumer is mounted first, so the provider's activation is what
 			// refreshes it, whatever the scheduling of the two mounts.
-			if _, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"svc"}, Check: func(*Context) bool {
+			if _, err := r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"svc"}, Check: func(*Handle) bool {
 				once.Do(func() {
 					close(entered)
 					<-gate
@@ -134,7 +134,7 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 			}}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Context) error { return c.Provide("svc", "v") }}); err != nil {
+			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Handle) error { return c.Provide("svc", "v") }}); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -181,10 +181,10 @@ func TestServiceEventPrecedesDependantLoadRecords(t *testing.T) {
 			r := makeRuntime()
 			defer closeRuntime(ctx, r)
 			noop := func(context.Context) error { return nil }
-			if _, err := r.Mount(ctx, Spec{ID: "fast", Needs: []string{"svc"}, Apply: func(c *Context) error { return c.Defer("fast-load", noop) }}); err != nil {
+			if _, err := r.Mount(ctx, Spec{ID: "fast", Needs: []string{"svc"}, Apply: func(c *Handle) error { return c.Defer("fast-load", noop) }}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := r.Mount(ctx, Spec{ID: "slow", Needs: []string{"svc"}, Check: func(*Context) bool {
+			if _, err := r.Mount(ctx, Spec{ID: "slow", Needs: []string{"svc"}, Check: func(*Handle) bool {
 				// Owner round trips: the fast loader has been launched by now.
 				for range 8 {
 					if _, err := r.Events(ctx); err != nil {
@@ -195,7 +195,7 @@ func TestServiceEventPrecedesDependantLoadRecords(t *testing.T) {
 			}}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Context) error { return c.Provide("svc", "v") }}); err != nil {
+			if _, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"svc"}, Apply: func(c *Handle) error { return c.Provide("svc", "v") }}); err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Settle(ctx); err != nil {

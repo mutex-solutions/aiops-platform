@@ -26,7 +26,7 @@ func TestReconcilerAdmissionCancelWhileQueuedHasNoEffect(t *testing.T) {
 		synctest.Wait() // the owner is parked inside that command; everything below queues
 
 		var applied atomic.Int32
-		spec := Spec{ID: "never", Apply: func(*Context) error { applied.Add(1); return nil }}
+		spec := Spec{ID: "never", Apply: func(*Handle) error { applied.Add(1); return nil }}
 		run := func(name string, call func(context.Context) error) {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)

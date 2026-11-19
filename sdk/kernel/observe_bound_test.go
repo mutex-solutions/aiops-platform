@@ -37,8 +37,8 @@ func actualRuntime(t *testing.T, factory func() Runtime) (context.Context, Runti
 
 func actualOwner(t *testing.T, ctx context.Context, r Runtime, label string) (nativeBinding, uint64) {
 	t.Helper()
-	ready := make(chan *Context, 1)
-	id, err := r.Mount(ctx, Spec{ID: label, Apply: func(c *Context) error {
+	ready := make(chan *Handle, 1)
+	id, err := r.Mount(ctx, Spec{ID: label, Apply: func(c *Handle) error {
 		ready <- c
 		return nil
 	}})
@@ -577,13 +577,13 @@ func TestRealEventLedgerTotalStateAndServiceOrder(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				return c.Provide("sample", "observed value")
 			}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			_, err = r.Mount(ctx, Spec{ID: "consumer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				_, err := c.Read("sample")
 				return err
 			}})
@@ -648,7 +648,7 @@ func TestDependentLeaseDrainsBeforeNativeRemovalEffects(t *testing.T) {
 			started, dependentCleaned, providerCleaned := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			var cleanupMu sync.Mutex
 			var cleanup []string
-			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Context) error {
+			provider, err := r.Mount(ctx, Spec{ID: "provider", Provides: []string{"sample"}, Apply: func(c *Handle) error {
 				if err := c.Defer("provider resource", func(context.Context) error {
 					cleanupMu.Lock()
 					cleanup = append(cleanup, "provider")
@@ -665,7 +665,7 @@ func TestDependentLeaseDrainsBeforeNativeRemovalEffects(t *testing.T) {
 			}
 			ready := make(chan nativeBinding, 1)
 			var calls atomic.Int64
-			_, err = r.Mount(ctx, Spec{ID: "dependent observer", Needs: []string{"sample"}, Apply: func(c *Context) error {
+			_, err = r.Mount(ctx, Spec{ID: "dependent observer", Needs: []string{"sample"}, Apply: func(c *Handle) error {
 				if err := c.Defer("dependent resource", func(context.Context) error {
 					cleanupMu.Lock()
 					cleanup = append(cleanup, "dependent")

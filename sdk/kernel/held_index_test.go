@@ -39,7 +39,7 @@ func TestHeldServiceIndexConsistency(t *testing.T) {
 type indexScenario struct {
 	mu         sync.Mutex
 	violations []string
-	applied    map[*Context]int
+	applied    map[*Handle]int
 }
 
 func (s *indexScenario) fail(format string, args ...any) {
@@ -60,7 +60,7 @@ func runIndexScenario(t *testing.T, seed int64) {
 	go owner.run()
 	var r Runtime = &rt{core: transport}
 	notifier := r.(Notifier)
-	scenario := &indexScenario{applied: make(map[*Context]int)}
+	scenario := &indexScenario{applied: make(map[*Handle]int)}
 	var provisions atomic.Int64
 
 	const providers, consumers = 4, 10
@@ -70,7 +70,7 @@ func runIndexScenario(t *testing.T, seed int64) {
 	}
 	providerIDs := make([]uint64, providers)
 	for i, key := range keys {
-		id, err := r.Mount(ctx, Spec{ID: "p" + key, Provides: []string{key}, Apply: func(c *Context) error {
+		id, err := r.Mount(ctx, Spec{ID: "p" + key, Provides: []string{key}, Apply: func(c *Handle) error {
 			return c.Provide(key, fmt.Sprintf("%s#%d", key, provisions.Add(1)))
 		}})
 		if err != nil {
@@ -93,7 +93,7 @@ func runIndexScenario(t *testing.T, seed int64) {
 		spec := Spec{ID: fmt.Sprintf("c%d", i), Needs: c.needs}
 		if rng.Intn(2) == 0 {
 			c.gate = make(chan struct{})
-			spec.Check = func(ctx *Context) bool {
+			spec.Check = func(ctx *Handle) bool {
 				select {
 				case <-c.gate:
 					return true
@@ -102,7 +102,7 @@ func runIndexScenario(t *testing.T, seed int64) {
 				}
 			}
 		}
-		spec.Apply = func(ac *Context) error {
+		spec.Apply = func(ac *Handle) error {
 			scenario.mu.Lock()
 			scenario.applied[ac]++
 			count := scenario.applied[ac]
@@ -207,19 +207,19 @@ func TestLoadNeedingTwoHeldKeysStartsAfterBoth(t *testing.T) {
 			r := build()
 			defer closeRuntime(ctx, r)
 			gate := make(chan struct{})
-			slowCheck := func(*Context) bool { <-gate; return true }
+			slowCheck := func(*Handle) bool { <-gate; return true }
 			for _, key := range []string{"a", "b"} {
 				// A checked dependant of each key holds that key's service event until
 				// its availability check has completed.
 				if _, err := r.Mount(ctx, Spec{ID: "dep-" + key, Needs: []string{key}, Check: slowCheck}); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := r.Mount(ctx, Spec{ID: "prov-" + key, Provides: []string{key}, Apply: func(c *Context) error { return c.Provide(key, key+"-v") }}); err != nil {
+				if _, err := r.Mount(ctx, Spec{ID: "prov-" + key, Provides: []string{key}, Apply: func(c *Handle) error { return c.Provide(key, key+"-v") }}); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var loads atomic.Int64
-			if _, err := r.Mount(ctx, Spec{ID: "both", Needs: []string{"a", "b"}, Apply: func(c *Context) error {
+			if _, err := r.Mount(ctx, Spec{ID: "both", Needs: []string{"a", "b"}, Apply: func(c *Handle) error {
 				loads.Add(1)
 				events, err := r.Events(ctx)
 				if err != nil {

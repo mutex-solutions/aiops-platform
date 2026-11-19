@@ -34,7 +34,7 @@ type svcKey any
 
 // disposer reverts one successful setup operation. It runs at most once, under the
 // dispose deadline, off the owner goroutine.
-type disposer func(context.Context) error
+type disposer = Disposer
 
 // coreConfig is every number the core needs. All of it is required at
 // construction and the core holds no default: the launcher supplies the values.

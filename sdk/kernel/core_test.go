@@ -36,10 +36,8 @@ func testConfig() coreConfig {
 }
 
 type (
-	// Context is the per-activation handle.
-	Context = handle
-	// Disposer is the core's disposer type.
-	Disposer = disposer
+	// Handle is the per-activation handle.
+	Handle = handle
 	// Snapshot is the core's fiber snapshot.
 	Snapshot = fiberSnap
 	// EpochSnapshot is the desired epoch of a snapshot.
@@ -98,9 +96,9 @@ type Spec struct {
 	ID          string
 	Needs       []string
 	Provides    []string
-	Apply       func(*Context) error
-	ApplyEffect func(*Context) (Disposer, error)
-	Check       func(*Context) bool
+	Apply       func(*Handle) error
+	ApplyEffect func(*Handle) (Disposer, error)
+	Check       func(*Handle) bool
 }
 
 func keysOf(names []string) []svcKey {
@@ -144,7 +142,7 @@ type (
 		Notify(context.Context, ...string) error
 	}
 	RootProvider interface {
-		RootContext(context.Context) (*Context, error)
+		RootContext(context.Context) (*Handle, error)
 	}
 	Waiter interface {
 		AwaitFiber(context.Context, uint64) error
@@ -159,13 +157,13 @@ type (
 		Record(context.Context, string, map[string]any) error
 	}
 	ObserverRuntime interface {
-		ObserveEvents(*Context, string, func(context.Context, Event) error) (Disposer, error)
+		ObserveEvents(*Handle, string, func(context.Context, Event) error) (Disposer, error)
 		AwaitObservers(context.Context) error
 		ObserverStatus() ObserverStatus
 	}
 	OverflowObserverRuntime interface {
 		ObserverRuntime
-		ObserveEventsWith(*Context, string, func(context.Context, Event) error, func(context.Context, *ObserverOverflow) error) (Disposer, error)
+		ObserveEventsWith(*Handle, string, func(context.Context, Event) error, func(context.Context, *ObserverOverflow) error) (Disposer, error)
 	}
 	RetentionReporter interface{ RetentionStatus() RetentionStatus }
 )
@@ -218,18 +216,18 @@ func (r *rt) Close(ctx context.Context) error                   { return r.close
 func (r *rt) Snapshots(ctx context.Context) ([]Snapshot, error) { return r.snapshots(ctx) }
 func (r *rt) Inspect(ctx context.Context) (Inspection, error)   { return r.inspect(ctx) }
 func (r *rt) Events(ctx context.Context) ([]Event, error)       { return r.events(ctx) }
-func (r *rt) RootContext(ctx context.Context) (*Context, error) { return r.rootHandle(ctx) }
+func (r *rt) RootContext(ctx context.Context) (*Handle, error)  { return r.rootHandle(ctx) }
 func (r *rt) AwaitObservers(ctx context.Context) error          { return r.awaitObservers(ctx) }
 func (r *rt) ObserverStatus() ObserverStatus                    { return r.observerStatus() }
 func (r *rt) RetentionStatus() retentionStatus                  { return r.retentionStatus() }
 func (r *rt) Notify(ctx context.Context, keys ...string) error {
 	return r.notifyKeys(ctx, keysOf(keys)...)
 }
-func (r *rt) ObserveEvents(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {
+func (r *rt) ObserveEvents(owner *Handle, label string, fn func(context.Context, Event) error) (Disposer, error) {
 	return r.observe(owner, label, fn, nil)
 }
 
-func (r *rt) ObserveEventsWith(owner *Context, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
+func (r *rt) ObserveEventsWith(owner *Handle, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
 	return r.observe(owner, label, fn, onOverflow)
 }
 
