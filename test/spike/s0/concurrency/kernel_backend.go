@@ -150,7 +150,29 @@ func fromKernel(err error) error {
 	if !kernelOrigin(err) && !kernelIdentity(err) {
 		return err
 	}
+	if d := diagnosticCause(err); d != nil {
+		return &kernelDiagnostic{kernelError{err}, fromKernel(d)}
+	}
 	return &kernelError{err}
+}
+
+// kernelDiagnostic is the "fiber N: text" entry of a Settle or Close error, as the
+// prototype's diagnostic is: it unwraps to the failure that it reports, so that a
+// caller can recognise a failure it injected, which a plain kernelError hides.
+type kernelDiagnostic struct {
+	kernelError
+	cause error
+}
+
+func (e *kernelDiagnostic) Unwrap() error { return e.cause }
+
+// diagnosticCause returns the failure behind a kernel diagnostic entry, nil for
+// any other error. The kernel's type is unexported, so it is recognised by name.
+func diagnosticCause(err error) error {
+	if t := reflect.TypeOf(err); t.Kind() != reflect.Pointer || t.Elem().Name() != "diagnostic" {
+		return nil
+	}
+	return errors.Unwrap(err)
 }
 
 // kernelOrigin reports whether err is a value of a type of the kernel package.
