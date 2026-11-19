@@ -33,7 +33,6 @@ type GraphLock struct {
 	nextUID    uint64
 	totalSeq   uint64
 	observers  *nativeObservers
-	changed    chan struct{}
 	closed     bool
 	batchDepth int
 	batchDirty []*graphFiber
@@ -51,6 +50,28 @@ type GraphLock struct {
 	loadSeq    uint64
 	waking     map[string]int
 	busy       int // User fibers with a worker, or LOADING/UNLOADING (see refreshBusyLocked).
+	// settleWaiters are the parked Settle calls. They are woken only when
+	// settledLocked becomes true (see notifySettleLocked), never per event.
+	settleWaiters map[*graphWaiter]struct{}
+}
+
+// graphWaiter is one parked AwaitFiber or Settle call. The registry that holds
+// it removes it when it wakes it, and a woken waiter always re-checks its
+// condition under mu, so a wake-up that is later overtaken is harmless.
+type graphWaiter struct{ ch chan struct{} }
+
+func newGraphWaiter() *graphWaiter { return &graphWaiter{ch: make(chan struct{}, 1)} }
+
+// wakeWaiters resumes and unregisters every waiter in set. It never blocks and
+// allocates nothing.
+func wakeWaiters(set map[*graphWaiter]struct{}) {
+	for w := range set {
+		delete(set, w)
+		select {
+		case w.ch <- struct{}{}:
+		default:
+		}
+	}
 }
 
 type graphPendingLoad struct {
@@ -86,6 +107,9 @@ type graphFiber struct {
 	available *graphAvailability // Last accepted off-lock Check result, not the committed activation.
 	pre       *graphPre          // In-flight availability check that precedes any load.
 	parent    *graphActivation   // Structural owner: this exact parent activation, not its replacement.
+	// waiters are the parked AwaitFiber calls on this fiber; they are woken when
+	// the fiber stops being busy, not by unrelated events.
+	waiters map[*graphWaiter]struct{}
 }
 
 type graphRetired struct {
@@ -165,16 +189,16 @@ func NewGraphLock() Runtime { return NewGraphLockWith(Retention{}) }
 func NewGraphLockWith(retention Retention) Runtime {
 	retention = retention.normalized()
 	return &GraphLock{
-		fibers:     make(map[uint64]*graphFiber),
-		retired:    newRecordArchive[graphRetired](retention.ArchiveLimit),
-		retention:  retention,
-		ledger:     newEventLedger(retention),
-		services:   make(map[string]graphService),
-		indexByKey: make(map[string]map[uint64]*graphFiber),
-		heldSvc:    make(map[string]int),
-		loadsByKey: make(map[string]map[*graphPendingLoad]struct{}),
-		observers:  newNativeObserversWith(retention.ObserverBacklog),
-		changed:    make(chan struct{}),
+		fibers:        make(map[uint64]*graphFiber),
+		retired:       newRecordArchive[graphRetired](retention.ArchiveLimit),
+		retention:     retention,
+		ledger:        newEventLedger(retention),
+		services:      make(map[string]graphService),
+		indexByKey:    make(map[string]map[uint64]*graphFiber),
+		heldSvc:       make(map[string]int),
+		loadsByKey:    make(map[string]map[*graphPendingLoad]struct{}),
+		observers:     newNativeObserversWith(retention.ObserverBacklog),
+		settleWaiters: make(map[*graphWaiter]struct{}),
 		knobs: graphKnobs{
 			load:       2 * time.Second,
 			cleanup:    2 * time.Second,
@@ -183,17 +207,11 @@ func NewGraphLockWith(retention Retention) Runtime {
 	}
 }
 
-func (g *GraphLock) signalLocked() {
-	close(g.changed)
-	g.changed = make(chan struct{})
-}
-
 func (g *GraphLock) appendEventLocked(event Event) {
 	g.totalSeq++
 	event.Sequence = g.totalSeq
 	g.ledger.append(event)
 	g.observers.append(event)
-	g.signalLocked()
 }
 
 func (g *GraphLock) eventLocked(f *graphFiber, kind, key string, uid uint64) {
@@ -348,22 +366,40 @@ func busyLocked(f *graphFiber) bool {
 	return f.worker || f.state == Loading || f.state == Unloading
 }
 
-// refreshBusyLocked keeps g.busy equal to the number of user fibers for which
-// busyLocked holds, so Settle is O(1) per wake-up instead of a scan of every
-// fiber (every appended event wakes the waiters; a scan made mounting n fibers
-// cost about n x events). Call it after any change to worker or state.
-func (g *GraphLock) refreshBusyLocked(f *graphFiber) {
-	if f == g.root {
-		return // The trusted root is not in g.fibers; Settle checks it separately.
+// settledLocked is the Settle condition: no user fiber and not the trusted
+// root is mid-transition.
+func (g *GraphLock) settledLocked() bool {
+	return g.busy == 0 && (g.root == nil || !busyLocked(g.root))
+}
+
+// notifySettleLocked resumes the parked Settle calls once, when their
+// condition holds. With no waiter, or while the condition is false, it is one
+// comparison and allocates nothing.
+func (g *GraphLock) notifySettleLocked() {
+	if len(g.settleWaiters) != 0 && g.settledLocked() {
+		wakeWaiters(g.settleWaiters)
 	}
-	if busy := busyLocked(f); busy != f.counted {
-		f.counted = busy
-		if busy {
-			g.busy++
-		} else {
-			g.busy--
+}
+
+// refreshBusyLocked keeps g.busy equal to the number of user fibers for which
+// busyLocked holds, so Settle is O(1) per check instead of a scan of every
+// fiber, and wakes exactly the waiters whose condition this change can satisfy:
+// the AwaitFiber calls on f when f stops being busy, and the Settle calls when
+// nothing is busy any more. An event that changes neither wakes nobody. Call it
+// after any change to worker or state.
+func (g *GraphLock) refreshBusyLocked(f *graphFiber) {
+	if f != g.root { // The trusted root is not in g.fibers; settledLocked checks it separately.
+		if busy := busyLocked(f); busy != f.counted {
+			f.counted = busy
+			if busy {
+				g.busy++
+			} else {
+				g.busy--
+				wakeWaiters(f.waiters)
+			}
 		}
 	}
+	g.notifySettleLocked()
 }
 
 func (g *GraphLock) setWorkerLocked(f *graphFiber, worker bool) {
@@ -618,7 +654,6 @@ func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any,
 			f.failed = false
 			f.lastErr = nil
 			f.awaitErr = nil
-			g.signalLocked()
 			return nil
 		})
 	request.Await = func(w context.Context) error {
@@ -725,12 +760,27 @@ func (g *GraphLock) requestDisposeLocked(f *graphFiber) {
 }
 
 func (g *GraphLock) Settle(ctx context.Context) error {
-	return g.wait(ctx, func() bool {
-		if g.busy != 0 {
-			return false
+	var w *graphWaiter
+	for {
+		g.mu.Lock()
+		if g.settledLocked() {
+			g.mu.Unlock()
+			return nil
 		}
-		return g.root == nil || (!g.root.worker && g.root.state != Unloading)
-	})
+		if w == nil {
+			w = newGraphWaiter()
+		}
+		g.settleWaiters[w] = struct{}{}
+		g.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			g.mu.Lock()
+			delete(g.settleWaiters, w)
+			g.mu.Unlock()
+			return ctx.Err()
+		case <-w.ch:
+		}
+	}
 }
 
 // AwaitFiber joins only the target's current lifecycle work. A stable PENDING
@@ -740,6 +790,7 @@ func (g *GraphLock) Settle(ctx context.Context) error {
 // Like Settle, it must not be used to self-join an executing callback or lease.
 func (g *GraphLock) AwaitFiber(ctx context.Context, id uint64) error {
 	var held *graphFiber // The waiter's own reference, like a Cordis caller's fiber handle.
+	var w *graphWaiter
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -762,34 +813,26 @@ func (g *GraphLock) AwaitFiber(ctx context.Context, id uint64) error {
 			return err
 		}
 		held = f
-		if !f.worker && f.state != Loading && f.state != Unloading {
+		if !busyLocked(f) {
 			err := f.awaitErr
 			g.mu.Unlock()
 			return err
 		}
-		changed := g.changed
+		if w == nil {
+			w = newGraphWaiter()
+		}
+		if f.waiters == nil {
+			f.waiters = make(map[*graphWaiter]struct{})
+		}
+		f.waiters[w] = struct{}{}
 		g.mu.Unlock()
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-changed:
-		}
-	}
-}
-
-func (g *GraphLock) wait(ctx context.Context, done func() bool) error {
-	for {
-		g.mu.Lock()
-		if done() {
+			g.mu.Lock()
+			delete(f.waiters, w)
 			g.mu.Unlock()
-			return nil
-		}
-		changed := g.changed
-		g.mu.Unlock()
-		select {
-		case <-ctx.Done():
 			return ctx.Err()
-		case <-changed:
+		case <-w.ch:
 		}
 	}
 }
@@ -1193,7 +1236,6 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 				defer g.mu.Unlock()
 				g.setWorkerLocked(f, false)
 				g.reconcileLocked(f)
-				g.signalLocked()
 			}()
 			return
 		}
@@ -1227,7 +1269,6 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 			}
 			f.parent = nil
 			g.signalDependantsLocked(parent)
-			g.signalLocked()
 		}
 		return
 	}
@@ -1560,7 +1601,6 @@ func (g *GraphLock) runScopeWork(a *graphActivation) {
 			g.eventLocked(a.fiber, "scope:failed", selected.label, 0)
 		}
 		g.removeScopeLocked(a, selected.scope)
-		g.signalLocked()
 		g.mu.Unlock()
 	}
 }
@@ -1575,7 +1615,6 @@ func (g *GraphLock) runScopeLane(a *graphActivation) {
 	}
 	g.setWorkerLocked(a.fiber, false)
 	g.reconcileLocked(a.fiber)
-	g.signalLocked()
 	g.mu.Unlock()
 }
 
@@ -1885,7 +1924,6 @@ func (g *GraphLock) finishPreCheckLocked(f *graphFiber, pre *graphPre, available
 	}
 	g.reconcileLocked(f)
 	g.flushServicesLocked()
-	g.signalLocked()
 }
 
 func (g *GraphLock) runActiveCheck(a *graphActivation) {
@@ -1899,7 +1937,6 @@ func (g *GraphLock) runActiveCheck(a *graphActivation) {
 	g.setWorkerLocked(a.fiber, false)
 	// A Notify may land after the last check and before this lock acquisition.
 	g.reconcileLocked(a.fiber)
-	g.signalLocked()
 	g.mu.Unlock()
 }
 
@@ -1996,7 +2033,6 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 			g.wakeServiceLocked([]string{key}, []Event{{Fiber: a.fiber.id, Name: a.fiber.spec.ID, Kind: "service:publish", State: a.fiber.state, Key: key, UID: p.uid, Value: p.value}})
 		}
 	}
-	g.signalLocked()
 	g.mu.Unlock()
 }
 
@@ -2184,7 +2220,6 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	a.fiber.current = nil
 	g.setWorkerLocked(a.fiber, false)
 	g.releaseBindingsLocked(a)
-	g.signalLocked()
 	g.reconcileLocked(a.fiber)
 	g.mu.Unlock()
 }

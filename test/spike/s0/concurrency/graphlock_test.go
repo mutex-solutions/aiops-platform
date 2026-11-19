@@ -1969,12 +1969,17 @@ func TestGraphLockConfigurationCoalescesLatestInputDuringHeldCleanup(t *testing.
 	for {
 		g.mu.Lock()
 		revision := g.fibers[id].revision
-		changed := g.changed
 		g.mu.Unlock()
 		if revision == 2 {
 			break
 		}
-		graphReceive(t, ctx, changed)
+		// The graph no longer has a global change broadcast to join; the update
+		// is committed by the in-flight UpdateConfig, so poll for it.
+		select {
+		case <-ctx.Done():
+			t.Fatalf("barrier: %v", ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
 	}
 	held := graphInspectedFiber(t, graphInspect(t, ctx, g), id)
 	if held.State != Unloading || held.Target == nil || held.Target.Revision != 2 || held.RawConfig != "latest" || held.EffectiveConfig != "resolved:old" || held.ConfigVersion != 2 || attempts.Load() != 1 {

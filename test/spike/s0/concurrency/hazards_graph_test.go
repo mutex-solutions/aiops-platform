@@ -359,14 +359,13 @@ func TestHazardG3WakeAllPerEvent(t *testing.T) {
 					t.Log(line)
 					observed += line + "; "
 					if c.name == "graph-lock" {
-						// Exact and deterministic: every event wakes every waiter.
-						if got, want := o.doneCalls, int64(w*(events+1)); got != want {
-							t.Fatalf("graph-lock %s W=%d: Done calls = %d, want exactly W*(E+1) = %d", kind, w, got, want)
+						// Exact and deterministic: a waiter looks at its context once
+						// when it parks and the unrelated events wake nobody, so W
+						// waiters cost W calls, whatever E is (it was W*(E+1)).
+						if got, want := o.doneCalls, int64(w); got != want {
+							t.Fatalf("graph-lock %s W=%d: Done calls = %d, want exactly W = %d (unrelated events must not wake waiters)", kind, w, got, want)
 						}
 					}
-				}
-				if c.name == "graph-lock" {
-					knownHazard(t, true, "every appended event wakes every parked AwaitFiber/Settle waiter (W x E wake-ups)", observed)
 				}
 			})
 		}
