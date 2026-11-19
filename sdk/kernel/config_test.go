@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -374,5 +375,93 @@ func TestAnUpdateListenerFailureIsTheUpdatesFailure(t *testing.T) {
 	want(t, f, Active)
 	if rec.count() != 1 {
 		t.Fatalf("seen %v", rec.seen)
+	}
+}
+
+// The candidate config of an update is resolved whenever the fiber has a desired
+// target, as the prototype does: internal/config sees it while the fiber is still
+// LOADING behind a gate (corpus D20), not at the next activation.
+func TestUpdateResolvesTheCandidateWhileTheFiberLoads(t *testing.T) {
+	r := newKernel(t)
+	var resolved []any
+	var mu sync.Mutex
+	InternalConfig.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[any]) (any, error) {
+		mu.Lock()
+		resolved = append(resolved, raw)
+		mu.Unlock()
+		return next()
+	})
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	f := r.Plugin(Define(Plugin{ID: "p/loading", Apply: func(*Context, any) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}}), "v1")
+	<-entered
+	defer func() { close(release); want(t, f, Active) }()
+	if err := f.Update(frontCtx(t), "v2"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(resolved) != 2 || resolved[1] != "v2" {
+		t.Fatalf("internal/config saw %v while the fiber was LOADING, want [v1 v2]: the candidate is resolved at the update", resolved)
+	}
+}
+
+// A candidate that fails to resolve is refused in every state with a target: the
+// error returns, nothing is retained or committed, and the activation in progress
+// goes on (the prototype's ApplyUpdate; ADR-034 owner decision 13).
+func TestUpdateRefusesABadCandidateWhileTheFiberLoads(t *testing.T) {
+	r := newKernel(t)
+	var commits atomic.Int64
+	InternalCommit.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { commits.Add(1); return nil, nil })
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	var seen cfgRecorder
+	p := seen.plugin(func(raw any) (any, error) {
+		if raw == "bad" {
+			return nil, errors.New("bad candidate")
+		}
+		return raw, nil
+	})
+	apply := p.Apply
+	p.Apply = func(c *Context, v any) error {
+		entered <- struct{}{}
+		<-release
+		return apply(c, v)
+	}
+	f := r.Plugin(p, "v1")
+	<-entered
+	if err := f.Update(frontCtx(t), "bad"); err == nil {
+		t.Fatal("a bad candidate was accepted")
+	}
+	close(release)
+	want(t, f, Active)
+	if commits.Load() != 0 {
+		t.Fatalf("%d commits for a refused candidate", commits.Load())
+	}
+	if err := f.Update(frontCtx(t), "v2"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, f, Active)
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if last := seen.seen[len(seen.seen)-1]; last != "v2" {
+		t.Fatalf("applied %v, want the last good candidate v2", seen.seen)
+	}
+}
+
+// An update of a fiber whose disposal was requested is refused as inactive before
+// anything is resolved or committed.
+func TestUpdateOfADisposedFiberIsInactive(t *testing.T) {
+	r := newKernel(t)
+	f := r.Plugin(Define(Plugin{ID: "p/gone", Apply: func(*Context, any) error { return nil }}), "v1")
+	want(t, f, Active)
+	if err := f.Dispose(frontCtx(t)); err != nil {
+		t.Fatal(err)
+	}
+	want(t, f, Disposed)
+	if err := f.Update(frontCtx(t), "v2"); !errors.Is(err, ErrInactive) {
+		t.Fatalf("%v, want ErrInactive", err)
 	}
 }

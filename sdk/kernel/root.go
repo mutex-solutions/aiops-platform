@@ -22,7 +22,7 @@ type Plugin struct {
 	Inject   []Dep                           // Data; the Needs gate activation and join the epoch.
 	Provides []AnyKey                        // Provide of a key not listed here fails.
 	Hooks    []HookUse                       // Every hook Apply may listen on, with its stage; an undeclared On fails.
-	Decode   func(raw any) (any, error)      // Optional (07-c4-plugin-sdk.md:192; ADR-034 owner decision 9): turns the raw config into what Apply receives. It must be pure: it also runs on an update of an active fiber before the restart.
+	Decode   func(raw any) (any, error)      // Optional (07-c4-plugin-sdk.md:192; ADR-034 owner decision 9): turns the raw config into what Apply receives. It must be pure: it also runs on an update of a fiber that has a desired target, before the restart, and again at the activation.
 	Apply    func(c *Context, cfg any) error // Everything it registers is an effect.
 
 	entry entryID // Minted by Define; nil for a Plugin with no entry of its own.

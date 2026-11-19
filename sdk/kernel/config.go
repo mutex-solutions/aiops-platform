@@ -70,26 +70,37 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // :239, :358; ADR-034 owner decision 9). The contract gives no signature: this
 // shape is an open point.
 //
-// On an ACTIVE fiber, Update first resolves cfg through internal/config and Decode.
-// If that fails, Update returns the error, retains nothing and leaves the running
-// activation untouched. Otherwise it emits internal/commit with cfg, retains cfg,
-// and restarts the fiber through the waterfall internal/update, whose payload is
-// the resolved config: a listener that does not call next vetoes the restart, and
-// the retained cfg then applies at the next restart. On a fiber in any other state
-// the resolution is skipped: cfg is retained and the activation that follows
-// resolves it and fails the fiber on an error. A fiber mounted with When takes no
-// config and Update ignores cfg.
+// Whenever the fiber is alive and has a desired target (it is ACTIVE, LOADING or
+// UNLOADING with a restart pending, as the prototype's "loaded"), Update first
+// resolves cfg through internal/config and Decode, so internal/config sees the
+// candidate at the time of the update, not at the next activation. If that fails,
+// Update returns the error in every state, retains nothing and leaves a running
+// activation untouched (ADR-034 owner decision 13). Otherwise it emits
+// internal/commit with cfg, retains cfg, and restarts the fiber through the
+// waterfall internal/update, whose payload is the resolved config: a listener that
+// does not call next vetoes the restart, and the retained cfg then applies at the
+// next restart. A fiber with no target (gated on a need, FAILED, a disposal
+// requested) skips resolution and the waterfall: cfg is retained and the
+// activation that follows resolves it and fails the fiber on an error. A fiber
+// mounted with When takes no config and Update ignores cfg.
+//
+// Decode must be pure: it runs here for the candidate and again at the activation
+// that applies the retained cfg.
 func (f *Fiber) Update(ctx context.Context, cfg any) error {
 	if f.cell == nil {
 		return f.ref.update(ctx)
 	}
-	st, err := f.ref.state(ctx)
+	snap, err := f.ref.snapshot(ctx)
 	if err != nil {
 		return err
 	}
+	if !snap.Alive {
+		return ErrInactive
+	}
 	root := f.cell.root
+	loaded := snap.Target != nil
 	var resolved any
-	if st == Active {
+	if loaded {
 		if resolved, err = f.cell.resolve(ctx, cfg); err != nil {
 			return err
 		}
@@ -98,7 +109,7 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 		return err
 	}
 	f.cell.retain(cfg)
-	if st != Active {
+	if !loaded {
 		return f.ref.update(ctx)
 	}
 	_, err = runInner(ctx, InternalUpdate, root, resolved, func(ctx context.Context, _ any) (any, error) {
