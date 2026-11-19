@@ -138,3 +138,31 @@ Readings of the protocol where it was silent or ambiguous; each is the stricter 
   from the package directory (as `go test` does).
 - **Dry run.** Reduced counts, or any plan other than the frozen one: classification
   can only be `inconclusive` or worse, and `Run` refuses a reduced plan unless `Dry`.
+
+## Protocol amendment 1 (2026-11-19)
+
+The measurement protocol is amended by
+[docs/design/s0-callpath-protocol-amendment-1.md](../../../../docs/design/s0-callpath-protocol-amendment-1.md),
+in writing before the next run. The frozen criteria are unchanged. The two earlier
+full runs are not reclassified. Where this section and an earlier note disagree,
+the amendment wins; the earlier text is kept for the record.
+
+Superseded by the amendment:
+
+- **Allocation** (Implementation notes): the sentence "goroutines and arrays created
+  beforehand" is extended: the coordinator no longer waits on a `sync.WaitGroup`
+  inside the window (sleep-poll on an atomic counter, timer warmed before), and a
+  timer-only control that reads non-zero in a run makes that run invalid for
+  allocation. A non-zero lease reading with a zero control remains a fail.
+- **Noise** (Implementation notes): throughput is no longer observations per
+  coordinator wall second. It is the sum of per-caller observations over each
+  caller's own first-to-last span, with callers released by an atomic start flag.
+  The 10% rule, swap/throttle counters and GOMAXPROCS rule are unchanged.
+- **`MeasureArm` description** (the channel-close start and the `done.Wait()` window)
+  describes the original protocol (amendment 0).
+
+Not superseded: window length (100,000 per run), operations, candidates, callers,
+repetitions, alternation, stress, thresholds, evidence and identity, and
+classification precedence. The harness implementing the amendment lands in a
+following commit; until then this directory still implements amendment 0 and must
+not be used for a run under the amendment.
