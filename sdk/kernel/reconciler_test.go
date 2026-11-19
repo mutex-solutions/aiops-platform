@@ -85,7 +85,7 @@ func rcSettle(t *testing.T, r Runtime) {
 	}
 }
 
-func rcInspect(t *testing.T, r Runtime) Inspection {
+func rcInspect(t *testing.T, r Runtime) graphView {
 	t.Helper()
 	inspector, ok := r.(Inspector)
 	if !ok {

@@ -84,7 +84,7 @@ func batchSettle(t *testing.T, ctx context.Context, r Runtime) {
 	}
 }
 
-func batchInspect(t *testing.T, ctx context.Context, r Runtime) Inspection {
+func batchInspect(t *testing.T, ctx context.Context, r Runtime) graphView {
 	t.Helper()
 	inspector, ok := r.(Inspector)
 	if !ok {
@@ -97,7 +97,7 @@ func batchInspect(t *testing.T, ctx context.Context, r Runtime) Inspection {
 	return inspection
 }
 
-func batchFiber(t *testing.T, inspection Inspection, id uint64) Snapshot {
+func batchFiber(t *testing.T, inspection graphView, id uint64) Snapshot {
 	t.Helper()
 	for _, fiber := range inspection.Fibers {
 		if fiber.ID == id {
@@ -108,7 +108,7 @@ func batchFiber(t *testing.T, inspection Inspection, id uint64) Snapshot {
 	return Snapshot{}
 }
 
-func batchProvision(t *testing.T, inspection Inspection, key string) ProvisionSnapshot {
+func batchProvision(t *testing.T, inspection graphView, key string) ProvisionSnapshot {
 	t.Helper()
 	for _, provision := range inspection.Provisions {
 		if provision.Key == key {
@@ -119,7 +119,7 @@ func batchProvision(t *testing.T, inspection Inspection, key string) ProvisionSn
 	return ProvisionSnapshot{}
 }
 
-func batchEvents(t *testing.T, ctx context.Context, r Runtime) []LedgerEvent {
+func batchEvents(t *testing.T, ctx context.Context, r Runtime) []ledgerEvent {
 	t.Helper()
 	events, err := r.Events(ctx)
 	if err != nil {
@@ -133,7 +133,7 @@ func batchEvents(t *testing.T, ctx context.Context, r Runtime) []LedgerEvent {
 	return events
 }
 
-func batchUnchanged(t *testing.T, ctx context.Context, r Runtime, before Inspection, events []LedgerEvent) {
+func batchUnchanged(t *testing.T, ctx context.Context, r Runtime, before graphView, events []ledgerEvent) {
 	t.Helper()
 	after := batchInspect(t, ctx, r)
 	if !reflect.DeepEqual(after, before) {
@@ -455,7 +455,7 @@ func TestSharedBatchColdConsumerNeverChecksOrAppliesAgainstOldProvider(t *testin
 			if check.err != nil || check.value != int64(2) {
 				t.Fatalf("Check ran against an old committed binding or under the owner: %+v", check)
 			}
-			observed := batchFiber(t, Inspection{Fibers: check.snapshots}, provider)
+			observed := batchFiber(t, graphView{Fibers: check.snapshots}, provider)
 			if observed.Revision != initial.Revision+1 {
 				t.Fatalf("Check saw a partially committed batch prefix: %+v", check.snapshots)
 			}

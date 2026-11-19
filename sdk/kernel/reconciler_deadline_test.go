@@ -33,9 +33,9 @@ func rcGatedSpec(stage string, gate chan struct{}) Spec {
 // rcDeadlineRun mounts one gated fiber, optionally stalls the owner, opens the
 // gate at openAt after the mount and releases the owner at releaseAt (fake time
 // since the mount, the owner stays stalled until then when stalled).
-func rcDeadlineRun(t *testing.T, stage string, stalled bool, openAt, releaseAt time.Duration) (Snapshot, []LedgerEvent) {
+func rcDeadlineRun(t *testing.T, stage string, stalled bool, openAt, releaseAt time.Duration) (Snapshot, []ledgerEvent) {
 	var snap Snapshot
-	var events []LedgerEvent
+	var events []ledgerEvent
 	synctest.Test(t, func(t *testing.T) {
 		r := hazardReconciler(t)
 		gate := make(chan struct{})
@@ -102,7 +102,7 @@ func TestReconcilerDeadlineJudgesReturnInstantNotHandlingInstant(t *testing.T) {
 // whose message was handled after the budget lapsed must not hide that the next
 // effect starts, and runs, past the budget.
 func TestReconcilerDeadlineDisposeBudgetStaysArmedAcrossEffects(t *testing.T) {
-	run := func(t *testing.T, second bool) (events []LedgerEvent) {
+	run := func(t *testing.T, second bool) (events []ledgerEvent) {
 		synctest.Test(t, func(t *testing.T) {
 			r := hazardReconciler(t)
 			gate := make(chan struct{})
@@ -151,9 +151,9 @@ func TestReconcilerDeadlineDisposeBudgetStaysArmedAcrossEffects(t *testing.T) {
 // Drain: tracked work that returned inside the drain budget is not blamed for the
 // owner's delay; tracked work that returned after it is.
 func TestReconcilerDeadlineDrainJudgesTrackedWorkByReturnInstant(t *testing.T) {
-	run := func(t *testing.T, workEnds time.Duration) (Snapshot, []LedgerEvent) {
+	run := func(t *testing.T, workEnds time.Duration) (Snapshot, []ledgerEvent) {
 		var snap Snapshot
-		var events []LedgerEvent
+		var events []ledgerEvent
 		synctest.Test(t, func(t *testing.T) {
 			r := hazardReconciler(t)
 			gate := make(chan struct{})

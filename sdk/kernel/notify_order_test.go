@@ -21,11 +21,11 @@ func orderCandidates() map[string]func() Runtime {
 	return map[string]func() Runtime{"reconciler": NewRecordingReconciler}
 }
 
-func isServiceEvent(e LedgerEvent, key string) bool {
+func isServiceEvent(e ledgerEvent, key string) bool {
 	return (e.Kind == "service" || e.Kind == "service:publish") && e.Key == key
 }
 
-func firstEvent(events []LedgerEvent, match func(LedgerEvent) bool) int {
+func firstEvent(events []ledgerEvent, match func(ledgerEvent) bool) int {
 	for i, e := range events {
 		if match(e) {
 			return i
@@ -34,7 +34,7 @@ func firstEvent(events []LedgerEvent, match func(LedgerEvent) bool) int {
 	return -1
 }
 
-func countEvents(events []LedgerEvent, match func(LedgerEvent) bool) int {
+func countEvents(events []ledgerEvent, match func(ledgerEvent) bool) int {
 	n := 0
 	for _, e := range events {
 		if match(e) {
@@ -44,8 +44,8 @@ func countEvents(events []LedgerEvent, match func(LedgerEvent) bool) int {
 	return n
 }
 
-func stateEvent(name string, to State) func(LedgerEvent) bool {
-	return func(e LedgerEvent) bool { return e.Kind == "state" && e.Name == name && e.State == to }
+func stateEvent(name string, to State) func(ledgerEvent) bool {
+	return func(e ledgerEvent) bool { return e.Kind == "state" && e.Name == name && e.State == to }
 }
 
 // D09: the false check never moves the consumer to LOADING, and Notify records
@@ -76,10 +76,10 @@ func TestDeniedCheckKeepsConsumerPendingAndNotifyRecordsService(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n := countEvents(events, func(e LedgerEvent) bool { return e.Kind == "state" && e.Name == "consumer" }); n != 0 || applied.Load() != 0 {
+			if n := countEvents(events, func(e ledgerEvent) bool { return e.Kind == "state" && e.Name == "consumer" }); n != 0 || applied.Load() != 0 {
 				t.Fatalf("consumer with a false check changed state %d times, applied %d", n, applied.Load())
 			}
-			if n := countEvents(events, func(e LedgerEvent) bool { return isServiceEvent(e, "svc") }); n != 1 {
+			if n := countEvents(events, func(e ledgerEvent) bool { return isServiceEvent(e, "svc") }); n != 1 {
 				t.Fatalf("service events before notify = %d, want 1", n)
 			}
 			allow.Store(1)
@@ -148,7 +148,7 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if i := firstEvent(events, func(e LedgerEvent) bool { return isServiceEvent(e, "svc") || stateEvent("consumer", Loading)(e) }); i >= 0 {
+			if i := firstEvent(events, func(e ledgerEvent) bool { return isServiceEvent(e, "svc") || stateEvent("consumer", Loading)(e) }); i >= 0 {
 				t.Fatalf("event %+v recorded while the dependant check was in flight", events[i])
 			}
 			release.Do(func() { close(gate) })
@@ -160,7 +160,7 @@ func TestDependantLoadingPrecedesServiceEvent(t *testing.T) {
 				t.Fatal(err)
 			}
 			loading := firstEvent(events, stateEvent("consumer", Loading))
-			published := firstEvent(events, func(e LedgerEvent) bool { return isServiceEvent(e, "svc") })
+			published := firstEvent(events, func(e ledgerEvent) bool { return isServiceEvent(e, "svc") })
 			if loading < 0 || published < 0 || loading > published {
 				t.Fatalf("consumer LOADING at %d must precede the service event at %d", loading, published)
 			}
@@ -206,8 +206,8 @@ func TestServiceEventPrecedesDependantLoadRecords(t *testing.T) {
 				t.Fatal(err)
 			}
 			loading := firstEvent(events, stateEvent("fast", Loading))
-			service := firstEvent(events, func(e LedgerEvent) bool { return isServiceEvent(e, "svc") })
-			record := firstEvent(events, func(e LedgerEvent) bool { return e.Name == "fast" && strings.HasPrefix(e.Kind, "effect") })
+			service := firstEvent(events, func(e ledgerEvent) bool { return isServiceEvent(e, "svc") })
+			record := firstEvent(events, func(e ledgerEvent) bool { return e.Name == "fast" && strings.HasPrefix(e.Kind, "effect") })
 			if loading < 0 || service < 0 || record < 0 || !(loading < service && service < record) {
 				t.Fatalf("want LOADING < service event < load record: loading=%d service=%d record=%d\n%+v", loading, service, record, events)
 			}

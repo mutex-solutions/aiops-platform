@@ -58,8 +58,8 @@ func TestBindByANonProviderFailsItsFiber(t *testing.T) {
 		"no provides":        plug("a", nil, nil, func(c *Context) error { ev.Bind(c); return nil }),
 		"another key":        plug("b", nil, []AnyKey{other}, func(c *Context) error { ev.Bind(c); return nil }),
 		"waterfall":          plug("c", nil, nil, func(c *Context) error { w.Bind(c); return nil }),
-		"kernel hook":        plug("d", nil, []AnyKey{key}, func(c *Context) error { hookStatus.Bind(c); return nil }),
-		"kernel waterfall":   plug("e", nil, []AnyKey{key}, func(c *Context) error { hookConfig.Bind(c); return nil }),
+		"kernel hook":        plug("d", nil, []AnyKey{key}, func(c *Context) error { InternalStatus.Bind(c); return nil }),
+		"kernel waterfall":   plug("e", nil, []AnyKey{key}, func(c *Context) error { InternalConfig.Bind(c); return nil }),
 		"isolated realm key": plug("f", nil, []AnyKey{key}, func(c *Context) error { ev.Bind(c.Isolate(key)); return nil }),
 	} {
 		if err := failure(t, r.Plugin(p, nil)); !errors.Is(err, ErrNotOwner) {
@@ -366,11 +366,11 @@ func TestSealedHookAdmitsTheListedEntriesOnly(t *testing.T) {
 }
 
 func TestSealedKernelHookCanBeListedForAPlugin(t *testing.T) {
-	p := hookPlug("status-listener", []HookUse{hookStatus.Use(DefaultStage)}, func(c *Context) error {
-		hookStatus.On(c, DefaultStage, noopAny)
+	p := hookPlug("status-listener", []HookUse{InternalStatus.Use(DefaultStage)}, func(c *Context) error {
+		InternalStatus.On(c, DefaultStage, noopAny)
 		return nil
 	})
-	r, err := newListening(t, map[AnyHook][]Plugin{hookStatus: {p}})
+	r, err := newListening(t, map[AnyHook][]Plugin{InternalStatus: {p}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,8 +389,8 @@ func TestTheTestConstructorSwitchesTheSealedMapOff(t *testing.T) {
 	r := NewForTest(t, cfg)
 	want(t, r.Plugin(listenEvent(ev, "any-ev", DefaultStage, noop), nil), Active)
 	want(t, r.Plugin(listenWaterfall(w, "any-wf", DefaultStage, func(_ context.Context, _ int, next Next[int]) (int, error) { return next() }), nil), Active)
-	want(t, r.Plugin(hookPlug("any-status", []HookUse{hookStatus.Use(DefaultStage)}, func(c *Context) error {
-		hookStatus.On(c, DefaultStage, noopAny)
+	want(t, r.Plugin(hookPlug("any-status", []HookUse{InternalStatus.Use(DefaultStage)}, func(c *Context) error {
+		InternalStatus.On(c, DefaultStage, noopAny)
 		return nil
 	}), nil), Active)
 	// It does not switch off the declaration.

@@ -87,7 +87,7 @@ func (l *ptLog) get() []string {
 
 // ptStateOrder returns the index of the event in which the named fiber entered
 // the given state, or -1.
-func ptStateOrder(events []LedgerEvent, name string, state State) int {
+func ptStateOrder(events []ledgerEvent, name string, state State) int {
 	for i, event := range events {
 		if event.Kind == "state" && event.Name == name && event.State == state {
 			return i

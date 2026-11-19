@@ -196,6 +196,7 @@ type cell[T any] struct{ value T }
 type provided struct {
 	view      func(caller *Context) any // Returns a cell[T].
 	available func(caller *Context) bool
+	value     any // The value of a plain Provide, for the launcher's read API; nil for a view.
 }
 
 // ProvideOption is an option of Provide and ProvideFor (07-c4-plugin-sdk.md:181).
@@ -233,7 +234,7 @@ func (k Key[T]) Of(c *Context) T {
 // provider-bound key, be listed by the provider binding map. It returns a
 // *InjectError otherwise, and when the fiber is inactive or already provides k.
 func (k Key[T]) Provide(c *Context, v T, o ...ProvideOption) error {
-	return k.provide(c, func(*Context) any { return cell[T]{v} }, o)
+	return k.provide(c, func(*Context) any { return cell[T]{v} }, v, o)
 }
 
 // ProvideFor provides a view bound to each consumer: view receives the resolving
@@ -244,10 +245,10 @@ func (k Key[T]) ProvideFor(c *Context, view func(caller *Context) T, o ...Provid
 	if view == nil {
 		return injectErr(k.k, errNilView)
 	}
-	return k.provide(c, func(caller *Context) any { return cell[T]{view(caller)} }, o)
+	return k.provide(c, func(caller *Context) any { return cell[T]{view(caller)} }, nil, o)
 }
 
-func (k Key[T]) provide(c *Context, view func(*Context) any, o []ProvideOption) error {
+func (k Key[T]) provide(c *Context, view func(*Context) any, value any, o []ProvideOption) error {
 	d, err := dataOf(k)
 	if err != nil {
 		return injectErr(nil, err)
@@ -255,7 +256,7 @@ func (k Key[T]) provide(c *Context, view func(*Context) any, o []ProvideOption) 
 	if c == nil {
 		return injectErr(d, ErrUndeclared)
 	}
-	p := &provided{view: view}
+	p := &provided{view: view, value: value}
 	for _, opt := range o {
 		opt(p)
 	}

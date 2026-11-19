@@ -17,7 +17,7 @@ import (
 // structural children is bounded by those fibers' own deadlines and is reported
 // by naming the fiber that is actually stuck.
 
-func deadlineFibers(events []LedgerEvent) map[uint64]string {
+func deadlineFibers(events []ledgerEvent) map[uint64]string {
 	out := map[uint64]string{}
 	for _, e := range events {
 		out[e.Fiber] = keyText(e.Key)

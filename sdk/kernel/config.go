@@ -38,7 +38,7 @@ func (c *cfgCell) retain(raw any) {
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
 // panic of Decode is contained as a *PanicError, as a listener's is.
 func (c *cfgCell) resolve(ctx context.Context, raw any) (v any, err error) {
-	v, err = runInner(ctx, hookConfig, c.root, raw, func(_ context.Context, a any) (any, error) { return a, nil })
+	v, err = runInner(ctx, InternalConfig, c.root, raw, func(_ context.Context, a any) (any, error) { return a, nil })
 	if err != nil || c.decode == nil {
 		return v, err
 	}
@@ -94,14 +94,14 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 			return err
 		}
 	}
-	if err = hookCommit.emit(ctx, root.aud, cfg); err != nil {
+	if err = InternalCommit.emit(ctx, root.aud, cfg); err != nil {
 		return err
 	}
 	f.cell.retain(cfg)
 	if st != Active {
 		return f.ref.update(ctx)
 	}
-	_, err = runInner(ctx, hookUpdate, root, resolved, func(ctx context.Context, _ any) (any, error) {
+	_, err = runInner(ctx, InternalUpdate, root, resolved, func(ctx context.Context, _ any) (any, error) {
 		return nil, f.ref.update(ctx)
 	})
 	return err

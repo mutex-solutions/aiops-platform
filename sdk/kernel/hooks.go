@@ -427,16 +427,20 @@ func (r *Root) logHook(err error) {
 
 // The kernel's own hooks, all sealed (07-c4-plugin-sdk.md:463; plugin record
 // section 8: three events, then a waterfall, a waterfall and an event). The
-// contract gives no payload type, so the payload is any. internal/config,
-// internal/update and internal/commit are dispatched by the config pipeline
-// (config.go). internal/plugin, internal/status and internal/service are declared
-// and not dispatched: neither the contract nor the plugin record describes their
-// payload.
+// contract gives no payload type, so the payload is any. They are exported so
+// that Config.Listeners can name them from outside the package (ADR-034 owner
+// decision 11); they stay sealed, have no owner, and no plugin can Bind one: the
+// kernel root alone dispatches them. Treat them as constants: never assign to one.
+//
+// InternalConfig, InternalUpdate and InternalCommit are dispatched by the config
+// pipeline (config.go). InternalPlugin, InternalStatus and InternalService are
+// declared and not dispatched: neither the contract nor the plugin record describes
+// their payload (ADR-034 owner decision 13).
 var (
-	hookPlugin  = newEvent[any](kernelPrefix+"plugin", true)
-	hookStatus  = newEvent[any](kernelPrefix+"status", true)
-	hookService = newEvent[any](kernelPrefix+"service", true)
-	hookConfig  = newWaterfall[any, any](kernelPrefix+"config", true)
-	hookUpdate  = newWaterfall[any, any](kernelPrefix+"update", true)
-	hookCommit  = newEvent[any](kernelPrefix+"commit", true)
+	InternalPlugin  = newEvent[any](kernelPrefix+"plugin", true)
+	InternalStatus  = newEvent[any](kernelPrefix+"status", true)
+	InternalService = newEvent[any](kernelPrefix+"service", true)
+	InternalConfig  = newWaterfall[any, any](kernelPrefix+"config", true)
+	InternalUpdate  = newWaterfall[any, any](kernelPrefix+"update", true)
+	InternalCommit  = newEvent[any](kernelPrefix+"commit", true)
 )

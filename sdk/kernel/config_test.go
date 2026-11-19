@@ -235,7 +235,7 @@ func TestConfigListenersTransformAndVeto(t *testing.T) {
 	other := newKernel(t)
 	rec, otherRec := &cfgRecorder{}, &cfgRecorder{}
 	var calls int
-	hookConfig.On(r.Context(), DefaultStage, func(ctx context.Context, raw any, next Next[any]) (any, error) {
+	InternalConfig.On(r.Context(), DefaultStage, func(ctx context.Context, raw any, next Next[any]) (any, error) {
 		calls++
 		eff, err := next()
 		if err != nil {
@@ -259,7 +259,7 @@ func TestAConfigListenerErrorFailsTheFiberAndTheUpdate(t *testing.T) {
 	r := newKernel(t)
 	ctx := frontCtx(t)
 	boom := errors.New("unresolved reference")
-	hookConfig.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[any]) (any, error) {
+	InternalConfig.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[any]) (any, error) {
 		if raw == "bad" {
 			return nil, boom
 		}
@@ -285,7 +285,7 @@ func TestCommitListenersSeeTheRawConfigBeforeItIsRetained(t *testing.T) {
 	r := newKernel(t)
 	ctx := frontCtx(t)
 	var committed []any
-	hookCommit.On(r.Context(), DefaultStage, func(_ context.Context, raw any) (any, error) {
+	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, raw any) (any, error) {
 		committed = append(committed, raw)
 		return nil, errors.New("a failing listener is contained")
 	})
@@ -314,7 +314,7 @@ func TestCommitListenersSeeTheRawConfigBeforeItIsRetained(t *testing.T) {
 func TestACommitThatEndsTheContextStopsTheUpdate(t *testing.T) {
 	r := newKernel(t)
 	ctx, cancel := context.WithCancel(frontCtx(t))
-	hookCommit.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { cancel(); return nil, nil })
+	InternalCommit.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { cancel(); return nil, nil })
 	rec := &cfgRecorder{}
 	f := r.Plugin(rec.plugin(nil), "a")
 	want(t, f, Active)
@@ -335,7 +335,7 @@ func TestUpdateListenersWrapTheRestartAndMayVetoIt(t *testing.T) {
 	want(t, f, Active)
 	var payload []any
 	veto := true
-	hookUpdate.On(r.Context(), DefaultStage, func(_ context.Context, resolved any, next Next[any]) (any, error) {
+	InternalUpdate.On(r.Context(), DefaultStage, func(_ context.Context, resolved any, next Next[any]) (any, error) {
 		payload = append(payload, resolved)
 		if veto {
 			return "vetoed", nil
@@ -367,7 +367,7 @@ func TestAnUpdateListenerFailureIsTheUpdatesFailure(t *testing.T) {
 	f := r.Plugin(rec.plugin(nil), "a")
 	want(t, f, Active)
 	boom := errors.New("refused")
-	hookUpdate.On(r.Context(), DefaultStage, func(context.Context, any, Next[any]) (any, error) { return nil, boom })
+	InternalUpdate.On(r.Context(), DefaultStage, func(context.Context, any, Next[any]) (any, error) { return nil, boom })
 	if err := f.Update(ctx, "b"); !errors.Is(err, boom) {
 		t.Fatalf("update: %v", err)
 	}

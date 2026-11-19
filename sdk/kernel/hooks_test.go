@@ -368,13 +368,13 @@ func TestHookSealedKernelHooksListenOnlyFromTheLauncher(t *testing.T) {
 	r := newBound(t, nil, nil) // New with empty maps: the sealed rule is enforced.
 	ctx := frontCtx(t)
 	var seen atomic.Int64
-	hookStatus.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { seen.Add(1); return nil, nil })
-	if err := hookStatus.emit(ctx, Unscoped, nil); err != nil || seen.Load() != 1 {
+	InternalStatus.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { seen.Add(1); return nil, nil })
+	if err := InternalStatus.emit(ctx, Unscoped, nil); err != nil || seen.Load() != 1 {
 		t.Fatalf("launcher listener: %v, %d", err, seen.Load())
 	}
 	// A plugin may declare it, and is still refused.
-	p := hookPlug("sneak", []HookUse{hookStatus.Use(DefaultStage)}, func(c *Context) error {
-		hookStatus.On(c, DefaultStage, func(context.Context, any) (any, error) { return nil, nil })
+	p := hookPlug("sneak", []HookUse{InternalStatus.Use(DefaultStage)}, func(c *Context) error {
+		InternalStatus.On(c, DefaultStage, func(context.Context, any) (any, error) { return nil, nil })
 		return nil
 	})
 	if err := failure(t, r.Plugin(p, nil)); !errors.Is(err, ErrSealed) {
@@ -393,7 +393,7 @@ func TestHookSealedKernelHooksListenOnlyFromTheLauncher(t *testing.T) {
 		t.Fatalf("Sealed option: %v", err)
 	}
 	// The six kernel hooks exist under their contract names.
-	names := []string{hookPlugin.Name(), hookStatus.Name(), hookService.Name(), hookConfig.Name(), hookUpdate.Name(), hookCommit.Name()}
+	names := []string{InternalPlugin.Name(), InternalStatus.Name(), InternalService.Name(), InternalConfig.Name(), InternalUpdate.Name(), InternalCommit.Name()}
 	if !slices.Equal(names, []string{"internal/plugin", "internal/status", "internal/service", "internal/config", "internal/update", "internal/commit"}) {
 		t.Fatalf("names = %v", names)
 	}
@@ -429,7 +429,7 @@ func TestHookDefinitionsAreChecked(t *testing.T) {
 		t.Fatal("waterfall accessors")
 	}
 	// The kernel's own hooks have no owner: the root dispatches them.
-	if hookStatus.Owner() != nil || hookConfig.Owner() != nil {
+	if InternalStatus.Owner() != nil || InternalConfig.Owner() != nil {
 		t.Fatal("a kernel hook has an owner")
 	}
 }

@@ -151,7 +151,7 @@ func TestAppendCopiesOnlyValueWithoutCallingUserHooks(t *testing.T) {
 			defer release()
 			var marshals, hooks atomic.Int64
 			var got []opaquePayload
-			if _, err := d.addObserver(owner, "opaque", func(_ context.Context, event LedgerEvent) error {
+			if _, err := d.addObserver(owner, "opaque", func(_ context.Context, event ledgerEvent) error {
 				value := event.Value.(opaquePayload)
 				if value.Number == 1 {
 					close(started)
@@ -162,12 +162,12 @@ func TestAppendCopiesOnlyValueWithoutCallingUserHooks(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if err := d.append(1, LedgerEvent{Sequence: 1, Value: opaquePayload{Number: 1, marshal: &marshals}}); err != nil {
+			if err := d.append(1, ledgerEvent{Sequence: 1, Value: opaquePayload{Number: 1, marshal: &marshals}}); err != nil {
 				t.Fatal(err)
 			}
 			awaitSignal(t, ctx, started, "first observer")
 			value := opaquePayload{Number: 2, Data: map[string]any{"stable": "original"}, Hook: func() { hooks.Add(1) }, marshal: &marshals}
-			if err := d.append(2, LedgerEvent{Sequence: 2, Value: value}); err != nil {
+			if err := d.append(2, ledgerEvent{Sequence: 2, Value: value}); err != nil {
 				t.Fatal(err)
 			}
 			// Reassign the caller's top-level value, never mutate referenced data.
@@ -567,8 +567,8 @@ func TestRealEventLedgerTotalStateAndServiceOrder(t *testing.T) {
 			ctx, r := actualRuntime(t, factory)
 			owner, _ := actualOwner(t, ctx, r, "observer owner")
 			d := testDispatcher(t, nil)
-			var got []LedgerEvent
-			if _, err := d.addObserver(owner, "ledger", func(callbackCtx context.Context, event LedgerEvent) error {
+			var got []ledgerEvent
+			if _, err := d.addObserver(owner, "ledger", func(callbackCtx context.Context, event ledgerEvent) error {
 				if _, err := r.Snapshots(callbackCtx); err != nil {
 					return err
 				}

@@ -120,13 +120,13 @@ func findSnapshot(snaps []Snapshot, name string) (Snapshot, bool) {
 	return Snapshot{}, false
 }
 
-func eventsOf(t *testing.T, r Runtime, kind, key string) []LedgerEvent {
+func eventsOf(t *testing.T, r Runtime, kind, key string) []ledgerEvent {
 	t.Helper()
 	events, err := r.Events(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []LedgerEvent
+	var out []ledgerEvent
 	for _, e := range events {
 		if e.Kind == kind && (key == "" || keyText(e.Key) == key) {
 			out = append(out, e)
@@ -260,7 +260,7 @@ type r2Obs struct {
 	state    State
 	errText  string
 	returned bool
-	deadline []LedgerEvent
+	deadline []ledgerEvent
 }
 
 // r2Stage mounts one fiber whose callback blocks on a gate, stalls the owner
@@ -324,7 +324,7 @@ func TestHazardR2OwnerClockJudgesDeadlines(t *testing.T) {
 	}
 }
 
-func kinds(events []LedgerEvent) []string {
+func kinds(events []ledgerEvent) []string {
 	var out []string
 	for _, e := range events {
 		out = append(out, e.Kind+"/"+keyText(e.Key))
