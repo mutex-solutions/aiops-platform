@@ -1,0 +1,37 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload after the hazard fixes in both cores (atomic admission, completion-time deadlines, own-work drain clock, shared Settle/Close contract, targeted wake-ups, boundary error rendering); NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "24b2625810d5e76d12a0b9963ccfc2db1eed31e6baa8de7b9f27e20d82b3944b",
+ "commit": "b6226f7",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 3519.4,
+ "candidateSeconds": {
+  "reconciler": 1430.27,
+  "graph-lock": 2088.9
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "b17e7c65039ae29c51dbac981010e58a840916305138a65d15c53bbba6f52004",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/hazard-fixes-b6226f7",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, call-path, scale, cold-mount and restart section 10 gates remain open."
+ ]
+}
