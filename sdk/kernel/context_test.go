@@ -456,3 +456,58 @@ func TestConsumerBoundKeysResolveOnlyForListedEntries(t *testing.T) {
 		t.Fatalf("host resolve: %v", e)
 	}
 }
+
+// Every entry point of a context decides liveness before any other refusal: on an
+// activation that has ended each reports ErrInactive, not a declaration, class,
+// argument or ownership error. The prototype's Provide does so (the property
+// harness checks it). The registrations decide again under the lease for the
+// action itself, so the first check opens no window.
+func TestAnEndedActivationIsInactiveBeforeAnyOtherRefusal(t *testing.T) {
+	r := newKernel(t)
+	declared, undeclared := NewKey[int]("declared", 0), NewKey[int]("undeclared", 0)
+	bound := NewKey[int]("bound", 0, ProviderBound())
+	typed := NewKey[int]("typed", 0, InterceptConfig[string]())
+	ev := NewEvent[int]("t/ended-ev", OwnedBy(undeclared))
+	wf := NewWaterfall[int, int]("t/ended-wf", OwnedBy(undeclared))
+	var held *Context
+	f := r.Plugin(plug("p/ended", nil, []AnyKey{declared}, func(c *Context) error { held = c; return nil }), nil)
+	want(t, f, Active)
+	if err := f.Dispose(frontCtx(t)); err != nil {
+		t.Fatal(err)
+	}
+	want(t, f, Disposed)
+	cases := map[string]func() error{
+		"Provide undeclared":    func() error { return undeclared.Provide(held, 1) },
+		"Provide not bound":     func() error { return bound.Provide(held, 1) },
+		"Provide zero key":      func() error { return Key[int]{}.Provide(held, 1) },
+		"Provide declared":      func() error { return declared.Provide(held, 1) },
+		"ProvideFor undeclared": func() error { return undeclared.ProvideFor(held, func(*Context) int { return 1 }) },
+		"ProvideFor nil view":   func() error { return declared.ProvideFor(held, nil) },
+		"ProvideFor declared":   func() error { return declared.ProvideFor(held, func(*Context) int { return 1 }) },
+		"Bind event":            func() error { return refusal(t, func() { ev.Bind(held) }) },
+		"Bind waterfall":        func() error { return refusal(t, func() { wf.Bind(held) }) },
+		"On event":              func() error { return refusal(t, func() { ev.On(held, DefaultStage, noop) }) },
+		"On event nil":          func() error { return refusal(t, func() { ev.On(held, "no-such-stage", nil) }) },
+		"On waterfall":          func() error { return refusal(t, func() { wf.On(held, DefaultStage, nil) }) },
+		"Isolate zero key":      func() error { return refusal(t, func() { held.Isolate(nil) }) },
+		"Isolate bound key":     func() error { return refusal(t, func() { held.Isolate(bound) }) },
+		"Isolate zero label":    func() error { return refusal(t, func() { held.Isolate(declared, Label{}) }) },
+		"Intercept zero key":    func() error { return refusal(t, func() { held.Intercept(nil, nil) }) },
+		"Intercept bad config":  func() error { return refusal(t, func() { held.Intercept(typed, 1) }) },
+		"Plugin":                func() error { return refusal(t, func() { held.Plugin(Plugin{ID: "child", Inject: []Dep{{}}}, nil) }) },
+		"When":                  func() error { return refusal(t, func() { held.When([]Dep{{}}, nil) }) },
+		"Effect empty label":    func() error { return held.Effect("", nil) },
+		"Effect":                func() error { return held.Effect("e", func() (Disposer, error) { return nil, nil }) },
+		"Defer":                 func() error { return refusal(t, func() { held.Defer("", nil) }) },
+		"Go empty label":        func() error { return refusal(t, func() { held.Go("", nil) }) },
+		"RequestEffectScope":    func() error { _, err := held.RequestEffectScope("", nil); return err },
+		"Dispose":               func() error { return held.Dispose() },
+	}
+	for name, call := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); !errors.Is(err, ErrInactive) {
+				t.Fatalf("%v, want ErrInactive", err)
+			}
+		})
+	}
+}

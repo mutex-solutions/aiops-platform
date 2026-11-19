@@ -211,14 +211,14 @@ func (d *hookDef) bind(c *Context) {
 	if c == nil {
 		refuse(d.errf(ErrHook))
 	}
+	leave, ok := c.h.enter()
+	if !ok {
+		refuse(d.errf(inactive()))
+	}
+	defer leave()
 	if d.owner == nil || !c.mayProvide(d.owner) {
 		refuse(d.errf(ErrNotOwner))
 	}
-	leave, ok := c.h.enter()
-	if !ok {
-		refuse(d.errf(errors.Join(ErrInactiveEffect, ErrInactive)))
-	}
-	leave()
 }
 
 // enter takes the lease of the dispatcher's activation for the length of one
@@ -309,15 +309,22 @@ func (t *table[F]) load() []*listener[F] {
 
 // add registers fn as an effect of c's fiber: the listener leaves the chain when
 // the fiber's effects are reverted (07-c4-plugin-sdk.md:369).
-func (t *table[F]) add(d *hookDef, c *Context, stage string, fn F) {
-	idx := d.admit(c, stage)
-	// The lease keeps the fiber's effects from being reverted before the listener is
-	// published: the unload waits for open leases (07-c4-plugin-sdk.md:373).
-	leave, ok := c.h.enter()
-	if !ok {
-		refuse(errors.Join(ErrInactiveEffect, ErrInactive))
+// The lease is taken first, so that an ended activation is refused as inactive
+// before any other refusal, and it keeps the fiber's effects from being reverted
+// before the listener is published: the unload waits for open leases
+// (07-c4-plugin-sdk.md:373). nilFn reports a nil fn, which F cannot compare.
+func (t *table[F]) add(d *hookDef, c *Context, stage string, fn F, nilFn bool) {
+	if c != nil {
+		leave, ok := c.h.enter()
+		if !ok {
+			refuse(d.errf(inactive()))
+		}
+		defer leave()
 	}
-	defer leave()
+	if nilFn {
+		refuse(d.errf(ErrHook))
+	}
+	idx := d.admit(c, stage)
 	r := &listener[F]{id: c.frame.id, stage: idx, ctx: c, scoped: hasScope(c), fn: fn}
 	c.h.deferEffect("hook "+d.name+"/"+stage, func(context.Context) error { t.remove(r); return nil })
 	t.mu.Lock()

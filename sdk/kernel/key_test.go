@@ -344,3 +344,23 @@ func TestBindingMapsAreCheckedAtConstruction(t *testing.T) {
 		t.Fatal("allows is wrong")
 	}
 }
+
+// Liveness is decided before the declaration: a provision on an ended activation
+// is refused with ErrInactive whatever the key is, as the prototype does.
+func TestProvideOnAnEndedActivationIsInactiveBeforeUndeclared(t *testing.T) {
+	r := newKernel(t)
+	declared, undeclared := NewKey[int]("declared", 0), NewKey[int]("undeclared", 0)
+	var held *Context
+	f := r.Plugin(plug("p/ended", nil, []AnyKey{declared}, func(c *Context) error { held = c; return nil }), nil)
+	want(t, f, Active)
+	if err := f.Dispose(frontCtx(t)); err != nil {
+		t.Fatal(err)
+	}
+	want(t, f, Disposed)
+	if err := declared.Provide(held, 1); !errors.Is(err, ErrInactive) {
+		t.Fatalf("declared key on an ended activation = %v, want ErrInactive", err)
+	}
+	if err := undeclared.Provide(held, 1); !errors.Is(err, ErrInactive) {
+		t.Fatalf("undeclared key on an ended activation = %v, want ErrInactive", err)
+	}
+}

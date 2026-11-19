@@ -54,6 +54,9 @@ var (
 // setup runs after Apply returns, before the fiber is ACTIVE. It returns an error
 // that matches ErrInactiveEffect and ErrInactive on an inactive activation.
 func (c *Context) RequestEffectScope(label string, setup func(*EffectScope) error) (*EffectHandle, error) {
+	if c.ended() {
+		return nil, inactive()
+	}
 	return c.h.requestScope(label, setup)
 }
 

@@ -85,10 +85,7 @@ func (w *Waterfall[A, R]) Use(stage string) HookUse { return w.def.use(stage) }
 // chain with the fiber (07-c4-plugin-sdk.md:209, :369). The refusals are those of
 // Event.On.
 func (w *Waterfall[A, R]) On(c *Context, stage string, fn WaterfallListener[A, R]) {
-	if fn == nil {
-		refuse(w.def.errf(ErrHook))
-	}
-	w.table.add(w.def, c, stage, fn)
+	w.table.add(w.def, c, stage, fn, fn == nil)
 }
 
 // Run calls the chain reached by aud, outermost first, and returns the result of

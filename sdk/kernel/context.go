@@ -102,6 +102,26 @@ func (c *Context) declaresProvide(k *keyData) bool {
 	return c.frame.host || slices.Contains(c.frame.provides, k.addr(c.realmOf(k)))
 }
 
+// ended reports whether c's activation has ended: an operation that must refuse
+// an ended activation decides this before any other refusal, so the caller sees
+// ErrInactive whatever else is wrong with the call. A nil c has no activation.
+// The check is a first refusal only: an action that must not race the end of the
+// activation (provide, effect, the registrations) decides again under the lease or
+// claim of the core.
+func (c *Context) ended() bool { return c != nil && !c.h.live.Load() }
+
+// inactive is the refusal of a registration on an ended activation.
+func inactive() error { return errors.Join(ErrInactiveEffect, ErrInactive) }
+
+// refusal panics with a refusal of c's key operation, which is ErrInactive when
+// the activation has ended, whatever err says.
+func (c *Context) refusal(k *keyData, err error) {
+	if c.ended() {
+		err = inactive()
+	}
+	refuse(injectErr(k, err))
+}
+
 // Isolate returns a child in which k lives in its own realm, named by label or by
 // a fresh one (07-c4-plugin-sdk.md:195). A provider-bound key is refused except to
 // the fiber that provides it. A refusal panics: it fails the fiber, as Key.Of does
@@ -109,13 +129,13 @@ func (c *Context) declaresProvide(k *keyData) bool {
 func (c *Context) Isolate(k AnyKey, label ...Label) *Context {
 	d, err := dataOf(k)
 	if err != nil {
-		refuse(injectErr(nil, err))
+		c.refusal(nil, err)
 	}
 	if len(label) > 1 || (len(label) == 1 && label[0].token == nil) {
-		refuse(injectErr(d, ErrIsolation))
+		c.refusal(d, ErrIsolation)
 	}
 	if d.provider == classBound && !(c.providerAllowed(d) && c.declaresProvide(d)) {
-		refuse(injectErr(d, ErrIsolation))
+		c.refusal(d, ErrIsolation)
 	}
 	l := NewLabel(d.name)
 	if len(label) == 1 {
@@ -132,10 +152,10 @@ func (c *Context) Isolate(k AnyKey, label ...Label) *Context {
 func (c *Context) Intercept(k AnyKey, cfg any) *Context {
 	d, err := dataOf(k)
 	if err != nil {
-		refuse(injectErr(nil, err))
+		c.refusal(nil, err)
 	}
 	if err := checkConfig(d, cfg); err != nil {
-		refuse(injectErr(d, err))
+		c.refusal(d, err)
 	}
 	n := c.derive()
 	n.icpts = []intercept{{key: d, value: cfg}}
@@ -213,6 +233,9 @@ func (c *Context) ownsKey(k *keyData) bool {
 // names it in the ledger (07-c4-plugin-sdk.md:199, :371). It returns an error that
 // matches ErrInactiveEffect on an unloading or disposed fiber.
 func (c *Context) Effect(label string, setup func() (Disposer, error)) error {
+	if c.ended() {
+		return inactive()
+	}
 	return c.h.effect(label, setup)
 }
 
@@ -224,7 +247,12 @@ func (c *Context) Defer(label string, d Disposer) { c.h.deferEffect(label, d) }
 // Go starts run as tracked work of c's fiber: Std is cancelled and run is awaited
 // at unload (07-c4-plugin-sdk.md:201, :370). A refused call panics and fails the
 // fiber. run must return when Std is cancelled.
-func (c *Context) Go(label string, run func(context.Context) error) { c.h.goTracked(label, run) }
+func (c *Context) Go(label string, run func(context.Context) error) {
+	if c.ended() {
+		refuse(inactive())
+	}
+	c.h.goTracked(label, run)
+}
 
 // Std returns the standard context of c's activation, cancelled when its unload
 // starts (07-c4-plugin-sdk.md:202).

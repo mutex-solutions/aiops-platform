@@ -95,10 +95,7 @@ func (e *Event[A]) Use(stage string) HookUse { return e.def.use(stage) }
 // call, such as an undeclared one, panics and fails the fiber, with ErrStage,
 // ErrHookUndeclared, ErrSealed, ErrHook or ErrInactiveEffect.
 func (e *Event[A]) On(c *Context, stage string, fn EventListener[A]) {
-	if fn == nil {
-		refuse(e.def.errf(ErrHook))
-	}
-	e.table.add(e.def, c, stage, fn)
+	e.table.add(e.def, c, stage, fn, fn == nil)
 }
 
 // callEvent runs one listener under a lease of its fiber. A fiber that is

@@ -232,7 +232,8 @@ func (k Key[T]) Of(c *Context) T {
 // Provide provides v as a service of c's fiber, as an effect
 // (07-c4-plugin-sdk.md:181, :366). The fiber must declare k in Provides and, for a
 // provider-bound key, be listed by the provider binding map. It returns a
-// *InjectError otherwise, and when the fiber is inactive or already provides k.
+// *InjectError otherwise, and when the fiber is inactive or already provides k; an inactive fiber is refused with ErrInactive before
+// any other refusal.
 func (k Key[T]) Provide(c *Context, v T, o ...ProvideOption) error {
 	return k.provide(c, func(*Context) any { return cell[T]{v} }, v, o)
 }
@@ -242,13 +243,21 @@ func (k Key[T]) Provide(c *Context, v T, o ...ProvideOption) error {
 // (07-c4-plugin-sdk.md:183-185). Refusals are those of Provide; a nil view is
 // refused.
 func (k Key[T]) ProvideFor(c *Context, view func(caller *Context) T, o ...ProvideOption) error {
-	if view == nil {
-		return injectErr(k.k, errNilView)
+	var v func(caller *Context) any
+	if view != nil {
+		v = func(caller *Context) any { return cell[T]{view(caller)} }
 	}
-	return k.provide(c, func(caller *Context) any { return cell[T]{view(caller)} }, nil, o)
+	return k.provide(c, v, nil, o)
 }
 
 func (k Key[T]) provide(c *Context, view func(*Context) any, value any, o []ProvideOption) error {
+	// Liveness first, for every refusal; handle.provide decides it again atomically.
+	if c.ended() {
+		return injectErr(k.k, ErrInactive)
+	}
+	if view == nil {
+		return injectErr(k.k, errNilView)
+	}
 	d, err := dataOf(k)
 	if err != nil {
 		return injectErr(nil, err)
