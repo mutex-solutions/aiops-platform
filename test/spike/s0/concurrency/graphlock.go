@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +54,15 @@ type GraphLock struct {
 	// settleWaiters are the parked Settle calls. They are woken only when
 	// settledLocked becomes true (see notifySettleLocked), never per event.
 	settleWaiters map[*graphWaiter]struct{}
+	// blocked holds the busy fibers that are blocked (see blockedLocked), the root
+	// included; nblocked counts the user fibers among them, so settledLocked
+	// stays O(1). Settle's diagnostics are built from this set.
+	blocked  map[*graphFiber]struct{}
+	nblocked int
+	// lateClose is set by a Close that returned before the runtime drained; the
+	// observer dispatcher is then closed at the moment it drains (see
+	// maybeLateCloseLocked).
+	lateClose bool
 }
 
 // graphWaiter is one parked AwaitFiber or Settle call. The registry that holds
@@ -110,6 +120,8 @@ type graphFiber struct {
 	// waiters are the parked AwaitFiber calls on this fiber; they are woken when
 	// the fiber stops being busy, not by unrelated events.
 	waiters map[*graphWaiter]struct{}
+	// blockedCounted: included in GraphLock.blocked (and nblocked for user fibers).
+	blockedCounted bool
 }
 
 type graphRetired struct {
@@ -149,23 +161,58 @@ type graphBlocked struct {
 }
 
 type graphActivation struct {
-	fiber             *graphFiber
-	ctx               *Context
-	cancel            context.CancelFunc
-	revision          uint64
-	epoch             []uint64
-	checked           uint64
-	provided          map[string]provision
-	children          map[uint64]*graphFiber
-	tracked           map[uint64]string // Registered work, retained until its real completion.
-	nextTrack         uint64
-	effects           []graphEffect
-	loading           bool
-	retiring          bool
-	dependantsChanged chan struct{} // Only actual binding/child release wakes this owner.
-	leaseWake         chan struct{}
-	loadTimer         *time.Timer
-	cleanupErr        error
+	fiber      *graphFiber
+	ctx        *Context
+	cancel     context.CancelFunc
+	revision   uint64
+	epoch      []uint64
+	checked    uint64
+	provided   map[string]provision
+	children   map[uint64]*graphFiber
+	tracked    map[uint64]string // Registered work, retained until its real completion.
+	nextTrack  uint64
+	effects    []graphEffect
+	loading    bool
+	retiring   bool
+	leaseWake  chan struct{}
+	loadTimer  *time.Timer
+	cleanupErr error
+	disposeErr error // Result of the disposer walk, kept while the unload waits for children.
+	// An unload that must wait for other fibers owns no goroutine: the activation
+	// is parked here (wait) and the event that satisfies it resumes it.
+	wait   graphWait
+	blame  []graphBlame // Awaited fibers that are blocked right now; nil unless wait != graphWaitNone.
+	blamed map[graphBlame]struct{}
+	// stalls are the stages of this activation's own callbacks that are past
+	// their deadline and have not returned yet, so the fiber is blocked in them.
+	stalls      []string
+	loadStalled bool
+}
+
+// graphWait is what a retiring activation is parked on.
+type graphWait uint8
+
+const (
+	graphWaitNone       graphWait = iota
+	graphWaitDependants           // Until no activation holds one of its provisions.
+	graphWaitChildren             // Until every structural child is disposed.
+)
+
+func (w graphWait) stage() string {
+	if w == graphWaitChildren {
+		return "awaiting children"
+	}
+	return "awaiting dependants"
+}
+
+// graphBlame names one fiber an activation is waiting for that is itself
+// blocked, and the stage it is blocked in. The waiter reports it; it claims no
+// deadline of its own.
+type graphBlame struct {
+	id    uint64
+	kind  string // "dependant" or "child"
+	name  string
+	stage string
 }
 
 type graphEffect struct {
@@ -199,6 +246,7 @@ func NewGraphLockWith(retention Retention) Runtime {
 		loadsByKey:    make(map[string]map[*graphPendingLoad]struct{}),
 		observers:     newNativeObserversWith(retention.ObserverBacklog),
 		settleWaiters: make(map[*graphWaiter]struct{}),
+		blocked:       make(map[*graphFiber]struct{}),
 		knobs: graphKnobs{
 			load:       2 * time.Second,
 			cleanup:    2 * time.Second,
@@ -366,30 +414,59 @@ func busyLocked(f *graphFiber) bool {
 	return f.worker || f.state == Loading || f.state == Unloading
 }
 
-// settledLocked is the Settle condition: no user fiber and not the trusted
-// root is mid-transition.
+// blockedLocked reports whether f is blocked: its current activation has a
+// callback past one of its own deadlines that has not returned (a stall), or it
+// is parked behind a fiber that is blocked (blame). A blocked fiber is still
+// busy, but Settle does not wait for it.
+func blockedLocked(f *graphFiber) bool {
+	a := f.current
+	return a != nil && (len(a.stalls) != 0 || len(a.blame) != 0)
+}
+
+// settledLocked is the Settle condition: every fiber that is mid-transition,
+// the trusted root included, is blocked.
 func (g *GraphLock) settledLocked() bool {
-	return g.busy == 0 && (g.root == nil || !busyLocked(g.root))
+	return g.busy == g.nblocked && (g.root == nil || !busyLocked(g.root) || g.root.blockedCounted)
+}
+
+// drainedLocked reports that a closed runtime has no fiber left.
+func (g *GraphLock) drainedLocked() bool {
+	return g.closed && len(g.fibers) == 0 && (g.root == nil || g.root.state == Disposed)
 }
 
 // notifySettleLocked resumes the parked Settle calls once, when their
-// condition holds. With no waiter, or while the condition is false, it is one
-// comparison and allocates nothing.
+// condition holds, and closes the observer dispatcher of a Close that returned
+// early once the runtime has drained. With no waiter and no late close pending
+// it is two comparisons and allocates nothing.
 func (g *GraphLock) notifySettleLocked() {
 	if len(g.settleWaiters) != 0 && g.settledLocked() {
 		wakeWaiters(g.settleWaiters)
 	}
+	g.maybeLateCloseLocked()
 }
 
-// refreshBusyLocked keeps g.busy equal to the number of user fibers for which
-// busyLocked holds, so Settle is O(1) per check instead of a scan of every
-// fiber, and wakes exactly the waiters whose condition this change can satisfy:
-// the AwaitFiber calls on f when f stops being busy, and the Settle calls when
-// nothing is busy any more. An event that changes neither wakes nobody. Call it
-// after any change to worker or state.
+// maybeLateCloseLocked is the equivalent of the reconciler's one-time late join:
+// a Close that gave up (its context ended, or a fiber was blocked) leaves the
+// runtime draining, and nobody may call Close again, so the dispatcher is closed
+// here when the last fiber is gone. It never parks a goroutine to wait for that.
+func (g *GraphLock) maybeLateCloseLocked() {
+	if g.lateClose && g.drainedLocked() {
+		g.lateClose = false
+		go func() { _ = g.observers.close(context.Background()) }()
+	}
+}
+
+// refreshBusyLocked keeps g.busy and g.nblocked equal to the number of user
+// fibers for which busyLocked, and busyLocked together with blockedLocked, hold,
+// so Settle is O(1) per check instead of a scan of every fiber, and wakes
+// exactly the waiters whose condition this change can satisfy: the AwaitFiber
+// calls on f when f stops being busy, and the Settle calls when every busy
+// fiber is blocked. An event that changes neither wakes nobody. Call it after
+// any change to worker, state, stalls or blame.
 func (g *GraphLock) refreshBusyLocked(f *graphFiber) {
+	busy := busyLocked(f)
 	if f != g.root { // The trusted root is not in g.fibers; settledLocked checks it separately.
-		if busy := busyLocked(f); busy != f.counted {
+		if busy != f.counted {
 			f.counted = busy
 			if busy {
 				g.busy++
@@ -397,6 +474,19 @@ func (g *GraphLock) refreshBusyLocked(f *graphFiber) {
 				g.busy--
 				wakeWaiters(f.waiters)
 			}
+		}
+	}
+	if blocked := busy && blockedLocked(f); blocked != f.blockedCounted {
+		f.blockedCounted = blocked
+		d := 1
+		if blocked {
+			g.blocked[f] = struct{}{}
+		} else {
+			delete(g.blocked, f)
+			d = -1
+		}
+		if f != g.root {
+			g.nblocked += d
 		}
 	}
 	g.notifySettleLocked()
@@ -411,10 +501,12 @@ func (g *GraphLock) stateLocked(f *graphFiber, state State) {
 	if f.state != state {
 		from := f.state
 		f.state = state
-		g.refreshBusyLocked(f)
 		g.appendEventLocked(Event{
 			Fiber: f.id, Name: f.spec.ID, Kind: "state", From: from, State: state,
 		})
+		// After the event: refreshing can close the observer dispatcher of a
+		// drained runtime (maybeLateCloseLocked), and no event may follow that.
+		g.refreshBusyLocked(f)
 	}
 }
 
@@ -759,13 +851,17 @@ func (g *GraphLock) requestDisposeLocked(f *graphFiber) {
 	g.reconcileLocked(f)
 }
 
+// Settle implements the Runtime.Settle contract (types.go). A fiber counts as
+// blocked while one of its callbacks is past one of its own deadlines, or while
+// it waits for a dependant or child that is blocked (see blockedLocked).
 func (g *GraphLock) Settle(ctx context.Context) error {
 	var w *graphWaiter
 	for {
 		g.mu.Lock()
 		if g.settledLocked() {
+			diagnostics := g.blockedDiagnosticsLocked()
 			g.mu.Unlock()
-			return nil
+			return errors.Join(diagnostics...)
 		}
 		if w == nil {
 			w = newGraphWaiter()
@@ -776,11 +872,41 @@ func (g *GraphLock) Settle(ctx context.Context) error {
 		case <-ctx.Done():
 			g.mu.Lock()
 			delete(g.settleWaiters, w)
+			diagnostics := g.blockedDiagnosticsLocked()
 			g.mu.Unlock()
-			return ctx.Err()
+			if len(diagnostics) == 0 {
+				return ctx.Err()
+			}
+			return errors.Join(append([]error{ctx.Err()}, diagnostics...)...)
 		case <-w.ch:
 		}
 	}
+}
+
+// blockedDiagnosticsLocked returns one error per blocked fiber, in fiber order,
+// each naming the fiber and the stage. Only strings the kernel stored are used.
+func (g *GraphLock) blockedDiagnosticsLocked() []error {
+	if len(g.blocked) == 0 {
+		return nil
+	}
+	fibers := make([]*graphFiber, 0, len(g.blocked))
+	for f := range g.blocked {
+		fibers = append(fibers, f)
+	}
+	slices.SortFunc(fibers, func(a, b *graphFiber) int { return cmp.Compare(a.id, b.id) })
+	out := make([]error, 0, len(fibers))
+	for _, f := range fibers {
+		a := f.current
+		var parts []string
+		for _, stage := range a.stalls {
+			parts = append(parts, "blocked past its "+stage+" deadline")
+		}
+		for _, b := range a.blame {
+			parts = append(parts, fmt.Sprintf("%s: %s fiber %d (%s) is blocked in %s", a.wait.stage(), b.kind, b.id, b.name, b.stage))
+		}
+		out = append(out, fmt.Errorf("fiber %d (%s): %s", f.id, f.spec.ID, strings.Join(parts, "; ")))
+	}
+	return out
 }
 
 // AwaitFiber joins only the target's current lifecycle work. A stable PENDING
@@ -1079,8 +1205,16 @@ func (g *GraphLock) Close(ctx context.Context) error {
 			g.reconcileLocked(g.root)
 		}
 	}
+	g.notifySettleLocked()
 	g.mu.Unlock()
 	if err := g.Settle(ctx); err != nil {
+		// Close gives up while the runtime may still be draining (the context
+		// ended, or a fiber is blocked past a deadline) and nobody may call it
+		// again: close the observer dispatcher when the last fiber is gone.
+		g.mu.Lock()
+		g.lateClose = true
+		g.maybeLateCloseLocked()
+		g.mu.Unlock()
 		return err
 	}
 	g.mu.Lock()
@@ -1255,8 +1389,9 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 		}
 		delete(g.fibers, f.id)
 		if g.closed && g.root != nil && g.root.current != nil {
-			g.signalDependantsLocked(g.root.current)
+			g.resumeLocked(g.root.current)
 		}
+		g.notifySettleLocked()
 		if parent := f.parent; parent != nil {
 			delete(parent.children, f.id)
 			for i, effect := range parent.effects {
@@ -1268,7 +1403,7 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 				}
 			}
 			f.parent = nil
-			g.signalDependantsLocked(parent)
+			g.resumeLocked(parent)
 		}
 		return
 	}
@@ -1316,9 +1451,8 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 	std, cancel := context.WithCancel(context.Background())
 	a := &graphActivation{
 		fiber: f, cancel: cancel, revision: f.revision, epoch: epoch, checked: f.notice,
-		provided:          make(map[string]provision),
-		dependantsChanged: make(chan struct{}),
-		leaseWake:         make(chan struct{}, 1),
+		provided:  make(map[string]provision),
+		leaseWake: make(chan struct{}, 1),
 	}
 	c := &Context{host: g, std: std, fiber: f.id, bindings: bindings}
 	c.leaseChanged = func() {
@@ -1381,6 +1515,8 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 		g.eventLocked(f, "deadline:load", "", 0)
 		g.retireLocked(a)
 		g.stateLocked(f, Unloading)
+		a.loadStalled = true
+		g.stallLocked(a, "load")
 	})
 	if g.serviceHeldLocked(f.spec.Needs) {
 		g.holdLoadLocked(f.spec.Needs, func() { go g.runLoad(a) })
@@ -1520,8 +1656,8 @@ func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, co
 	budget := g.knobs.cleanup
 	g.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
-	pending, recorded := true, false // Protected by mu, including the timer.
-	recordLocked := func() {
+	pending, recorded, stalled := true, false, false // Protected by mu, including the timer.
+	recordLocked := func(stall bool) {
 		if recorded || a.fiber.current != a {
 			return
 		}
@@ -1530,12 +1666,16 @@ func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, co
 		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
 		a.fiber.lastErr = errors.Join(a.fiber.lastErr, diagnostic)
 		g.eventLocked(a.fiber, "deadline:scopeCleanup", "", 0)
+		if stall { // The disposer is still running: the fiber is blocked in it.
+			stalled = true
+			g.stallLocked(a, "scope cleanup")
+		}
 	}
 	timer := time.AfterFunc(budget, func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if pending {
-			recordLocked()
+			recordLocked(true)
 		}
 	})
 	return ctx, func() {
@@ -1543,7 +1683,11 @@ func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, co
 		g.mu.Lock()
 		pending = false
 		if ctx.Err() != nil {
-			recordLocked()
+			recordLocked(false)
+		}
+		if stalled {
+			stalled = false
+			g.unstallLocked(a, "scope cleanup")
 		}
 		g.mu.Unlock()
 		cancel()
@@ -1609,8 +1753,11 @@ func (g *GraphLock) runScopeLane(a *graphActivation) {
 	g.runScopeWork(a)
 	g.mu.Lock()
 	if a.retiring {
+		proceed := g.beginUnloadLocked(a)
 		g.mu.Unlock()
-		g.runUnload(a)
+		if proceed {
+			g.runUnload(a)
+		}
 		return
 	}
 	g.setWorkerLocked(a.fiber, false)
@@ -1630,8 +1777,8 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 	g.mu.Unlock()
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	pending, recorded := true, false // Both protected by g.mu, including timer completion.
-	recordDeadlineLocked := func() {
+	pending, recorded, stalled := true, false, false // All protected by g.mu, including timer completion.
+	recordDeadlineLocked := func(stall bool) {
 		if recorded || a.fiber.current != a {
 			return
 		}
@@ -1640,12 +1787,16 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
 		a.fiber.lastErr = errors.Join(a.fiber.lastErr, diagnostic)
 		g.eventLocked(a.fiber, "deadline:cleanupEffect", "", 0)
+		if stall { // The disposer is still running: the fiber is blocked in it.
+			stalled = true
+			g.stallLocked(a, "effect cleanup")
+		}
 	}
 	timer := time.AfterFunc(budget, func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if pending {
-			recordDeadlineLocked()
+			recordDeadlineLocked(true)
 		}
 	})
 	err := graphCallDispose(dispose, cleanupCtx)
@@ -1656,7 +1807,11 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 	if timeout != nil {
 		// The real callback can observe its context deadline and return before
 		// the sibling diagnostic timer acquires mu. Record it at most once.
-		recordDeadlineLocked()
+		recordDeadlineLocked(false)
+	}
+	if stalled {
+		stalled = false
+		g.unstallLocked(a, "effect cleanup")
 	}
 	if err != nil && a.fiber.current == a && a.retiring {
 		a.cleanupErr = errors.Join(a.cleanupErr, err)
@@ -1748,7 +1903,9 @@ func (g *GraphLock) retireLocked(a *graphActivation) {
 	}
 	if !a.fiber.worker {
 		g.setWorkerLocked(a.fiber, true)
-		go g.runUnload(a)
+		if g.beginUnloadLocked(a) {
+			go g.runUnload(a)
+		}
 	}
 }
 
@@ -1930,8 +2087,11 @@ func (g *GraphLock) runActiveCheck(a *graphActivation) {
 	g.checkAvailability(a, false)
 	g.mu.Lock()
 	if a.retiring {
+		proceed := g.beginUnloadLocked(a)
 		g.mu.Unlock()
-		g.runUnload(a)
+		if proceed {
+			g.runUnload(a)
+		}
 		return
 	}
 	g.setWorkerLocked(a.fiber, false)
@@ -2000,6 +2160,10 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 		g.mu.Lock()
 	}
 	a.loading = false
+	if a.loadStalled {
+		a.loadStalled = false
+		g.unstallLocked(a, "load")
+	}
 	if a.loadTimer != nil {
 		a.loadTimer.Stop()
 	}
@@ -2019,8 +2183,11 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 	}
 	if a.retiring {
 		g.stateLocked(a.fiber, Unloading)
+		proceed := g.beginUnloadLocked(a)
 		g.mu.Unlock()
-		g.runUnload(a)
+		if proceed {
+			g.runUnload(a)
+		}
 		return
 	}
 	g.stateLocked(a.fiber, Active)
@@ -2060,12 +2227,7 @@ func (g *GraphLock) hasDependantsLocked(a *graphActivation) bool {
 	return false
 }
 
-func (g *GraphLock) signalDependantsLocked(a *graphActivation) {
-	close(a.dependantsChanged)
-	a.dependantsChanged = make(chan struct{})
-}
-
-// releaseBindingsLocked wakes only the actual provider activations retained by
+// releaseBindingsLocked resumes only the actual provider activations retained by
 // this consumer, never every retiring fiber on each unrelated event. Providers
 // cannot remove/reuse a bound UID before this release, but verify it explicitly
 // so a newer reservation cannot be mistaken for the old owner.
@@ -2073,47 +2235,217 @@ func (g *GraphLock) releaseBindingsLocked(a *graphActivation) {
 	for key, bound := range a.ctx.bindings {
 		service, exists := g.services[key]
 		if exists && service.uid == bound.uid && service.owner == bound.owner {
-			g.signalDependantsLocked(service.activation)
+			g.resumeLocked(service.activation)
 		}
 	}
 }
 
-func (g *GraphLock) awaitDependants(a *graphActivation) {
-	for {
-		g.mu.Lock()
-		if !g.hasDependantsLocked(a) {
-			g.mu.Unlock()
+// The unload of a retiring activation has two waits on other fibers: for the
+// activations that hold one of its provisions (dependants, before anything of
+// its own is torn down) and for its structural children (after its effects ran).
+// Neither parks a goroutine. The activation records what it waits for (a.wait)
+// under mu and the event that can satisfy it, the release of a binding or the
+// disposal of a child, resumes it with resumeLocked. Waiting is bounded
+// transitively by the awaited fibers' own deadlines, not by one of its own: a
+// waiter never claims a deadline it did not miss. While an awaited fiber is
+// blocked past a deadline of its own the waiter records which fiber and in
+// which stage (see reevalWaitLocked) and counts as blocked for Settle.
+
+// beginUnloadLocked is called by the worker that owns a retiring activation's
+// fiber slot, with mu held. It reports whether the caller should continue
+// with runUnload on its own goroutine; if the activation must first wait for its
+// dependants it is parked instead and the caller must simply return.
+func (g *GraphLock) beginUnloadLocked(a *graphActivation) bool {
+	if g.hasDependantsLocked(a) {
+		g.parkLocked(a, graphWaitDependants)
+		return false
+	}
+	return true
+}
+
+// parkLocked records what a is waiting for. The fiber stays busy: its worker
+// slot is still held, there is just no goroutine behind it.
+func (g *GraphLock) parkLocked(a *graphActivation, w graphWait) {
+	a.wait = w
+	if g.reevalWaitLocked(a) {
+		g.blockedChangedLocked(a.fiber)
+	}
+}
+
+// resumeLocked continues a parked activation whose wait is over. The disposers
+// and lease waits that follow run off the lock, so it starts a goroutine for them.
+func (g *GraphLock) resumeLocked(a *graphActivation) {
+	switch a.wait {
+	case graphWaitDependants:
+		if g.hasDependantsLocked(a) {
 			return
 		}
-		// Predicate and channel version share mu with every actual release.
-		// A release before this check is observed; one afterward closes this
-		// exact channel. Neither path can miss the last dependency going away.
-		changed := a.dependantsChanged
-		g.mu.Unlock()
-		<-changed
-	}
-}
-
-// awaitChildren joins every structural child after the parent's own effects
-// ran. Disposal of each was requested at its slot in the walk; the last child's
-// removal signals this activation.
-func (g *GraphLock) awaitChildren(a *graphActivation) {
-	for {
-		g.mu.Lock()
-		if len(a.children) == 0 {
-			g.mu.Unlock()
+		g.unparkLocked(a)
+		go g.runUnload(a)
+	case graphWaitChildren:
+		if len(a.children) != 0 {
 			return
 		}
-		changed := a.dependantsChanged
-		g.mu.Unlock()
-		<-changed
+		g.unparkLocked(a)
+		go g.finishUnload(a)
 	}
 }
 
+func (g *GraphLock) unparkLocked(a *graphActivation) {
+	a.wait = graphWaitNone
+	if len(a.blame) != 0 {
+		a.blame = nil
+		g.blockedChangedLocked(a.fiber)
+	}
+}
+
+// stallLocked marks a's fiber as blocked in stage: a callback of the activation
+// is past its own deadline and has not returned. The caller has just recorded
+// that deadline.
+func (g *GraphLock) stallLocked(a *graphActivation, stage string) {
+	if a.fiber.current != a {
+		return
+	}
+	a.stalls = append(a.stalls, stage)
+	g.blockedChangedLocked(a.fiber)
+}
+
+// unstallLocked ends one stall when its callback finally returned.
+func (g *GraphLock) unstallLocked(a *graphActivation, stage string) {
+	i := slices.Index(a.stalls, stage)
+	if i < 0 {
+		return
+	}
+	a.stalls = slices.Delete(a.stalls, i, i+1)
+	if a.fiber.current == a {
+		g.blockedChangedLocked(a.fiber)
+	}
+}
+
+// stageLocked is how a fiber describes where it is blocked to whoever waits for it.
+func stageLocked(f *graphFiber) string {
+	a := f.current
+	if len(a.stalls) != 0 {
+		return a.stalls[0]
+	}
+	return a.wait.stage()
+}
+
+// blockedChangedLocked refreshes f's accounting after its stalls or blame
+// changed, then re-evaluates every activation parked behind f. A change that
+// leaves a waiter's blame as it was stops there, so the walk up the chain of
+// waiters is proportional to the waiters that actually change.
+func (g *GraphLock) blockedChangedLocked(f *graphFiber) {
+	g.refreshBusyLocked(f)
+	work := []*graphFiber{f}
+	for len(work) != 0 {
+		f := work[len(work)-1]
+		work = work[:len(work)-1]
+		for _, waiter := range g.waitersOnLocked(f) {
+			if g.reevalWaitLocked(waiter) {
+				work = append(work, waiter.fiber)
+			}
+		}
+	}
+}
+
+// waitersOnLocked lists the parked activations that wait for f: the providers
+// f's current activation is bound to, its structural parent, and, once the
+// runtime is closing, the root (which waits for every user).
+func (g *GraphLock) waitersOnLocked(f *graphFiber) []*graphActivation {
+	var out []*graphActivation
+	if a := f.current; a != nil {
+		for key, bound := range a.ctx.bindings {
+			if service, ok := g.services[key]; ok && service.uid == bound.uid && service.owner == bound.owner && service.activation.wait == graphWaitDependants {
+				out = append(out, service.activation)
+			}
+		}
+	}
+	if parent := f.parent; parent != nil && parent.wait == graphWaitChildren {
+		out = append(out, parent)
+	}
+	if r := g.root; r != nil && r != f && g.closed && r.current != nil && r.current.wait == graphWaitDependants {
+		out = append(out, r.current)
+	}
+	return out
+}
+
+// reevalWaitLocked recomputes which of the fibers a is waiting for are blocked.
+// It reports whether that set changed. A newly blamed fiber is recorded once, on
+// a, as a diagnostic naming the fiber and its stage plus a "wait:" event; it is
+// not a deadline of a's own and uses no "deadline" event kind.
+func (g *GraphLock) reevalWaitLocked(a *graphActivation) bool {
+	var blame []graphBlame
+	switch a.wait {
+	case graphWaitDependants:
+		blame = g.blockedDependantsLocked(a)
+	case graphWaitChildren:
+		for _, child := range a.children {
+			if blockedLocked(child) {
+				blame = append(blame, graphBlame{id: child.id, kind: "child", name: child.spec.ID, stage: stageLocked(child)})
+			}
+		}
+	}
+	slices.SortFunc(blame, func(x, y graphBlame) int { return cmp.Compare(x.id, y.id) })
+	if slices.Equal(blame, a.blame) {
+		return false
+	}
+	a.blame = blame
+	f := a.fiber
+	for _, b := range blame {
+		if _, seen := a.blamed[b]; seen {
+			continue
+		}
+		if a.blamed == nil {
+			a.blamed = make(map[graphBlame]struct{})
+		}
+		a.blamed[b] = struct{}{}
+		f.lastErr = errors.Join(f.lastErr, fmt.Errorf("%s: %s fiber %d (%s) is blocked in %s", a.wait.stage(), b.kind, b.id, b.name, b.stage))
+		g.appendEventLocked(Event{Fiber: f.id, Name: f.spec.ID, Kind: "wait:" + b.kind, State: f.state, Key: b.stage, UID: b.id})
+	}
+	g.refreshBusyLocked(f)
+	return true
+}
+
+// blockedDependantsLocked lists the blocked fibers whose activation holds one of
+// a's provisions (all blocked users when a is the closing root).
+func (g *GraphLock) blockedDependantsLocked(a *graphActivation) []graphBlame {
+	var blame []graphBlame
+	seen := make(map[uint64]struct{})
+	add := func(d *graphFiber) {
+		if _, dup := seen[d.id]; dup || !blockedLocked(d) {
+			return
+		}
+		seen[d.id] = struct{}{}
+		blame = append(blame, graphBlame{id: d.id, kind: "dependant", name: d.spec.ID, stage: stageLocked(d)})
+	}
+	for key, provided := range a.provided {
+		for _, d := range g.indexByKey[key] {
+			if d.current != nil {
+				if bound, exists := d.current.ctx.bindings[key]; exists && bound.uid == provided.uid {
+					add(d)
+				}
+			}
+		}
+	}
+	if a.fiber == g.root && g.closed {
+		for d := range g.blocked {
+			if d != g.root {
+				add(d)
+			}
+		}
+	}
+	return blame
+}
+
+// awaitLeases waits for the activation's own leases to drain: that is its own
+// work and its own drain budget. Past the budget the fiber is blocked in
+// "lease drain" until the last lease is released.
 func (g *GraphLock) awaitLeases(a *graphActivation) {
 	timer := time.NewTimer(g.knobs.leaseDrain)
 	defer timer.Stop()
 	deadline := timer.C
+	stalled := false
 	for a.ctx.lease.Load() > 0 {
 		select {
 		case <-a.leaseWake:
@@ -2122,11 +2454,18 @@ func (g *GraphLock) awaitLeases(a *graphActivation) {
 			if a.fiber.current == a && a.ctx.lease.Load() > 0 {
 				a.fiber.lastErr = errors.New("lease drain deadline exceeded; still awaiting leases")
 				g.eventLocked(a.fiber, "deadline:lease", "", 0)
+				stalled = true
+				g.stallLocked(a, "lease drain")
 			}
 			g.mu.Unlock()
 			// Timing out never permits reclamation of still-leased effects.
 			deadline = nil
 		}
+	}
+	if stalled {
+		g.mu.Lock()
+		g.unstallLocked(a, "lease drain")
+		g.mu.Unlock()
 	}
 }
 
@@ -2157,13 +2496,16 @@ func (g *GraphLock) removeProvision(a *graphActivation, effect graphEffect) {
 	g.serviceEventLocked(a.fiber, "service:remove", effect.provisionKey, provided)
 }
 
+// runUnload is the unload of an activation whose dependants are all gone: drain
+// its leases, run its effects in LIFO order, then finish, or park until its
+// children are disposed. Each budget measures only this activation's own work.
 func (g *GraphLock) runUnload(a *graphActivation) {
-	g.awaitDependants(a)
 	g.awaitLeases(a)
 	g.mu.Lock()
 	effects := append([]graphEffect(nil), a.effects...)
 	g.mu.Unlock()
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), g.knobs.cleanup)
+	var walkDone, stalled bool // Protected by mu, including the timer.
 	timer := time.AfterFunc(g.knobs.cleanup, func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -2171,6 +2513,10 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 			a.cleanupErr = errors.Join(a.cleanupErr, errors.New("cleanup deadline exceeded; still awaiting disposer"))
 			a.fiber.lastErr = errors.Join(a.fiber.lastErr, a.cleanupErr)
 			g.eventLocked(a.fiber, "deadline:cleanup", "", 0)
+			if !walkDone {
+				stalled = true
+				g.stallLocked(a, "cleanup")
+			}
 		}
 	})
 	var disposeErr error
@@ -2207,9 +2553,25 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	}
 	timer.Stop()
 	cancel()
-	g.awaitChildren(a)
 	g.mu.Lock()
-	a.cleanupErr = errors.Join(a.cleanupErr, disposeErr)
+	walkDone = true
+	if stalled {
+		g.unstallLocked(a, "cleanup")
+	}
+	a.disposeErr = disposeErr
+	if len(a.children) != 0 {
+		g.parkLocked(a, graphWaitChildren)
+		g.mu.Unlock()
+		return
+	}
+	g.mu.Unlock()
+	g.finishUnload(a)
+}
+
+// finishUnload ends the unload once nothing is awaited any more.
+func (g *GraphLock) finishUnload(a *graphActivation) {
+	g.mu.Lock()
+	a.cleanupErr = errors.Join(a.cleanupErr, a.disposeErr)
 	if a.cleanupErr != nil {
 		a.fiber.lastErr = errors.Join(a.fiber.lastErr, a.cleanupErr)
 	}

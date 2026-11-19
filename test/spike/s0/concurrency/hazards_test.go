@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -480,15 +481,82 @@ func TestHazardR4SettleReturnsWhileHealthyFiberLoads(t *testing.T) {
 				return err != nil && !errors.Is(err, context.DeadlineExceeded) && state != Active
 			}
 			if c.name == "graph-lock" {
-				// The graph-lock never returns early: it blocks until the
-				// caller's context expires (the hung fiber keeps busy != 0).
-				if !errors.Is(obs.first, context.DeadlineExceeded) || !errors.Is(obs.second, context.DeadlineExceeded) {
-					t.Fatalf("graph-lock Settle: %s", observed)
+				// While the healthy fiber is mid-load Settle must not return: it
+				// ends with the caller's context, joined with the hung fiber's
+				// diagnostic (the contract in types.go).
+				for _, err := range []error{obs.first, obs.second} {
+					if err == nil || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "fiber 1 (hung): blocked past its load deadline") {
+						t.Fatalf("graph-lock Settle: %s", observed)
+					}
 				}
+				r4GraphLockContract(t)
 				return
 			}
 			knownHazard(t, early(obs.first, obs.stateAfterFirst) && early(obs.second, obs.stateAfterSecond),
 				"reconciler Settle returns the blocked fiber's diagnostic at once, every time, even though an unrelated healthy fiber is still LOADING", observed)
 		})
 	}
+}
+
+// r4GraphLockContract checks the Settle contract on the graph-lock: with one
+// fiber hung past its load deadline and one healthy fiber mid-load, Settle does
+// not return before the healthy fiber is ACTIVE, and then returns promptly with
+// the hung fiber's diagnostic instead of waiting for the caller's context.
+func r4GraphLockContract(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		g := graphTestRuntime(t)
+		hang, slow := make(chan struct{}), make(chan struct{})
+		var h, s sync.Once
+		t.Cleanup(func() { h.Do(func() { close(hang) }) })
+		t.Cleanup(func() { s.Do(func() { close(slow) }) })
+		bg := context.Background()
+		graphMount(t, bg, g, Spec{ID: "hung", Apply: func(*Context) error { <-hang; return nil }})
+		time.Sleep(1500 * time.Millisecond)
+		healthy := graphMount(t, bg, g, Spec{ID: "healthy", Apply: func(*Context) error { <-slow; return nil }})
+		time.Sleep(600 * time.Millisecond) // t = 2.1s: hung is past its 2s load budget, healthy is mid-load
+		ctx, cancel := context.WithTimeout(bg, time.Minute)
+		defer cancel()
+		type result struct {
+			err error
+			at  time.Time
+		}
+		results := make(chan result, 1)
+		started := time.Now()
+		go func() { err := g.Settle(ctx); results <- result{err, time.Now()} }()
+		synctest.Wait()
+		select {
+		case r := <-results:
+			t.Fatalf("Settle returned while the healthy fiber was mid-load: %v", r.err)
+		default:
+		}
+		if state := graphSnapshotByID(t, g, healthy).State; state != Loading {
+			t.Fatalf("healthy fiber is %s, want LOADING", state)
+		}
+		s.Do(func() { close(slow) })
+		synctest.Wait()
+		var r result
+		select {
+		case r = <-results:
+		default:
+			t.Fatal("Settle did not return once the healthy fiber was ACTIVE; the hung fiber is blocked past its deadline")
+		}
+		if state := graphSnapshotByID(t, g, healthy).State; state != Active {
+			t.Fatalf("Settle returned with the healthy fiber %s", state)
+		}
+		if r.err == nil || errors.Is(r.err, context.DeadlineExceeded) || !strings.Contains(r.err.Error(), "fiber 1 (hung): blocked past its load deadline") {
+			t.Fatalf("Settle err = %v, want the hung fiber's diagnostic and not the context error", r.err)
+		}
+		if waited := r.at.Sub(started); waited >= time.Second {
+			t.Fatalf("Settle waited %v for the caller's context instead of returning promptly", waited)
+		}
+		// The condition is genuine: it keeps being reported until the hung fiber returns.
+		if err := g.Settle(ctx); err == nil || !strings.Contains(err.Error(), "fiber 1 (hung)") {
+			t.Fatalf("second Settle err = %v, want the hung fiber's diagnostic", err)
+		}
+		h.Do(func() { close(hang) })
+		synctest.Wait()
+		if err := g.Settle(ctx); err != nil {
+			t.Fatalf("Settle after the hung fiber returned: %v", err)
+		}
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -526,6 +527,7 @@ func TestGraphLockLoadDeadlineKeepsStuckApplyAsSoleWriter(t *testing.T) {
 			t.Fatal("timed-out Apply accepted a new lease")
 		}
 		releaseOnce.Do(func() { close(release) })
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		if got := graphSnapshot(t, ctx, g, id); got.State != Failed || got.Error == "" || len(got.Effects) != 0 || cleanups.Load() != 1 {
 			t.Fatalf("timeout not sticky after actual unwind: %+v", got)
@@ -549,6 +551,11 @@ func TestGraphLockLoadDeadlineCooperativelyUnwinds(t *testing.T) {
 			<-c.Std().Done()
 			return c.Std().Err()
 		}})
+		// The callback unwinds only after its deadline fired, and a Settle that
+		// is already waiting may report the fiber as blocked in that instant
+		// (contract), so let the deadline and the unwind pass before joining.
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
 		graphSettle(t, ctx, g)
 		if got := graphSnapshot(t, ctx, g, id); got.State != Failed || got.Error == "" || len(got.Effects) != 0 || cleanups.Load() != 1 {
 			t.Fatalf("cooperative timeout: %+v", got)
@@ -588,6 +595,7 @@ func TestGraphLockLeaseDeadlineDoesNotReleaseBorrowedEffects(t *testing.T) {
 			t.Fatalf("lease deadline released borrowed effect: %+v", got)
 		}
 		leaveOnce.Do(old.Leave)
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		if got := graphSnapshot(t, ctx, g, id); got.State != Disposed || len(got.Effects) != 0 || cleanups.Load() != 1 {
 			t.Fatalf("returned lease did not finish disposal: %+v", got)
@@ -913,6 +921,7 @@ func TestGraphLockCleanupDeadlineDoesNotClearEffectsOrRetry(t *testing.T) {
 		if err := graphReceive(t, ctx, disposed); err != nil {
 			t.Fatal(err)
 		}
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		if got := graphSnapshot(t, ctx, g, id); got.State != Disposed || len(got.Effects) != 0 {
 			t.Fatalf("actual cleanup not completed: %+v", got)
@@ -2212,6 +2221,7 @@ func TestGraphLockConfigurationPrepareUsesLoadDeadline(t *testing.T) {
 			t.Fatalf("configuration resolution escaped load deadline: %+v", held)
 		}
 		once.Do(func() { close(release) })
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		got := graphInspectedFiber(t, graphInspect(t, ctx, g), id)
 		if got.State != Failed || got.ConfigPrepared || got.EffectiveConfig != nil || applies.Load() != 0 {
@@ -2503,6 +2513,7 @@ func TestGraphLockLoadingParentSelfDisposeRetiresLoadingChild(t *testing.T) {
 			t.Fatalf("loading child falsely released parent: %+v", inspection)
 		}
 		once.Do(func() { close(release) })
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		if !parentCleaned.Load() || graphSnapshot(t, ctx, g, parent).State != Disposed || graphSnapshot(t, ctx, g, child).State != Disposed {
 			t.Fatal("child release failed to finish parent self-disposal")
@@ -2718,6 +2729,7 @@ func TestGraphLockTrackedLedgerUsesStartOrderCopiesAndRealDrain(t *testing.T) {
 		}
 		once[0].Do(func() { close(releases[0]) })
 		once[2].Do(func() { close(releases[2]) })
+		synctest.Wait() // The released callback must return before Settle can see its fiber idle (Settle ignores blocked fibers).
 		graphSettle(t, ctx, g)
 		if got := graphSnapshot(t, ctx, g, id); got.State != Disposed || len(got.Tracked) != 0 || !cleaned.Load() {
 			t.Fatalf("real worker completion did not release cleanup: %+v", got)
@@ -3074,10 +3086,14 @@ func TestGraphLockRootCloseRetainsTrackedWorkAcrossLeaseDeadline(t *testing.T) {
 		if inspection := graphInspect(t, ctx, g); len(inspection.Fibers) != 0 || len(inspection.Provisions) != 1 || inspection.Provisions[0].Active {
 			t.Fatalf("held root introduced user row or removed service: %+v", inspection)
 		}
-		if err := graphReceive(t, ctx, closed); !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("external Close timeout: %v", err)
+		// The root is blocked past its lease drain deadline, so Close returns at
+		// once with a diagnostic naming it instead of waiting for the caller's
+		// context (the Settle/Close contract in types.go).
+		if err := graphReceive(t, ctx, closed); err == nil || errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "fiber 0 (root): blocked past its lease drain deadline") {
+			t.Fatalf("Close with a root blocked in lease drain: %v", err)
 		}
 		once.Do(func() { close(release) })
+		synctest.Wait()
 		graphSettle(t, ctx, g)
 		if err := g.Close(ctx); err == nil || !cleaned.Load() {
 			t.Fatal("completed root lost real lease diagnostic or cleanup")
@@ -3111,13 +3127,15 @@ func TestGraphLockRootCleanupDeadlineDoesNotFinishDisposer(t *testing.T) {
 		if !retained || diagnostic == nil {
 			t.Fatal("root cleanup deadline pretended disposer finished")
 		}
-		select {
-		case err := <-closed:
-			t.Fatalf("root Close completed while disposer blocked: %v", err)
-		default:
+		// Close does not pretend the disposer finished: it returns the root's
+		// diagnostic (the Settle/Close contract in types.go) while the disposer
+		// is still blocked and the root still retains its effects.
+		if err := graphReceive(t, ctx, closed); err == nil || !strings.Contains(err.Error(), "fiber 0 (root): blocked past its cleanup deadline") {
+			t.Fatalf("root Close while the disposer is blocked: %v", err)
 		}
 		once.Do(func() { close(release) })
-		if err := graphReceive(t, ctx, closed); err == nil {
+		synctest.Wait()
+		if err := g.Close(ctx); err == nil {
 			t.Fatal("root cleanup diagnostic disappeared")
 		}
 	})
@@ -3615,13 +3633,14 @@ func TestGraphLockProvisionLIFORemovalVisibleDuringOlderHeldCleanup(t *testing.T
 	}
 }
 
+// A provider waiting for its dependants is parked (no goroutine; wait is set
+// under mu) and only the release of one of its own dependants resumes it.
 func TestGraphLockDependencyWaitWakesOnlyActualReleasedProvider(t *testing.T) {
 	ctx := graphTestContext(t)
 	g := graphTestRuntime(t).(*GraphLock)
 	var providers [2]uint64
 	var consumers [2]uint64
 	var activations [2]*graphActivation
-	var waits [2]<-chan struct{}
 	started := make(chan int, 2)
 	releases := [2]chan struct{}{make(chan struct{}), make(chan struct{})}
 	var once [2]sync.Once
@@ -3649,11 +3668,16 @@ func TestGraphLockDependencyWaitWakesOnlyActualReleasedProvider(t *testing.T) {
 	}
 	graphReceive(t, ctx, started)
 	graphReceive(t, ctx, started)
-	g.mu.Lock()
-	for i := range activations {
-		waits[i] = activations[i].dependantsChanged
+	parked := func(i int) bool {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		return activations[i].wait == graphWaitDependants
 	}
-	g.mu.Unlock()
+	for i := range activations {
+		if !parked(i) {
+			t.Fatalf("provider %d is not parked on its dependants", i)
+		}
+	}
 	if err := g.Record(ctx, "unrelated-ledger-event", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -3661,22 +3685,17 @@ func TestGraphLockDependencyWaitWakesOnlyActualReleasedProvider(t *testing.T) {
 	if err := g.AwaitFiber(ctx, other); err != nil {
 		t.Fatal(err)
 	}
-	for i, changed := range waits {
-		select {
-		case <-changed:
-			t.Fatalf("unrelated state/debug event woke provider %d", i)
-		default:
+	for i := range activations {
+		if !parked(i) {
+			t.Fatalf("unrelated state/debug event resumed provider %d", i)
 		}
 	}
 	once[0].Do(func() { close(releases[0]) })
 	if err := g.AwaitFiber(ctx, providers[0]); err != nil {
 		t.Fatal(err)
 	}
-	graphReceive(t, ctx, waits[0])
-	select {
-	case <-waits[1]:
-		t.Fatal("releasing consumer a woke unrelated provider b")
-	default:
+	if !parked(1) {
+		t.Fatal("releasing consumer a resumed unrelated provider b")
 	}
 	if got := graphSnapshot(t, ctx, g, consumers[0]); got.State != Pending || got.Target != nil {
 		t.Fatalf("actual provider release failed to reach stable consumer state: %+v", got)
@@ -3685,7 +3704,6 @@ func TestGraphLockDependencyWaitWakesOnlyActualReleasedProvider(t *testing.T) {
 	if err := g.AwaitFiber(ctx, providers[1]); err != nil {
 		t.Fatal(err)
 	}
-	graphReceive(t, ctx, waits[1])
 	graphSettle(t, ctx, g)
 }
 
