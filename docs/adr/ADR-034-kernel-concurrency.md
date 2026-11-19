@@ -926,3 +926,17 @@ the contract documents leave open:
    observer sequence.
 6. **`Enter` has the documented shape**, `Enter() (leave func(), ok bool)`,
    with zero allocations per call as a gate of the port.
+
+### Further owner decisions, 2026-11-19
+
+7. **An entry is a token the kernel mints.** `kernel.Define` stamps an
+   unexported token into the `Plugin` value it returns. A copy keeps the token.
+   A `Plugin` built without it has no entry of its own and inherits the entry
+   of the context that mounts it. Binding maps compare tokens. The kernel does
+   not import `unsafe` and does not derive identity from a function value.
+8. **`Available` takes one argument.** The undefined `hold` argument is removed
+   from the contract (`07-c4-plugin-sdk.md` and the plugin record). It returns
+   only by ADR with a definition.
+9. **`Plugin.Decode` is `func(raw any) (any, error)`.** The kernel knows no
+   configuration format; the loader passes the merged tree and `Apply` receives
+   what `Decode` returns.

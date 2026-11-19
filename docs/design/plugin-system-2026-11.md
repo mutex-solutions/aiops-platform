@@ -82,7 +82,7 @@ package kernel // module sdk/kernel
 type Key[T any] struct{ /* name, major, provider class, consumer class, intercept config type */ }
 func NewKey[T any](name string, major int, opts ...KeyOption) Key[T] // declared only in definition packages
 func (k Key[T]) Of(c *Context) T // needs a declared Need or a When on k; panics *InjectError otherwise (recovered at the fiber boundary)
-func (k Key[T]) Provide(c *Context, v T, o ...ProvideOption) error // an effect; ProvideOption: Available(fn(caller *Context) bool, hold)
+func (k Key[T]) Provide(c *Context, v T, o ...ProvideOption) error // an effect; ProvideOption: Available(fn(caller *Context) bool)
 // ProvideFor hands each consumer a view bound to the consumer's context (the Cordis traceable proxy rebinding this.ctx):
 // the view reads the caller's entry, scope values and intercept chain from the kernel, never from an argument.
 func (k Key[T]) ProvideFor(c *Context, view func(caller *Context) T, o ...ProvideOption) error
