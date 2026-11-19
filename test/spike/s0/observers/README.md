@@ -76,11 +76,14 @@ spellings without rewriting their event streams.
 
 Queue storage clears popped references and compacts when the consumed prefix is
 at least half the slice. This is an amortized data algorithm, not a fixed tuning
-budget. The empty queue releases its event backing storage. **The queue itself
-is unbounded.** A hung observer/logger blocks the single worker and can retain
-unbounded accepted work and old listener snapshots. Cooperative cancellation and
-truthful Close diagnostics do not solve that backpressure/memory-policy problem.
-No arbitrary capacity, drop policy, retry loop, per-event worker, or new runtime
+budget. The empty queue releases its event backing storage. **The queue is
+bounded** (`Options.Backlog`, default `DefaultBacklog`): when an event arrives while
+that many are undelivered, the observer the worker is inside is detached, its lost
+events are counted, and the worker role passes to a new goroutine that resumes the
+same event for the other observers. The overflow is reported through the failure
+path, `Status`, an optional terminal `OverflowHandler`, and `Close`. See ADR-034
+(bounded observer queue) for the rule, the alternatives and the sizing. A hung
+logger still blocks the worker; no retry loop, per-event worker, or new runtime
 deadline policy is selected by this probe.
 
 ## Scoped validation and remaining proof

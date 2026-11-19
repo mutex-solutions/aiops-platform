@@ -266,7 +266,7 @@ were dropped, never a silent partial list. Both candidates expose
 `RetentionStatus()` (`RetentionReporter`), read lock-free, for the harness.
 
 Not bounded by this change: the observer dispatcher queue. A stalled observer still
-retains accepted events (documented in `observer.go`, unchanged).
+retained accepted events (documented in `observer.go`); the 2026-11-19 section on the bounded observer queue below closes this.
 
 ### Held service events and pending loads, indexed by key
 
@@ -354,7 +354,132 @@ addition on the owner or under the graph lock is one write into a ring that grow
 up to its bound and, with a recorder, one append; it was not benchmarked
 separately. Its cost does not appear in the mount curves above.
 
-Left open: the observer dispatcher queue is still unbounded for a stalled observer
+Left open at that time (closed in the 2026-11-19 section on the bounded observer queue below): the observer dispatcher queue was still unbounded for a stalled observer
 (unchanged, documented in `observer.go`); the harness's own per-sample records
 still grow with the number of samples and count toward the section 8.2 reading of a
 sampled run.
+
+## 2026-11-19 bounded observer queue and overflow rule
+
+The one item the retention work left open is closed in both candidates
+(`test/spike/s0/internal/eventqueue`, `test/spike/s0/concurrency`). Criteria,
+thresholds and the differential, property and scale suites are unchanged.
+Numbers are development-host observations on a shared machine, not acceptance
+evidence.
+
+### Constraints that decide the design
+
+- The kernel (graph-lock holder, reconciler owner) must never block on an observer,
+  so a bound cannot push back: something has to give on overflow.
+- Observers must stay serialized on one worker: the existing tests pin the
+  cross-observer order within an event (`A1 B1 A2 B2`, `error1 panic1 healthy1`) and
+  write to unsynchronized slices from several observers. A goroutine per observer
+  is therefore out, and so is a per-observer queue served by its own goroutine.
+- A slow observer must not make an observer that keeps up lose events, and must not
+  lose silently itself. With one worker, a stalled callback blocks everyone behind
+  it, so isolating the stall requires handing the worker role over, not only
+  dropping something.
+
+### Rule
+
+`Retention.ObserverBacklog` (default `DefaultObserverBacklog` = 65,536 events,
+reported by `RetentionStatus.ObserverBacklog` and `ObserverStatus.Backlog`; 0 selects
+the default, a larger value is honoured) bounds the accepted events that are not yet
+delivered, the in-flight one included. When `Append` (on the owner, under the lock) finds
+that many undelivered events since the last detachment, it, in constant time and
+without calling user code:
+
+1. detaches the observer the worker is inside (the callback being run, or about to
+   be): it leaves the copy-on-write listener list and is marked overflowed, with
+   `Lost` = events captured for it minus those whose delivery started;
+2. records the overflow in `ObserverStatus` (`Overflowed`, `EventsLost`, `LastOverflow`)
+   and queues one diagnostic for the failure path;
+3. starts a new worker generation that resumes the same event at the next listener,
+   and accepts the new event as usual (the producer never waits and no event of any
+   other observer is dropped).
+
+The stalled callback's goroutine finishes that one callback and exits; the new worker
+logs the overflow through the existing failure path (`ObserverErrors`,
+`LastObserverError`, the `Logger`). If the observer was registered with
+`ObserveEventsWith` its `onOverflow` runs once, on that goroutine, after the callback
+returned, under the observer's lease, so it is serialized after the observer's own last
+callback and is skipped (never run) when the owner is disposed or quiescing. A callback
+that never returns never sees it; status and Close report the overflow regardless.
+`AwaitObservers` and `Close` return an error matching `ErrObserverOverflow` (an
+`*ObserverOverflow` with label, lost count, last sequence addressed to the observer
+and the bound), joined with any other result. `Close` waits for detached goroutines
+too; `ObserverStatus.Orphaned` counts those still inside a callback. A fiber
+registering an observer is not failed: the observer's registration is detached and its
+fiber keeps running, so the failure is the observer's, and visible; a fiber that wants
+to fail on it can do so from `onOverflow`.
+
+Counting only events accepted since the last detachment keeps the backlog that
+built up behind a stalled observer from being charged to the observer that takes over:
+with the bound per detachment, the queue holds at most `Backlog * (1 + k)` events while
+`k` detached backlogs are still draining. A second observer that stalls in its turn is
+detached in its turn (`TestInheritedBacklogIsNotChargedToTheNextObserver`).
+
+Alternatives considered:
+
+- Global bound with drop-oldest or drop-newest: loses events for observers that keep
+  up because of one that does not, and is silent per observer. Rejected.
+- Per-observer queue plus per-observer goroutine: isolates stalls with no handover,
+  but breaks the pinned cross-observer order and makes unsynchronized observers race;
+  costs a goroutine and a queue per observer (10,000 fibers could register 10,000).
+  Rejected.
+- Per-observer queue with one worker: the worker is still stuck inside the stalled
+  callback, so every other queue fills too. It needs the same handover and duplicates
+  every envelope per observer. Rejected for the shared queue above.
+- Block the producer: forbidden (G1, kernel never waits on an observer).
+- Fail the observer's fiber on overflow: needs the dispatcher to call back into the
+  runtime from its worker or from the owner path; the observer error and the optional
+  terminal callback give the same signal without that reentry.
+
+Unfairness that remains, by design: the bound is blamed on whichever observer the
+worker is inside when it is crossed. A burst of more than `Backlog` events arriving
+faster than the worker can start on them detaches the observer then running, even if
+that observer is merely slow. Tests that use a tiny bound synchronize for that reason;
+the default is far above any producer burst measured.
+
+### Sizing
+
+Largest backlog observed (`ObserverStatus.PeakBacklog`, reconciler and graph-lock, no
+overflow in any suite): concurrency tests 55, observers 17, replay 23, properties 36,
+composition 30, hooks 31, callpath 50, scale tests 179, `S0_SCALE_REPRO` (about 100,000
+events per run, 10,000-fiber mounts, no observers attached, so the worker only pops
+events) 1,662. The default is about 40 times the largest of these. An opt-in
+larger bound is needed by no suite.
+
+Memory: an envelope is 160 bytes (128-byte event, sequence, listener slice header).
+Nothing is preallocated: an idle dispatcher holds no queue, an observer costs one
+registration of about 130 bytes and no queue, and a detached observer's registration
+is released with its fiber. The full default bound is 10 MiB of envelopes, about 20 MiB
+while the slice grows by doubling, and only while events are actually waiting: far
+below the 128 MiB scale budget (section 8.1) and not reached at 10,000 fibers
+(1,662 events waiting at worst, about 0.3 MiB).
+
+### Cost
+
+`BenchmarkAppend` (dispatcher, 3 runs each, before / after): producer cost per
+emitted event with 0, 1 and 8 observers that keep up is 179 / 162, 147 / 160 and
+165 / 170 ns, 0 allocs, about 460 B amortized queue growth in both: no measurable
+change. Worker-side delivery per event (`drain-ns/event`) rises with the observer
+count by about 4 ns per observer per event (one more critical section per
+listener): 1 observer 34 / 43 ns, 8 observers 86 / 118 ns. `BenchmarkEventEmission`
+(a `Record` call through the kernel, about 4.4 to 5.2 us graph-lock and 7.1 to 7.9 us
+reconciler) is the same before and after within noise. The lease fast path
+(`Context.Enter`/`Leave`) is untouched.
+
+Tests: `observer_overflow_test.go` (both candidates, real activations: a stalled
+observer hits the bound, the one that keeps up receives every event in order, the
+overflow is reported exactly once with its count, nothing is retained, Close
+reports it; just-below-bound slow progress loses nothing; overflow racing fiber
+disposal and racing Close; the option and default in status) and
+`internal/eventqueue/overflow_test.go` (the algorithm, including the inherited
+backlog, an inactive owner and manual removal). No existing test asserted unbounded
+queuing; `TestCloseReportsHungWork...` queues 2,048 events behind a hung callback and
+stays below the default.
+
+Left open: a callback that never returns keeps its goroutine and cannot receive its
+terminal signal (Go cannot stop it); this is reported (`Orphaned`, `Close` timing out
+with the real status), not hidden. The harness's own per-sample records are unchanged.
