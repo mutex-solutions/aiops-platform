@@ -85,8 +85,8 @@ func TestNativeObserversDeliverVerbatimLedgerInTotalSequenceOrder(t *testing.T) 
 		t.Run(candidate.name, func(t *testing.T) {
 			ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
 			var mu sync.Mutex
-			var observed []Event
-			_, err := observers.ObserveEvents(root, "ledger", func(_ context.Context, event Event) error {
+			var observed []LedgerEvent
+			_, err := observers.ObserveEvents(root, "ledger", func(_ context.Context, event LedgerEvent) error {
 				mu.Lock()
 				observed = append(observed, event)
 				mu.Unlock()
@@ -144,7 +144,7 @@ func TestNativeObserversDeliverVerbatimLedgerInTotalSequenceOrder(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			var want []Event
+			var want []LedgerEvent
 			for index, event := range ledger {
 				if event.Sequence != uint64(index+1) {
 					t.Fatalf("native ledger is not consecutive at %d: %+v", index, event)
@@ -154,7 +154,7 @@ func TestNativeObserversDeliverVerbatimLedgerInTotalSequenceOrder(t *testing.T) 
 				}
 			}
 			mu.Lock()
-			got := append([]Event(nil), observed...)
+			got := append([]LedgerEvent(nil), observed...)
 			mu.Unlock()
 			if len(want) == 0 || !reflect.DeepEqual(got, want) {
 				t.Fatalf("observer stream differs from this backend's exact ledger:\ngot  %+v\nwant %+v", got, want)
@@ -179,7 +179,7 @@ func TestNativeObserversReenterControlPlaneAndRejectSelfBarrier(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := make(chan error, 1)
-			_, err = observers.ObserveEvents(root, "reentrant", func(callbackCtx context.Context, event Event) error {
+			_, err = observers.ObserveEvents(root, "reentrant", func(callbackCtx context.Context, event LedgerEvent) error {
 				if markerOf(event) != "reenter" {
 					return nil
 				}
@@ -228,7 +228,7 @@ func TestNativeObserversSettleDoesNotJoinHeldCallback(t *testing.T) {
 			ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
 			release, unblock := nativeObserverRelease(t)
 			started := make(chan struct{}, 1)
-			_, err := observers.ObserveEvents(root, "held", func(_ context.Context, event Event) error {
+			_, err := observers.ObserveEvents(root, "held", func(_ context.Context, event LedgerEvent) error {
 				if markerOf(event) == "held" {
 					started <- struct{}{}
 					<-release
@@ -267,7 +267,7 @@ func TestNativeObserversRequireExactRuntimeOwnerAndLiveActivation(t *testing.T) 
 	for _, candidate := range nativeObserverConstructors {
 		t.Run(candidate.name, func(t *testing.T) {
 			ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
-			callback := func(context.Context, Event) error { return nil }
+			callback := func(context.Context, LedgerEvent) error { return nil }
 			for _, owner := range []*Handle{nil, {}} {
 				if dispose, err := observers.ObserveEvents(owner, "invalid", callback); !errors.Is(err, ErrObserverBinding) || dispose != nil {
 					t.Fatalf("nil/zero owner registration = %v, disposer nil=%t", err, dispose == nil)
@@ -340,7 +340,7 @@ func TestNativeObserversLeaseDelaysDependentAndProviderCleanup(t *testing.T) {
 				}); err != nil {
 					return err
 				}
-				_, err := observers.ObserveEvents(c, "leased listener", func(_ context.Context, event Event) error {
+				_, err := observers.ObserveEvents(c, "leased listener", func(_ context.Context, event LedgerEvent) error {
 					if markerOf(event) == "" {
 						return nil
 					}
@@ -416,7 +416,7 @@ func TestNativeObserversManualRemovalKeepsCapturedSnapshotOnly(t *testing.T) {
 			started := make(chan struct{}, 1)
 			var mu sync.Mutex
 			var calls []string
-			dispose, err := observers.ObserveEvents(root, "manual removal", func(_ context.Context, event Event) error {
+			dispose, err := observers.ObserveEvents(root, "manual removal", func(_ context.Context, event LedgerEvent) error {
 				if markerOf(event) == "" {
 					return nil
 				}
@@ -461,7 +461,7 @@ func TestNativeObserversErrorsAndPanicsAreDiagnosticsNotBarrierFailures(t *testi
 		t.Run(candidate.name, func(t *testing.T) {
 			ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
 			failure := errors.New("observer failure")
-			_, err := observers.ObserveEvents(root, "failing", func(_ context.Context, event Event) error {
+			_, err := observers.ObserveEvents(root, "failing", func(_ context.Context, event LedgerEvent) error {
 				if markerOf(event) != "" {
 					switch markerOf(event) {
 					case "error":
@@ -476,7 +476,7 @@ func TestNativeObserversErrorsAndPanicsAreDiagnosticsNotBarrierFailures(t *testi
 				t.Fatal(err)
 			}
 			var healthy atomic.Int64
-			_, err = observers.ObserveEvents(root, "healthy", func(_ context.Context, event Event) error {
+			_, err = observers.ObserveEvents(root, "healthy", func(_ context.Context, event LedgerEvent) error {
 				if markerOf(event) != "" {
 					healthy.Add(1)
 				}
@@ -507,7 +507,7 @@ func TestNativeObserversAwaitCapturesWatermarkNotFutureEvents(t *testing.T) {
 				firstRelease, releaseFirst := nativeObserverRelease(t)
 				futureRelease, releaseFuture := nativeObserverRelease(t)
 				started := make(chan string, 2)
-				_, err := observers.ObserveEvents(root, "watermark", func(_ context.Context, event Event) error {
+				_, err := observers.ObserveEvents(root, "watermark", func(_ context.Context, event LedgerEvent) error {
 					if markerOf(event) == "" {
 						return nil
 					}
@@ -562,7 +562,7 @@ func TestNativeObserversCloseTimeoutRetainsWorkAndLaterCloseReallyJoins(t *testi
 				ctx, r, observers, root := nativeObserverTestRuntime(t, candidate.make)
 				release, unblock := nativeObserverRelease(t)
 				started := make(chan struct{}, 1)
-				_, err := observers.ObserveEvents(root, "close lease", func(_ context.Context, event Event) error {
+				_, err := observers.ObserveEvents(root, "close lease", func(_ context.Context, event LedgerEvent) error {
 					if markerOf(event) == "held" {
 						started <- struct{}{}
 						<-release
@@ -617,7 +617,7 @@ func TestNativeObserversDisposeCancelsCallbackBeforeJoiningLease(t *testing.T) {
 			}
 			finished := make(chan callbackResult, 1)
 			id, err := r.Mount(ctx, Spec{ID: "cooperative observer", Apply: func(owner *Handle) error {
-				_, err := observers.ObserveEvents(owner, "cancel on dispose", func(callbackCtx context.Context, event Event) error {
+				_, err := observers.ObserveEvents(owner, "cancel on dispose", func(callbackCtx context.Context, event LedgerEvent) error {
 					if markerOf(event) != "cooperative dispose" {
 						return nil
 					}
@@ -677,7 +677,7 @@ func TestNativeObserversCloseCancelsCallbackBeforeClosingQueue(t *testing.T) {
 				closing    bool
 			}
 			finished := make(chan callbackResult, 1)
-			_, err := observers.ObserveEvents(root, "cancel on close", func(callbackCtx context.Context, event Event) error {
+			_, err := observers.ObserveEvents(root, "cancel on close", func(callbackCtx context.Context, event LedgerEvent) error {
 				if markerOf(event) != "cooperative close" {
 					return nil
 				}
@@ -711,10 +711,10 @@ func TestNativeObserversCloseCancelsCallbackBeforeClosingQueue(t *testing.T) {
 func TestNativeObserversRetainFirstQueueAdmissionFailure(t *testing.T) {
 	n := newObserverSet(1<<16, nil)
 	t.Cleanup(func() { _ = n.close(context.Background()) })
-	if err := n.append(Event{Sequence: 2}); !errors.Is(err, errSequenceGap) {
+	if err := n.append(LedgerEvent{Sequence: 2}); !errors.Is(err, errSequenceGap) {
 		t.Fatalf("gap admission = %v", err)
 	}
-	if err := n.append(Event{Sequence: 1}); err != nil {
+	if err := n.append(LedgerEvent{Sequence: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := n.await(context.Background()); !errors.Is(err, errSequenceGap) {
@@ -723,7 +723,7 @@ func TestNativeObserversRetainFirstQueueAdmissionFailure(t *testing.T) {
 	if err := n.close(context.Background()); !errors.Is(err, errSequenceGap) {
 		t.Fatalf("close hid a broken native ledger integration: %v", err)
 	}
-	if err := n.append(Event{Sequence: 2}); !errors.Is(err, errObserverClosed) {
+	if err := n.append(LedgerEvent{Sequence: 2}); !errors.Is(err, errObserverClosed) {
 		t.Fatalf("post-close admission = %v", err)
 	}
 	if err := n.await(context.Background()); !errors.Is(err, errSequenceGap) || errors.Is(err, errObserverClosed) {

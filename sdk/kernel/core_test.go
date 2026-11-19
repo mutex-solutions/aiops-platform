@@ -46,8 +46,8 @@ type (
 	ProvisionSnapshot = provisionSnap
 	// Inspection is the core's graph view.
 	Inspection = graphView
-	// Event is one ledger event.
-	Event = ledgerEvent
+	// LedgerEvent is one ledger event.
+	LedgerEvent = ledgerEvent
 	// EffectScope is the scope handed to a scope setup callback.
 	EffectScope = effectScope
 	// EffectHandle observes one scope.
@@ -133,7 +133,7 @@ type Runtime interface {
 	Dispose(context.Context, uint64) error
 	Settle(context.Context) error
 	Snapshots(context.Context) ([]Snapshot, error)
-	Events(context.Context) ([]Event, error)
+	Events(context.Context) ([]LedgerEvent, error)
 	Close(context.Context) error
 }
 
@@ -157,13 +157,13 @@ type (
 		Record(context.Context, string, map[string]any) error
 	}
 	ObserverRuntime interface {
-		ObserveEvents(*Handle, string, func(context.Context, Event) error) (Disposer, error)
+		ObserveEvents(*Handle, string, func(context.Context, LedgerEvent) error) (Disposer, error)
 		AwaitObservers(context.Context) error
 		ObserverStatus() ObserverStatus
 	}
 	OverflowObserverRuntime interface {
 		ObserverRuntime
-		ObserveEventsWith(*Handle, string, func(context.Context, Event) error, func(context.Context, *ObserverOverflow) error) (Disposer, error)
+		ObserveEventsWith(*Handle, string, func(context.Context, LedgerEvent) error, func(context.Context, *ObserverOverflow) error) (Disposer, error)
 	}
 	RetentionReporter interface{ RetentionStatus() RetentionStatus }
 )
@@ -215,7 +215,7 @@ func (r *rt) Settle(ctx context.Context) error                  { return r.settl
 func (r *rt) Close(ctx context.Context) error                   { return r.close(ctx) }
 func (r *rt) Snapshots(ctx context.Context) ([]Snapshot, error) { return r.snapshots(ctx) }
 func (r *rt) Inspect(ctx context.Context) (Inspection, error)   { return r.inspect(ctx) }
-func (r *rt) Events(ctx context.Context) ([]Event, error)       { return r.events(ctx) }
+func (r *rt) Events(ctx context.Context) ([]LedgerEvent, error) { return r.events(ctx) }
 func (r *rt) RootContext(ctx context.Context) (*Handle, error)  { return r.rootHandle(ctx) }
 func (r *rt) AwaitObservers(ctx context.Context) error          { return r.awaitObservers(ctx) }
 func (r *rt) ObserverStatus() ObserverStatus                    { return r.observerStatus() }
@@ -223,11 +223,11 @@ func (r *rt) RetentionStatus() retentionStatus                  { return r.reten
 func (r *rt) Notify(ctx context.Context, keys ...string) error {
 	return r.notifyKeys(ctx, keysOf(keys)...)
 }
-func (r *rt) ObserveEvents(owner *Handle, label string, fn func(context.Context, Event) error) (Disposer, error) {
+func (r *rt) ObserveEvents(owner *Handle, label string, fn func(context.Context, LedgerEvent) error) (Disposer, error) {
 	return r.observe(owner, label, fn, nil)
 }
 
-func (r *rt) ObserveEventsWith(owner *Handle, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
+func (r *rt) ObserveEventsWith(owner *Handle, label string, fn func(context.Context, LedgerEvent) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
 	return r.observe(owner, label, fn, onOverflow)
 }
 
@@ -351,7 +351,7 @@ func keyText(k svcKey) string {
 }
 
 // markerOf is the name given to Record, or "" when e is not a Record marker.
-func markerOf(e Event) string {
+func markerOf(e LedgerEvent) string {
 	if e.Kind != "effect" {
 		return ""
 	}

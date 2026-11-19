@@ -295,8 +295,8 @@ func TestObserverEventsCarryTheTotalOrderSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seen := make(chan Event, 256)
-	if _, err := r.observe(root, "order", func(_ context.Context, e Event) error { seen <- e; return nil }, nil); err != nil {
+	seen := make(chan LedgerEvent, 256)
+	if _, err := r.observe(root, "order", func(_ context.Context, e LedgerEvent) error { seen <- e; return nil }, nil); err != nil {
 		t.Fatal(err)
 	}
 	key := &keyOf{"k"}
@@ -336,7 +336,7 @@ func TestObserverEventsCarryTheTotalOrderSequence(t *testing.T) {
 	}
 	other := NewReconciler().(*rt)
 	t.Cleanup(func() { _ = closeRuntime(ctx, other) })
-	if _, err := other.observe(root, "x", func(context.Context, Event) error { return nil }, nil); !errors.Is(err, errObserverBinding) {
+	if _, err := other.observe(root, "x", func(context.Context, LedgerEvent) error { return nil }, nil); !errors.Is(err, errObserverBinding) {
 		t.Fatalf("observe with another core's handle = %v", err)
 	}
 }

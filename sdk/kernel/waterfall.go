@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: Apache-2.0
+// Adapted from the Cordis lifecycle model; see NOTICE.
+
+package kernel
+
+import (
+	"context"
+	"sync"
+)
+
+// Next continues a waterfall with the next listener inward, or past the last
+// listener with the zero R. It is valid until its listener returns and may be
+// called once (07-c4-plugin-sdk.md:209, :386).
+type Next[R any] func() (R, error)
+
+// WaterfallListener is the function of a Waterfall listener. A listener that does
+// not call next vetoes the rest of the chain, built-in behaviour included
+// (07-c4-plugin-sdk.md:209, :386).
+type WaterfallListener[A, R any] func(ctx context.Context, a A, next Next[R]) (R, error)
+
+// Waterfall is a hook whose listeners wrap one another, outermost first
+// (07-c4-plugin-sdk.md:209, :386). The owner's built-in behaviour is the owner's
+// own innermost listener: the contract gives Run no inner function. Build it with
+// NewWaterfall; it must not be copied.
+type Waterfall[A, R any] struct {
+	def   *hookDef
+	table table[WaterfallListener[A, R]]
+}
+
+// NewWaterfall declares a waterfall hook named "<owner noun>/<event>"
+// (07-c4-plugin-sdk.md:381, :386, :627). It panics on a bad definition.
+func NewWaterfall[A, R any](name string, opts ...HookOption) *Waterfall[A, R] {
+	return newWaterfall[A, R](name, false, opts...)
+}
+
+func newWaterfall[A, R any](name string, kernel bool, opts ...HookOption) *Waterfall[A, R] {
+	return &Waterfall[A, R]{def: newHookDef(name, kernel, opts)}
+}
+
+// Name returns the hook's name.
+func (w *Waterfall[A, R]) Name() string { return w.def.name }
+
+// Owner returns the key given to OwnedBy, nil if none (07-c4-plugin-sdk.md:439).
+func (w *Waterfall[A, R]) Owner() AnyKey {
+	if w.def.owner == nil {
+		return nil
+	}
+	return w.def.owner
+}
+
+// Use returns the HookUse that a plugin lists in Plugin.Hooks to listen on stage
+// (07-c4-plugin-sdk.md:219, :411).
+func (w *Waterfall[A, R]) Use(stage string) HookUse { return w.def.use(stage) }
+
+// On registers fn as a listener of stage, as an effect of c's fiber: it leaves the
+// chain with the fiber (07-c4-plugin-sdk.md:209, :369). The refusals are those of
+// Event.On.
+func (w *Waterfall[A, R]) On(c *Context, stage string, fn WaterfallListener[A, R]) {
+	if fn == nil {
+		refuse(w.def.errf(ErrHook))
+	}
+	w.table.add(w.def, c, stage, fn)
+}
+
+// Run calls the chain reached by aud, outermost first, and returns the result of
+// the outermost listener (07-c4-plugin-sdk.md:209, :386, :440). A listener that
+// errors or panics fails the dispatch with a *ListenerError: a waterfall never
+// substitutes a successful value for a failed call. An empty chain returns the
+// zero R.
+func (w *Waterfall[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error) {
+	var zero R
+	if err := w.def.dispatchable(ctx, aud); err != nil {
+		return zero, err
+	}
+	list, err := w.table.pick(aud, nil)
+	if err != nil {
+		return zero, err
+	}
+	return walk[A, R](ctx, list, a)
+}
+
+const (
+	stepReady = iota
+	stepRunning
+	stepDone
+	stepExpired
+)
+
+// step is the state of one listener's next.
+type step[A, R any] struct {
+	ctx   context.Context
+	rest  []*listener[WaterfallListener[A, R]]
+	a     A
+	mu    sync.Mutex
+	cond  sync.Cond
+	state int
+}
+
+func (s *step[A, R]) next() (R, error) {
+	var zero R
+	s.mu.Lock()
+	state := s.state
+	if state == stepReady {
+		s.state = stepRunning
+	}
+	s.mu.Unlock()
+	switch state {
+	case stepReady:
+	case stepExpired:
+		return zero, ErrNextExpired
+	default:
+		return zero, ErrNext
+	}
+	defer func() {
+		s.mu.Lock()
+		s.state = stepDone
+		s.mu.Unlock()
+		s.cond.Broadcast()
+	}()
+	return walk[A, R](s.ctx, s.rest, s.a)
+}
+
+// expire ends the listener's next: a later call is refused, and a call that is
+// still running on another goroutine is waited for, so that the listener's lease
+// outlives the work it started.
+func (s *step[A, R]) expire() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state == stepReady {
+		s.state = stepExpired
+		return
+	}
+	for s.state == stepRunning {
+		s.cond.Wait()
+	}
+}
+
+// walk calls the first listener of list that can be entered; the others are its
+// next.
+func walk[A, R any](ctx context.Context, list []*listener[WaterfallListener[A, R]], a A) (R, error) {
+	var zero R
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	for i, r := range list {
+		leave, ok := r.lease()
+		if !ok {
+			continue // Its fiber is quiescing.
+		}
+		defer leave()
+		s := &step[A, R]{ctx: ctx, rest: list[i+1:], a: a}
+		s.cond.L = &s.mu
+		v, err := callWaterfall(ctx, r, a, s.next)
+		s.expire()
+		if err != nil {
+			return zero, &ListenerError{PluginID: r.id, Cause: err}
+		}
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
+		return v, nil
+	}
+	return zero, nil
+}
+
+func callWaterfall[A, R any](ctx context.Context, r *listener[WaterfallListener[A, R]], a A, next Next[R]) (v R, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = &PanicError{Value: p}
+		}
+	}()
+	return r.fn(ctx, a, next)
+}

@@ -119,7 +119,7 @@ func batchProvision(t *testing.T, inspection Inspection, key string) ProvisionSn
 	return ProvisionSnapshot{}
 }
 
-func batchEvents(t *testing.T, ctx context.Context, r Runtime) []Event {
+func batchEvents(t *testing.T, ctx context.Context, r Runtime) []LedgerEvent {
 	t.Helper()
 	events, err := r.Events(ctx)
 	if err != nil {
@@ -133,7 +133,7 @@ func batchEvents(t *testing.T, ctx context.Context, r Runtime) []Event {
 	return events
 }
 
-func batchUnchanged(t *testing.T, ctx context.Context, r Runtime, before Inspection, events []Event) {
+func batchUnchanged(t *testing.T, ctx context.Context, r Runtime, before Inspection, events []LedgerEvent) {
 	t.Helper()
 	after := batchInspect(t, ctx, r)
 	if !reflect.DeepEqual(after, before) {

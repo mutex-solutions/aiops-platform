@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 	"unsafe"
@@ -16,13 +17,14 @@ import (
 // (07-c4-plugin-sdk.md:192, :236). Its entry identity is the identity of Apply, so
 // a Plugin needs an Apply to be listed in a binding map.
 //
-// Gap: the contract also lists Hooks and Decode (07-c4-plugin-sdk.md:192). Their
-// types belong to the hook and config implementations, which are not in this
-// package, so they are not declared yet.
+// Gap: the contract also lists Decode (07-c4-plugin-sdk.md:192). Its type belongs
+// to the config implementation, which is not in this package, so it is not
+// declared yet.
 type Plugin struct {
 	ID       string                          // "<owner>/<name>", the fiber's name in diagnostics.
 	Inject   []Dep                           // Data; the Needs gate activation and join the epoch.
 	Provides []AnyKey                        // Provide of a key not listed here fails.
+	Hooks    []HookUse                       // Every hook Apply may listen on, with its stage; an undeclared On fails.
 	Apply    func(c *Context, cfg any) error // Everything it registers is an effect.
 }
 
@@ -240,7 +242,7 @@ func (c *Context) Plugin(p Plugin, cfg any) *Fiber {
 // provider, the only optional form (07-c4-plugin-sdk.md:198, :470). The contract
 // gives it no id; the fiber is named after c's fiber.
 func (c *Context) When(deps []Dep, body func(*Context) error) *Fiber {
-	return c.spawn(c.compile(c.frame.id+"/when", c.entry, deps, nil, body))
+	return c.spawn(c.compile(c.frame.id+"/when", c.entry, deps, nil, body, c.frame.hooks...))
 }
 
 func (c *Context) mountSpec(p Plugin, cfg any) pluginSpec {
@@ -248,7 +250,7 @@ func (c *Context) mountSpec(p Plugin, cfg any) pluginSpec {
 	if p.Apply != nil {
 		apply = func(cc *Context) error { return p.Apply(cc, cfg) }
 	}
-	return c.compile(p.ID, c.mountEntry(p), p.Inject, p.Provides, apply)
+	return c.compile(p.ID, c.mountEntry(p), p.Inject, p.Provides, apply, p.Hooks...)
 }
 
 func (c *Context) spawn(spec pluginSpec) *Fiber {
@@ -264,8 +266,8 @@ func (c *Context) spawn(spec pluginSpec) *Fiber {
 
 // compile turns declarations into the spec the core mounts. A refused declaration
 // gives a spec that fails its fiber with the refusal and has no Needs or Provides.
-func (c *Context) compile(id string, entry entryID, inject []Dep, provides []AnyKey, apply func(*Context) error) pluginSpec {
-	fr := &frame{id: id, inject: append([]Dep(nil), inject...), at: c}
+func (c *Context) compile(id string, entry entryID, inject []Dep, provides []AnyKey, apply func(*Context) error, hooks ...HookUse) pluginSpec {
+	fr := &frame{id: id, inject: append([]Dep(nil), inject...), at: c, hooks: slices.Clone(hooks)}
 	probe := &Context{parent: c, root: c.root, entry: entry, frame: fr}
 	var needs, required []svcKey
 	var icpts []intercept
@@ -312,6 +314,7 @@ func (c *Context) compile(id string, entry entryID, inject []Dep, provides []Any
 		seen[d] = true
 		fr.provides = append(fr.provides, d.addr(c.realmOf(d)))
 	}
+	err = errors.Join(err, checkUses(hooks))
 	if err != nil {
 		return pluginSpec{ID: id, Apply: func(*handle) error { return err }}
 	}

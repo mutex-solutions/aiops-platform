@@ -71,7 +71,7 @@ func (rig *overflowRig) mountStalled(label string, cooperative bool) *stalledObs
 	s.release = func() { once.Do(func() { close(s.gate) }) }
 	rig.t.Cleanup(s.release)
 	id, err := rig.r.Mount(rig.ctx, Spec{ID: label, Apply: func(owner *Handle) error {
-		_, err := rig.obs.ObserveEventsWith(owner, label, func(callbackCtx context.Context, event Event) error {
+		_, err := rig.obs.ObserveEventsWith(owner, label, func(callbackCtx context.Context, event LedgerEvent) error {
 			s.calls.Add(1)
 			if markerOf(event) == "stall" {
 				s.started <- event.Sequence
@@ -101,12 +101,12 @@ func (rig *overflowRig) mountStalled(label string, cooperative bool) *stalledObs
 
 type eventCollector struct {
 	mu  sync.Mutex
-	got []Event
+	got []LedgerEvent
 }
 
 func (c *eventCollector) observe(rig *overflowRig, label string) {
 	rig.t.Helper()
-	if _, err := rig.obs.ObserveEvents(rig.root, label, func(_ context.Context, event Event) error {
+	if _, err := rig.obs.ObserveEvents(rig.root, label, func(_ context.Context, event LedgerEvent) error {
 		c.mu.Lock()
 		c.got = append(c.got, event)
 		c.mu.Unlock()
@@ -244,8 +244,8 @@ func TestObserverJustBelowTheBoundWithSlowProgressLosesNothing(t *testing.T) {
 		t.Run(candidate.name, func(t *testing.T) {
 			rig := newOverflowRig(t, candidate.make, backlog)
 			step := make(chan struct{})
-			seen := make(chan Event, 4*backlog)
-			if _, err := rig.obs.ObserveEvents(rig.root, "slow", func(_ context.Context, event Event) error {
+			seen := make(chan LedgerEvent, 4*backlog)
+			if _, err := rig.obs.ObserveEvents(rig.root, "slow", func(_ context.Context, event LedgerEvent) error {
 				<-step
 				seen <- event
 				return nil

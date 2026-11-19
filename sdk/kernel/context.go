@@ -32,6 +32,7 @@ type frame struct {
 	inject   []Dep
 	provides []*address // The addresses the fiber may provide, in the realms of the mount.
 	at       *Context   // The context the fiber was mounted from.
+	hooks    []HookUse  // The hooks the fiber may listen on.
 	host     bool       // The root frame: the launcher's own context.
 }
 
