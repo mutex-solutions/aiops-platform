@@ -4,16 +4,21 @@ package concurrency
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue"
 )
 
 // These tests exercise the kernel backend through the spike interfaces only. The
-// capabilities the public sdk/kernel API lacks are asserted as loud refusals, so
-// an export that closes a gap turns the matching test red and must be mapped.
+// capabilities the public sdk/kernel API still lacks are asserted as loud refusals,
+// so an export that closes a gap turns the matching test red and must be mapped.
 
 func kernelFixture(t *testing.T) (context.Context, Runtime) {
 	t.Helper()
@@ -178,15 +183,22 @@ func TestKernelLeaseHoldsDrain(t *testing.T) {
 	}
 }
 
-func TestKernelSelfDisposeIsAGap(t *testing.T) {
+func TestKernelSelfDispose(t *testing.T) {
 	ctx, r := kernelFixture(t)
 	errs := make(chan error, 1)
 	id := kernelMount(t, ctx, r, Spec{ID: "self", Apply: func(c *Context) error { errs <- c.Dispose(); return nil }})
+	if err := <-errs; err != nil {
+		t.Fatalf("self-dispose from Apply = %v, want an accepted request", err)
+	}
 	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-errs; !errors.Is(err, ErrKernelUnsupported) {
-		t.Fatalf("self-dispose = %v, want ErrKernelUnsupported", err)
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := r.Snapshots(ctx)
+	if err != nil || len(snapshots) != 1 || snapshots[0].State != Disposed || snapshots[0].ID != id {
+		t.Fatalf("snapshots = %+v, %v; want the fiber DISPOSED", snapshots, err)
 	}
 }
 
@@ -398,39 +410,429 @@ func TestKernelValidationMatchesTheReconciler(t *testing.T) {
 	}
 }
 
-// TestKernelGapsFailLoudly lists every capability the public API cannot express.
-// Each must refuse with ErrKernelUnsupported; none may succeed vacuously.
+// TestKernelGapsFailLoudly lists what the public API still cannot express. Each
+// must refuse with ErrKernelUnsupported; none may succeed vacuously.
 func TestKernelGapsFailLoudly(t *testing.T) {
 	ctx, r := kernelFixture(t)
 	root, err := r.(RootProvider).RootContext(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	owned := make(chan *Context, 1)
+	id := kernelMount(t, ctx, r, Spec{ID: "holder", Apply: func(c *Context) error { owned <- c; return nil }})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	fiberCtx := <-owned
 	gaps := map[string]error{}
-	_, gaps["Snapshots"] = r.Snapshots(ctx)
-	_, gaps["Events"] = r.Events(ctx)
-	_, gaps["Inspect"] = r.(Inspector).Inspect(ctx)
-	gaps["Notify"] = r.(Notifier).Notify(ctx, "k")
-	gaps["Record"] = r.(Recorder).Record(ctx, "fixture", nil)
-	_, gaps["ObserveEvents"] = r.(ObserverRuntime).ObserveEvents(root, "o", func(context.Context, Event) error { return nil })
-	_, gaps["ObserveEventsWith"] = r.(OverflowObserverRuntime).ObserveEventsWith(root, "o", nil, nil)
-	gaps["AwaitObservers"] = r.(ObserverRuntime).AwaitObservers(ctx)
-	_, gaps["Check"] = r.Mount(ctx, Spec{ID: "check", Check: func(*Context) bool { return true }})
-	_, gaps["ConfigHooks"] = r.Mount(ctx, Spec{ID: "hooks", Config: NewConfiguration(1, ConfigHooks{Commit: func(context.Context, any) error { return nil }})})
-	_, gaps["EffectScope"] = root.RequestEffectScope("scope", func(*EffectScope) error { return nil })
+	_, gaps["Check without a need"] = r.Mount(ctx, Spec{ID: "check", Check: func(*Context) bool { return true }})
+	_, gaps["UpdateAsync"] = r.Mount(ctx, Spec{ID: "async", Config: NewConfiguration(1, ConfigHooks{
+		UpdateAsync: func(context.Context, any, func() error) (func(context.Context) error, error) { return nil, nil }})})
+	_, gaps["fiber-bound observer"] = r.(ObserverRuntime).ObserveEvents(fiberCtx, "o", func(context.Context, Event) error { return nil })
+	_, gaps["fiber-bound observer with overflow"] = r.(OverflowObserverRuntime).ObserveEventsWith(fiberCtx, "o", func(context.Context, Event) error { return nil }, nil)
 	for name, err := range gaps {
-		want := ErrKernelUnsupported
-		if name == "EffectScope" {
-			want = ErrScopeUnavailable // The spike Context has no scope bridge: its own loud refusal.
-		}
-		if !errors.Is(err, want) {
-			t.Errorf("%s = %v, want %v", name, err, want)
+		if !errors.Is(err, ErrKernelUnsupported) {
+			t.Errorf("%s = %v, want ErrKernelUnsupported", name, err)
 		}
 	}
-	if status := r.(ObserverRuntime).ObserverStatus(); status.ObserverErrors == 0 || status.LastObserverError == "" {
-		t.Errorf("ObserverStatus reports no gap: %+v", status)
+	if _, err := r.(ObserverRuntime).ObserveEvents(root, "root", func(context.Context, Event) error { return nil }); err != nil {
+		t.Errorf("a launcher observer is refused: %v", err)
 	}
-	if _, ok := r.(RetentionReporter); ok {
-		t.Error("RetentionReporter implemented: its report cannot carry the gap")
+	if gap := UnsupportedGap(ctx, r); gap != "" {
+		t.Errorf("UnsupportedGap = %q, want none", gap)
+	}
+}
+
+// kernelScenario drives the same operations on any backend.
+func kernelScenario(t *testing.T, build func() Runtime) ([]Event, []Snapshot, Inspection, ObserverStatus) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r := build()
+	defer func() { _ = r.Close(ctx) }()
+	if _, err := r.(RootProvider).RootContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	record := r.(Recorder)
+	if err := record.Record(ctx, "before", map[string]any{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+	p := kernelMount(t, ctx, r, Spec{ID: "p", Provides: []string{"k"}, Config: NewConfiguration("raw", ConfigHooks{}), Apply: func(c *Context) error {
+		if err := c.Defer("cleanup", func(context.Context) error { return nil }); err != nil {
+			return err
+		}
+		return c.Provide("k", 7)
+	}})
+	if err := r.(Waiter).AwaitFiber(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	c := kernelMount(t, ctx, r, Spec{ID: "c", Needs: []string{"k"}})
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := record.Record(ctx, "mid", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.(ConfigUpdater).UpdateConfig(ctx, p, "raw2", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Dispose(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.(ObserverRuntime).AwaitObservers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	events, err := r.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := r.Snapshots(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspection, err := r.(Inspector).Inspect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events, snapshots, inspection, r.(ObserverRuntime).ObserverStatus()
+}
+
+// TestKernelReadBackMatchesTheReconciler runs one scenario on both and requires
+// the same ledger, snapshots, provisions and observer counters: the sequence
+// starts at 1 and the identities at 1 although the kernel installs built-ins.
+func TestKernelReadBackMatchesTheReconciler(t *testing.T) {
+	events, snapshots, inspection, status := kernelScenario(t, NewRecordingKernel)
+	wantEvents, wantSnapshots, wantInspection, wantStatus := kernelScenario(t, NewRecordingReconciler)
+	if len(events) != len(wantEvents) {
+		t.Fatalf("%d events, reconciler %d", len(events), len(wantEvents))
+	}
+	for i := range events {
+		if len(events[i].Data) == 0 && len(wantEvents[i].Data) == 0 {
+			events[i].Data, wantEvents[i].Data = nil, nil
+		}
+	}
+	if !reflect.DeepEqual(events, wantEvents) {
+		t.Errorf("events differ:\n kernel     %+v\n reconciler %+v", events, wantEvents)
+	}
+	if !reflect.DeepEqual(snapshots, wantSnapshots) {
+		t.Errorf("snapshots differ:\n kernel     %+v\n reconciler %+v", snapshots, wantSnapshots)
+	}
+	if !reflect.DeepEqual(inspection, wantInspection) {
+		t.Errorf("inspection differs:\n kernel     %+v\n reconciler %+v", inspection, wantInspection)
+	}
+	if status.Accepted != wantStatus.Accepted || status.Delivered != wantStatus.Delivered || status.Remaining != 0 {
+		t.Errorf("observer status %+v, reconciler %+v", status, wantStatus)
+	}
+}
+
+func TestKernelRecordOrdersAgainstEventsAndObservers(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	root, err := r.(RootProvider).RootContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var seen []Event
+	if _, err := r.(ObserverRuntime).ObserveEvents(root, "all", func(_ context.Context, e Event) error {
+		mu.Lock()
+		seen = append(seen, e)
+		mu.Unlock()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := r.(Recorder)
+	for i := range 3 {
+		if err := rec.Record(ctx, "step", map[string]any{"i": i}); err != nil {
+			t.Fatal(err)
+		}
+		kernelMount(t, ctx, r, Spec{ID: "f"})
+		if err := r.Settle(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.(ObserverRuntime).AwaitObservers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	events, err := r.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	// An observer is registered by an effect, and that event precedes its first.
+	if len(seen) != len(events)-1 || seen[0].Sequence != 2 || events[0].Kind != "effect" {
+		t.Fatalf("observer saw %d events from %d, ledger has %d", len(seen), seen[0].Sequence, len(events))
+	}
+	next := 0
+	for i, e := range events {
+		if e.Sequence != uint64(i)+1 {
+			t.Fatalf("event %d has sequence %d", i, e.Sequence)
+		}
+		if i == 0 {
+			continue
+		}
+		if seen[i-1].Sequence != e.Sequence || seen[i-1].Kind != e.Kind {
+			t.Fatalf("event %d: ledger %+v, observer %+v", i, e, seen[i-1])
+		}
+		if e.Kind == "fixture" {
+			if e.Key != "step" || e.Data["i"] != json.Number(strconv.Itoa(next)) || seen[i-1].Data["i"] != e.Data["i"] {
+				t.Fatalf("fixture %d: %+v, observer %+v", next, e, seen[i-1])
+			}
+			if events[i+1].Kind != "mount" {
+				t.Fatalf("the mount after record %d is not next: %+v", next, events[i+1])
+			}
+			next++
+		}
+	}
+	if next != 3 {
+		t.Fatalf("found %d records, want 3", next)
+	}
+}
+
+func TestKernelCheckIsEvaluatedPerConsumerThroughItsProviders(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	var allow, checks, loads atomic.Int64
+	kernelMount(t, ctx, r, Spec{ID: "a", Provides: []string{"a"}, Apply: func(c *Context) error { return c.Provide("a", "va") }})
+	kernelMount(t, ctx, r, Spec{ID: "b", Provides: []string{"b"}, Apply: func(c *Context) error { return c.Provide("b", "vb") }})
+	id := kernelMount(t, ctx, r, Spec{ID: "checked", Needs: []string{"a", "b"}, Check: func(c *Context) bool {
+		checks.Add(1)
+		a, errA := c.Read("a")
+		b, errB := c.Read("b")
+		if c.Enter() || !errors.Is(c.Defer("x", func(context.Context) error { return nil }), ErrInactive) || !errors.Is(c.Dispose(), ErrInactive) {
+			return false
+		}
+		return errA == nil && errB == nil && a == "va" && b == "vb" && allow.Load() == 1
+	}, Apply: func(*Context) error { loads.Add(1); return nil }})
+	other := kernelMount(t, ctx, r, Spec{ID: "plain", Needs: []string{"a"}, Apply: func(*Context) error { return nil }})
+	state := func(id uint64, want State) {
+		t.Helper()
+		if err := r.Settle(ctx); err != nil {
+			t.Fatal(err)
+		}
+		snapshots, _ := r.Snapshots(ctx)
+		for _, s := range snapshots {
+			if s.ID == id && s.State != want {
+				t.Fatalf("fiber %d is %s, want %s", id, s.State, want)
+			}
+		}
+	}
+	state(id, Pending)
+	state(other, Active) // The check of one consumer never gates another.
+	if loads.Load() != 0 || checks.Load() == 0 {
+		t.Fatalf("loads %d, checks %d", loads.Load(), checks.Load())
+	}
+	allow.Store(1)
+	before := checks.Load()
+	if err := r.(Notifier).Notify(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	state(id, Active)
+	if n := checks.Load() - before; n != 1 {
+		t.Fatalf("one evaluation ran the predicate %d times, want once for two needs", n)
+	}
+	allow.Store(0)
+	if err := r.(Notifier).Notify(ctx, "b"); err != nil {
+		t.Fatal(err)
+	}
+	state(id, Pending)
+}
+
+func TestKernelConfigHooks(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	var mu sync.Mutex
+	var calls []string
+	note := func(s string) { mu.Lock(); calls = append(calls, s); mu.Unlock() }
+	var veto atomic.Bool
+	cell := NewConfiguration("raw0", ConfigHooks{
+		Resolve: func(_ context.Context, raw any) (any, error) {
+			note("resolve:" + raw.(string))
+			return "eff-" + raw.(string), nil
+		},
+		Commit: func(_ context.Context, raw any) error { note("commit:" + raw.(string)); return nil },
+		Update: func(_ context.Context, resolved any, next func() error) error {
+			note("update:" + resolved.(string))
+			if veto.Load() {
+				return nil
+			}
+			return next()
+		},
+	})
+	seen := make(chan any, 8)
+	id := kernelMount(t, ctx, r, Spec{ID: "cfg", Config: cell, Apply: func(c *Context) error { seen <- c.Config(); return nil }})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil || <-seen != "eff-raw0" {
+		t.Fatalf("first activation: %v", err)
+	}
+	if err := r.(ConfigUpdater).UpdateConfig(ctx, id, "raw1", false); err != nil || <-seen != "eff-raw1" {
+		t.Fatalf("update: %v", err)
+	}
+	if err := r.(ConfigUpdater).UpdateConfig(ctx, id, "raw2", true); err != nil || <-seen != "eff-raw2" {
+		t.Fatalf("noSave update: %v", err)
+	}
+	veto.Store(true)
+	if err := r.(ConfigUpdater).UpdateConfig(ctx, id, "raw3", false); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case v := <-seen:
+		t.Fatalf("a vetoed update restarted the fiber: %v", v)
+	default:
+	}
+	snapshots, err := r.Snapshots(ctx)
+	if err != nil || len(snapshots) != 1 || !snapshots[0].Configured || !snapshots[0].ConfigPrepared ||
+		snapshots[0].RawConfig != "raw3" || snapshots[0].EffectiveConfig != "eff-raw3" || snapshots[0].ConfigVersion != 3 {
+		t.Fatalf("snapshot %+v, %v; a veto retains the raw config and publishes the candidate", snapshots, err)
+	}
+	mu.Lock()
+	want := []string{"resolve:raw0", "resolve:raw1", "commit:raw1", "update:eff-raw1", "resolve:raw1",
+		"resolve:raw2", "update:eff-raw2", "resolve:raw2", "resolve:raw3", "commit:raw3", "update:eff-raw3"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Errorf("hook calls\n got  %v\n want %v", calls, want)
+	}
+	mu.Unlock()
+	failing := kernelMount(t, ctx, r, Spec{ID: "bad", Apply: func(*Context) error { return nil }, Config: NewConfiguration("x", ConfigHooks{
+		Resolve: func(context.Context, any) (any, error) { return nil, errors.New("resolve failed") }})})
+	if err := r.(Waiter).AwaitFiber(ctx, failing); err == nil {
+		t.Error("a failing Resolve did not fail the activation")
+	}
+}
+
+func TestKernelObserversAndRetention(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	root, _ := r.(RootProvider).RootContext(ctx)
+	obs := r.(OverflowObserverRuntime)
+	if _, err := obs.ObserveEvents(nil, "x", func(context.Context, Event) error { return nil }); !errors.Is(err, ErrObserverBinding) {
+		t.Errorf("nil owner = %v", err)
+	}
+	other, _ := NewKernel().(RootProvider).RootContext(ctx)
+	if _, err := obs.ObserveEvents(other, "x", func(context.Context, Event) error { return nil }); !errors.Is(err, ErrObserverBinding) {
+		t.Errorf("foreign owner = %v", err)
+	}
+	if _, err := obs.ObserveEvents(root, "", func(context.Context, Event) error { return nil }); !errors.Is(err, eventqueue.ErrObserver) {
+		t.Errorf("no label = %v", err)
+	}
+	if _, err := obs.ObserveEvents(root, "nil", nil); !errors.Is(err, eventqueue.ErrObserver) {
+		t.Errorf("no callback = %v", err)
+	}
+	var reentrant atomic.Pointer[error]
+	if _, err := obs.ObserveEvents(root, "reentrant", func(cb context.Context, _ Event) error {
+		if reentrant.Load() == nil {
+			err := obs.AwaitObservers(cb)
+			reentrant.Store(&err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	kernelMount(t, ctx, r, Spec{ID: "a"})
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := obs.AwaitObservers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := reentrant.Load(); err == nil || !errors.Is(*err, eventqueue.ErrReentrant) {
+		t.Errorf("AwaitObservers from a callback = %v", err)
+	}
+	events, _ := r.Events(ctx)
+	status := obs.ObserverStatus()
+	if status.Accepted != uint64(len(events)) || status.Delivered != status.Accepted || status.Observers != 1 {
+		t.Errorf("status %+v, %d events", status, len(events))
+	}
+	retention := r.(RetentionReporter).RetentionStatus()
+	if retention.EventsTotal != uint64(len(events)) || retention.Windowed != len(events) || retention.EventWindow != DefaultEventWindow ||
+		retention.ArchiveLimit != DefaultArchiveLimit || retention.ObserverBacklog != DefaultObserverBacklog {
+		t.Errorf("retention %+v, %d events", retention, len(events))
+	}
+}
+
+func TestKernelEventWindowAndExpiry(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r := NewKernelWith(Retention{EventWindow: 4, ArchiveLimit: 1})
+	defer func() { _ = r.Close(ctx) }()
+	first := kernelMount(t, ctx, r, Spec{ID: "one"})
+	second := kernelMount(t, ctx, r, Spec{ID: "two"})
+	for _, id := range []uint64{first, second} {
+		if err := r.Dispose(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Settle(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	events, err := r.Events(ctx)
+	if !errors.Is(err, ErrEventsTruncated) || len(events) != 4 || events[3].Sequence <= 4 {
+		t.Fatalf("events = %+v, %v; want the 4-event tail and ErrEventsTruncated", events, err)
+	}
+	if err := r.(Waiter).AwaitFiber(ctx, first); !errors.Is(err, ErrExpired) {
+		t.Fatalf("await of an evicted fiber = %v, want ErrExpired", err)
+	}
+	if status := r.(RetentionReporter).RetentionStatus(); status.EventWindow != 4 || status.Windowed != 4 || status.ArchiveEvicted != 1 {
+		t.Errorf("retention %+v", status)
+	}
+	if err := r.Dispose(ctx, 99); !errors.Is(err, ErrUnknown) {
+		t.Errorf("dispose of an unissued fiber = %v, want ErrUnknown", err)
+	}
+}
+
+func TestKernelEffectScope(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	var order []string
+	var mu sync.Mutex
+	note := func(s string) Disposer {
+		return func(context.Context) error { mu.Lock(); order = append(order, s); mu.Unlock(); return nil }
+	}
+	handles := make(chan *EffectHandle, 2)
+	id := kernelMount(t, ctx, r, Spec{ID: "scoped", Apply: func(c *Context) error {
+		h, err := c.RequestEffectScope("tree", func(s *EffectScope) error {
+			if err := s.Defer("a", note("a")); err != nil {
+				return err
+			}
+			return s.Scope("inner", func(s *EffectScope) error { return s.Defer("b", note("b")) })
+		})
+		if err != nil {
+			return err
+		}
+		failing, err := c.RequestEffectScope("fails", func(s *EffectScope) error {
+			if err := s.Defer("c", note("c")); err != nil {
+				return err
+			}
+			panic("boom")
+		})
+		handles <- h
+		handles <- failing
+		return err
+	}})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	h, failing := <-handles, <-handles
+	if err := h.AwaitSetup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if meta := h.Metadata(); meta.State != ScopeReady || len(meta.Children) != 2 || meta.Children[1].Label != "inner" {
+		t.Fatalf("metadata %+v", meta)
+	}
+	var panicErr *ScopePanicError
+	if err := failing.AwaitSetup(ctx); !errors.As(err, &panicErr) || panicErr.Value != "boom" {
+		t.Fatalf("failing setup = %v", err)
+	}
+	if err := h.RequestWithdraw(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Await(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"c", "b", "a"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("cleanup order %v, want %v", order, want)
 	}
 }

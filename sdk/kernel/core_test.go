@@ -59,7 +59,6 @@ var (
 	ErrScopeUnavailable   = errScopeUnavailable
 	ErrEffectUnavailable  = errEffectUnavailable
 	ErrTrackedUnavailable = errTrackedUnavailable
-	ErrReentrant          = errReentrant
 )
 
 // Spec is the corpus form of a pluginSpec: services are named by string.

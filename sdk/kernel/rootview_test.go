@@ -249,8 +249,13 @@ func TestRootObserveOrderOptionsAndStatus(t *testing.T) {
 		t.Error("an observer with no callback was accepted")
 	}
 	var got []LedgerEvent
+	var self atomic.Pointer[error]
 	fail := errors.New("observer failure")
-	dispose, err := r.Observe("collect", func(_ context.Context, e LedgerEvent) error {
+	dispose, err := r.Observe("collect", func(cb context.Context, e LedgerEvent) error {
+		if self.Load() == nil {
+			err := r.AwaitObservers(cb) // A callback must not join its own dispatcher.
+			self.Store(&err)
+		}
 		got = append(got, e)
 		if e.Sequence == 1 {
 			return fail
@@ -271,6 +276,9 @@ func TestRootObserveOrderOptionsAndStatus(t *testing.T) {
 	}
 	if !slices.Equal(got, all[len(all)-len(got):]) || len(got) == 0 {
 		t.Fatalf("observer saw %d events, ledger has %d: not the same order", len(got), len(all))
+	}
+	if err := self.Load(); err == nil || !errors.Is(*err, ErrReentrant) {
+		t.Errorf("AwaitObservers from a callback = %v, want ErrReentrant", err)
 	}
 	status := r.ObserverStatus()
 	if status.Observers < 1 || status.Accepted != all[len(all)-1].Sequence || status.Delivered != status.Accepted || status.Remaining != 0 {

@@ -71,9 +71,13 @@ func (c *Context) RequestEffectScope(label string, setup func(*EffectScope) erro
 type EffectScope struct {
 	effect *scopeEffect
 	node   *scopeNode
+	fwd    *scopeForward // Set only by the kernel backend, which owns scopes in sdk/kernel.
 }
 
 func (s *EffectScope) Defer(label string, d Disposer) error {
+	if s.fwd != nil {
+		return s.fwd.deferTo(label, d)
+	}
 	if label == "" || d == nil {
 		return errors.New("scope disposer requires a nonempty label and nonnil callback")
 	}
@@ -89,6 +93,9 @@ func (s *EffectScope) Defer(label string, d Disposer) error {
 }
 
 func (s *EffectScope) Scope(label string, setup func(*EffectScope) error) error {
+	if s.fwd != nil {
+		return s.fwd.nested(label, setup)
+	}
 	if err := validateScope(label, setup); err != nil {
 		return err
 	}
@@ -108,9 +115,15 @@ func (s *EffectScope) Scope(label string, setup func(*EffectScope) error) error 
 // EffectHandle observes completion of one native scope identity. It contains no
 // caller-mutable ownership or scheduling state. AwaitSetup and Await may only be
 // called outside callbacks running on the scope's own transition lane.
-type EffectHandle struct{ effect *scopeEffect }
+type EffectHandle struct {
+	effect *scopeEffect
+	fwd    *handleForward // Set only by the kernel backend.
+}
 
 func (h *EffectHandle) AwaitSetup(ctx context.Context) error {
+	if h != nil && h.fwd != nil {
+		return h.fwd.awaitSetup(ctx)
+	}
 	if h == nil || h.effect == nil {
 		return ErrScopeUnavailable
 	}
@@ -123,6 +136,9 @@ func (h *EffectHandle) AwaitSetup(ctx context.Context) error {
 // RequestWithdraw only requests native control work, never inline cleanup. The
 // native hook is responsible for idempotence and unload/admission serialization.
 func (h *EffectHandle) RequestWithdraw() error {
+	if h != nil && h.fwd != nil {
+		return h.fwd.withdraw()
+	}
 	if h == nil || h.effect == nil || h.effect.requestWithdraw == nil {
 		return ErrScopeUnavailable
 	}
@@ -132,6 +148,9 @@ func (h *EffectHandle) RequestWithdraw() error {
 // Await returns cleanup errors after every owned callback has actually returned.
 // Setup errors (including its rollback errors) are observed through AwaitSetup.
 func (h *EffectHandle) Await(ctx context.Context) error {
+	if h != nil && h.fwd != nil {
+		return h.fwd.await(ctx)
+	}
 	if h == nil || h.effect == nil {
 		return ErrScopeUnavailable
 	}
@@ -142,6 +161,9 @@ func (h *EffectHandle) Await(ctx context.Context) error {
 }
 
 func (h *EffectHandle) Metadata() EffectMeta {
+	if h != nil && h.fwd != nil {
+		return h.fwd.metadata()
+	}
 	if h == nil || h.effect == nil {
 		return EffectMeta{}
 	}

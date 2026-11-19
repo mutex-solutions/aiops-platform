@@ -33,6 +33,9 @@ var (
 	// it stalled the dispatcher past Config.ObserverQueue (ADR-034, "2026-11-19
 	// bounded observer queue and overflow rule").
 	ErrObserverOverflow = errObserverOverflow
+	// ErrReentrant is returned by AwaitObservers when it is called with the context
+	// of an observer callback: a callback must not join its own dispatcher.
+	ErrReentrant = errReentrant
 )
 
 // ObserverOverflow describes one observer detached for overflow: its label, the
