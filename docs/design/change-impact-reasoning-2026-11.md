@@ -5,7 +5,9 @@
   which is a draft awaiting the project owner.
 - Scope: how the Change pillar agent and the change hub use the estate model, a
   small rule table and a reasoner to say what a change takes away or adds, how
-  sure that statement is, and how the model stays true after the change.
+  sure that statement is, how the model stays true after the change, what was
+  last known good, which change probably caused an incident, and how a person
+  sees what changed on a map.
 - Reading order: `docs/architecture/00-decisions.md` wins over this note. This
   note extends `docs/architecture/09-c3-estate-and-troubleshooting.md` §2.6 and
   §3.3 and the harness record.
@@ -392,7 +394,274 @@ gets the same method with no change.
 - Certification needs a checker that may not exist for every platform; without
   it nothing fails and the basis stays computed.
 
-## 13. Order of work
+## 13. Invariants: facts a change must never produce
+
+An invariant is a derived fact that must not hold after a change, written as data
+beside the rule table: a name, a pattern over one reserved derived predicate, and
+the entities it covers. Example: "no entity of class data store is
+`externallyExposed`", or "`billing-db` is never `reachableFrom` an Ingress".
+
+- Impact evaluates every invariant on the proposed slice. A fact that matches an
+  invariant and is gained by the change is a **violation**, listed first on the
+  approval card with the invariant's name and the rule that derived it.
+- A violation that already holds on the base slice is reported as pre-existing
+  and is not attributed to the change.
+- A violation is bound into the approval digest with the lost sentences. Whether
+  a violation blocks approval or only raises the tier is a policy row, default
+  "raise to the highest tier and require a named reason".
+- Invariants need a basis of at least computed. On an estimated or runtime report
+  the card says "invariants not evaluated" rather than "none violated".
+- Invariants are first-party data on our own reasoner. No outside tool is needed.
+
+## 14. Last known good and probable cause
+
+Two different things carry this name and are kept apart.
+
+- **Changes in the window** is a per-incident list: for each resource, the changes
+  recorded since the window opened and the before-state of the earliest one. It is
+  a change history, not a verified good state, and every surface says so.
+- **A last-known-good record** is written once per resolve cycle of an incident and
+  holds the after-state of a fix that was verified. Only this is "last known good".
+
+### 14.1 The record
+
+A sweep picks resolved incidents after the post-close check window has passed.
+It first runs any post-change read still owed, then writes one append-only record
+keyed by the incident. A reopen followed by a new resolve earns a new record that
+covers only its own cycle.
+
+**Grade, decided by code.**
+
+| Grade | When |
+|---|---|
+| verified | The newest executed change completed with verdict cleared, or recovery was verified by readings |
+| unverified | A change ran but nothing verified it |
+| human reported | Only a person's close note says it was fixed |
+| failed | The newest change failed, or a later recheck found the condition still present |
+| no record | Expected event, accepted risk, merge or storm close, or nothing executed and nothing reported |
+
+**Fields.** Incident and correlation key; grade and who verified; the time the
+condition cleared (never the time of the close click) and the cycle start; per
+change and step, the resource, the operation, the pre and post status (present,
+absent, unknown, not captured) and the parsed images when small; the verification
+verdict; the probable cause (§14.4); a **fix signature** that is comparable across
+incidents (the sorted set of operation and normalised target, or the repository
+and path, or the route name, or a hash of the person's note); and the estate
+version at the error onset and at verification.
+
+**Status, derived when read, never stored.** A "did not hold" mark is an
+append-only audit event written when the same alert recurs, when the incident
+reopens, or when a recurrence opened before the record was written. A mark is
+explained, and not counted, when a recorded write from outside the platform landed
+on the fix's resources between the verified clear and the recurrence. Precedence:
+not good (graded failed, or the same fix signature on the same key did not hold
+twice inside the problem window), same cause again, did not hold, recurred after
+an outside change, held. "Held" is worded "no recurrence seen": silence is never
+proof.
+
+There is no stored per-resource last known good and there are no scheduled state
+snapshots: snapshots grow with resources, records grow with remediated incidents.
+A lookup derives, at read time, the newest verified record for a key or a resource
+that has no counting mark and whose signature was not "not good" at that time.
+
+### 14.2 One window for every reader
+
+Every reader (the ranking, the changes list, revert-all, the agent's change
+lookup) uses the same window. Its floor is the latest of:
+
+1. the end of the previous error on the same correlation key (when the condition
+   cleared, never when it was closed);
+2. the alert history boundary of the alerting rule, when that read is usable;
+3. a look-back cap (72 hours by default);
+4. the verification time of a verified last-known-good record, when it is later
+   than the others. After a verified fix no reader reaches back past it.
+
+The window ends at the error onset plus an onset tolerance. The onset and its
+basis are always shown: the alert's start time for the Prometheus family, the
+first breach for built-in detection, else the receipt time.
+
+**Flapping.** An earlier error that ended less than thirty minutes before the next
+start is the same episode, for at most three hops back, and the episode start
+moves to the first. The chain stops when the healthy gap contains an applied write
+on the service's own resources: that is a new error caused by a change.
+
+The notes shown to people never claim health: "ended here, no error recorded
+since, which is no proof of health".
+
+### 14.3 Changes in the window
+
+Sources are rows of one ledger: platform writes with their per-step pre-state;
+outside changes from the change feed (the GitOps controller's commits and syncs,
+Kubernetes events, host change evidence); and webhook-reported changes, which are
+listed and never used as a restore source. Denied attempts, plans that never ran
+and cluster system events are left out before the scan cap.
+
+A row touches the incident when the incident names it, when its service is one of
+the incident's services, or when its resource identity matches after
+normalisation. Then every version in the window for those resources is taken,
+whatever service the later row carries. This list uses no graph hops.
+
+Identical repeats collapse on identity, operation and a hash of the written
+content; unknown or truncated content never collapses. Writes that one controller
+made in one sync fold into one **change set** scored by its best member.
+
+**Before-state on the target estate.** For a platform write it is the pre-read of
+the step. For an outside change it is, in order: the parent commit of a GitOps
+change; an earlier ledger write of the same property; the estate's own row as of
+just before the change. The last is a model image, not a byte-exact one: it is
+graded "from the estate model" and may authorise an operator command but never a
+typed inverse. When none exists the row says why.
+
+### 14.4 Ranking the candidates
+
+`score = round(100 × relation × time × kind)`, with every factor kept beside the
+candidate with its note.
+
+| Relation, first that holds | Weight |
+|---|---|
+| The incident names the change; same resource; same service | 1.0 |
+| Attached to the alerting resource in the estate as of the episode start | 0.8 |
+| Upstream dependency, one hop | 0.7 |
+| Upstream dependency, two or more hops | 0.5 |
+| Same grouping (namespace, resource group) | 0.4 |
+| Downstream ("usually a victim, not the cause") | 0.2 |
+| Time only | 0.1 |
+
+| Before the episode start | Factor |
+|---|---|
+| Up to 15 minutes | 1.0 |
+| Up to 1 hour | 0.8 |
+| Up to the suspect horizon (2 hours by default) | 0.6 |
+| Up to 24 hours | 0.3 |
+| Older | 0.1 |
+
+Kind is 0.3 for a label-only or annotation-only edit and 1.0 otherwise.
+
+"Attached" comes from an as-of read of the estate: a walk both ways over a fixed
+whitelist of attachment relations for at most three hops, never inward over a
+shared boundary (a namespace, a subnet, a policy) that would reach siblings, at
+most fifty neighbours, skipping relations flagged inconsistent. When the entity is
+stale, unmodelled or absent, a live read of its neighbours stands in, and the
+factor note names which source was used.
+
+**Verdict.** Suspect: relation at least 0.4 and inside the suspect horizon.
+Proven good: only when alert history backed by data shows the rule was healthy
+from the change until at least a day later; a rule that treats missing data as
+healthy can never prove a change good. Possible: everything else.
+
+**Order.** Proven good last, then score, then the newest, then the id. The top
+five are shown and the rest counted. Changes applied after the window are listed
+separately as "during" and are never a cause.
+
+**The model's pick.** The analysis may name at most one suspect, or explicitly
+none, and only from the shown top five. A pick outside them is recorded and not
+acted on. The model never moves the window, a score or a tier.
+
+**Restore first.** When criticality is high, the analysis is not confident, and
+the judged change is a suspect with a recorded before-state, the first
+recommendation is to roll that change back.
+
+### 14.5 Pre-state and inverses
+
+Before each compiled step writes, its read-only verification read runs and lands
+as an append-only capture: step, operation, target, digest, status, the parsed
+image, and the ids attached at execution time.
+
+- **Present** from a successful read. **Absent** only from an exact-target read
+  that proves absence. **Unknown** when the read was unavailable, denied,
+  truncated or redacted.
+- A redacted capture is evidence, never a restore source.
+- A write whose before-state could not be captured does not run; the refusal is an
+  audit event. A merge request is exempt: its base commit is the before-state.
+- After each step every written target is read again as evidence, and once more
+  after verification. The post-state read is never stored where it could become a
+  restore source.
+- Only a captured image with status present authorises an inverse. A single-step
+  plan with a compilable inverse gets a typed rollback that a person releases;
+  everything else gets operator lines, last step first, with the exact reason, for
+  example "the forward action was a restart; its inverse recreates the outage".
+- An empty capture is recorded as "none" with its reason, never as a fake
+  snapshot.
+
+### 14.6 Reverting from the window
+
+A revert is drafted, never executed: the draft is an ordinary change that goes
+through review, tier, window, approval and the before-state rule, with its own
+impact report attached before anyone approves.
+
+- **One change.** Refused for a denied attempt, a platform change (it has its own
+  rollback), a reported change, a change with no before-state, a resource the
+  change created ("revert is deleting it by hand"), or drift since the pre-image
+  (§10). The draft lists each later change on the same resource and what the
+  revert does to it: kept, undone, maybe, re-added or overwritten.
+- **Everything in the window.** Per resource the target is the earliest
+  before-state, newest-changed resource first. The first drifted resource refuses
+  the whole draft. A rule removed and later re-added is not treated as gone.
+- The first failing step stops the run; an exception means "uncertain, reconcile
+  before retrying".
+- Outside changes are never reverted automatically.
+
+### 14.7 Where the record is used
+
+- The next incident on the same key gets, in its first message: the grade, the fix
+  in words, the after-state, ledger changes on those resources since, how often
+  the fix was applied and did not hold, and, when the fix is "not good", the
+  instruction not to re-apply it but to find what keeps re-creating the condition.
+- An automatic remediation route whose fix is "not good" is refused.
+- The record's cause is the analysis pick when it is in the top five, else the
+  first-ranked change when it is a suspect, else the change pinned at open.
+
+## 15. The estate map: seeing what changed, fast
+
+The map is a dashboard in the dashboard server, a node graph panel fed by two
+frames (nodes and edges) that the `estate` plugin computes. There is no portal
+application of ours. Everything that makes the view fast or readable is computed
+on the server, because a stock panel cannot do it.
+
+**Views, each a panel with variables.**
+
+| View | Question | Input |
+|---|---|---|
+| Map | What does the model hold and how is it connected | Layer, class and text filters; or a focus entity with one to three hops both ways |
+| Changed since | What changed since a time, since the last read, or since the verification time of a last-known-good record | A time or a record id |
+| Change overlay | What does this pending change touch | A change id |
+| Service group | What is this one service made of | A seed entity |
+| Lifecycle | What moved the model, and when | A time range |
+
+**Selection and capping.** Above a node cap (300) the server keeps the focus and
+its nearest nodes, then the business layer, then the most connected, draws edges
+only between kept nodes, and says the result is cut. Properties are restricted to
+a whitelist and shortened.
+
+**Folding.** Leaves of one hub that share a class fold into one node past six, and
+a wall of one class with identical neighbours folds past twenty. Members of a fold
+share identical neighbours, so folding never hides a path. The focus, a selected
+node, nodes of the change overlay and marked nodes never fold.
+
+**Marks, as node and edge fields.**
+
+- Trust flags are drawn, never hidden: stale, unmodelled, unexpanded,
+  inconsistent. They are shown on the map and left out of reasoning.
+- Open incidents on the entity's service.
+- **Changed since**: added (valid time starts inside the range), not seen (last
+  observed before the latest complete read), changed (the fingerprint of §10
+  differs between the two times, so status noise and usage counters do not count),
+  split into changed by the platform and changed outside it.
+- **Change overlay**: intended and also-affected nodes highlighted; lost and gained
+  derived facts as dashed edges; violated invariants marked.
+
+**Why this is cheap on rows.** Because the estate is rows with valid time, "as of"
+and "changed since" are indexed range queries on one tenant's rows; no whole-model
+version is loaded and no fold has to be memoised. The diff for one entity loads
+two row images. The lifecycle list reads audit events, newest first, and folds
+bursts of outside writes on one resource into one row.
+
+**Limits.** The stock panel chooses its own layout; a tiered layout and multi-mark
+nodes would need a custom panel, which is a trigger, not part of this design. The
+field names the panel accepts are verified against the pinned dashboard server
+version before the dashboard is written.
+
+## 16. Order of work
 
 1. P2, with the `estate` plugin: vocabulary v1, the exporter, the rule table, the
    `estateReasoner` definition with its fake and conformance suite, and the
@@ -405,3 +674,8 @@ gets the same method with no change.
 4. Follow, outside-change absorption and the drift guard.
 5. On a trigger: a derivation checker contribution, flow grading of the service
    layer, firewall readers and their rules.
+6. With step 4: last-known-good records, the window and the ranking (§14), then
+   reverts from the window.
+7. With the first exact translator: invariants (§13).
+8. With the `estate` plugin's read surface: the map dashboard (§15), the changed
+   since view first.

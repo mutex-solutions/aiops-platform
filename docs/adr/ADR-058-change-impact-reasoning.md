@@ -85,6 +85,34 @@ decision rather than an edit.
    price is that a later estate read can invalidate a vote when those
    consequences change. The owner may accept decisions 1 to 8 without this one.
 
+10. **Invariants.** A list of derived facts that a change must never produce is
+    first-party data beside the rule table. A violation gained by a change is
+    shown first on the approval card and bound into the digest; whether it blocks
+    or raises the tier is a policy row.
+11. **Last known good is a record of a verified fix, not a snapshot.** One record
+    per resolve cycle of an incident, graded by code, with a fix signature and the
+    estate versions at onset and at verification; its status (held, did not hold,
+    not good) is derived when read from append-only marks. No scheduled state
+    snapshots.
+12. **One window and one transparent score.** Every reader uses the same window,
+    whose floor moves to the verification time of a verified record, and the same
+    `relation × time × kind` score with every factor kept. The model may pick a
+    suspect only from the shown candidates and never moves the window, a score or
+    a tier.
+13. **Reverts are drafted, never executed.** A revert from the window is an
+    ordinary change with its own impact report, refused on drift since the
+    pre-image, and outside changes are never reverted automatically. A write whose
+    before-state could not be captured does not run.
+14. **The estate map is a dashboard, computed on the server.** Capping, folding,
+    marks, "changed since" and the change overlay are computed by the `estate`
+    plugin and rendered by a stock node graph panel. No portal application.
+15. **Outside ontology toolkits stay build-time and optional.** Beyond the
+    optional derivation checker of decision 6, an upstream toolkit may be used in
+    CI only: shape and closed-world vocabulary checks beside the primary RDF
+    tool, a plan and drift report when the vocabulary or rule table changes, and
+    alignment suggestions that a person reviews. None runs in a profile, none is
+    offered to a harness, and its absence fails no release.
+
 ## Changes to the canonical record
 
 If accepted, and only then, these edits are made in one commit:
@@ -136,3 +164,9 @@ If accepted, and only then, these edits are made in one commit:
    customer or an auditor asks for machine-checkable impact?
 3. Which exact operations come first: NetworkPolicy, Service and Ingress edits,
    or host firewall rules?
+4. Decisions 11 to 13 bring last known good, the cause ranking and drafted
+   reverts into the plan, where 09 has none of them today. Which phase: with the
+   change hub in P1 (the ranking needs only the ledger and alert labels; the
+   "attached" relation waits for the estate), or all in P2?
+5. Does an invariant violation block approval, or raise the tier and require a
+   named reason (the proposed default)?
