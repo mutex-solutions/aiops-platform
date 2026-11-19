@@ -1,0 +1,13 @@
+# Words the kernel must not contain (whole word, case-insensitive).
+tenant
+incident
+alert
+approval
+dashboard
+grafana
+postgres
+river
+pillar
+harness
+remediation
+estate

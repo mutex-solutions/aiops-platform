@@ -1,0 +1,248 @@
+// Command kernelcheck enforces structural rules on the kernel module.
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "kernelcheck:", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> | coverage <profile> <import-path>")
+	if len(args) == 0 {
+		return usage
+	}
+	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3}
+	if n, ok := need[args[0]]; !ok || len(args) != n {
+		return usage
+	}
+	switch args[0] {
+	case "modfile":
+		return checkModfile(args[1])
+	case "vocab":
+		return checkVocab(args[1], args[2])
+	case "lines":
+		c, err := strconv.Atoi(args[2])
+		if err != nil || c < 0 {
+			return fmt.Errorf("invalid cap %q", args[2])
+		}
+		return checkLines(args[1], c)
+	default:
+		return checkCoverage(args[1], args[2])
+	}
+}
+
+var directive = regexp.MustCompile(`^(require|replace|exclude)\b`)
+
+func checkModfile(dir string) error {
+	f, err := os.Open(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		if m := directive.FindString(strings.TrimSpace(sc.Text())); m != "" {
+			return fmt.Errorf("%s/go.mod:%d: forbidden %q directive", dir, n, m)
+		}
+	}
+	return sc.Err()
+}
+
+// sourceFiles lists non-test .go files directly in dir.
+func sourceFiles(dir string) ([]string, error) {
+	all, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range all {
+		if !strings.HasSuffix(p, "_test.go") {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+var token = regexp.MustCompile(`[A-Za-z0-9]+`)
+
+// splitCamel splits "tenantID" into "tenant", "ID" and "HTTPServer" into
+// "HTTP", "Server".
+func splitCamel(s string) []string {
+	r := []rune(s)
+	var parts []string
+	start := 0
+	for i := 1; i < len(r); i++ {
+		prev, cur := r[i-1], r[i]
+		boundary := (unicode.IsLower(prev) || unicode.IsDigit(prev)) && unicode.IsUpper(cur) ||
+			unicode.IsUpper(prev) && unicode.IsUpper(cur) && i+1 < len(r) && unicode.IsLower(r[i+1])
+		if boundary {
+			parts = append(parts, string(r[start:i]))
+			start = i
+		}
+	}
+	return append(parts, string(r[start:]))
+}
+
+func checkVocab(dir, wordlist string) error {
+	data, err := os.ReadFile(wordlist)
+	if err != nil {
+		return err
+	}
+	banned := map[string]bool{}
+	for _, l := range strings.Split(string(data), "\n") {
+		if i := strings.Index(l, "#"); i >= 0 {
+			l = l[:i]
+		}
+		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
+			banned[l] = true
+		}
+	}
+	files, err := sourceFiles(dir)
+	if err != nil {
+		return err
+	}
+	var bad []string
+	for _, p := range files {
+		src, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		for n, line := range strings.Split(string(src), "\n") {
+			// Underscores are not token characters, so they split too.
+			for _, tok := range token.FindAllString(line, -1) {
+				for _, part := range splitCamel(tok) {
+					if w := strings.ToLower(part); banned[w] {
+						bad = append(bad, fmt.Sprintf("%s:%d: forbidden word %q", p, n+1, w))
+					}
+				}
+			}
+		}
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("vocabulary violations:\n%s", strings.Join(bad, "\n"))
+	}
+	return nil
+}
+
+func checkLines(dir string, limit int) error {
+	clean := filepath.Clean(dir)
+	err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
+			return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	files, err := sourceFiles(dir)
+	if err != nil {
+		return err
+	}
+	total := 0
+	for _, p := range files {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		n := strings.Count(string(b), "\n")
+		if len(b) > 0 && b[len(b)-1] != '\n' {
+			n++
+		}
+		fmt.Printf("%6d %s\n", n, p)
+		total += n
+	}
+	fmt.Printf("%6d total (cap %d)\n", total, limit)
+	if total > limit {
+		return fmt.Errorf("total %d lines exceeds cap %d", total, limit)
+	}
+	return nil
+}
+
+func checkCoverage(profile, importPath string) error {
+	f, err := os.Open(profile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	type cnt struct{ stmts, covered int }
+	files := map[string]*cnt{}
+	prefix := strings.TrimSuffix(importPath, "/") + "/"
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := sc.Text()
+		if (n == 1 && strings.HasPrefix(line, "mode:")) || line == "" {
+			continue
+		}
+		// name.go:l.c,l.c stmts count
+		colon := strings.LastIndex(line, ":")
+		fields := strings.Fields(line)
+		if colon < 0 || len(fields) != 3 {
+			return fmt.Errorf("%s:%d: malformed line %q", profile, n, line)
+		}
+		stmts, err1 := strconv.Atoi(fields[1])
+		hits, err2 := strconv.Atoi(fields[2])
+		if err1 != nil || err2 != nil {
+			return fmt.Errorf("%s:%d: malformed counts %q", profile, n, line)
+		}
+		name := line[:colon]
+		if !strings.HasPrefix(name, prefix) || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		c := files[name]
+		if c == nil {
+			c = &cnt{}
+			files[name] = c
+		}
+		c.stmts += stmts
+		if hits > 0 {
+			c.covered += stmts
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("no files under %s in %s", importPath, profile)
+	}
+	names := make([]string, 0, len(files))
+	for k := range files {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	var bad []string
+	for _, k := range names {
+		c := files[k]
+		pct := 100.0
+		if c.stmts > 0 {
+			pct = 100 * float64(c.covered) / float64(c.stmts)
+		}
+		fmt.Printf("%6.1f%% %s\n", pct, k)
+		if c.covered < c.stmts {
+			bad = append(bad, k)
+		}
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("incomplete coverage: %s", strings.Join(bad, ", "))
+	}
+	return nil
+}
