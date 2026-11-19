@@ -274,6 +274,57 @@ func TestInheritedBacklogIsNotChargedToTheNextObserver(t *testing.T) {
 	}
 }
 
+// The rule blames whichever observer the worker is inside when the bound is
+// crossed. An observer that is not at fault, merely still draining the backlog it
+// inherited from a stalled one, is detached once limit further events have been
+// accepted since the detachment and it has not yet delivered past them. This
+// documents the rule (ADR-034 "Unfairness that remains"); it is why a test that
+// needs an observer to keep up must wait for it before producing more events.
+func TestObserverStillDrainingInheritedBacklogIsDetachedOnItsOwnBacklog(t *testing.T) {
+	const limit = 4
+	ctx := testCtx(t)
+	d := newDispatcher(nil, dispatcherOptions{Backlog: limit})
+	owner := &stubOwner{}
+	stalled := addStalled(t, d, owner, "stalled")
+	gate := make(chan struct{}) // holds the healthy observer inside its first callback
+	started := make(chan struct{}, 1)
+	var release sync.Once
+	open := func() { release.Do(func() { close(gate) }) }
+	t.Cleanup(open)
+	var healthy recorder
+	if _, err := d.addObserver(owner, "healthy", func(_ context.Context, e ledgerEvent) error {
+		if e.Sequence == 1 {
+			started <- struct{}{}
+			<-gate
+		}
+		healthy.add(int(e.Sequence))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	appendRange(t, d, 1, 1)
+	receive(t, ctx, stalled.started, "stall")
+	appendRange(t, d, 2, limit+1) // detaches the stalled observer
+	receive(t, ctx, started, "healthy observer reached the resumed event")
+	appendRange(t, d, limit+2, 2*limit) // below the bound since the detachment
+	if status := d.snapshot(); status.Overflowed != 1 {
+		t.Fatalf("healthy observer detached below its own bound: %+v", status)
+	}
+	appendRange(t, d, 2*limit+1, 2*limit+1) // limit events since the detachment, none delivered
+	status := d.snapshot()
+	if status.Overflowed != 2 || status.Observers != 0 {
+		t.Fatalf("healthy observer behind the stalled one not detached: %+v", status)
+	}
+	open()
+	stalled.release()
+	if err := d.close(ctx); !errors.Is(err, errObserverOverflow) {
+		t.Fatalf("Close = %v", err)
+	}
+	if got := healthy.all(); !slices.Equal(got, []int{1}) {
+		t.Fatalf("healthy observer got %v, want only the event it was inside", got)
+	}
+}
+
 func TestOverflowOfAnInactiveOwnerReportsButSendsNoCallback(t *testing.T) {
 	const limit = 3
 	ctx := testCtx(t)

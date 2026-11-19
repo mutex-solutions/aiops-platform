@@ -100,18 +100,34 @@ func (rig *overflowRig) mountStalled(label string, cooperative bool) *stalledObs
 }
 
 type eventCollector struct {
-	mu  sync.Mutex
-	got []LedgerEvent
+	mu   sync.Mutex
+	got  []LedgerEvent
+	stop Disposer
 }
 
 func (c *eventCollector) observe(rig *overflowRig, label string) {
 	rig.t.Helper()
-	if _, err := rig.obs.ObserveEvents(rig.root, label, func(_ context.Context, event LedgerEvent) error {
+	stop, err := rig.obs.ObserveEvents(rig.root, label, func(_ context.Context, event LedgerEvent) error {
 		c.mu.Lock()
 		c.got = append(c.got, event)
 		c.mu.Unlock()
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
+		rig.t.Fatal(err)
+	}
+	c.stop = stop
+}
+
+// detach removes the observer once the test is done with it. Close disposes every
+// effect still registered on the root, one event each, so it emits at least as
+// many events as the test recorded: a burst above a small bound that no observer
+// can be guaranteed to keep up with. The rule then detaches whichever observer the
+// worker is inside (ADR-034, "Unfairness that remains"), so a test whose premise is
+// that the observer never overflows takes it off before Close.
+func (c *eventCollector) detach(rig *overflowRig) {
+	rig.t.Helper()
+	if err := c.stop(rig.ctx); err != nil {
 		rig.t.Fatal(err)
 	}
 }
@@ -223,6 +239,7 @@ func TestObserverOverflowDetachesOnlyTheStalledObserver(t *testing.T) {
 			}
 			keepsUp.checkTail(rig) // Every event, including the one after the overflow.
 			calls := stalled.calls.Load()
+			keepsUp.detach(rig)
 			err = rig.r.Close(rig.ctx)
 			if !errors.Is(err, ErrObserverOverflow) {
 				t.Fatalf("Close did not report the overflow: %v", err)
@@ -245,11 +262,12 @@ func TestObserverJustBelowTheBoundWithSlowProgressLosesNothing(t *testing.T) {
 			rig := newOverflowRig(t, candidate.make, backlog)
 			step := make(chan struct{})
 			seen := make(chan LedgerEvent, 4*backlog)
-			if _, err := rig.obs.ObserveEvents(rig.root, "slow", func(_ context.Context, event LedgerEvent) error {
+			stop, err := rig.obs.ObserveEvents(rig.root, "slow", func(_ context.Context, event LedgerEvent) error {
 				<-step
 				seen <- event
 				return nil
-			}); err != nil {
+			})
+			if err != nil {
 				t.Fatal(err)
 			}
 			// backlog undelivered events (the first in flight) is the largest allowed.
@@ -274,7 +292,12 @@ func TestObserverJustBelowTheBoundWithSlowProgressLosesNothing(t *testing.T) {
 			if status := rig.obs.ObserverStatus(); status.Overflowed != 0 || status.EventsLost != 0 || status.PeakBacklog < backlog {
 				t.Fatalf("status: %+v", status)
 			}
-			close(step) // later events (including shutdown) pass straight through
+			close(step)
+			// Close emits one event per recorded effect, a burst of at least the bound
+			// that even a fast observer is not guaranteed to absorb (see detach).
+			if err := stop(rig.ctx); err != nil {
+				t.Fatal(err)
+			}
 			if err := rig.r.Close(rig.ctx); err != nil {
 				t.Fatalf("Close without overflow: %v", err)
 			}
@@ -323,7 +346,8 @@ func TestObserverExplicitLargerBoundAbsorbsTheSameStall(t *testing.T) {
 
 // Overflow while the observer's fiber is being disposed: the callback holds the
 // lease, so disposal waits; the overflow is reported once and no callback
-// (terminal included) runs after the fiber is gone.
+// (terminal included) runs after the fiber is gone. The healthy observer is
+// taken off before Close, whose teardown burst could detach it (see detach).
 func TestObserverOverflowRacingFiberDisposal(t *testing.T) {
 	const backlog = 16
 	for _, candidate := range overflowCandidates {
@@ -355,6 +379,7 @@ func TestObserverOverflowRacingFiberDisposal(t *testing.T) {
 				t.Fatalf("AwaitObservers = %v", err)
 			}
 			keepsUp.checkTail(rig) // Including the disposal events.
+			keepsUp.detach(rig)
 			err := rig.r.Close(rig.ctx)
 			if !errors.Is(err, ErrObserverOverflow) {
 				t.Fatalf("Close = %v", err)
