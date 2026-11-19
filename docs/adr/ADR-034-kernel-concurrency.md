@@ -483,3 +483,127 @@ stays below the default.
 Left open: a callback that never returns keeps its goroutine and cannot receive its
 terminal signal (Go cannot stop it); this is reported (`Orphaned`, `Close` timing out
 with the real status), not hidden. The harness's own per-sample records are unchanged.
+
+## 2026-11-19 reconciler: atomic admission, completion-time deadlines, own-work drain clock, Settle/Close contract
+
+Four hazards of the reconciler (the single-owner candidate) were pinned by
+`hazards_test.go` and `hazards_graph_test.go` and are fixed here. The graph-lock
+candidate is changed separately. Every hazard test of the reconciler now passes
+(also with `S0_HAZARD_REPRO=1`).
+
+### Atomic admission (R1)
+
+Rule: a `Mount`, `Batch`, `Update` or `Dispose` either returns its result or has no
+effect. Never both "the caller got an error" and "the command was applied".
+
+Mechanism: every command that is not a wait carries one claim word with three
+states (queued, claimed, abandoned). The owner takes it queued to claimed
+immediately before it applies the command. A caller that gives up (context done,
+runtime closed) moves it queued to abandoned. The compare-and-swap decides who wins.
+
+Linearization argument: the claim word moves out of "queued" exactly once. If the
+caller wins, the owner finds "abandoned" at dequeue and drops the message, so the
+error means no effect. If the owner wins, the command is applied in that same turn
+and the reply is already on its way; the caller's give-up CAS fails and it takes
+the reply instead of the context error, so "applied" always comes with the real
+result. The wait after a claim is bounded because the owner never runs a callback
+and replies in the turn in which it claimed, before it can close `done`.
+Cancellation therefore stays effective exactly while the command is queued.
+
+Settle, Close and AwaitFiber admit no mutation and stay cancellable at any time.
+The earlier pinned behaviour of `Update`/`Dispose` (effect despite a context error,
+at-least-once) fell out of the same mechanism: it is gone, and
+`TestHazardR1UpdateDisposeEffectDespiteError` now expects "applied implies
+reported" for the reconciler (it already did for the graph-lock). With 10,000
+mounts under short contexts the burst leaves 5,000 accepted, 5,000 context errors,
+5,000 fibers and no fiber whose id no caller holds.
+
+### Deadlines are judged by the callback's return time (R2)
+
+Rule: a callback is judged by when it returned, not by when the owner got to its
+message.
+
+Mechanism: each load, check, scope, dispose and tracked callback has a small
+handshake. The worker stamps the instant the callback returned under a mutex,
+before it sends the completion; the completion carries the stamp. When a deadline
+falls due the owner reads the stamp: returned before the deadline means the work
+finished in time and only its message is late, so the entry is retired without a
+verdict and the queued message completes the transition. Not returned, or returned
+at or after the deadline, is a real overrun and is failed as before. The drain
+stage is judged the same way over its own work: the last lease by the instant it
+was released (stamped on the quiesced release path only), tracked work by its
+stamp, a lease still held by a tracked worker that is waiting for the owner's
+acknowledgement is discounted.
+
+Interleaving argument: the owner reads its clock (now >= deadline) before it takes
+the handshake mutex, and the worker writes the stamp under the same mutex, so one
+of two orders holds. If the stamp was written first it is the true return time,
+and the verdict is exact whether the message is in flight, queued behind other
+work or already handled. If the owner took the mutex first, the callback had not
+returned at an instant at or after the deadline, so it truly overran and its stamp
+can only be later. A completion that is ready together with its timer is judged
+after the verdict (the owner calls `expire` before it handles a completion), so
+select's random choice cannot matter. The dispose budget is one total deadline for
+the effect walk: when an effect finished in time but the budget lapsed while its
+message waited, the budget is re-armed for the effects still to run, which are
+then judged by their own return time.
+
+### Drain clock measures the fiber's own draining (R3)
+
+Rule: a fiber's drain budget covers its own leases, tracked work and in-flight
+check, nothing else. Waiting for dependants and for structural children is a
+separate wait without a clock of its own, bounded transitively by those fibers'
+own drain and dispose budgets.
+
+Mechanism: the drain clock runs only while the fiber has work of its own and
+stops when that work is done; entering the dispose walk starts the dispose budget
+as before. A fiber that waits for a blocked fiber is reported by name ("fiber N
+drain: waiting for fiber M", unwrapping to M's cause) in Settle and in its
+snapshot, never as a deadline of its own.
+
+Argument: a fiber's own work is finite by its own budget, a waiter's wait is the
+sum of waits that are each bounded by the awaited fiber's budgets, and the
+ownership graph (dependants, children) is acyclic, so every wait is bounded and
+the culprit is the one fiber whose callback is actually blocked.
+
+### Settle and Close contract (R4)
+
+Settle returns when no fiber is mid-transition except fibers blocked past one of their own deadlines. It returns nil when nothing is blocked, otherwise one joined diagnostic per blocked fiber naming the fiber and the stage. It never returns while an unblocked fiber is mid-transition. If ctx ends first it returns ctx's error joined with the diagnostics known so far.
+
+Close follows the same rule for its wait and always releases what it can (the
+observer dispatcher included) once the runtime has drained, even when its own
+context ended first. A fiber that waits on a blocked fiber counts as blocked, so a
+hung dependant does not make Settle hang on its provider.
+
+Mechanism: the owner keeps the number of busy units (one per fiber in a
+transition, one per in-flight check). A quiet turn compares it with zero; when
+fibers are blocked it compares it with the units held by the blocked set and the
+fibers waiting on it, so the cost is paid only while Settle or Close is parked and
+something is blocked. A waiter whose context ends is pushed to the owner by that
+context and is answered with the context error joined with the diagnostics known
+so far.
+
+Argument: Settle answers only on a turn at which busy equals the blocked set's
+units, which is exactly "no unblocked fiber is mid-transition"; a deadline can
+only add fibers to the blocked set and the completion of a blocked fiber's
+callback removes it from the set in the same turn that it changes phase, so the
+two sides cannot be seen apart.
+
+### Smaller fixes
+
+Parked waiters cost nothing per turn: cancelled waiters are handed to the owner by
+their context, and AwaitFiber waiters are examined only when their fiber changed
+(previously every parked waiter was checked on every turn, about W squared over 2
+context checks for W waiters; the test `TestReconcilerParkedWaitersCostNothingPerTurn`
+pins that the count does not grow with the events). A load deadline is shown once
+in a snapshot.
+
+### Cost on the owner loop and per completion
+
+Per command message: one compare-and-swap on the claim word. Per completion
+message: one `time.Time` stamp (24 bytes) and, on the worker, one clock read, one
+uncontended mutex and one small allocation for the handshake. Per owner turn that
+handles a completion: one extra `expire` call, which is a comparison with the
+earliest deadline when nothing is due. The lease fast path, `Enter` and `Leave`
+are untouched; the quiesced release path stamps the instant the last lease is
+released. No callback runs on the owner and the owner still never blocks.
