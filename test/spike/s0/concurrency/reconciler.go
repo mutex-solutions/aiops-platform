@@ -71,7 +71,8 @@ type rcMessage struct {
 	value    any
 	dispose  Disposer
 	err      error
-	errText  string // Rendered by the callback worker, never by the graph owner.
+	errText  string    // Rendered by the callback worker, never by the graph owner.
+	at       time.Time // Completions: when the callback returned, read on the worker (see rcRun).
 	keys     []string
 	check    *rcCheck
 	allowed  bool
@@ -95,6 +96,66 @@ type rcReply struct {
 	root       *Context
 	ids        []uint64
 	handle     *EffectHandle
+	run        *rcRun // Tracked start: the handshake its completion stamps.
+}
+
+// rcRun is the handshake between one off-owner callback and the owner's verdict
+// on that callback's deadline. A callback is judged by when IT returned, never
+// by when the owner got to its message: the worker stamps the instant the
+// callback returned (finish) under mu, and the owner reads that stamp under the
+// same mu when the deadline falls due (inTime).
+//
+// Why no interleaving of timer and completion can mis-judge. The owner reads the
+// clock (now >= deadline) before it takes mu, and both sides read the stamp or
+// write it only under mu, so exactly one of two orders holds. (1) finish ran
+// first: the stamp is the true return time, so the verdict is exact whether the
+// message is still in flight, queued behind other work, or already handled:
+// stamp < deadline means finished in time and the owner defers to the message,
+// stamp >= deadline means it overran. (2) The owner took mu first: the callback
+// has not returned at an instant >= deadline, and finish can only stamp later
+// than that, so it truly overran. The stamp is taken before the worker sends its
+// message (which may block on a full inbox), so queueing delay never counts. mu
+// guards two stores and one clock read on the worker and one load on the owner;
+// no callback ever runs under it.
+type rcRun struct {
+	mu sync.Mutex
+	at time.Time // Zero until the callback returned.
+}
+
+func (r *rcRun) finish() time.Time {
+	r.mu.Lock()
+	r.at = time.Now()
+	at := r.at
+	r.mu.Unlock()
+	return at
+}
+
+func (r *rcRun) zero() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.at.IsZero()
+}
+
+// once stamps only the first call.
+func (r *rcRun) once() {
+	r.mu.Lock()
+	if r.at.IsZero() {
+		r.at = time.Now()
+	}
+	r.mu.Unlock()
+}
+
+// inTime reports whether the callback returned strictly before deadline.
+func (r *rcRun) inTime(deadline time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return !r.at.IsZero() && r.at.Before(deadline)
+}
+
+// rcTracked is one tracked-work record, kept until its actual completion.
+type rcTracked struct {
+	label string
+	run   *rcRun
 }
 
 type rcConfigBinding struct {
@@ -141,9 +202,10 @@ type rcActivation struct {
 	cancel      context.CancelFunc
 	epoch       []uint64
 	selfDispose atomic.Bool
+	freed       rcRun // First instant the lease count of this quiesced activation reached zero.
 	notice      rcNotice
-	children    map[uint64]struct{} // Owner-only lifecycle children of this activation.
-	tracked     map[uint64]string   // Owner-only records until actual worker completion.
+	children    map[uint64]struct{}  // Owner-only lifecycle children of this activation.
+	tracked     map[uint64]rcTracked // Owner-only records until actual worker completion.
 	nextTracked uint64
 }
 
@@ -154,6 +216,7 @@ type rcCheck struct {
 	bindings   map[string]*rcProvision
 	generation uint64
 	deadline   time.Time
+	run        *rcRun // The check callback's handshake.
 	timedOut   bool
 	done       bool                // Result delivered to the owner; a pending service event may follow.
 	holds      []*rcPendingService // Held service events still waiting on this check.
@@ -226,6 +289,8 @@ type rcFiber struct {
 	scopeText       string // Cached operation diagnostics do not fail the activation.
 	blocked         error
 	deadline        time.Time
+	due             time.Time // A passed deadline whose callback finished in time: re-armed if more work follows under the same budget.
+	run             *rcRun    // Handshake of the load, scope or dispose callback in flight.
 	deadlineIndex   int
 	cleanupCtx      context.Context
 	cleanupCancel   context.CancelFunc
@@ -679,6 +744,11 @@ func (o *rcOwner) run() {
 			if msg.claim != nil && !msg.claim.CompareAndSwap(rcQueued, rcClaimed) {
 				break // The caller abandoned it while queued: no effect, nobody waits.
 			}
+			if !msg.at.IsZero() {
+				// A completion and its timer can both be ready, and select picks at
+				// random: let the verdict on the deadline come before the message.
+				o.expire(time.Now())
+			}
 			reply, deferred := o.handle(msg)
 			o.consumeNotices()
 			o.work()
@@ -884,12 +954,13 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 			return rcReply{err: errors.New("empty tracked work label")}, false
 		}
 		if m.act.tracked == nil {
-			m.act.tracked = make(map[uint64]string)
+			m.act.tracked = make(map[uint64]rcTracked)
 		}
 		m.act.nextTracked++
-		m.act.tracked[m.act.nextTracked] = m.key
+		run := new(rcRun)
+		m.act.tracked[m.act.nextTracked] = rcTracked{label: m.key, run: run}
 		o.event(f, "go:start", m.key, 0)
-		return rcReply{id: m.act.nextTracked}, false
+		return rcReply{id: m.act.nextTracked, run: run}, false
 	case rcTrackedDoneCommand:
 		o.trackedDone(m)
 	case rcNotifyCommand:
@@ -1293,7 +1364,7 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 	}
 	std, cancel := context.WithCancel(context.Background())
 	c := &Context{std: std, host: o.r, fiber: f.id, bindings: make(map[string]provision, len(bindings)), dispose: func() error { return ErrInactive }}
-	q := &rcCheck{ctx: c, cancel: cancel, epoch: slices.Clone(epoch), bindings: bindings, generation: f.checkVersion, deadline: time.Now().Add(rcLoadBudget)}
+	q := &rcCheck{ctx: c, cancel: cancel, epoch: slices.Clone(epoch), bindings: bindings, generation: f.checkVersion, deadline: time.Now().Add(rcLoadBudget), run: new(rcRun)}
 	for key, p := range bindings {
 		c.bindings[key] = p.binding
 		p.dependents[c] = f
@@ -1307,7 +1378,8 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 	go func() {
 		var allowed bool
 		err := rcInvoke(func() error { allowed = check(c); return nil })
-		o.r.completed(rcMessage{kind: rcCheckComplete, id: c.fiber, check: q, allowed: allowed, err: err, errText: rcErrorText(err)})
+		at := q.run.finish()
+		o.r.completed(rcMessage{kind: rcCheckComplete, id: c.fiber, check: q, allowed: allowed, err: err, errText: rcErrorText(err), at: at})
 	}()
 	return false
 }
@@ -1368,6 +1440,7 @@ func (o *rcOwner) activation(f *rcFiber, epoch []uint64, bindings map[string]*rc
 	// never enter the owner, and the transport waker runs only on quiescent exit.
 	c.leaseChanged = func() {
 		if !c.live.Load() && c.lease.Load() == 0 {
+			a.freed.once() // Quiesced exit only: the lease fast path never gets here.
 			o.r.notify(&a.notice)
 		}
 	}
@@ -1405,11 +1478,12 @@ func (o *rcOwner) activation(f *rcFiber, epoch []uint64, bindings map[string]*rc
 			}
 			return nil, reply.err
 		}
-		id := reply.id
+		id, run := reply.id, reply.run
 		return func(err error) {
 			// run and even Error() belong to the worker. Completion uses a
 			// non-canceled transport context so quiescence cannot lose its record.
-			o.r.exchange(context.Background(), rcMessage{kind: rcTrackedDoneCommand, act: a, id: id, err: err, errText: rcErrorText(err)})
+			at := run.finish()
+			o.r.exchange(context.Background(), rcMessage{kind: rcTrackedDoneCommand, act: a, id: id, err: err, errText: rcErrorText(err), at: at})
 		}, nil
 	}
 	c.child = func(spec Spec) (uint64, error) {
@@ -1439,6 +1513,8 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 	a := o.activation(f, epoch, bindings)
 	c, std := a.ctx, a.ctx.std
 	f.act, f.committed, f.invalid, f.phase = a, bindings, false, rcApplying
+	run := new(rcRun)
+	f.run = run
 	o.busy++
 	o.deadline(f, time.Now().Add(rcLoadBudget))
 	o.state(f, Loading)
@@ -1469,7 +1545,8 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 				}
 				return apply(c)
 			})
-			o.r.completed(rcMessage{kind: rcLoadComplete, id: c.fiber, act: a, dispose: returned, stale: stale, err: err, errText: rcErrorText(err)})
+			at := run.finish()
+			o.r.completed(rcMessage{kind: rcLoadComplete, id: c.fiber, act: a, dispose: returned, stale: stale, err: err, errText: rcErrorText(err), at: at})
 		}()
 	}
 	if o.serviceHeld(f.spec.Needs) {
@@ -1534,6 +1611,7 @@ func (o *rcOwner) loaded(m rcMessage) {
 	if f == nil || f.act != m.act || f.phase != rcApplying {
 		return
 	}
+	f.run = nil
 	if m.err == nil && m.dispose != nil {
 		// A returned plugin disposer is collected after all body effects, even
 		// when the load was superseded or requested its own disposal meanwhile.
@@ -1581,6 +1659,8 @@ func (o *rcOwner) scopeWork(f *rcFiber) bool {
 			continue
 		}
 		f.phase, f.scopeRunning = rcScoping, e
+		run := new(rcRun)
+		f.run = run
 		o.busy++
 		budget := rcLoadBudget
 		if withdraw {
@@ -1605,7 +1685,8 @@ func (o *rcOwner) scopeWork(f *rcFiber) bool {
 					err = nil
 				}
 			}
-			o.r.completed(rcMessage{kind: rcScopeComplete, id: id, act: a, scope: e, withdraw: withdraw, err: err, errText: rcErrorText(err)})
+			at := run.finish()
+			o.r.completed(rcMessage{kind: rcScopeComplete, id: id, act: a, scope: e, withdraw: withdraw, err: err, errText: rcErrorText(err), at: at})
 		}()
 		return true
 	}
@@ -1617,7 +1698,7 @@ func (o *rcOwner) scopeDone(m rcMessage) {
 	if f == nil || f.act != m.act || f.phase != rcScoping || f.scopeRunning != m.scope {
 		return
 	}
-	f.scopeRunning = nil
+	f.scopeRunning, f.run = nil, nil
 	f.phase = rcIdle
 	o.busy--
 	o.deadline(f, time.Time{})
@@ -1646,10 +1727,11 @@ func (o *rcOwner) trackedDone(m rcMessage) {
 	if a == nil {
 		return
 	}
-	label, exists := a.tracked[m.id]
+	work, exists := a.tracked[m.id]
 	if !exists {
 		return
 	}
+	label := work.label
 	delete(a.tracked, m.id)
 	f := o.lookup(a.ctx.fiber)
 	if f == nil || f.act != a {
@@ -1758,6 +1840,8 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 			continue
 		}
 		f.effectRunning = true
+		run := new(rcRun)
+		f.run = run
 		act, cleanupCtx, id := f.act, f.cleanupCtx, f.id
 		go func() {
 			err := rcInvoke(func() error {
@@ -1767,7 +1851,8 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 				}
 				return e.dispose(cleanupCtx)
 			})
-			o.r.completed(rcMessage{kind: rcEffectComplete, id: id, act: act, err: err, errText: rcErrorText(err)})
+			at := run.finish()
+			o.r.completed(rcMessage{kind: rcEffectComplete, id: id, act: act, err: err, errText: rcErrorText(err), at: at})
 		}()
 		return
 	}
@@ -1790,19 +1875,25 @@ func (o *rcOwner) effectDone(m rcMessage) {
 	if f == nil || f.act != m.act || f.phase != rcDisposing || !f.effectRunning {
 		return
 	}
-	f.effectRunning = false
+	f.effectRunning, f.run = false, nil
 	// Disposal has one total deadline for this activation, not a fresh budget
 	// per effect. Once it expires, retain the blocked diagnostic until all
-	// remaining LIFO cleanup actually returns; the owner timer is already spent.
-	// Compare the clock, not only Err: the owner no longer cancels the cleanup
-	// context at expiry, so the context's own timer may not have run yet.
+	// remaining LIFO cleanup actually returns. Whether this disposer overran is
+	// judged by the instant it returned (m.at, stamped on its worker), not by the
+	// clock of the owner turn that handles the message.
 	expired := false
 	if f.cleanupCtx != nil {
 		at, _ := f.cleanupCtx.Deadline()
-		expired = f.cleanupCtx.Err() != nil || !time.Now().Before(at)
+		expired = !m.at.Before(at)
 	}
 	if !expired {
 		o.block(f, nil)
+	}
+	// This callback finished inside the budget, but the budget lapsed while its
+	// message waited: the effects still to run are under the same total deadline,
+	// so re-arm it and let the next turn judge them (see expire).
+	if due := f.due; !due.IsZero() {
+		o.deadline(f, due)
 	}
 	if m.err != nil {
 		o.fail(f, errors.Join(f.failure, m.err), rcJoinText(f.failureText, m.errText))
@@ -2137,7 +2228,7 @@ func (o *rcOwner) snapshot(f *rcFiber) Snapshot {
 		}
 		slices.Sort(trackedIDs)
 		for _, id := range trackedIDs {
-			s.Tracked = append(s.Tracked, f.act.tracked[id])
+			s.Tracked = append(s.Tracked, f.act.tracked[id].label)
 		}
 	}
 	for _, e := range f.effects {
@@ -2312,7 +2403,7 @@ func (o *rcOwner) block(f *rcFiber, err error) {
 }
 
 func (o *rcOwner) deadline(f *rcFiber, at time.Time) {
-	f.deadline = at
+	f.deadline, f.due = at, time.Time{}
 	if at.IsZero() {
 		if f.deadlineIndex >= 0 {
 			heap.Remove(&o.deadlines, f.deadlineIndex)
@@ -2331,27 +2422,31 @@ func (o *rcOwner) nextDeadline() time.Time {
 	return o.deadlines[0].deadline
 }
 
+// expire fires the deadlines that are due at now. A deadline is a verdict on a
+// callback that has not returned, so before it blocks a fiber it asks the
+// callback's handshake (rcRun) whether the callback returned before the deadline.
+// If it did, the work finished in time and only its message is late: the entry is
+// retired without a verdict and the message completes the transition. Only work
+// that had not returned by the deadline is blocked, so an owner busy with other
+// commands cannot fail a callback that finished in budget, and a callback that
+// truly overran is still failed even if its completion is already in flight.
 func (o *rcOwner) expire(now time.Time) {
 	for len(o.deadlines) != 0 && !now.Before(o.deadlines[0].deadline) {
 		f := o.deadlines[0]
+		at := f.deadline
+		stage, run := o.stageOf(f)
+		inTime := run != nil && run.inTime(at)
+		if stage == "drain" {
+			inTime = o.drainInTime(f, at)
+		}
 		o.deadline(f, time.Time{})
-		stage := "load"
-		if f.checking != nil && f.phase == rcIdle {
-			stage = "check"
+		if inTime {
+			f.due = at
+			continue
+		}
+		if stage == "check" {
 			f.checking.timedOut = true
 			f.checking.cancel()
-		}
-		if f.phase == rcScoping {
-			stage = "scope"
-		}
-		if f.phase == rcDraining {
-			stage = "drain"
-		}
-		if f.phase == rcDisposing {
-			stage = "dispose"
-			if f.joining {
-				stage = "drain"
-			}
 		}
 		o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		if f.phase == rcApplying {
@@ -2368,4 +2463,62 @@ func (o *rcOwner) expire(now time.Time) {
 		// the context's own deadline cancels blocked disposer work truthfully.
 		o.event(f, "deadline", stage, 0)
 	}
+}
+
+// stageOf names the stage a due deadline of f belongs to and returns the handshake
+// of the off-owner callback it waits for, if any.
+func (o *rcOwner) stageOf(f *rcFiber) (string, *rcRun) {
+	switch {
+	case f.phase == rcScoping:
+		return "scope", f.run
+	case f.phase == rcDraining:
+		return "drain", nil
+	case f.phase == rcDisposing:
+		if f.joining {
+			return "drain", nil
+		}
+		if f.effectRunning {
+			return "dispose", f.run
+		}
+		return "dispose", nil
+	case f.checking != nil && f.phase == rcIdle:
+		return "check", f.checking.run
+	}
+	return "load", f.run
+}
+
+// drainInTime reports whether everything a draining fiber still waits for is
+// already done, or finished before at, so that only owner messages are pending.
+// The last lease is judged by the instant it was released (act.freed, stamped by
+// the releasing goroutine on the quiesced path only). A tracked worker keeps its
+// lease until the owner acknowledges its completion, so a worker whose callback
+// returned in time and waits for that acknowledgement is discounted from the
+// lease count instead of being blamed for the owner's delay.
+func (o *rcOwner) drainInTime(f *rcFiber, at time.Time) bool {
+	a := f.act
+	if a == nil || f.joining || (f.id == 0 && o.closing && len(o.fibers) != 0) {
+		return false
+	}
+	finished := int64(0)
+	for _, w := range a.tracked {
+		if !w.run.inTime(at) {
+			return false
+		}
+		finished++
+	}
+	if a.ctx.lease.Load() > finished {
+		return false
+	}
+	if !a.freed.inTime(at) && !a.freed.zero() {
+		return false
+	}
+	if f.checking != nil && !f.checking.run.inTime(at) {
+		return false
+	}
+	for _, p := range f.provisions {
+		if len(p.dependents) != 0 {
+			return false
+		}
+	}
+	return true
 }
