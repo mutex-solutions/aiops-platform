@@ -21,6 +21,7 @@ import (
 var candidates = map[string]func() concurrency.Runtime{
 	"reconciler": concurrency.NewReconciler,
 	"graph-lock": concurrency.NewGraphLock,
+	"kernel":     concurrency.NewKernel,
 }
 
 type fixture struct {
@@ -44,6 +45,9 @@ func newFixture(t testing.TB, makeRuntime func() concurrency.Runtime) *fixture {
 		}
 		cancel()
 	})
+	if gap := concurrency.UnsupportedGap(ctx, runtime); gap != "" {
+		t.Skipf("UNSUPPORTED backend, not run, not a pass: %s", gap)
+	}
 	key := contextmodel.NewKey[int]("test-owner", 0, contextmodel.Classes(contextmodel.ProviderBound, contextmodel.Open)).Any()
 	entries := make(map[string]contextmodel.Plugin)
 	var registered []contextmodel.Plugin

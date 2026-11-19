@@ -29,7 +29,7 @@ var diagnosticCompiledSourceSHA256, diagnosticCompiledBuildFlags string
 const diagnosticLabel = "single-trial-NoSampleFloor-NoFinalParity"
 
 var diagnosticSourceClasses = []string{
-	"test/spike/s0/concurrency", "test/spike/s0/composition",
+	"sdk/kernel", "test/spike/s0/concurrency", "test/spike/s0/composition",
 	"test/spike/s0/contextmodel", "test/spike/s0/internal/eventqueue", "test/spike/s0/scale",
 }
 
@@ -150,12 +150,12 @@ func TestDiagnosticSourceFence(t *testing.T) {
 func diagnosticCaseValid(selected string) bool {
 	topology, backend, ok := strings.Cut(selected, "/")
 	return ok && slices.Contains([]string{"independent", "chain", "fanout", "diamonds", "realms"}, topology) &&
-		slices.Contains([]string{"reconciler", "graph-lock"}, backend)
+		slices.Contains([]string{"reconciler", "graph-lock", "kernel"}, backend)
 }
 
 func TestDiagnosticCaseSelector(t *testing.T) {
 	for _, topology := range []string{"independent", "chain", "fanout", "diamonds", "realms"} {
-		for _, backend := range []string{"reconciler", "graph-lock"} {
+		for _, backend := range []string{"reconciler", "graph-lock", "kernel"} {
 			if !diagnosticCaseValid(topology + "/" + backend) {
 				t.Errorf("exact diagnostic case rejected: %s/%s", topology, backend)
 			}
@@ -234,7 +234,7 @@ func TestDiagnostic10k(t *testing.T) {
 		if err != nil || len(fixture.Nodes) != 10_000 {
 			t.Fatalf("frozen topology %s: count=%d error=%v", topology, len(fixture.Nodes), err)
 		}
-		for _, backend := range Candidates() {
+		for _, backend := range supportedBackends(t) {
 			if selected != string(topology)+"/"+backend.Name {
 				continue
 			}
@@ -288,7 +288,7 @@ func TestDiagnostic15FiberSmoke(t *testing.T) {
 	if err != nil || len(fixture.Nodes) != 15 {
 		t.Fatalf("15-fiber fixture: %v", err)
 	}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			result := RunT(context.Background(), backend, fixture)
 			path := filepath.Join(t.TempDir(), "result.json")

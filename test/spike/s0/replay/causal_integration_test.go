@@ -41,7 +41,7 @@ const (
 var causalBackends = []struct {
 	name string
 	make func() concurrency.Runtime
-}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}}
+}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}, {"kernel", concurrency.NewRecordingKernel}}
 
 // actualWitness binds exact emitted bytes, not a remarshal or a desired cut.
 func actualWitness(script, trace []byte, cuts []differential.CausalCut) differential.CausalWitness {
@@ -92,6 +92,7 @@ func TestActualCausalWitnessObservations(t *testing.T) {
 	for _, id := range []string{"D10", "D16"} {
 		for _, backend := range causalBackends {
 			t.Run(id+"/"+backend.name, func(t *testing.T) {
+				skipUnsupportedBackend(t, backend.make)
 				script := loadFixture(t, "../../../differential/corpus/"+id+".json")
 				result, runErr, closeErr := captureCausalActual(backend.make, script, false)
 				if err := errors.Join(runErr, closeErr, result.ComparisonError); err != nil {
@@ -143,6 +144,7 @@ func TestActualCausalWitnessZeroRepeatedCutAndTail(t *testing.T) {
 		{"op":"output","to":"v","value":2}]} ` + "\n")
 	for _, backend := range causalBackends {
 		t.Run(backend.name, func(t *testing.T) {
+			skipUnsupportedBackend(t, backend.make)
 			result, runErr, closeErr := captureCausalActual(backend.make, script, false)
 			if err := errors.Join(runErr, closeErr); err != nil {
 				t.Fatal(err)
@@ -203,46 +205,50 @@ func corpusPath(id string) string { return "../../../differential/corpus/" + id 
 // causalCovered must match on every listed backend, every run. The set is the
 // pairs that matched 100 of 100 under -race and 100 of 100 with GOMAXPROCS=2 after
 // the candidate fixes of 2026-11-18 (docs/design/s0-causal-coverage.md).
+//
+// The kernel column is the requirement for the final port, not a measured rate:
+// until the public API exports what the replay needs, a live run on it fails with
+// the adapter's unsupported error.
 var causalCovered = []struct {
 	causalScenario
 	backends []string
 }{
-	{causalScenario{"D01", corpusPath("D01"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D02", corpusPath("D02"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D03", corpusPath("D03"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D04", corpusPath("D04"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D07", corpusPath("D07"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D08", corpusPath("D08"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D09", corpusPath("D09"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D11", corpusPath("D11"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D13", "../../../differential/corpus/revision-5/D13.json", true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D15", corpusPath("D15"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D17", corpusPath("D17"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D18", corpusPath("D18"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D19", corpusPath("D19"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D20", corpusPath("D20"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D21", corpusPath("D21"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D01", corpusPath("D01"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D02", corpusPath("D02"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D03", corpusPath("D03"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D04", corpusPath("D04"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D07", corpusPath("D07"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D08", corpusPath("D08"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D09", corpusPath("D09"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D10", corpusPath("D10"), false}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D11", corpusPath("D11"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D12", corpusPath("D12"), false}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D13", "../../../differential/corpus/revision-5/D13.json", true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D14", corpusPath("D14"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D15", corpusPath("D15"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D16", corpusPath("D16"), false}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D17", corpusPath("D17"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D18", corpusPath("D18"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D19", corpusPath("D19"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D20", corpusPath("D20"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D21", corpusPath("D21"), true}, []string{"reconciler", "graph-lock", "kernel"}},
 	// Amendment 3 (docs/design/s0-causal-comparison-amendment-3.md): each pair below
 	// matched 100 of 100 under -race and 100 of 100 with GOMAXPROCS=2 under -race.
 	// Amendment 4: the joining-setup cut after the un-awaited disposal floats (14, 15 or 18
 	// events); matched 100 of 100 in both modes on both candidates.
-	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D24", corpusPath("D24"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D27", corpusPath("D27"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D28", corpusPath("D28"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D29", corpusPath("D29"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D30", corpusPath("D30"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D31", corpusPath("D31"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D32", corpusPath("D32"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D33", corpusPath("D33"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D34", corpusPath("D34"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D35", corpusPath("D35"), true}, []string{"reconciler", "graph-lock"}},
-	{causalScenario{"D36", corpusPath("D36"), true}, []string{"reconciler", "graph-lock"}},
+	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D24", corpusPath("D24"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D27", corpusPath("D27"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D28", corpusPath("D28"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D29", corpusPath("D29"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D30", corpusPath("D30"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D31", corpusPath("D31"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D32", corpusPath("D32"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D33", corpusPath("D33"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D34", corpusPath("D34"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D35", corpusPath("D35"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	{causalScenario{"D36", corpusPath("D36"), true}, []string{"reconciler", "graph-lock", "kernel"}},
 }
 
 // causalDiagnostics are pairs the comparator does NOT accept. A pair marked flaky

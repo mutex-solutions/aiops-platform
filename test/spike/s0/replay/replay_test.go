@@ -32,10 +32,31 @@ func corpus(t *testing.T, id string) differential.Script {
 	return *script
 }
 
+// skipUnsupported registers a backend whose adapter refuses a capability every
+// replay needs as a skipped subtest that prints the gap: not run, not a pass.
+func skipUnsupported(t *testing.T, ctx context.Context, runtime concurrency.Runtime) {
+	t.Helper()
+	if gap := concurrency.UnsupportedGap(ctx, runtime); gap != "" {
+		t.Skipf("UNSUPPORTED backend, not run, not a pass: %s", gap)
+	}
+}
+
+// skipUnsupportedBackend is skipUnsupported for a table entry that builds its
+// own runtime: the probe runtime is closed and the subtest is skipped, not passed.
+func skipUnsupportedBackend(t *testing.T, build func() concurrency.Runtime) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r := build()
+	defer func() { _ = r.Close(ctx) }()
+	skipUnsupported(t, ctx, r)
+}
+
 func eachRuntime(t *testing.T, test func(*testing.T, context.Context, concurrency.Runtime)) {
 	t.Helper()
 	for name, makeRuntime := range map[string]func() concurrency.Runtime{
 		"reconciler": concurrency.NewRecordingReconciler, "graph-lock": concurrency.NewRecordingGraphLock,
+		"kernel": concurrency.NewRecordingKernel,
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -46,6 +67,7 @@ func eachRuntime(t *testing.T, test func(*testing.T, context.Context, concurrenc
 				defer closeCancel()
 				_ = runtime.Close(closeCtx) // Deliberate fixture failures can survive Close.
 			}()
+			skipUnsupported(t, ctx, runtime)
 			test(t, ctx, runtime)
 		})
 	}

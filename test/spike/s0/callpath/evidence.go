@@ -26,7 +26,7 @@ const repoRoot = "../../../.."
 // Production Go of every package linked into the measured executable, plus the
 // whole callpath package (its test files are compiled into the test binary).
 var closureClasses = []string{
-	"test/spike/s0/concurrency", "test/spike/s0/composition", "test/spike/s0/contextmodel",
+	"sdk/kernel", "test/spike/s0/concurrency", "test/spike/s0/composition", "test/spike/s0/contextmodel",
 	"test/spike/s0/internal/eventqueue", "test/spike/s0/scale",
 }
 

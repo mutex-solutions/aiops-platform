@@ -59,7 +59,7 @@ func settleOf(t *testing.T, backend Backend, groups, total int) time.Duration {
 // pre-check and were never affected.
 func TestReproHeldServiceScanGrowsWithProviders(t *testing.T) {
 	requireRepro(t)
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			best := func(groups int) time.Duration {
 				d := settleOf(t, backend, groups, 10_000)
@@ -140,7 +140,7 @@ func TestReproRetainedHeapGrowsWithChurnHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			deltas := churnRetained(t, backend, f, 8)
 			t.Logf("%s: retained over shared-only per cycle %v bytes", backend.Name, deltas)
@@ -161,7 +161,7 @@ func TestReproChurnStaysInsideRetentionBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			result := RunCycles(context.Background(), backend, f, 6)
 			if len(result.Errors) != 0 {

@@ -117,6 +117,9 @@ func TestGoroutineOwnershipMatchesStacksNotCountOffsets(t *testing.T) {
 	if !ownedGoroutine("github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue.(*Dispatcher[...]).run(0x1)") {
 		t.Fatal("native observer worker must be counted, not exempted as another package")
 	}
+	if !ownedGoroutine("github.com/mutex-solutions/aiops-platform/sdk/kernel.(*owner).run(0x1)") {
+		t.Fatal("kernel owner stacks must be counted")
+	}
 	for _, stack := range []string{"runtime.forcegchelper()", "testing.(*T).Run(0x1)", "runtime.bgsweep()"} {
 		if ownedGoroutine(stack) {
 			t.Fatalf("unrelated Go runtime/test stack treated as fixture-owned: %s", stack)

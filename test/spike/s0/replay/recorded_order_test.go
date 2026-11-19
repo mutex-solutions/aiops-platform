@@ -61,6 +61,7 @@ func TestD09D14MatchRecordedOracleOrder(t *testing.T) {
 		script := loadFixture(t, corpusPath(id))
 		for _, backend := range causalBackends {
 			t.Run(id+"/"+backend.name, func(t *testing.T) {
+				skipUnsupportedBackend(t, backend.make)
 				result, runErr, closeErr := captureCausalActual(backend.make, script, true)
 				if runErr != nil || closeErr != nil {
 					t.Fatal(runErr, closeErr)

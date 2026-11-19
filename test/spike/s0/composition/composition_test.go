@@ -22,7 +22,7 @@ func both(t *testing.T, body func(*testing.T, context.Context, cc.Runtime)) {
 	for _, candidate := range []struct {
 		name string
 		new  func() cc.Runtime
-	}{{"graphlock", cc.NewRecordingGraphLock}, {"reconciler", cc.NewRecordingReconciler}} {
+	}{{"graphlock", cc.NewRecordingGraphLock}, {"reconciler", cc.NewRecordingReconciler}, {"kernel", cc.NewRecordingKernel}} {
 		t.Run(candidate.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -32,6 +32,9 @@ func both(t *testing.T, body func(*testing.T, context.Context, cc.Runtime)) {
 					t.Error(err)
 				}
 			}()
+			if gap := cc.UnsupportedGap(ctx, r); gap != "" {
+				t.Skipf("UNSUPPORTED backend, not run, not a pass: %s", gap)
+			}
 			body(t, ctx, r)
 		})
 	}

@@ -71,14 +71,16 @@ func MeasureColdMount(ctx context.Context, rec IdentityRecord, plan ColdPlan, co
 		}
 	}
 	var names []string
-	for _, b := range Candidates() {
+	candidates, unsupported := Runnable(Candidates())
+	report.Add(UnsupportedFindings(unsupported)...)
+	for _, b := range candidates {
 		names = append(names, b.Name)
 		report.Timeouts = append(report.Timeouts, RunColdTimeoutFixture(ctx, b, plan))
 	}
 	var runs []ColdRun
 	for _, body := range plan.Bodies {
 		for rep := 0; rep < plan.Repetitions; rep++ {
-			backends := Candidates()
+			backends := slices.Clone(candidates)
 			arms := []ColdArm{ArmB0, ArmB1, ArmA}
 			if rep%2 == 1 {
 				slices.Reverse(backends)

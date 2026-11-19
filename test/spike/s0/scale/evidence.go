@@ -29,7 +29,7 @@ const repoRoot = "../../../.."
 // executable. Production Go only for dependencies; the scale package itself is
 // hashed with its tests because its test files are compiled into the binary.
 var closureClasses = []string{
-	"test/spike/s0/concurrency", "test/spike/s0/composition", "test/spike/s0/contextmodel",
+	"sdk/kernel", "test/spike/s0/concurrency", "test/spike/s0/composition", "test/spike/s0/contextmodel",
 	"test/spike/s0/internal/eventqueue",
 }
 

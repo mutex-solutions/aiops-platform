@@ -157,7 +157,11 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 	if len(backends) == 0 {
 		backends = scale.Candidates()
 	}
+	backends, unsupported := scale.Runnable(backends)
 	in := EvalInput{Plan: cfg.Plan, Dry: cfg.Dry, IdentityProblems: identity.Problems, Invalid: identity.Invalid}
+	for _, u := range unsupported { // Missing evidence is inconclusive, never a pass.
+		in.EvidenceProblems = append(in.EvidenceProblems, fmt.Sprintf("%s: backend registered but UNSUPPORTED, not run: %s", u.Name, u.Gap))
+	}
 	for _, b := range backends {
 		in.Candidates = append(in.Candidates, b.Name)
 	}

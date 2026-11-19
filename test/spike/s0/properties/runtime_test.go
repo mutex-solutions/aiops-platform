@@ -594,7 +594,7 @@ func identity(root string) (evidenceIdentity, error) {
 	// Freeze the actual local package closure, not unrelated S0 probes that do
 	// not enter this executable. The native observer queue is now linked by the
 	// runtime; its source and leak footprint must join this exact local closure.
-	for _, directory := range []string{"test/spike/s0/concurrency", "test/spike/s0/properties", "test/spike/s0/internal/eventqueue"} {
+	for _, directory := range []string{"sdk/kernel", "test/spike/s0/concurrency", "test/spike/s0/properties", "test/spike/s0/internal/eventqueue"} {
 		if err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -681,6 +681,7 @@ func goroutines() map[uint64]string {
 func ownedGoroutine(stack string) bool {
 	return strings.Contains(stack, "/test/spike/s0/concurrency.") ||
 		strings.Contains(stack, "/test/spike/s0/internal/eventqueue.") ||
+		strings.Contains(stack, "/sdk/kernel.") ||
 		strings.Contains(stack, "/test/spike/s0/properties.(*actualFiber).")
 }
 
@@ -744,7 +745,7 @@ func TestRuntimeProperties(t *testing.T) {
 	backends := []struct {
 		name string
 		make func() concurrency.Runtime
-	}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}}
+	}{{"reconciler", concurrency.NewRecordingReconciler}, {"graph-lock", concurrency.NewRecordingGraphLock}, {"kernel", concurrency.NewRecordingKernel}}
 	var replay *failureRecord
 	if path := os.Getenv("S0_PROPERTY_REPLAY"); path != "" {
 		if full {
@@ -758,7 +759,7 @@ func TestRuntimeProperties(t *testing.T) {
 		if err := json.Unmarshal(bytes, replay); err != nil {
 			t.Fatal(err)
 		}
-		if replay.Kind != "s0-property-first-failing-prefix" || (replay.Backend != "reconciler" && replay.Backend != "graph-lock") || len(replay.Operations) == 0 {
+		if replay.Kind != "s0-property-first-failing-prefix" || (replay.Backend != "reconciler" && replay.Backend != "graph-lock" && replay.Backend != "kernel") || len(replay.Operations) == 0 {
 			t.Fatal("invalid replay: expected a nonempty S0 first-failing prefix for an actual candidate")
 		}
 		seeds, mode = 1, "replay-NOT-full-gate"
@@ -767,6 +768,13 @@ func TestRuntimeProperties(t *testing.T) {
 	var completedBackends []string
 	for _, backend := range backends {
 		if replay != nil && replay.Backend != backend.name {
+			continue
+		}
+		if gap := backendGap(backend.make); gap != "" {
+			// Registered, reported, never run and never listed as completed.
+			t.Run(backend.name, func(t *testing.T) {
+				t.Skipf("UNSUPPORTED backend %s, not run, not a pass: %s", backend.name, gap)
+			})
 			continue
 		}
 		if full {
@@ -856,6 +864,16 @@ func TestRuntimeProperties(t *testing.T) {
 			t.Error(err)
 		}
 	}
+}
+
+// backendGap probes a fresh runtime for a capability its adapter refuses with
+// concurrency.ErrKernelUnsupported. Empty for both prototype cores.
+func backendGap(make func() concurrency.Runtime) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r := make()
+	defer func() { _ = r.Close(ctx) }()
+	return concurrency.UnsupportedGap(ctx, r)
 }
 
 // TestPropertyIdentity prints a freeze receipt without running any runtime or

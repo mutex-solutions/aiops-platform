@@ -249,7 +249,7 @@ func candidateGoroutines() int {
 		if n < len(buf) {
 			count := 0
 			for _, stack := range strings.Split(string(buf[:n]), "\n\n") {
-				if strings.Contains(stack, "/test/spike/s0/concurrency.") || strings.Contains(stack, "/test/spike/s0/internal/eventqueue.") {
+				if strings.Contains(stack, "/test/spike/s0/concurrency.") || strings.Contains(stack, "/test/spike/s0/internal/eventqueue.") || strings.Contains(stack, "/sdk/kernel.") {
 					count++
 				}
 			}

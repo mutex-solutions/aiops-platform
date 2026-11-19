@@ -31,7 +31,49 @@ func Candidates() []Backend {
 	return []Backend{
 		{Name: "reconciler", New: cc.NewReconciler, WithRetention: cc.NewReconcilerWith},
 		{Name: "graph-lock", New: cc.NewGraphLock, WithRetention: cc.NewGraphLockWith},
+		// The final port, driven through its public API (see concurrency/kernel_backend.go).
+		{Name: "kernel", New: cc.NewKernel, WithRetention: cc.NewKernelWith},
 	}
+}
+
+// Unsupported is a registered backend that cannot be driven because its adapter
+// refuses a capability the harness needs (cc.ErrKernelUnsupported).
+type Unsupported struct{ Name, Gap string }
+
+// Runnable splits backends into those a harness can drive and those whose adapter
+// refuses a capability every harness needs. It probes a fresh runtime, so closing
+// a gap in the adapter needs no table edit. An unsupported backend stays
+// registered and is reported (UnsupportedFindings), never
+// dropped silently and never counted as a pass.
+func Runnable(backends []Backend) ([]Backend, []Unsupported) {
+	var run []Backend
+	var out []Unsupported
+	for _, b := range backends {
+		if gap := probeGap(b); gap != "" {
+			out = append(out, Unsupported{b.Name, gap})
+			continue
+		}
+		run = append(run, b)
+	}
+	return run, out
+}
+
+func probeGap(b Backend) string {
+	ctx, cancel := context.WithTimeout(context.Background(), TrialGuard)
+	defer cancel()
+	r := b.New()
+	defer func() { _ = r.Close(ctx) }()
+	return cc.UnsupportedGap(ctx, r)
+}
+
+// UnsupportedFindings is one inconclusive finding per unsupported backend:
+// missing evidence for a registered backend can never reach pass.
+func UnsupportedFindings(list []Unsupported) []Finding {
+	var out []Finding
+	for _, u := range list {
+		out = append(out, inconclusive("%s: backend registered but UNSUPPORTED, not run: %s", u.Name, u.Gap))
+	}
+	return out
 }
 
 // harnessRetention is this harness's explicit opt-in to history. The archive

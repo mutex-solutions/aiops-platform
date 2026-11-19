@@ -20,7 +20,7 @@ func TestSmallRealLifecycleSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -130,6 +130,10 @@ func TestStackOwnershipAndRawWriters(t *testing.T) {
 	if observed.Counts["example/test/spike/s0/concurrency.(*rcOwner).run"] != 1 || observed.Counts["external"] != 1 {
 		t.Fatalf("stack owners = %+v", observed.Counts)
 	}
+	kernelOwned := parseGoroutines("goroutine 9 [chan receive]:\nexample/aiops-platform/sdk/kernel.(*owner).run(0x01)\n /owner.go:1\n")
+	if kernelOwned.Counts["external"] != 0 || len(kernelOwned.Counts) != 1 {
+		t.Fatalf("kernel stack owners = %+v", kernelOwned.Counts)
+	}
 	result := RunResult{Backend: "fixture", Workload: Workload{Name: "tiny"}, Classification: Inconclusive, Samples: []Sample{{Operation: "mount-settle", Tree: -1, LatencyNS: 42}}}
 	var json, csv bytes.Buffer
 	if err := WriteJSON(&json, result); err != nil || !strings.Contains(json.String(), "\"latencyNS\": 42") {
@@ -138,4 +142,16 @@ func TestStackOwnershipAndRawWriters(t *testing.T) {
 	if err := WriteCSV(&csv, []RunResult{result}); err != nil || !strings.Contains(csv.String(), "unavailable") {
 		t.Fatalf("CSV: %q %v", csv.String(), err)
 	}
+}
+
+// supportedBackends is Candidates for a test: a backend whose adapter lacks a
+// capability the harness needs becomes a skipped subtest that prints the gap. It
+// is never counted as a pass and never dropped without a trace.
+func supportedBackends(t *testing.T) []Backend {
+	t.Helper()
+	run, unsupported := Runnable(Candidates())
+	for _, u := range unsupported {
+		t.Run(u.Name, func(t *testing.T) { t.Skipf("UNSUPPORTED backend %s, not run, not a pass: %s", u.Name, u.Gap) })
+	}
+	return run
 }

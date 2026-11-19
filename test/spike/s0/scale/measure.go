@@ -187,8 +187,10 @@ func Measure(ctx context.Context, rec IdentityRecord, plan Plan, consume func(Ru
 	}
 	buckets := make(map[string]*bucket)
 	heaps := make(map[string][]RetainedMetrics)
+	candidates, unsupported := Runnable(Candidates())
+	report.Add(UnsupportedFindings(unsupported)...)
 	for rep := 0; rep < plan.Repetitions; rep++ {
-		backends := Candidates()
+		backends := slices.Clone(candidates)
 		if rep%2 == 1 {
 			slices.Reverse(backends)
 		}
@@ -267,7 +269,7 @@ func Measure(ctx context.Context, rec IdentityRecord, plan Plan, consume func(Ru
 		}
 	}
 	for _, f := range fixtures {
-		for _, backend := range Candidates() {
+		for _, backend := range candidates {
 			for _, op := range operations(f) {
 				key := backend.Name + "/" + f.Name + "/" + op
 				b := buckets[key]

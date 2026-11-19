@@ -27,7 +27,7 @@ import (
 
 func forBackends(t *testing.T, body func(*testing.T, context.Context, scale.Backend)) {
 	t.Helper()
-	for _, b := range scale.Candidates() {
+	for _, b := range supportedBackends(t) {
 		t.Run(b.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -605,4 +605,16 @@ func TestSourceClosureCoversLinkedModulePackages(t *testing.T) {
 			t.Fatalf("closure path %s is not repository-relative", f.Path)
 		}
 	}
+}
+
+// supportedBackends is the scale table for a test: a backend whose adapter lacks a
+// capability the harness needs becomes a skipped subtest that prints the gap. It
+// is never counted as a pass and never dropped without a trace.
+func supportedBackends(t *testing.T) []scale.Backend {
+	t.Helper()
+	run, unsupported := scale.Runnable(scale.Candidates())
+	for _, u := range unsupported {
+		t.Run(u.Name, func(t *testing.T) { t.Skipf("UNSUPPORTED backend %s, not run, not a pass: %s", u.Name, u.Gap) })
+	}
+	return run
 }

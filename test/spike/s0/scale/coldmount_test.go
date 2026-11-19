@@ -51,7 +51,7 @@ func TestColdPlanIsTheFrozenSection9(t *testing.T) {
 // The cold-timeout fixture on both real candidates: 503 with Retry-After, or a
 // snooze; never a commit; never a fall-through to the warm foreign scope.
 func TestColdTimeoutFixture(t *testing.T) {
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
@@ -84,7 +84,7 @@ func microColdPlan() ColdPlan {
 func TestColdArmsStructure(t *testing.T) {
 	plan := microColdPlan()
 	body := BodySize{Name: "100-items", Items: 100}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		for _, arm := range []ColdArm{ArmB0, ArmB1, ArmA} {
 			t.Run(backend.Name+"/"+string(arm), func(t *testing.T) {
 				run := RunColdArm(context.Background(), backend, plan, body, arm, 0)

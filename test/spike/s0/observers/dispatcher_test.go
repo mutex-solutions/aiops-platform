@@ -18,6 +18,7 @@ import (
 var candidates = map[string]func() cc.Runtime{
 	"graph-lock": cc.NewRecordingGraphLock,
 	"reconciler": cc.NewRecordingReconciler,
+	"kernel":     cc.NewRecordingKernel,
 }
 
 // Only an adapter to actual native contexts, never a replacement/fake host.
@@ -39,6 +40,9 @@ func actualRuntime(t *testing.T, factory func() cc.Runtime) (context.Context, cc
 			t.Errorf("native runtime close: %v", err)
 		}
 	})
+	if gap := cc.UnsupportedGap(ctx, r); gap != "" {
+		t.Skipf("UNSUPPORTED backend, not run, not a pass: %s", gap)
+	}
 	return ctx, r
 }
 

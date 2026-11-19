@@ -33,7 +33,7 @@ func TestDevObserve(t *testing.T) {
 	}
 	shape, name := Topology(parts[0]), parts[1]
 	var backend Backend
-	for _, b := range Candidates() {
+	for _, b := range supportedBackends(t) {
 		if b.Name == name {
 			backend = b
 		}

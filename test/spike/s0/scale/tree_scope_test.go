@@ -18,7 +18,7 @@ func TestTreeScopeConstruction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, backend := range Candidates() {
+		for _, backend := range supportedBackends(t) {
 			t.Run(backend.Name, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer cancel()
@@ -62,7 +62,7 @@ func TestTreeIsolationAndClosure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, backend := range Candidates() {
+	for _, backend := range supportedBackends(t) {
 		t.Run(backend.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
