@@ -166,3 +166,15 @@ repetitions, alternation, stress, thresholds, evidence and identity, and
 classification precedence. This directory implements amendment 1: every record
 carries `protocolAmendment: 1` and the evaluator refuses to mix amendments. The
 full-run command in "Running" is unchanged.
+
+## Protocol amendment 2 (2026-11-19)
+
+Amended again by
+[docs/design/s0-callpath-protocol-amendment-2.md](../../../../docs/design/s0-callpath-protocol-amendment-2.md),
+in writing before the next run. Amendment 1 stays in force except where amendment 2
+says otherwise; the three earlier full runs are not reclassified. Amendment 2 adds one
+recorded, labelled warm-up baseline repetition at process start, excluded from
+classification, and reads the 10% throughput-variation rule from the timer-only
+control of the same candidate and caller count (a measured arm above 10% with a clean
+control is reported as `candidateVariation`, not invalid). Thresholds, counts and the
+full-run command are unchanged.
