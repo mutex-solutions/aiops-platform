@@ -95,6 +95,7 @@ type FixtureOptions struct {
 // provider (leased contribution owner), consumer, and unrelated mounted leaves.
 type Fixture struct {
 	Name     string
+	Seq      uint64 // Process-unique: a fresh fixture always has a new sequence number.
 	Runtime  cc.Runtime
 	Key      cm.Key[BoundView]
 	Provider *co.Fiber
@@ -112,8 +113,10 @@ type Fixture struct {
 	goroutines int
 }
 
+var fixtureSeq atomic.Uint64
+
 func NewFixture(ctx context.Context, backend scale.Backend, opt FixtureOptions) (*Fixture, error) {
-	fx := &Fixture{Name: backend.Name, Runtime: backend.New(), changed: make(chan struct{}), body: defaultBody, goroutines: candidateGoroutines()}
+	fx := &Fixture{Name: backend.Name, Seq: fixtureSeq.Add(1), Runtime: backend.New(), changed: make(chan struct{}), body: defaultBody, goroutines: candidateGoroutines()}
 	if opt.Gate != nil {
 		gate := opt.Gate
 		fx.body = func(o *Owner) uint64 { gate(o); return defaultBody(o) }

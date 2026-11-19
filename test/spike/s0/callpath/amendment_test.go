@@ -174,10 +174,10 @@ func TestProtocolAmendmentsAreNeverMixed(t *testing.T) {
 		runs []int
 		want scale.Classification
 	}{
-		{"all current", []int{1, 1, 1}, scale.Pass},
-		{"one original-protocol run", []int{1, 0, 1}, scale.Invalid},
+		{"all current", []int{ProtocolAmendment, ProtocolAmendment, ProtocolAmendment}, scale.Pass},
+		{"one original-protocol run", []int{ProtocolAmendment, 0, ProtocolAmendment}, scale.Invalid},
 		{"all original protocol", []int{0, 0}, scale.Invalid},
-		{"a future amendment", []int{1, 2}, scale.Invalid},
+		{"a future amendment", []int{ProtocolAmendment, ProtocolAmendment + 1}, scale.Invalid},
 		{"none recorded", nil, scale.Inconclusive},
 	}
 	for _, c := range cases {
@@ -188,7 +188,7 @@ func TestProtocolAmendmentsAreNeverMixed(t *testing.T) {
 			t.Errorf("%s: classified %s, want %s: %v", c.name, class, c.want, reasons)
 		}
 	}
-	if !strings.Contains(strings.Join(checkProtocols([]int{1, 0}), ";"), "mix") {
+	if !strings.Contains(strings.Join(checkProtocols([]int{ProtocolAmendment, 0}), ";"), "mix") {
 		t.Fatal("mixture not named")
 	}
 }

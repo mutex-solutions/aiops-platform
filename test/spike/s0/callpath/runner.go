@@ -36,6 +36,7 @@ type Report struct {
 	Classification scale.Classification `json:"classification"`
 	Reasons        []string             `json:"reasons"`
 	Plan           Plan                 `json:"plan"`
+	Warmup         []WarmupSummary      `json:"warmup"` // Amendment 2: recorded and listed, never classified.
 	Aggregates     []Aggregate          `json:"aggregates"`
 	Stress         []StressSummary      `json:"stress"`
 	Hosts          []HostDelta          `json:"hostNoise"`
@@ -47,6 +48,9 @@ const dryLabel = "DRY RUN - NOT ACCEPTANCE - reduced counts; this output never s
 // BaselineRecord is the raw record of one fresh-fixture baseline run.
 type BaselineRecord struct {
 	Protocol   int        `json:"protocolAmendment"`
+	Warmup     bool       `json:"warmup"` // Amendment 2: labelled, excluded from classification.
+	Label      string     `json:"label,omitempty"`
+	FixtureSeq uint64     `json:"fixtureSeq"`
 	Candidate  string     `json:"candidate"`
 	Rep        int        `json:"repetition"`
 	Order      []string   `json:"armOrder"`
@@ -62,6 +66,7 @@ type BaselineRecord struct {
 
 type stressFile struct {
 	Protocol   int           `json:"protocolAmendment"`
+	FixtureSeq uint64        `json:"fixtureSeq"`
 	Candidate  string        `json:"candidate"`
 	Rep        int           `json:"repetition"`
 	StartedUTC time.Time     `json:"startedUTC"`
@@ -74,6 +79,39 @@ type stressFile struct {
 }
 
 func throughput(a Arm) float64 { return a.ThroughputPS }
+
+// WarmupSummary lists one warm-up record in the report. Nothing in it is a
+// classification input except Errors, through foldWarmup.
+type WarmupSummary struct {
+	Candidate  string      `json:"candidate"`
+	File       string      `json:"file"`
+	FixtureSeq uint64      `json:"fixtureSeq"`
+	Arms       []WarmupArm `json:"arms"`
+	Errors     []string    `json:"errors,omitempty"`
+}
+
+// WarmupArm is the listed reading of one warm-up window.
+type WarmupArm struct {
+	Operation     Operation      `json:"operation"`
+	Callers       int            `json:"callers"`
+	Mallocs       uint64         `json:"mallocsInWindow"`
+	ThroughputPS  float64        `json:"throughputPerSecond"`
+	OutcomeCounts map[string]int `json:"outcomeCounts"`
+}
+
+// foldWarmup is the only way a warm-up record reaches classification: its
+// integrity errors fail the run and its protocol amendment is checked. Its
+// measurements (latency, allocation, throughput, host noise) are listed in the
+// returned summary and enter no aggregate, variation or count.
+func foldWarmup(in *EvalInput, rec BaselineRecord, file string) WarmupSummary {
+	in.RunErrors = append(in.RunErrors, prefixed(fmt.Sprintf("warmup %s", rec.Candidate), rec.Errors)...)
+	in.RunProtocols = append(in.RunProtocols, rec.Protocol)
+	s := WarmupSummary{Candidate: rec.Candidate, File: file, FixtureSeq: rec.FixtureSeq, Errors: rec.Errors}
+	for _, a := range rec.Arms {
+		s.Arms = append(s.Arms, WarmupArm{Operation: a.Operation, Callers: a.Callers, Mallocs: a.Mallocs, ThroughputPS: a.ThroughputPS, OutcomeCounts: a.OutcomeCounts})
+	}
+	return s
+}
 
 type aggKey struct {
 	arm, cand string
@@ -146,6 +184,23 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 		pooled[k] = append(pooled[k], arm.LatencyNS...)
 	}
 
+	// Amendment 2: the warm-up exercises every baseline window shape of every
+	// candidate once, on its own fresh fixtures, before the first measured window.
+	for range cfg.Plan.WarmupReps {
+		for _, b := range backends {
+			if err := ctx.Err(); err != nil {
+				in.RunErrors = append(in.RunErrors, "driver: "+err.Error())
+				goto finish
+			}
+			progress("warmup baseline " + b.Name)
+			rec := runBaseline(ctx, cfg.Plan, b, 0, true)
+			file := fmt.Sprintf("baseline-%s-warmup.json", b.Name)
+			rep.Warmup = append(rep.Warmup, foldWarmup(&in, rec, file))
+			if err := w.write(file, rec); err != nil {
+				return rep, err
+			}
+		}
+	}
 	for r := 0; r < cfg.Plan.Repetitions; r++ {
 		order := slices.Clone(backends)
 		baselineFirst := r%2 == 0
@@ -164,7 +219,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 				}
 				if arm == "baseline" {
 					progress(fmt.Sprintf("rep %d baseline %s", r, b.Name))
-					rec := runBaseline(ctx, cfg.Plan, b, r)
+					rec := runBaseline(ctx, cfg.Plan, b, r, false)
 					in.RunErrors = append(in.RunErrors, prefixed(fmt.Sprintf("baseline %s rep%d", b.Name, r), rec.Errors)...)
 					in.RunProtocols = append(in.RunProtocols, rec.Protocol)
 					for _, a := range rec.Arms {
@@ -263,8 +318,11 @@ func closeFixture(fx *Fixture, errs *[]string) {
 // runBaseline measures the mutation-free arm on one fresh fixture. Operation
 // and concurrency order rotate with the repetition so no operation always runs
 // first on a cold or hot machine.
-func runBaseline(ctx context.Context, p Plan, b scale.Backend, rep int) BaselineRecord {
-	rec := BaselineRecord{Protocol: ProtocolAmendment, Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
+func runBaseline(ctx context.Context, p Plan, b scale.Backend, rep int, warmup bool) BaselineRecord {
+	rec := BaselineRecord{Protocol: ProtocolAmendment, Warmup: warmup, Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
+	if warmup {
+		rec.Label = "warmup: recorded, excluded from classification"
+	}
 	fx, err := NewFixture(ctx, b, FixtureOptions{Leaves: p.Leaves})
 	if err != nil {
 		rec.Errors = append(rec.Errors, "fixture: "+err.Error())
@@ -272,6 +330,7 @@ func runBaseline(ctx context.Context, p Plan, b scale.Backend, rep int) Baseline
 		return rec
 	}
 	defer closeFixture(fx, &rec.Errors)
+	rec.FixtureSeq = fx.Seq
 	ops := []Operation{LookupView, Lease, Dispatch, Timer}
 	if rep%2 == 1 {
 		slices.Reverse(ops)
@@ -311,6 +370,7 @@ func runStress(ctx context.Context, p Plan, b scale.Backend, rep, callers int) s
 		return f
 	}
 	defer closeFixture(fx, &f.Errors)
+	f.FixtureSeq = fx.Seq
 	f.HostBefore = ReadHost()
 	f.Record = RunStress(ctx, fx, p, callers, StressHooks{})
 	f.HostAfter = ReadHost()

@@ -55,6 +55,9 @@ func TestFullCallpath(t *testing.T) {
 	if report.Classification != "pass" {
 		t.Fatalf("callpath classification %s (raw records in the output directory):\n%s", report.Classification, strings.Join(report.Reasons, "\n"))
 	}
+	for _, r := range report.Reasons { // Observations (candidateVariation) accompany a pass.
+		t.Log(r)
+	}
 	t.Logf("callpath classification pass; candidate evidence only; raw records in %s", out)
 }
 

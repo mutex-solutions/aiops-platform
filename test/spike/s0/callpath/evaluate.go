@@ -27,6 +27,10 @@ type Aggregate struct {
 	Errors      int                  `json:"errors"`
 	Throughput  []float64            `json:"throughputPerSecondPerRun"`
 	CV          float64              `json:"throughputCV"`
+	// CandidateVariation is amendment 2: the throughput CV of a measured arm that is
+	// above the 10% limit while its timer-only control is clean. It is an observation
+	// about the candidate, not an invalid run. Zero when absent.
+	CandidateVariation float64 `json:"candidateVariation,omitempty"`
 }
 
 // EvalInput is everything classification depends on: no clock, no filesystem.
@@ -48,8 +52,15 @@ type EvalInput struct {
 // Evaluate classifies. Precedence is fail > invalid > inconclusive > pass, and
 // pass requires the frozen plan plus complete identity, noise and raw evidence.
 // A candidate failure is never downgraded to environmental noise.
+//
+// Amendment 2 noise rule: the 10% variation rule is read from the timer-only
+// control of the same candidate and caller count. A noisy control makes the
+// corresponding measured arms invalid, a missing control is inconclusive, and a
+// measured arm above 10% with a clean control is an OBSERVATION: it sets
+// CandidateVariation on that element of in.Aggregates and is returned in the
+// reasons, also for a pass.
 func Evaluate(in EvalInput) (scale.Classification, []string) {
-	var fail, invalid, inconclusive []string
+	var fail, invalid, inconclusive, observed []string
 	if in.Dry || !in.Plan.Frozen() {
 		inconclusive = append(inconclusive, "reduced or dry-run plan: never acceptance")
 	}
@@ -84,7 +95,21 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 	}
 	for _, callers := range CallerConcurrencies() {
 		for _, cand := range in.Candidates {
-			covered(find("timer", cand, Timer, callers), fmt.Sprintf("timer overhead %s/c%d", cand, callers))
+			ctl := find("timer", cand, Timer, callers)
+			ctlLabel := fmt.Sprintf("timer overhead %s/c%d", cand, callers)
+			covered(ctl, ctlLabel)
+			// Amendment 2: host noise is the control's variation.
+			ctlCV, ctlNoisy, ctlKnown := 0.0, false, false
+			if ctl != nil {
+				if cv, err := scale.CV(ctl.Throughput); err != nil {
+					inconclusive = append(inconclusive, ctlLabel+": control throughput CV unavailable: "+err.Error())
+				} else {
+					ctlCV, ctlKnown = cv, true
+					if ctlNoisy = cv > NoiseCVLimit; ctlNoisy {
+						invalid = append(invalid, fmt.Sprintf("%s: control throughput CV %.1f%% > 10%%; host too noisy for this caller count; repeat the unchanged protocol", ctlLabel, cv*100))
+					}
+				}
+			}
 			for _, op := range []Operation{LookupView, Lease, Dispatch} {
 				label := fmt.Sprintf("baseline %s/%s/c%d", cand, op, callers)
 				a := find("baseline", cand, op, callers)
@@ -94,10 +119,16 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 				if a.NonOK > 0 {
 					fail = append(fail, fmt.Sprintf("%s: %d non-OK observations in the mutation-free baseline", label, a.NonOK))
 				}
+				a.CandidateVariation = 0
 				if cv, err := scale.CV(a.Throughput); err != nil {
 					inconclusive = append(inconclusive, label+": throughput CV unavailable: "+err.Error())
+				} else if !ctlKnown {
+					inconclusive = append(inconclusive, fmt.Sprintf("%s: throughput CV %.1f%% cannot be read: no usable timer-only control", label, cv*100))
+				} else if ctlNoisy {
+					invalid = append(invalid, fmt.Sprintf("%s: timer-only control CV %.1f%% > 10%%; repeat the unchanged protocol", label, ctlCV*100))
 				} else if cv > NoiseCVLimit {
-					invalid = append(invalid, fmt.Sprintf("%s: throughput CV %.1f%% > 10%%; repeat the unchanged protocol", label, cv*100))
+					a.CandidateVariation = cv
+					observed = append(observed, fmt.Sprintf("%s: candidateVariation %.1f%% > 10%% with a clean control (%.1f%%); characteristic of the candidate, not an invalid run", label, cv*100, ctlCV*100))
 				}
 				if op != Lease {
 					continue
@@ -114,7 +145,6 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 				// Amendment 1: the timer-only control of the same run must read zero too.
 				// A non-zero control makes that run invalid for allocation (never a
 				// pass, never a lease failure); a non-zero lease with a zero control fails.
-				ctl := find("timer", cand, Timer, callers)
 				for i, m := range a.Mallocs {
 					switch {
 					case ctl == nil || i >= len(ctl.Mallocs):
@@ -195,6 +225,7 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 	reasons = append(reasons, prefixed("FAIL", fail)...)
 	reasons = append(reasons, prefixed("INVALID", invalid)...)
 	reasons = append(reasons, prefixed("INCONCLUSIVE", inconclusive)...)
+	reasons = append(reasons, prefixed("OBSERVATION", observed)...)
 	switch {
 	case len(fail) > 0:
 		return scale.Fail, reasons
@@ -203,7 +234,7 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 	case len(inconclusive) > 0:
 		return scale.Inconclusive, reasons
 	}
-	return scale.Pass, nil
+	return scale.Pass, reasons
 }
 
 // checkProtocols refuses runs from any amendment but the one this harness

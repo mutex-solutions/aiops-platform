@@ -363,6 +363,14 @@ func TestEvaluateNeverPassesMissingOrFailedEvidence(t *testing.T) {
 		}
 		return nil
 	}
+	timerIndex := func(in *EvalInput) *Aggregate {
+		for i := range in.Aggregates {
+			if in.Aggregates[i].Operation == Timer && in.Aggregates[i].Callers == 8 {
+				return &in.Aggregates[i]
+			}
+		}
+		return nil
+	}
 	cases := []struct {
 		name string
 		in   EvalInput
@@ -380,7 +388,7 @@ func TestEvaluateNeverPassesMissingOrFailedEvidence(t *testing.T) {
 			leaseIndex(in).Dist.P99 = 5000
 			in.Invalid, in.IdentityProblems = []string{"x"}, []string{"y"}
 		}), scale.Fail},
-		{"throughput noise", mutate(func(in *EvalInput) { leaseIndex(in).Throughput[0] = 5e6 }), scale.Invalid},
+		{"control throughput noise", mutate(func(in *EvalInput) { timerIndex(in).Throughput[0] = 5e6 }), scale.Invalid},
 		{"swap observed", mutate(func(in *EvalInput) { in.Hosts[0].SwapDelta = 1 }), scale.Invalid},
 		{"throttle observed", mutate(func(in *EvalInput) { in.Hosts[0].ThrottleDiff = 1 }), scale.Invalid},
 		{"protocol violation", mutate(func(in *EvalInput) { in.Invalid = []string{"GOMAXPROCS=24"} }), scale.Invalid},
@@ -420,7 +428,7 @@ func TestPlanRejectsReducedAcceptanceAndKeepsFrozenValues(t *testing.T) {
 }
 
 func tinyPipeline() Plan {
-	return Plan{Repetitions: 2, SamplesPerRun: 200, StressSamples: 40, Leaves: 10, UpdatesPerSecond: 100, OutstandingLimit: 8,
+	return Plan{Repetitions: 2, WarmupReps: WarmupRepetitions, SamplesPerRun: 200, StressSamples: 40, Leaves: 10, UpdatesPerSecond: 100, OutstandingLimit: 8,
 		OwnerUpdateEvery: 5, ScheduledUpdates: 20, StressDuration: 200 * time.Millisecond, Callers: []int{1, 3}}
 }
 
@@ -439,9 +447,10 @@ func TestDryPipelineWritesWellFormedRecordsAndRefusesOverwrite(t *testing.T) {
 	if !strings.Contains(strings.Join(rep.Reasons, "\n"), "dry-run") {
 		t.Fatal("dry run did not record why it is inconclusive")
 	}
-	// Two candidates x (baseline + two stress callers) x two repetitions + identity files + report.
+	// Two candidates x (baseline + two stress callers) x two repetitions, two warm-up
+	// records, identity files and the report.
 	names, _ := filepath.Glob(filepath.Join(out, "*.json"))
-	if want := 2*2*(1+2) + 3; len(names) != want {
+	if want := 2*2*(1+2) + 2 + 3; len(names) != want {
 		t.Fatalf("%d records, want %d: %v", len(names), want, names)
 	}
 	if problems := (&evidenceWriter{dir: out, manifest: rep.Manifest}).verify(); len(problems) != 0 {

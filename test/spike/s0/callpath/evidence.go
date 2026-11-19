@@ -32,7 +32,7 @@ var closureClasses = []string{
 
 const callpathClass = "test/spike/s0/callpath"
 
-var closureExtras = []string{"go.mod", "go.sum", "docs/design/s0-spike-criteria.md", "docs/design/s0-criteria-freeze.json", "docs/design/s0-callpath-protocol-amendment-1.md"}
+var closureExtras = []string{"go.mod", "go.sum", "docs/design/s0-spike-criteria.md", "docs/design/s0-criteria-freeze.json", "docs/design/s0-callpath-protocol-amendment-1.md", "docs/design/s0-callpath-protocol-amendment-2.md"}
 
 type ClosureFile struct {
 	Path   string `json:"path"`

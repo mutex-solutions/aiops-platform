@@ -64,9 +64,9 @@ func countOutcomes(outcomes string) map[string]int {
 const pollInterval = 250 * time.Microsecond
 
 // ProtocolAmendment is the callpath measurement protocol this harness implements
-// (docs/design/s0-callpath-protocol-amendment-1.md). Records without the field
-// are amendment 0, the original protocol.
-const ProtocolAmendment = 1
+// (docs/design/s0-callpath-protocol-amendment-2.md, which builds on amendment 1).
+// Records without the field are amendment 0, the original protocol.
+const ProtocolAmendment = 2
 
 // RunThroughput is the amendment-1 run throughput: the sum over callers of that
 // caller's observations divided by its own first-start to last-end span. A zero
