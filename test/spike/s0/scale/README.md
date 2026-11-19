@@ -1,22 +1,187 @@
-# S0 scale harness — performance withheld
+# S0 scale and cold-mount harness — ready to run; acceptance runs NOT executed
 
-**Status: author helpers tested; all 10,000-fiber and full tree performance runs
-are NOT RUN.** An ordinary package test reports `TestDefaultMeasure` as **SKIP**,
-not scale acceptance. Do not enable it while the parent's full property/race
-corpus is running. The parent owns final semantic parity, source/hash freeze,
-measurement-host evidence, execution and candidate selection.
+**Status: the SCALE gate (criteria §4, §8.1, §8.2) and the COLD MOUNT gate (§9)
+have a complete harness. Neither has been executed as an acceptance run.** Ordinary
+`go test` runs only small deterministic semantic tests (no timing thresholds).
+`TestDefaultMeasure` and `TestColdMountRun` SKIP unless explicitly authorised, and
+a skip is not a pass. Dry-run modes exist, are labelled in every record and can
+never classify as `pass`. The parent owns final parity, source/hash freeze, the
+idle-host evidence, execution and candidate selection.
 
 This is a test-only experiment, not a final SDK, production port, new policy,
 transaction/HTTP workload or new S0 acceptance criterion. It imports only the Go
-standard library and the existing S0 concurrency/composition/contextmodel code.
-No Docker, SQL, native dependency, tool script, CI change or module edit is needed.
+standard library and the S0 concurrency/composition/contextmodel code.
 
 Authority is the unchanged frozen
-[`s0-spike-criteria.md`](../../../../docs/design/s0-spike-criteria.md) §§4, 8 and 9.
-The parent must verify its exact bytes against the freeze receipt. No threshold
-is tuned here. The snapshot receipt identifies SHA-256
-`628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c`;
-that text is not a fresh verification or parent source freeze.
+[`s0-spike-criteria.md`](../../../../docs/design/s0-spike-criteria.md) §§4, 8.1,
+8.2 and 9 (§8.3 call path is `test/spike/s0/callpath`). No threshold is tuned here.
+The runner computes the criteria digest itself and compares it with the freeze
+receipt (`docs/design/s0-criteria-freeze.json`); a mismatch is `invalid`.
+
+## Requirements table
+
+"Before" is the state recorded by the previous version of this README; "Now" is
+what the harness implements. `done` means implemented and covered by a unit test
+or a small-fixture semantic test; every status refers to the harness, not to a
+candidate result.
+
+### SCALE (§4, §8.1, §8.2)
+
+| # | Criteria text (quoted) | Implemented by | Before | Now |
+| --- | --- | --- | --- | --- |
+| S1 | §4 "Use the same host and toolchain for both candidates/arms, `GOMAXPROCS=8`" | `CollectIdentity` records Go version, GOOS/GOARCH, GOMAXPROCS; `Measure` refuses a non-frozen plan unless `Dry`; GOMAXPROCS≠8 is `invalid` | partial (error only, no toolchain record) | done |
+| S2 | §4 "Record CPU affinity and resource limits rather than inferring dedicated hardware from visible CPU count." | `IdentityRecord.Affinity/CPUMax/MemLimit/NumCPU/CPUModel/Kernel`, `cgroupFile` ("unavailable" is recorded, never "unlimited") | missing | done |
+| S3 | §4 "Fixture deadlines: load 2 seconds, drain 5 seconds, dispose 2 seconds." | unchanged kernel knobs; the harness only adds a 15 s outer guard (`TrialGuard`), not a changed policy | done | done |
+| S4 | §4 "at least ten independent repetitions" … "Alternate arm/candidate order." | `FrozenPlan.Repetitions=10`; candidate order reverses on odd repetitions (`Measure`) | done | done |
+| S5 | §4 "at least 1,000 observations **per candidate, topology and operation**, across fresh runs, not ten aggregate `ns/op` averages" | graphs 100 fresh roots × 10 reps; trees 10 roots × 10 cycles × 10 reps (cold mounts: ×500/300 trees); `Plan.expectedObservations`, `floorFindings` | partial (a reason string only) | done (floor and scheduled count both gate; short = `inconclusive`) |
+| S6 | §4 "Quantiles use nearest-rank on individual operation latencies. Report p50, p95, p99, maximum, sample count and per-run distributions as well as aggregates." | `NearestRank`, `Summarize` (exported API unchanged), `OperationSummary.PerRun` | done | done |
+| S7 | §4 "If a probe has fewer observations than its stated floor, it is inconclusive." | `floorFindings` → `Inconclusive`; also fewer than scheduled | partial | done |
+| S8 | §4 "Optimized performance is measured without the race detector." | `raceEnabled` (`race_on.go`/`race_off.go`) → `invalid` | missing | done |
+| S9 | §4 "Throughput coefficient of variation greater than 10% across independent runs, or observed host CPU throttling or swapping, requires a repeat of the unchanged protocol … Preserve the invalid data" | `cvFinding`; `ReadHost` before/after every root, `hostDelta`, `noiseFindings` (swap/throttle → `invalid`, unobservable → `inconclusive`) | partial (parent-asserted booleans) | done |
+| S10 | §4 "Candidate OOM, panic, deadlock, race, resource leak, unbounded queue or its own cap violation is a failure, not environmental noise." | any `RunResult.Errors` → `Fail`; `Fail` outranks `Invalid` in `Resolve`; earlier roots' paired raw records persist | partial | partial: a process crash (OOM, stack overflow, panic) leaves raw records but no `report.json`; that absence is itself the failure |
+| S11 | §2 run record: criteria digest, baseline commit, source-tree digest "including uncommitted experimental files", executable digest, exact commands, toolchain | `IdentityRecord`, `sourceClosure` (every linked local package, working tree), `fileSHA256(os.Executable())`, parent-supplied `Identity` | missing (parent digests trusted) | done |
+| S12 | §2 "Keep raw results as well as summaries." §4 "Do not discard slow runs" | per root: `….json.gz` (samples, checkpoints, host, retained metrics), `….trace.json.gz` (every event, archive, provision), `….csv`; manifest with SHA-256, `Verify` | partial | done (about 19 GiB for the frozen plan) |
+| S13 | (evidence integrity) no overwrite | `NewEvidenceWriter` refuses an existing directory; every file `O_EXCL` | partial | done |
+| S14 | §8.1 "Each topology has exactly 10,000 measured fibers, excluding the kernel's root" and the five shapes | `fixture.go` `Graph`, `RealmFixture`, `FrozenFixtures` | done | done |
+| S15 | §8.1 "Every required fixture fiber must reach ACTIVE before a mount settles." | `inspectActive` (every fiber, epoch, provision UID/owner) | done | done |
+| S16 | §8.1 "Measure mount/settle, leaf update/settle, provider restart/settle and teardown"; realms "Restart one provider (local closure) and all providers in one Batch" | `RunCycles` (`mount-settle`, `leaf-update-settle`, `root-restart-settle`, `all-providers-batch-restart-settle`, `teardown`) | done | done |
+| S17 | §8.1 "The empty root and post-shared fixture baselines are recorded separately." | `RunResult.EmptyRoot`, `SharedOnly` | done | done |
+| S18 | §8.1 mount p99 ≤2 s; leaf p99 ≤10 ms; root-provider restart ≤5 s | `budgetFinding` (restart held at the maximum) | done | done |
+| S19 | §8.1 "Retained heap over the empty/shared baseline ≤128 MiB" | `retainedMetrics`, `heapFinding` on every retained checkpoint; per-fiber, total, slope, stack-in-use recorded | partial | done (method below) |
+| S20 | §8.1 "Idle goroutine per fiber: Zero; fixed root workers recorded separately" | `EmptyRoot.Goroutines` enumerates root workers before any mount; `idleGoroutineFindings` → `Fail` on any candidate owner above its baseline | partial (reason only) | done |
+| S21 | §8.1 "Teardown: Resource/registry/effect/lease baseline restored" | `inspectDisposed`, post-Close owner comparison, fixture resource/lease counters | done | done |
+| S22 | §8.1 "Property/random workload seed … record the PRNG algorithm" | the harness has no PRNG; `Workload.PRNG` records "none"; the property corpus is parent-owned | n/a | n/a |
+| S23 | §8.2 shared 97 fibers; two/four-fiber trees; "A scope value distinguishes each tree … Count every container fiber if the fixture creates one" | `TreeFixture`; **`MountTree` two-phase construction with the real `composition.Scope`** (see below); `scopeStep` | partial (scope seam open) | done |
+| S24 | §8.2 "500 loaded trees and an additional 300-tree run" | `FrozenFixtures` (500/300 × 2/4) | done | done |
+| S25 | §8.2 "ten full cycles of mount-all, hot lookup, one Batch shared-provider restart, reverse-order tree disposal and remount; independently record each tree's cold mount" | `runTrees` | done | done |
+| S26 | §8.2 "Eager tree mount at boot: Zero" | snapshot count equals 97 before the first local mount | done | done |
+| S27 | §8.2 "Each measured in-process cold mount <50 ms; report maximum" | `budgetFinding` (maximum, strictly below) | done | done |
+| S28 | §8.2 "Idle goroutines that scale with trees: Zero" | same owner comparison against the shared-only checkpoint | partial | done |
+| S29 | §8.2 "Retained heap above shared-only baseline for 500 trees ≤32 MiB" | `retainedMetrics` against `SharedOnly`; strict reading, **see Decision 1** | partial | done (strict; open decision) |
+| S30 | §8.2 "Shared root-provider restart and settle ≤5 s" | one native Batch containing the shared provider's Update; maximum ≤5 s; **every shared and mounted local fiber must reload exactly once** | partial | done |
+| S31 | §8.2 "Cross-scope lookup/callback/effect leakage: Zero" | consumer bodies check the real `Scope.From` value and the realm-local provision; `HotLookup`; a consumer's `Scope.With` must be refused | partial | done |
+| S32 | §8.2 "Churn and final teardown: Empty owned ledger and restored resource baseline" | per cycle resource/lease check, `inspectDisposed` at the end | done | done |
+
+### COLD MOUNT (§9)
+
+The probe did not exist: no file mentioned section 9 beyond "not implemented".
+
+| # | Criteria text (quoted) | Implemented by | Before | Now |
+| --- | --- | --- | --- | --- |
+| C1 | "Compare diagnostic arm A (cold mount inline before commit/ack) with arm B (all ack/page dependencies pinned while other synthetic trees cold-mount and churn)." | `RunColdArm` arms `A`, `B0`, `B1`; the pinned set is the 97 shared fibers, mounted for the whole run and never churned | missing | done |
+| C2 | "alternate a pinned-only baseline B0 and pinned-with-churn B1 on identical data and workload" | `MeasureColdMount`: B0/B1 order reverses on odd repetitions; same fixture, body and schedule per cell | missing | done |
+| C3 | "Each arm uses ten 30-second-warm-up plus 120-second-measured repetitions." | `FrozenColdPlan` (10 × 30 s + 120 s), warm-up arrivals recorded and flagged, excluded from the measured window | missing | done |
+| C4 | "B1 schedules 50 fresh four-fiber tree mounts per second (IDs round-robin across 500 scope labels), at most eight mounts in flight, then disposes each tree after 100 ms of idle time" | churn scheduler, 50/s, label = seq mod 500, cap 8, `MountTreeAwait`, 100 ms idle, `disposeTree` (one native BatchDispose, joined per fiber) | missing | done |
+| C5 | "B0 runs the same scheduler without starting mounts." | same `schedule` loop, arrivals recorded as `idle(B0)` | missing | done |
+| C6 | "Record every scheduled/completed background mount and disposal; a missed churn arrival or cap/backlog overflow fails B1" | `ChurnRecord` per arrival (`Outcome`, `Late`, timestamps); `runFindings` fails overflow, late start, collision, error, not-disposed | missing | done |
+| C7 | "Pair B0/B1 repetitions in alternating order and evaluate the ≤5 ms delta on each matched pair as well as aggregate." | `EvaluateCold`: B1 p99 − B0 p99 per matched repetition and pooled; `ColdReport.Pairs` | missing | done |
+| C8 | "Arm A uses one fresh four-fiber scope per first-time request and the same 100-request/s schedule; report its complete latency and mount results, not a pinning exemption." | `AckCold`: every request mounts a fresh tree inline before commit; `ColdCell.Aggregate` and `.Mount` | missing | done |
+| C9 | "At 100 requests/second test bodies with 100 synthetic items and a separate 1 MiB body." | `FrozenColdPlan.Bodies` (100 items; 4,096 items × 256 B = 1 MiB) | missing | done |
+| C10 | "Arm B has zero cold-ensure/mount calls in its measured ack path" | `coldProbe.ensures` counted only by `AckCold`; B arms with a nonzero count fail | missing | done |
+| C11 | "p99 ack ≤250 ms for the 100-item body and ≤1 second at 1 MiB." | `ackLimit`, per run and pooled | missing | done |
+| C12 | "Background cold churn may increase arm B p99 by no more than 5 ms over its pinned baseline." | see C7 | missing | done |
+| C13 | "Record the complete mount+transaction latency of arm A rather than subtracting mount cost." | arm A latency is scheduled arrival to acknowledgement, mount included | missing | done |
+| C14 | §4 open loop: "Latency starts at scheduled arrival, includes queue/pool wait"; "Record every scheduled arrival, including overload, error and timeout"; request cap 32; "5 seconds from scheduled arrival"; "at most 30 seconds for all committed/acknowledged IDs to reach logical completion"; "at least 99.9% successful commits or acknowledgements" | `schedule` never slows down; `AckRecord` for every arrival; cap 32 → `overflow`; 5 s deadline; 30 s drain → `Outstanding`; ledger reconciliation; success ratio | missing | done |
+| C15 | "A separate cold-timeout fixture returns 503 with Retry-After on synchronous lookup or snoozes the simulated job. It never acknowledges an uncommitted write or falls through to another scope's/process contribution." | `RunColdTimeoutFixture` (both outcomes) with a warm foreign scope present | missing | done |
+| C16 | noise, floors, identity, raw records, refusal to overwrite (§2, §4) | shared with SCALE: `CollectIdentity`, `ReadHost`, `Resolve`, `EvidenceWriter` | missing | done |
+
+## Scope seam — outcome
+
+The previous README recorded: *"local consumer specs currently start as siblings
+under the precompiled metadata-only realm context. `Scope.With` must run on the
+actual local provider after successful native Provide, and its derived context must
+then become the metadata parent used to compile those consumers."*
+
+**Closed, without bending the fixture.** `composition.Scope.With` runs on the
+realm-local provider's own activation after its successful native `Provide`
+(`scopeStep`), and the derived context is published per tree. `MountTree` then:
+
+1. commits the provider alone with one native `BatchStart` (parent: the realm
+   context) and joins that target only (`Fiber.Await`);
+2. takes the provider-written derived context as the **metadata parent** of the
+   declared local consumers and commits them as **roots** in one more
+   `BatchStart`. This is the pattern `composition_test.go`
+   (`TestEntryIdentityAndNativeScopeOwnership`) already uses.
+
+Nothing is added: the tree is still exactly two/four fibers (97 + 500×2/4 and
+97 + 300×2/4 in total), there is no container fiber, no new key, edge or count,
+and each consumer keeps its single native dependency on the realm-local key.
+Because `contextmodel.Context.OwnDependencies` lists only a fiber's own
+declarations, a consumer parented under the provider's derived context does not
+inherit the provider's need on the shared key.
+
+Validated (`tree_scope_test.go`, both candidates, 2/4-fiber trees):
+
+- shared-provider restart reloads every shared and every mounted local fiber
+  exactly once (complete dependency closure; also a per-cycle invariant in
+  `runTrees`), while one tree provider's restart reloads only that tree;
+- each consumer observes `Scope.From == its tree` and its own tree's provider
+  value under the identical key name; a consumer's `Scope.With` is refused;
+- the archived fiber count is exactly shared + cycles × locals (no hidden fiber);
+- a stale incarnation's derived context is never reused (`MountTree` clears it).
+
+One consequence is part of the measurement: a tree's cold mount is **two** native
+`BatchStart` calls (provider, then consumers) inside one measured interval
+(`BatchStart(provider)` + provider `Await` + `BatchStart(consumers)` + `Settle`).
+That interval is what is compared with 50 ms.
+
+## Implementation notes (interpretations; each is the stricter reading)
+
+1. **Decision 1 (open, owner): retained heap in §8.2 is gated at every cycle.**
+   The table says "Retained heap above shared-only baseline for 500 trees ≤32 MiB".
+   The harness checks every retained checkpoint (one per cycle, archives and event
+   history included) against 32 MiB, for all four tree fixtures including the
+   300-tree runs. The runtime keeps the archive and the events of every disposed
+   incarnation, so the same 500 trees retain more each cycle. The first checkpoint
+   (500 trees loaded, no history) is reported next to the worst
+   (`HeapSummary.MaxFirstBytes`, `RetainedMetrics.FirstDeltaBytes`) so the owner can
+   decide whether the budget is the first checkpoint, or whether the candidates
+   must bound their history. Nothing here relaxes it.
+2. Restarts (`root-restart-settle`, `shared-provider-restart-settle`,
+   `all-providers-batch-restart-settle`) are held to 5 s at the **maximum**, not
+   p99; the criteria give a plain bound. Cold tree mounts are held strictly below
+   50 ms at the maximum.
+3. Idle goroutines: any candidate-owned goroutine owner whose count exceeds its
+   enumerated empty-root (graphs) or shared-only (trees) count at a retained
+   checkpoint is a `Fail`, without waiting for a reviewer.
+4. A bucket must hold exactly the scheduled observation count, not merely the
+   floor; a shortfall is `inconclusive`. A plan that is not byte-equal to
+   `FrozenPlan` is never acceptance-eligible and must be labelled `Dry`.
+5. Throughput CV stays as before (per bucket, across the ten repetitions,
+   observations ÷ summed latency). Fewer than two evaluable repetitions is
+   `inconclusive`. Swap counters (`pswpin`/`pswpout`) are system-wide; any paging
+   during any root is `invalid`.
+6. Per-sample event history length is the dispatcher's accepted count; cloning
+   the ledger per sample was quadratic. The ledger is fetched once per root, its
+   contiguous sequence verified and its length required to equal the accepted
+   count (`verifyLedger`).
+7. A tree cold-mount sample is confirmed by the fixture's own record that every
+   fiber of that incarnation ran its body (after `Provide`, scope and read checks)
+   plus a clean target join. The complete Inspect-based ACTIVE check (every epoch,
+   provision UID and owner) runs for the first and last tree of each cycle and for
+   every tree once per cycle, because a full Inspect per sample is quadratic in
+   archived history. Graph operations still run the complete check after every
+   operation.
+8. Cold mount, what is simulated: no database or tenant cache. A request takes a
+   pinned activation's lease (`Enter`), resolves its typed provision
+   (`composition.Resolve`), leaves, and hashes one 256-byte item (the item size is
+   an interpretation; the criteria fix only the count and 1 MiB), for every item;
+   then appends one commit to an in-memory ledger and only then is acknowledged.
+   Arm A resolves the fresh scope's local contribution instead.
+9. Cold mount counting: `overflow` of the 32-request cap and `error` fail the
+   run outright; `timeout` (5 s from scheduled arrival) and `503` stay in the
+   99.9% success rule with their latency in every distribution; an unserved
+   overflow carries the 5 s timeout as its latency. p99 ack limits and the 5 ms
+   delta are applied to every run and to the pooled observations. Arm A is held to
+   integrity and the 99.9% rule only: no latency limit is invented for it.
+10. Churn "late" means a mount started more than one churn interval (20 ms) after
+    its scheduled instant: the offered rate was not sustained, so B1 fails.
+11. The cold-timeout fixture stalls a cold scope's real provider body (it
+    cooperates with cancellation) so its mount cannot finish inside a 50 ms
+    cold-ensure budget; the budget is a fixture parameter, not a kernel policy.
+12. The previous in-process diagnostic (`diagnostic_test.go`) and its v2 process
+    isolation rule are kept as history; failures at 10,000 fibers should be run one
+    case per process (`TestDevObserve`).
 
 ## Exact deterministic fixture data
 
@@ -32,193 +197,127 @@ that text is not a fresh verification or parent source freeze.
 | realms | 100 actual opaque labels, each one provider + 99 consumers, equal key name |
 | trees | 97 shared fibers (one provider + 96 consumers) plus 500×2, 500×4, 300×2, or 300×4 local fibers |
 
-`Graph`, `RealmFixture` and `TreeFixture` permit explicit small helper fixtures;
+`Graph`, `RealmFixture` and `TreeFixture` permit explicit small fixtures;
 `Validate` rejects duplicate provider keys, undeclared/missing providers, duplicate
-Needs, and forward/cyclic edges. Node/key types are shallow. Generation and
-validation are iterative, not recursive, including the 10k chain. Runtime stack
-growth/recursion safety at 10k is **unmeasured**, not inferred from a small smoke.
+Needs, and forward/cyclic edges. Generation and validation are iterative, not
+recursive, including the 10k chain. Every actual native `Spec` declares all
+body/cleanup reads. Each body uses real `Config`, `Read`/typed `Resolve`, `Provide`
+of its immutable integer node index, and one native `Defer`-owned resource;
+cleanup reads dependencies again. No body starts a persistent goroutine or does
+network I/O. Graphs use native string-keyed specs; realm/tree fixtures use the
+composition frontend with real contextmodel opaque labels.
 
-Every actual native `Spec` declares all body/cleanup reads. Each body uses real
-`Config`, `Read`/typed `Resolve`, `Provide` of its immutable integer node index,
-and one native `Defer`-owned resource. Cleanup reads dependencies again, so
-provider retention is tested rather than assumed. There is no double provision
-of the root key. No body starts a persistent goroutine or performs network I/O.
+Seed is fixed at `0x53000000`; the harness uses no PRNG, fixture and operation
+orders are deterministic and recorded.
 
-Graphs use native string-keyed specs; realm/tree fixtures use the existing
-composition frontend with **real contextmodel opaque labels**, not a substitute
-realm implementation. Their metadata-only parents add no hidden container
-fibers. Trees use immutable provider-index/config values plus opaque realm labels
-to distinguish scope and validate actual Resolve/cleanup isolation. A separate
-`composition.Scope` value/write is not exercised. All bodies acquire and release
-the actual activation lease, using native `Enter`/`Leave` for graphs and the
-composition bridge for realms/trees; the fixture counter tracks those leases.
-This is not a zero-allocation or p99 call-path claim.
+## One real root per run
 
-Precise remaining scope seam: local consumer specs currently start as siblings
-under the precompiled metadata-only realm context. `Scope.With` must run on the
-actual local provider **after successful native Provide**, and its derived
-context must then become the metadata parent used to compile those consumers.
-Changing to native children would add inherited dependencies/lifetime behavior;
-adding a scope/container provider would violate the frozen two/four-fiber total.
-Neither change is made here. A future approved harness-only two-phase composition
-construction can derive the provider-written parent and still mount the declared
-consumers as roots, but needs explicit dependency/restart propagation validation.
-No fixture node, edge, key, count or scope-writer success is invented to close it.
+`RunCycles(ctx, backend, fixture, cycles)` (`RunT` = ten cycles) runs one fresh
+root: mount + `Settle` with every fiber inspected ACTIVE; leaf `Update`; node-0
+`Update`; for realms one native Batch of every provider's update; teardown as one
+native `BatchDispose` prefix. Trees mount the 97 shared fibers, capture the
+shared-only baseline, then run the cycles of per-tree cold mount (`MountTree`),
+hot lookup, one Batch shared-provider update, reverse-order disposal and remount.
+The root is always closed under a fresh cleanup context and its goroutine owners
+compared with the baseline taken before the root existed.
 
-Seed is fixed at `0x53000000`. This harness uses no PRNG: fixture and operation
-orders are deterministic and recorded. The property corpus's SplitMix64/random
-stream is a separate parent-owned test. Candidate order alternates by repetition.
-
-## One real root per `RunT`
-
-`RunT(ctx, backend, fixture)` returns a small `RunResult` schema containing
-`Workload`, raw individual `Sample`s, actual final snapshots/provisions/events,
-resource/lease counts, memory checkpoints and goroutine stacks. It performs:
-
-1. Real graph mount + `Settle`, then inspects **every required fiber ACTIVE**, its
-   effective configuration and actual retained dependency/provision UID/owner.
-   `Settle` or `Await` returning by itself is never treated as ACTIVE.
-2. Leaf `Update` + `Settle`, checked ACTIVE again.
-3. Root-provider `Update` of fixture node **0** + `Settle`; for independent this
-   restarts node 0 only, not fictitious dependents.
-4. For realms, one real native `Batch` containing every provider's `BatchUpdate`,
-   followed by `Settle`, labeled `all-providers-batch-restart-settle`. Graph mounts
-   use `BatchMount`; composed mounts use `RootAuthority.BatchStart`, which compiles
-   the actual metadata/specs and commits one native Batch with real returned IDs.
-   No temporary backend, staging error, fake ID or Update-loop fallback is used.
-5. Normal teardown submits **all** disposal requests in one native `BatchDispose`
-   prefix before `Settle`. Providers may be requested first: the runtime must
-   retain dependent bindings until cleanup drains. Only final failure/idempotent
-   cleanup uses individual Dispose acknowledgements, never reported as a measured
-   successful Batch. The check requires DISPOSED archives with no live effects,
-   tracked work or target, no provision entries (ACTIVE or reserved), and zero
-   fixture-owned active resources and open leases. Archives are not live fibers.
-6. Always close the real root under a fresh cleanup context, even if the operation
-   context expired. Compare candidate-owned goroutine stacks against the harness
-   baseline after Close, then release frontend references. Native archive/event
-   history is never truncated. A failed candidate cannot get a pass by leaking.
-
-Trees first mount exactly 97 shared fibers, capturing the shared-only baseline
-before any local mount. A run then executes ten cycles of individual tree cold
-mount in one actual `BatchStart` + `Settle`, hot actual lookup, **one native Batch
-containing the shared provider's Update** + `Settle`, reverse-tree-order disposal
-in one native BatchDispose prefix, and remount at the next cycle. The shared
-provider really invalidates its complete dependency closure. Every cold mount
-has its own sample. Native Batch calls and mount/update/dispose group counts are
-recorded in each `RunResult`; this helper does not claim sample-floor acceptance.
-
-The prototype deadlines stay **load 2s, drain 5s, dispose 2s**. The outer
-operation/cleanup guard is **15s**, not a changed kernel policy or a 2s whole
-mount deadline. A mount taking 2.1s can finish and be recorded as a budget miss
-instead of being hidden as an infrastructure timeout. Context errors remain
-failed samples. There are no bare sleeps, retries or unlimited waits.
+Deadlines stay load 2 s, drain 5 s, dispose 2 s inside the kernel; the outer guard
+is 15 s so a 2.1 s mount is recorded as a budget miss, not hidden as a timeout.
+Context errors remain failed samples. No bare sleeps, retries or unlimited waits.
 
 ## Measurement and accounting
 
-- `LatencyNS` includes the actual action plus **lifecycle `Settle` only**, using
-  monotonic `time.Now` differences. Immediately afterward `AfterSettle` records
-  native `ObserverStatus` **before** the separate explicit `AwaitObservers` join.
-  `ObserverWaitNS`, `ObserversEndedUTC` and `SettleObserversLatencyNS` preserve that
-  extra wait and the complete start-through-observers envelope; no existing
-  lifecycle sample is silently relabeled to include it. Runtime.Settle is never
-  changed to join callbacks. Correctness inspection is outside both timings.
-  Graph operations remain sequential closed-loop, not §9's open-loop scheduler.
-- Each operation records before/after heap/allocation/GC counters, resource/lease
-  counts, full goroutine stacks/ownership and retained event-history counts.
-  `eventBacklog` is the actual native dispatcher `Accepted - Delivered`, including
-  an **in-flight** event, alongside raw `Remaining`, `Queued` and `InFlight`. The
-  counters are checked for consistency with overflow protection. Post-join
-  checkpoints record observed completion; no constant zero is substituted.
-  Native owner inbox/work-queue depth is still not exposed and is **not** inferred
-  from this dispatcher status. Retained history length is never backlog.
-- Before every runtime GC checkpoint, observers are explicitly completed. A failed
-  observer barrier records its actual live counters and an error, without forcing
-  GC or presenting a completed retained-heap checkpoint. The empty harness cut has
-  no runtime; empty-root/shared/retained/disposed/post-Close cuts name the actual
-  native observer status. No listener body is added solely for scale accounting;
-  the dispatcher still accepts/delivers the actual native event stream.
-- Heap comparisons after GC include runtime archives and event history, plus any
-  retained result/frontend references. Caller-owned declarative `Fixture` data,
-  handle/context slices and the harness itself already exist at empty-root time;
-  compiled native/realm specs are prepared **after** that baseline. Tree local
-  specs/metadata are predeclared before shared-only time. These baselines measure
-  activation/runtime retention; they do not claim total fixture-generator memory.
-- Capturing per-operation stacks/history is diagnostic overhead outside the clock
-  interval but can affect cache/GC scheduling; no observer-disabled optimized
-  claim is made. Final raw events preserve total order, never sorted for equality.
-  Composition provision values are private wrappers: ordinary JSON may encode an
-  event's `Value` as `{}` rather than its provided integer. The parent diagnostic
-  writer separately records actual `composition.ProvisionObservation` results;
-  this harness never replaces an opaque value with an expected fixture value.
-- `DisposedWithArchives` is before root Close; `PostClose` deliberately still
-  references that Go root/result. Neither is claimed to be a zero-byte heap after
-  removing all evidence. The next fresh trial does not reuse a closed root.
-- Goroutines are identified by `runtime.Stack` ownership, not a toleranced
-  subtraction of `runtime.NumGoroutine`. Fixed root workers are recorded before
-  mounting. Full per-instance idle/termination conclusions require reviewing raw
-  stacks, including any `Settle`/Close return-vs-worker-return boundary.
+- `LatencyNS` covers the action plus lifecycle `Settle` only (monotonic
+  `time.Now`); `AfterSettle` records native `ObserverStatus` before the explicit
+  `AwaitObservers` join, whose cost is kept separately. Correctness inspection is
+  outside both timings.
+- Retained heap method: `runtime.GC()` then `HeapAlloc`, after observers are
+  drained, at every retained checkpoint; the delta is against the empty-root
+  (graphs) or shared-only (trees) checkpoint. Archives, event history and any held
+  result/frontend references are included; compiled specs are prepared after the
+  empty-root baseline. `HeapInuse`, `StackInuse` and `Sys` are recorded too.
+  Per-fiber bytes, the regression slope per checkpoint and the goroutine count are
+  in `RetainedMetrics`/`HeapSummary`.
+- Goroutines are identified by `runtime.Stack` ownership, never by a toleranced
+  `NumGoroutine` subtraction; root workers are recorded before mounting.
+- Capturing per-operation stacks is diagnostic overhead outside the clock interval
+  but can affect cache/GC scheduling; no observer-disabled optimized claim is made.
+- Composition provision values are private wrappers: raw event `Value` may encode
+  as `{}`; the diagnostic writer records `composition.ProvisionObservation`.
 
-`FrozenPlan()` uses ten independent repetitions. Each graph operation has 100
-fresh roots × ten repetitions = **1,000 individual observations per candidate,
-topology and operation**. Tree shared restarts have ten roots × ten cycles × ten
-repetitions = 1,000; cold mounts have much more. These are deliberately not ten
-benchmark `ns/op` averages. The floor cannot be lowered via environment flags.
+## Classification
 
-Nearest-rank quantiles report count/p50/p95/p99/max for individual samples and
-per-root distributions, then aggregates. Population throughput CV is evaluated
-across independent repetitions; `>10%`, host swapping or throttling invalidates
-unchanged-protocol performance conclusions. Candidate failures override noise
-classification. Timer overhead is recorded separately. Parent host evidence must
-include actual before/after limits, swapping/throttling and background-load facts;
-these are not discovered or invented by this package.
+`Resolve` applies **fail > invalid > inconclusive > pass**. Candidate failures
+(budget, heap, goroutine, teardown, correctness, cap/overflow, outstanding work)
+are `fail`; protocol-environment problems (criteria not the frozen bytes,
+GOMAXPROCS≠8, race build, swap/throttle, CV >10%, source changed during the run)
+are `invalid`; everything missing (identity facts, counters that cannot be
+observed, observations below the floor or the scheduled count, absent cells,
+unevaluable CV, incomplete raw records) is `inconclusive`. `pass` exists only when
+no finding exists and the plan is the frozen one; `Dry` can never be better than
+`inconclusive`. A full run fails its Go test unless the result is `pass`.
 
-Current aggregate classification can be **fail**, **invalid**, or
-**inconclusive**, never a whole-S0 acceptance pass: native Batch and dispatcher
-backlog now use the real APIs, but the separate provider-written scope-value gap
-is explicit; §8.3 call path and §9 acknowledgement arms are not implemented here. `RunT` success alone remains inconclusive regardless of
-how fast a small graph runs. The defined `pass` schema value is reserved for later
-complete, parent-validated evidence, not emitted to bless missing probes.
+## Commands
 
-## Reproducible commands
-
-Safe author checks (no full-scale runtime performance):
+Safe author checks (fast, deterministic, no timing thresholds):
 
 ```sh
-go test ./test/spike/s0/scale -run '^Test(SmallRealLifecycleSmoke|ObserverBacklogArithmetic|NearestRankAndCV|StackOwnershipAndRawWriters|MeasurementPreconditionsNoRuntime|DefaultMeasure)$' -count=1 -v
 go vet ./test/spike/s0/scale
-go test -race ./test/spike/s0/scale -run '^Test(SmallRealLifecycleSmoke|ObserverBacklogArithmetic|NearestRankAndCV|StackOwnershipAndRawWriters|MeasurementPreconditionsNoRuntime|DefaultMeasure)$' -count=3
+go test -race -count=10 ./test/spike/s0/scale
 ```
 
-The explicit filter above exercises only helper arithmetic/serialization, driver
-preconditions, the default SKIP, and the real 16-fiber smoke (four opaque realms ×
-four fibers) per candidate per requested `-count`. It does not execute diagnostic
-or performance tests. Separate fixture unit tests can generate exact 10k/500/300
-shapes **as data only**. Do not confuse helper passes with frozen budgets.
+Run compiled test binaries with this package directory as the working directory
+(`go test` does that); source and criteria paths are relative to it.
 
-The following is a **future parent-managed command template, NOT executed**.
-First complete full final-source parity, stop competing full-property/race jobs,
-freeze criteria/source/fixture/executable hashes, retain host evidence and compile
-a non-race executable. Use a fresh output directory; the harness refuses to
-replace existing evidence. A full floor run is intentionally expensive.
+Dry runs (reduced, labelled NOT ACCEPTANCE, never `pass`):
 
 ```sh
-go test -c -o "$S0_PARENT_EXECUTABLE" ./test/spike/s0/scale
-# Parent hashes that exact executable and source tree, completes identity JSON,
-# and records these exact commands/exit codes outside the running artifact.
-GOMAXPROCS=8 S0_SCALE_RUN=1 \
-  S0_SCALE_IDENTITY="$S0_PARENT_IDENTITY" \
-  S0_SCALE_OUT="$S0_PARENT_FRESH_RESULT_DIRECTORY" \
-  "$S0_PARENT_EXECUTABLE" -test.run '^TestDefaultMeasure$' -test.count=1 -test.timeout=24h
+go test -c -o "$EXE" ./test/spike/s0/scale
+cd test/spike/s0/scale
+S0_SCALE_DRYRUN=1 S0_SCALE_OUT=<fresh dir> "$EXE" -test.run '^TestDryRunScale$' -test.count=1 -test.timeout 30m    # about 5 s
+S0_SCALE_DRYRUN=1 S0_SCALE_DRYSIZE=full S0_SCALE_OUT=<fresh dir> "$EXE" -test.run '^TestDryRunScale$' -test.count=1 -test.timeout 60m   # frozen sizes, one root per cell, about 2.5 min, 100 MiB
+S0_COLD_DRYRUN=1 S0_COLD_OUT=<fresh dir> "$EXE" -test.run '^TestDryRunColdMount$' -test.count=1 -test.timeout 30m   # about 90 s
 ```
 
-Identity JSON contains `criteriaSHA256`, `sourceSHA256`, `executableSHA256`,
-`baselineCommit`, `commands`, `finalParityCompleted: true`, `hostEvidence`,
-`observedThrottle` and `observedSwap`. The parent owns verification of those bytes
-and the exact command, never the harness. Every closed root is written to paired
-JSON/CSV before the next root, followed by `report.json`. Final events and archived
-snapshots stay in raw JSON. Errors, failed operations and slow samples are not
-removed from denominators. DefaultMeasure deliberately exits nonzero for an
-inconclusive/invalid/failed report rather than letting `go test` imply acceptance.
+Frozen runs (idle host, non-race executable, a fresh output directory each; the
+output directory must not exist). `S0_SCALE_IDENTITY` / `S0_COLD_IDENTITY` is the
+parent-supplied strict JSON:
+
+```json
+{"baselineCommit": "<commit>", "commands": ["<exact command lines>"], "finalParityCompleted": true,
+ "hostEvidence": "<idle-host record: load, background processes, swap and throttle counters>",
+ "expectedCriteriaSHA256": "<optional>", "expectedSourceSHA256": "<optional>", "expectedExecutableSHA256": "<optional>"}
+```
+
+```sh
+go test -c -o "$EXE" ./test/spike/s0/scale          # no -race
+cd test/spike/s0/scale
+GOMAXPROCS=8 S0_SCALE_RUN=1 S0_SCALE_IDENTITY="$ID" S0_SCALE_OUT="$FRESH_SCALE_DIR" \
+  "$EXE" -test.run '^TestDefaultMeasure$' -test.count=1 -test.timeout 24h -test.v
+GOMAXPROCS=8 S0_COLD_RUN=1 S0_COLD_IDENTITY="$ID" S0_COLD_OUT="$FRESH_COLD_DIR" \
+  "$EXE" -test.run '^TestColdMountRun$' -test.count=1 -test.timeout 12h -test.v
+```
+
+Run the two gates one after the other, never together. Trace retention defaults to
+every root (`S0_SCALE_TRACE=all`); `first-and-failed` keeps less and caps the
+result at `inconclusive`. Output: `identity.json`, `source-closure.json`, one
+`….json.gz`/`….trace.json.gz`/`….csv` per root (scale) or one `….json.gz` per arm
+run (cold mount), `report.json`, `manifest.json`.
+
+Development-host observation helper (NOT acceptance; one case per process):
+
+```sh
+S0_SCALE_DEV=chain/graph-lock/10000 "$EXE" -test.run '^TestDevObserve$' -test.count=1 -test.v
+S0_SCALE_DEV=trees/reconciler/500/4 "$EXE" -test.run '^TestDevObserve$' -test.count=1 -test.v
+```
+
+## Known candidate behaviour (reproductions, not fixed here)
+
+`candidate_defects_test.go` holds two skipped, deliberately failing reproductions
+(`S0_SCALE_REPRO=1`): graph-lock mount cost that grows with the number of
+providers at a fixed fiber count (held service events rescanned per pending load
+and per composed pre-check), and retained heap that grows with churn history at a
+constant live set. See the report that accompanied this change for numbers.
 
 No performance output file has been produced by the author checks. No candidate
 selection or S0-complete claim is made.
