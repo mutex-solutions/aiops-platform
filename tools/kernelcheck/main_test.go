@@ -114,8 +114,35 @@ func TestCoverage(t *testing.T) {
 	}
 }
 
+func TestTestCtor(t *testing.T) {
+	const imp = "import \"github.com/mutex-solutions/aiops-platform/sdk/kernel\"\n"
+	const use = "var _ = kernel.NewForTest\n"
+	for _, tc := range []struct {
+		name, file, src string
+		fail            bool
+	}{
+		{"clean", "plugins/a/a.go", "package a\n" + imp + "var _ = kernel.New\n", false},
+		{"no import", "plugins/a/a.go", "package a\nvar kernel struct{ NewForTest int }\nvar _ = kernel.NewForTest\n", false},
+		{"plugin violation", "plugins/a/a_test.go", "package a\n" + imp + use, true},
+		{"alias violation", "plugins/a/a.go", "package a\nimport k \"github.com/mutex-solutions/aiops-platform/sdk/kernel\"\nvar _ = k.NewForTest\n", true},
+		{"dot import violation", "plugins/a/a.go", "package a\nimport . \"github.com/mutex-solutions/aiops-platform/sdk/kernel\"\nvar _ = NewForTest\n", true},
+		{"other package aliased as kernel", "plugins/a/a.go", "package a\nimport kernel \"example.com/other\"\nvar _ = kernel.NewForTest\n", false},
+		{"kernel itself", "sdk/kernel/root_test.go", "package kernel\n" + imp + use, false},
+		{"kerneltest", "sdk/testkit/kerneltest/kerneltest.go", "package kerneltest\n" + imp + use, false},
+		{"testdata skipped", "plugins/a/testdata/a.go", "package a\n" + imp + use, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := t.TempDir()
+			write(t, d, tc.file, tc.src)
+			if err := checkTestCtor(d); (err != nil) != tc.fail {
+				t.Fatalf("fail=%v, err=%v", tc.fail, err)
+			}
+		})
+	}
+}
+
 func TestRunUsage(t *testing.T) {
-	for _, a := range [][]string{nil, {"bogus"}, {"modfile"}, {"lines", "d", "x"}} {
+	for _, a := range [][]string{nil, {"bogus"}, {"modfile"}, {"lines", "d", "x"}, {"testctor"}} {
 		if run(a) == nil {
 			t.Errorf("run(%v) succeeded", a)
 		}

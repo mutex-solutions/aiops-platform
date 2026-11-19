@@ -4,6 +4,9 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,11 +25,11 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> | coverage <profile> <import-path>")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> | coverage <profile> <import-path> | testctor <repo-root>")
 	if len(args) == 0 {
 		return usage
 	}
-	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3}
+	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2}
 	if n, ok := need[args[0]]; !ok || len(args) != n {
 		return usage
 	}
@@ -41,9 +44,90 @@ func run(args []string) error {
 			return fmt.Errorf("invalid cap %q", args[2])
 		}
 		return checkLines(args[1], c)
+	case "testctor":
+		return checkTestCtor(args[1])
 	default:
 		return checkCoverage(args[1], args[2])
 	}
+}
+
+// testCtorHomes are the only directories, relative to the repository root, that
+// may reference kernel.NewForTest (ADR-034 owner decision 1).
+var testCtorHomes = []string{"sdk/kernel", "sdk/testkit/kerneltest"}
+
+var skipDirs = map[string]bool{".git": true, ".claude": true, "node_modules": true, "testdata": true}
+
+// checkTestCtor fails when a .go file outside testCtorHomes references NewForTest
+// of a package imported from a path ending in sdk/kernel. The package name is
+// taken from the file's own import, so an alias does not hide a use.
+// ponytail: a local variable shadowing the import name is still flagged.
+func checkTestCtor(root string) error {
+	root = filepath.Clean(root)
+	var bad []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p != root && skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		for _, h := range testCtorHomes {
+			if strings.HasPrefix(rel, h+"/") {
+				return nil
+			}
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), p, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		names := map[string]bool{}
+		for _, im := range f.Imports {
+			path, _ := strconv.Unquote(im.Path.Value)
+			if path != "sdk/kernel" && !strings.HasSuffix(path, "/sdk/kernel") {
+				continue
+			}
+			name := "kernel"
+			if im.Name != nil {
+				name = im.Name.Name
+			}
+			names[name] = true
+		}
+		if len(names) == 0 {
+			return nil
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				if id, ok := x.X.(*ast.Ident); ok && x.Sel.Name == "NewForTest" && names[id.Name] {
+					bad = append(bad, rel+": references NewForTest")
+				}
+			case *ast.Ident:
+				if names["."] && x.Name == "NewForTest" {
+					bad = append(bad, rel+": references NewForTest")
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("kernel.NewForTest outside %s:\n%s", strings.Join(testCtorHomes, " and "), strings.Join(bad, "\n"))
+	}
+	return nil
 }
 
 var directive = regexp.MustCompile(`^(require|replace|exclude)\b`)
@@ -79,7 +163,7 @@ func sourceFiles(dir string) ([]string, error) {
 	return out, nil
 }
 
-var token = regexp.MustCompile(`[A-Za-z0-9]+`)
+var wordToken = regexp.MustCompile(`[A-Za-z0-9]+`)
 
 // splitCamel splits "tenantID" into "tenant", "ID" and "HTTPServer" into
 // "HTTP", "Server".
@@ -125,7 +209,7 @@ func checkVocab(dir, wordlist string) error {
 		}
 		for n, line := range strings.Split(string(src), "\n") {
 			// Underscores are not token characters, so they split too.
-			for _, tok := range token.FindAllString(line, -1) {
+			for _, tok := range wordToken.FindAllString(line, -1) {
 				for _, part := range splitCamel(tok) {
 					if w := strings.ToLower(part); banned[w] {
 						bad = append(bad, fmt.Sprintf("%s:%d: forbidden word %q", p, n+1, w))
