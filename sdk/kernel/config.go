@@ -94,7 +94,7 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 			return err
 		}
 	}
-	if err = hookCommit.Emit(ctx, root.aud, cfg); err != nil {
+	if err = hookCommit.emit(ctx, root.aud, cfg); err != nil {
 		return err
 	}
 	f.cell.retain(cfg)

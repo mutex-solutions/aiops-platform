@@ -25,7 +25,9 @@ type Event[A any] struct {
 }
 
 // NewEvent declares an event hook named "<owner noun>/<event>"
-// (07-c4-plugin-sdk.md:381, :385). It panics on a bad definition.
+// (07-c4-plugin-sdk.md:381, :385). It panics on a bad definition, and on one with
+// no OwnedBy (ADR-034 owner decision 10). The hook value cannot dispatch: its
+// owner calls Bind.
 func NewEvent[A any](name string, opts ...HookOption) *Event[A] {
 	return newEvent[A](name, false, opts...)
 }
@@ -37,12 +39,50 @@ func newEvent[A any](name string, kernel bool, opts ...HookOption) *Event[A] {
 // Name returns the hook's name.
 func (e *Event[A]) Name() string { return e.def.name }
 
-// Owner returns the key given to OwnedBy, nil if none (07-c4-plugin-sdk.md:439).
+// Owner returns the key given to OwnedBy, nil for a kernel hook
+// (07-c4-plugin-sdk.md:439; ADR-034 owner decision 10).
 func (e *Event[A]) Owner() AnyKey {
 	if e.def.owner == nil {
 		return nil
 	}
 	return e.def.owner
+}
+
+func (e *Event[A]) anyHook() *hookDef {
+	if e == nil {
+		return nil
+	}
+	return e.def
+}
+
+// EventDispatcher dispatches one Event for the activation that bound it. Only
+// Bind makes one, so only the fiber that provides the hook's owning key holds one
+// (07-c4-plugin-sdk.md:208, :439; ADR-034 owner decision 10). It dies with that
+// activation: once the fiber is quiescing, disposed or restarted, every method
+// returns an error that matches ErrInactive and calls no listener. Its zero value
+// is dead. It is a small value and safe for concurrent use.
+type EventDispatcher[A any] struct {
+	e *Event[A]
+	c *Context
+}
+
+// Bind returns the dispatcher of e for c's fiber. The owner calls it once in Apply
+// (07-c4-plugin-sdk.md:439; ADR-034 owner decision 10). c's fiber must provide
+// the hook's owning key: its entry is admitted for the key by the provider binding
+// map when the key is provider-bound, and it declared the key in Plugin.Provides,
+// the same two checks Key.Provide makes. A refused call, with ErrNotOwner, ErrHook
+// or ErrInactiveEffect, panics and fails the fiber.
+func (e *Event[A]) Bind(c *Context) EventDispatcher[A] {
+	e.def.bind(c)
+	return EventDispatcher[A]{e: e, c: c}
+}
+
+// enter takes the activation's lease for one dispatch.
+func (d EventDispatcher[A]) enter() (func(), error) {
+	if d.e == nil {
+		return nil, ErrInactive
+	}
+	return d.e.def.enter(d.c)
 }
 
 // Use returns the HookUse that a plugin lists in Plugin.Hooks to listen on stage
@@ -109,7 +149,18 @@ func (e *Event[A]) sequence(ctx context.Context, aud Audience, a A, bail bool) (
 // Emit calls every listener reached by aud, one after the other in chain order,
 // and ignores their values. It returns ctx's error if ctx ends first
 // (07-c4-plugin-sdk.md:208, :385, :440).
-func (e *Event[A]) Emit(ctx context.Context, aud Audience, a A) error {
+func (d EventDispatcher[A]) Emit(ctx context.Context, aud Audience, a A) error {
+	leave, err := d.enter()
+	if err != nil {
+		return err
+	}
+	defer leave()
+	return d.e.emit(ctx, aud, a)
+}
+
+// emit is Emit with no check of a dispatcher: the kernel root's own path
+// (config.go), which plugins cannot reach.
+func (e *Event[A]) emit(ctx context.Context, aud Audience, a A) error {
 	_, err := e.sequence(ctx, aud, a, false)
 	return err
 }
@@ -117,7 +168,16 @@ func (e *Event[A]) Emit(ctx context.Context, aud Audience, a A) error {
 // Parallel calls every listener reached by aud at the same time, each in its own
 // goroutine, and returns when all have returned. The goroutines are bounded by the
 // dispatch and each runs under its fiber's lease (07-c4-plugin-sdk.md:208, :385).
-func (e *Event[A]) Parallel(ctx context.Context, aud Audience, a A) error {
+func (d EventDispatcher[A]) Parallel(ctx context.Context, aud Audience, a A) error {
+	leave, err := d.enter()
+	if err != nil {
+		return err
+	}
+	defer leave()
+	return d.e.parallel(ctx, aud, a)
+}
+
+func (e *Event[A]) parallel(ctx context.Context, aud Audience, a A) error {
 	if err := e.def.dispatchable(ctx, aud); err != nil {
 		return err
 	}
@@ -147,13 +207,22 @@ func (e *Event[A]) Parallel(ctx context.Context, aud Audience, a A) error {
 // first stopping value, which it returns; nil means none stopped
 // (07-c4-plugin-sdk.md:208, :385). Listeners are synchronous, so it behaves as Bail
 // does: see the open points of the report.
-func (e *Event[A]) Serial(ctx context.Context, aud Audience, a A) (any, error) {
-	return e.sequence(ctx, aud, a, true)
+func (d EventDispatcher[A]) Serial(ctx context.Context, aud Audience, a A) (any, error) {
+	return d.bail(ctx, aud, a)
 }
 
 // Bail calls the listeners one after the other in chain order and stops at the
 // first stopping value, which it returns; nil means none stopped
 // (07-c4-plugin-sdk.md:208, :385).
-func (e *Event[A]) Bail(ctx context.Context, aud Audience, a A) (any, error) {
-	return e.sequence(ctx, aud, a, true)
+func (d EventDispatcher[A]) Bail(ctx context.Context, aud Audience, a A) (any, error) {
+	return d.bail(ctx, aud, a)
+}
+
+func (d EventDispatcher[A]) bail(ctx context.Context, aud Audience, a A) (any, error) {
+	leave, err := d.enter()
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
+	return d.e.sequence(ctx, aud, a, true)
 }

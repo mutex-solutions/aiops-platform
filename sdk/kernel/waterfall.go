@@ -29,7 +29,9 @@ type Waterfall[A, R any] struct {
 }
 
 // NewWaterfall declares a waterfall hook named "<owner noun>/<event>"
-// (07-c4-plugin-sdk.md:381, :386, :627). It panics on a bad definition.
+// (07-c4-plugin-sdk.md:381, :386, :627). It panics on a bad definition, and on one
+// with no OwnedBy (ADR-034 owner decision 10). The hook value cannot dispatch: its
+// owner calls Bind.
 func NewWaterfall[A, R any](name string, opts ...HookOption) *Waterfall[A, R] {
 	return newWaterfall[A, R](name, false, opts...)
 }
@@ -41,12 +43,38 @@ func newWaterfall[A, R any](name string, kernel bool, opts ...HookOption) *Water
 // Name returns the hook's name.
 func (w *Waterfall[A, R]) Name() string { return w.def.name }
 
-// Owner returns the key given to OwnedBy, nil if none (07-c4-plugin-sdk.md:439).
+// Owner returns the key given to OwnedBy, nil for a kernel hook
+// (07-c4-plugin-sdk.md:439; ADR-034 owner decision 10).
 func (w *Waterfall[A, R]) Owner() AnyKey {
 	if w.def.owner == nil {
 		return nil
 	}
 	return w.def.owner
+}
+
+func (w *Waterfall[A, R]) anyHook() *hookDef {
+	if w == nil {
+		return nil
+	}
+	return w.def
+}
+
+// WaterfallDispatcher runs one Waterfall for the activation that bound it. Only
+// Bind makes one, so only the fiber that provides the hook's owning key holds one
+// (07-c4-plugin-sdk.md:209, :439; ADR-034 owner decision 10). It dies with that
+// activation: once the fiber is quiescing, disposed or restarted, Run returns an
+// error that matches ErrInactive and calls no listener. Its zero value is dead. It
+// is a small value and safe for concurrent use.
+type WaterfallDispatcher[A, R any] struct {
+	w *Waterfall[A, R]
+	c *Context
+}
+
+// Bind returns the dispatcher of w for c's fiber, under the rule of Event.Bind
+// (07-c4-plugin-sdk.md:439; ADR-034 owner decision 10).
+func (w *Waterfall[A, R]) Bind(c *Context) WaterfallDispatcher[A, R] {
+	w.def.bind(c)
+	return WaterfallDispatcher[A, R]{w: w, c: c}
 }
 
 // Use returns the HookUse that a plugin lists in Plugin.Hooks to listen on stage
@@ -64,15 +92,29 @@ func (w *Waterfall[A, R]) On(c *Context, stage string, fn WaterfallListener[A, R
 }
 
 // Run calls the chain reached by aud, outermost first, and returns the result of
-// the outermost listener (07-c4-plugin-sdk.md:209, :386, :440). A listener that
-// errors or panics fails the dispatch with a *ListenerError: a waterfall never
-// substitutes a successful value for a failed call. An empty chain returns the
-// zero R.
-func (w *Waterfall[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error) {
-	return w.run(ctx, aud, a, nil)
+// the outermost listener (07-c4-plugin-sdk.md:209, :386, :440). A waterfall fails
+// closed (ADR-034 owner decision 12): a listener that errors or panics fails the
+// dispatch with a *ListenerError naming it, no later listener and not the owner's
+// built-in behaviour runs, and the dispatch never substitutes a successful value
+// for a failed call. An empty chain returns the zero R. A dispatcher whose
+// activation has ended returns an error that matches ErrInactive and calls no
+// listener (decision 10).
+func (d WaterfallDispatcher[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error) {
+	if d.w == nil {
+		var zero R
+		return zero, ErrInactive
+	}
+	leave, err := d.w.def.enter(d.c)
+	if err != nil {
+		var zero R
+		return zero, err
+	}
+	defer leave()
+	return d.w.run(ctx, aud, a, nil)
 }
 
-// run is Run with an optional innermost listener: the kernel's own behaviour, which
+// run is Run with no check of a dispatcher and an optional innermost listener: the
+// kernel root's own path (config.go), which plugins cannot reach. The listener is the kernel's own behaviour, which
 // the next of the last listener reaches and which runs alone on an empty chain.
 func (w *Waterfall[A, R]) run(ctx context.Context, aud Audience, a A, inner *listener[WaterfallListener[A, R]]) (R, error) {
 	var zero R

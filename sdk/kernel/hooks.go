@@ -24,9 +24,14 @@ var (
 	// ErrStage reports a stage that the hook's definition does not declare
 	// (07-c4-plugin-sdk.md:438).
 	ErrStage = errors.New("unknown hook stage")
-	// ErrSealed reports an On on a sealed hook from anything but the launcher's own
-	// context (07-c4-plugin-sdk.md:439, :463).
+	// ErrSealed reports an On on a sealed hook from a fiber that neither is the
+	// launcher's own context nor is listed for the hook in Config.Listeners
+	// (07-c4-plugin-sdk.md:439, :463; ADR-034 owner decision 11).
 	ErrSealed = errors.New("hook is sealed to the launcher")
+	// ErrNotOwner reports a Bind by a fiber that does not provide the hook's owning
+	// key, and a Bind on a hook with no owner that a plugin may bind
+	// (07-c4-plugin-sdk.md:439; ADR-034 owner decision 10).
+	ErrNotOwner = errors.New("fiber does not provide the hook's owning key")
 	// ErrUnscoped reports a dispatch with Unscoped on a hook that its definition
 	// marks as carrying scoped data (07-c4-plugin-sdk.md:440).
 	ErrUnscoped = errors.New("hook carries scoped data and refuses an Unscoped dispatch")
@@ -63,9 +68,11 @@ func (e *PanicError) Unwrap() error { err, _ := e.Value.(error); return err }
 type HookOption func(*hookDef)
 
 // OwnedBy records that only the fiber that provides k may dispatch the hook
-// (07-c4-plugin-sdk.md:393, :439, :627). Dispatch takes a std context and no
-// context of the caller, so the kernel cannot check the caller: the owner is
-// recorded and reported by Owner, and kept behind the definition's own API.
+// (07-c4-plugin-sdk.md:393, :439, :627; ADR-034 owner decision 10). The kernel
+// enforces it in Bind: only a fiber for which Bind's rule holds gets a dispatcher.
+// A hook declared with NewEvent or NewWaterfall must have an owner: the contract
+// shows every hook with OwnedBy and is silent on a hook without one, so the
+// kernel fails closed and refuses the definition (an open point).
 func OwnedBy(k AnyKey) HookOption {
 	return func(d *hookDef) { d.owner, _ = dataOf(k) }
 }
@@ -82,7 +89,8 @@ func Stages(names ...string) HookOption {
 func Scoped() HookOption { return func(d *hookDef) { d.scoped = true } }
 
 // Sealed marks the hook sealed to the distribution: only the launcher's own
-// context may listen on it (07-c4-plugin-sdk.md:439, :463).
+// context and the entries that Config.Listeners lists for the hook may listen on
+// it (07-c4-plugin-sdk.md:439, :463; ADR-034 owner decision 11).
 func Sealed() HookOption { return func(d *hookDef) { d.sealed = true } }
 
 // hookDef is the definition shared by Event and Waterfall.
@@ -97,7 +105,8 @@ type hookDef struct {
 const kernelPrefix = "internal/"
 
 // newHookDef checks and builds a definition. A bad definition is a programming
-// error and panics, as NewKey does. The prefix internal/ belongs to the kernel.
+// error and panics, as NewKey does. The prefix internal/ belongs to the kernel,
+// and only a kernel hook may have no owner: the kernel root dispatches it.
 func newHookDef(name string, kernel bool, opts []HookOption) *hookDef {
 	d := &hookDef{name: name}
 	for _, o := range opts {
@@ -107,6 +116,8 @@ func newHookDef(name string, kernel bool, opts []HookOption) *hookDef {
 		d.sealed = true
 	} else if strings.HasPrefix(name, kernelPrefix) {
 		panic(fmt.Sprintf("kernel: hook %q: the prefix %q is reserved to the kernel", name, kernelPrefix))
+	} else if d.owner == nil {
+		panic(fmt.Sprintf("kernel: hook %q: no owner, declare it with OwnedBy", name))
 	}
 	if name == "" {
 		panic("kernel: hook with no name")
@@ -169,8 +180,10 @@ func checkUses(uses []HookUse) error {
 
 func (d *hookDef) errf(err error) error { return fmt.Errorf("hook %s: %w", d.name, err) }
 
-// admit is the checks of an On: context, stage, seal, declaration. A refusal fails
-// the fiber like the other no-error registrations (effect.go refuse).
+// admit is the checks of an On: context, stage, seal, declaration. A sealed hook
+// admits the launcher's own context and the entries of Config.Listeners; the test
+// constructor admits any entry (ADR-034 owner decision 11). A refusal fails the
+// fiber like the other no-error registrations (effect.go refuse).
 func (d *hookDef) admit(c *Context, stage string) (idx int) {
 	if c == nil {
 		refuse(d.errf(ErrHook))
@@ -179,7 +192,7 @@ func (d *hookDef) admit(c *Context, stage string) (idx int) {
 		refuse(d.errf(ErrStage))
 	}
 	if !c.frame.host {
-		if d.sealed {
+		if d.sealed && !c.root.unbound && !c.root.listeners.allows(d, c.entry) {
 			refuse(d.errf(ErrSealed))
 		}
 		if !slices.Contains(c.frame.hooks, HookUse{def: d, stage: idx}) {
@@ -187,6 +200,46 @@ func (d *hookDef) admit(c *Context, stage string) (idx int) {
 		}
 	}
 	return idx
+}
+
+// bind is the check of a Bind (ADR-034 owner decision 10). The fiber of c must
+// provide the owning key: c's entry is admitted for it by the provider binding
+// map when it is provider-bound, and the fiber declared it in Provides in c's
+// realm. It is the predicate Key.Provide applies (Context.mayProvide), so the two
+// cannot disagree. The activation must be live. A refusal fails the fiber.
+func (d *hookDef) bind(c *Context) {
+	if c == nil {
+		refuse(d.errf(ErrHook))
+	}
+	if d.owner == nil || !c.mayProvide(d.owner) {
+		refuse(d.errf(ErrNotOwner))
+	}
+	leave, ok := c.h.enter()
+	if !ok {
+		refuse(d.errf(errors.Join(ErrInactiveEffect, ErrInactive)))
+	}
+	leave()
+}
+
+// enter takes the lease of the dispatcher's activation for the length of one
+// dispatch: a dispatcher dies with the activation that bound it (ADR-034 owner
+// decision 10). The error matches ErrInactive for a zero dispatcher and once
+// that fiber is quiescing, disposed or restarted.
+func (d *hookDef) enter(c *Context) (leave func(), err error) {
+	if c != nil {
+		if leave, ok := c.h.enter(); ok {
+			return leave, nil
+		}
+	}
+	return nil, d.errf(ErrInactive)
+}
+
+// AnyHook is a hook of any payload type: the key of Config.Listeners, as AnyKey is
+// the key of a binding map (ADR-034 owner decision 11). Every *Event and
+// *Waterfall is an AnyHook.
+type AnyHook interface {
+	Name() string
+	anyHook() *hookDef
 }
 
 // dispatchable is the checks every dispatch makes before it reads the chain.
@@ -311,6 +364,48 @@ func (t *table[F]) pick(aud Audience, buf []*listener[F]) ([]*listener[F], error
 		}
 	}
 	return sel, nil
+}
+
+// listenerSet is the checked form of Config.Listeners.
+type listenerSet map[*hookDef]map[entryID]struct{}
+
+// compileListeners checks l: it reports a nil hook, a hook that is not sealed, an
+// entry with no identity and an entry listed twice for one hook.
+func compileListeners(l map[AnyHook][]Plugin) (listenerSet, error) {
+	set := make(listenerSet, len(l))
+	var errs []error
+	for h, entries := range l {
+		var d *hookDef
+		if h != nil {
+			d = h.anyHook()
+		}
+		if d == nil {
+			errs = append(errs, fmt.Errorf("listener binding: %w", ErrHook))
+			continue
+		}
+		if !d.sealed {
+			errs = append(errs, fmt.Errorf("listener binding for hook %s that is not sealed: %w", d.name, ErrSealed))
+			continue
+		}
+		ids := make(map[entryID]struct{}, len(entries))
+		for _, p := range entries {
+			_, dup := ids[p.entry]
+			switch {
+			case p.entry == nil:
+				errs = append(errs, fmt.Errorf("listener binding for %s lists plugin %q that was never defined: %w", d.name, p.ID, ErrBinding))
+			case dup:
+				errs = append(errs, fmt.Errorf("listener binding for %s lists plugin %q twice: %w", d.name, p.ID, ErrDuplicate))
+			}
+			ids[p.entry] = struct{}{}
+		}
+		set[d] = ids
+	}
+	return set, errors.Join(errs...)
+}
+
+func (s listenerSet) allows(d *hookDef, e entryID) bool {
+	_, ok := s[d][e]
+	return e != nil && ok
 }
 
 // hookLogMu serialises the log sink: dispatches run on any goroutine and the sink

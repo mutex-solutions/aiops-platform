@@ -28,7 +28,7 @@ type Plugin struct {
 	entry entryID // Minted by Define; nil for a Plugin with no entry of its own.
 }
 
-// Config is every number the kernel needs, plus the two binding maps. The kernel
+// Config is every number the kernel needs, plus the three binding maps. The kernel
 // holds no default: the launcher supplies all of it (ADR-034 owner decisions 3
 // and 4). The deadlines are kernel-wide.
 type Config struct {
@@ -49,6 +49,13 @@ type Config struct {
 	// Consumers lists, per consumer-bound or signed key, the entries allowed to
 	// resolve it (07-c4-plugin-sdk.md:551). Both are checked by New.
 	Providers, Consumers Bindings
+
+	// Listeners lists, per sealed hook, the entries allowed to listen on it: the
+	// third binding map, compared by entry token like the other two. The launcher
+	// fills it from the distribution manifest. A hook that is not sealed, a nil
+	// hook and an entry that was never defined or is listed twice are refused by
+	// New. NewForTest ignores it (ADR-034 owner decision 11).
+	Listeners map[AnyHook][]Plugin
 }
 
 func (c Config) core() coreConfig {
@@ -59,39 +66,44 @@ func (c Config) core() coreConfig {
 	}
 }
 
-// Root is the kernel root: it owns the lifecycle core, the two binding maps and
+// Root is the kernel root: it owns the lifecycle core, the three binding maps and
 // the root context (07-c4-plugin-sdk.md:1346, :1358).
 type Root struct {
 	core      *core
 	providers bindingSet
 	consumers bindingSet
+	listeners listenerSet
 	unbound   bool
 	host      entryID
 	ctx       *Context
 	aud       Audience // Reaches the listeners of this kernel only: see config.go.
 }
 
-// New constructs a kernel with the two binding maps of cfg (07-c4-plugin-sdk.md:1358).
-// It fails on a zero or negative number, and on a binding map that names an
-// invalid key, an open key, a key twice or an entry with no Apply. Close it.
+// New constructs a kernel with the three binding maps of cfg (07-c4-plugin-sdk.md:1358;
+// ADR-034 owner decision 11). It fails on a zero or negative number, and on a
+// binding map that names an invalid key or hook, an open key, a hook that is not
+// sealed, a key or an entry twice or an entry that was never defined. Close it.
 func New(cfg Config) (*Root, error) {
 	providers, perr := compileBindings("provider", cfg.Providers, func(k *keyData) bool { return k.provider == classBound })
 	consumers, cerr := compileBindings("consumer", cfg.Consumers, func(k *keyData) bool { return k.consumer != classOpen })
-	if err := errors.Join(perr, cerr); err != nil {
+	listeners, lerr := compileListeners(cfg.Listeners)
+	if err := errors.Join(perr, cerr, lerr); err != nil {
 		return nil, err
 	}
-	return newRoot(context.Background(), cfg.core(), providers, consumers, false, cfg.LogHandler)
+	return newRoot(context.Background(), cfg.core(), providers, consumers, listeners, false, cfg.LogHandler)
 }
 
-// NewForTest constructs a kernel with both binding maps off, so that a plugin can
-// mount alone with a fake of any key (07-c4-plugin-sdk.md:247, :564; ADR-034 owner
-// decision 1). It is the only constructor that can, and it needs a testing.TB. The
-// bindings of cfg are ignored. The kernel is closed when the test ends: a leaked
+// NewForTest constructs a kernel with the three binding maps off, so that a plugin
+// can mount alone with a fake of any key and listen on any sealed hook
+// (07-c4-plugin-sdk.md:247, :564; ADR-034 owner decisions 1 and 11). It is the only
+// constructor that can, and it needs a testing.TB. The bindings of cfg are ignored.
+// A plugin must still declare a hook in Plugin.Hooks, and Bind still checks the
+// owning key. The kernel is closed when the test ends: a leaked
 // fiber fails the test and any other Close diagnostic, such as that of a fiber that
 // failed on purpose, is logged. A bad cfg fails the test at once.
 func NewForTest(tb testing.TB, cfg Config) *Root {
 	tb.Helper()
-	r, err := newRoot(context.Background(), cfg.core(), nil, nil, true, cfg.LogHandler)
+	r, err := newRoot(context.Background(), cfg.core(), nil, nil, nil, true, cfg.LogHandler)
 	if err != nil {
 		tb.Fatalf("kernel.NewForTest: %v", err)
 	}
@@ -106,7 +118,7 @@ func NewForTest(tb testing.TB, cfg Config) *Root {
 	return r
 }
 
-func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSet, unbound bool, log slog.Handler) (*Root, error) {
+func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSet, listeners listenerSet, unbound bool, log slog.Handler) (*Root, error) {
 	c, err := newCore(cfg)
 	if err != nil {
 		return nil, err
@@ -116,7 +128,7 @@ func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSe
 		_ = c.close(context.Background())
 		return nil, err
 	}
-	r := &Root{core: c, providers: providers, consumers: consumers, unbound: unbound}
+	r := &Root{core: c, providers: providers, consumers: consumers, listeners: listeners, unbound: unbound}
 	r.host = new(entryToken)
 	r.ctx = &Context{root: r, h: h, entry: r.host, frame: &frame{id: "root", host: true}}
 	r.aud = Audience{match: func(l *Context) bool { return l.root == r }}

@@ -185,6 +185,13 @@ func (c *Context) read(k *keyData) (*provided, error) {
 	return p, nil
 }
 
+// mayProvide reports whether c's fiber may provide k: the entry is admitted by the
+// provider binding map and the fiber declared k in Provides. provideKey decides
+// the same way, and so does Bind (ADR-034 owner decision 10).
+func (c *Context) mayProvide(k *keyData) bool {
+	return c.providerAllowed(k) && c.declaresProvide(k)
+}
+
 // provideKey provides k from c's fiber after the class and declaration checks.
 func (c *Context) provideKey(k *keyData, p *provided) error {
 	if !c.providerAllowed(k) {
@@ -199,7 +206,7 @@ func (c *Context) provideKey(k *keyData, p *provided) error {
 // ownsKey reports whether c's fiber has actually provided k: the declaration, the
 // class and the core's own record of the reservation.
 func (c *Context) ownsKey(k *keyData) bool {
-	return c.providerAllowed(k) && c.declaresProvide(k) && c.h.owns(k.addr(c.realmOf(k)))
+	return c.mayProvide(k) && c.h.owns(k.addr(c.realmOf(k)))
 }
 
 // Effect runs setup and records its disposer as an effect of c's fiber; the label
