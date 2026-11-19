@@ -391,11 +391,15 @@ func r3Scenario(t *testing.T) r3Obs {
 		dep.Leave()
 		synctest.Wait()
 		time.Sleep(600 * time.Millisecond) // t = 5.5s: past the provider's 5s from invalidation
-		if err := r.Settle(ctx); err != nil {
+		// The dependant is healthy and mid-dispose, so Settle must keep waiting:
+		// bound it, and any diagnostic other than the bound itself is the hazard.
+		bounded, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		if err := r.Settle(bounded); err != nil && err.Error() != context.DeadlineExceeded.Error() {
 			obs.providerErr = err.Error()
 		}
+		cancel()
 		obs.deadlines = kinds(eventsOf(t, r, "deadline", ""))
-		time.Sleep(1200 * time.Millisecond) // t = 6.7s: dependant disposer returns in budget
+		time.Sleep(1100 * time.Millisecond) // t = 6.7s: dependant disposer returns in budget
 		open()
 		synctest.Wait()
 		obs.final = r.Settle(ctx)

@@ -1641,7 +1641,7 @@ func (o *rcOwner) loaded(m rcMessage) {
 	o.quiesce(f)
 	f.phase = rcDraining
 	o.state(f, Unloading)
-	o.deadline(f, time.Now().Add(rcDrainBudget))
+	o.armDrain(f)
 	o.enqueue(f)
 }
 
@@ -1717,7 +1717,7 @@ func (o *rcOwner) scopeDone(m rcMessage) {
 		f.phase = rcDraining
 		o.busy++
 		o.state(f, Unloading)
-		o.deadline(f, time.Now().Add(rcDrainBudget))
+		o.armDrain(f)
 	}
 	o.enqueue(f)
 }
@@ -1775,24 +1775,41 @@ func (o *rcOwner) quiesce(f *rcFiber) {
 	if f.phase == rcIdle {
 		o.busy++
 		f.phase = rcDraining
-		o.deadline(f, time.Now().Add(rcDrainBudget))
+		o.armDrain(f)
 	}
 	if f.phase != rcApplying {
 		o.state(f, Unloading)
 	}
 }
 
+// ownBusy reports whether the quiesced activation of f still has work of its own:
+// leases, tracked workers or an availability check. Only this work is covered by
+// the drain budget.
+func (o *rcOwner) ownBusy(f *rcFiber) bool {
+	return len(f.act.tracked) != 0 || f.act.ctx.lease.Load() != 0 || f.checking != nil
+}
+
+// armDrain starts the drain budget of f, which measures f's own draining and
+// nothing else. A fiber with no work of its own to wait for has no drain clock
+// at all: whatever it then waits for (dependants, structural children) is bounded
+// by those fibers' own deadlines and is reported through them (see awaited).
+func (o *rcOwner) armDrain(f *rcFiber) {
+	if o.ownBusy(f) {
+		o.deadline(f, time.Now().Add(rcDrainBudget))
+	} else {
+		o.deadline(f, time.Time{})
+	}
+}
+
 func (o *rcOwner) drain(f *rcFiber) {
+	if o.ownBusy(f) {
+		return
+	}
+	// The fiber's own draining is over: stop its clock and drop its own
+	// diagnostic. What follows is a wait on other fibers, not drain time.
+	o.deadline(f, time.Time{})
+	o.block(f, nil)
 	if f.id == 0 && o.closing && len(o.fibers) != 0 {
-		return
-	}
-	if len(f.act.tracked) != 0 {
-		return
-	}
-	if f.act.ctx.lease.Load() != 0 {
-		return
-	}
-	if f.checking != nil {
 		return
 	}
 	for _, p := range f.provisions {
@@ -1800,7 +1817,6 @@ func (o *rcOwner) drain(f *rcFiber) {
 			return
 		}
 	}
-	o.block(f, nil)
 	f.phase = rcDisposing
 	o.deadline(f, time.Now().Add(rcDisposeBudget))
 	f.cleanupCtx, f.cleanupCancel = context.WithDeadline(context.Background(), f.deadline)
@@ -1858,11 +1874,12 @@ func (o *rcOwner) disposeNext(f *rcFiber) {
 	}
 	if len(f.act.children) != 0 {
 		// Join after the walk. The last child's remove() enqueues this owner and
-		// work() re-enters here. The join has its own drain budget.
+		// work() re-enters here. The join is a wait on the children, which have
+		// their own drain and dispose budgets: it has no clock of its own.
 		if !f.joining {
 			f.joining = true
 			o.block(f, nil)
-			o.deadline(f, time.Now().Add(rcDrainBudget))
+			o.deadline(f, time.Time{})
 		}
 		return
 	}
@@ -2334,9 +2351,7 @@ func (o *rcOwner) finishWaiters() {
 		for id, err := range o.failures {
 			failures = append(failures, &rcDiagnostic{text: fmt.Sprintf("fiber %d: %s", id, o.lookup(id).failureText), cause: err})
 		}
-		for _, err := range o.blocked {
-			failures = append(failures, err)
-		}
+		failures = append(failures, o.blockedDiagnostics()...)
 		// Sort diagnostics only: lifecycle events are never reordered.
 		sort.Slice(failures, func(i, j int) bool { return failures[i].Error() < failures[j].Error() })
 		err := errors.Join(append(failures, o.terminalErrors()...)...)
@@ -2400,6 +2415,121 @@ func (o *rcOwner) block(f *rcFiber, err error) {
 	} else {
 		o.blocked[f.id] = err
 	}
+}
+
+// awaited lists the fibers f is waiting on once its own work is done: the
+// dependants that still hold its provisions, its structural children while it
+// joins them, or, for the closing root, every fiber. Sorted by id.
+func (o *rcOwner) awaited(f *rcFiber) []*rcFiber {
+	if f.act == nil {
+		return nil
+	}
+	var out []*rcFiber
+	switch {
+	case f.phase == rcDraining && !o.ownBusy(f):
+		if f.id == 0 && o.closing {
+			for _, id := range o.ids() {
+				out = append(out, o.fibers[id])
+			}
+			return out
+		}
+		seen := make(map[*rcFiber]bool)
+		for _, p := range f.provisions {
+			for _, d := range p.dependents {
+				if d != f && !seen[d] {
+					seen[d] = true
+					out = append(out, d)
+				}
+			}
+		}
+	case f.phase == rcDisposing && f.joining:
+		for id := range f.act.children {
+			if c := o.fibers[id]; c != nil {
+				out = append(out, c)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b *rcFiber) int { return cmp.Compare(a.id, b.id) })
+	return out
+}
+
+// waitersOf lists the fibers that may be waiting on g: the owners of the
+// provisions g still holds, its structural parent, and the closing root.
+func (o *rcOwner) waitersOf(g *rcFiber) []*rcFiber {
+	var out []*rcFiber
+	add := func(id uint64) {
+		if h := o.lookup(id); h != nil && h != g {
+			out = append(out, h)
+		}
+	}
+	for _, p := range g.committed {
+		add(p.binding.owner)
+	}
+	for _, p := range g.releaseBindings {
+		add(p.binding.owner)
+	}
+	if q := g.checking; q != nil {
+		for _, p := range q.bindings {
+			add(p.binding.owner)
+		}
+	}
+	if g.parent != nil {
+		add(g.parent.ctx.fiber)
+	}
+	if o.closing && o.root != nil && g != o.root {
+		out = append(out, o.root)
+	}
+	return out
+}
+
+// blockedClosure returns the fibers that cannot make progress, in discovery
+// order, each with the fiber it waits on (nil for a fiber past one of its own
+// deadlines). A fiber that waits on a blocked fiber is blocked too, so one hung
+// callback is reported once at its own stage and once by name on every fiber
+// queued behind it, never as a deadline of the waiters.
+func (o *rcOwner) blockedClosure() ([]*rcFiber, map[*rcFiber]*rcFiber) {
+	ids := make([]uint64, 0, len(o.blocked))
+	for id := range o.blocked {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	via := make(map[*rcFiber]*rcFiber, len(ids))
+	var order []*rcFiber
+	for _, id := range ids {
+		if f := o.lookup(id); f != nil {
+			via[f] = nil
+			order = append(order, f)
+		}
+	}
+	for i := 0; i < len(order); i++ {
+		g := order[i]
+		for _, h := range o.waitersOf(g) {
+			if _, seen := via[h]; seen || !slices.Contains(o.awaited(h), g) {
+				continue
+			}
+			via[h] = g
+			order = append(order, h)
+		}
+	}
+	return order, via
+}
+
+// blockedDiagnostics is one diagnostic per blocked fiber: its own deadline error,
+// or, for a fiber waiting on a blocked one, a diagnostic naming that fiber that
+// still unwraps to the awaited fiber's cause.
+func (o *rcOwner) blockedDiagnostics() []error {
+	order, via := o.blockedClosure()
+	errs := make(map[*rcFiber]error, len(order))
+	out := make([]error, 0, len(order))
+	for _, f := range order {
+		if g := via[f]; g == nil {
+			errs[f] = o.blocked[f.id]
+		} else {
+			errs[f] = &rcDiagnostic{text: fmt.Sprintf("fiber %d drain: waiting for fiber %d", f.id, g.id), cause: errs[g]}
+		}
+		out = append(out, errs[f])
+	}
+	return out
 }
 
 func (o *rcOwner) deadline(f *rcFiber, at time.Time) {
@@ -2474,9 +2604,6 @@ func (o *rcOwner) stageOf(f *rcFiber) (string, *rcRun) {
 	case f.phase == rcDraining:
 		return "drain", nil
 	case f.phase == rcDisposing:
-		if f.joining {
-			return "drain", nil
-		}
 		if f.effectRunning {
 			return "dispose", f.run
 		}
@@ -2487,8 +2614,8 @@ func (o *rcOwner) stageOf(f *rcFiber) (string, *rcRun) {
 	return "load", f.run
 }
 
-// drainInTime reports whether everything a draining fiber still waits for is
-// already done, or finished before at, so that only owner messages are pending.
+// drainInTime reports whether all of a draining fiber's own work is already done,
+// or finished before at, so that only owner messages are pending.
 // The last lease is judged by the instant it was released (act.freed, stamped by
 // the releasing goroutine on the quiesced path only). A tracked worker keeps its
 // lease until the owner acknowledges its completion, so a worker whose callback
@@ -2496,7 +2623,7 @@ func (o *rcOwner) stageOf(f *rcFiber) (string, *rcRun) {
 // lease count instead of being blamed for the owner's delay.
 func (o *rcOwner) drainInTime(f *rcFiber, at time.Time) bool {
 	a := f.act
-	if a == nil || f.joining || (f.id == 0 && o.closing && len(o.fibers) != 0) {
+	if a == nil {
 		return false
 	}
 	finished := int64(0)
@@ -2512,13 +2639,5 @@ func (o *rcOwner) drainInTime(f *rcFiber, at time.Time) bool {
 	if !a.freed.inTime(at) && !a.freed.zero() {
 		return false
 	}
-	if f.checking != nil && !f.checking.run.inTime(at) {
-		return false
-	}
-	for _, p := range f.provisions {
-		if len(p.dependents) != 0 {
-			return false
-		}
-	}
-	return true
+	return f.checking == nil || f.checking.run.inTime(at)
 }
