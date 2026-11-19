@@ -901,3 +901,28 @@ supported runtime.
 
 Still open in this ADR: the cost and ownership of `Enter`, and the line budget,
 both fixed with the final port to `sdk/kernel`.
+
+## Owner decisions for the final port, 2026-11-19
+
+The port to `sdk/kernel` is one package, `kernel`. The owner decided the points
+the contract documents leave open:
+
+1. **Test construction.** `sdk/kernel` exports one constructor that switches
+   both binding maps off and takes a `testing.TB`. `kerneltest.New` wraps it,
+   and a check in `tools/` forbids any other caller. One production file of the
+   kernel imports `testing`, which is standard library.
+2. **Signatures follow `07-c4-plugin-sdk.md`.** `Isolate`, `Intercept`,
+   `Plugin`, `Defer` and `Go` return no error. A refused call fails the fiber,
+   as `Key.Of` does with `*InjectError`.
+3. **Capacity bounds are structural, not policy.** The archive limit, the event
+   window, the observer queue and the owner inbox are capacities required at
+   construction. The kernel holds no default for them; the launcher supplies
+   them. They are not "policy numbers" in the sense of
+   `08-profiles-roadmap-adrs.md` §4.
+4. **Deadlines are kernel-wide.** Load, drain and dispose deadlines are
+   construction data for the whole kernel. A per-fiber deadline needs an ADR.
+5. **No test recorder in the kernel.** The spike's `Record` instrumentation and
+   full-history recorder are not ported. Harnesses order fixture records by the
+   observer sequence.
+6. **`Enter` has the documented shape**, `Enter() (leave func(), ok bool)`,
+   with zero allocations per call as a gate of the port.
