@@ -460,3 +460,12 @@ seconds; the job table held at about 93,000 live rows.
 
 This is candidate evidence. It does not change the status of the raw-SQL
 authority gate, which remains failed, and acceptance stays with the owner.
+
+### Note, 2026-11-19: resource and leak accounting added after that pass
+
+The restart gate's section 10 accounting (warmed baseline, checkpoints after cycles 0/10/20/30,
+teardown check against the harness baseline; see `plugins/jobs-river/internal/s0workers/restart-README.md`,
+"Section 10 requirements") was added after the recorded frozen-scale pass above. That pass ran a
+binary without it, so it does not cover section 10: for section 10 it is "not evaluated", and the
+per-cycle goroutine and descriptor counts in its log are observations only. Section 10 needs a rerun
+of the gate with this accounting.
