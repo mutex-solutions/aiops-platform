@@ -4,6 +4,7 @@ package concurrency
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,15 +39,22 @@ type GraphLock struct {
 	batchDirty []*graphFiber
 	batchSeen  map[uint64]bool
 	knobs      graphKnobs
-	pendingSvc []graphPendingService
+	pendingSvc []*graphPendingService
+	// heldSvc counts, per key, the held service events in pendingSvc.
+	heldSvc map[string]int
 	// A load worker whose fiber needs a key with a held (or being produced)
 	// service event starts only after that event: the oracle records it after
-	// the fiber's LOADING and before anything its load does.
-	pendingLoads []graphPendingLoad
-	waking       map[string]int
+	// the fiber's LOADING and before anything its load does. Pending loads are
+	// indexed by every key they need, so releasing a key touches only the loads
+	// waiting on it rather than rescanning every pending load.
+	loadsByKey map[string]map[*graphPendingLoad]struct{}
+	loadSeq    uint64
+	waking     map[string]int
+	busy       int // User fibers with a worker, or LOADING/UNLOADING (see refreshBusyLocked).
 }
 
 type graphPendingLoad struct {
+	seq   uint64 // Insertion order: loads released together start in this order.
 	needs []string
 	start func()
 }
@@ -65,6 +73,7 @@ type graphFiber struct {
 	state     State
 	revision  uint64
 	epoch     []uint64
+	counted   bool // Included in GraphLock.busy.
 	failedAt  uint64
 	failed    bool
 	lastErr   error
@@ -98,13 +107,14 @@ type graphPre struct {
 	cancel   context.CancelFunc
 	timer    *time.Timer
 	done     bool
+	holds    []*graphPendingService // Held service events still waiting on this check.
 }
 
 // graphPendingService is a service event held until the pre-checks its
 // refresh started have been applied, so dependants move first.
 type graphPendingService struct {
-	event Event
-	waits []*graphPre
+	event   Event
+	pending int // Checks it still waits for; it may be emitted at zero, in queue order.
 }
 
 type graphBlocked struct {
@@ -155,6 +165,8 @@ func NewGraphLock() Runtime {
 		retiredErr: make(map[uint64]error),
 		services:   make(map[string]graphService),
 		indexByKey: make(map[string]map[uint64]*graphFiber),
+		heldSvc:    make(map[string]int),
+		loadsByKey: make(map[string]map[*graphPendingLoad]struct{}),
 		observers:  newNativeObservers(),
 		changed:    make(chan struct{}),
 		knobs: graphKnobs{
@@ -198,50 +210,93 @@ func (g *GraphLock) queueServiceLocked(e Event, waits []*graphPre) {
 		g.appendEventLocked(e)
 		return
 	}
-	g.pendingSvc = append(g.pendingSvc, graphPendingService{event: e, waits: waits})
+	held := &graphPendingService{event: e}
+	for _, pre := range waits {
+		if !pre.done {
+			pre.holds = append(pre.holds, held)
+			held.pending++
+		}
+	}
+	g.pendingSvc = append(g.pendingSvc, held)
+	g.heldSvc[e.Key]++
 }
 
-// flushServicesLocked emits held service events in order once their checks ended.
+// flushServicesLocked emits held service events in order once their checks
+// ended, then releases the keys whose last held event went out.
 func (g *GraphLock) flushServicesLocked() {
-	defer g.startLoadsLocked()
-	for len(g.pendingSvc) != 0 {
+	var released []string
+	for len(g.pendingSvc) != 0 && g.pendingSvc[0].pending == 0 {
 		head := g.pendingSvc[0]
-		for _, pre := range head.waits {
-			if !pre.done {
-				return
-			}
-		}
-		g.pendingSvc[0] = graphPendingService{}
+		g.pendingSvc[0] = nil
 		g.pendingSvc = g.pendingSvc[1:]
 		g.appendEventLocked(head.event)
+		if g.heldSvc[head.event.Key]--; g.heldSvc[head.event.Key] == 0 {
+			delete(g.heldSvc, head.event.Key)
+		}
+		released = append(released, head.event.Key)
 	}
+	g.releaseLoadsLocked(released)
 }
 
 func (g *GraphLock) serviceHeldLocked(keys []string) bool {
 	for _, k := range keys {
-		if g.waking[k] != 0 {
-			return true
-		}
-	}
-	for _, p := range g.pendingSvc {
-		if slices.Contains(keys, p.event.Key) {
+		if g.waking[k] != 0 || g.heldSvc[k] != 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func (g *GraphLock) startLoadsLocked() {
-	kept := g.pendingLoads[:0]
-	for _, l := range g.pendingLoads {
-		if g.serviceHeldLocked(l.needs) {
-			kept = append(kept, l)
-			continue
+// holdLoadLocked parks a load worker until none of its needed keys is held.
+func (g *GraphLock) holdLoadLocked(needs []string, start func()) {
+	g.loadSeq++
+	l := &graphPendingLoad{seq: g.loadSeq, needs: needs, start: start}
+	for _, k := range needs {
+		if g.loadsByKey[k] == nil {
+			g.loadsByKey[k] = make(map[*graphPendingLoad]struct{})
 		}
+		g.loadsByKey[k][l] = struct{}{}
+	}
+}
+
+// releaseLoadsLocked starts, in insertion order, the pending loads waiting on
+// one of keys whose needed keys are all free now. A load becomes startable only
+// when a key it needs stops being held, so only those keys are examined.
+func (g *GraphLock) releaseLoadsLocked(keys []string) {
+	var ready []*graphPendingLoad
+	var seen map[*graphPendingLoad]struct{} // Only needed when a load is indexed under several released keys.
+	if len(keys) > 1 {
+		seen = make(map[*graphPendingLoad]struct{})
+	}
+	for _, k := range keys {
+		for l := range g.loadsByKey[k] {
+			if g.serviceHeldLocked(l.needs) {
+				continue
+			}
+			if seen != nil {
+				if _, dup := seen[l]; dup {
+					continue
+				}
+				seen[l] = struct{}{}
+			}
+			ready = append(ready, l)
+		}
+	}
+	if len(ready) == 0 {
+		return
+	}
+	slices.SortFunc(ready, func(a, b *graphPendingLoad) int { return cmp.Compare(a.seq, b.seq) })
+	for _, l := range ready {
+		for _, k := range l.needs {
+			delete(g.loadsByKey[k], l)
+			if len(g.loadsByKey[k]) == 0 {
+				delete(g.loadsByKey, k)
+			}
+		}
+	}
+	for _, l := range ready {
 		l.start()
 	}
-	clear(g.pendingLoads[len(kept):])
-	g.pendingLoads = kept
 }
 
 // wakeServiceLocked refreshes the dependants of keys, then records the service
@@ -279,13 +334,42 @@ func (g *GraphLock) wakeServiceLocked(keys []string, events []Event) {
 			delete(g.waking, key)
 		}
 	}
-	g.startLoadsLocked()
+	g.releaseLoadsLocked(keys)
+}
+
+// busyLocked is the Settle/AwaitFiber notion of unsettled lifecycle work.
+func busyLocked(f *graphFiber) bool {
+	return f.worker || f.state == Loading || f.state == Unloading
+}
+
+// refreshBusyLocked keeps g.busy equal to the number of user fibers for which
+// busyLocked holds, so Settle is O(1) per wake-up instead of a scan of every
+// fiber (every appended event wakes the waiters; a scan made mounting n fibers
+// cost about n x events). Call it after any change to worker or state.
+func (g *GraphLock) refreshBusyLocked(f *graphFiber) {
+	if f == g.root {
+		return // The trusted root is not in g.fibers; Settle checks it separately.
+	}
+	if busy := busyLocked(f); busy != f.counted {
+		f.counted = busy
+		if busy {
+			g.busy++
+		} else {
+			g.busy--
+		}
+	}
+}
+
+func (g *GraphLock) setWorkerLocked(f *graphFiber, worker bool) {
+	f.worker = worker
+	g.refreshBusyLocked(f)
 }
 
 func (g *GraphLock) stateLocked(f *graphFiber, state State) {
 	if f.state != state {
 		from := f.state
 		f.state = state
+		g.refreshBusyLocked(f)
 		g.appendEventLocked(Event{
 			Fiber: f.id, Name: f.spec.ID, Kind: "state", From: from, State: state,
 		})
@@ -636,10 +720,8 @@ func (g *GraphLock) requestDisposeLocked(f *graphFiber) {
 
 func (g *GraphLock) Settle(ctx context.Context) error {
 	return g.wait(ctx, func() bool {
-		for _, f := range g.fibers {
-			if f.worker || f.state == Loading || f.state == Unloading {
-				return false
-			}
+		if g.busy != 0 {
+			return false
 		}
 		return g.root == nil || (!g.root.worker && g.root.state != Unloading)
 	})
@@ -1039,7 +1121,7 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 				g.stateLocked(f, Failed)
 			}
 		} else if !f.worker && !f.current.retiring && g.scopeWorkLocked(f.current) {
-			f.worker = true
+			g.setWorkerLocked(f, true)
 			go g.runScopeLane(f.current)
 		}
 		return
@@ -1053,10 +1135,10 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 			g.retireLocked(a)
 		} else if !a.retiring && !a.loading && !f.worker {
 			if f.spec.Check != nil && a.checked != f.notice {
-				f.worker = true
+				g.setWorkerLocked(f, true)
 				go g.runActiveCheck(a)
 			} else if g.scopeWorkLocked(a) {
-				f.worker = true
+				g.setWorkerLocked(f, true)
 				go g.runScopeLane(a)
 			}
 		}
@@ -1073,11 +1155,11 @@ func (g *GraphLock) reconcileLocked(f *graphFiber) {
 			// Even a never-activated PENDING fiber has an asynchronous unload
 			// boundary. Do not skip directly to DISPOSED or run Apply to make one.
 			g.stateLocked(f, Unloading)
-			f.worker = true
+			g.setWorkerLocked(f, true)
 			go func() {
 				g.mu.Lock()
 				defer g.mu.Unlock()
-				f.worker = false
+				g.setWorkerLocked(f, false)
 				g.reconcileLocked(f)
 				g.signalLocked()
 			}()
@@ -1211,7 +1293,7 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) {
 	a := g.activationLocked(f, bindings, epoch)
 	a.loading = true
-	f.worker = true
+	g.setWorkerLocked(f, true)
 	g.stateLocked(f, Loading)
 	a.loadTimer = time.AfterFunc(g.knobs.load, func() {
 		g.mu.Lock()
@@ -1231,7 +1313,7 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 		g.stateLocked(f, Unloading)
 	})
 	if g.serviceHeldLocked(f.spec.Needs) {
-		g.pendingLoads = append(g.pendingLoads, graphPendingLoad{needs: f.spec.Needs, start: func() { go g.runLoad(a) }})
+		g.holdLoadLocked(f.spec.Needs, func() { go g.runLoad(a) })
 		return
 	}
 	go g.runLoad(a)
@@ -1462,7 +1544,7 @@ func (g *GraphLock) runScopeLane(a *graphActivation) {
 		g.runUnload(a)
 		return
 	}
-	a.fiber.worker = false
+	g.setWorkerLocked(a.fiber, false)
 	g.reconcileLocked(a.fiber)
 	g.signalLocked()
 	g.mu.Unlock()
@@ -1597,7 +1679,7 @@ func (g *GraphLock) retireLocked(a *graphActivation) {
 		a.loadTimer.Stop()
 	}
 	if !a.fiber.worker {
-		a.fiber.worker = true
+		g.setWorkerLocked(a.fiber, true)
 		go g.runUnload(a)
 	}
 }
@@ -1721,7 +1803,8 @@ func (g *GraphLock) checkAvailability(a *graphActivation, force bool) bool {
 func (g *GraphLock) startPreCheckLocked(f *graphFiber, bindings map[string]provision, epoch []uint64) {
 	std, cancel := context.WithCancel(context.Background())
 	pre := &graphPre{revision: f.revision, notice: f.notice, epoch: epoch, cancel: cancel}
-	f.pre, f.worker = pre, true
+	f.pre = pre
+	g.setWorkerLocked(f, true)
 	pre.timer = time.AfterFunc(g.knobs.load, func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -1748,7 +1831,12 @@ func (g *GraphLock) finishPreCheckLocked(f *graphFiber, pre *graphPre, available
 	pre.timer.Stop()
 	pre.cancel()
 	pre.done = true
-	f.pre, f.worker = nil, false
+	for _, held := range pre.holds {
+		held.pending--
+	}
+	pre.holds = nil
+	f.pre = nil
+	g.setWorkerLocked(f, false)
 	_, epoch, ready := g.bindingsLocked(f)
 	switch {
 	case f.wantGone || !ready || f.revision != pre.revision || !graphSameEpoch(epoch, pre.epoch):
@@ -1779,7 +1867,7 @@ func (g *GraphLock) runActiveCheck(a *graphActivation) {
 		g.runUnload(a)
 		return
 	}
-	a.fiber.worker = false
+	g.setWorkerLocked(a.fiber, false)
 	// A Notify may land after the last check and before this lock acquisition.
 	g.reconcileLocked(a.fiber)
 	g.signalLocked()
@@ -1870,7 +1958,7 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 		return
 	}
 	g.stateLocked(a.fiber, Active)
-	a.fiber.worker = false
+	g.setWorkerLocked(a.fiber, false)
 	for _, key := range a.fiber.spec.Provides {
 		if p, exists := a.provided[key]; exists {
 			g.services[key] = graphService{provision: p, activation: a}
@@ -2065,7 +2153,7 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 	a.effects = nil
 	g.eventLocked(a.fiber, "effects:gone", "", 0)
 	a.fiber.current = nil
-	a.fiber.worker = false
+	g.setWorkerLocked(a.fiber, false)
 	g.releaseBindingsLocked(a)
 	g.signalLocked()
 	g.reconcileLocked(a.fiber)

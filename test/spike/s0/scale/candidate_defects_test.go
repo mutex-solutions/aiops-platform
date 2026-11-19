@@ -10,14 +10,15 @@ import (
 )
 
 // Minimal reproductions of candidate behaviour found while preparing the scale
-// run. They are NOT fixed here (the candidates are not this package's to change)
-// and are skipped unless S0_SCALE_REPRO=1, because they are timing/heap based.
-// They are development-host observations, not acceptance evidence.
+// run. The first is fixed in the candidates and now passes; the second still
+// FAILS by design. Both are skipped unless S0_SCALE_REPRO=1, because they are
+// timing/heap based. They are development-host observations, not acceptance
+// evidence.
 
 func requireRepro(t *testing.T) {
 	t.Helper()
 	if os.Getenv("S0_SCALE_REPRO") != "1" {
-		t.Skip("known candidate defect, reproduction only; set S0_SCALE_REPRO=1 to run it (it currently FAILS by design)")
+		t.Skip("timing/heap-based candidate check; set S0_SCALE_REPRO=1 to run it")
 	}
 }
 
@@ -49,16 +50,14 @@ func settleOf(t *testing.T, backend Backend, groups, total int) time.Duration {
 	return time.Since(start)
 }
 
-// graph-lock: with the same 10,000 composed fibers, mounting them across 1,000
-// provider groups takes several times longer than across 10 groups. The held
-// service events (GraphLock.pendingSvc, one per provider) are rescanned for every
-// pending load (GraphLock.startLoadsLocked / serviceHeldLocked), and
-// finishPreCheckLocked calls flushServicesLocked -> startLoadsLocked once per
-// composed pre-check, so the cost is about pendingLoads x pendingSvc per check.
-// Native string-key graphs have no pre-check and are unaffected (fan-out and
-// diamonds scale linearly); realms and every composed tree fixture are affected.
-// Before commits 3da076b/3ffc037 the same 10,000-fiber realm mount took about a
-// third of the time and grew linearly.
+// With the same 10,000 composed fibers, mounting them across 1,000 provider
+// groups used to take several times longer than across 10 groups (graph-lock 4.2
+// to 8 times, the reconciler up to its own 2 s check deadline): every held
+// service event was rescanned for every pending load, once per composed
+// pre-check (about pendingLoads x heldEvents per check). Both candidates now index
+// held events and pending loads by key, so a check completion touches only the
+// loads waiting on the keys it releases. Native string-key graphs have no
+// pre-check and were never affected.
 func TestReproHeldServiceScanGrowsWithProviders(t *testing.T) {
 	requireRepro(t)
 	for _, backend := range Candidates() {

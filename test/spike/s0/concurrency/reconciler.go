@@ -6,6 +6,7 @@ package concurrency
 
 import (
 	"bytes"
+	"cmp"
 	"container/heap"
 	"context"
 	"encoding/json"
@@ -140,21 +141,23 @@ type rcCheck struct {
 	generation uint64
 	deadline   time.Time
 	timedOut   bool
-	done       bool // Result delivered to the owner; a pending service event may follow.
+	done       bool                // Result delivered to the owner; a pending service event may follow.
+	holds      []*rcPendingService // Held service events still waiting on this check.
 }
 
 // rcPendingService is a service notification whose dependants still have
 // availability checks in flight. The checks run off the owner, so the event is
 // held (with source cleanup deferred) until their results have been applied.
 type rcPendingService struct {
-	event Event
-	waits []*rcCheck
+	event   Event
+	pending int // Checks it still waits for; it may be emitted at zero, in queue order.
 }
 
 // rcPendingLoad is a load worker not yet started: its fiber needs a key whose
 // service event is still held, and the oracle records that event after the
 // fiber's LOADING and before anything its load does.
 type rcPendingLoad struct {
+	seq   uint64 // Insertion order: loads released together start in this order.
 	needs []string
 	start func()
 }
@@ -284,9 +287,13 @@ type rcOwner struct {
 	noticeDepth   int
 	deferredDrain map[uint64]*rcFiber
 	batchDepth    int // Data commit/invalidation may not admit new callbacks.
-	pendingSvc    []rcPendingService
-	pendingLoads  []rcPendingLoad // Load workers held back by pendingSvc.
-	notifying     map[string]int  // Keys whose service event is being produced by notifyService.
+	pendingSvc    []*rcPendingService
+	heldSvc       map[string]int // Held service events per key (pendingSvc).
+	// Load workers held back by a held or being-produced service event, indexed
+	// by every key they need so a release touches only the loads waiting on it.
+	loadsByKey map[string]map[*rcPendingLoad]struct{}
+	loadSeq    uint64
+	notifying  map[string]int // Keys whose service event is being produced by notifyService.
 }
 
 // NewReconciler starts one global state owner and no per-idle-fiber goroutine.
@@ -294,7 +301,7 @@ type rcOwner struct {
 // work. Context.Dispose is a separate nonblocking request, never its own join.
 func NewReconciler() Runtime {
 	r := &reconcilerRuntime{inbox: make(chan rcMessage, 256), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
-	o := &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter)}
+	o := &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber), failures: make(map[uint64]error), blocked: make(map[uint64]error), retired: make(map[uint64]Snapshot), retiredErr: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter), heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
 	go o.run()
 	return r
 }
@@ -1210,6 +1217,10 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 
 func (o *rcOwner) checkedResult(m rcMessage) {
 	m.check.done = true
+	for _, held := range m.check.holds {
+		held.pending--
+	}
+	m.check.holds = nil
 	f := o.fibers[m.id]
 	if f == nil || f.checking != m.check {
 		return
@@ -1365,7 +1376,7 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 		}()
 	}
 	if o.serviceHeld(f.spec.Needs) {
-		o.pendingLoads = append(o.pendingLoads, rcPendingLoad{needs: f.spec.Needs, start: start})
+		o.holdLoad(f.spec.Needs, start)
 		return
 	}
 	start()
@@ -1374,12 +1385,7 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 // serviceHeld reports whether a held service event is for one of keys.
 func (o *rcOwner) serviceHeld(keys []string) bool {
 	for _, k := range keys {
-		if o.notifying[k] != 0 {
-			return true
-		}
-	}
-	for _, p := range o.pendingSvc {
-		if slices.Contains(keys, p.event.Key) {
+		if o.notifying[k] != 0 || o.heldSvc[k] != 0 {
 			return true
 		}
 	}
@@ -1859,13 +1865,21 @@ func (o *rcOwner) notifyService(keys []string, events []Event) {
 	}
 	for _, e := range events {
 		if len(waits) != 0 || len(o.pendingSvc) != 0 {
-			o.pendingSvc = append(o.pendingSvc, rcPendingService{event: e, waits: waits})
+			held := &rcPendingService{event: e}
+			for _, q := range waits {
+				if !q.done {
+					q.holds = append(q.holds, held)
+					held.pending++
+				}
+			}
+			o.pendingSvc = append(o.pendingSvc, held)
+			o.heldSvc[e.Key]++
 			waits = nil // Later events follow the first in queue order.
 			continue
 		}
 		o.emitService(e)
 	}
-	o.startLoads()
+	o.releaseLoads(keys)
 }
 
 func (o *rcOwner) emitService(e Event) {
@@ -1885,34 +1899,76 @@ func (o *rcOwner) emitService(e Event) {
 	}
 }
 
-// flushServices emits held service events in order once their checks finished.
+// flushServices emits held service events in order once their checks finished,
+// then releases the keys whose last held event went out. It is called after
+// every owner message, so it must cost nothing when no event can be emitted.
 func (o *rcOwner) flushServices() {
-	defer o.startLoads()
-	for len(o.pendingSvc) != 0 {
+	var released []string
+	for len(o.pendingSvc) != 0 && o.pendingSvc[0].pending == 0 {
 		head := o.pendingSvc[0]
-		for _, q := range head.waits {
-			if !q.done {
-				return
-			}
-		}
-		o.pendingSvc[0] = rcPendingService{}
+		o.pendingSvc[0] = nil
 		o.pendingSvc = o.pendingSvc[1:]
 		o.emitService(head.event)
+		if o.heldSvc[head.event.Key]--; o.heldSvc[head.event.Key] == 0 {
+			delete(o.heldSvc, head.event.Key)
+		}
+		released = append(released, head.event.Key)
+	}
+	if len(released) != 0 {
+		o.releaseLoads(released)
 	}
 }
 
-// startLoads launches the load workers whose held service events are out.
-func (o *rcOwner) startLoads() {
-	kept := o.pendingLoads[:0]
-	for _, l := range o.pendingLoads {
-		if o.serviceHeld(l.needs) {
-			kept = append(kept, l)
-			continue
+// holdLoad parks a load worker until none of its needed keys is held.
+func (o *rcOwner) holdLoad(needs []string, start func()) {
+	o.loadSeq++
+	l := &rcPendingLoad{seq: o.loadSeq, needs: needs, start: start}
+	for _, k := range needs {
+		if o.loadsByKey[k] == nil {
+			o.loadsByKey[k] = make(map[*rcPendingLoad]struct{})
 		}
+		o.loadsByKey[k][l] = struct{}{}
+	}
+}
+
+// releaseLoads launches, in insertion order, the load workers waiting on one of
+// keys whose needed keys are all free now. A load becomes startable only when a
+// key it needs stops being held, so only those keys are examined.
+func (o *rcOwner) releaseLoads(keys []string) {
+	var ready []*rcPendingLoad
+	var seen map[*rcPendingLoad]struct{} // Only needed when a load is indexed under several released keys.
+	if len(keys) > 1 {
+		seen = make(map[*rcPendingLoad]struct{})
+	}
+	for _, k := range keys {
+		for l := range o.loadsByKey[k] {
+			if o.serviceHeld(l.needs) {
+				continue
+			}
+			if seen != nil {
+				if _, dup := seen[l]; dup {
+					continue
+				}
+				seen[l] = struct{}{}
+			}
+			ready = append(ready, l)
+		}
+	}
+	if len(ready) == 0 {
+		return
+	}
+	slices.SortFunc(ready, func(a, b *rcPendingLoad) int { return cmp.Compare(a.seq, b.seq) })
+	for _, l := range ready {
+		for _, k := range l.needs {
+			delete(o.loadsByKey[k], l)
+			if len(o.loadsByKey[k]) == 0 {
+				delete(o.loadsByKey, k)
+			}
+		}
+	}
+	for _, l := range ready {
 		l.start()
 	}
-	clear(o.pendingLoads[len(kept):])
-	o.pendingLoads = kept
 }
 
 func (o *rcOwner) event(f *rcFiber, kind, key string, uid uint64) {
