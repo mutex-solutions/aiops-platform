@@ -824,3 +824,49 @@ noise in both directions on a busy machine; they are not pinned.
 - InspectFormatsDiagnosticsOutsideMutex and RootTrackedFailureIsContainedAndReturnedByClose
   asserted that `Error` is called only by readers; they now assert exactly one
   call, at the boundary.
+
+## 2026-11-19 first full scale run on a dedicated host
+
+Evidence: `test/spike/s0/results/scale-full-first/` (commit `225ffbe`, 10,800
+runs, 22,372 s, GOMAXPROCS 8, dedicated 24 vCPU guest, no swap movement, no
+cgroup throttling). The run predates the hazard fixes recorded above, so it is
+candidate evidence; the final port reruns the gate.
+
+**Classification: invalid, by the noise rule only.** No latency, memory or
+goroutine bound failed on either candidate. Fifteen buckets had a throughput
+coefficient of variation between 10% and 15.1% against the frozen 10% limit:
+ten on `graph-lock`, five on `reconciler`. The scale protocol has no control
+arm, so, unlike the call-path protocol after its amendment 2, it cannot tell
+host noise from candidate noise. This note does not relax the rule. The gate is
+repeated unchanged on the final port; if it is invalid again for the same
+reason, a written amendment is proposed to the owner before any further run.
+
+Selected results, milliseconds, `reconciler` / `graph-lock`:
+
+| Workload, operation | p50 | p99 | max | Bound |
+|---|---|---|---|---|
+| chain, root restart to settle | 531 / 559 | 915 / 1028 | 991 / 1071 | 5,000 |
+| diamonds, root restart to settle | 534 / 561 | 1020 / 1066 | 1081 / 1144 | 5,000 |
+| realms, all providers batch restart | 434 / 522 | 857 / 949 | 866 / 979 | 5,000 |
+| chain, teardown | 217 / 316 | 404 / 683 | 424 / 721 | |
+| independent, teardown | 143 / 208 | 271 / 402 | 283 / 412 | |
+| independent, mount to settle | 209 / 156 | 414 / 298 | 442 / 344 | |
+| fanout, mount to settle | 267 / 192 | 489 / 355 | 500 / 377 | |
+| leaf update to settle (all shapes) | 0.10–0.13 / 0.07–0.10 | 0.25–0.36 / 0.18–0.27 | 0.76 / 0.60 | |
+| trees 500×4, cold tree mount | 0.20 / 0.19 | 0.59 / 0.54 | 9.7 / 9.1 | 50 |
+| trees 300×4, cold tree mount (worst max) | 0.21 / 0.20 | 0.68 / 0.66 | 12.2 / 8.9 | 50 |
+| trees 500×4, shared provider restart | 85 / 108 | 162 / 167 | 172 / 199 | |
+| trees 500×4, reverse dispose | 29 / 43 | 60 / 78 | 67 / 94 | |
+
+Retained heap, worst workload: 73.3 / 74.3 MiB for 1,000 roots (chain) against
+128 MiB; 20.3 / 19.3 MiB for trees 500×4 against 32 MiB. Goroutines at the last
+checkpoint: 4 / 3. Timer overhead p99 64 ns.
+
+Reading: both candidates sit far inside every bound, and neither dominates.
+`reconciler` has the lower p99 in 20 of 37 buckets, and is faster wherever work
+is teardown, disposal or a restart that fans through shared providers (up to
+about 40% on teardown). `graph-lock` is faster on mount of independent and
+fan-out graphs (about 28%) and on single leaf updates (tens of microseconds).
+Performance therefore does not select the core; the selection rests on the
+failure-mode and maintainability arguments recorded in the two hazard sections
+above.
