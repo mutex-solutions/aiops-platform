@@ -120,3 +120,24 @@ full scale/call-path evidence remain required.
   final-port differential/coverage/performance acceptance.
 - The final kernel still requires all carried behaviors and explicit tests for
   accepted adaptations/additions, not whole-scenario exclusions.
+
+## Parity declared complete, 2026-11-19
+
+The owner declared S0 semantic parity with the pinned oracle complete on
+2026-11-19, with these recorded exceptions:
+
+- **D06**: a child in a private realm that reads a value retained from an
+  ancestor gets the undeclared-key error where the oracle returns the value. The
+  Go port is stricter on purpose (plugin record section 15, row 8).
+- **D23**: the caught effect error is observed after the fiber is ACTIVE. This is
+  the replay adapter's documented request and completion mapping, not a candidate
+  difference.
+- **D05 and D26**: unchecked `ctx.get` and awaited self-disposal are not carried.
+
+Basis: under the causal method and its four amendments, 64 of 68
+scenario and candidate pairs match in 100 of 100 runs under the race detector
+and in 100 of 100 runs with two processors, and the four remaining pairs are the
+D06 and D23 exceptions above ([coverage](../design/s0-causal-coverage.md)).
+Measurement runs may state that final parity is complete. This does not select a
+core, and it is not S0 acceptance: the call-path, scale and cold-mount gates and
+the raw-SQL authority gate are still open.
