@@ -29,6 +29,8 @@ const (
 type Memory struct {
 	HeapAlloc  uint64 `json:"heapAlloc"`
 	HeapInuse  uint64 `json:"heapInuse"`
+	StackInuse uint64 `json:"stackInuse"`
+	Sys        uint64 `json:"sys"`
 	TotalAlloc uint64 `json:"totalAlloc"`
 	Mallocs    uint64 `json:"mallocs"`
 	NumGC      uint32 `json:"numGC"`
@@ -89,7 +91,7 @@ func checkpoint(resources *Resources, gc bool) Checkpoint {
 	}
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	out := Checkpoint{Memory: Memory{HeapAlloc: mem.HeapAlloc, HeapInuse: mem.HeapInuse,
+	out := Checkpoint{Memory: Memory{HeapAlloc: mem.HeapAlloc, HeapInuse: mem.HeapInuse, StackInuse: mem.StackInuse, Sys: mem.Sys,
 		TotalAlloc: mem.TotalAlloc, Mallocs: mem.Mallocs, NumGC: mem.NumGC}, Goroutines: captureGoroutines()}
 	if resources != nil {
 		out.ResourcesActive, out.Leases = resources.Active.Load(), resources.Leases.Load()
@@ -137,6 +139,7 @@ type Workload struct {
 // accordingly and Clear happens only after all archive inspection is finished.
 type RunResult struct {
 	Backend              string                 `json:"backend"`
+	Cycles               int                    `json:"treeCycles"`
 	Workload             Workload               `json:"workload"`
 	Repetition           int                    `json:"repetition"`
 	Trial                int                    `json:"trial"`

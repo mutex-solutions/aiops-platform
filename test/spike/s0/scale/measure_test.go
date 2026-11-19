@@ -3,93 +3,136 @@
 package scale
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// TestDefaultMeasure deliberately SKIPS without the explicit parent authorization.
-// A skip is not a scale pass. The parent must freeze the final source, finish
-// parity, record host evidence and manage execution without competing full tests.
-func TestDefaultMeasure(t *testing.T) { DefaultMeasure(t) }
-
-func DefaultMeasure(t *testing.T) {
-	t.Helper()
+// TestDefaultMeasure is the frozen scale run (section 8.1 and 8.2). It SKIPS
+// without S0_SCALE_RUN=1; a skip is not a pass. A full run FAILS unless the
+// classification is pass: missed thresholds, correctness failures, noise and
+// missing identity/noise/raw evidence are all non-pass.
+func TestDefaultMeasure(t *testing.T) {
 	if os.Getenv("S0_SCALE_RUN") != "1" {
-		t.Skip("S0 scale performance WITHHELD: require S0_SCALE_RUN=1 after parent final parity/source-hash freeze")
+		t.Skip("S0 scale NOT RUN: set S0_SCALE_RUN=1 S0_SCALE_IDENTITY=<json> S0_SCALE_OUT=<fresh dir> on an idle host")
 	}
-	path, out := os.Getenv("S0_SCALE_IDENTITY"), os.Getenv("S0_SCALE_OUT")
-	if path == "" || out == "" {
-		t.Fatal("parent-owned S0_SCALE_IDENTITY JSON and fresh S0_SCALE_OUT directory required")
+	if os.Getenv("S0_SCALE_DRYRUN") == "1" {
+		t.Fatal("S0_SCALE_RUN and S0_SCALE_DRYRUN are mutually exclusive")
 	}
-	file, err := os.Open(path)
+	runScale(t, FrozenPlan())
+}
+
+// TestDryRunScale exercises the whole pipeline (identity, raw records, floors,
+// classification, manifest) at a reduced size. Labelled NOT ACCEPTANCE; the
+// classification can never be pass.
+func TestDryRunScale(t *testing.T) {
+	if os.Getenv("S0_SCALE_DRYRUN") != "1" {
+		t.Skip("dry run NOT RUN: set S0_SCALE_DRYRUN=1 S0_SCALE_OUT=<fresh dir>")
+	}
+	if os.Getenv("S0_SCALE_DRYSIZE") == "full" {
+		runScale(t, DryFullSizePlan()) // frozen fixture sizes, one root per cell, still NOT acceptance.
+		return
+	}
+	runScale(t, DryPlan())
+}
+
+type runFiles struct {
+	writer *EvidenceWriter
+	trace  string
+	runs   int
+}
+
+// traceRetention is the policy for the heavy raw trace (every event and every
+// archived fiber of a root). "all" is the default and the only policy that can
+// pass; "first-and-failed" keeps the first trial of each case and every failure
+// and makes the run inconclusive.
+func traceRetention() string {
+	if v := os.Getenv("S0_SCALE_TRACE"); v != "" {
+		return v
+	}
+	return "all"
+}
+
+func runScale(t *testing.T, plan Plan) {
+	t.Helper()
+	out := os.Getenv("S0_SCALE_OUT")
+	var supplied *Identity
+	if path := os.Getenv("S0_SCALE_IDENTITY"); path != "" {
+		id, err := LoadIdentity(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		supplied = &id
+	} else if !plan.Dry {
+		t.Fatal("S0_SCALE_IDENTITY (parent identity JSON) required")
+	}
+	if policy := traceRetention(); policy != "all" && policy != "first-and-failed" {
+		t.Fatalf("S0_SCALE_TRACE must be all or first-and-failed, got %q", policy)
+	}
+	writer, err := NewEvidenceWriter(out) // refuses an existing directory.
 	if err != nil {
 		t.Fatal(err)
 	}
-	var identity Identity
-	decoder := json.NewDecoder(file)
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&identity)
-	err = errors.Join(err, file.Close())
-	if err != nil {
-		t.Fatal(err)
+	rec, closure := CollectIdentity(repoRoot, "scale", plan, plan.Frozen(), plan.Dry, supplied)
+	for name, v := range map[string]any{"identity.json": rec, "source-closure.json": closure} {
+		if err := writer.WriteJSON(name, v, false); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// Exclusive creation prevents accidental replacement/merging of evidence.
-	// This only writes beneath the parent-provided fresh output directory.
-	if err := os.Mkdir(out, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ordinal := 0
-	report, runErr := Measure(t.Context(), identity, FrozenPlan(), func(result RunResult) error {
-		ordinal++
-		stem := fmt.Sprintf("%06d-%s-%s-r%02d-t%03d", ordinal, result.Backend, result.Workload.Name, result.Repetition, result.Trial)
-		jsonFile, err := os.OpenFile(filepath.Join(out, stem+".json"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			return err
-		}
-		if err := errors.Join(WriteJSON(jsonFile, result), jsonFile.Close()); err != nil {
-			return err
-		}
-		csvFile, err := os.OpenFile(filepath.Join(out, stem+".csv"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			return err
-		}
-		return errors.Join(WriteCSV(csvFile, []RunResult{result}), csvFile.Close())
-	})
+	files := &runFiles{writer: writer}
+	report, runErr := Measure(t.Context(), rec, plan, files.consume)
 	if runErr != nil {
-		report.Reasons = append(report.Reasons, "driver: "+runErr.Error())
+		report.Add(inconclusive("driver: %v", runErr))
 	}
-	summary, err := os.OpenFile(filepath.Join(out, "report.json"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
+	if traceRetention() != "all" {
+		report.Add(inconclusive("raw trace retention reduced (%s): not every root's events and archives are kept", traceRetention()))
+	}
+	if problems := writer.Verify(); len(problems) != 0 {
+		report.Add(inconclusive("raw record verification: %s", strings.Join(problems, "; ")))
+	}
+	if err := writer.WriteJSON("report.json", report, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := errors.Join(WriteJSON(summary, report), summary.Close()); err != nil {
+	if err := writer.WriteJSON("manifest.json", writer.Manifest(), false); err != nil {
 		t.Fatal(err)
+	}
+	t.Logf("classification=%s dry=%v acceptanceEligible=%v runs=%d reasons=%d", report.Classification, report.Dry, report.Acceptance, report.Runs, len(report.Reasons))
+	for i, reason := range report.Reasons {
+		if i < 25 {
+			t.Log(reason)
+		}
 	}
 	if runErr != nil || report.Classification != Pass {
-		t.Fatalf("scale classification %s (not an acceptance pass); raw records: %s; driver error: %v", report.Classification, out, runErr)
+		t.Fatalf("scale classification %s (a dry run, failure, noise or missing evidence is never a pass)", report.Classification)
 	}
 }
 
-func TestMeasurementPreconditionsNoRuntime(t *testing.T) {
-	// Every call returns before creating a runtime; this is NOT a benchmark run.
-	if _, err := Measure(context.Background(), Identity{}, FrozenPlan(), nil); err == nil {
-		t.Fatal("missing parent authority accepted")
-	}
-	plan := FrozenPlan()
-	if plan.Repetitions != 10 || plan.GraphTrials*plan.Repetitions != 1000 || plan.TreeTrials*10*plan.Repetitions != 1000 || validatePlan(plan) != nil {
-		t.Fatalf("wrong observation floors: %+v", plan)
-	}
-	for _, bad := range []Plan{{Repetitions: 9, GraphTrials: 1000, TreeTrials: 100}, {Repetitions: 10, GraphTrials: 99, TreeTrials: 10}, {Repetitions: 10, GraphTrials: 100, TreeTrials: 9}} {
-		if validatePlan(bad) == nil {
-			t.Fatalf("insufficient plan accepted: %+v", bad)
+// consume writes one root's raw record exclusively before the next root starts.
+func (f *runFiles) consume(run RunRecord) error {
+	r := run.Result
+	stem := fmt.Sprintf("%06d-%s-%s-r%02d-t%03d", run.Ordinal, r.Backend, r.Workload.Name, r.Repetition, r.Trial)
+	trace := struct {
+		Events          any `json:"events"`
+		FinalFibers     any `json:"finalFibers"`
+		FinalProvisions any `json:"finalProvisions"`
+	}{r.Events, r.FinalFibers, r.FinalProvisions}
+	keep := traceRetention() == "all" || r.Repetition+r.Trial == 0 || r.Classification == Fail
+	light := struct {
+		RunRecord
+		TraceFile string `json:"traceFile"`
+	}{RunRecord: run}
+	light.Result.Events, light.Result.FinalFibers, light.Result.FinalProvisions = nil, nil, nil
+	if keep {
+		light.TraceFile = stem + ".trace.json.gz"
+		if err := f.writer.WriteJSON(light.TraceFile, trace, true); err != nil {
+			return err
 		}
 	}
-	if validDigest("missing") || !validDigest("628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c") {
-		t.Fatal("SHA256 identity validation failed")
+	if err := f.writer.WriteJSON(stem+".json.gz", light, true); err != nil {
+		return err
 	}
+	f.runs++
+	return f.writer.WriteCSVFile(stem+".csv", func(w io.Writer) error { return WriteCSV(w, []RunResult{r}) })
 }

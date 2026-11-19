@@ -65,6 +65,16 @@ type RealCandidateRuntime struct {
 	providers map[RawKey]int
 	mu        sync.Mutex
 	live      []liveContext
+	// scope is the ONE real composition.Scope of the tree fixtures. Its owner key
+	// is the realm-local provided key; With runs on the provider's native
+	// activation after a successful Provide, and the derived context becomes the
+	// metadata parent of that tree's consumers (see MountTree).
+	scope  co.Scope[int]
+	scoped map[int]*co.Context // guarded by mu; latest provider-written parent per tree.
+	cmu    sync.Mutex          // guards the Batch counters (churn mounts concurrently).
+	// Hold lets the cold-timeout fixture stall one tree's provider body, which
+	// still returns when its activation is cancelled. Never set in a measured run.
+	Hold func(tree int) <-chan struct{}
 }
 
 func NewRealCandidateRuntime(backend Backend, f Fixture) (*RealCandidateRuntime, error) {
@@ -192,6 +202,9 @@ func (r *RealCandidateRuntime) compileRealms() error {
 		}
 		r.parents[node.Realm] = parent
 	}
+	if r.Fixture.Topology == Trees {
+		r.scope, r.scoped = co.NewScope[int](r.keys["value"].Any()), make(map[int]*co.Context)
+	}
 	r.composed = make([]co.Spec, len(r.Fixture.Nodes))
 	for i, node := range r.Fixture.Nodes {
 		spec := co.Spec{Metadata: cm.Spec{ID: node.ID}, Config: cc.NewConfiguration(node.Index, cc.ConfigHooks{})}
@@ -210,6 +223,15 @@ func (r *RealCandidateRuntime) compileRealms() error {
 			if c.Config() != node.Index {
 				return nil, fmt.Errorf("%s: effective config differs", node.ID)
 			}
+			if hold := r.Hold; hold != nil && node.Tree >= 0 && len(node.Provides) != 0 {
+				if gate := hold(node.Tree); gate != nil {
+					select {
+					case <-gate:
+					case <-c.Std().Done():
+						return nil, c.Std().Err()
+					}
+				}
+			}
 			read := func(raw RawKey) error {
 				value, err := co.Resolve(c, r.keys[raw.Name])
 				if err != nil || value != r.providers[raw] {
@@ -225,12 +247,41 @@ func (r *RealCandidateRuntime) compileRealms() error {
 					return nil, err
 				}
 			}
+			if node.Tree >= 0 {
+				if err := r.scopeStep(c, node); err != nil {
+					return nil, err
+				}
+			}
 			r.mu.Lock()
 			r.live[node.Index] = liveContext{composed: c}
 			r.mu.Unlock()
 			return nil, nil
 		}
 		r.composed[i] = spec
+	}
+	return nil
+}
+
+// scopeStep is the real scope construction. A local provider runs Scope.With on
+// its own activation AFTER its successful native Provide and publishes the
+// derived context; a local consumer must observe exactly its own tree's value
+// through that derived parent. A consumer's own write attempt must be refused.
+func (r *RealCandidateRuntime) scopeStep(c *co.Context, node Node) error {
+	if len(node.Provides) != 0 {
+		derived, err := r.scope.With(c, node.Tree)
+		if err != nil {
+			return fmt.Errorf("%s: Scope.With on the provider after Provide: %w", node.ID, err)
+		}
+		r.mu.Lock()
+		r.scoped[node.Tree] = derived
+		r.mu.Unlock()
+		return nil
+	}
+	if value, ok := r.scope.From(c); !ok || value != node.Tree {
+		return fmt.Errorf("%s: scope value = %d (present=%v), want tree %d", node.ID, value, ok, node.Tree)
+	}
+	if _, err := r.scope.With(c, node.Tree); err == nil {
+		return fmt.Errorf("%s: a consumer was allowed to write the scope", node.ID)
 	}
 	return nil
 }
@@ -280,6 +331,12 @@ func (r *RealCandidateRuntime) Mount(ctx context.Context, start, end int) error 
 	if start == end {
 		return nil
 	}
+	if r.Fixture.Topology == Trees && start >= r.Fixture.Shared {
+		if w := r.Fixture.TreeWidth; (start-r.Fixture.Shared)%w != 0 || end-start != w {
+			return fmt.Errorf("tree mount interval [%d,%d) is not exactly one tree", start, end)
+		}
+		return r.MountTree(ctx, (start-r.Fixture.Shared)/r.Fixture.TreeWidth)
+	}
 	var ids []uint64
 	if r.authority == nil {
 		operations := make([]cc.BatchOperation, end-start)
@@ -313,8 +370,123 @@ func (r *RealCandidateRuntime) Mount(ctx context.Context, start, end int) error 
 		}
 		r.IDs[start+offset] = id
 	}
+	r.count(&r.MountBatches)
+	return nil
+}
+
+// count records one acknowledged native Batch under the counter lock.
+func (r *RealCandidateRuntime) count(kind *int) {
+	r.cmu.Lock()
 	r.BatchCalls++
-	r.MountBatches++
+	*kind++
+	r.cmu.Unlock()
+}
+
+// MountTree is the approved two-phase construction of one local tree. Phase one
+// commits the realm-local provider (one native BatchStart) and joins that target
+// only. Its Apply has already run Scope.With after the successful Provide; the
+// derived context is then the metadata parent used to compile the declared
+// consumers, which are committed as ROOTS in one further native BatchStart. No
+// container fiber, key, edge or count is added: the tree has exactly TreeWidth
+// fibers, and each consumer keeps its single native dependency on the local key,
+// so a shared-provider update reaches it through the provider's new provision.
+// The caller's Runtime.Settle joins both phases inside the measured interval.
+func (r *RealCandidateRuntime) MountTree(ctx context.Context, tree int) error {
+	_, err := r.mountTree(ctx, tree)
+	return err
+}
+
+// MountTreeAwait is MountTree followed by a target-only join of every consumer,
+// for callers that cannot use the global Settle (concurrent mounts while other
+// trees churn). A nil result means each fiber of the tree ran its body.
+func (r *RealCandidateRuntime) MountTreeAwait(ctx context.Context, tree int) error {
+	consumers, err := r.mountTree(ctx, tree)
+	if err != nil {
+		return err
+	}
+	for _, fiber := range consumers {
+		if err := fiber.Await(ctx); err != nil {
+			return fmt.Errorf("tree %d consumer %d: %w", tree, fiber.ID, err)
+		}
+	}
+	return r.confirmTree(ctx, tree)
+}
+
+func (r *RealCandidateRuntime) mountTree(ctx context.Context, tree int) ([]*co.Fiber, error) {
+	f := r.Fixture
+	if f.Topology != Trees || tree < 0 || tree >= f.TreeCount {
+		return nil, fmt.Errorf("invalid tree %d", tree)
+	}
+	start := f.Shared + tree*f.TreeWidth
+	r.mu.Lock()
+	delete(r.scoped, tree) // never reuse a stale incarnation's parent.
+	for i := start; i < start+f.TreeWidth; i++ {
+		r.live[i] = liveContext{} // a previous incarnation's context is not evidence.
+	}
+	r.mu.Unlock()
+	provider, err := r.authority.BatchStart(ctx, []co.MountRequest{{Parent: r.parents[tree], Entry: r.entry, Spec: r.composed[start]}})
+	if err != nil {
+		return nil, err
+	}
+	if len(provider) != 1 || provider[0].ID == 0 {
+		return nil, fmt.Errorf("tree %d provider mount returned %d handles", tree, len(provider))
+	}
+	r.IDs[start] = provider[0].ID
+	r.count(&r.MountBatches)
+	if err := provider[0].Await(ctx); err != nil {
+		return nil, fmt.Errorf("tree %d provider: %w", tree, err)
+	}
+	r.mu.Lock()
+	scoped := r.scoped[tree]
+	r.mu.Unlock()
+	if scoped == nil {
+		return nil, fmt.Errorf("tree %d provider did not publish its Scope.With context", tree)
+	}
+	requests := make([]co.MountRequest, 0, f.TreeWidth-1)
+	for i := start + 1; i < start+f.TreeWidth; i++ {
+		requests = append(requests, co.MountRequest{Parent: scoped, Entry: r.entry, Spec: r.composed[i]})
+	}
+	consumers, err := r.authority.BatchStart(ctx, requests)
+	if err != nil {
+		return nil, err
+	}
+	if len(consumers) != len(requests) {
+		return nil, fmt.Errorf("tree %d consumers: %d handles for %d mounts", tree, len(consumers), len(requests))
+	}
+	for offset, fiber := range consumers {
+		if fiber.ID == 0 {
+			return nil, fmt.Errorf("tree %d consumer %d has no ID", tree, offset)
+		}
+		r.IDs[start+1+offset] = fiber.ID
+	}
+	r.count(&r.MountBatches)
+	return consumers, nil
+}
+
+// confirmTree is the light per-mount confirmation: every fiber of the tree has
+// run its body to completion in this incarnation (its own activation was
+// recorded after Provide/Resolve/scope checks) and its target join is clean. The
+// complete Inspect-based ACTIVE check runs for the first and last tree of every
+// cycle and for every tree once per cycle, because a full Inspect per sample is
+// quadratic in the archived history.
+func (r *RealCandidateRuntime) confirmTree(ctx context.Context, tree int) error {
+	f := r.Fixture
+	start := f.Shared + tree*f.TreeWidth
+	waiter, ok := r.Runtime.(cc.Waiter)
+	if !ok {
+		return errors.New("real candidate lacks AwaitFiber")
+	}
+	for i := start; i < start+f.TreeWidth; i++ {
+		r.mu.Lock()
+		live := r.live[i].composed
+		r.mu.Unlock()
+		if live == nil {
+			return fmt.Errorf("tree %d fiber %d did not complete its body in this incarnation", tree, i)
+		}
+		if err := waiter.AwaitFiber(ctx, r.IDs[i]); err != nil {
+			return fmt.Errorf("tree %d fiber %d: %w", tree, i, err)
+		}
+	}
 	return nil
 }
 
@@ -334,8 +506,7 @@ func (r *RealCandidateRuntime) BatchUpdate(ctx context.Context, indexes []int) e
 	if _, err := r.Runtime.(cc.Batcher).Batch(ctx, operations); err != nil {
 		return err
 	}
-	r.BatchCalls++
-	r.UpdateBatches++
+	r.count(&r.UpdateBatches)
 	return nil
 }
 
@@ -355,8 +526,7 @@ func (r *RealCandidateRuntime) BatchDisposal(ctx context.Context, indexes []int)
 	if _, err := r.Runtime.(cc.Batcher).Batch(ctx, operations); err != nil {
 		return err
 	}
-	r.BatchCalls++
-	r.DisposeBatches++
+	r.count(&r.DisposeBatches)
 	return nil
 }
 
@@ -421,6 +591,9 @@ func (r *RealCandidateRuntime) HotLookup() error {
 			value, err := co.Resolve(r.live[node.Index].composed, r.keys[key.Name])
 			if err != nil || value != r.providers[key] {
 				return fmt.Errorf("tree %d lookup %q = %d, want %d: %w", node.Tree, key.Name, value, r.providers[key], err)
+			}
+			if scoped, ok := r.scope.From(r.live[node.Index].composed); len(node.Provides) == 0 && (!ok || scoped != node.Tree) {
+				return fmt.Errorf("tree %d consumer %d scope value = %d (present=%v)", node.Tree, node.Index, scoped, ok)
 			}
 		}
 	}

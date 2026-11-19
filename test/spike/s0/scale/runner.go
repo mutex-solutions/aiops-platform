@@ -22,8 +22,14 @@ const TrialGuard = 15 * time.Second // NOT the frozen 2s mount performance limit
 // Mount/dispose groups and realm/shared-provider restarts use actual data-only
 // native Batch. Observer completion is explicit, never part of Runtime.Settle.
 // Trees execute ten cycles.
-func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
-	result = RunResult{Backend: backend.Name, StartedUTC: time.Now().UTC(), GOMAXPROCS: runtime.GOMAXPROCS(0), Classification: Inconclusive,
+func RunT(ctx context.Context, backend Backend, f Fixture) RunResult {
+	return RunCycles(ctx, backend, f, FrozenTreeCycles)
+}
+
+// RunCycles is RunT with an explicit tree cycle count. Only the frozen count
+// (FrozenTreeCycles) is a protocol run; smaller counts are for dry runs and tests.
+func RunCycles(ctx context.Context, backend Backend, f Fixture, cycles int) (result RunResult) {
+	result = RunResult{Cycles: cycles, Backend: backend.Name, StartedUTC: time.Now().UTC(), GOMAXPROCS: runtime.GOMAXPROCS(0), Classification: Inconclusive,
 		Workload: Workload{Name: f.Name, Topology: f.Topology, Fibers: len(f.Nodes), Trees: f.TreeCount, TreeWidth: f.TreeWidth, Seed: f.Seed, PRNG: "none; fixed declaration and operation order"}}
 	result.HarnessBaseline = checkpoint(nil, true)
 	r, err := NewRealCandidateRuntime(backend, f)
@@ -53,6 +59,9 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 		if err != nil {
 			result.Errors = append(result.Errors, "final event ledger: "+err.Error())
 		}
+		if err := verifyLedger(result.Events, r.Runtime.(cc.ObserverRuntime).ObserverStatus()); err != nil {
+			result.Errors = append(result.Errors, err.Error())
+		}
 		result.DisposedWithArchives, err = r.Checkpoint(cleanup, true)
 		if err != nil {
 			result.Errors = append(result.Errors, "disposed observer/GC checkpoint: "+err.Error())
@@ -77,8 +86,7 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 		}
 	}()
 	if f.Topology == Trees {
-		result.Gaps = append(result.Gaps, "actual provider-written composition.Scope value is not propagated to precompiled sibling contexts; opaque realm/index isolation only")
-		runTrees(ctx, r, &result)
+		runTrees(ctx, r, &result, cycles)
 		return
 	}
 	if !measure(ctx, r, &result, "mount-settle", 0, -1, func(op context.Context) error {
@@ -117,7 +125,7 @@ func RunT(ctx context.Context, backend Backend, f Fixture) (result RunResult) {
 	return
 }
 
-func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
+func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult, cycles int) {
 	f := r.Fixture
 	if err := r.Mount(ctx, 0, f.Shared); err != nil {
 		result.Errors = append(result.Errors, err.Error())
@@ -143,12 +151,17 @@ func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
 	}
 	result.SharedOnly = &baseline
 	// No local runtime fiber exists until its own explicit cold mount.
-	for cycle := 0; cycle < MinimumRepetitions; cycle++ {
+	for cycle := 0; cycle < cycles; cycle++ {
 		for tree := 0; tree < f.TreeCount; tree++ {
 			start := f.Shared + tree*f.TreeWidth
 			if !measure(ctx, r, result, "cold-tree-mount-settle", cycle, tree, func(op context.Context) error {
 				return errors.Join(r.Mount(op, start, start+f.TreeWidth), r.Runtime.Settle(op))
-			}, func(op context.Context) error { return inspectActive(op, r, result, start, start+f.TreeWidth) }) {
+			}, func(op context.Context) error {
+				if tree == 0 || tree == f.TreeCount-1 {
+					return inspectActive(op, r, result, start, start+f.TreeWidth)
+				}
+				return r.confirmTree(op, tree)
+			}) {
 				return
 			}
 		}
@@ -162,10 +175,19 @@ func runTrees(ctx context.Context, r *RealCandidateRuntime, result *RunResult) {
 		if !measure(ctx, r, result, "hot-tree-lookup", cycle, -1, func(context.Context) error { return r.HotLookup() }, nil) {
 			return
 		}
+		loadsBefore := r.Resources.Loads.Load()
 		if !measure(ctx, r, result, "shared-provider-restart-settle", cycle, -1, func(op context.Context) error {
 			// Exactly one provider, committed through the actual native Batch.
 			return errors.Join(r.BatchUpdate(op, []int{0}), r.Runtime.Settle(op))
-		}, func(op context.Context) error { return inspectActive(op, r, result, 0, len(f.Nodes)) }) {
+		}, func(op context.Context) error {
+			// The complete dependency closure must really restart: every shared
+			// and every mounted local fiber loads exactly once more. A fiber the
+			// update missed keeps a stale epoch (inspectActive) and a short count.
+			if got, want := r.Resources.Loads.Load()-loadsBefore, int64(len(f.Nodes)); got != want {
+				return fmt.Errorf("shared restart reloaded %d fibers, want its complete closure of %d", got, want)
+			}
+			return inspectActive(op, r, result, 0, len(f.Nodes))
+		}) {
 			return
 		}
 		if !measure(ctx, r, result, "reverse-trees-dispose-settle", cycle, -1, func(op context.Context) error {
@@ -209,11 +231,15 @@ func measure(ctx context.Context, r *RealCandidateRuntime, result *RunResult, op
 	defer cancel()
 	var beforeErr error
 	sample.Before, beforeErr = r.Checkpoint(op, false)
-	events, eventErr := r.Runtime.Events(op)
-	sample.EventsBefore = len(events)
+	// History length is the native dispatcher's accepted count (every appended
+	// event is accepted); the ledger itself is fetched and its sequence verified
+	// once per root, because cloning it per sample is quadratic in history.
+	if sample.Before.Observers != nil {
+		sample.EventsBefore = int(sample.Before.Observers.Accepted)
+	}
 	start := time.Now()
 	sample.ScheduledUTC, sample.StartedUTC = start.UTC(), start.UTC() // sequential closed-loop graph operation
-	err := errors.Join(beforeErr, eventErr, action(op))
+	err := errors.Join(beforeErr, action(op))
 	end := time.Now()
 	sample.EndedUTC, sample.LatencyNS = end.UTC(), end.Sub(start).Nanoseconds()
 	// This is deliberately BEFORE AwaitObservers: Settle alone does not join an
@@ -239,19 +265,9 @@ func measure(ctx context.Context, r *RealCandidateRuntime, result *RunResult, op
 	if validate != nil {
 		err = errors.Join(err, validate(op)) // correctness inspection outside both latencies
 	}
-	events, eventErr = r.Runtime.Events(op)
-	sample.EventsAfter = len(events)
-	err = errors.Join(err, eventErr)
-	if err == nil {
-		for i, event := range events {
-			if event.Sequence != uint64(i+1) {
-				err = fmt.Errorf("event sequence %d at offset %d", event.Sequence, i)
-				break
-			}
-		}
-	}
 	sample.After = checkpoint(&r.Resources, false)
 	afterStatus := r.Runtime.(cc.ObserverRuntime).ObserverStatus()
+	sample.EventsAfter = int(afterStatus.Accepted)
 	sample.After.Observers = &afterStatus
 	err = errors.Join(err, validateObserverStatus(afterStatus))
 	if err != nil {
@@ -357,6 +373,21 @@ func inspectDisposed(ctx context.Context, r *RealCandidateRuntime, result *RunRe
 				return fmt.Errorf("disposed handle %d not archived", id)
 			}
 		}
+	}
+	return nil
+}
+
+// verifyLedger checks the complete retained event history once: contiguous
+// sequence numbers from one, and a length equal to the dispatcher's accepted
+// count (so the per-sample history lengths are the real ledger lengths).
+func verifyLedger(events []cc.Event, status cc.ObserverStatus) error {
+	for i, event := range events {
+		if event.Sequence != uint64(i+1) {
+			return fmt.Errorf("event sequence %d at offset %d", event.Sequence, i)
+		}
+	}
+	if uint64(len(events)) != status.Accepted {
+		return fmt.Errorf("event ledger holds %d events but the dispatcher accepted %d", len(events), status.Accepted)
 	}
 	return nil
 }
