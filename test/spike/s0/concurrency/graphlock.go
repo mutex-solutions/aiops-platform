@@ -108,7 +108,8 @@ type graphFiber struct {
 	failedAt  uint64
 	failed    bool
 	lastErr   error
-	awaitErr  error // Current startup failure only; cleanup diagnostics are not startup rejection.
+	awaitErr  error // Current startup failure only; cleanup diagnostics are not startup rejection. The caller's own value.
+	awaitDiag error // The same failure as the kernel stores and reports it (see graphDiagnostic).
 	wantGone  bool
 	worker    bool
 	current   *graphActivation
@@ -614,7 +615,7 @@ func (g *GraphLock) Update(ctx context.Context, id uint64) error {
 	}
 	f.revision++
 	f.lastErr = nil
-	f.awaitErr = nil
+	f.awaitErr, f.awaitDiag = nil, nil
 	g.eventLocked(f, "update", "", 0)
 	g.reconcileLocked(f)
 	return nil
@@ -652,7 +653,7 @@ func (g *GraphLock) Batch(ctx context.Context, operations []BatchOperation) ([]u
 		case BatchUpdate:
 			f := g.fibers[operation.Fiber]
 			f.revision++
-			f.lastErr, f.awaitErr = nil, nil
+			f.lastErr, f.awaitErr, f.awaitDiag = nil, nil, nil
 			g.eventLocked(f, "update", "", 0)
 			g.reconcileLocked(f)
 		case BatchDispose:
@@ -745,7 +746,7 @@ func (g *GraphLock) RequestUpdateConfig(ctx context.Context, id uint64, raw any,
 			}
 			f.failed = false
 			f.lastErr = nil
-			f.awaitErr = nil
+			f.awaitErr, f.awaitDiag = nil, nil
 			return nil
 		})
 	request.Await = func(w context.Context) error {
@@ -1220,7 +1221,7 @@ func (g *GraphLock) Close(ctx context.Context) error {
 	g.mu.Lock()
 	var rootErr error
 	if g.root != nil {
-		rootErr = errors.Join(g.root.awaitErr, g.root.lastErr)
+		rootErr = errors.Join(g.root.awaitDiag, g.root.lastErr)
 	}
 	g.mu.Unlock()
 	// All actual lifecycle events have now been published. Even a failed root
@@ -1509,7 +1510,7 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 		if !a.retiring {
 			f.failedAt = a.revision
 			f.failed = true
-			f.awaitErr = deadlineErr
+			f.awaitErr, f.awaitDiag = deadlineErr, deadlineErr
 		}
 		f.lastErr = deadlineErr
 		g.eventLocked(f, "deadline:load", "", 0)
@@ -1730,6 +1731,7 @@ func (g *GraphLock) runScopeWork(a *graphActivation) {
 			err = selected.scope.runCleanup(ctx)
 			cancel()
 		}
+		diagnostic := graphDiagnose(err) // Rendered here, off the lock, on the worker.
 		g.mu.Lock()
 		if setup && err == ErrScopeStarted && a.retiring && selected.scope.cleanupFinished() {
 			// Retirement can cancel an unstarted slot after lane selection but
@@ -1738,9 +1740,9 @@ func (g *GraphLock) runScopeWork(a *graphActivation) {
 			err = nil
 		}
 		if err != nil {
-			a.fiber.lastErr = errors.Join(a.fiber.lastErr, err)
+			a.fiber.lastErr = errors.Join(a.fiber.lastErr, diagnostic)
 			if !setup || a.retiring {
-				a.cleanupErr = errors.Join(a.cleanupErr, err)
+				a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
 			}
 			g.eventLocked(a.fiber, "scope:failed", selected.label, 0)
 		}
@@ -1800,6 +1802,7 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 		}
 	})
 	err := graphCallDispose(dispose, cleanupCtx)
+	diagnostic := graphDiagnose(err) // Rendered here, on the caller's goroutine, before taking the lock.
 	timeout := cleanupCtx.Err()
 	timer.Stop()
 	g.mu.Lock()
@@ -1814,7 +1817,7 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 		g.unstallLocked(a, "effect cleanup")
 	}
 	if err != nil && a.fiber.current == a && a.retiring {
-		a.cleanupErr = errors.Join(a.cleanupErr, err)
+		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
 	}
 	g.mu.Unlock()
 	return errors.Join(timeout, err)
@@ -1839,6 +1842,7 @@ func (g *GraphLock) startTracked(a *graphActivation, label string) (func(error),
 	g.eventLocked(f, "go:start", label, token)
 	var once sync.Once
 	return func(err error) {
+		diagnostic := graphDiagnose(err) // Rendered here, on the worker that ran the callback, not under the lock.
 		once.Do(func() {
 			g.mu.Lock()
 			defer g.mu.Unlock()
@@ -1847,12 +1851,12 @@ func (g *GraphLock) startTracked(a *graphActivation, label string) (func(error),
 			if err == nil || f.current != a || a.retiring || !a.ctx.live.Load() || !g.targetMatchesLocked(a) {
 				return
 			}
-			// Preserve the exact error identity. Error formatting and panic
-			// conversion belong outside the graph owner, just like Apply.
+			// AwaitFiber keeps the exact error identity; everything the kernel
+			// reports uses the text rendered above.
 			f.failedAt = a.revision
 			f.failed = true
-			f.lastErr = err
-			f.awaitErr = err
+			f.lastErr = diagnostic
+			f.awaitErr, f.awaitDiag = err, diagnostic
 			g.eventLocked(f, "go:failed", label, token)
 			g.retireLocked(a)
 		})
@@ -1948,6 +1952,40 @@ func (g *GraphLock) callApply(a *graphActivation) error {
 	}
 	g.mu.Unlock()
 	return nil
+}
+
+// graphErrorText renders a plugin-supplied error. The Error method is plugin
+// code: it runs under a recover, so a panicking method yields a fixed text.
+func graphErrorText(err error) (text string) {
+	defer func() {
+		if recover() != nil {
+			text = "error formatting panic"
+		}
+	}()
+	return err.Error()
+}
+
+// graphDiagnostic is a plugin error as the kernel stores and reports it: the
+// text was rendered once, where the error entered the kernel, and Unwrap keeps
+// errors.Is and errors.As working on the plugin's own value. Its Error method
+// returns that text and never calls plugin code, so any goroutine may call it
+// and it is safe under mu.
+type graphDiagnostic struct {
+	text  string
+	cause error
+}
+
+func (e *graphDiagnostic) Error() string { return e.text }
+func (e *graphDiagnostic) Unwrap() error { return e.cause }
+
+// graphDiagnose is the one place a plugin-supplied error value is rendered. Call
+// it on the plugin's (worker's) goroutine, off the lock, right where the error
+// came back from plugin code; store and report only its result.
+func graphDiagnose(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &graphDiagnostic{text: graphErrorText(err), cause: err}
 }
 
 func graphCallDispose(dispose Disposer, ctx context.Context) (err error) {
@@ -2145,6 +2183,7 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 			}
 		}
 	}
+	diagnostic := graphDiagnose(err) // Rendered here, on the worker, before taking the lock.
 	g.mu.Lock()
 	for !a.retiring && err == nil {
 		check := a.fiber.spec.Check != nil && a.checked != a.fiber.notice
@@ -2173,8 +2212,8 @@ func (g *GraphLock) runLoad(a *graphActivation) {
 	if !a.retiring && err != nil {
 		a.fiber.failedAt = a.revision
 		a.fiber.failed = true
-		a.fiber.lastErr = err
-		a.fiber.awaitErr = err
+		a.fiber.lastErr = diagnostic
+		a.fiber.awaitErr, a.fiber.awaitDiag = err, diagnostic
 		g.eventLocked(a.fiber, "load:failed", "", 0)
 		g.retireLocked(a)
 	} else if a.retiring && err != nil {
@@ -2542,14 +2581,14 @@ func (g *GraphLock) runUnload(a *graphActivation) {
 			// A never-started canceled slot has no acquired resources and no
 			// cleanup error to add to normal unload diagnostics.
 			if !scope.cleanupFinished() {
-				disposeErr = errors.Join(disposeErr, scope.runCleanup(cleanupCtx))
+				disposeErr = errors.Join(disposeErr, graphDiagnose(scope.runCleanup(cleanupCtx)))
 			}
 			g.mu.Lock()
 			g.removeScopeLocked(a, scope)
 			g.mu.Unlock()
 			continue
 		}
-		disposeErr = errors.Join(disposeErr, graphCallDispose(effects[i].dispose, cleanupCtx))
+		disposeErr = errors.Join(disposeErr, graphDiagnose(graphCallDispose(effects[i].dispose, cleanupCtx)))
 	}
 	timer.Stop()
 	cancel()

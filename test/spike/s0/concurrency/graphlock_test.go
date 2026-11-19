@@ -1716,19 +1716,21 @@ type graphInspectErrorProbe struct {
 
 func (p *graphInspectErrorProbe) Error() string {
 	p.calls.Add(1)
-	// Events takes mu but does not format startup errors. Reentrancy proves both
-	// live and archived diagnostic formatting happens outside the graph owner.
+	// Events takes mu. Reentrancy proves the one rendering of the error, where it
+	// enters the kernel, happens outside the graph owner.
 	_, _ = p.g.Events(p.ctx)
 	return "actual diagnostic"
 }
 
+// The error is rendered exactly once, on the worker that received it and off
+// mu; Snapshots, Inspect and the archive only read the stored text.
 func TestGraphLockInspectFormatsDiagnosticsOutsideMutex(t *testing.T) {
 	ctx := graphTestContext(t)
 	g := graphTestRuntime(t).(*GraphLock)
 	probe := &graphInspectErrorProbe{g: g, ctx: ctx}
 	id := graphMount(t, ctx, g, Spec{ID: "failure", Apply: func(*Context) error { return probe }})
-	if err := g.AwaitFiber(ctx, id); err != probe || probe.calls.Load() != 0 {
-		t.Fatalf("startup unexpectedly formatted error: %T calls %d", err, probe.calls.Load())
+	if err := g.AwaitFiber(ctx, id); err != probe || probe.calls.Load() != 1 {
+		t.Fatalf("startup error was not rendered exactly once at the boundary: %T calls %d", err, probe.calls.Load())
 	}
 	for _, disposed := range []bool{false, true} {
 		snapshots := make(chan []Snapshot, 1)
@@ -1750,14 +1752,14 @@ func TestGraphLockInspectFormatsDiagnosticsOutsideMutex(t *testing.T) {
 			if err := g.Dispose(ctx, id); err != nil {
 				t.Fatal(err)
 			}
-			if err := g.AwaitFiber(ctx, id); err != probe || probe.calls.Load() != 2 {
-				t.Fatalf("archive formatted diagnostic under owner: %T calls %d", err, probe.calls.Load())
+			if err := g.AwaitFiber(ctx, id); err != probe || probe.calls.Load() != 1 {
+				t.Fatalf("archive rendered the diagnostic again: %T calls %d", err, probe.calls.Load())
 			}
 		}
 	}
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
-	if inspection, err := g.Inspect(canceled); !errors.Is(err, context.Canceled) || len(inspection.Fibers) != 0 || len(inspection.Provisions) != 0 || probe.calls.Load() != 4 {
+	if inspection, err := g.Inspect(canceled); !errors.Is(err, context.Canceled) || len(inspection.Fibers) != 0 || len(inspection.Provisions) != 0 || probe.calls.Load() != 1 {
 		t.Fatalf("canceled inspection: %+v %v calls %d", inspection, err, probe.calls.Load())
 	}
 	if err := g.Close(ctx); err != nil {
@@ -3170,8 +3172,8 @@ func TestGraphLockRootTrackedFailureIsContainedAndReturnedByClose(t *testing.T) 
 	if _, err := g.RootContext(ctx); !errors.Is(err, ErrInactive) {
 		t.Fatalf("terminal root silently restarted: %v", err)
 	}
-	if inspection := graphInspect(t, ctx, g); len(inspection.Provisions) != 0 || len(inspection.Fibers) != 3 || failure.calls.Load() != 0 {
-		t.Fatalf("root failure inspection fabricated user row or formatted error: %+v", inspection)
+	if inspection := graphInspect(t, ctx, g); len(inspection.Provisions) != 0 || len(inspection.Fibers) != 3 || failure.calls.Load() != 1 {
+		t.Fatalf("root failure inspection fabricated a user row or rendered the error again (want one rendering at the boundary): %+v", inspection)
 	}
 	if err := g.Close(ctx); !errors.Is(err, failure) {
 		t.Fatalf("Close lost native root failure identity: %T", err)
