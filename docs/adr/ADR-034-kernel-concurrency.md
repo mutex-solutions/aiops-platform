@@ -962,3 +962,36 @@ the contract documents leave open:
     its own; the dispatch context bounds it. `internal/plugin`,
     `internal/status` and `internal/service` are declared but not wired until
     the loader (S1) fixes their payloads.
+
+## 2026-11-19 first full cold-mount run on a dedicated host
+
+Evidence: `test/spike/s0/results/coldmount-full-first/` (commit `225ffbe`, 120
+runs, 18,039 s, GOMAXPROCS 8, same host as the scale run). **Classification:
+pass, no reasons**, on both candidates. Like the scale run it predates the
+hazard fixes and is candidate evidence; the final port reruns the gate.
+
+Arm A puts a cold tree mount on every acknowledged request; arm B0 is the warm
+baseline; arm B1 adds background mount churn beside warm requests.
+Milliseconds, `reconciler` / `graph-lock`:
+
+| Body, arm | p50 | p99 | max |
+|---|---|---|---|
+| 100 items, A (cold on the ack path) | 1.39 / 1.34 | 2.03 / 1.95 | 5.8 / 10.2 |
+| 100 items, B0 (warm) | 0.81 / 0.80 | 1.35 / 1.34 | 3.7 / 2.7 |
+| 100 items, B1 (warm beside churn) | 0.83 / 0.83 | 1.38 / 1.39 | 4.2 / 6.1 |
+| 1 MiB, A | 7.28 / 7.35 | 10.0 / 9.9 | 26.7 / 24.2 |
+| 1 MiB, B0 | 5.58 / 5.58 | 7.18 / 7.17 | 18.0 / 17.5 |
+| 1 MiB, B1 | 5.57 / 5.55 | 7.23 / 7.22 | 22.4 / 22.5 |
+
+A cold mount adds about 0.6 ms at p50 and 0.7 ms at p99 to a small request and
+about 1.7 ms and 2.8 ms to a 1 MiB request. The mount itself is at most 1.0 ms
+at p99 and 9.5 ms at worst. Mount churn beside warm traffic moves p99 by 0.03
+to 0.06 ms in the median matched pair and 0.16 ms at worst. Every request
+succeeded. The timeout fixture behaves as specified on both candidates: the
+synchronous path answers 503 with a one-second retry hint and commits nothing,
+the job snoozes and commits nothing, and no foreign scope contributes.
+
+One known defect of the harness binary used: the per-cell field
+`coldEnsureCalls` reports a shared counter for arm A (fixed later in
+`c5ce385`); totals and latencies are unaffected. This reading goes to ADR-036
+with the tenancy cost.
