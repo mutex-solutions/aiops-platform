@@ -81,6 +81,7 @@ type fullCycleSummary struct {
 	LiveListeners       int64           `json:"live_listeners_after_cycle"`
 	Goroutines          int             `json:"goroutines_after_cycle"`
 	OpenFDs             int             `json:"open_fds_after_cycle"`
+	Section10           *s10Snapshot    `json:"section10,omitempty"` // checkpoint taken after this cycle, between cycles
 	Bounds              []boundResult   `json:"bounds"`
 	Pass                bool            `json:"pass"`
 }
@@ -103,6 +104,7 @@ type fullArmSummary struct {
 	RiverRetries     int     `json:"river_retries"`
 	RecoveryMsMax    float64 `json:"recovery_ms_max"`
 	AckToCompleteMs  float64 `json:"ack_to_completion_max_ms"`
+	Section10        string  `json:"section10_label"`
 }
 
 type fullReport struct {
@@ -125,10 +127,13 @@ type fullReport struct {
 	Frozen           map[string]any     `json:"frozen_requirements"`
 	Interpretations  []string           `json:"interpretations"`
 	Limits           []string           `json:"limits"`
+	Section10Label   string             `json:"section10_label"`
+	Section10        *s10Report         `json:"section10"`
 }
 
 var fullSourceFiles = []string{"fixture_test.go", "worker_test.go", "diagnostic_test.go", "report_test.go", "restart_test.go", "restart_report_test.go",
-	"restart_full_pure_test.go", "restart_full_app_test.go", "restart_full_test.go", "restart_full_unit_test.go", "restart_full_race_test.go", "restart_full_norace_test.go", "restart-README.md"}
+	"restart_full_pure_test.go", "restart_full_app_test.go", "restart_full_test.go", "restart_full_unit_test.go", "restart_full_race_test.go", "restart_full_norace_test.go",
+	"restart_leak_pure_test.go", "restart_leak_app_test.go", "restart_leak_unit_test.go", "restart_leak_db_test.go", "restart-README.md"}
 
 func fullSource(t *testing.T) map[string]string {
 	t.Helper()
@@ -154,7 +159,7 @@ func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
 			"operation_timeout_s": fullOpTimeout.Seconds(), "pool_conns": fullPoolConns, "worker_max": fullWorkers},
 		Frozen: map[string]any{"cycles_each_pool_client_listener": frozenCyclesPerKind, "combined_cycles": frozenCombinedCycles, "recovery_seconds": 5,
 			"ack_to_completion_seconds": 30, "new_ids_per_recovery": frozenRecoveryIDs, "new_ids_per_second": fullRate, "warmup_s": 30, "window_s": 120, "restart_at_s": 60, "hold_ms": 200},
-		Interpretations: fullInterpretations, Limits: fullLimits,
+		Interpretations: fullInterpretations, Limits: fullLimits, Section10: &s10Report{Rule: s10Rules},
 	}
 	firstCase := len(report.Cases)
 	t.Cleanup(func() {
@@ -171,6 +176,19 @@ func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
 			executed += a.CyclesExecuted
 			passed += a.CyclesPassed
 		}
+		var labels []string
+		for _, a := range r.Section10.Arms {
+			labels = append(labels, a.Label)
+		}
+		for i := range r.Arms {
+			for _, sa := range r.Section10.Arms {
+				if sa.Arm == r.Arms[i].Arm {
+					r.Arms[i].Section10 = sa.Label
+				}
+			}
+		}
+		r.Section10Label = s10OverallLabel(labels, 4)
+		r.Section10.Label = r.Section10Label
 		want := 3*cfg.CyclesPerKind + cfg.Combined
 		switch {
 		case executed == 0:
@@ -205,13 +223,14 @@ var fullInterpretations = []string{
 	"Duplicate logical result: more than one job or one result row per idempotency ID. Duplicate attempts (HTTP retries, River retries/errors, handler redeliveries, replays finding the result present) are reported, not failed; only duplicate logical results are zero-bound.",
 	"At most 32 concurrent requests is enforced structurally by a gate in front of every HTTP attempt (a request that finds no free slot waits inside its own 5 s operation timeout and its latency from the scheduled instant; each such wait is reported as concurrency_cap_deferred_attempts) and the in-flight maximum is still observed independently; an eight-connection pool per role is applied. GOMAXPROCS must be 8; race-instrumented runs are labelled not frozen-scale.",
 	"Orphans: failed handler drain, StopAndCancel, pool close or listener shutdown within 5 s, plus live pool/client/listener counts and idle-in-transaction sessions of the fixture login role after each cycle.",
+	"Section 10: per arm a warmed baseline (after warm-up traffic, drain, quiescence and two GCs), checkpoints after cycles 0/10/20/30 (combined 0/10; reduced arms 0 and the last cycle) taken between cycles, and a teardown check against the pre-application harness baseline. Goroutines are compared per owner/role/generation/entry, descriptors per class, entries per generation, heap against max(1 MiB, 5%); pool idle/total connections and their PostgreSQL sockets/sessions are bounded by exact relations, not by baseline equality. Label: passed only at frozen scale with everything taken, otherwise partially evaluated (reduced) or not evaluated.",
 }
 
 var fullLimits = []string{
 	"Loopback synthetic HTTP in one process; no production ingress, proxy, TLS, kernel leases or final kernel effects (the S6 'kernel leases' hold has no kernel here).",
 	"Listener restart uses graceful Shutdown: in-flight requests finish; abrupt connection loss and ambiguous commits are covered only by the separate smoke controls.",
 	"Trusted jobs role sees all tenants and the original fixture authority FAIL is unchanged; this gate does not repair or test authority.",
-	"S10 resource/leak accounting is a separate gate; goroutine and fd counts are recorded per cycle but not bounded here.",
+	"S10 resource/leak accounting is enforced for what exists in this probe (see section10 and restart-README.md 'Section 10 requirements'); fibers, provisions, contributions, leases, pending transitions and the effect ledger have no equivalent here. goroutines_after_cycle and open_fds_after_cycle remain unbounded raw observations.",
 	"Durable completion is observed by polling SQL, not by a push signal; resolution is the 50 ms poll.",
 	"No database crash, power loss or exactly-once delivery claim; result rows are idempotent per job, at-least-once handler attempts are allowed.",
 }
@@ -446,6 +465,7 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 	idle, idleErr := a.idleInTransaction(ctx)
 	orphans += idle
 	redel1, replay1 := a.tally()
+	a.resetTally() // bounded retained memory: per-job delivery counts only matter within a cycle
 	lagMax, lagP99, over := time.Duration(0), time.Duration(0), 0
 	sortedLags := sortedCopy(arrivals.Lags)
 	if len(sortedLags) > 0 {
@@ -606,6 +626,10 @@ func TestWorkerRestartFullGate(t *testing.T) {
 			}
 			app := newFullApp(f, cfg.JobRetention)
 			t.Cleanup(app.teardown)
+			acct := newS10Arm(t, app, arm.name, arm.cycles, rep.AcceptanceScale)
+			rep.Section10.Arms = append(rep.Section10.Arms, acct.rep)
+			acct.harness(ctx)     // before the application exists
+			defer acct.teardown() // full teardown, then counts must return to the harness baseline
 			must(t, safeError("full app start", app.start(ctx)))
 			report.WorkerStarted = true
 			if cfg.PregrowRows > 0 {
@@ -615,8 +639,25 @@ func TestWorkerRestartFullGate(t *testing.T) {
 			sum := fullArmSummary{Arm: arm.name, CyclesPlanned: arm.cycles}
 			rep.Arms = append(rep.Arms, sum)
 			idx := len(rep.Arms) - 1
+			floor, floorErr := app.idFloor(ctx)
+			must(t, floorErr)
+			acct.floor = floor
+			app.warmPools(ctx)
+			app.warmTraffic(ctx, fmt.Sprintf("fw-%s-%s-warm-", f.id, arm.name), max(cfg.Warmup, 3*time.Second))
+			acct.baseline(ctx)
+			acct.checkpoint(ctx, 0)
+			due := map[int]bool{}
+			for _, cy := range s10CheckpointCycles(arm.cycles) {
+				due[cy] = true
+			}
 			for cycle := 1; cycle <= arm.cycles; cycle++ {
 				c := app.runCycle(t, ctx, arm.name, cycle, cfg)
+				if due[cycle] {
+					snap, bounds := acct.checkpoint(ctx, cycle)
+					c.Section10 = snap
+					c.Bounds = append(c.Bounds, bounds...)
+					c.Pass = allPass(c.Bounds)
+				}
 				line, _ := json.Marshal(c)
 				fmt.Printf("S0WORKERS_RESTART_FULL_CYCLE %s\n", line)
 				rep.Cycles = append(rep.Cycles, c)
@@ -634,6 +675,7 @@ func TestWorkerRestartFullGate(t *testing.T) {
 				s.HandlerRedeliv += c.HandledRedelivered
 				s.RiverRetries += c.RiverRetries
 				s.RecoveryMsMax, s.AckToCompleteMs = max(s.RecoveryMsMax, c.RecoveryMs), max(s.AckToCompleteMs, c.AckToCompleteMaxMs)
+
 				if c.Pass {
 					s.CyclesPassed++
 					continue

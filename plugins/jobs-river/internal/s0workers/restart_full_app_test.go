@@ -40,12 +40,14 @@ type callerGen struct {
 	pool     *pgxpool.Pool
 	fx       *fixture // per-generation copy bound to this pool/inserter
 	inflight sync.WaitGroup
+	insGen   int // generation of the insert client (section 10 accounting)
 }
 type workerGen struct {
 	pool         *pgxpool.Pool
 	d            *dispatcher
 	client       *river.Client[pgx.Tx]
 	stopLifetime context.CancelFunc
+	gen          int // generation of the worker client (section 10 accounting)
 }
 
 type fullApp struct {
@@ -61,6 +63,7 @@ type fullApp struct {
 	inflightReq, maxInflight   atomic.Int64
 	livePools, liveClients     atomic.Int64
 	liveListeners              atomic.Int64
+	gens                       *genLedger    // section 10: generation of every pool, client and listener
 	retention                  time.Duration // River cleaner retention; 0 = deletion off
 	httpHoldSlots              chan struct{}
 	gate                       *capGate // structural S4 cap on concurrent requests
@@ -79,36 +82,63 @@ type fullApp struct {
 	open      bool
 	epoch     int64
 	srv       *http.Server
+	srvGen    int
+	tornDown  sync.Once
+	drainOn   bool
+	reqNow    atomic.Int64 // admitted requests/handlers not yet finished (section 10 quiescence)
 	serveDone chan struct{}
 	w         *workerGen // owned by the single controller goroutine
 }
 
 func newFullApp(f *fixture, retention time.Duration) *fullApp {
-	a := &fullApp{retention: retention, f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2), gate: newCapGate(fullMaxConcurrent)}
+	a := &fullApp{gens: newGenLedger(), retention: retention, f: f, deliveries: make(chan delivery, 1024), handled: map[int64]int{}, stopDrain: make(chan struct{}), drainDone: make(chan struct{}), httpHoldSlots: make(chan struct{}, fullPoolConns/2), gate: newCapGate(fullMaxConcurrent)}
 	a.httpClient = &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 64, IdleConnTimeout: 30 * time.Second}}
-	go func() {
-		defer close(a.drainDone)
-		for {
-			select {
-			case d := <-a.deliveries:
-				if d.stage != "handled" {
-					continue
-				}
-				a.tallyMu.Lock()
-				a.handled[d.jobID]++
-				if a.handled[d.jobID] > 1 {
-					a.redelivered++
-				}
-				if !d.inserted {
-					a.insertedFalse++
-				}
-				a.tallyMu.Unlock()
-			case <-a.stopDrain:
-				return
-			}
-		}
-	}()
 	return a
+}
+
+// drain empties the dispatcher's delivery channel for the life of the application.
+// It starts in start (not newFullApp) so a section 10 harness baseline can be taken
+// before any goroutine of the application exists.
+func (a *fullApp) drain() {
+	defer close(a.drainDone)
+	for {
+		select {
+		case d := <-a.deliveries:
+			if d.stage != "handled" {
+				continue
+			}
+			a.tallyMu.Lock()
+			a.handled[d.jobID]++
+			if a.handled[d.jobID] > 1 {
+				a.redelivered++
+			}
+			if !d.inserted {
+				a.insertedFalse++
+			}
+			a.tallyMu.Unlock()
+		case <-a.stopDrain:
+			return
+		}
+	}
+}
+
+// resetTally drops the per-job delivery counts of finished cycles. They only exist
+// to detect a handler redelivery of the same job; the map grew by one entry per
+// delivered job for the whole arm (about 450,000 entries at frozen scale), which
+// section 10's retained-heap bound correctly reads as unbounded growth. It is
+// called between cycles, after the cycle's own tally was read and its jobs drained.
+func (a *fullApp) resetTally() int {
+	a.tallyMu.Lock()
+	defer a.tallyMu.Unlock()
+	n := len(a.handled)
+	a.handled = map[int64]int{}
+	return n
+}
+
+func (a *fullApp) tallyEntries() int {
+	a.tallyMu.Lock()
+	defer a.tallyMu.Unlock()
+	return len(a.handled)
 }
 
 func (a *fullApp) tally() (redelivered, insertedFalse int) {
@@ -147,10 +177,15 @@ func (a *fullApp) holdIfActive(ctx context.Context, total, now *atomic.Int64, sl
 func (a *fullApp) newCallerPool(ctx context.Context) (*pgxpool.Pool, error) {
 	cc := a.f.base.Copy()
 	cc.MaxConns = fullPoolConns
-	p, err := pgxpool.NewWithConfig(ctx, cc)
+	gen := a.gens.open(roleCallerPool)
+	cc.ConnConfig.RuntimeParams["application_name"] = s10AppName(roleCallerPool, gen) // harness-only: attributes the server session to its generation
+	var p *pgxpool.Pool
+	var err error
+	labelled(ctx, roleCallerPool, gen, func(ctx context.Context) { p, err = pgxpool.NewWithConfig(ctx, cc) })
 	if err != nil {
 		return nil, safeError("full caller pool", err)
 	}
+	a.gens.poolOpened(p, roleCallerPool, gen)
 	var one int
 	if err := p.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil {
 		p.Close()
@@ -167,10 +202,15 @@ func (a *fullApp) newWorkerPool(ctx context.Context) (*pgxpool.Pool, error) {
 		_, err := conn.Exec(ctx, "SET ROLE "+ident(a.f.jobs))
 		return safeError("trusted jobs session", err)
 	}
-	p, err := pgxpool.NewWithConfig(ctx, wc)
+	gen := a.gens.open(roleWorkerPool)
+	wc.ConnConfig.RuntimeParams["application_name"] = s10AppName(roleWorkerPool, gen) // harness-only
+	var p *pgxpool.Pool
+	var err error
+	labelled(ctx, roleWorkerPool, gen, func(ctx context.Context) { p, err = pgxpool.NewWithConfig(ctx, wc) })
 	if err != nil {
 		return nil, safeError("full worker pool", err)
 	}
+	a.gens.poolOpened(p, roleWorkerPool, gen)
 	var user string
 	if err = p.QueryRow(ctx, "SELECT current_user").Scan(&user); err != nil || user != a.f.jobs {
 		p.Close()
@@ -188,7 +228,7 @@ func (a *fullApp) makeCaller(pool *pgxpool.Pool) (*callerGen, error) {
 		return nil, safeError("full insert client", err)
 	}
 	fx.inserter = ins
-	return &callerGen{pool: pool, fx: &fx}, nil
+	return &callerGen{pool: pool, fx: &fx, insGen: a.gens.open(roleInsertClient)}, nil
 }
 
 // The handler resolves the CURRENT caller generation per call; while the caller
@@ -200,7 +240,7 @@ func (a *fullApp) workerHandler(d *dispatcher) handlerFunc {
 		if g == nil {
 			return river.JobSnooze(10 * time.Millisecond)
 		}
-		defer g.inflight.Done()
+		defer a.finish(g)
 		return g.fx.recordingHandler(d)(ctx, row)
 	}
 }
@@ -224,7 +264,11 @@ func (a *fullApp) makeWorker(pool *pgxpool.Pool, d *dispatcher) (*workerGen, err
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, d) // once per NEW client
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+	gen := a.gens.open(roleWorkerClient)
+	a.gens.handlerInstalled(gen, true)
+	var client *river.Client[pgx.Tx]
+	var err error
+	cfg := &river.Config{
 		Schema: a.f.jobs, ID: "s0wk-" + a.f.id + "-full-" + strconv.FormatInt(a.clientSeq.Add(1), 10), Logger: quiet, Workers: workers,
 		Queues:        map[string]river.QueueConfig{queue: {MaxWorkers: fullWorkers}},
 		FetchCooldown: time.Millisecond, FetchPollInterval: 5 * time.Millisecond,
@@ -232,17 +276,20 @@ func (a *fullApp) makeWorker(pool *pgxpool.Pool, d *dispatcher) (*workerGen, err
 		RescueStuckJobsAfter: time.Minute, TestOnly: true,
 		CancelledJobRetentionPeriod: riverRetention(a.retention), CompletedJobRetentionPeriod: riverRetention(a.retention), DiscardedJobRetentionPeriod: riverRetention(a.retention),
 		ReindexerIndexNames: []string{},
-	})
-	if err != nil {
-		return nil, safeError("full worker client", err)
 	}
 	life, cancel := context.WithCancel(context.Background())
-	if err := client.Start(life); err != nil {
+	labelled(life, roleWorkerClient, gen, func(ctx context.Context) { // goroutines inherit the generation label
+		if client, err = river.NewClient(riverpgxv5.New(pool), cfg); err != nil {
+			return
+		}
+		err = client.Start(life)
+	})
+	if err != nil {
 		cancel()
-		return nil, safeError("full worker start", err)
+		return nil, safeError("full worker client", err)
 	}
 	a.liveClients.Add(1)
-	return &workerGen{pool: pool, d: d, client: client, stopLifetime: cancel}, nil
+	return &workerGen{pool: pool, d: d, client: client, stopLifetime: cancel, gen: gen}, nil
 }
 
 // openCaller publishes the generation with a NEW epoch under one lock: an ACK
@@ -262,7 +309,13 @@ func (a *fullApp) acquire() (*callerGen, int64) {
 		return nil, 0
 	}
 	a.cur.inflight.Add(1)
+	a.reqNow.Add(1)
 	return a.cur, a.epoch
+}
+
+func (a *fullApp) finish(g *callerGen) {
+	g.inflight.Done()
+	a.reqNow.Add(-1)
 }
 
 // closeCaller makes new requests see 503 / handlers snooze and drains admitted ones.
@@ -289,6 +342,7 @@ func (a *fullApp) stopWorker() {
 	if w == nil {
 		return
 	}
+	a.gens.markDisposed(roleWorkerClient, w.gen)
 	ctx, cancel := context.WithTimeout(context.Background(), restartRecoveryBudget)
 	defer cancel()
 	if err := w.d.registry.revoke(ctx); err != nil {
@@ -299,9 +353,13 @@ func (a *fullApp) stopWorker() {
 	}
 	w.stopLifetime()
 	a.liveClients.Add(-1)
+	a.gens.handlerInstalled(w.gen, w.d.registry.live.Load() != nil)
+	a.gens.keepClient(w.gen, w.pool, w.client)
 }
 
 func (a *fullApp) closePool(p *pgxpool.Pool) {
+	role, gen := a.gens.poolDisposed(p)
+	defer a.gens.keepPool(role, gen, p)
 	done := make(chan struct{})
 	go func() { p.Close(); close(done) }() // Close blocks until every connection is returned
 	select {
@@ -326,24 +384,30 @@ func (a *fullApp) startListener() error {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/enqueue", a.serveEnqueue)
+	gen := a.gens.open(roleListener)
+	a.gens.routes(gen, 1)
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: restartRecoveryBudget}
 	done := make(chan struct{})
 	a.mu.Lock()
 	a.srv, a.serveDone = srv, done
 	a.mu.Unlock()
 	a.liveListeners.Add(1)
-	go func() { _ = srv.Serve(ln); close(done) }()
+	a.mu.Lock()
+	a.srvGen = gen
+	a.mu.Unlock()
+	labelled(context.Background(), roleListener, gen, func(context.Context) { go func() { _ = srv.Serve(ln); close(done) }() })
 	return nil
 }
 
 func (a *fullApp) stopListener() {
 	a.mu.Lock()
-	srv, done := a.srv, a.serveDone
+	srv, done, gen := a.srv, a.serveDone, a.srvGen
 	a.srv = nil
 	a.mu.Unlock()
 	if srv == nil {
 		return
 	}
+	a.gens.markDisposed(roleListener, gen)
 	ctx, cancel := context.WithTimeout(context.Background(), restartRecoveryBudget)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -353,6 +417,7 @@ func (a *fullApp) stopListener() {
 	select {
 	case <-done:
 		a.liveListeners.Add(-1)
+		a.gens.routes(gen, 0)
 	case <-time.After(restartRecoveryBudget):
 		a.orphans.Add(1)
 	}
@@ -365,7 +430,7 @@ func (a *fullApp) serveEnqueue(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable) // never counted as accepted work
 		return
 	}
-	defer g.inflight.Done()
+	defer a.finish(g)
 	key := r.URL.Query().Get("id")
 	if key == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -415,6 +480,8 @@ type fullRestart struct {
 }
 
 func (a *fullApp) start(ctx context.Context) error {
+	a.drainOn = true
+	go a.drain()
 	cp, err := a.newCallerPool(ctx)
 	if err != nil {
 		return err
@@ -439,6 +506,7 @@ func (a *fullApp) start(ctx context.Context) error {
 // affected consumer is back; the listener is untouched.
 func (a *fullApp) recreate(ctx context.Context, newPools bool) (int64, error) {
 	old := a.closeCaller()
+	a.gens.markDisposed(roleInsertClient, old.insGen)
 	a.stopWorker()
 	callerPool, workerPool, d := old.pool, a.w.pool, a.w.d
 	if newPools {
@@ -497,8 +565,13 @@ func (a *fullApp) restart(ctx context.Context, kind string) (fullRestart, error)
 }
 
 func (a *fullApp) teardown() {
+	a.tornDown.Do(a.teardownOnce)
+}
+
+func (a *fullApp) teardownOnce() {
 	a.stopListener()
 	if g := a.closeCaller(); g != nil {
+		a.gens.markDisposed(roleInsertClient, g.insGen)
 		a.closePool(g.pool)
 	}
 	a.stopWorker()
@@ -506,8 +579,14 @@ func (a *fullApp) teardown() {
 		a.closePool(a.w.pool)
 	}
 	a.httpClient.CloseIdleConnections()
-	close(a.stopDrain)
-	<-a.drainDone
+	if a.drainOn {
+		close(a.stopDrain)
+		<-a.drainDone
+	}
+	a.mu.Lock()
+	a.cur, a.srv = nil, nil // the application keeps no reference to a disposed generation
+	a.mu.Unlock()
+	a.w = nil
 }
 
 // ---- client side ----
