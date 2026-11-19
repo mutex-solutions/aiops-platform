@@ -1469,7 +1469,8 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 		return g.requestScope(a, label, setup)
 	}
 	c.trackedStart = func(label string) (func(error), error) { return g.startTracked(a, label) }
-	c.child = func(spec Spec) (uint64, error) {
+	c.child = func(spec Spec) (id uint64, err error) {
+		defer g.guardEntry(a, "MountChild", &err)
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if f.current != a || a.retiring || !c.live.Load() {
@@ -1477,7 +1478,8 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 		}
 		return g.mountLocked(spec, a)
 	}
-	c.dispose = func() error {
+	c.dispose = func() (err error) {
+		defer g.guardEntry(a, "Dispose", &err)
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		// A captured old context cannot dispose a replacement activation.
@@ -1526,7 +1528,42 @@ func (g *GraphLock) startLoadLocked(f *graphFiber, bindings map[string]provision
 	go g.runLoad(a)
 }
 
-func (g *GraphLock) provide(a *graphActivation, key string, value any) error {
+// guardEntry is deferred first in every kernel function a plugin can call
+// (Provide, Defer, Effect rollback, effect scopes, tracked work, MountChild and
+// Dispose). Those run on the plugin's goroutine, inside the recover that guards
+// its Apply, so a bug in kernel code would be reported as the plugin's "Apply
+// panic". Recovering here, after the entry point's own deferred unlock has run,
+// keeps the two apart: the plugin's call returns an error naming the entry
+// point, and the fiber records the same internal error. The plugin's own
+// callbacks never run inside these functions (they have their own recover), so a
+// panic that reaches this point is a kernel panic. errp may be nil.
+func (g *GraphLock) guardEntry(a *graphActivation, entry string, errp *error) {
+	recovered := recover()
+	if recovered == nil {
+		return
+	}
+	text := "unknown panic value"
+	switch v := recovered.(type) {
+	case string:
+		text = v
+	case error:
+		text = graphErrorText(v)
+	}
+	err := fmt.Errorf("internal error in %s: %s", entry, text)
+	if errp != nil {
+		*errp = err
+	}
+	defer func() { _ = recover() }() // Recording must not turn one panic into another.
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if f := a.fiber; f.current == a {
+		f.lastErr = errors.Join(f.lastErr, err)
+		g.eventLocked(f, "internal:"+entry, "", 0)
+	}
+}
+
+func (g *GraphLock) provide(a *graphActivation, key string, value any) (err error) {
+	defer g.guardEntry(a, "provide", &err)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	f := a.fiber
@@ -1575,7 +1612,8 @@ func (g *GraphLock) provide(a *graphActivation, key string, value any) error {
 	return nil
 }
 
-func (g *GraphLock) deferEffect(a *graphActivation, label string, dispose Disposer) error {
+func (g *GraphLock) deferEffect(a *graphActivation, label string, dispose Disposer) (err error) {
+	defer g.guardEntry(a, "Defer", &err)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if a.fiber.current != a || a.retiring || !a.ctx.live.Load() {
@@ -1591,7 +1629,8 @@ func (g *GraphLock) deferEffect(a *graphActivation, label string, dispose Dispos
 
 // requestScope reserves an actual ownership slot before exposing its handle.
 // Scope callbacks run only on this activation's existing transition lane.
-func (g *GraphLock) requestScope(a *graphActivation, label string, setup func(*EffectScope) error) (*EffectHandle, error) {
+func (g *GraphLock) requestScope(a *graphActivation, label string, setup func(*EffectScope) error) (handle *EffectHandle, err error) {
+	defer g.guardEntry(a, "RequestEffectScope", &err)
 	if err := validateScope(label, setup); err != nil {
 		return nil, err
 	}
@@ -1601,7 +1640,8 @@ func (g *GraphLock) requestScope(a *graphActivation, label string, setup func(*E
 		return nil, errors.Join(ErrInactiveEffect, ErrInactive)
 	}
 	effect := newScopeEffect(label, setup)
-	effect.requestWithdraw = func() error {
+	effect.requestWithdraw = func() (err error) {
+		defer g.guardEntry(a, "scope withdraw", &err)
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if effect.cleanupFinished() {
@@ -1653,9 +1693,7 @@ func (g *GraphLock) removeScopeLocked(a *graphActivation, scope *scopeEffect) {
 // scope rollback/withdrawal, not once per nested disposer. Expiry is diagnostic;
 // the same transition worker and ownership tree remain until real callbacks exit.
 func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, context.CancelFunc) {
-	g.mu.Lock()
-	budget := g.knobs.cleanup
-	g.mu.Unlock()
+	budget := g.cleanupBudget()
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	pending, recorded, stalled := true, false, false // Protected by mu, including the timer.
 	recordLocked := func(stall bool) {
@@ -1681,18 +1719,27 @@ func (g *GraphLock) scopeCleanupContext(a *graphActivation) (context.Context, co
 	})
 	return ctx, func() {
 		timer.Stop()
-		g.mu.Lock()
-		pending = false
-		if ctx.Err() != nil {
-			recordLocked(false)
-		}
-		if stalled {
-			stalled = false
-			g.unstallLocked(a, "scope cleanup")
-		}
-		g.mu.Unlock()
+		func() {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			pending = false
+			if ctx.Err() != nil {
+				recordLocked(false)
+			}
+			if stalled {
+				stalled = false
+				g.unstallLocked(a, "scope cleanup")
+			}
+		}()
 		cancel()
 	}
+}
+
+// cleanupBudget reads the cleanup budget under the lock.
+func (g *GraphLock) cleanupBudget() time.Duration {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.knobs.cleanup
 }
 
 // runScopeWork is called only by the activation's one transition worker. During
@@ -1770,13 +1817,12 @@ func (g *GraphLock) runScopeLane(a *graphActivation) {
 // cleanupEffect joins one partial or late setup disposer outside the graph
 // owner. The Effect helper retains its actual lease until this function returns;
 // a deadline records blocked work, never permission to release that ownership.
-func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
+func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) (err error) {
+	defer g.guardEntry(a, "Effect cleanup", &err)
 	if dispose == nil {
 		return nil
 	}
-	g.mu.Lock()
-	budget := g.knobs.cleanup
-	g.mu.Unlock()
+	budget := g.cleanupBudget()
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	pending, recorded, stalled := true, false, false // All protected by g.mu, including timer completion.
@@ -1801,32 +1847,35 @@ func (g *GraphLock) cleanupEffect(a *graphActivation, dispose Disposer) error {
 			recordDeadlineLocked(true)
 		}
 	})
-	err := graphCallDispose(dispose, cleanupCtx)
-	diagnostic := graphDiagnose(err) // Rendered here, on the caller's goroutine, before taking the lock.
+	disposeErr := graphCallDispose(dispose, cleanupCtx)
+	diagnostic := graphDiagnose(disposeErr) // Rendered here, on the caller's goroutine, before taking the lock.
 	timeout := cleanupCtx.Err()
 	timer.Stop()
-	g.mu.Lock()
-	pending = false
-	if timeout != nil {
-		// The real callback can observe its context deadline and return before
-		// the sibling diagnostic timer acquires mu. Record it at most once.
-		recordDeadlineLocked(false)
-	}
-	if stalled {
-		stalled = false
-		g.unstallLocked(a, "effect cleanup")
-	}
-	if err != nil && a.fiber.current == a && a.retiring {
-		a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
-	}
-	g.mu.Unlock()
-	return errors.Join(timeout, err)
+	func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		pending = false
+		if timeout != nil {
+			// The real callback can observe its context deadline and return before
+			// the sibling diagnostic timer acquires mu. Record it at most once.
+			recordDeadlineLocked(false)
+		}
+		if stalled {
+			stalled = false
+			g.unstallLocked(a, "effect cleanup")
+		}
+		if disposeErr != nil && a.fiber.current == a && a.retiring {
+			a.cleanupErr = errors.Join(a.cleanupErr, diagnostic)
+		}
+	}()
+	return errors.Join(timeout, disposeErr)
 }
 
 // startTracked is called after the common Go helper acquires its real lease and
 // before it starts caller code. Completion is bookkeeping only: lease Leave is
 // still the actual drain barrier, and no extra joining goroutine is necessary.
-func (g *GraphLock) startTracked(a *graphActivation, label string) (func(error), error) {
+func (g *GraphLock) startTracked(a *graphActivation, label string) (done func(error), err error) {
+	defer g.guardEntry(a, "Go", &err)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	f := a.fiber
@@ -1843,6 +1892,7 @@ func (g *GraphLock) startTracked(a *graphActivation, label string) (func(error),
 	var once sync.Once
 	return func(err error) {
 		diagnostic := graphDiagnose(err) // Rendered here, on the worker that ran the callback, not under the lock.
+		defer g.guardEntry(a, "Go completion", nil)
 		once.Do(func() {
 			g.mu.Lock()
 			defer g.mu.Unlock()
