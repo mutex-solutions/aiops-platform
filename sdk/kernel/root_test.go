@@ -510,7 +510,7 @@ func TestCompileCheckAndReadFailClosedOnAnUnboundActivation(t *testing.T) {
 func TestNewRootStopsItsCoreWhenTheRootHandleIsRefused(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if r, err := newRoot(ctx, testConfig(), nil, nil, true); !errors.Is(err, context.Canceled) || r != nil {
+	if r, err := newRoot(ctx, testConfig(), nil, nil, true, nil); !errors.Is(err, context.Canceled) || r != nil {
 		t.Fatalf("newRoot with a cancelled context = %v, %v", r, err)
 	}
 }

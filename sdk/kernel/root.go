@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"testing"
 	"time"
@@ -40,6 +41,9 @@ type Config struct {
 	OwnerInbox      int           // Capacity of the owner's inbox: external backpressure.
 	TerminalLimit   int           // Diagnostics of past failed fibers that Settle and Close keep.
 	ObserverLog     func(error)   // Optional: receives each contained observer failure.
+	// LogHandler is the one slog.Handler of the built-in logger (plugin record :55,
+	// :540). Optional: nil discards. The contract names no such field: an open point.
+	LogHandler slog.Handler
 
 	// Providers lists, per provider-bound key, the entries allowed to provide it;
 	// Consumers lists, per consumer-bound or signed key, the entries allowed to
@@ -76,7 +80,7 @@ func New(cfg Config) (*Root, error) {
 	if err := errors.Join(perr, cerr); err != nil {
 		return nil, err
 	}
-	return newRoot(context.Background(), cfg.core(), providers, consumers, false)
+	return newRoot(context.Background(), cfg.core(), providers, consumers, false, cfg.LogHandler)
 }
 
 // NewForTest constructs a kernel with both binding maps off, so that a plugin can
@@ -87,7 +91,7 @@ func New(cfg Config) (*Root, error) {
 // failed on purpose, is logged. A bad cfg fails the test at once.
 func NewForTest(tb testing.TB, cfg Config) *Root {
 	tb.Helper()
-	r, err := newRoot(context.Background(), cfg.core(), nil, nil, true)
+	r, err := newRoot(context.Background(), cfg.core(), nil, nil, true, cfg.LogHandler)
 	if err != nil {
 		tb.Fatalf("kernel.NewForTest: %v", err)
 	}
@@ -102,7 +106,7 @@ func NewForTest(tb testing.TB, cfg Config) *Root {
 	return r
 }
 
-func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSet, unbound bool) (*Root, error) {
+func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSet, unbound bool, log slog.Handler) (*Root, error) {
 	c, err := newCore(cfg)
 	if err != nil {
 		return nil, err
@@ -116,6 +120,10 @@ func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSe
 	r.host = new(entryToken)
 	r.ctx = &Context{root: r, h: h, entry: r.host, frame: &frame{id: "root", host: true}}
 	r.aud = Audience{match: func(l *Context) bool { return l.root == r }}
+	if err := installBuiltins(r, log); err != nil {
+		_ = c.close(context.Background())
+		return nil, err
+	}
 	return r, nil
 }
 
