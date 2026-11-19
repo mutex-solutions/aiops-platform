@@ -317,7 +317,7 @@ func TestOperationsAreSeparateAndCorrect(t *testing.T) {
 
 func passingInput() EvalInput {
 	p := FrozenPlan()
-	in := EvalInput{Plan: p, Candidates: []string{"reconciler", "graph-lock"}, Hosts: []HostDelta{{Run: "r", SwapKnown: true, ThrottleKnow: true}}}
+	in := EvalInput{Plan: p, Candidates: []string{"reconciler", "graph-lock"}, Hosts: []HostDelta{{Run: "r", SwapKnown: true, ThrottleKnow: true}}, RunProtocols: []int{ProtocolAmendment, ProtocolAmendment}}
 	dist := scale.Distribution{Count: SamplesPerRun, P50: 20, P95: 40, P99: 100, Max: 900}
 	for _, cand := range in.Candidates {
 		for _, c := range CallerConcurrencies() {

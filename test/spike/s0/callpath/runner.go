@@ -28,6 +28,7 @@ type Config struct {
 // Report is the summary written last; raw per-run files are the evidence.
 type Report struct {
 	Schema         string               `json:"schema"`
+	Protocol       int                  `json:"protocolAmendment"`
 	Label          string               `json:"label"`
 	Acceptance     bool                 `json:"acceptanceEligible"`
 	StartedUTC     time.Time            `json:"startedUTC"`
@@ -45,6 +46,7 @@ const dryLabel = "DRY RUN - NOT ACCEPTANCE - reduced counts; this output never s
 
 // BaselineRecord is the raw record of one fresh-fixture baseline run.
 type BaselineRecord struct {
+	Protocol   int        `json:"protocolAmendment"`
 	Candidate  string     `json:"candidate"`
 	Rep        int        `json:"repetition"`
 	Order      []string   `json:"armOrder"`
@@ -59,6 +61,7 @@ type BaselineRecord struct {
 }
 
 type stressFile struct {
+	Protocol   int           `json:"protocolAmendment"`
 	Candidate  string        `json:"candidate"`
 	Rep        int           `json:"repetition"`
 	StartedUTC time.Time     `json:"startedUTC"`
@@ -70,7 +73,7 @@ type stressFile struct {
 	Errors     []string      `json:"errors,omitempty"`
 }
 
-func throughput(a Arm) float64 { return float64(a.Samples) * 1e9 / float64(a.WallNS) }
+func throughput(a Arm) float64 { return a.ThroughputPS }
 
 type aggKey struct {
 	arm, cand string
@@ -85,7 +88,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 	if cfg.Dry {
 		label = dryLabel
 	}
-	rep := Report{Schema: "s0-callpath-report/v1", Label: label, StartedUTC: time.Now().UTC(), Plan: cfg.Plan, Classification: scale.Inconclusive}
+	rep := Report{Schema: "s0-callpath-report/v1", Protocol: ProtocolAmendment, Label: label, StartedUTC: time.Now().UTC(), Plan: cfg.Plan, Classification: scale.Inconclusive}
 	if err := cfg.Plan.validate(); err != nil {
 		return rep, err
 	}
@@ -163,6 +166,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					progress(fmt.Sprintf("rep %d baseline %s", r, b.Name))
 					rec := runBaseline(ctx, cfg.Plan, b, r)
 					in.RunErrors = append(in.RunErrors, prefixed(fmt.Sprintf("baseline %s rep%d", b.Name, r), rec.Errors)...)
+					in.RunProtocols = append(in.RunProtocols, rec.Protocol)
 					for _, a := range rec.Arms {
 						k := aggKey{"baseline", b.Name, a.Operation, a.Callers}
 						if a.Operation == Timer {
@@ -181,6 +185,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					file := runStress(ctx, cfg.Plan, b, r, callers)
 					in.RunErrors = append(in.RunErrors, prefixed(fmt.Sprintf("stress %s c%d rep%d", b.Name, callers, r), file.Errors)...)
 					in.Stress = append(in.Stress, file.Summary)
+					in.RunProtocols = append(in.RunProtocols, file.Protocol)
 					a := group(aggKey{"stress", b.Name, StressObservationOp(), callers})
 					a.Runs++
 					a.Count += file.Record.Observations.Samples
@@ -259,7 +264,7 @@ func closeFixture(fx *Fixture, errs *[]string) {
 // and concurrency order rotate with the repetition so no operation always runs
 // first on a cold or hot machine.
 func runBaseline(ctx context.Context, p Plan, b scale.Backend, rep int) BaselineRecord {
-	rec := BaselineRecord{Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
+	rec := BaselineRecord{Protocol: ProtocolAmendment, Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
 	fx, err := NewFixture(ctx, b, FixtureOptions{Leaves: p.Leaves})
 	if err != nil {
 		rec.Errors = append(rec.Errors, "fixture: "+err.Error())
@@ -298,7 +303,7 @@ func runBaseline(ctx context.Context, p Plan, b scale.Backend, rep int) Baseline
 }
 
 func runStress(ctx context.Context, p Plan, b scale.Backend, rep, callers int) stressFile {
-	f := stressFile{Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
+	f := stressFile{Protocol: ProtocolAmendment, Candidate: b.Name, Rep: rep, StartedUTC: time.Now().UTC()}
 	fx, err := NewFixture(ctx, b, FixtureOptions{Leaves: p.Leaves})
 	if err != nil {
 		f.Errors = append(f.Errors, "fixture: "+err.Error())

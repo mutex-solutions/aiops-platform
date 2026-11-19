@@ -163,6 +163,6 @@ Superseded by the amendment:
 
 Not superseded: window length (100,000 per run), operations, candidates, callers,
 repetitions, alternation, stress, thresholds, evidence and identity, and
-classification precedence. The harness implementing the amendment lands in a
-following commit; until then this directory still implements amendment 0 and must
-not be used for a run under the amendment.
+classification precedence. This directory implements amendment 1: every record
+carries `protocolAmendment: 1` and the evaluator refuses to mix amendments. The
+full-run command in "Running" is unchanged.

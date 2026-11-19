@@ -5,6 +5,7 @@ package callpath
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/test/spike/s0/scale"
@@ -28,6 +29,8 @@ type Arm struct {
 	Outcomes       string             `json:"outcomes"` // One digit per observation: 0 ok, 1 refused read, 2 refused enter, 3 error.
 	OutcomeCounts  map[string]int     `json:"outcomeCounts"`
 	Summary        scale.Distribution `json:"summary"`
+	SpanNS         []int64            `json:"callerSpanNS"`        // Amendment 1: each caller's first-start to last-end span.
+	ThroughputPS   float64            `json:"throughputPerSecond"` // Amendment 1: sum of per-caller observations/span.
 	AllocsMeasured string             `json:"allocationNote"`
 	StartOffsetNS  []int64            `json:"startOffsetNS,omitempty"`      // Stress only.
 	ScheduledNS    []int64            `json:"scheduledOffsetNS,omitempty"`  // Stress only.
@@ -57,47 +60,112 @@ func countOutcomes(outcomes string) map[string]int {
 	return counts
 }
 
+// pollInterval is the coordinator's sleep between completion checks (amendment 1).
+const pollInterval = 250 * time.Microsecond
+
+// ProtocolAmendment is the callpath measurement protocol this harness implements
+// (docs/design/s0-callpath-protocol-amendment-1.md). Records without the field
+// are amendment 0, the original protocol.
+const ProtocolAmendment = 1
+
+// RunThroughput is the amendment-1 run throughput: the sum over callers of that
+// caller's observations divided by its own first-start to last-end span. A zero
+// span is read as 1 ns so a clock tie can never divide by zero.
+func RunThroughput(counts []int, spanNS []int64) float64 {
+	sum := 0.0
+	for i, n := range counts {
+		span := max(spanNS[i], 1)
+		sum += float64(n) * 1e9 / float64(span)
+	}
+	return sum
+}
+
+// waitDone is the coordinator's wait. It polls an atomic counter and sleeps on
+// the goroutine's own (pre-warmed) timer; it never parks on a wait queue, so the
+// runtime has no wait-queue record to allocate.
+func waitDone(done *atomic.Int32, n int32) {
+	for done.Load() < n {
+		time.Sleep(pollInterval)
+	}
+}
+
+type windowResult struct {
+	Mallocs, Bytes uint64
+	NumGC          uint32
+	Wall           time.Duration
+}
+
+// runWindow starts callers goroutines, each running work(i) once the single start
+// flag flips, and returns the process-wide allocation delta and coordinator wall
+// time of the window. Everything the window uses (goroutines, flag, counter,
+// MemStats, the coordinator's sleep timer) exists and is warm before the first
+// ReadMemStats. ready, if set, runs in each caller just before it signals ready.
+func runWindow(callers int, ready func(int), work func(int)) windowResult {
+	var rdy sync.WaitGroup
+	var start atomic.Bool
+	var done atomic.Int32
+	rdy.Add(callers)
+	for i := range callers {
+		go func() {
+			if ready != nil {
+				ready(i)
+			}
+			rdy.Done()
+			for !start.Load() { // Yield so callers beyond GOMAXPROCS can reach the flag.
+				runtime.Gosched()
+			}
+			work(i)
+			done.Add(1)
+		}()
+	}
+	rdy.Wait() // Before the window: parking here is allowed.
+	runtime.GC()
+	for range 4 {
+		time.Sleep(pollInterval) // Creates the timer record and grows the timer heap slot.
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	t0 := time.Now()
+	start.Store(true)
+	waitDone(&done, int32(callers))
+	wall := time.Since(t0)
+	runtime.ReadMemStats(&after)
+	return windowResult{Mallocs: after.Mallocs - before.Mallocs, Bytes: after.TotalAlloc - before.TotalAlloc, NumGC: after.NumGC - before.NumGC, Wall: wall}
+}
+
 // MeasureArm runs op with callers independent goroutines, each recording its own
-// individual latencies with a monotonic clock around exactly one op call. The
-// goroutines and arrays exist before the allocation window opens, so a nonzero
-// Mallocs is allocation by the operation (or by the runtime wake callback it
-// reaches), never by the harness.
+// individual latencies with a monotonic clock around exactly one op call. Under
+// amendment 1 the window holds no harness allocation (see runWindow), callers are
+// released by one start flag, and throughput comes from the callers' own spans.
 func MeasureArm(operation Operation, op Op, callers, samples int) Arm {
 	counts := split(samples, callers)
 	latency := make([]int64, samples)
 	outcomes := make([]byte, samples)
-	start := make(chan struct{})
-	var ready, done sync.WaitGroup
-	offset := 0
-	for _, n := range counts {
-		l, o := latency[offset:offset+n], outcomes[offset:offset+n]
-		offset += n
-		ready.Add(1)
-		done.Add(1)
-		go func() {
-			ready.Done()
-			<-start
-			for i := range l {
-				t0 := time.Now()
-				outcome, _ := op()
-				l[i] = int64(time.Since(t0))
-				o[i] = outcome.char()
-			}
-			done.Done()
-		}()
+	spans := make([]int64, callers)
+	offsets := make([]int, callers)
+	for i := 1; i < callers; i++ {
+		offsets[i] = offsets[i-1] + counts[i-1]
 	}
-	ready.Wait()
-	runtime.GC()
-	var before, after runtime.MemStats
-	runtime.ReadMemStats(&before)
-	t0 := time.Now()
-	close(start)
-	done.Wait()
-	wall := time.Since(t0)
-	runtime.ReadMemStats(&after)
-	arm := Arm{Operation: operation, Callers: callers, Samples: samples, WallNS: wall.Nanoseconds(),
-		Mallocs: after.Mallocs - before.Mallocs, AllocBytes: after.TotalAlloc - before.TotalAlloc, NumGC: after.NumGC - before.NumGC,
-		CallerCounts: counts, LatencyNS: latency, Outcomes: string(outcomes), AllocsMeasured: "process-wide Mallocs delta across the observation window; no subtraction"}
+	w := runWindow(callers, nil, func(c int) {
+		l, o := latency[offsets[c]:offsets[c]+counts[c]], outcomes[offsets[c]:offsets[c]+counts[c]]
+		var first, end time.Time
+		for i := range l {
+			t0 := time.Now()
+			if i == 0 {
+				first = t0
+			}
+			outcome, _ := op()
+			end = time.Now()
+			l[i] = int64(end.Sub(t0))
+			o[i] = outcome.char()
+		}
+		spans[c] = int64(end.Sub(first))
+	})
+	arm := Arm{Operation: operation, Callers: callers, Samples: samples, WallNS: w.Wall.Nanoseconds(),
+		Mallocs: w.Mallocs, AllocBytes: w.Bytes, NumGC: w.NumGC,
+		CallerCounts: counts, LatencyNS: latency, Outcomes: string(outcomes), SpanNS: spans,
+		AllocsMeasured: "process-wide Mallocs delta across the observation window; no subtraction"}
+	arm.ThroughputPS = RunThroughput(counts, spans)
 	arm.AllocsPerOp = float64(arm.Mallocs) / float64(samples)
 	arm.OutcomeCounts = countOutcomes(arm.Outcomes)
 	arm.Summary = scale.Summarize(latency)

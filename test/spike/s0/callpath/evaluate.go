@@ -4,6 +4,7 @@ package callpath
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/mutex-solutions/aiops-platform/test/spike/s0/scale"
 )
@@ -40,6 +41,8 @@ type EvalInput struct {
 	Hosts            []HostDelta
 	EvidenceProblems []string
 	RunErrors        []string
+	// RunProtocols is the protocol amendment each run record carried.
+	RunProtocols []int
 }
 
 // Evaluate classifies. Precedence is fail > invalid > inconclusive > pass, and
@@ -54,6 +57,10 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 	invalid = append(invalid, in.Invalid...)
 	inconclusive = append(inconclusive, in.IdentityProblems...)
 	inconclusive = append(inconclusive, in.EvidenceProblems...)
+	invalid = append(invalid, checkProtocols(in.RunProtocols)...)
+	if len(in.RunProtocols) == 0 {
+		inconclusive = append(inconclusive, "no run recorded a protocol amendment")
+	}
 
 	find := func(arm, cand string, op Operation, callers int) *Aggregate {
 		for i := range in.Aggregates {
@@ -104,8 +111,17 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 						fail = append(fail, fmt.Sprintf("%s: run %d p99 %dns > %dns", label, i, d.P99, int64(LeaseP99Limit)))
 					}
 				}
+				// Amendment 1: the timer-only control of the same run must read zero too.
+				// A non-zero control makes that run invalid for allocation (never a
+				// pass, never a lease failure); a non-zero lease with a zero control fails.
+				ctl := find("timer", cand, Timer, callers)
 				for i, m := range a.Mallocs {
-					if m != 0 {
+					switch {
+					case ctl == nil || i >= len(ctl.Mallocs):
+						inconclusive = append(inconclusive, fmt.Sprintf("%s: run %d has no timer-only control allocation reading", label, i))
+					case ctl.Mallocs[i] != 0:
+						invalid = append(invalid, fmt.Sprintf("%s: run %d control allocated %d objects; allocation reading invalid (environment), repeat unchanged", label, i, ctl.Mallocs[i]))
+					case m != 0:
 						fail = append(fail, fmt.Sprintf("%s: run %d allocated %d objects; budget is zero", label, i, m))
 					}
 				}
@@ -188,6 +204,24 @@ func Evaluate(in EvalInput) (scale.Classification, []string) {
 		return scale.Inconclusive, reasons
 	}
 	return scale.Pass, nil
+}
+
+// checkProtocols refuses runs from any amendment but the one this harness
+// implements, and any mixture of amendments.
+func checkProtocols(versions []int) []string {
+	var out []string
+	for _, v := range versions {
+		if v != versions[0] {
+			out = append(out, "runs mix callpath protocol amendments; they are never combined")
+			break
+		}
+	}
+	for _, v := range slices.Compact(slices.Sorted(slices.Values(versions))) {
+		if v != ProtocolAmendment {
+			out = append(out, fmt.Sprintf("run records carry protocol amendment %d, this harness implements %d", v, ProtocolAmendment))
+		}
+	}
+	return out
 }
 
 func prefixed(prefix string, items []string) []string {

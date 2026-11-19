@@ -32,7 +32,7 @@ var closureClasses = []string{
 
 const callpathClass = "test/spike/s0/callpath"
 
-var closureExtras = []string{"go.mod", "go.sum", "docs/design/s0-spike-criteria.md", "docs/design/s0-criteria-freeze.json"}
+var closureExtras = []string{"go.mod", "go.sum", "docs/design/s0-spike-criteria.md", "docs/design/s0-criteria-freeze.json", "docs/design/s0-callpath-protocol-amendment-1.md"}
 
 type ClosureFile struct {
 	Path   string `json:"path"`
@@ -130,6 +130,7 @@ func LoadIdentity(path string) (Identity, error) {
 // IdentityRecord is the invocation/identity record written before any run.
 type IdentityRecord struct {
 	Schema         string    `json:"schema"`
+	Protocol       int       `json:"protocolAmendment"`
 	Mode           string    `json:"mode"`
 	Acceptance     bool      `json:"acceptanceEligible"`
 	StartedUTC     time.Time `json:"startedUTC"`
@@ -181,7 +182,7 @@ func validDigest(v string) bool { b, err := hex.DecodeString(v); return err == n
 // CollectIdentity gathers everything the process can observe itself and checks
 // the parent-supplied facts. It never invents a missing fact.
 func CollectIdentity(root string, plan Plan, dry bool, supplied *Identity) (IdentityRecord, Closure) {
-	rec := IdentityRecord{Schema: "s0-callpath-identity/v1", StartedUTC: time.Now().UTC(), Supplied: supplied, GoVersion: runtime.Version(),
+	rec := IdentityRecord{Schema: "s0-callpath-identity/v1", Protocol: ProtocolAmendment, StartedUTC: time.Now().UTC(), Supplied: supplied, GoVersion: runtime.Version(),
 		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, GOMAXPROCS: runtime.GOMAXPROCS(0), NumCPU: runtime.NumCPU(), Race: raceEnabled, Plan: plan,
 		Mode: "full protocol; candidate evidence, never final-port evidence", Acceptance: !dry && plan.Frozen(), Build: map[string]string{}, Env: map[string]string{}}
 	if dry {
