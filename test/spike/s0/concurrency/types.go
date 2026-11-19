@@ -166,6 +166,7 @@ type Runtime interface {
 	Mount(context.Context, Spec) (uint64, error)
 	Update(context.Context, uint64) error
 	Dispose(context.Context, uint64) error
+	// Settle returns when no fiber is mid-transition except fibers blocked past one of their own deadlines. It returns nil when nothing is blocked, otherwise one joined diagnostic per blocked fiber naming the fiber and the stage. It never returns while an unblocked fiber is mid-transition. If ctx ends first it returns ctx's error joined with the diagnostics known so far.
 	Settle(context.Context) error
 	// Snapshots lists live fibers and the bounded archive of recently disposed ones.
 	Snapshots(context.Context) ([]Snapshot, error)
@@ -173,6 +174,7 @@ type Runtime interface {
 	// (Retention.RecordLimit); otherwise the bounded tail with ErrEventsTruncated
 	// once older events were dropped. See retention.go.
 	Events(context.Context) ([]Event, error)
+	// Close follows the same rule as Settle for its wait, and always releases what it can (the observer dispatcher included) once the runtime has drained, even when its own ctx ended first.
 	Close(context.Context) error
 }
 

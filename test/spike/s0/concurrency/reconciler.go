@@ -174,7 +174,8 @@ type reconcilerRuntime struct {
 	wake      chan struct{}
 	done      chan struct{}
 	notices   atomic.Pointer[rcNotice]
-	rootErr   error // Published before done closes; retained host-lifetime failure.
+	cancelled atomic.Pointer[rcWaiter] // Parked waiters whose context ended.
+	rootErr   error                    // Published before done closes; retained host-lifetime failure.
 	observers *nativeObservers
 	// History bounds (retention.go). The owner is the only writer; status
 	// readers use the atomic counters inside these values.
@@ -292,6 +293,8 @@ type rcFiber struct {
 	due             time.Time // A passed deadline whose callback finished in time: re-armed if more work follows under the same budget.
 	run             *rcRun    // Handshake of the load, scope or dispose callback in flight.
 	deadlineIndex   int
+	awaiters        int  // Parked AwaitFiber calls on this fiber.
+	dirty           bool // Queued in rcOwner.dirty.
 	cleanupCtx      context.Context
 	cleanupCancel   context.CancelFunc
 	effectRunning   bool
@@ -334,11 +337,16 @@ func (d *rcDeadlines) Pop() any {
 	return f
 }
 
+// rcWaiter is a parked Settle, Close or AwaitFiber. Its fields belong to the
+// owner, except next, which links the cancellation stack (see cancelWaiter).
 type rcWaiter struct {
 	ctx   context.Context
 	ack   chan rcReply
 	stop  func() bool
+	kind  rcCommand
 	fiber *rcFiber // AwaitFiber only: the waiter's own reference, so disposal never loses the error.
+	done  bool     // Replied or pruned.
+	next  *rcWaiter
 }
 
 type rcOwner struct {
@@ -354,11 +362,12 @@ type rcOwner struct {
 	blocked       map[uint64]error
 	nextFiber     uint64
 	nextUID       uint64
-	settlers      []rcWaiter
-	closers       []rcWaiter
+	settlers      []*rcWaiter
+	closers       []*rcWaiter
 	closing       bool
 	terminal      []error
-	awaiting      map[uint64][]rcWaiter
+	awaiting      map[uint64][]*rcWaiter
+	dirty         []*rcFiber // Awaited fibers whose state may have changed this turn.
 	workHead      int
 	working       bool
 	noticeDepth   int
@@ -394,7 +403,7 @@ func newRcOwner(r *reconcilerRuntime, retention Retention) *rcOwner {
 		r.observers = newNativeObserversWith(retention.ObserverBacklog)
 	}
 	return &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber),
-		failures: make(map[uint64]error), blocked: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter),
+		failures: make(map[uint64]error), blocked: make(map[uint64]error), awaiting: make(map[uint64][]*rcWaiter),
 		heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
 }
 
@@ -600,20 +609,28 @@ func (r *reconcilerRuntime) Close(ctx context.Context) error {
 		// The diagnostic is returned while the owner may still be alive. The
 		// owner replies before it closes done, so join that exit off this call
 		// path; otherwise nobody closes the observer queue.
-		r.lateClose.Do(func() {
-			go func() {
-				<-r.done
-				_ = r.observers.close(context.Background())
-			}()
-		})
+		r.releaseWhenDrained()
 		return err
 	}
 	select {
 	case <-r.done:
 		return errors.Join(r.rootErr, r.ledger.failure(), r.observers.close(ctx))
 	case <-ctx.Done():
+		r.releaseWhenDrained()
 		return ctx.Err()
 	}
+}
+
+// releaseWhenDrained closes the observer dispatcher once the owner has exited,
+// for a Close that returned (diagnostic or context error) before that. A Close
+// always releases what it can once the runtime has drained, whoever waits.
+func (r *reconcilerRuntime) releaseWhenDrained() {
+	r.lateClose.Do(func() {
+		go func() {
+			<-r.done
+			_ = r.observers.close(context.Background())
+		}()
+	})
 }
 
 // Admission states of one command, the only word shared by caller and owner.
@@ -678,6 +695,15 @@ func (r *reconcilerRuntime) abandon(msg rcMessage, cause error) rcReply {
 		}
 		return <-msg.ack // Claimed: the owner replies in the turn it claimed it.
 	}
+	if msg.kind == rcSettleCommand || msg.kind == rcCloseCommand {
+		// The owner answers a finished context with its error joined with the
+		// diagnostics known so far. It never blocks, so this wait is bounded.
+		select {
+		case reply := <-msg.ack:
+			return reply
+		case <-r.done:
+		}
+	}
 	select {
 	case reply := <-msg.ack:
 		return reply
@@ -722,6 +748,7 @@ func (o *rcOwner) run() {
 	defer timer.Stop()
 	for {
 		o.consumeNotices()
+		o.consumeCancelled()
 		o.expire(time.Now())
 		o.work()
 		o.flushServices()
@@ -766,7 +793,9 @@ func (o *rcOwner) run() {
 }
 
 func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
-	if m.ctx != nil && m.ctx.Err() != nil {
+	// Settle and Close answer a finished context themselves, with the diagnostics
+	// known so far, when their waiter is pruned.
+	if m.ctx != nil && m.ctx.Err() != nil && m.kind != rcSettleCommand && m.kind != rcCloseCommand {
 		return rcReply{err: m.ctx.Err()}, false
 	}
 	if o.closing && (m.kind == rcMountCommand || m.kind == rcMountChildCommand || m.kind == rcUpdateCommand || m.kind == rcConfigBindingCommand || m.kind == rcRootCommand || m.kind == rcBatchCommand) {
@@ -861,6 +890,8 @@ func (o *rcOwner) handle(m rcMessage) (rcReply, bool) {
 		}
 		w := o.waiter(m)
 		w.fiber = f
+		f.awaiters++
+		o.touch(f)
 		o.awaiting[m.id] = append(o.awaiting[m.id], w)
 		return rcReply{}, true
 	case rcRecordCommand:
@@ -1370,6 +1401,7 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 		p.dependents[c] = f
 	}
 	f.checking = q
+	o.touch(f)
 	o.busy++
 	if f.phase == rcIdle {
 		o.deadline(f, q.deadline)
@@ -1404,6 +1436,7 @@ func (o *rcOwner) checkedResult(m rcMessage) {
 		}
 	}
 	f.checking = nil
+	o.touch(f)
 	o.busy--
 	if f.phase == rcIdle {
 		o.deadline(f, time.Time{})
@@ -1513,6 +1546,7 @@ func (o *rcOwner) load(f *rcFiber, epoch []uint64, bindings map[string]*rcProvis
 	a := o.activation(f, epoch, bindings)
 	c, std := a.ctx, a.ctx.std
 	f.act, f.committed, f.invalid, f.phase = a, bindings, false, rcApplying
+	o.touch(f)
 	run := new(rcRun)
 	f.run = run
 	o.busy++
@@ -1626,6 +1660,7 @@ func (o *rcOwner) loaded(m rcMessage) {
 	o.block(f, nil)
 	if current && !m.stale && m.err == nil {
 		f.phase = rcIdle
+		o.touch(f)
 		o.busy--
 		f.publishActive = true
 		if !o.scopeWork(f) {
@@ -1640,6 +1675,7 @@ func (o *rcOwner) loaded(m rcMessage) {
 	}
 	o.quiesce(f)
 	f.phase = rcDraining
+	o.touch(f)
 	o.state(f, Unloading)
 	o.armDrain(f)
 	o.enqueue(f)
@@ -1659,6 +1695,7 @@ func (o *rcOwner) scopeWork(f *rcFiber) bool {
 			continue
 		}
 		f.phase, f.scopeRunning = rcScoping, e
+		o.touch(f)
 		run := new(rcRun)
 		f.run = run
 		o.busy++
@@ -1700,6 +1737,7 @@ func (o *rcOwner) scopeDone(m rcMessage) {
 	}
 	f.scopeRunning, f.run = nil, nil
 	f.phase = rcIdle
+	o.touch(f)
 	o.busy--
 	o.deadline(f, time.Time{})
 	o.block(f, nil)
@@ -1715,6 +1753,7 @@ func (o *rcOwner) scopeDone(m rcMessage) {
 	if f.invalid || f.remove || f.failure != nil {
 		f.publishActive = false
 		f.phase = rcDraining
+		o.touch(f)
 		o.busy++
 		o.state(f, Unloading)
 		o.armDrain(f)
@@ -1775,6 +1814,7 @@ func (o *rcOwner) quiesce(f *rcFiber) {
 	if f.phase == rcIdle {
 		o.busy++
 		f.phase = rcDraining
+		o.touch(f)
 		o.armDrain(f)
 	}
 	if f.phase != rcApplying {
@@ -1818,6 +1858,7 @@ func (o *rcOwner) drain(f *rcFiber) {
 		}
 	}
 	f.phase = rcDisposing
+	o.touch(f)
 	o.deadline(f, time.Now().Add(rcDisposeBudget))
 	f.cleanupCtx, f.cleanupCancel = context.WithDeadline(context.Background(), f.deadline)
 	o.disposeNext(f)
@@ -1929,6 +1970,7 @@ func (o *rcOwner) unloaded(f *rcFiber) {
 	f.releasing, f.releaseBindings = f.act.ctx, f.committed
 	f.committed, f.act, f.effects, f.provisions = nil, nil, nil, nil
 	f.phase = rcIdle
+	o.touch(f)
 	o.busy--
 	o.deadline(f, time.Time{})
 	o.block(f, nil)
@@ -1994,6 +2036,7 @@ func (o *rcOwner) terminalErrors() []error {
 }
 
 func (o *rcOwner) remove(f *rcFiber) {
+	o.touch(f)
 	diagnostic := o.snapshot(f).Error
 	if f.failure != nil {
 		o.addTerminal(&rcDiagnostic{text: f.failureText, cause: f.failure})
@@ -2259,14 +2302,34 @@ func (o *rcOwner) snapshot(f *rcFiber) Snapshot {
 			s.EffectTree = append(s.EffectTree, EffectMeta{Label: e.label, State: ScopeReady})
 		}
 	}
-	s.Error = rcJoinText(f.failureText, f.blockedText, f.checkText, f.awaitText, f.scopeText)
+	// A load deadline is both the activation failure and the blocked diagnostic:
+	// show that line once.
+	blockedText := f.blockedText
+	if blockedText == f.failureText {
+		blockedText = ""
+	}
+	s.Error = rcJoinText(f.failureText, blockedText, f.checkText, f.awaitText, f.scopeText)
 	return s
 }
 
 func (o *rcOwner) snapshots() []Snapshot {
 	ss := make([]Snapshot, 0, len(o.fibers)+int(o.r.archive.n.Load()))
+	var waiting map[uint64]string
+	if len(o.blocked) != 0 {
+		order, via := o.blockedClosure()
+		waiting = make(map[uint64]string, len(order))
+		for _, f := range order {
+			if g := via[f]; g != nil {
+				waiting[f.id] = rcWaitingText(f, g)
+			}
+		}
+	}
 	for _, id := range o.ids() {
-		ss = append(ss, o.snapshot(o.fibers[id]))
+		s := o.snapshot(o.fibers[id])
+		if text := waiting[id]; text != "" {
+			s.Error = rcJoinText(s.Error, text) // Names the blocked fiber it waits for.
+		}
+		ss = append(ss, s)
 	}
 	o.r.archive.each(func(_ uint64, record rcRetired) {
 		archived := record.snapshot
@@ -2318,75 +2381,191 @@ func (o *rcOwner) inspect() Inspection {
 	return inspection
 }
 
-func (o *rcOwner) waiter(m rcMessage) rcWaiter {
-	return rcWaiter{ctx: m.ctx, ack: m.ack, stop: context.AfterFunc(m.ctx, o.r.poke)}
+func (o *rcOwner) waiter(m rcMessage) *rcWaiter {
+	w := &rcWaiter{ctx: m.ctx, ack: m.ack, kind: m.kind}
+	w.stop = context.AfterFunc(m.ctx, func() { o.r.cancelWaiter(w) })
+	return w
 }
 
-func (o *rcOwner) finishWaiters() {
-	for id, waiters := range o.awaiting {
-		f := o.fibers[id]
-		if f == nil || (f.phase == rcIdle && f.checking == nil) || f.blocked != nil {
-			var err error
-			if f != nil {
-				err = errors.Join(f.awaitErr, f.blocked)
-			} else if len(waiters) != 0 {
-				err = waiters[0].fiber.awaitErr // The waiter's own reference: exact even after archive eviction.
-			}
-			o.replyAll(&waiters, err)
-			delete(o.awaiting, id)
-		} else {
-			o.pruneWaiters(&waiters)
-			if len(waiters) == 0 {
-				delete(o.awaiting, id)
-			} else {
-				o.awaiting[id] = waiters
-			}
+// cancelWaiter runs on the context's own goroutine: it hands the waiter to the
+// owner, which prunes exactly the waiters whose context ended instead of
+// re-checking every parked waiter on every turn.
+func (r *reconcilerRuntime) cancelWaiter(w *rcWaiter) {
+	for {
+		head := r.cancelled.Load()
+		w.next = head
+		if r.cancelled.CompareAndSwap(head, w) {
+			break
 		}
 	}
+	r.poke()
+}
+
+// touch records that f changed in a way a parked AwaitFiber must look at.
+func (o *rcOwner) touch(f *rcFiber) {
+	if f.awaiters != 0 && !f.dirty {
+		f.dirty = true
+		o.dirty = append(o.dirty, f)
+	}
+}
+
+// rcUnits is how many o.busy units f holds: one for a transition in flight and
+// one for an availability check in flight.
+func rcUnits(f *rcFiber) int {
+	n := 0
+	if f.phase != rcIdle {
+		n++
+	}
+	if f.checking != nil {
+		n++
+	}
+	return n
+}
+
+// consumeCancelled answers the parked waiters whose context ended. Settle and
+// Close get the context's error joined with the diagnostics known so far.
+func (o *rcOwner) consumeCancelled() {
+	n := o.r.cancelled.Swap(nil)
+	if n == nil {
+		return
+	}
+	var known []error
+	var haveKnown, settlers, closers bool
+	var awaited map[uint64]struct{}
+	for ; n != nil; n = n.next {
+		if n.done {
+			continue
+		}
+		n.done = true
+		err := n.ctx.Err()
+		if err == nil {
+			err = context.Canceled
+		}
+		switch n.kind {
+		case rcSettleCommand, rcCloseCommand:
+			if !haveKnown {
+				known, haveKnown = o.diagnostics(), true
+			}
+			n.ack <- rcReply{err: errors.Join(append([]error{err}, known...)...)}
+			settlers, closers = settlers || n.kind == rcSettleCommand, closers || n.kind == rcCloseCommand
+		default:
+			n.ack <- rcReply{err: err}
+			n.fiber.awaiters--
+			if awaited == nil {
+				awaited = make(map[uint64]struct{})
+			}
+			awaited[n.fiber.id] = struct{}{}
+		}
+	}
+	finished := func(w *rcWaiter) bool { return w.done }
+	if settlers {
+		o.settlers = slices.DeleteFunc(o.settlers, finished)
+	}
+	if closers {
+		o.closers = slices.DeleteFunc(o.closers, finished)
+	}
+	for id := range awaited {
+		if waiters := slices.DeleteFunc(o.awaiting[id], finished); len(waiters) != 0 {
+			o.awaiting[id] = waiters
+		} else {
+			delete(o.awaiting, id)
+		}
+	}
+}
+
+// diagnostics is everything Settle and Close report: failed activations, one
+// entry per blocked fiber, and the retained terminal diagnostics.
+func (o *rcOwner) diagnostics() []error {
+	var failures []error
+	for id, err := range o.failures {
+		if o.blocked[id] == err {
+			continue // A deadline is the failure and the blocked fiber's diagnostic: once.
+		}
+		failures = append(failures, &rcDiagnostic{text: fmt.Sprintf("fiber %d: %s", id, o.lookup(id).failureText), cause: err})
+	}
+	failures = append(failures, o.blockedDiagnostics()...)
+	// Sort diagnostics only: lifecycle events are never reordered.
+	sort.Slice(failures, func(i, j int) bool { return failures[i].Error() < failures[j].Error() })
+	return append(failures, o.terminalErrors()...)
+}
+
+// settleReady reports whether Settle may answer now, and whether a fiber is
+// blocked. It may answer when no fiber is mid-transition except fibers that are
+// blocked: past one of their own deadlines, or waiting on such a fiber (see
+// blockedClosure). o.busy counts the units of every mid-transition fiber, so the
+// two are compared as totals; with no blocked fiber this is O(1) per turn.
+func (o *rcOwner) settleReady() (ready, blocked bool) {
+	if o.busy == 0 {
+		return true, len(o.blocked) != 0
+	}
+	if len(o.blocked) == 0 {
+		return false, false
+	}
+	order, _ := o.blockedClosure()
+	units := 0
+	for _, f := range order {
+		units += rcUnits(f)
+	}
+	return units == o.busy, true
+}
+
+// finishWaiters answers the waiters whose condition may have changed this turn:
+// the AwaitFibers of touched fibers, and Settle/Close when every mid-transition
+// fiber is blocked or none is. A parked waiter costs nothing per turn.
+func (o *rcOwner) finishWaiters() {
+	for _, f := range o.dirty {
+		f.dirty = false
+		waiters := o.awaiting[f.id]
+		if len(waiters) == 0 {
+			continue
+		}
+		gone := o.fibers[f.id] != f
+		if gone || (f.phase == rcIdle && f.checking == nil) || f.blocked != nil {
+			var err error
+			if gone {
+				err = waiters[0].fiber.awaitErr // The waiter's own reference: exact even after archive eviction.
+			} else {
+				err = errors.Join(f.awaitErr, f.blocked)
+			}
+			o.replyAll(&waiters, err)
+			delete(o.awaiting, f.id)
+			f.awaiters = 0
+		}
+	}
+	clear(o.dirty)
+	o.dirty = o.dirty[:0]
 	if len(o.settlers) == 0 && len(o.closers) == 0 {
 		return
 	}
-	if o.busy == 0 || len(o.blocked) != 0 {
-		var failures []error
-		for id, err := range o.failures {
-			failures = append(failures, &rcDiagnostic{text: fmt.Sprintf("fiber %d: %s", id, o.lookup(id).failureText), cause: err})
-		}
-		failures = append(failures, o.blockedDiagnostics()...)
-		// Sort diagnostics only: lifecycle events are never reordered.
-		sort.Slice(failures, func(i, j int) bool { return failures[i].Error() < failures[j].Error() })
-		err := errors.Join(append(failures, o.terminalErrors()...)...)
-		o.replyAll(&o.settlers, err)
-		if len(o.blocked) != 0 {
-			o.replyAll(&o.closers, err)
-		}
-	} else {
-		o.pruneWaiters(&o.settlers)
-		o.pruneWaiters(&o.closers)
+	ready, blocked := o.settleReady()
+	if !ready {
+		return
+	}
+	err := errors.Join(o.diagnostics()...)
+	o.replyAll(&o.settlers, err)
+	if blocked {
+		o.replyAll(&o.closers, err)
 	}
 }
 
-func (o *rcOwner) replyAll(waiters *[]rcWaiter, err error) {
+func (o *rcOwner) replyAll(waiters *[]*rcWaiter, err error) {
 	for _, w := range *waiters {
+		if w.done {
+			continue
+		}
+		w.done = true
 		w.stop()
-		if w.ctx.Err() != nil {
-			w.ack <- rcReply{err: w.ctx.Err()}
-		} else {
+		switch {
+		case w.ctx.Err() == nil:
 			w.ack <- rcReply{err: err}
+		case w.kind == rcSettleCommand || w.kind == rcCloseCommand:
+			w.ack <- rcReply{err: errors.Join(w.ctx.Err(), err)}
+		default:
+			w.ack <- rcReply{err: w.ctx.Err()}
 		}
 	}
 	clear(*waiters)
 	*waiters = nil
-}
-
-func (o *rcOwner) pruneWaiters(waiters *[]rcWaiter) {
-	*waiters = slices.DeleteFunc(*waiters, func(w rcWaiter) bool {
-		if w.ctx.Err() == nil {
-			return false
-		}
-		w.stop()
-		w.ack <- rcReply{err: w.ctx.Err()}
-		return true
-	})
 }
 
 func (o *rcOwner) fail(f *rcFiber, err error, text ...string) {
@@ -2404,6 +2583,7 @@ func (o *rcOwner) fail(f *rcFiber, err error, text ...string) {
 
 func (o *rcOwner) block(f *rcFiber, err error) {
 	f.blocked = err
+	o.touch(f)
 	// Only owner-generated deadline errors enter block; their formatting invokes
 	// no plugin behavior. Callback diagnostics arrive with their cached text.
 	f.blockedText = ""
@@ -2514,6 +2694,11 @@ func (o *rcOwner) blockedClosure() ([]*rcFiber, map[*rcFiber]*rcFiber) {
 	return order, via
 }
 
+// rcWaitingText is what a fiber reports while it waits on a blocked fiber g.
+func rcWaitingText(f, g *rcFiber) string {
+	return fmt.Sprintf("fiber %d drain: waiting for fiber %d", f.id, g.id)
+}
+
 // blockedDiagnostics is one diagnostic per blocked fiber: its own deadline error,
 // or, for a fiber waiting on a blocked one, a diagnostic naming that fiber that
 // still unwraps to the awaited fiber's cause.
@@ -2525,7 +2710,7 @@ func (o *rcOwner) blockedDiagnostics() []error {
 		if g := via[f]; g == nil {
 			errs[f] = o.blocked[f.id]
 		} else {
-			errs[f] = &rcDiagnostic{text: fmt.Sprintf("fiber %d drain: waiting for fiber %d", f.id, g.id), cause: errs[g]}
+			errs[f] = &rcDiagnostic{text: rcWaitingText(f, g), cause: errs[g]}
 		}
 		out = append(out, errs[f])
 	}
@@ -2581,7 +2766,9 @@ func (o *rcOwner) expire(now time.Time) {
 		o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		if f.phase == rcApplying {
 			if !f.invalid && !f.remove {
-				f.awaitErr, f.awaitText = f.blocked, f.blockedText
+				// The text is already the failure text: the await copy would
+				// repeat it in the snapshot once the blocked text clears.
+				f.awaitErr, f.awaitText = f.blocked, ""
 				o.fail(f, f.blocked, f.blockedText)
 			}
 			o.quiesce(f)

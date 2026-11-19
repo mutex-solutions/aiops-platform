@@ -473,7 +473,12 @@ func TestHazardR4SettleReturnsWhileHealthyFiberLoads(t *testing.T) {
 			if obs.stateAtSettleEnd != Active {
 				t.Fatalf("scenario broken: %s", observed)
 			}
-			early := func(err error, state State) bool { return err != nil && state != Active }
+			// Early means before the caller's context ended: Settle answered with
+			// something that is not the context's own error. The context error
+			// joined with the diagnostics known so far is the contract.
+			early := func(err error, state State) bool {
+				return err != nil && !errors.Is(err, context.DeadlineExceeded) && state != Active
+			}
 			if c.name == "graph-lock" {
 				// The graph-lock never returns early: it blocks until the
 				// caller's context expires (the hung fiber keeps busy != 0).
