@@ -5,6 +5,7 @@ package kernel
 
 import (
 	"context"
+	"slices"
 	"sync"
 )
 
@@ -68,6 +69,12 @@ func (w *Waterfall[A, R]) On(c *Context, stage string, fn WaterfallListener[A, R
 // substitutes a successful value for a failed call. An empty chain returns the
 // zero R.
 func (w *Waterfall[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error) {
+	return w.run(ctx, aud, a, nil)
+}
+
+// run is Run with an optional innermost listener: the kernel's own behaviour, which
+// the next of the last listener reaches and which runs alone on an empty chain.
+func (w *Waterfall[A, R]) run(ctx context.Context, aud Audience, a A, inner *listener[WaterfallListener[A, R]]) (R, error) {
 	var zero R
 	if err := w.def.dispatchable(ctx, aud); err != nil {
 		return zero, err
@@ -75,6 +82,9 @@ func (w *Waterfall[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error)
 	list, err := w.table.pick(aud, nil)
 	if err != nil {
 		return zero, err
+	}
+	if inner != nil {
+		list = append(slices.Clip(list), inner)
 	}
 	return walk[A, R](ctx, list, a)
 }

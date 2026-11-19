@@ -419,8 +419,8 @@ func TestConsumerBoundKeysResolveOnlyForListedEntries(t *testing.T) {
 	var child *Fiber
 	listed := plug("listed", []Dep{Need(secret), Need(signed)}, nil, func(c *Context) error {
 		got = secret.Of(c) + signed.Of(c)
-		// An unlisted child inherits the entry of the plugin that mounted it.
-		child = c.Plugin(plug("child", []Dep{Need(secret)}, nil, func(cc *Context) error { inherited = secret.Of(cc); return nil }), nil)
+		// A child that was never defined inherits the entry of the plugin that mounted it.
+		child = c.Plugin(Plugin{ID: "child", Inject: []Dep{Need(secret)}, Apply: func(cc *Context, _ any) error { inherited = secret.Of(cc); return nil }}, nil)
 		return nil
 	})
 	stranger := plug("stranger", []Dep{Need(secret)}, nil, nil)

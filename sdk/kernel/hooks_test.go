@@ -538,7 +538,7 @@ func TestHookListenerLeavesWithItsFiber(t *testing.T) {
 		t.Fatalf("after disposal: %v, %d", err, calls.Load())
 	}
 	// An update reruns Apply: the listener is registered once, not twice.
-	if err := keep.Update(ctx); err != nil {
+	if err := keep.Update(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
 	want(t, keep, Active)

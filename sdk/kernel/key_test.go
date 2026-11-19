@@ -334,19 +334,13 @@ func TestBindingMapsAreCheckedAtConstruction(t *testing.T) {
 	if !errors.Is(err, ErrBinding) {
 		t.Fatalf("open key: %v", err)
 	}
-	if entryOf(Plugin{ID: "x"}) != nil {
-		t.Fatal("a Plugin with no Apply has an identity")
+	if _, err := compileBindings("provider", Bindings{NewKey[int]("pb", 0, ProviderBound()): {Plugin{ID: "x"}}}, func(*keyData) bool { return true }); !errors.Is(err, ErrBinding) {
+		t.Fatalf("an undefined entry: %v", err)
 	}
 	a := plug("a", nil, nil, nil)
 	b := a // A copy is the same entry.
-	if entryOf(a) != entryOf(b) || entryOf(a) == entryOf(plug("a", nil, nil, nil)) {
-		t.Fatal("entry identity is not the identity of the Plugin value")
-	}
-	set := bindingSet{open.k: {entryOf(a): {}}}
-	if !set.allows(open.k, entryOf(b)) || set.allows(open.k, nil) || set.allows(open.k, entryOf(plug("z", nil, nil, nil))) || set.allows(NewKey[int]("o", 0).k, entryOf(a)) {
+	set := bindingSet{open.k: {a.entry: {}}}
+	if !set.allows(open.k, b.entry) || set.allows(open.k, nil) || set.allows(open.k, plug("z", nil, nil, nil).entry) || set.allows(NewKey[int]("o", 0).k, a.entry) {
 		t.Fatal("allows is wrong")
-	}
-	if !set.listed(entryOf(a)) || set.listed(nil) {
-		t.Fatal("listed is wrong")
 	}
 }

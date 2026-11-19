@@ -332,8 +332,11 @@ func (r *Root) logHook(err error) {
 
 // The kernel's own hooks, all sealed (07-c4-plugin-sdk.md:463; plugin record
 // section 8: three events, then a waterfall, a waterfall and an event). The
-// contract gives no payload type, so none is invented. They are declared and
-// not dispatched: see the gaps in the report.
+// contract gives no payload type, so the payload is any. internal/config,
+// internal/update and internal/commit are dispatched by the config pipeline
+// (config.go). internal/plugin, internal/status and internal/service are declared
+// and not dispatched: neither the contract nor the plugin record describes their
+// payload.
 var (
 	hookPlugin  = newEvent[any](kernelPrefix+"plugin", true)
 	hookStatus  = newEvent[any](kernelPrefix+"status", true)

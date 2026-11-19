@@ -10,22 +10,21 @@ import (
 	"slices"
 	"testing"
 	"time"
-	"unsafe"
 )
 
-// Plugin is one entry of the module table: plain data plus a function
-// (07-c4-plugin-sdk.md:192, :236). Its entry identity is the identity of Apply, so
-// a Plugin needs an Apply to be listed in a binding map.
-//
-// Gap: the contract also lists Decode (07-c4-plugin-sdk.md:192). Its type belongs
-// to the config implementation, which is not in this package, so it is not
-// declared yet.
+// Plugin is one entry of the module table: plain data plus two functions
+// (07-c4-plugin-sdk.md:192, :236). Its entry is the token that Define stamps into
+// it (ADR-034 owner decision 7), so a Plugin that was never defined has no entry
+// of its own.
 type Plugin struct {
 	ID       string                          // "<owner>/<name>", the fiber's name in diagnostics.
 	Inject   []Dep                           // Data; the Needs gate activation and join the epoch.
 	Provides []AnyKey                        // Provide of a key not listed here fails.
 	Hooks    []HookUse                       // Every hook Apply may listen on, with its stage; an undeclared On fails.
+	Decode   func(raw any) (any, error)      // Optional (07-c4-plugin-sdk.md:192; ADR-034 owner decision 9): turns the raw config into what Apply receives. It must be pure: it also runs on an update of an active fiber before the restart.
 	Apply    func(c *Context, cfg any) error // Everything it registers is an effect.
+
+	entry entryID // Minted by Define; nil for a Plugin with no entry of its own.
 }
 
 // Config is every number the kernel needs, plus the two binding maps. The kernel
@@ -65,6 +64,7 @@ type Root struct {
 	unbound   bool
 	host      entryID
 	ctx       *Context
+	aud       Audience // Reaches the listeners of this kernel only: see config.go.
 }
 
 // New constructs a kernel with the two binding maps of cfg (07-c4-plugin-sdk.md:1358).
@@ -113,8 +113,9 @@ func newRoot(ctx context.Context, cfg coreConfig, providers, consumers bindingSe
 		return nil, err
 	}
 	r := &Root{core: c, providers: providers, consumers: consumers, unbound: unbound}
-	r.host = unsafe.Pointer(r)
+	r.host = new(entryToken)
 	r.ctx = &Context{root: r, h: h, entry: r.host, frame: &frame{id: "root", host: true}}
+	r.aud = Audience{match: func(l *Context) bool { return l.root == r }}
 	return r, nil
 }
 
@@ -148,7 +149,8 @@ type BatchOp struct {
 // fiber.
 func MountOp(p Plugin, cfg any) BatchOp { return BatchOp{kind: batchMount, plugin: p, cfg: cfg} }
 
-// UpdateOp is the operation that restarts f, like Fiber.Update.
+// UpdateOp is the operation that restarts f with the config it retains. The
+// contract gives it no shape; it runs no config hook and decodes at activation.
 func UpdateOp(f *Fiber) BatchOp { return BatchOp{kind: batchUpdate, fiber: f} }
 
 // DisposeOp is the operation that disposes f, like Fiber.Dispose.
@@ -163,10 +165,11 @@ var errForeignFiber = errors.New("fiber belongs to another kernel")
 // the core's batch directly.
 func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	native := make([]batchOp, len(ops))
+	cells := make([]*cfgCell, len(ops))
 	for i, op := range ops {
 		native[i].Kind = op.kind
 		if op.kind == batchMount {
-			native[i].Spec = r.ctx.mountSpec(op.plugin, op.cfg)
+			native[i].Spec, cells[i] = r.ctx.mountSpec(op.plugin, op.cfg)
 			continue
 		}
 		if op.fiber == nil {
@@ -184,7 +187,7 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	out := make([]*Fiber, len(ops))
 	for i, op := range ops {
 		if op.kind == batchMount {
-			out[i] = &Fiber{ref: r.core.fiber(ids[i])}
+			out[i] = &Fiber{ref: r.core.fiber(ids[i]), cell: cells[i]}
 		} else {
 			out[i] = op.fiber
 		}
@@ -195,7 +198,10 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 // Fiber is the running instance of a plugin: six states and an epoch
 // (07-c4-plugin-sdk.md:205, :239). It holds no state of its own and stays usable
 // after the fiber is disposed, for as long as the kernel keeps its record.
-type Fiber struct{ ref fiberRef }
+type Fiber struct {
+	ref  fiberRef
+	cell *cfgCell // The fiber's config; nil for a fiber that takes none (When).
+}
 
 // State returns the fiber's current state.
 func (f *Fiber) State(ctx context.Context) (State, error) { return f.ref.state(ctx) }
@@ -203,10 +209,6 @@ func (f *Fiber) State(ctx context.Context) (State, error) { return f.ref.state(c
 // Await returns when the fiber is not mid-transition, with its retained startup
 // error. It must not be called from inside the fiber's own callbacks.
 func (f *Fiber) Await(ctx context.Context) error { return f.ref.await(ctx) }
-
-// Update requests a restart of the fiber and returns once the request is admitted;
-// use Await for the restart.
-func (f *Fiber) Update(ctx context.Context) error { return f.ref.update(ctx) }
 
 // Dispose requests disposal of the fiber. It is idempotent and does not wait for
 // the cleanup; use Await for that.
@@ -219,41 +221,47 @@ func (f *Fiber) Effects(ctx context.Context) ([]string, error) {
 	return s.Effects, err
 }
 
-// mountEntry returns the entry a child mounted from c with p gets: p's own
-// identity when a binding map lists it, otherwise c's entry, so that a child that
-// names itself with a bound id gains nothing (07-c4-plugin-sdk.md:253, :563).
-func (c *Context) mountEntry(p Plugin) entryID {
-	if id := entryOf(p); id != nil && (c.root.providers.listed(id) || c.root.consumers.listed(id)) {
-		return id
-	}
-	return c.entry
-}
-
 // Plugin mounts p as a child fiber of c's fiber, an effect of c, and returns it
-// (07-c4-plugin-sdk.md:197, :367). The child inherits c's entry unless a binding
-// map lists p. A child whose declarations are refused, such as a Need on a key its
+// (07-c4-plugin-sdk.md:197, :367). The child gets the entry of p when p was defined
+// and inherits c's entry when it was not (07-c4-plugin-sdk.md:253, :563; ADR-034
+// owner decision 7), so a child that copies the ID of a bound plugin gains nothing. A child whose declarations are refused, such as a Need on a key its
 // entry may not resolve, is mounted failed and says why. A mount on an inactive c
 // panics and fails c's fiber, with ErrInactiveEffect.
 func (c *Context) Plugin(p Plugin, cfg any) *Fiber {
-	return c.spawn(c.mountSpec(p, cfg))
+	spec, cell := c.mountSpec(p, cfg)
+	return c.spawn(spec, cell)
 }
 
 // When mounts a child fiber that runs body once every Need of deps has an active
 // provider, the only optional form (07-c4-plugin-sdk.md:198, :470). The contract
 // gives it no id; the fiber is named after c's fiber.
 func (c *Context) When(deps []Dep, body func(*Context) error) *Fiber {
-	return c.spawn(c.compile(c.frame.id+"/when", c.entry, deps, nil, body, c.frame.hooks...))
+	return c.spawn(c.compile(c.frame.id+"/when", c.entry, deps, nil, body, c.frame.hooks...), nil)
 }
 
-func (c *Context) mountSpec(p Plugin, cfg any) pluginSpec {
+// mountSpec returns the spec that mounts p with the config cfg and the cell that
+// keeps the config for later updates. Apply gets what the config pipeline makes of
+// the cell's raw value at each activation (config.go).
+func (c *Context) mountSpec(p Plugin, cfg any) (pluginSpec, *cfgCell) {
+	cell := &cfgCell{root: c.root, raw: cfg, decode: p.Decode}
 	var apply func(*Context) error
 	if p.Apply != nil {
-		apply = func(cc *Context) error { return p.Apply(cc, cfg) }
+		apply = func(cc *Context) error {
+			v, err := cell.prepare(cc.Std())
+			if err != nil {
+				return err
+			}
+			return p.Apply(cc, v)
+		}
 	}
-	return c.compile(p.ID, c.mountEntry(p), p.Inject, p.Provides, apply, p.Hooks...)
+	entry := p.entry
+	if entry == nil {
+		entry = c.entry
+	}
+	return c.compile(p.ID, entry, p.Inject, p.Provides, apply, p.Hooks...), cell
 }
 
-func (c *Context) spawn(spec pluginSpec) *Fiber {
+func (c *Context) spawn(spec pluginSpec, cell *cfgCell) *Fiber {
 	id, err := c.h.mountChild(spec)
 	if err != nil {
 		if errors.Is(err, ErrInactive) {
@@ -261,7 +269,7 @@ func (c *Context) spawn(spec pluginSpec) *Fiber {
 		}
 		refuse(err)
 	}
-	return &Fiber{ref: c.root.core.fiber(id)}
+	return &Fiber{ref: c.root.core.fiber(id), cell: cell}
 }
 
 // compile turns declarations into the spec the core mounts. A refused declaration

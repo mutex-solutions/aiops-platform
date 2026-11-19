@@ -7,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 // ErrInactive reports a call on a context, fiber or lease that no longer accepts
@@ -204,7 +204,7 @@ type leaseShard struct {
 }
 
 // leaseCount is a striped open-lease counter. A leave may land on a different
-// shard than its enter (the shard follows the calling goroutine's stack), so an
+// shard than its enter (each pick is random), so an
 // individual shard can be negative; only the sum is meaningful. The leading and
 // trailing pads keep neighbouring handle fields off the first and last shard's
 // line.
@@ -214,14 +214,11 @@ type leaseCount struct {
 	_      [64]byte
 }
 
-// shard picks a shard from the address of a local, which is distinct per
-// goroutine stack. It needs no goroutine id, allocation, lock or syscall; the
-// address is only hashed, never dereferenced. Any shard is correct, the choice
-// only spreads contention.
+// shard picks a shard at random. The generator keeps its state per thread, so the
+// pick takes no lock, allocates nothing and shares no cache line. Any shard is
+// correct, the choice only spreads contention.
 func (l *leaseCount) shard() *atomic.Int64 {
-	var anchor byte
-	h := uint64(uintptr(unsafe.Pointer(&anchor))>>10) * 0x9E3779B97F4A7C15
-	return &l.shards[h>>(64-leaseShardBits)].n
+	return &l.shards[rand.Uint32N(leaseShards)].n
 }
 
 // Load sums the shards. It reads each shard once, in order, while enter/leave

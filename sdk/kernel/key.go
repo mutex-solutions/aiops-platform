@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"unsafe"
 )
 
 // The reasons a key operation is refused. A *InjectError wraps exactly one of
@@ -204,8 +203,8 @@ type ProvideOption func(*provided)
 
 // Available makes the provision available only to the consumers for which fn
 // returns true. It is evaluated off the owner, for each consumer, whenever the
-// consumer's availability is checked (07-c4-plugin-sdk.md:181, :349). The
-// contract's second argument, hold, is not defined and is not implemented.
+// consumer's availability is checked (07-c4-plugin-sdk.md:181, :349; ADR-034
+// owner decision 8: it takes this one argument).
 func Available(fn func(caller *Context) bool) ProvideOption {
 	return func(p *provided) { p.available = fn }
 }
@@ -366,17 +365,25 @@ func Intercepts[C any](caller *Context, k AnyKey) []C {
 	return out
 }
 
-// entryID identifies one registered Plugin value, "never the id a plugin declares
-// about itself" (07-c4-plugin-sdk.md:563). It is the identity of the Plugin's
-// Apply function value: a copy of a Plugin keeps it, a new Plugin has a new one.
-// A Plugin with no Apply has no identity (nil).
-type entryID = unsafe.Pointer
+// entryToken is the identity of one entry, minted by Define (ADR-034 owner
+// decision 7). It is never zero-size, so two tokens are never equal.
+type entryToken struct{ _ byte }
 
-func entryOf(p Plugin) entryID {
-	if p.Apply == nil {
-		return nil
-	}
-	return *(*unsafe.Pointer)(unsafe.Pointer(&p.Apply))
+// entryID identifies one registered Plugin value, "never the id a plugin declares
+// about itself" (07-c4-plugin-sdk.md:563). nil is no entry of one's own.
+type entryID = *entryToken
+
+// Define returns a copy of p stamped with a fresh entry token: the Plugin value the
+// module table holds (ADR-034 owner decision 7; 07-c4-plugin-sdk.md:236, :563). A
+// binding map names the entry by this token, so a copy of the result is the same
+// entry and a hand-built Plugin, even one with the same ID or the same Apply, is
+// not. Defining a value that is already defined mints a new token: the result is a
+// new entry and the old one keeps its own. A Plugin that was never defined has no
+// entry of its own: mounted with Context.Plugin it inherits the entry of the
+// mounting context, and listed in a binding map it is refused by New.
+func Define(p Plugin) Plugin {
+	p.entry = new(entryToken)
+	return p
 }
 
 // Bindings lists, per key, the Plugin values the module table allows
@@ -409,9 +416,9 @@ func compileBindings(side string, b Bindings, bound func(*keyData) bool) (bindin
 		}
 		ids := make(map[entryID]struct{}, len(entries))
 		for _, p := range entries {
-			id := entryOf(p)
+			id := p.entry
 			if id == nil {
-				errs = append(errs, fmt.Errorf("%s binding for %s@%d lists plugin %q with no Apply: %w", side, d.name, d.major, p.ID, ErrBinding))
+				errs = append(errs, fmt.Errorf("%s binding for %s@%d lists plugin %q that was never defined: %w", side, d.name, d.major, p.ID, ErrBinding))
 				continue
 			}
 			ids[id] = struct{}{}
@@ -424,13 +431,4 @@ func compileBindings(side string, b Bindings, bound func(*keyData) bool) (bindin
 func (s bindingSet) allows(k *keyData, e entryID) bool {
 	_, ok := s[k][e]
 	return e != nil && ok
-}
-
-func (s bindingSet) listed(e entryID) bool {
-	for _, ids := range s {
-		if _, ok := ids[e]; ok {
-			return true
-		}
-	}
-	return false
 }

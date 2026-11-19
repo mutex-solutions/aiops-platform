@@ -53,12 +53,12 @@ func newBound(t *testing.T, providers, consumers Bindings) *Root {
 
 // plug builds a Plugin whose Apply runs apply; each call has its own identity.
 func plug(id string, inject []Dep, provides []AnyKey, apply func(*Context) error) Plugin {
-	return Plugin{ID: id, Inject: inject, Provides: provides, Apply: func(c *Context, _ any) error {
+	return Define(Plugin{ID: id, Inject: inject, Provides: provides, Apply: func(c *Context, _ any) error {
 		if apply == nil {
 			return nil
 		}
 		return apply(c)
-	}}
+	}})
 }
 
 // await waits for f and returns its state and startup error.
@@ -177,7 +177,7 @@ func TestNewRejectsBadConfigAndBindings(t *testing.T) {
 		"open key as provider":       {p: Bindings{open: {applied}}},
 		"open key as consumer":       {c: Bindings{open: {applied}}},
 		"consumer-bound as provider": {p: Bindings{consumed: {applied}}},
-		"entry without Apply":        {p: Bindings{bound: {noApply}}},
+		"entry never defined":        {p: Bindings{bound: {noApply}}},
 		"nil key":                    {p: Bindings{nil: {applied}}},
 		"zero key":                   {c: Bindings{Key[int]{}: {applied}}},
 		"key twice":                  {p: Bindings{bound: {applied}, bound.k: {applied}}},
@@ -284,7 +284,7 @@ func TestFiberUpdateRestartsAndAwaitReportsTheStartupError(t *testing.T) {
 	if err := failure(t, f); err.Error() == "" {
 		t.Fatal("empty error")
 	}
-	if err := f.Update(ctx); err != nil {
+	if err := f.Update(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
 	want(t, f, Active)
@@ -298,7 +298,7 @@ func TestFiberUpdateRestartsAndAwaitReportsTheStartupError(t *testing.T) {
 		t.Fatalf("second dispose: %v", err)
 	}
 	want(t, f, Disposed)
-	if err := f.Update(ctx); err == nil {
+	if err := f.Update(ctx, nil); err == nil {
 		t.Fatal("update of a disposed fiber succeeded")
 	}
 }
