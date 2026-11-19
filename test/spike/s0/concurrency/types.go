@@ -210,6 +210,7 @@ type forward struct {
 	leave func()
 	read  func(string) (any, error)
 	owns  func(string) bool
+	track func(string, func(context.Context) error) error // Optional: starts tracked work.
 }
 
 type ownedProvisions struct{ keys map[string]struct{} }

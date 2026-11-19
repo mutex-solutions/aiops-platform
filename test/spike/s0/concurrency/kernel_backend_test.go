@@ -426,8 +426,6 @@ func TestKernelGapsFailLoudly(t *testing.T) {
 	fiberCtx := <-owned
 	gaps := map[string]error{}
 	_, gaps["Check without a need"] = r.Mount(ctx, Spec{ID: "check", Check: func(*Context) bool { return true }})
-	_, gaps["UpdateAsync"] = r.Mount(ctx, Spec{ID: "async", Config: NewConfiguration(1, ConfigHooks{
-		UpdateAsync: func(context.Context, any, func() error) (func(context.Context) error, error) { return nil, nil }})})
 	_, gaps["fiber-bound observer"] = r.(ObserverRuntime).ObserveEvents(fiberCtx, "o", func(context.Context, Event) error { return nil })
 	_, gaps["fiber-bound observer with overflow"] = r.(OverflowObserverRuntime).ObserveEventsWith(fiberCtx, "o", func(context.Context, Event) error { return nil }, nil)
 	for name, err := range gaps {
@@ -834,5 +832,80 @@ func TestKernelEffectScope(t *testing.T) {
 	defer mu.Unlock()
 	if want := []string{"c", "b", "a"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("cleanup order %v, want %v", order, want)
+	}
+}
+
+// A disposer returned by a load that requested its own disposal must still run:
+// the approximation runs it at once, which is earlier than the prototypes run it.
+func TestKernelApplyEffectOfASelfDisposingLoadStillRunsItsDisposer(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	ran := make(chan struct{}, 1)
+	id := kernelMount(t, ctx, r, Spec{ID: "self", ApplyEffect: func(c *Context) (Disposer, error) {
+		if err := c.Dispose(); err != nil {
+			return nil, err
+		}
+		return func(context.Context) error { ran <- struct{}{}; return nil }, nil
+	}})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ran:
+	default:
+		t.Fatal("the returned disposer of a self-disposing load never ran")
+	}
+	if snapshots, _ := r.Snapshots(ctx); len(snapshots) != 1 || snapshots[0].State != Disposed || snapshots[0].Error != "" {
+		t.Fatalf("snapshots %+v", snapshots)
+	}
+}
+
+// An asynchronous update hook returns after its synchronous prefix and completes
+// later, calling next then: the request returns at the prefix, and Await at the end.
+func TestKernelUpdateAsyncHookCompletesAfterTheRequestReturns(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	release, finished := make(chan struct{}), make(chan error, 1)
+	var hookResult error
+	seen := make(chan any, 4)
+	cell := NewConfiguration("a", ConfigHooks{UpdateAsync: func(_ context.Context, _ any, next func() error) (func(context.Context) error, error) {
+		go func() {
+			<-release
+			hookResult = next()
+			finished <- hookResult
+		}()
+		return func(w context.Context) error {
+			select {
+			case err := <-finished:
+				finished <- err
+				return err
+			case <-w.Done():
+				return w.Err()
+			}
+		}, nil
+	}})
+	id := kernelMount(t, ctx, r, Spec{ID: "async", Config: cell, Apply: func(c *Context) error { seen <- c.Config(); return nil }})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil || <-seen != "a" {
+		t.Fatalf("first activation: %v", err)
+	}
+	request, err := r.(ConfigRequester).RequestUpdateConfig(ctx, id, "b", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case v := <-seen:
+		t.Fatalf("the update restarted the fiber before its hook continued: %v", v)
+	default:
+	}
+	close(release)
+	if err := request.Await(ctx); err != nil || <-seen != "b" {
+		t.Fatalf("await = %v", err)
+	}
+	if err := request.Await(ctx); err != nil {
+		t.Fatalf("a second Await = %v", err)
+	}
+	if hookResult != nil {
+		t.Fatalf("next = %v", hookResult)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,29 +63,41 @@ var ErrKernelUnsupported = errors.New("capability not exported by the public sdk
 
 func kernelGap(what string) error { return fmt.Errorf("%w: %s", ErrKernelUnsupported, what) }
 
+// kernelSentinels pairs each spike sentinel with the kernel's.
+var kernelSentinels = []struct{ spike, native error }{
+	{ErrInactive, kernel.ErrInactive}, {ErrInactiveEffect, kernel.ErrInactiveEffect},
+	{ErrClosed, kernel.ErrClosed}, {ErrUnknown, kernel.ErrUnknown}, {ErrExpired, kernel.ErrExpired},
+	{ErrRootDispose, kernel.ErrRootDispose}, {ErrEventsTruncated, kernel.ErrEventsTruncated},
+	{ErrObserverOverflow, kernel.ErrObserverOverflow}, {eventqueue.ErrReentrant, kernel.ErrReentrant},
+	{ErrScopeSealed, kernel.ErrScopeSealed}, {ErrScopeStarted, kernel.ErrScopeStarted},
+	{ErrAlreadyContinued, kernel.ErrNext},
+}
+
 // kernelError keeps the kernel's text and identity and also matches the spike
 // sentinels, and extracts the spike error types, that the harnesses classify by.
+// It is deliberately a leaf for errors.Unwrap and reaches the kernel's chain through
+// Is and As: the replay interpreter explains a diagnostic by comparing the leaves
+// of its chain with the failures it recorded, which are the very values that the
+// adapter returned, so these must be leaves (a group is kept as a group below).
 type kernelError struct{ err error }
 
 func (e *kernelError) Error() string { return e.err.Error() }
-func (e *kernelError) Unwrap() error { return e.err }
 func (e *kernelError) Is(target error) bool {
-	for spike, native := range map[error]error{
-		ErrInactive: kernel.ErrInactive, ErrInactiveEffect: kernel.ErrInactiveEffect,
-		ErrClosed: kernel.ErrClosed, ErrUnknown: kernel.ErrUnknown, ErrExpired: kernel.ErrExpired,
-		ErrRootDispose: kernel.ErrRootDispose, ErrEventsTruncated: kernel.ErrEventsTruncated,
-		ErrObserverOverflow: kernel.ErrObserverOverflow, eventqueue.ErrReentrant: kernel.ErrReentrant,
-		ErrScopeSealed: kernel.ErrScopeSealed, ErrScopeStarted: kernel.ErrScopeStarted,
-		ErrAlreadyContinued: kernel.ErrNext,
-	} {
-		if target == spike {
-			return errors.Is(e.err, native)
+	if errors.Is(e.err, target) {
+		return true
+	}
+	for _, pair := range kernelSentinels {
+		if target == pair.spike {
+			return errors.Is(e.err, pair.native)
 		}
 	}
 	return false
 }
 
 func (e *kernelError) As(target any) bool {
+	if errors.As(e.err, target) {
+		return true
+	}
 	switch t := target.(type) {
 	case **ScopePanicError:
 		var native *kernel.ScopePanicError
@@ -102,17 +115,112 @@ func (e *kernelError) As(target any) bool {
 	return false
 }
 
+// kernelGroup keeps the structure of a joined error, whose parts are mapped one by one.
+type kernelGroup struct {
+	err   error
+	parts []error
+}
+
+func (e *kernelGroup) Error() string   { return e.err.Error() }
+func (e *kernelGroup) Unwrap() []error { return e.parts }
+
+// fromKernel is the error a spike caller sees for err. An error that the adapter
+// already produced, and a plain leaf that carries no kernel identity (a value that
+// the harness itself returned from Apply, say), keep their own identity, which the
+// replay compares. A joined error keeps its parts. Any other error becomes a leaf
+// that matches both the kernel's and the spike's sentinels.
 func fromKernel(err error) error {
-	if err == nil {
+	switch err.(type) {
+	case nil:
 		return nil
+	case *kernelError, *kernelGroup:
+		return err
+	}
+	if inactive := spikeInactive(err); inactive != nil {
+		return inactive
+	}
+	if group, ok := err.(interface{ Unwrap() []error }); ok {
+		parts := group.Unwrap()
+		mapped := make([]error, len(parts))
+		for i, part := range parts {
+			mapped[i] = fromKernel(part)
+		}
+		return &kernelGroup{err: err, parts: mapped}
+	}
+	if !kernelOrigin(err) && !kernelIdentity(err) {
+		return err
 	}
 	return &kernelError{err}
+}
+
+// kernelOrigin reports whether err is a value of a type of the kernel package.
+func kernelOrigin(err error) bool {
+	t := reflect.TypeOf(err)
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.PkgPath() == reflect.TypeFor[kernel.Root]().PkgPath()
+}
+
+// spikeInactive maps a refusal that consists of nothing but the kernel's inactive
+// sentinels to the same refusal made of the spike's, by identity: the replay
+// recognizes a late registration by those exact values. Nil for any other error.
+func spikeInactive(err error) error {
+	var effect, inactive bool
+	var visit func(error) bool
+	visit = func(e error) bool {
+		switch e {
+		case kernel.ErrInactiveEffect:
+			effect = true
+		case kernel.ErrInactive:
+			inactive = true
+		default:
+			group, ok := e.(interface{ Unwrap() []error })
+			if !ok {
+				return false
+			}
+			for _, part := range group.Unwrap() {
+				if !visit(part) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	switch {
+	case !visit(err):
+		return nil
+	case effect && inactive:
+		return errors.Join(ErrInactiveEffect, ErrInactive)
+	case effect:
+		return ErrInactiveEffect
+	case inactive:
+		return ErrInactive
+	}
+	return nil
+}
+
+// kernelIdentity reports whether err is one of the kernel's own sentinels or types.
+func kernelIdentity(err error) bool {
+	for _, pair := range kernelSentinels {
+		if errors.Is(err, pair.native) {
+			return true
+		}
+	}
+	var panicErr *kernel.ScopePanicError
+	var overflow *kernel.ObserverOverflow
+	return errors.As(err, &panicErr) || errors.As(err, &overflow)
 }
 
 // fromPanic turns a refused registration (the kernel panics with an error value
 // that fails the fiber) into the error the spike Context returns.
 func fromPanic(p any) error {
 	if err, ok := p.(error); ok {
+		// The kernel's refusal wrapper is unexported and repeats the text of its
+		// cause: the error the spike sees is that cause.
+		if cause := errors.Unwrap(err); cause != nil && cause.Error() == err.Error() {
+			err = cause
+		}
 		return fromKernel(err)
 	}
 	return fmt.Errorf("kernel refused the call: %v", p)
@@ -183,16 +291,17 @@ type kernelFiber struct {
 }
 
 type kernelRuntime struct {
-	root   *kernel.Root
-	cfg    kernel.Config
-	base   kernelBase
-	window int // The reported event window: the kernel's, less the prefix.
-	host   atomic.Pointer[Context]
-	hostMu sync.Mutex
-	closed atomic.Bool
-	keys   sync.Map // string -> kernel.Key[any], one per name for this instance.
-	mu     sync.RWMutex
-	fibers map[uint64]kernelFiber
+	root     *kernel.Root
+	cfg      kernel.Config
+	base     kernelBase
+	window   int // The reported event window: the kernel's, less the prefix.
+	host     atomic.Pointer[Context]
+	hostMu   sync.Mutex
+	closed   atomic.Bool
+	rootDone atomic.Bool // Close has returned.
+	keys     sync.Map    // string -> kernel.Key[any], one per name for this instance.
+	mu       sync.RWMutex
+	fibers   map[uint64]kernelFiber
 
 	recMu   sync.Mutex
 	records map[uint64]map[string]any // Record payloads by the kernel sequence of their marker.
@@ -337,12 +446,23 @@ type kernelCfg struct {
 
 	mu        sync.Mutex
 	commitErr error
+	prefix    chan struct{} // Closed when the update hook has been entered: the end of the synchronous prefix.
+	once      sync.Once
+	version   uint64 // The cell's version and publication generation right after this request retained its raw config.
+	published uint64
+}
+
+func (c *kernelCfg) prefixDone() {
+	if c.prefix != nil {
+		c.once.Do(func() { close(c.prefix) })
+	}
 }
 
 // kernelResolved is what Plugin.Decode returns and the update waterfall carries.
 type kernelResolved struct {
 	cell  *Configuration
 	value any
+	req   *kernelCfg // The request that produced it, nil on an activation.
 }
 
 func kernelDecode(v any) (any, error) {
@@ -350,7 +470,7 @@ func kernelDecode(v any) (any, error) {
 	case *kernelResolved:
 		return x, nil
 	case *kernelCfg:
-		return &kernelResolved{cell: x.cell, value: x.raw}, nil
+		return &kernelResolved{cell: x.cell, value: x.raw, req: x}, nil
 	}
 	return nil, fmt.Errorf("kernel backend: unexpected raw configuration %T", v)
 }
@@ -371,7 +491,7 @@ func kernelResolveHook(ctx context.Context, a any, next kernel.Next[any]) (any, 
 	if err != nil {
 		return nil, err
 	}
-	return &kernelResolved{cell: c.cell, value: value}, nil
+	return &kernelResolved{cell: c.cell, value: value, req: c}, nil
 }
 
 func kernelCommitHook(ctx context.Context, a any) (any, error) {
@@ -385,28 +505,70 @@ func kernelCommitHook(ctx context.Context, a any) (any, error) {
 	}
 	// The kernel retains the raw config right after this event: mirror it in the
 	// cell, which is what Snapshots reports.
-	c.cell.RetainRaw(c.raw)
+	version, publication := c.cell.retain(c.raw)
 	c.mu.Lock()
-	c.commitErr = err
+	c.commitErr, c.version, c.published = err, version, publication
 	c.mu.Unlock()
 	return nil, err
 }
 
 func kernelUpdateHook(ctx context.Context, a any, next kernel.Next[any]) (any, error) {
 	res, ok := a.(*kernelResolved)
-	if !ok || res.cell.hooks.Update == nil {
+	if !ok || (res.cell.hooks.Update == nil && res.cell.hooks.UpdateAsync == nil) {
 		return next()
 	}
 	var continued atomic.Bool
-	err := res.cell.hooks.Update(ctx, res.value, func() error {
+	nextOnce := func() error {
 		continued.Store(true)
 		_, err := next()
 		return fromKernel(err)
-	})
+	}
+	var err error
+	if hook := res.cell.hooks.UpdateAsync; hook != nil {
+		// The spike's hook returns after its synchronous prefix and completes later,
+		// possibly calling next then. The kernel's listener may call next until it
+		// returns, so it waits here for the completion; Fiber.Update is then run on a
+		// goroutine of the adapter (RequestUpdateConfig), which returns at this point.
+		var wait func(context.Context) error
+		wait, err = hook(ctx, res.value, nextOnce)
+		res.req.prefixDone()
+		if err == nil {
+			err = wait(ctx)
+		}
+	} else {
+		err = res.cell.hooks.Update(ctx, res.value, nextOnce)
+	}
 	if err == nil && !continued.Load() {
-		res.cell.publish(res.value) // A veto publishes the candidate, as the spike's cell does.
+		// A veto publishes the candidate, as the spike's cell does, unless a later
+		// raw retention or publication made this request stale.
+		res.req.mu.Lock()
+		version, publication := res.req.version, res.req.published
+		res.req.mu.Unlock()
+		res.cell.publishIf(version, publication, res.value)
 	}
 	return nil, err
+}
+
+// ownListener removes the kernel's naming of the adapter's own listener, which is
+// registered on the root (ADR-034 owner decision 12: a waterfall fails with an
+// error that names its listener). The hook is the spike's, and its error is what
+// the spike's cell returns.
+func ownListener(err error) error {
+	var named *kernel.ListenerError
+	if errors.As(err, &named) && named.PluginID == "root" {
+		return named.Cause
+	}
+	return err
+}
+
+// publishIf is publish if no raw retention and no publication came after the request.
+func (c *Configuration) publishIf(version, publication uint64, value any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.version == version && c.publication == publication {
+		c.effective, c.prepared = value, true
+		c.publication++
+	}
 }
 
 // publish stores value as the effective config, as Prepare does after a resolve.
@@ -428,9 +590,6 @@ func (r *kernelRuntime) plan(spec Spec) (kernel.Plugin, any, error) {
 		return kernel.Plugin{}, nil, errors.New("empty or duplicate declaration")
 	case spec.Check != nil && len(spec.Needs) == 0:
 		return kernel.Plugin{}, nil, kernelGap("Spec.Check without a need: the kernel evaluates availability per required key, through the provider's Available, so a consumer with no need has no check")
-	}
-	if spec.Config != nil && spec.Config.hooks.UpdateAsync != nil {
-		return kernel.Plugin{}, nil, kernelGap("ConfigHooks.UpdateAsync: the listener of internal/update runs to completion inside Fiber.Update and its next is valid only until it returns")
 	}
 	holder := kernelNoCheck
 	if spec.Check != nil {
@@ -471,13 +630,29 @@ func (r *kernelRuntime) plan(spec Spec) (kernel.Plugin, any, error) {
 		// has no such return, so the disposer is registered as the last effect of
 		// Apply: the same ledger slot, but registered inside Apply, so a load that
 		// was invalidated meanwhile runs it at once instead of in the teardown
-		// walk (needs Plugin.ApplyEffect for the exact behaviour).
+		// walk (needs Plugin.ApplyEffect for the exact behaviour). When the activation
+		// is already inactive, which a body that requested its own disposal made it,
+		// Effect refuses before it runs setup: the adapter then runs the disposer at
+		// once, as Effect does when it refuses after setup, and reports no error, as
+		// the prototypes do for a returned disposer of an invalidated load. The
+		// disposer then runs before the unload events, not after them.
 		p.Apply = func(kc *kernel.Context, cfg any) error {
 			d, err := spec.ApplyEffect(activation(kc, cfg))
 			if err != nil || d == nil {
 				return err
 			}
-			return kc.Effect("apply", func() (kernel.Disposer, error) { return kernel.Disposer(d), nil })
+			ran := false
+			err = kc.Effect("apply", func() (kernel.Disposer, error) { ran = true; return kernel.Disposer(d), nil })
+			if err == nil {
+				return nil
+			}
+			if !ran && spikeInactive(err) != nil {
+				return r.cleanup(d)
+			}
+			if spikeInactive(err) != nil {
+				return nil
+			}
+			return err
 		}
 	}
 	return kernel.Define(p), raw, nil
@@ -547,7 +722,9 @@ func (r *kernelRuntime) Settle(ctx context.Context) error { return fromKernel(r.
 
 func (r *kernelRuntime) Close(ctx context.Context) error {
 	r.closed.Store(true)
-	return fromKernel(r.root.Close(ctx))
+	err := r.root.Close(ctx)
+	r.rootDone.Store(true)
+	return fromKernel(err)
 }
 
 func (r *kernelRuntime) RootContext(context.Context) (*Context, error) {
@@ -584,16 +761,52 @@ func (r *kernelRuntime) RequestUpdateConfig(ctx context.Context, id uint64, raw 
 		return none, ErrClosed
 	}
 	cfg := &kernelCfg{cell: f.cell, raw: raw, noSave: noSave}
-	err := f.f.Update(ctx, cfg)
-	cfg.mu.Lock()
-	commitErr := cfg.commitErr
-	cfg.mu.Unlock()
-	// The kernel does not stop at a failing Commit (see kernelCommitHook); the
-	// failure is still the caller's to see.
-	if err = errors.Join(err, commitErr); err != nil {
-		return none, fromKernel(err)
+	result := func(err error) error {
+		cfg.mu.Lock()
+		defer cfg.mu.Unlock()
+		// The kernel does not stop at a failing Commit (see kernelCommitHook); the
+		// failure is still the caller's to see.
+		err = ownListener(err)
+		if cfg.commitErr != nil {
+			err = errors.Join(err, cfg.commitErr)
+		}
+		return fromKernel(err)
 	}
-	return ConfigRequest{Await: func(w context.Context) error { return fromKernel(f.f.Await(w)) }}, nil
+	if f.cell.hooks.UpdateAsync == nil {
+		if err := result(f.f.Update(ctx, cfg)); err != nil {
+			return none, err
+		}
+		return ConfigRequest{Await: func(w context.Context) error { return fromKernel(f.f.Await(w)) }}, nil
+	}
+	// An asynchronous update hook outlives the listener's entry (kernelUpdateHook),
+	// so Fiber.Update, which runs the listener, runs on its own goroutine here and
+	// the request returns once the listener has been entered, or Update has returned.
+	cfg.prefix = make(chan struct{})
+	finished, updateErr := make(chan struct{}), error(nil)
+	go func() {
+		updateErr = f.f.Update(ctx, cfg)
+		close(finished)
+	}()
+	select {
+	case <-cfg.prefix:
+	case <-finished:
+		if err := result(updateErr); err != nil {
+			return none, err
+		}
+	case <-ctx.Done():
+		return none, ctx.Err()
+	}
+	return ConfigRequest{Await: func(w context.Context) error {
+		select {
+		case <-finished:
+		case <-w.Done():
+			return w.Err()
+		}
+		if err := result(updateErr); err != nil {
+			return err
+		}
+		return fromKernel(f.f.Await(w))
+	}}, nil
 }
 
 func (r *kernelRuntime) Batch(ctx context.Context, operations []BatchOperation) ([]uint64, error) {
@@ -662,10 +875,30 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 			return ok
 		},
 		leave: func() { (*leave.Load())() },
-		read:  func(key string) (any, error) { return r.read(kc, key) },
-		// A provision stops being the activation's own when its unload starts.
+		// The kernel owns the worker: it holds the lease, reports the result to the
+		// owner and clears the tracked label itself, so a label is gone from the
+		// snapshot as soon as the worker has returned, as in the prototypes.
+		track: func(label string, run func(context.Context) error) (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fromPanic(p)
+				}
+			}()
+			kc.Go(label, run)
+			return nil
+		},
+		read: func(key string) (any, error) { return r.read(kc, key) },
+		// GAP, approximated here: the kernel keeps the activation's own provisions in
+		// an unexported ownership record (handle.owns) and exports no Context.Owns.
+		// The adapter keeps its own set of the keys that Provide accepted. A
+		// provision stops being the activation's own when its unload starts; the
+		// root's does not, it stays until Close has finished.
 		owns: func(key string) bool {
-			if kc.Std().Err() != nil {
+			if kc == r.root.Context() {
+				if r.closed.Load() && r.rootDone.Load() {
+					return false
+				}
+			} else if kc.Std().Err() != nil {
 				return false
 			}
 			values := c.owned.Load()
@@ -708,24 +941,6 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 		return kernelHandle(h), nil
 	}
 	c.child = func(spec Spec) (uint64, error) { return r.mount(kc, spec) }
-	c.trackedStart = func(label string) (func(error), error) {
-		done := make(chan error, 1)
-		var err error
-		func() {
-			defer func() {
-				if p := recover(); p != nil {
-					err = fromPanic(p)
-				}
-			}()
-			// The worker the spike Context starts reports through done; the kernel's
-			// tracked slot lasts until it does, so a drain waits for the real work.
-			kc.Go(label, func(context.Context) error { return <-done })
-		}()
-		if err != nil {
-			return nil, err
-		}
-		return func(e error) { done <- e }, nil
-	}
 	return c
 }
 
@@ -1051,6 +1266,6 @@ func (r *kernelRuntime) RetentionStatus() RetentionStatus {
 	s := r.root.RetentionStatus()
 	return RetentionStatus{ArchiveLimit: s.ArchiveLimit, Archived: s.Archived, ArchiveEvicted: s.ArchiveEvicted,
 		EventWindow: r.window, Windowed: int(min(s.EventsTotal-min(s.EventsTotal, r.base.events), uint64(r.window))),
-		EventsTotal: s.EventsTotal - min(s.EventsTotal, r.base.events),
+		EventsTotal:     s.EventsTotal - min(s.EventsTotal, r.base.events),
 		ObserverBacklog: s.ObserverBacklog, TerminalDropped: s.TerminalDropped}
 }

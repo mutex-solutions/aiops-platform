@@ -447,10 +447,11 @@ func TestDryPipelineWritesWellFormedRecordsAndRefusesOverwrite(t *testing.T) {
 	if !strings.Contains(strings.Join(rep.Reasons, "\n"), "dry-run") {
 		t.Fatal("dry run did not record why it is inconclusive")
 	}
-	// Two candidates x (baseline + two stress callers) x two repetitions, two warm-up
-	// records, identity files and the report.
+	// Every runnable candidate x (baseline + two stress callers) x two repetitions,
+	// one warm-up record each, identity files and the report.
 	names, _ := filepath.Glob(filepath.Join(out, "*.json"))
-	if want := 2*2*(1+2) + 2 + 3; len(names) != want {
+	n := len(runnableNames())
+	if want := n*2*(1+2) + n + 3; len(names) != want {
 		t.Fatalf("%d records, want %d: %v", len(names), want, names)
 	}
 	if problems := (&evidenceWriter{dir: out, manifest: rep.Manifest}).verify(); len(problems) != 0 {
@@ -468,7 +469,7 @@ func TestDryPipelineWritesWellFormedRecordsAndRefusesOverwrite(t *testing.T) {
 			t.Fatalf("%s records a workstation path", path)
 		}
 	}
-	for _, cand := range []string{"reconciler", "graph-lock"} {
+	for _, cand := range runnableNames() {
 		for rep := range 2 {
 			var base BaselineRecord
 			readJSON(t, filepath.Join(out, "baseline-"+cand+"-rep0"+string(rune('0'+rep))+".json"), &base)
@@ -617,4 +618,15 @@ func supportedBackends(t *testing.T) []scale.Backend {
 		t.Run(u.Name, func(t *testing.T) { t.Skipf("UNSUPPORTED backend %s, not run, not a pass: %s", u.Name, u.Gap) })
 	}
 	return run
+}
+
+// runnableNames are the candidates a pipeline run drives: every registered backend
+// whose adapter supports what the harness needs.
+func runnableNames() []string {
+	run, _ := scale.Runnable(scale.Candidates())
+	names := make([]string, len(run))
+	for i, b := range run {
+		names[i] = b.Name
+	}
+	return names
 }

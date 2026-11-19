@@ -30,11 +30,12 @@ func TestWarmupIsRecordedLabelledExcludedAndFixturesAreFresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Protocol != 2 || len(rep.Warmup) != 2 {
+	names := runnableNames()
+	if rep.Protocol != 2 || len(rep.Warmup) != len(names) {
 		t.Fatalf("report protocol %d, %d warm-up entries", rep.Protocol, len(rep.Warmup))
 	}
 	var seqs []uint64
-	for _, cand := range []string{"reconciler", "graph-lock"} {
+	for _, cand := range names {
 		var w BaselineRecord
 		readJSON(t, filepath.Join(out, "baseline-"+cand+"-warmup.json"), &w)
 		if !w.Warmup || !strings.Contains(w.Label, "warmup") || w.Protocol != 2 || w.Candidate != cand || len(w.Arms) != 2*4 || len(w.Errors) != 0 {

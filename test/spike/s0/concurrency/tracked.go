@@ -36,6 +36,9 @@ func (c *Context) Go(label string, run func(context.Context) error) error {
 	if run == nil {
 		return errors.New("tracked goroutine run must not be nil")
 	}
+	if c.fwd != nil && c.fwd.track != nil {
+		return c.fwd.track(label, run) // The kernel runs and reports its own worker.
+	}
 	if !c.Enter() {
 		return ErrInactive
 	}

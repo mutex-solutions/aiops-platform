@@ -281,14 +281,16 @@ func TestDryMeasureNeverPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 2 reps x 2 candidates x (5 graphs + 2 tree widths).
-	if report.Runs != 28 || len(records) != 28 {
+	// 2 reps x every runnable candidate x (5 graphs + 2 tree widths).
+	candidates, _ := Runnable(Candidates())
+	n := len(candidates)
+	if report.Runs != 14*n || len(records) != 14*n {
 		t.Fatalf("runs = %d records = %d", report.Runs, len(records))
 	}
 	if !report.Dry || report.Acceptance || report.Classification == Pass {
 		t.Fatalf("a dry run must be labelled and can never pass: %+v", report.Classification)
 	}
-	if len(report.Summaries) != 2*(4+4+4+4+5+4+4) || len(report.Heap) != 2*7 {
+	if len(report.Summaries) != n*(4+4+4+4+5+4+4) || len(report.Heap) != n*7 {
 		t.Fatalf("summaries = %d heap = %d", len(report.Summaries), len(report.Heap))
 	}
 	// Classification, not speed: even with no finding at all a dry run resolves
