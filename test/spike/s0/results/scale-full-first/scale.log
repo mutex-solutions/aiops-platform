@@ -1,0 +1,20 @@
+=== RUN   TestDefaultMeasure
+    measure_test.go:24: classification=invalid dry=false acceptanceEligible=true runs=10800 reasons=15
+    measure_test.go:24: invalid: graph-lock/independent/mount-settle: throughput CV 0.110 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/independent/leaf-update-settle: throughput CV 0.120 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/independent/root-restart-settle: throughput CV 0.122 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/independent/teardown: throughput CV 0.108 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/chain/teardown: throughput CV 0.105 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: reconciler/realms/teardown: throughput CV 0.126 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/trees-300-width-2/cold-tree-mount-settle: throughput CV 0.114 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: reconciler/trees-300-width-4/cold-tree-mount-settle: throughput CV 0.147 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: reconciler/trees-300-width-4/hot-tree-lookup: throughput CV 0.100 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: reconciler/trees-300-width-4/shared-provider-restart-settle: throughput CV 0.139 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: reconciler/trees-300-width-4/reverse-trees-dispose-settle: throughput CV 0.141 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/trees-300-width-4/cold-tree-mount-settle: throughput CV 0.146 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/trees-300-width-4/hot-tree-lookup: throughput CV 0.107 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/trees-300-width-4/shared-provider-restart-settle: throughput CV 0.129 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: invalid: graph-lock/trees-300-width-4/reverse-trees-dispose-settle: throughput CV 0.151 > 0.10; repeat the unchanged protocol
+    measure_test.go:24: scale classification invalid (a dry run, failure, noise or missing evidence is never a pass)
+--- FAIL: TestDefaultMeasure (22372.64s)
+FAIL
