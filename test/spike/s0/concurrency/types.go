@@ -198,6 +198,18 @@ type Context struct {
 	config        any    // Immutable effective input captured for this activation.
 	configVersion uint64
 	owned         atomic.Pointer[ownedProvisions]
+	// fwd, when set, redirects the operations that need runtime-owned state to a
+	// runtime that keeps it elsewhere (the kernel adapter). The two prototype
+	// cores leave it nil.
+	fwd *forward
+}
+
+// forward is the optional redirection of an activation's call-path operations.
+type forward struct {
+	enter func() bool
+	leave func()
+	read  func(string) (any, error)
+	owns  func(string) bool
 }
 
 type ownedProvisions struct{ keys map[string]struct{} }
@@ -206,6 +218,9 @@ type ownedProvisions struct{ keys map[string]struct{} }
 // provision reservations. Callers that write derived scope metadata must also
 // hold Enter/Leave, so quiescence cannot finish while that operation is in flight.
 func (c *Context) Owns(key string) bool {
+	if c.fwd != nil {
+		return c.fwd.owns(key)
+	}
 	if c.released.Load() {
 		return false
 	}
@@ -259,6 +274,9 @@ func (c *Context) Config() any { return c.config }
 
 // Read requires a dependency captured for the current activation.
 func (c *Context) Read(key string) (any, error) {
+	if c.fwd != nil {
+		return c.fwd.read(key)
+	}
 	if c.released.Load() {
 		return nil, ErrInactive
 	}
@@ -387,6 +405,9 @@ func (l *leaseCount) Load() int64 {
 // them). The wake channel (graph-lock) is buffered and sticky; the reconciler's
 // wake re-checks live and the sum on the owner.
 func (c *Context) Enter() bool {
+	if c.fwd != nil {
+		return c.fwd.enter()
+	}
 	if !c.live.Load() {
 		return false
 	}
@@ -404,6 +425,10 @@ func (c *Context) Enter() bool {
 
 // Leave releases a lease taken by a successful Enter. See Enter for the wake rule.
 func (c *Context) Leave() {
+	if c.fwd != nil {
+		c.fwd.leave()
+		return
+	}
 	c.lease.shard().Add(-1)
 	if !c.live.Load() && c.leaseChanged != nil {
 		c.leaseChanged()

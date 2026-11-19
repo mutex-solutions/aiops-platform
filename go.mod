@@ -6,6 +6,7 @@ toolchain go1.26.8
 
 require (
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/mutex-solutions/aiops-platform/sdk/kernel v0.0.0
 	github.com/riverqueue/river v0.51.2
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.51.2
 )
@@ -24,3 +25,5 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
+
+replace github.com/mutex-solutions/aiops-platform/sdk/kernel => ./sdk/kernel
