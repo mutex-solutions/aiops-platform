@@ -870,3 +870,34 @@ fan-out graphs (about 28%) and on single leaf updates (tens of microseconds).
 Performance therefore does not select the core; the selection rests on the
 failure-mode and maintainability arguments recorded in the two hazard sections
 above.
+
+## Decision, 2026-11-19: the core is `reconciler`
+
+The project owner selected the `reconciler` core on 2026-11-19: one owner
+goroutine holds all lifecycle state, and every transition is a message to it.
+
+Grounds, in the order they weighed:
+
+1. Both candidates match the oracle on the differential corpus within the
+   recorded exceptions (ADR-035), pass the full property workload under
+   `-race`, and have every known hazard fixed (the two sections above).
+2. The first full scale run shows neither candidate dominating and both far
+   inside every bound, so performance does not select.
+3. With one owner there is no lock order to get wrong and no wait-and-blame
+   rule to keep true as the kernel grows; the invariants are those of a
+   sequential program. The independent review reached the same preference.
+4. `reconciler` is faster where a production kernel spends its bad days:
+   teardown, disposal and restarts that fan through shared providers.
+
+Accepted costs: mounting many independent or fan-out graphs is about 28%
+slower than `graph-lock`, a single leaf update is tens of microseconds slower,
+and every transition passes through one loop, so a slow step in the owner
+delays all fibers. The call-path lease stays off the owner loop (striped
+counter) for that reason.
+
+`graph-lock` stays in `test/spike/s0/concurrency` as the second implementation
+for the differential and property tests. It is not ported and is not a
+supported runtime.
+
+Still open in this ADR: the cost and ownership of `Enter`, and the line budget,
+both fixed with the final port to `sdk/kernel`.
