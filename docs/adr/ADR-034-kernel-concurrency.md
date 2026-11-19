@@ -607,3 +607,220 @@ handles a completion: one extra `expire` call, which is a comparison with the
 earliest deadline when nothing is due. The lease fast path, `Enter` and `Leave`
 are untouched; the quiesced release path stamps the instant the last lease is
 released. No callback runs on the owner and the owner still never blocks.
+
+## 2026-11-19 graph-lock: bounded waits with blame, targeted wake-ups, error rendering
+
+Four confirmed hazards of the graph-lock core (pinned as tests in
+`concurrency/hazards_*_test.go` before the fixes) and one structural hardening. The
+reconciler is not touched by this section; it implements the same Settle/Close
+contract separately.
+
+### Wait and blame rule (G2)
+
+Cause: a retiring fiber waited for its dependants (before its own teardown) and
+for its structural children (after its effect walk) in one parked goroutine each,
+with no diagnostic. One hung disposer left its provider and every ancestor
+UNLOADING with an empty error forever, `Settle` and `Close` returned only the
+caller's context error, and the observer dispatcher stayed open after the hung
+disposer returned and the runtime drained.
+
+Rule:
+
+- A fiber's drain budget (lease drain, 5 s), cleanup budget (2 s, including scope
+  and effect-rollback cleanup) and load budget (2 s) measure its own work only.
+  Waiting for dependants or children is a different wait. It has no deadline of its
+  own; it is bounded transitively by the awaited fibers' own deadlines, and a
+  waiter never claims a deadline it did not miss (no `deadline:*` event, no
+  deadline text on a waiter).
+- A fiber is blocked while one of its callbacks is past one of its own deadlines
+  and has not returned (a stall: `load`, `cleanup`, `scope cleanup`,
+  `effect cleanup`, `lease drain`), or while it waits for an awaited fiber that
+  is blocked. When an awaited fiber is blocked the waiter records, once per awaited
+  fiber and stage, an error on itself that names the fiber and the stage
+  (`awaiting dependants: dependant fiber 3 (dependant) is blocked in cleanup`) and a
+  `wait:dependant` or `wait:child` event (`Event.UID` is the awaited fiber, `Key`
+  its stage). The chain of blame is visible on every waiting ancestor: each names
+  the fiber directly below it, and the fiber at the bottom carries the real
+  deadline. The set is re-evaluated when an awaited fiber becomes blocked or
+  recovers, and the walk up the waiters stops at the first one whose blame does not
+  change. A fiber that starts waiting when its awaited fiber is already blocked
+  records at once.
+- Continuation style, no parked goroutine: the retiring activation records what it
+  waits for under the lock (`a.wait`: dependants or children; its fiber keeps its
+  worker slot and stays busy) and the event that can satisfy it, the release of a
+  binding (`releaseBindingsLocked`) or the disposal of a child, resumes it
+  (`resumeLocked`). Resuming the dependants wait starts the unload goroutine; the
+  children wait starts the finishing goroutine, as the woken goroutine did before.
+  Everything that runs a plugin callback (lease drain, the disposer walk) still has
+  a goroutine.
+- `Close` always closes the observer dispatcher once the runtime has drained. A
+  `Close` that gives up (its context ended, or fibers are blocked) arms a one-time
+  late close that fires when the last fiber and the root are gone; it parks no
+  goroutine to wait for that.
+
+Goroutines on a 10,000-fiber chain root restart (`Update` of the head of the
+chain, sampled every 50 microseconds; the base is the three goroutines of the
+idle runtime and the sampler): peak 10,002 and 10,003 before, 6 after.
+`TestGraphLockChainUnloadParksNoGoroutines` holds the leaf of a 2,000-fiber chain
+and checks that 1,999 fibers are parked with at most 10 extra goroutines.
+
+### Settle and Close contract (R4)
+
+The contract both cores implement, as written on `Runtime.Settle` in `types.go`:
+
+> Settle returns when no fiber is mid-transition except fibers blocked past one of
+> their own deadlines. It returns nil when nothing is blocked, otherwise one joined
+> diagnostic per blocked fiber naming the fiber and the stage. It never returns
+> while an unblocked fiber is mid-transition. If ctx ends first it returns ctx's
+> error joined with the diagnostics known so far.
+
+`Close(ctx)` follows the same rule for its wait. In the graph-lock a waiter that is
+blocked on a blocked awaited fiber counts as blocked, so it is one of the joined
+diagnostics (grandparent, provider, dependant: three lines, in fiber order). The
+condition stays O(1): `refreshBusyLocked` keeps `busy` and `nblocked`, and Settle is
+satisfied when `busy == nblocked` and the root is idle or blocked. A context error
+with no diagnostics is returned as is (identity preserved).
+
+A fiber is blocked from the moment its deadline is recorded, so a callback that
+cooperates with its cancelled context returns an instant later and a Settle that
+was already waiting may see the diagnostic first. Tests that released a hung
+callback and then joined with Settle now let the callback return first.
+
+Fibers that have no deadline are not blocked in this sense: an availability check
+or effect-scope setup that hangs while the fiber is ACTIVE has none, so Settle
+waits for it until the caller's context ends. That is unchanged and not covered here.
+
+### Targeted wake-ups (G3)
+
+Cause: `signalLocked` closed and reallocated one channel on every appended event, so
+W parked waiters and E events cost exactly W x (E+1) wake-ups, and a waiter on
+one fiber was woken by every event of every other fiber.
+
+Now: no broadcast. `AwaitFiber` registers on the fiber it joins and is woken when
+that fiber stops being busy; `Settle` registers in a settle waiter set that is woken
+once, when `settledLocked` becomes true. Both wake-ups are in `refreshBusyLocked`
+(the busy accounting), which every change of worker or state passes through, plus
+the blocked accounting of G2. A waiter looks at its context once when it parks and
+once per wake-up, so the test's `Done` count is exact. An event that changes
+neither condition wakes nobody and allocates nothing; a canceled waiter unregisters
+itself. Callers of the removed `wait(ctx, done)` helper: `Settle`, moved to the
+settle waiter set (`Close` joins through `Settle`); `AwaitFiber` had its own copy
+of the loop and now registers per fiber. The `signalLocked` calls in the transition
+workers, pre-check completion and `RequestUpdateConfig` were general nudges; each
+already changes worker or state through the refresh, so they are gone.
+
+Wake-ups before / after (hazard test, E = 20 unrelated events):
+
+| W waiters | before (W x (E+1)) | after |
+|---|---|---|
+| 10 | 210 | 10 |
+| 100 | 2,100 | 100 |
+| 1,000 | 21,000 | 1,000 |
+
+for both `AwaitFiber` and `Settle`; the single remaining look is the one when the
+waiter parks.
+
+### Error rendering at the boundary (X1)
+
+Cause: `Snapshots` and `Inspect` kept the plugin's error value and called its
+`Error` method later, off the lock but on the caller's goroutine, so a panicking
+`Error` method panicked a monitoring caller, and plugin code ran whenever any caller
+looked.
+
+Now: a plugin-supplied error is rendered exactly once where it comes back from
+plugin code, on the plugin's worker goroutine, off the lock, under a recover that
+turns a panicking `Error` into the fixed text `error formatting panic`
+(`graphDiagnose`). The kernel stores a `graphDiagnostic` (the text, and `Unwrap`
+to the plugin's value, so `errors.Is` and `errors.As` still work). Snapshots,
+Inspect, the archive, `Close` and every join only read stored text. `AwaitFiber`
+still returns the plugin's own value (identity is part of its contract). Audit of
+every place graph-lock formats or holds an error or value from a plugin:
+
+| Where | What happens |
+|---|---|
+| `runLoad`: Apply, ApplyEffect, config resolution (`prepareConfig`) | rendered once on the load worker; stored in `lastErr`; raw value kept in `awaitErr` for AwaitFiber |
+| `runUnload`: disposers, scope cleanup | each result rendered on the unload worker as it returns |
+| `cleanupEffect` (Effect rollback, late setup disposer) | rendered on the plugin's goroutine before the lock; stored in `cleanupErr` |
+| `runScopeWork`: scope setup and cleanup | rendered on the lane worker before the lock |
+| `startTracked` completion (Go helper) | rendered on the worker that ran the callback; stored in `lastErr`, raw in `awaitErr` |
+| `graphCallApply`, `graphCallApplyEffect`, `graphCallDispose`, `graphCallCheck`, `graphCallPrepare` panics | `fmt.Errorf("... panic: %v")` inside the recover on the plugin's goroutine; `fmt` itself contains a panicking `Error`/`String` |
+| `Snapshots`, `Inspect`, archive | read stored text only |
+| `Close` | joins the stored diagnostics of the root's failure and `lastErr` |
+| `Provide` values, service `Value` in events and `Inspect` | identity only, never formatted (`TestHazardG1...`) |
+| `Record` data | marshalled on the caller's own goroutine before the lock |
+| observer callback errors | owned by the shared dispatcher (`eventqueue`), unchanged and common to both cores |
+| `runTracked` | `errors.Is` may call a plugin `Is` method on the worker |
+
+A value that passes through plugin code and enters the kernel again is rendered
+again at the new entry (an Effect rollback error that Apply then returns: two calls
+to its `Error`). Each entry renders once; readers never render.
+
+### Plugin-facing lock regions (hardening)
+
+Kernel code behind `Provide`, `Defer`, `Effect` rollback, effect scopes, tracked
+work, `MountChild` and `Dispose` runs on the plugin's goroutine inside the recover
+that guards its Apply, so a kernel bug there would be reported as the plugin's
+"Apply panic". No live panic exists (`TestHazardG1...` passes). Changes: those entry
+points now `defer` a `guardEntry` that recovers kernel-side after the entry's own
+deferred unlock, returns an error `internal error in <entry>` to the plugin and
+records the same error and an `internal:<entry>` event on the fiber; the hand-locked
+regions of `cleanupEffect` and `scopeCleanupContext` (budget read, post-callback
+bookkeeping, cancel function) use `defer` or a closure with `defer`. A test parses
+`graphlock.go` and fails on a bare `Unlock` in those functions; another injects a
+kernel panic (a nil ledger) behind each entry and checks the error text, that no
+"Apply panic" is reported and that the lock is free. Left as it was: the
+hand-locked regions of worker and host-facing code that no plugin call reaches
+(`Close`, `RequestUpdateConfig`, `checkAvailability`, the transition workers, timer
+callbacks), and kernel panics on timer goroutines, which no recover can attribute.
+
+### Measurements (development host, shared and busy, not acceptance)
+
+Growth curves of the graph-lock, one root per fixture and process (`TestDevObserve`),
+milliseconds at 1k / 2k / 4k / 8k / 10k fibers, before (916b564) and after. Both
+are about linear; the absolute drop comes from not allocating a channel per event
+and from not parking a goroutine per waiting fiber.
+
+| Shape | Operation | Before | After |
+|---|---|---|---|
+| chain | mount-settle | 55 / 115 / 216 / 404 / 515 | 36 / 71 / 148 / 297 / 351 |
+| chain | root-restart-settle | 76 / 176 / 320 / 661 / 832 | 59 / 106 / 211 / 435 / 569 |
+| realms | mount-settle | 63 / 113 / 213 / 435 / 523 | 51 / 85 / 161 / 343 / 408 |
+| realms | all-providers-batch-restart-settle | 69 / 135 / 276 / 560 / 700 | 53 / 92 / 194 / 428 / 521 |
+
+`BenchmarkEventEmission` (graph-lock, 3 runs each, ns/op): 0 observers 5.3, 4.5, 5.3
+before and 4.3, 4.7, 5.3 after; 8 observers 4.4, 4.1, 4.3 before and 3.7, 4.5, 4.2
+after: within noise. One allocation fewer per event (the per-event channel):
+19 to 18 allocs and about 100 B per `Record`. The lease fast path (`Enter`/`Leave`)
+is untouched; the added cost on the transition path is one `blockedLocked` check in
+`refreshBusyLocked`.
+
+Differential and causal runs: live oracle and causal replay at the default
+GOMAXPROCS and at 2, `-race`, `-count=3`: pass. Causal rates (100 runs per pair,
+`-race` and GOMAXPROCS=2 `-race`): the 64 pairs that matched causally 100/100 before
+still do, and D06 and D23 keep their pinned verdicts (100 causal mismatches with
+the same messages) on both cores. Strict (total-order) match counts move within
+noise in both directions on a busy machine; they are not pinned.
+
+### Tests changed by the new contract and rendering
+
+- `hazards_graph_test.go` G3: graph-lock asserts W looks instead of W x (E+1).
+- `hazards_test.go` R4 graph-lock: the old comment (blocks until the context) is
+  replaced; the first two Settles still end with the context error, now joined with
+  the hung fiber's diagnostic, and `r4GraphLockContract` adds the prompt return.
+- Tests that released a hung callback and joined with `Settle` right away now let the
+  callback return first (`synctest.Wait`): LoadDeadlineKeepsStuckApplyAsSoleWriter,
+  LoadDeadlineCooperativelyUnwinds, LeaseDeadlineDoesNotReleaseBorrowedEffects,
+  CleanupDeadlineDoesNotClearEffectsOrRetry, ConfigurationPrepareUsesLoadDeadline,
+  LoadingParentSelfDisposeRetiresLoadingChild,
+  TrackedLedgerUsesStartOrderCopiesAndRealDrain.
+- RootCloseRetainsTrackedWorkAcrossLeaseDeadline and
+  RootCleanupDeadlineDoesNotFinishDisposer asserted that Close times out with the
+  caller's context while a root callback is past its deadline; they now assert the
+  diagnostic naming the root and its stage.
+- ConfigurationCoalescesLatestInputDuringHeldCleanup waited on the removed
+  `changed` channel; it polls for the revision.
+- DependencyWaitWakesOnlyActualReleasedProvider observed the removed
+  `dependantsChanged` channel; it checks the parked state of each provider.
+- InspectFormatsDiagnosticsOutsideMutex and RootTrackedFailureIsContainedAndReturnedByClose
+  asserted that `Error` is called only by readers; they now assert exactly one
+  call, at the boundary.
