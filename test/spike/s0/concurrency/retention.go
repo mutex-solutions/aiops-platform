@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"sync/atomic"
+
+	"github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue"
 )
 
 // Retention contract (both candidates).
@@ -65,6 +67,9 @@ const (
 	// DefaultRecordLimit is a cap for callers that opt into complete history
 	// and have no better figure (128 MiB of 128-byte events, never preallocated).
 	DefaultRecordLimit = 1 << 20
+	// DefaultObserverBacklog is the observer dispatcher bound when
+	// Retention.ObserverBacklog is zero (see eventqueue.DefaultBacklog).
+	DefaultObserverBacklog = eventqueue.DefaultBacklog
 )
 
 // Retention bounds a runtime's history. The zero value selects the defaults and
@@ -73,6 +78,10 @@ type Retention struct {
 	ArchiveLimit int // Disposed incarnations kept; 0 = DefaultArchiveLimit.
 	EventWindow  int // Most recent events always kept; 0 = DefaultEventWindow.
 	RecordLimit  int // Complete-history recorder cap; 0 = no recorder.
+	// ObserverBacklog bounds the accepted events that may wait undelivered behind
+	// a stalled observer (the in-flight one included); the observer the dispatcher
+	// is inside when it is exceeded is detached. 0 = DefaultObserverBacklog.
+	ObserverBacklog int
 }
 
 // Recording is the retention a test or adapter that needs complete history
@@ -95,6 +104,9 @@ func (r Retention) normalized() Retention {
 	if r.RecordLimit < 0 {
 		r.RecordLimit = 0
 	}
+	if r.ObserverBacklog <= 0 {
+		r.ObserverBacklog = DefaultObserverBacklog
+	}
 	return r
 }
 
@@ -110,6 +122,7 @@ type RetentionStatus struct {
 	Recorded         int
 	RecorderOverflow bool   // The recorder reached its cap and stopped.
 	RecorderDropped  uint64 // Events not recorded after the overflow.
+	ObserverBacklog  int    // Bound on undelivered events behind a stalled observer.
 	// TerminalDropped counts diagnostics of past failed incarnations dropped
 	// beyond the reconciler's cap of 64 (always zero for graph-lock, which keeps
 	// them only in the bounded archive).
@@ -246,6 +259,6 @@ func retentionStatus[T any](r Retention, a *recordArchive[T], l *eventLedger) Re
 	return RetentionStatus{
 		ArchiveLimit: r.ArchiveLimit, Archived: int(a.n.Load()), ArchiveEvicted: a.evicted.Load(),
 		EventWindow: r.EventWindow, Windowed: windowed, EventsTotal: total,
-		RecordLimit: r.RecordLimit, Recorded: recorded, RecorderOverflow: over, RecorderDropped: dropped,
+		RecordLimit: r.RecordLimit, Recorded: recorded, RecorderOverflow: over, RecorderDropped: dropped, ObserverBacklog: r.ObserverBacklog,
 	}
 }

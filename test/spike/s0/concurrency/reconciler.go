@@ -314,7 +314,7 @@ func NewReconciler() Runtime { return NewReconcilerWith(Retention{}) }
 
 // NewReconcilerWith is NewReconciler with explicit history bounds (see Retention).
 func NewReconcilerWith(retention Retention) Runtime {
-	r := &reconcilerRuntime{inbox: make(chan rcMessage, 256), wake: make(chan struct{}, 1), done: make(chan struct{}), observers: newNativeObservers()}
+	r := &reconcilerRuntime{inbox: make(chan rcMessage, 256), wake: make(chan struct{}, 1), done: make(chan struct{})}
 	o := newRcOwner(r, retention)
 	go o.run()
 	return r
@@ -324,6 +324,9 @@ func NewReconcilerWith(retention Retention) Runtime {
 func newRcOwner(r *reconcilerRuntime, retention Retention) *rcOwner {
 	retention = retention.normalized()
 	r.retention, r.ledger, r.archive = retention, newEventLedger(retention), newRecordArchive[rcRetired](retention.ArchiveLimit)
+	if r.observers == nil {
+		r.observers = newNativeObserversWith(retention.ObserverBacklog)
+	}
 	return &rcOwner{r: r, fibers: make(map[uint64]*rcFiber), providers: make(map[string]*rcProvision), byKey: make(map[string]map[uint64]*rcFiber),
 		failures: make(map[uint64]error), blocked: make(map[uint64]error), awaiting: make(map[uint64][]rcWaiter),
 		heldSvc: make(map[string]int), loadsByKey: make(map[string]map[*rcPendingLoad]struct{})}
@@ -485,6 +488,13 @@ func (r *reconcilerRuntime) Events(ctx context.Context) ([]Event, error) {
 		reply.events[i].Data = data
 	}
 	return reply.events, ledgerErr
+}
+
+func (r *reconcilerRuntime) ObserveEventsWith(owner *Context, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
+	if owner == nil || owner.host != r {
+		return nil, ErrObserverBinding
+	}
+	return r.observers.observeWith(owner, label, fn, onOverflow)
 }
 
 func (r *reconcilerRuntime) ObserveEvents(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {

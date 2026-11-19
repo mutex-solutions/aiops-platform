@@ -173,7 +173,7 @@ func NewGraphLockWith(retention Retention) Runtime {
 		indexByKey: make(map[string]map[uint64]*graphFiber),
 		heldSvc:    make(map[string]int),
 		loadsByKey: make(map[string]map[*graphPendingLoad]struct{}),
-		observers:  newNativeObservers(),
+		observers:  newNativeObserversWith(retention.ObserverBacklog),
 		changed:    make(chan struct{}),
 		knobs: graphKnobs{
 			load:       2 * time.Second,
@@ -989,6 +989,14 @@ func (g *GraphLock) issuedLocked(id uint64) bool { return id != 0 && id <= g.nex
 // ObserveEvents registers activation-owned observation, never a callback on the
 // graph owner. The helper owns its subscription lease and Defer registration, so
 // this method must not hold mu while it runs.
+func (g *GraphLock) ObserveEventsWith(owner *Context, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
+	if owner == nil || owner.host != g {
+		return nil, ErrObserverBinding
+	}
+	return g.observers.observeWith(owner, label, fn, onOverflow)
+}
+
+// ObserveEvents registers activation-owned observation (see ObserveEventsWith).
 func (g *GraphLock) ObserveEvents(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {
 	if owner == nil || owner.host != g {
 		return nil, ErrObserverBinding
@@ -1054,7 +1062,8 @@ var _ Recorder = (*GraphLock)(nil)
 var _ Inspector = (*GraphLock)(nil)
 var _ ConfigUpdater = (*GraphLock)(nil)
 var _ RootProvider = (*GraphLock)(nil)
-var _ ObserverRuntime = (*GraphLock)(nil)
+var _ OverflowObserverRuntime = (*GraphLock)(nil)
+var _ OverflowObserverRuntime = (*reconcilerRuntime)(nil)
 var _ RetentionReporter = (*GraphLock)(nil)
 var _ Batcher = (*GraphLock)(nil)
 

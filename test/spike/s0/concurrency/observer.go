@@ -37,14 +37,37 @@ type ObserverStatus = eventqueue.Status
 // Callbacks can request disposal with Context.Dispose and leave joining to an
 // external caller. They must not synchronously await their own teardown.
 //
-// Queue memory is intentionally unbounded in this prototype: a stalled observer
-// can retain accepted events. This bridge is not a complete workload-budget or
-// crash-persistence policy.
+// The queue is bounded by Retention.ObserverBacklog (default
+// DefaultObserverBacklog events). Because the kernel never waits for an observer,
+// the bound cannot push back: when an event arrives while that many accepted
+// events are still undelivered, the observer the worker is inside is detached.
+// It receives no further event, its lost events are counted, the overflow goes
+// through the dispatcher failure path (ObserverStatus.ObserverErrors,
+// LastObserverError), ObserverStatus.Overflowed/EventsLost/LastOverflow, the
+// error of AwaitObservers and Close (errors.Is(err, ErrObserverOverflow)), and,
+// if registered with ObserveEventsWith, one terminal OnOverflow call once its
+// callback returns. Every other observer keeps every event, in order, and the
+// runtime is unaffected; the detached observer's queue memory is released. This
+// bridge is still not a crash-persistence policy.
 type ObserverRuntime interface {
 	ObserveEvents(*Context, string, func(context.Context, Event) error) (Disposer, error)
 	AwaitObservers(context.Context) error
 	ObserverStatus() ObserverStatus
 }
+
+// OverflowObserverRuntime adds the terminal overflow signal to ObserverRuntime.
+// onOverflow may be nil. It runs at most once, under the observer's lease, on the
+// goroutine that was inside the detached callback, after that callback returned.
+type OverflowObserverRuntime interface {
+	ObserverRuntime
+	ObserveEventsWith(owner *Context, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error)
+}
+
+// ObserverOverflow describes one observer detached for overflow.
+type ObserverOverflow = eventqueue.OverflowError
+
+// ErrObserverOverflow is matched by errors.Is for any observer overflow.
+var ErrObserverOverflow = eventqueue.ErrOverflow
 
 // nativeObservers must be constructed once with newNativeObservers, before the
 // first native event. Only the core's state owner appends its consecutive ledger
@@ -59,8 +82,11 @@ type nativeObservers struct {
 	err error
 }
 
-func newNativeObservers() *nativeObservers {
-	return &nativeObservers{d: eventqueue.New[Event](nil)}
+func newNativeObservers() *nativeObservers { return newNativeObserversWith(0) }
+
+// newNativeObserversWith bounds the dispatcher backlog; 0 selects the default.
+func newNativeObserversWith(backlog int) *nativeObservers {
+	return &nativeObservers{d: eventqueue.NewWith[Event](nil, eventqueue.Options{Backlog: backlog})}
 }
 
 func (n *nativeObservers) append(event Event) error {
@@ -79,6 +105,12 @@ func (n *nativeObservers) append(event Event) error {
 // must validate that pointer identity before calling this method outside its
 // state owner: registration invokes Context.Defer and can reenter the core.
 func (n *nativeObservers) observe(owner *Context, label string, fn func(context.Context, Event) error) (Disposer, error) {
+	return n.observeWith(owner, label, fn, nil)
+}
+
+// observeWith also registers the optional terminal overflow signal, which gets
+// the same owner-bound cancellation as an event callback.
+func (n *nativeObservers) observeWith(owner *Context, label string, fn func(context.Context, Event) error, onOverflow func(context.Context, *ObserverOverflow) error) (Disposer, error) {
 	if owner == nil {
 		return nil, ErrObserverBinding
 	}
@@ -95,7 +127,17 @@ func (n *nativeObservers) observe(owner *Context, label string, fn func(context.
 			return fn(ctx, event)
 		}
 	}
-	dispose, err := n.d.AddObserver(nativeObserverBinding{owner}, label, callback)
+	var terminal eventqueue.OverflowHandler
+	if onOverflow != nil {
+		terminal = func(dispatcherCtx context.Context, failure *eventqueue.OverflowError) error {
+			ctx, cancel := context.WithCancel(dispatcherCtx)
+			stop := context.AfterFunc(owner.Std(), cancel)
+			defer stop()
+			defer cancel()
+			return onOverflow(ctx, failure)
+		}
+	}
+	dispose, err := n.d.AddObserverWith(nativeObserverBinding{owner}, label, callback, terminal)
 	if errors.Is(err, eventqueue.ErrInactive) {
 		return nil, ErrInactive
 	}
@@ -106,7 +148,8 @@ func (n *nativeObservers) observe(owner *Context, label string, fn func(context.
 }
 
 func (n *nativeObservers) await(ctx context.Context) error {
-	return errors.Join(n.d.Barrier(ctx), n.failure())
+	// An overflow is a failure of observation, not a successful full drain.
+	return errors.Join(n.d.Barrier(ctx), n.failure(), n.d.OverflowErr())
 }
 
 func (n *nativeObservers) close(ctx context.Context) error {
