@@ -940,3 +940,25 @@ the contract documents leave open:
 9. **`Plugin.Decode` is `func(raw any) (any, error)`.** The kernel knows no
    configuration format; the loader passes the merged tree and `Apply` receives
    what `Decode` returns.
+
+### Owner decisions on hooks and built-ins, 2026-11-19
+
+10. **Dispatch needs a bound dispatcher.** The owner of a hook calls
+    `Bind(c)` once in `Apply`; the kernel checks that the fiber of `c` provides
+    the owning key and returns a dispatcher whose methods have the documented
+    shape `(ctx, Audience, a)`. The hook value itself cannot dispatch.
+11. **Sealed hooks have a third binding map.** `Config` carries a map from a
+    sealed hook to the entries allowed to listen, compared by entry token like
+    the two key maps. The launcher fills it from the distribution manifest, and
+    the test constructor switches it off with the other two.
+12. **A waterfall fails closed.** A listener that errors or panics fails the
+    dispatch with an error naming the listener. Events keep the documented
+    rule: the listener is skipped and logged.
+13. **Deliberately open until a consumer exists.** `reflect`, `registry` and
+    `hooks` are provided as values with no methods. `Fiber.Update(ctx, cfg)`
+    keeps the running activation and returns the error when the new config
+    fails to resolve or decode. `Serial` and `Bail` behave alike because Go
+    listeners are synchronous; both names stay. A listener has no timeout of
+    its own; the dispatch context bounds it. `internal/plugin`,
+    `internal/status` and `internal/service` are declared but not wired until
+    the loader (S1) fixes their payloads.
