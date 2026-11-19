@@ -65,7 +65,7 @@ func parseGoroutines(raw string) Goroutines {
 		owner := "external"
 		for _, line := range strings.Split(stack, "\n") {
 			if strings.Contains(line, "/test/spike/s0/concurrency.") || strings.Contains(line, "/test/spike/s0/internal/eventqueue.") {
-				owner = strings.TrimPrefix(line, "created by ")
+				owner = strings.Clone(strings.TrimPrefix(line, "created by ")) // Not a view into the whole dump: a sample keeps it.
 				if index := strings.LastIndex(owner, "("); index >= 0 {
 					owner = owner[:index]
 				}

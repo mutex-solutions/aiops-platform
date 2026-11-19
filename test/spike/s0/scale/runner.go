@@ -281,6 +281,11 @@ func measure(ctx context.Context, r *RealCandidateRuntime, result *RunResult, op
 		sample.Error = err.Error()
 		result.Errors = append(result.Errors, operation+": "+err.Error())
 	}
+	// A sample keeps the per-owner goroutine counts, not the raw stack text of
+	// every goroutine twice: the trace of a ten-cycle tree run holds thousands of
+	// samples, and that text would be harness memory counted as retained heap.
+	// The retained, disposed and closed checkpoints keep their raw stacks.
+	sample.Before.Goroutines.Stacks, sample.After.Goroutines.Stacks = nil, nil
 	result.Samples = append(result.Samples, sample)
 	return err == nil
 }
