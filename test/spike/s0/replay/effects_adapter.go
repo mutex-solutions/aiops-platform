@@ -268,15 +268,16 @@ func (f *composedFrontend) inspectNativeEffects(a differential.Action, env envir
 	if err := f.flushEffectCompletions(); err != nil {
 		return err
 	}
-	f.r.mu.Lock()
-	target := f.r.fibers[a.Fiber]
-	var id uint64
-	if target != nil {
-		id = target.id
+	target, err := f.r.lookup(a.Fiber)
+	if err != nil {
+		return err
 	}
-	f.r.mu.Unlock()
 	if target == nil {
 		return fmt.Errorf("unknown fiber %q", a.Fiber)
+	}
+	id, err := f.r.fiberID(target)
+	if err != nil {
+		return err
 	}
 	inspection, err := f.r.runtime.(cc.Inspector).Inspect(f.r.ctx)
 	if err != nil {

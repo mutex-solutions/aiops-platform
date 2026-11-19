@@ -59,9 +59,18 @@ type Result struct {
 	CheckpointAfterEvent []differential.CausalCut
 }
 
+// fiber is shared between the root script goroutine and plugin body goroutines.
+// name and ready are immutable. id and mountErr are written once, by publish,
+// before ready is closed; read them only through interpreter.fiberID. The other
+// mutable fields are guarded by interpreter.mu. config is set before the fiber is
+// handed to Runtime.Mount and is read by the root script only after fiberID.
 type fiber struct {
 	name           string
 	id             uint64
+	mountErr       error
+	ready          chan struct{} // Closed once the native id (or the mount failure) is published.
+	plugin         string
+	bodyDone       bool // Guarded by interpreter.mu: Apply returned, or the mount failed without a body.
 	needs          []string
 	config         *concurrency.Configuration
 	ctx            activation
@@ -97,6 +106,7 @@ type interpreter struct {
 	plugins      map[string]differential.PluginSpec
 	orderedNeeds map[string][]string
 	fibers       map[string]*fiber
+	declared     map[string]map[string]bool // fiber name -> plugin ids whose Apply body mounts it.
 	order        []*fiber
 	outputs      map[string]any
 	gates        map[string]*gate
@@ -139,7 +149,7 @@ func run(ctx context.Context, runtime concurrency.Runtime, script differential.S
 func runAdapted(ctx context.Context, runtime concurrency.Runtime, script differential.Script, orderedNeeds map[string][]string, frontend *composedFrontend) (Result, error) {
 	r := &interpreter{ctx: ctx, runtime: runtime, frontend: frontend, changed: make(chan struct{}),
 		plugins: make(map[string]differential.PluginSpec), orderedNeeds: orderedNeeds, fibers: make(map[string]*fiber),
-		outputs: make(map[string]any), gates: make(map[string]*gate), marks: make(map[string]int), tasks: make(map[string]task)}
+		declared: make(map[string]map[string]bool), outputs: make(map[string]any), gates: make(map[string]*gate), marks: make(map[string]int), tasks: make(map[string]task)}
 	r.result = Result{Trace: differential.Trace{Schema: differential.TraceSchema, Scenario: script.ID,
 		Events: []differential.Event{}, Checkpoints: []differential.Checkpoint{}},
 		RuntimeSnapshots: make(map[string][]concurrency.Snapshot), RuntimeInspections: make(map[string]concurrency.Inspection)}
@@ -186,6 +196,7 @@ func runAdapted(ctx context.Context, runtime concurrency.Runtime, script differe
 				unsupported("needs order", fmt.Sprintf("typed plugin %q lost JSON declaration order; lexical execution only; use RunJSON", plugin.ID)))
 		}
 		r.plugins[plugin.ID] = plugin
+		declareMounts(r.declared, plugin.ID, plugin.Apply)
 		if err := validateActions(plugin.Apply); err != nil {
 			return r.result, err
 		}
@@ -392,8 +403,7 @@ func (r *interpreter) mark(label, kind string, value any) {
 	if kind == "gate" {
 		r.getGate(label).arrivals++
 	}
-	close(r.changed)
-	r.changed = make(chan struct{})
+	r.broadcastLocked()
 }
 
 func (r *interpreter) run(actions []differential.Action, env environment) error {
@@ -522,17 +532,23 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 		if env.fiber != nil {
 			return unsupported(a.Op, "external configuration operations from a plugin body are not implemented")
 		}
+		f, err := r.lookup(a.Fiber)
+		if err != nil {
+			return err
+		}
+		if f == nil {
+			return fmt.Errorf("unknown fiber %q", a.Fiber)
+		}
+		if _, err := r.fiberID(f); err != nil { // f.config is complete once the mount published.
+			return err
+		}
 		r.mu.Lock()
-		f := r.fibers[a.Fiber]
 		var applied any
 		var wasApplied bool
 		if f != nil && f.ctx != nil {
 			applied, wasApplied = f.ctx.Config(), true
 		}
 		r.mu.Unlock()
-		if f == nil {
-			return fmt.Errorf("unknown fiber %q", a.Fiber)
-		}
 		switch a.Op {
 		case "rawConfig":
 			f.config.RetainRaw(clone(r.evaluate(a.Config, env)))
@@ -552,21 +568,26 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 		if env.fiber != nil {
 			return unsupported(a.Op, "external lifecycle commands from a plugin body need a native context-aware join API")
 		}
-		r.mu.Lock()
-		f := r.fibers[a.Fiber]
+		var f *fiber
 		joinMode := a.Op
+		var request *concurrency.ConfigRequest
 		if a.Op == "awaitTask" {
+			r.mu.Lock()
 			tracked := r.tasks[a.Task]
-			f, joinMode = tracked.fiber, tracked.op
+			r.mu.Unlock()
+			f, joinMode, request = tracked.fiber, tracked.op, tracked.request
+		} else {
+			var lookupErr error
+			if f, lookupErr = r.lookup(a.Fiber); lookupErr != nil {
+				return lookupErr
+			}
 		}
-		r.mu.Unlock()
 		if f == nil {
 			return fmt.Errorf("unknown fiber/task %q/%q", a.Fiber, a.Task)
 		}
-		var err error
-		var request *concurrency.ConfigRequest
-		if a.Op == "awaitTask" {
-			request = r.tasks[a.Task].request
+		id, err := r.fiberID(f)
+		if err != nil {
+			return err
 		}
 		if a.Op == "update" {
 			updater, ok := r.runtime.(concurrency.ConfigRequester)
@@ -577,10 +598,10 @@ func (r *interpreter) execute(a differential.Action, env environment) error {
 			// its lifecycle completion is deferred by await:false; spawning the
 			// whole prefix would reorder commit/raw retention and lose coalescing.
 			var requested concurrency.ConfigRequest
-			requested, err = updater.RequestUpdateConfig(r.ctx, f.id, clone(r.evaluate(a.Config, env)), a.Mode == "noSave")
+			requested, err = updater.RequestUpdateConfig(r.ctx, id, clone(r.evaluate(a.Config, env)), a.Mode == "noSave")
 			request = &requested
 		} else if a.Op == "dispose" {
-			err = r.runtime.Dispose(r.ctx, f.id)
+			err = r.runtime.Dispose(r.ctx, id)
 		}
 		if err != nil {
 			return err
@@ -620,7 +641,7 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 		r.mu.Unlock()
 		return errors.New("invalid mount")
 	}
-	f := &fiber{name: a.Fiber}
+	f := &fiber{name: a.Fiber, plugin: plugin.ID, ready: make(chan struct{})}
 	if r.orderedNeeds != nil {
 		f.needs = append([]string(nil), r.orderedNeeds[plugin.ID]...)
 	} else {
@@ -633,7 +654,12 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 	}
 	r.fibers[f.name] = f
 	r.order = append(r.order, f)
+	r.broadcastLocked() // Wake lookup callers waiting for this name to be registered.
 	r.mu.Unlock()
+	// Waiters (fiberID) must never be left behind, whatever path leaves mount.
+	var id uint64
+	var err error
+	defer func() { r.publish(f, id, err) }()
 	provides := []string{}
 	var collect func([]differential.Action)
 	collect = func(actions []differential.Action) {
@@ -721,6 +747,8 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 		err := r.run(plugin.Apply, env)
 		r.mu.Lock()
 		f.startupFailure = err
+		f.bodyDone = true
+		r.broadcastLocked() // A lookup waiting for a child this body would mount can now give up.
 		r.mu.Unlock()
 		if err != nil {
 			return nil, r.capture(f, err)
@@ -738,18 +766,81 @@ func (r *interpreter) mount(a differential.Action, config any, env environment) 
 			return r.capture(f, r.run(plugin.Cleanup, cleanup))
 		}, nil
 	}
-	var id uint64
-	var err error
 	if r.frontend != nil {
 		id, err = r.frontend.mount(a, env, f, plugin, provides, apply)
 	} else {
 		id, err = r.runtime.Mount(r.ctx, concurrency.Spec{ID: f.name, Needs: f.needs, Provides: provides, Config: f.config,
 			ApplyEffect: func(c *concurrency.Context) (concurrency.Disposer, error) { return apply(c) }})
 	}
-	r.mu.Lock()
-	f.id = id
-	r.mu.Unlock()
 	return err
+}
+
+// publish stores the outcome of Runtime.Mount and wakes every fiberID waiter.
+func (r *interpreter) publish(f *fiber, id uint64, err error) {
+	f.id, f.mountErr = id, err
+	close(f.ready) // The close orders the stores above before every waiter's read.
+	if id == 0 {
+		r.mu.Lock()
+		f.bodyDone = true // No native fiber: its body will never run.
+		r.broadcastLocked()
+		r.mu.Unlock()
+	}
+}
+
+// fiberID waits, bounded by the interpreter's context, until f's mount has
+// published its outcome. A mount that produced no native id reports its failure.
+func (r *interpreter) fiberID(f *fiber) (uint64, error) {
+	select {
+	case <-f.ready:
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	}
+	if f.id == 0 && f.mountErr != nil {
+		return 0, f.mountErr
+	}
+	return f.id, nil
+}
+
+// lookup returns the registered fiber, nil when it is unknown. While a body that
+// mounts this name (a parent's Apply) has not finished, the name is awaited,
+// bounded by the context: the root script may reach it before that mount started.
+func (r *interpreter) lookup(name string) (*fiber, error) {
+	for {
+		r.mu.Lock()
+		f, changed, pending := r.fibers[name], r.changed, false
+		if f == nil {
+			for _, parent := range r.order {
+				pending = pending || !parent.bodyDone && r.declared[name][parent.plugin]
+			}
+		}
+		r.mu.Unlock()
+		if f != nil || !pending {
+			return f, nil
+		}
+		select {
+		case <-changed:
+		case <-r.ctx.Done():
+			return nil, r.ctx.Err()
+		}
+	}
+}
+
+func (r *interpreter) broadcastLocked() {
+	close(r.changed)
+	r.changed = make(chan struct{})
+}
+
+func declareMounts(into map[string]map[string]bool, plugin string, actions []differential.Action) {
+	for _, a := range actions {
+		if (a.Op == "mount" || a.Op == "child") && a.Fiber != "" {
+			if into[a.Fiber] == nil {
+				into[a.Fiber] = map[string]bool{}
+			}
+			into[a.Fiber][plugin] = true
+		}
+		declareMounts(into, plugin, a.Program)
+		declareMounts(into, plugin, a.Cleanup)
+	}
 }
 
 func (r *interpreter) capture(f *fiber, err error) error {
@@ -770,10 +861,14 @@ func (r *interpreter) await(f *fiber, mode string) error {
 	if !ok {
 		return unsupported("awaitFiber", "target-only Waiter is required; global Settle is not an equivalent operation")
 	}
+	id, err := r.fiberID(f)
+	if err != nil {
+		return err
+	}
 	r.mu.Lock()
 	startupFailure := f.startupFailure
 	r.mu.Unlock()
-	err := waiter.AwaitFiber(r.ctx, f.id)
+	err = waiter.AwaitFiber(r.ctx, id)
 	if err == nil {
 		return nil
 	}
@@ -792,7 +887,7 @@ func (r *interpreter) await(f *fiber, mode string) error {
 			return errors.Join(err, snapshotErr)
 		}
 		for _, snapshot := range snapshots {
-			if snapshot.ID == f.id && snapshot.State == concurrency.Disposed {
+			if snapshot.ID == id && snapshot.State == concurrency.Disposed {
 				return nil
 			}
 		}
@@ -864,6 +959,14 @@ func (r *interpreter) acceptFailure(op string, err error) error {
 }
 
 func (r *interpreter) checkpoint(label string) error {
+	// Registered fibers still inside Runtime.Mount have no id yet. Wait for each
+	// outcome before taking the recorder lock; a failed mount keeps id 0.
+	r.mu.Lock()
+	mounting := append([]*fiber(nil), r.order...)
+	r.mu.Unlock()
+	for _, f := range mounting {
+		_, _ = r.fiberID(f)
+	}
 	// Fixture outputs and their acknowledged native Record envelopes share this
 	// recorder lock. Freeze them before Inspect so the checkpoint cannot combine
 	// a past graph watermark with future fixture output. Native owner inspection
