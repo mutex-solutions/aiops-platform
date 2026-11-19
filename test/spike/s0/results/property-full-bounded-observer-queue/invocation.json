@@ -1,0 +1,37 @@
+{
+ "classification": "PASS full frozen experimental-candidate property workload with the bounded observer queue; NOT final kernel/S0 acceptance",
+ "exitCode": 0,
+ "sourceSHA256": "7bf4e782e9b4052ed9b91f891312d6fc13cd9f618d0f5a4ed4740caf798d2b08",
+ "commit": "ada34cb",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 2746.04,
+ "candidateSeconds": {
+  "reconciler": 1482.47,
+  "graph-lock": 1263.4
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-mod=readonly",
+  "-race",
+  "-count=1",
+  "-timeout=150m",
+  "-v",
+  "-run",
+  "^TestRuntimeProperties$",
+  "./test/spike/s0/properties"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "logSHA256": "d784c2fae7089913b78be62fa4308a46be4fdb29324ff7b6fbad27696453539e",
+ "originalEvidenceDirectory": "test/spike/s0/properties/evidence/bounded-observer-queue-ada34cb",
+ "limits": [
+  "This stream checks the recorded independent model/assertions, not every composed/hook behavior.",
+  "Final SDK rerun, call-path, scale, cold-mount and SQL authority gates remain open."
+ ]
+}

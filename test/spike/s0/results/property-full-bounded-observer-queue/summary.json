@@ -1,0 +1,178 @@
+{
+  "kind": "s0-property-result",
+  "mode": "full-1000-seeds-x-1000-operations-per-real-candidate",
+  "seedsPerCandidate": 1000,
+  "operationsPerSeed": 1000,
+  "prng": "SplitMix64",
+  "firstSeed": 1392508928,
+  "realBackends": [
+    "reconciler",
+    "graph-lock"
+  ],
+  "identity": {
+    "criteriaSHA256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c",
+    "baselineCommit": "ada34cb92052ef249c80b5a11157d6c898de8f32",
+    "sourceSHA256": "7bf4e782e9b4052ed9b91f891312d6fc13cd9f618d0f5a4ed4740caf798d2b08",
+    "sources": [
+      {
+        "path": "docs/design/s0-criteria-freeze.json",
+        "sha256": "1d619fd5ae86bc62bc02a03f9daa633efbc3834dca63d70e574610d795e514ef"
+      },
+      {
+        "path": "docs/design/s0-spike-criteria.md",
+        "sha256": "628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c"
+      },
+      {
+        "path": "go.mod",
+        "sha256": "03fd12e8b5a388cf0c83b65d29fa55d95640195c4248b6859f3714b7f95da2a2"
+      },
+      {
+        "path": "go.sum",
+        "sha256": "a407d0c737b6fb5dfcfbf5a00c1f32b4e55b39be04c9a279c9c2266c043ccec5"
+      },
+      {
+        "path": "test/spike/s0/concurrency/batch.go",
+        "sha256": "ca93ced2c7c12ad3cdc471232ca1e34f088a285a2f069afa711fbd7a1fb2d124"
+      },
+      {
+        "path": "test/spike/s0/concurrency/batch_test.go",
+        "sha256": "c0e5cc2fff59b5ebe55bed0407c51a42f15ce9846b44a33f890aabbdde82db9d"
+      },
+      {
+        "path": "test/spike/s0/concurrency/common_test.go",
+        "sha256": "7b580fd6c97287f4da4eb9040e401e16544ff6e6959a160863f136911216c2f1"
+      },
+      {
+        "path": "test/spike/s0/concurrency/configuration.go",
+        "sha256": "03392f923a7fdb0703b669d13b814be91f4fd5518c83c883c980da92a1ebd514"
+      },
+      {
+        "path": "test/spike/s0/concurrency/configuration_test.go",
+        "sha256": "904dece91659328c3c47dc35ffa271ca79252077927f4c1b311258490be058dc"
+      },
+      {
+        "path": "test/spike/s0/concurrency/effect.go",
+        "sha256": "380c0a2c51f5a418c1d9edef30a9249296b56ed63b221db6f834c39d95f3563d"
+      },
+      {
+        "path": "test/spike/s0/concurrency/effect_scope.go",
+        "sha256": "f99cf29120415a127f86ea16910788e96828c5abc28d36cef03e325f2f1bbc2a"
+      },
+      {
+        "path": "test/spike/s0/concurrency/effect_scope_test.go",
+        "sha256": "2227234faad4a5e222f9d5326e5f916d28b66513c7e7391edf5317e763836674"
+      },
+      {
+        "path": "test/spike/s0/concurrency/effect_test.go",
+        "sha256": "6e439aee4a83a69ba91f044d0f0fce28e3451dca15c6b59ca3707d7627c2fad6"
+      },
+      {
+        "path": "test/spike/s0/concurrency/graphlock.go",
+        "sha256": "18eabc02eb2a03f14fad6070fd27131cee5d0a35a5ad48fcdb58ba6981ced7c5"
+      },
+      {
+        "path": "test/spike/s0/concurrency/graphlock_test.go",
+        "sha256": "c26a285856b418931a499afe665fca020194bf27be4ae1cc4a6116c814fd8bca"
+      },
+      {
+        "path": "test/spike/s0/concurrency/held_index_test.go",
+        "sha256": "41310591366cfc0259c8f08d30200d3793bcb751968bce173fd76b70abcdaf16"
+      },
+      {
+        "path": "test/spike/s0/concurrency/lease_bench_test.go",
+        "sha256": "62965a57c8a4b15c75e1364621779b8080422810a91c8f41bd069ae1b2181dab"
+      },
+      {
+        "path": "test/spike/s0/concurrency/lease_test.go",
+        "sha256": "44d8dfea7990acf458a5e4d560db9b40ea167eb8f25853c52a7b54748e1459ba"
+      },
+      {
+        "path": "test/spike/s0/concurrency/notify_order_test.go",
+        "sha256": "eb21a09b66204fe50262f8ea849b02c5bb8d5c8bfde120cc95005c9547260b14"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer.go",
+        "sha256": "01490871ba7e9feee276c477df3a26a829e5d2779219e49c9ad921a9a779a5fd"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer_bench_test.go",
+        "sha256": "55088cc3fd54030dc660088dfc1a7f77a882547d2ad222d8210427d35fcdc828"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer_overflow_test.go",
+        "sha256": "697bd0ede832a8954db4fcb18478f26d5275cb196b0d6ae0eac5be2ea1008fa9"
+      },
+      {
+        "path": "test/spike/s0/concurrency/observer_test.go",
+        "sha256": "9fa960ecaf2d5fcf99f053e561674c65c95fe98969f10833eea3151361ad9eb4"
+      },
+      {
+        "path": "test/spike/s0/concurrency/parent_teardown_order_test.go",
+        "sha256": "727ab7f49bd9d057a19a8e9e93983f08af51e849a8dcd6c1ad6b1ad78f082c58"
+      },
+      {
+        "path": "test/spike/s0/concurrency/reconciler.go",
+        "sha256": "050442c04595eac206b87fac9ec3ec5f822c49de684c477d64a8110b86696aef"
+      },
+      {
+        "path": "test/spike/s0/concurrency/reconciler_test.go",
+        "sha256": "57f88ca52fcd19db804dbbd2d6d7e5cd4275f9141c2825eb3860395e3b91f741"
+      },
+      {
+        "path": "test/spike/s0/concurrency/retention.go",
+        "sha256": "2f41c248325ee746b8dcce4079f8bec3ceea6755f54723cd8a0c74183e8595f6"
+      },
+      {
+        "path": "test/spike/s0/concurrency/retention_test.go",
+        "sha256": "93145795a4dbdd167c402d59f60fb9d304ca030e59615aec50db3e3c13d74cb6"
+      },
+      {
+        "path": "test/spike/s0/concurrency/tracked.go",
+        "sha256": "f007c8734f394824a6983e54ddf83a840dafd2304f0a6934b20203e00d867ace"
+      },
+      {
+        "path": "test/spike/s0/concurrency/tracked_test.go",
+        "sha256": "0d2bf8cdc2922462618092507d4406bf1ad785c7e5450eb45fdbce87ee24809e"
+      },
+      {
+        "path": "test/spike/s0/concurrency/types.go",
+        "sha256": "684421ebbce16784754c5376171de6b893d7fec6c9efcf252faf782628bdf8fa"
+      },
+      {
+        "path": "test/spike/s0/concurrency/types_test.go",
+        "sha256": "03c570258024e3b3d4d596578c44caa18572bd4dc5c58dc24335a8554b729e68"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/dispatcher.go",
+        "sha256": "ad991e53c73d3adb5134062f697889a7ad031413c441b1934787dfb896ec3bbb"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/dispatcher_bench_test.go",
+        "sha256": "7189b51d8c2e30112c849b53878462c47b79d4d99aff188d7d08284873f6b5de"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/dispatcher_test.go",
+        "sha256": "905cf34f708d462971be5230a207cc4719b5854cb93df031ce079df3dec64077"
+      },
+      {
+        "path": "test/spike/s0/internal/eventqueue/overflow_test.go",
+        "sha256": "3ba4e3648b2a79784f7414458b38530b1f9de8dbe3b5e25514b8221f8ab4c7f6"
+      },
+      {
+        "path": "test/spike/s0/properties/generator.go",
+        "sha256": "8ddf02917571e0d253988cde4aa84101c77b7acb84f9f16e733f3fe39b0d08d9"
+      },
+      {
+        "path": "test/spike/s0/properties/generator_test.go",
+        "sha256": "2ec47e7d5b991293303aff6176dabe7bd36d48ced3fe8b5d2845cba147265d2b"
+      },
+      {
+        "path": "test/spike/s0/properties/runtime_test.go",
+        "sha256": "2314ea334bf2a5e386141ba8ad5bc2e007b31134e4e7e35c934bfae3d731625a"
+      }
+    ],
+    "executableSHA256": "534d8d432a2bcafb3ee8ea4997b686759c3a53590cd3fb5457a9141e2c92686f",
+    "goVersion": "go1.26.8",
+    "gomaxprocs": 8
+  }
+}
