@@ -1,0 +1,94 @@
+{
+ "classification": "S0 restart full gate: all frozen bounds met at frozen scale; candidate evidence only, acceptance is the reviewer's decision",
+ "status": "PASS at frozen scale: 100/100 cycles",
+ "commit": "9ba2c5a",
+ "startedUTC": "2026-11-18T18:35:03.03605258Z",
+ "endedUTC": "2026-11-18T22:45:42.913019936Z",
+ "argv": [
+  "go",
+  "test",
+  "-count=1",
+  "-timeout",
+  "7h",
+  "-v",
+  "-run",
+  "^TestWorkerRestartFullGate$",
+  "./plugins/jobs-river/internal/s0workers"
+ ],
+ "environment": {
+  "S0_WORKER_RESTART_FULL": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local",
+  "S0_EXPECT_DATABASE": "s0restartfull"
+ },
+ "database": "postgres:16.15-trixie pinned by digest, throwaway container, trust authentication on loopback",
+ "host": "dedicated KVM guest, 24 vCPU, idle before start",
+ "arms": {
+  "pool": {
+   "cycles": 30,
+   "passed": 30,
+   "acknowledged": 450000,
+   "completed": 450000,
+   "ackToCompletionMaxMs": 618.0,
+   "recoveryMaxMs": 404.5,
+   "arrivalStartLagMaxMs": 1.85,
+   "maxConcurrentRequests": 28,
+   "http503": 237,
+   "transportErrors": 0,
+   "riverRetries": 0,
+   "duplicateLogicalResults": 0,
+   "liveRowsMax": 92788
+  },
+  "client": {
+   "cycles": 30,
+   "passed": 30,
+   "acknowledged": 450000,
+   "completed": 450000,
+   "ackToCompletionMaxMs": 1005.9,
+   "recoveryMaxMs": 405.0,
+   "arrivalStartLagMaxMs": 2.95,
+   "maxConcurrentRequests": 32,
+   "http503": 168,
+   "transportErrors": 0,
+   "riverRetries": 0,
+   "duplicateLogicalResults": 0,
+   "liveRowsMax": 92754
+  },
+  "listener": {
+   "cycles": 30,
+   "passed": 30,
+   "acknowledged": 450000,
+   "completed": 450000,
+   "ackToCompletionMaxMs": 574.1,
+   "recoveryMaxMs": 354.2,
+   "arrivalStartLagMaxMs": 2.18,
+   "maxConcurrentRequests": 32,
+   "http503": 0,
+   "transportErrors": 213,
+   "riverRetries": 0,
+   "duplicateLogicalResults": 0,
+   "liveRowsMax": 93374
+  },
+  "combined": {
+   "cycles": 10,
+   "passed": 10,
+   "acknowledged": 150000,
+   "completed": 150000,
+   "ackToCompletionMaxMs": 618.3,
+   "recoveryMaxMs": 454.0,
+   "arrivalStartLagMaxMs": 1.83,
+   "maxConcurrentRequests": 31,
+   "http503": 0,
+   "transportErrors": 124,
+   "riverRetries": 0,
+   "duplicateLogicalResults": 0,
+   "liveRowsMax": 92761
+  }
+ },
+ "limits": [
+  "Candidate evidence only; acceptance is the reviewer's decision.",
+  "The original raw-SQL authority gate remains failed and is not re-run by this harness.",
+  "Retention of finished jobs is 900 seconds, the harness default."
+ ],
+ "logSHA256": "e35daafb8abdcef639883d9e2bf19056830e9313a5f553ddf7a8bfe6a4c31564"
+}

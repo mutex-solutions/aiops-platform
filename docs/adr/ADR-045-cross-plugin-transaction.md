@@ -446,3 +446,17 @@ still fails for its recorded reason (a caller's `set_config` of the scope follow
 a scoped read of the other scope's row under FORCE RLS on its own tables, along with
 the role-switch escapes). The role/GUC mechanism, the transaction-authority
 decision and the S0 status are unchanged by this section.
+
+## Restart gate rerun at frozen scale, 2026-11-19
+
+With River's tables out of row-level security and finished jobs retained for 900
+seconds, the [full restart gate](../../test/spike/s0/results/restart-full-frozen-scale/invocation.json)
+was rerun on the idle dedicated host and met every frozen bound in all 100
+cycles: 30 pool, 30 client and 30 listener recreations and 10 combined, with
+15,000 IDs per cycle at 100 per second. Every acknowledged ID completed, with no
+duplicate logical result and no River retry; the longest acknowledgement to
+durable completion was about one second and the longest recovery about 0.4
+seconds; the job table held at about 93,000 live rows.
+
+This is candidate evidence. It does not change the status of the raw-SQL
+authority gate, which remains failed, and acceptance stays with the owner.
