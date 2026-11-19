@@ -291,8 +291,20 @@ func TestDryMeasureNeverPasses(t *testing.T) {
 	if len(report.Summaries) != 2*(4+4+4+4+5+4+4) || len(report.Heap) != 2*7 {
 		t.Fatalf("summaries = %d heap = %d", len(report.Summaries), len(report.Heap))
 	}
+	// Classification, not speed: even with no finding at all a dry run resolves
+	// below pass, and the report says why.
+	if class, reasons := Resolve(nil, true); class == Pass || !strings.Contains(strings.Join(reasons, "\n"), "DRY RUN") {
+		t.Fatalf("an empty dry run resolved to %s: %v", class, reasons)
+	}
+	if !strings.Contains(strings.Join(report.Reasons, "\n"), "DRY RUN") {
+		t.Errorf("dry report does not name the dry run: %v", report.Reasons)
+	}
 	for _, f := range report.Findings {
-		if f.Class == Fail {
+		// A latency limit (p99 or max) depends on the speed of the machine running
+		// ordinary go test, so it is not asserted here. Any other failure at tiny
+		// size (errors, leaks, heap) is a real defect.
+		timing := strings.Contains(f.Text, " p99 ") || strings.Contains(f.Text, " max ")
+		if f.Class == Fail && !timing {
 			t.Errorf("candidate failure at tiny size: %s", f.Text)
 		}
 	}
