@@ -918,7 +918,7 @@ the contract documents leave open:
    window, the observer queue and the owner inbox are capacities required at
    construction. The kernel holds no default for them; the launcher supplies
    them. They are not "policy numbers" in the sense of
-   `08-profiles-roadmap-adrs.md` §4.
+   `08-profiles-roadmap-adrs.md` (repository rules).
 4. **Deadlines are kernel-wide.** Load, drain and dispose deadlines are
    construction data for the whole kernel. A per-fiber deadline needs an ADR.
 5. **No test recorder in the kernel.** The spike's `Record` instrumentation and
