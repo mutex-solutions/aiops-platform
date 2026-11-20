@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -440,6 +441,7 @@ type fuzzFiber struct {
 	id       string
 	needs    []int
 	provides []int
+	ctx      atomic.Pointer[Context] // The context of its latest activation, the parent of a child mount.
 }
 
 type fuzzRun struct {
@@ -499,7 +501,16 @@ func (run *fuzzRun) spec(rd *reader) (Plugin, *fuzzFiber) {
 		run.hangs++
 	}
 	gate := run.gate
-	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Apply: func(c *Context, _ any) error {
+	// Decode refuses a config whose first byte is a multiple of four, so an
+	// update with a config can be refused whole.
+	decode := func(raw any) (any, error) {
+		if n, ok := raw.(uint8); ok && n%4 == 0 {
+			return nil, errors.New("decode refused")
+		}
+		return raw, nil
+	}
+	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Decode: decode, Apply: func(c *Context, _ any) error {
+		ff.ctx.Store(c)
 		provide := func() error {
 			for _, i := range ff.provides {
 				if err := run.keys[i].Provide(c, i); err != nil {
@@ -582,7 +593,7 @@ func (run *fuzzRun) step(rd *reader) {
 		var ops []BatchOp
 		var added []*fuzzFiber
 		for n := int(rd.next()%3) + 1; n > 0; n-- {
-			switch rd.next() % 3 {
+			switch rd.next() % 5 {
 			case 0:
 				p, ff := run.spec(rd)
 				added = append(added, ff)
@@ -591,13 +602,39 @@ func (run *fuzzRun) step(rd *reader) {
 				if ff := run.pick(rd); ff != nil {
 					ops = append(ops, UpdateOp(ff.fiber))
 				}
+			case 2: // A child of a picked fiber's latest activation, or of the root.
+				parent := run.root.Context()
+				if ff := run.pick(rd); ff != nil && ff.ctx.Load() != nil {
+					parent = ff.ctx.Load()
+				}
+				p, ff := run.spec(rd)
+				added = append(added, ff)
+				ops = append(ops, parent.MountOp(p, nil))
+			case 3: // An update that carries a config.
+				if ff := run.pick(rd); ff != nil {
+					ops = append(ops, UpdateOpWith(ff.fiber, rd.next()))
+				}
 			default:
 				if ff := run.pick(rd); ff != nil {
 					ops = append(ops, DisposeOp(ff.fiber))
 				}
 			}
 		}
+		retained := make(map[*cfgCell]any)
+		for _, op := range ops {
+			if op.hasCfg {
+				retained[op.fiber.cell] = op.fiber.cell.load()
+			}
+		}
 		fibers, err := run.root.Batch(run.ctx, ops...)
+		if err != nil {
+			// A refused batch retains no config.
+			for cell, was := range retained {
+				if now := cell.load(); now != was {
+					run.t.Fatalf("a refused batch (%v) retained the config %v over %v", err, now, was)
+				}
+			}
+		}
 		if err == nil {
 			mounted := 0
 			for i, op := range ops {
@@ -692,6 +729,10 @@ func FuzzOperationSequence(f *testing.F) {
 	f.Add([]byte{0, 0, 1, 0, 0, 1, 0, 0, 4, 2, 1, 0, 2, 0, 6})          // batch: update and dispose
 	f.Add([]byte{0, 0, 1, 7, 0, 3, 0, 0, 0, 3, 4, 1, 0, 0, 5, 3, 0, 6}) // defer and tracked worker, consumers
 	f.Add([]byte{0, 0, 1, 2, 0, 1, 0, 3, 7, 0, 3, 1, 6})                // failing provider, panicking consumer
+	f.Add([]byte{0, 0, 1, 0, 4, 0, 2, 0, 0, 0, 0, 6})                   // batch: child of a fiber
+	f.Add([]byte{0, 0, 1, 0, 4, 0, 3, 0, 5, 6})                         // batch: update with a config
+	f.Add([]byte{0, 0, 1, 0, 4, 0, 3, 0, 4, 6})                         // batch: update with a refused config
+	f.Add([]byte{0, 0, 1, 0, 4, 2, 2, 0, 0, 0, 0, 3, 0, 4, 0, 3, 0, 9}) // batch: child, dispose, update with a config
 	f.Fuzz(func(t *testing.T, data []byte) {
 		before := runtime.NumGoroutine()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

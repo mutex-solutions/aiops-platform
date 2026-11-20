@@ -31,6 +31,7 @@ type handle struct {
 	core     *core // The core this activation belongs to, set once.
 	std      context.Context
 	fiber    uint64
+	act      *activation // The activation this handle belongs to; nil on an availability-check handle.
 	live     atomic.Bool // New effects and leases are accepted only while live.
 	released atomic.Bool // Committed reads remain valid during orderly teardown.
 	lease    leaseCount  // Own cache lines: enter/leave writes never invalidate live/std/core readers.
@@ -298,6 +299,7 @@ func (o *owner) activation(f *fiber, epoch []uint64, bindings map[svcKey]*livePr
 	std, cancel := context.WithCancel(context.Background())
 	c := newHandle(o.r, std, f.id, make(map[svcKey]provision, len(bindings)))
 	a := &activation{ctx: c, cancel: cancel, epoch: epoch}
+	c.act = a
 	a.notice.act = a
 	for key, p := range bindings {
 		c.bindings[key] = p.binding
