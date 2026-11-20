@@ -10,6 +10,7 @@ package fake
 import (
 	"cmp"
 	"context"
+	"maps"
 	"slices"
 	"sync"
 
@@ -46,42 +47,74 @@ func New() (*Loader, kernel.Plugin) {
 	})
 }
 
-// Create records the entry and dispatches loader/entry-init.
+// Apply applies the operations in order, all or nothing: an operation that is
+// refused refuses the plan and leaves the entries as they were. The fake mounts
+// nothing: every entry is Mounted whatever its Enabled and Roles say, an Update
+// that changes the config is Committed and dispatches loader/volatile-update with
+// the new config, and a Create dispatches loader/entry-init.
+func (f *Loader) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, error) {
+	f.mu.Lock()
+	next := maps.Clone(f.entries)
+	var res []loader.Result
+	var inits []loader.EntrySpec
+	var volatiles []loader.VolatileUpdateArgs
+	for _, op := range ops {
+		id := op.Entry.ID
+		cur, ok := next[id]
+		r := loader.Result{ID: id}
+		switch {
+		case op.Kind == loader.OpCreate && ok:
+			f.mu.Unlock()
+			return nil, loader.ErrExists
+		case op.Kind == loader.OpCreate:
+			next[id] = loader.Entry{Spec: op.Entry, Mount: loader.Mounted, State: kernel.Active}
+			inits, r.Outcome = append(inits, op.Entry), loader.Created
+		case !ok:
+			f.mu.Unlock()
+			return nil, loader.ErrNotFound
+		case op.Kind == loader.OpRemove:
+			delete(next, id)
+			r.Outcome = loader.Removed
+		default:
+			cur.Spec = op.Entry
+			next[id] = cur
+			volatiles, r.Outcome = append(volatiles, loader.VolatileUpdateArgs{ID: id, Config: op.Entry.Config}), loader.Committed
+		}
+		res = append(res, r)
+	}
+	f.entries = next
+	f.mu.Unlock()
+	for _, e := range inits {
+		if err := f.entryInit.Emit(ctx, kernel.Unscoped, loader.EntryInitArgs{Entry: e}); err != nil {
+			return res, err
+		}
+	}
+	for _, v := range volatiles {
+		if err := f.volatile.Emit(ctx, kernel.Unscoped, v); err != nil {
+			return res, err
+		}
+	}
+	return res, nil
+}
+
+func (f *Loader) one(ctx context.Context, op loader.Op) error {
+	_, err := f.Apply(ctx, []loader.Op{op})
+	return err
+}
+
+// Create is Apply with one create.
 func (f *Loader) Create(ctx context.Context, e loader.EntrySpec) error {
-	f.mu.Lock()
-	if _, ok := f.entries[e.ID]; ok {
-		f.mu.Unlock()
-		return loader.ErrExists
-	}
-	f.entries[e.ID] = loader.Entry{Spec: e, State: kernel.Active}
-	f.mu.Unlock()
-	return f.entryInit.Emit(ctx, kernel.Unscoped, loader.EntryInitArgs{Entry: e})
+	return f.one(ctx, loader.Op{Kind: loader.OpCreate, Entry: e})
 }
 
-// Update replaces the spec of an entry and dispatches loader/volatile-update with
-// its new config.
+// Update is Apply with one update.
 func (f *Loader) Update(ctx context.Context, e loader.EntrySpec) error {
-	f.mu.Lock()
-	cur, ok := f.entries[e.ID]
-	if !ok {
-		f.mu.Unlock()
-		return loader.ErrNotFound
-	}
-	cur.Spec = e
-	f.entries[e.ID] = cur
-	f.mu.Unlock()
-	return f.volatile.Emit(ctx, kernel.Unscoped, loader.VolatileUpdateArgs{ID: e.ID, Config: e.Config})
+	return f.one(ctx, loader.Op{Kind: loader.OpUpdate, Entry: e})
 }
 
-// Remove forgets the entry.
-func (f *Loader) Remove(_ context.Context, id string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if _, ok := f.entries[id]; !ok {
-		return loader.ErrNotFound
-	}
-	delete(f.entries, id)
-	return nil
+// Remove is Apply with one remove.
+func (f *Loader) Remove(ctx context.Context, id string) error {
+	return f.one(ctx, loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}})
 }
 
 // Await returns the scripted state of the entry at once.

@@ -25,6 +25,7 @@ type Launcher struct {
 	LayerList   []launch.Layer
 	Modules     []launch.CatalogEntry
 	Plugins     map[string]kernel.Plugin // by plugin id, for Catalog.Plugin
+	Keys        map[string]kernel.AnyKey // by key name, for Catalog.Key
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
@@ -121,6 +122,11 @@ func (f *Launcher) Lookup(id string) (launch.CatalogEntry, bool) {
 func (f *Launcher) Plugin(id string) (kernel.Plugin, bool) {
 	p, ok := f.Plugins[id]
 	return p, ok
+}
+
+func (f *Launcher) Key(name string) (kernel.AnyKey, bool) {
+	k, ok := f.Keys[name]
+	return k, ok
 }
 
 // Cmdline.

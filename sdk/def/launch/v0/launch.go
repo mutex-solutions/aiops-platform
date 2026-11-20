@@ -97,7 +97,7 @@ const (
 
 // PlanEntry is the change of one row between two compositions. Changed names the
 // row fields that differ and ConfigPaths the dotted config paths that differ, so
-// a volatile-only update is told from a restart (07-c4-plugin-sdk.md:1371).
+// a volatile-only update is told from a restart (07-c4-plugin-sdk.md:1374).
 type PlanEntry struct {
 	ID          string
 	Action      Action
@@ -136,6 +136,11 @@ type ProfileContext interface {
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
 }
 
+// RoleAll is the role of a process that mounts every row: "--role all mounts every
+// row" (03-c3-kernel.md:547). Any other role mounts the rows whose roles list names
+// it.
+const RoleAll = "all"
+
 // CatalogEntry is what the launcher knows of one plugin of the module table and
 // its manifest (07-c4-plugin-sdk.md:1339; boot.ModuleEntry without the value).
 type CatalogEntry struct {
@@ -144,12 +149,19 @@ type CatalogEntry struct {
 	Version  string
 	Provides []string // key names
 	Needs    []string // key names
+	// Volatile lists the config paths of the plugin that a change commits in place,
+	// with no restart (07-c4-plugin-sdk.md:1374; ADR-059 decision 10: listed in the
+	// module table entry until S2a derives them from the config type). A path is
+	// dotted: each segment names a map key, a segment "*" matches any key or list
+	// index, and a path covers its whole subtree. A key that holds a dot or is "*"
+	// cannot be named: only an ancestor path covers it.
+	Volatile []string
 }
 
 // Catalog is the catalog service: the module table and manifests
 // (plugin-system-2026-11.md:178). The docs give no methods; this is the minimum
 // that plugin-manager needs to list and inspect (03-c3-kernel.md:71) and the
-// loader to mount.
+// loader to mount and to resolve the key names of a row.
 type Catalog interface {
 	// Entries lists every entry, sorted by id.
 	Entries() []CatalogEntry
@@ -160,6 +172,12 @@ type Catalog interface {
 	// row (03-c3-kernel.md:82). Docs silent, open point: it hands the value to
 	// every consumer of the open-class consumer side.
 	Plugin(id string) (kernel.Plugin, bool)
+	// Key returns the key that a row names by string in inject, isolate and
+	// intercept (07-c4-plugin-sdk.md:1244, :1347): the kernel addresses keys by
+	// value and has no lookup by name, so the launcher fills this read-only table
+	// from the definitions of the module table. The name is the key's Name. ok is
+	// false for a name the table does not hold.
+	Key(name string) (kernel.AnyKey, bool)
 }
 
 // Cmdline is the cmdline service: argv (plugin-system-2026-11.md:178).

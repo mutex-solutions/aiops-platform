@@ -34,12 +34,15 @@ type Row struct {
 	Registrations []string     // what the row registered, by label, as effects
 }
 
-// Generation is one committed generation of one scope.
+// Generation is one committed generation of one scope: its rows. The documents
+// list what the key serves as "rows, declared hooks and registrations, states, by
+// scope" (03-c3-kernel.md:64) and name no number or digest; the number and the
+// digest belong to reload, which commits, and to composition/applied, which carries
+// them (03-c3-kernel.md:382). The loader holds neither, so the generation here is
+// narrowed to the scope and the rows.
 type Generation struct {
-	Scope  Scope
-	Seq    uint64 // the generation number
-	Digest Digest
-	Rows   []Row
+	Scope Scope
+	Rows  []Row
 }
 
 // Reader is what the composition key serves. It has no mutating method and every

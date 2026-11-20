@@ -13,80 +13,178 @@ import (
 // (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:556).
 var Key = kernel.NewKey[Loader]("loader", 0, kernel.ConsumerBound())
 
-// The refusals of the entry tree.
+// The two plugin names that make an entry a group: its fiber mounts the entries
+// whose Parent is its id (00-decisions.md:475; 07-c4-plugin-sdk.md:1252). An include row arrives
+// from the launcher already resolved, as rows under the include row's id, so it is a
+// group with no config of its own.
+const (
+	GroupPlugin   = "core:group"
+	IncludePlugin = "core:include"
+)
+
+// The refusals of the entry tree. A refused Apply has no effect.
 var (
-	// ErrExists reports a Create of an id that has an entry. The loader never
-	// creates an entry for an id whose previous fiber is not DISPOSED
-	// (03-c3-kernel.md:64, :379).
+	// ErrExists reports a Create of an id that has an entry.
 	ErrExists = errors.New("loader: entry exists")
 	// ErrNotFound reports an Update, Remove or Await of an id with no entry.
 	ErrNotFound = errors.New("loader: no such entry")
+	// ErrParent reports an entry whose Parent has no entry, or an Update that
+	// changes the Parent: the parent is fixed at insert (07-c4-plugin-sdk.md:1307).
+	ErrParent = errors.New("loader: no such parent")
+	// ErrNotGroup reports a Parent that is not a group.
+	ErrNotGroup = errors.New("loader: parent is not a group")
+	// ErrNotMounted reports an Await of an entry that has no fiber because it is
+	// disabled, of another role or under an entry that is not mounted.
+	ErrNotMounted = errors.New("loader: entry is not mounted")
+	// ErrUnsupported reports an Apply on a loader that was given no batch function.
+	ErrUnsupported = errors.New("loader: no batch function")
+	// ErrNotDisposed reports a previous fiber of an id that settled in a state other
+	// than DISPOSED, so that no entry of that id may be created
+	// (07-c4-plugin-sdk.md:341).
+	ErrNotDisposed = errors.New("loader: previous fiber is not disposed")
+	// ErrUnknownKey and ErrUnknownPlugin are why a row's fiber is FAILED: a key name
+	// that the catalog does not hold, a plugin id that the module table does not
+	// hold. They fail the row, never the loader.
+	ErrUnknownKey    = errors.New("loader: unknown key name")
+	ErrUnknownPlugin = errors.New("loader: unknown plugin")
 )
 
 // EntrySpec is one entry of the tree: a row, as the loader needs it. Plugin, Inject,
-// Isolate and Intercept are names, resolved by the loader through the launch keys
-// it injects (03-c3-kernel.md:64): the kernel has no lookup from a name to a key
-// (open point). Config is the parsed tree of the row, as plain values.
-// The row's inject, intercept and isolate are applied to the entry's context
-// (07-c4-plugin-sdk.md:1346, :1354).
+// Isolate and Intercept are names: the loader resolves them through the catalog
+// launch service (launch.Catalog.Plugin and Key), because the kernel has no lookup
+// from a name to a key. Config is the parsed tree of the row, as plain values. The
+// row's inject, intercept and isolate are applied to the entry's context
+// (07-c4-plugin-sdk.md:1347, :1375). Only an entry that is Enabled and whose Roles
+// include the process role is mounted (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:1360).
 type EntrySpec struct {
 	ID        string // the composed id, "<group>:<id>" for a child
 	Parent    string // composed id of the enclosing group, or ""
-	Plugin    string // "<owner>/<name>"; docs: "one fiber per row"
+	Plugin    string // "<owner>/<name>", GroupPlugin or IncludePlugin
 	Config    any
+	Enabled   bool
+	Roles     []string
 	Inject    []string
 	Isolate   []string
 	Intercept map[string]any // key name -> intercept config
 }
 
-// Entry is an entry of the tree and the state of its fiber.
+// Mount says whether an entry has a fiber, and if not why.
+type Mount string
+
+// The four mount states of an entry.
+const (
+	Mounted         Mount = "mounted"          // the entry has, or is waiting to get, a fiber
+	Disabled        Mount = "disabled"         // enabled is false
+	OtherRole       Mount = "other-role"       // the process role is not in the entry's roles
+	ParentUnmounted Mount = "parent-unmounted" // the entry's group is not mounted
+)
+
+// Entry is an entry of the tree. State is the state of its fiber: PENDING while a
+// child waits for its group to be active, and empty when Mount is not Mounted.
 type Entry struct {
 	Spec  EntrySpec
+	Mount Mount
 	State kernel.State
+}
+
+// OpKind names what one operation of Apply does.
+type OpKind string
+
+// The three operations of a plan, in the order of 03-c3-kernel.md:379.
+const (
+	OpCreate OpKind = "create"
+	OpUpdate OpKind = "update"
+	OpRemove OpKind = "remove" // only Entry.ID is read
+)
+
+// Op is one operation of Apply.
+type Op struct {
+	Kind  OpKind
+	Entry EntrySpec
+}
+
+// Outcome is what Apply did for one operation.
+type Outcome string
+
+// The outcomes. Committed is the in-place commit of volatile values
+// (07-c4-plugin-sdk.md:1374); Restarted is a restart with the new config or a fiber
+// replaced because the row's plugin, inject, isolate or intercept changed.
+const (
+	Created   Outcome = "created"   // a fiber was mounted for a new entry
+	Recorded  Outcome = "recorded"  // a new entry that is not mounted
+	Restarted Outcome = "restarted" // the fiber restarts with the new spec
+	Committed Outcome = "committed" // volatile values changed in place, no restart
+	Unchanged Outcome = "unchanged"
+	Removed   Outcome = "removed"   // the entry and its fiber are gone
+	Unmounted Outcome = "unmounted" // the entry stays, its fiber is gone: disabled or another role
+)
+
+// Result is the outcome of the operation at the same position of Apply.
+type Result struct {
+	ID      string
+	Outcome Outcome
 }
 
 // Loader is the entry tree: "create, update, remove, await, locate"
 // (03-c3-kernel.md:64). The docs name the five operations and no signatures;
 // these are minimal. reload applies a plan as one kernel.Batch of remove, update
-// and create (03-c3-kernel.md:379, :84): the docs do not say how the loader
-// takes a batch, so none of the five does (open point).
+// and create (03-c3-kernel.md:379, :84), so Apply takes the whole plan, and Create,
+// Update and Remove are Apply with one operation. The docs say both that the plan
+// is one batch and that the loader never creates an entry for an id whose previous
+// fiber is not DISPOSED (07-c4-plugin-sdk.md:341); an id that is removed and created
+// again therefore has its create in a second batch, after the wait (open point).
 type Loader interface {
+	// Apply applies the operations in order against the tree as the earlier ones
+	// leave it. It validates everything first: a refused operation refuses the whole
+	// plan with no effect. An error after the first kernel batch has committed
+	// (the context ended while waiting for a disposal) leaves the tree as it is:
+	// the entry list is the truth, and an Update of an entry with no fiber mounts it.
+	// It is not re-entrant: a hook listener must not call it.
+	Apply(ctx context.Context, ops []Op) ([]Result, error)
 	// Create mounts a fiber for the entry. It returns ErrExists for a known id.
 	Create(ctx context.Context, e EntrySpec) error
-	// Update replaces the entry's spec: a volatile-only change commits in place,
-	// any other restarts the fiber (07-c4-plugin-sdk.md:1371). ErrNotFound for an
-	// unknown id.
+	// Update replaces the entry's spec: a change of volatile config paths only
+	// commits in place, any other restarts the fiber (07-c4-plugin-sdk.md:1374).
+	// ErrNotFound for an unknown id.
 	Update(ctx context.Context, e EntrySpec) error
-	// Remove unloads and disposes the entry's fiber. ErrNotFound for an unknown id.
+	// Remove unloads and disposes the entry's fiber and its children. ErrNotFound
+	// for an unknown id.
 	Remove(ctx context.Context, id string) error
 	// Await waits until the entry's fiber has settled and returns its state
-	// (03-c3-kernel.md:67, :380). ErrNotFound for an unknown id.
+	// (03-c3-kernel.md:67, :380). ErrNotFound for an unknown id, ErrNotMounted for
+	// an entry with no fiber by Mount.
 	Await(ctx context.Context, id string) (kernel.State, error)
-	// Locate returns the entry of an id.
+	// Locate returns the entry of an id, mounted or not.
 	Locate(id string) (Entry, bool)
 }
 
 // PatchContextArgs is the payload of loader/patch-context: the entry being
-// mounted and the context built for its fiber. The docs name the hook's use,
-// "isolate and intercept handling" (plugin-system-2026-11.md:319), and no payload;
-// this is the smallest the named listeners need (open point).
+// mounted and the context built for its fiber, with the row's isolate and intercept
+// already applied. A listener returns the context to mount from: it wraps Context,
+// replaces it, or returns Context. The kernel gives an owner no innermost step, so
+// the built-in handling runs first and a nil result means "keep Context" (open
+// point: 07-c4-plugin-sdk.md:386 has the built-in behaviour innermost). The docs
+// name the hook's use, "isolate and intercept handling"
+// (plugin-system-2026-11.md:319), and no payload; this is the smallest the named
+// listeners need (open point).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
 }
 
-// EntryInitArgs is the payload of loader/entry-init, dispatched when an entry's
-// context is ready, before its fiber is created. Payload not described in the docs;
-// minimal (open point).
+// EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
+// fiber is created, with the context it was mounted from. Payload not described in
+// the docs; minimal (open point).
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
 }
 
 // VolatileUpdateArgs is the payload of loader/volatile-update, dispatched when
-// the loader commits volatile values in place (07-c4-plugin-sdk.md:1371;
-// plugin-system-2026-11.md:319 "volatile commits"). Paths are the dotted config
-// paths that changed. Payload not described in the docs; minimal (open point).
+// the loader commits volatile values in place (07-c4-plugin-sdk.md:1374;
+// plugin-system-2026-11.md:319 "volatile commits"). Config is the whole new config
+// and Paths the sorted dotted config paths that changed. Payload not described in
+// the docs; minimal (open point).
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any
@@ -95,10 +193,9 @@ type VolatileUpdateArgs struct {
 
 // The three hooks of the loader, all owned by Key and sealed
 // (07-c4-plugin-sdk.md:463). PatchContext is a waterfall: a listener returns the
-// context, the built-in behaviour is the isolate and intercept of the row, and a
-// listener that does not call next vetoes it (07-c4-plugin-sdk.md:385).
-// EntryInit and VolatileUpdate are events (plugin-system-2026-11.md:319). None
-// is Scoped: they carry no tenant data at S1.
+// context, and a listener that does not call next vetoes what follows it
+// (07-c4-plugin-sdk.md:386). EntryInit and VolatileUpdate are events
+// (plugin-system-2026-11.md:319). None is Scoped: they carry no tenant data at S1.
 var (
 	PatchContext   = kernel.NewWaterfall[PatchContextArgs, *kernel.Context]("loader/patch-context", kernel.OwnedBy(Key), kernel.Sealed())
 	EntryInit      = kernel.NewEvent[EntryInitArgs]("loader/entry-init", kernel.OwnedBy(Key), kernel.Sealed())
