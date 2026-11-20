@@ -117,7 +117,10 @@ func TestBoundedCloseReportsRemainingWorkAndOverflow(t *testing.T) {
 	}
 	want := fmt.Sprintf("observer close incomplete: accepted=%d delivered=%d remaining=%d queued=%d in-flight=%t",
 		incomplete.Status.Accepted, incomplete.Status.Delivered, incomplete.Status.Remaining, incomplete.Status.Queued, incomplete.Status.InFlight)
-	if incomplete.Error() != want || incomplete.Status.Accepted != 2 || incomplete.Status.Stopped {
+	// The active worker may or may not have drained by now (it is not held), but the
+	// detached observer's goroutine is inside its callback until released, so close
+	// cannot be complete: one orphan and two accepted events, whatever the worker did.
+	if incomplete.Error() != want || incomplete.Status.Accepted != 2 || incomplete.Status.Orphaned != 1 {
 		t.Fatalf("closeError = %q, status %+v", incomplete.Error(), incomplete.Status)
 	}
 	release()
