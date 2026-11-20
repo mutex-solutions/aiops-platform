@@ -993,7 +993,7 @@ During the community phase the project index lists open licences only.
 | DR-15 | Object storage (§3.2 `object-store`); not a row of §2.1 | 2026-10-28; read with the licence record of 2026-11-11 |
 | DR-16 to DR-20 | §2.1 rows 15 to 19, so row n is DR-(n+1) | 2026-11-10. DR-16 and DR-20 read as amended on 2026-11-11; DR-17, DR-19 and DR-20 as edited by the second amendment of that date |
 
-New ADRs take the next free number from ADR-058, live in `docs/adr/ADR-NNN-<slug>.md` with the sections Context, Decision, Consequences and Status, and any ADR that changes a decision edits `00-decisions.md` in the same change.
+New ADRs take the next free number from ADR-060, live in `docs/adr/ADR-NNN-<slug>.md` with the sections Context, Decision, Consequences and Status, and any ADR that changes a decision edits `00-decisions.md` in the same change.
 
 ### DR-01 Kernel language and plugin mechanism
 
@@ -1186,6 +1186,7 @@ Records `00-decisions.md` §2.1 row 19.
 | ADR-055 | The built-in on-call provider, the default by owner decision of 2026-11-11 (W11). Open: the model, the time arithmetic and how the lookup is computed, the `page` class, the ack token, limits, the fence, and the lawyer's answer on schedule patents before any code (§5.4 Q3) | DR-03 | `on-call-provider-builtin`, the `notifiers` types | Before S5 ends (the types); before S8b | open: the owner's yes is given (W11); awaits the lawyer's answer on Q3 |
 | ADR-056 | Editorial documentation baseline, preserved attribution and open L14 gate; initial module namespace superseded by ADR-057 | `00-decisions.md` §2.3; §4, §5.1 L14 | Initial local documentation commit | Decided | accepted by the owner 2026-11-12; no architecture or publication-rights clearance change |
 | ADR-057 | Organization module prefix `github.com/mutex-solutions/aiops-platform`; reviewed partial S0 checkpoint to private main through existing SSH; no CI/CD, force push or public disclosure | `00-decisions.md` §9; §4, §5.1 L14 | Repository identity and private checkpoint | Decided | accepted by the owner 2026-11-12; L14 stays open |
+| ADR-059 | Scope and working rules of S1: start beside the last S0 gates; five kernel additions on a branch; matrix cells carry their step; ten gate slots; one YAML library in `boot/`; launch service for `reload`; minimal `clock`; test-only control rows; budgets of `boot/` and `loader/` at the S1 exit | §2.1 | `boot`, `loader`, core rows, the failure matrix | S1 | accepted 2026-11-20 |
 
 Decide-by values are on the phases of §2: the round-1 P0 is S7, and the round-1 P1 is S8a for the agent runtime and S8b for the incident loop. The values of ADR-020, ADR-036, ADR-038, ADR-041 and ADR-044 are restated on the order of 2026-11-11, ADR-047 to ADR-050 come from community record §9, and ADR-051 to ADR-055 from harness record §12. A "P2" or "P2 start" value is read on the track of the row it blocks (§2.3).
 
