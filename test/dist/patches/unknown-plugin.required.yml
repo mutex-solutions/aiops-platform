@@ -1,0 +1,3 @@
+# Layer 4 patch: a required row of a plugin that is not in the module table stops boot.
+- insert:
+    - {id: ghost, plugin: aiops-test/no-such-plugin, roles: [api], required: true}

@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: the fault plugin bad-config as an required row,
+# with a row that depends on what it provides.
+- insert:
+    - {id: fault, plugin: aiops-test/bad-config, roles: [api], required: true, config: {broken: true}}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

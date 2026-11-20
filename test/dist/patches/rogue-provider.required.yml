@@ -1,0 +1,4 @@
+# Layer 4 patch: a plugin that provides the provider-bound key toy.policy without
+# being bound to it. The gate denies the row (check 7).
+- insert:
+    - {id: fault, plugin: aiops-test/rogue-provider, roles: [api], required: true}

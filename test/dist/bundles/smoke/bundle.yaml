@@ -1,0 +1,8 @@
+# Test-only bundle of the profile "smoke": the dependency chain of the toy plugins
+# spine <- store <- consumer, and the two rows a test needs to see the process.
+- insert:
+    - {id: clock, plugin: aiops-test/test-clock, roles: [api]}
+    - {id: spine, plugin: aiops-test/toy-spine, roles: [api], config: {workers: 2}}
+    - {id: store, plugin: aiops-test/toy-provider, roles: [api]}
+    - {id: consumer, plugin: aiops-test/toy-consumer, roles: [api], config: {note: hello}}
+    - {id: state, plugin: aiops-test/test-state, roles: [api]}

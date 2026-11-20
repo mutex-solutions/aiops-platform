@@ -1,0 +1,8 @@
+# The limits of the test distribution (boot.ParseLimits): short, so that a fault that
+# passes a deadline is seen within seconds. The documents give no value for any of
+# them (an open point of S1); the release defaults are in dist/limits.yaml.
+loadDeadline: 2s
+drainDeadline: 2s
+disposeDeadline: 2s
+shutdownBound: 10s
+leakGrace: 500ms

@@ -1,0 +1,3 @@
+# Test-only bundle: the row that watches a control file and submits it as a generation.
+- insert:
+    - {id: submit, plugin: aiops-test/test-submit, roles: [api]}

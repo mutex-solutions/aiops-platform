@@ -1,0 +1,2 @@
+# smoke plus the row that submits a generation named by a control file.
+bundles: [smoke, control]

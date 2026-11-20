@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: the fault plugin fail-apply as an optional row,
+# with a row that depends on what it provides.
+- insert:
+    - {id: fault, plugin: aiops-test/fail-apply, roles: [api]}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}
