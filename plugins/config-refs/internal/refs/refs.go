@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"syscall"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
@@ -148,7 +149,9 @@ func (r *Resolver) file(name string) (string, string) {
 		return "", "the file root cannot be opened"
 	}
 	defer root.Close()
-	f, err := root.Open(name)
+	// A FIFO or a device can block an open or a read without bound, so only a regular
+	// file is read, and it is opened without blocking to find out what it is.
+	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return "", "the file does not exist"
@@ -156,11 +159,15 @@ func (r *Resolver) file(name string) (string, string) {
 		return "", "the path is outside the file root or cannot be opened"
 	}
 	defer f.Close()
-	// One byte past the limit shows a larger file; min keeps MaxInt64 from wrapping.
-	b, err := io.ReadAll(io.LimitReader(f, min(r.MaxBytes, math.MaxInt64-1)+1))
+	fi, err := f.Stat()
+	var b []byte
+	if err == nil && fi.Mode().IsRegular() {
+		// One byte past the limit shows a larger file; min keeps MaxInt64 from wrapping.
+		b, err = io.ReadAll(io.LimitReader(f, min(r.MaxBytes, math.MaxInt64-1)+1))
+	}
 	switch {
-	case err != nil:
-		return "", "the file cannot be read"
+	case err != nil || !fi.Mode().IsRegular():
+		return "", "the path is not a regular file or cannot be read"
 	case int64(len(b)) > r.MaxBytes:
 		return "", fmt.Sprintf("the file is larger than the limit of %d bytes", r.MaxBytes)
 	}
