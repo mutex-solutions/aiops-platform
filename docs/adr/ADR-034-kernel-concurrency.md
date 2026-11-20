@@ -1172,7 +1172,10 @@ or zero key and for a key whose intercept config is dynamically typed.
 `*Event[LedgerEvent]`. The kernel dispatches them from one internal observer of
 the dispatcher that `Root.Observe` uses. It is subscribed when the first
 listener of any of the three is registered, so a kernel with no listener
-subscribes to nothing and the owner does no work for these hooks. A listener
+subscribes to nothing and the owner does no work for these hooks. The
+subscription takes no lease of the root and leaves no effect on it (each listener
+runs under its own fiber's lease), so a stuck listener blames its own fiber alone
+and a subscription made again after an overflow costs the root nothing. A listener
 runs off the owner, one event at a time in the order of `Sequence`. A failing,
 panicking or slow listener is skipped and logged to `Config.ObserverLog`, and
 cannot block or fail the kernel. Listeners are admitted only through

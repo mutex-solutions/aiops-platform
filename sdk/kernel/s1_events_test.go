@@ -289,3 +289,82 @@ func TestKernelEventOverflowIsVisibleToTheListeners(t *testing.T) {
 		t.Fatalf("Inspect sequence %d is below the notice %d", view.Sequence, notice.Sequence)
 	}
 }
+
+// The relay leaves no effect on the root per subscription: however often a listener
+// overflows it, the root's effects do not grow.
+func TestRelayResubscriptionLeavesNoEffectOnTheRoot(t *testing.T) {
+	cfg := frontConfig()
+	cfg.ObserverQueue = 4
+	r := NewForTest(t, cfg)
+	ctx := frontCtx(t)
+	var mu sync.Mutex
+	var gate chan struct{} // Set: the next listener call stalls on it.
+	entered := make(chan struct{}, 1)
+	for _, h := range []*Event[LedgerEvent]{InternalPlugin, InternalStatus, InternalService} {
+		h.On(r.Context(), DefaultStage, func(context.Context, LedgerEvent) (any, error) {
+			mu.Lock()
+			g := gate
+			gate = nil
+			mu.Unlock()
+			if g != nil {
+				entered <- struct{}{}
+				<-g
+			}
+			return nil, nil
+		})
+	}
+	rootEffects := func() int {
+		t.Helper()
+		events, err := r.Events(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, e := range events {
+			if e.Fiber == 0 && e.Kind == "effect" && e.Label == "observer kernel/events" {
+				n++
+			}
+		}
+		return n
+	}
+	if err := r.AwaitObservers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before := rootEffects()
+	mounts := 0
+	mount := func() {
+		t.Helper()
+		if mounts > 1000 {
+			t.Fatalf("no progress after %d mounts: %+v", mounts, r.ObserverStatus())
+		}
+		want(t, r.Plugin(plug(fmt.Sprintf("s1/relay%d", mounts), nil, nil, nil), nil), Active)
+		mounts++
+	}
+	for cycle := uint64(1); cycle <= 3; cycle++ {
+		g := make(chan struct{})
+		mu.Lock()
+		gate = g
+		mu.Unlock()
+		// Mount until the relay stalls, then until that stall detaches it.
+		for stalled := false; !stalled; {
+			mount()
+			select {
+			case <-entered:
+				stalled = true
+			default:
+			}
+		}
+		for r.ObserverStatus().Overflowed < cycle {
+			mount()
+		}
+		close(g)
+		// The relay subscribes again once the stalled callback has returned and its
+		// goroutine is gone; each mount paces the wait.
+		for st := r.ObserverStatus(); st.Observers == 0 || st.Orphaned != 0; st = r.ObserverStatus() {
+			mount()
+		}
+	}
+	if after := rootEffects(); after != before {
+		t.Fatalf("the root holds %d relay effects after three overflows, %d before", after, before)
+	}
+}

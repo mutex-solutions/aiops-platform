@@ -15,12 +15,23 @@ import "context"
 // registered: a kernel with no listener has no subscription and pays nothing.
 func (r *Root) startRelay() { r.relayOnce.Do(func() { r.relay(false) }) }
 
+// relayLease is the leaseHolder of the relay. Each listener the relay calls runs
+// under its own fiber's lease (callEvent), so the relay takes none of the root's: a
+// listener stuck in a callback blames its own fiber alone, and the root drains. It
+// delivers while the root is live, as the root's lease would, and it registers no
+// cleanup effect: nothing needs releasing, and a subscription that replaces one
+// detached for overflow would otherwise leave one more effect on the root each time.
+type relayLease struct{ *handle }
+
+func (l relayLease) enter() (func(), bool)         { return func() {}, l.live.Load() }
+func (relayLease) tryDefer(string, disposer) error { return nil }
+
 // relay subscribes the relay to the ledger. gap is set when it replaces a
 // subscription detached for overflow: its first event is then preceded by the
 // notice that events were lost. The subscription fails only when the kernel is
 // closing, and then there is nothing left to relay.
 func (r *Root) relay(gap bool) {
-	_, _ = r.core.observe(r.ctx.h, "kernel/events", func(ctx context.Context, e ledgerEvent) error {
+	_, _ = r.core.observers.observe(r.ctx.h, relayLease{r.ctx.h}, "kernel/events", func(ctx context.Context, e ledgerEvent) error {
 		ev := exportEvent(e)
 		if gap {
 			gap = false
