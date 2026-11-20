@@ -772,6 +772,13 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+func TestDecodeErrorDoesNotEchoTheValue(t *testing.T) {
+	err := base(t).root.Plugin(reload.Plugin, map[string]any{"queue": "hunter2-secret", "history": 1}).Await(t.Context())
+	if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "queue") {
+		t.Errorf("err = %v: a resolved reference may be in the value, so only the field and the type are named", err)
+	}
+}
+
 func TestBindingMaps(t *testing.T) {
 	_, lp := launchfake.New()
 	_, ldp := loaderfake.New()
