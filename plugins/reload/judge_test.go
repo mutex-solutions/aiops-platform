@@ -3,14 +3,173 @@
 package reload_test
 
 import (
+	"cmp"
 	"context"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/mutex-solutions/aiops-platform/plugins/reload"
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
+
+// script is a loader whose rows the test scripts. Apply records each operation with the
+// outcome the real loader gives it (a create of an id that exists is refused whole) and
+// then calls onApply, whose error it returns with its results, as the real loader does
+// when its second batch did not run. A row starts in the state start names, ACTIVE by
+// default. Await reads a row, then runs the test's hook for it: the hook stands for what
+// the kernel does meanwhile.
+type script struct {
+	mu      sync.Mutex
+	rows    map[string]loader.Entry
+	start   map[string]kernel.State
+	after   map[string]func(ctx context.Context)
+	onApply func(ctx context.Context, n int, ops []loader.Op) error
+	applies int
+}
+
+func newScript() *script {
+	return &script{rows: map[string]loader.Entry{}, start: map[string]kernel.State{}, after: map[string]func(context.Context){}}
+}
+
+func (s *script) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, error) {
+	s.mu.Lock()
+	var res []loader.Result
+	for _, op := range ops {
+		id := op.Entry.ID
+		switch _, ok := s.rows[id]; {
+		case op.Kind == loader.OpCreate && ok:
+			s.mu.Unlock()
+			return nil, fmt.Errorf("create %s: %w", id, loader.ErrExists)
+		case op.Kind == loader.OpCreate:
+			s.rows[id] = loader.Entry{Spec: op.Entry, Mount: loader.Mounted, State: cmp.Or(s.start[id], kernel.Active)}
+			res = append(res, loader.Result{ID: id, Outcome: loader.Created})
+		case op.Kind == loader.OpRemove:
+			delete(s.rows, id)
+			res = append(res, loader.Result{ID: id, Outcome: loader.Removed})
+		default:
+			e := s.rows[id]
+			e.Spec = op.Entry
+			s.rows[id] = e
+			res = append(res, loader.Result{ID: id, Outcome: loader.Restarted})
+		}
+	}
+	s.applies++
+	n := s.applies
+	s.mu.Unlock()
+	if s.onApply == nil {
+		return res, nil
+	}
+	return res, s.onApply(ctx, n, ops)
+}
+
+func (s *script) Await(ctx context.Context, id string) (kernel.State, error) {
+	s.mu.Lock()
+	e, ok := s.rows[id]
+	h := s.after[id]
+	s.mu.Unlock()
+	if h != nil {
+		h(ctx)
+	}
+	switch {
+	case ctx.Err() != nil:
+		return "", ctx.Err()
+	case !ok:
+		return "", loader.ErrNotFound
+	case e.Mount != loader.Mounted:
+		return "", loader.ErrNotMounted
+	}
+	return e.State, nil
+}
+
+func (s *script) set(id string, st kernel.State) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.rows[id]
+	e.State = st
+	s.rows[id] = e
+}
+
+func (s *script) Locate(id string) (loader.Entry, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.rows[id]
+	return e, ok
+}
+
+func (s *script) Create(context.Context, loader.EntrySpec) error { return nil }
+func (s *script) Update(context.Context, loader.EntrySpec) error { return nil }
+func (s *script) Remove(context.Context, string) error           { return nil }
+
+// sworld is reload on the launcher fake and a script loader.
+type sworld struct {
+	t       *testing.T
+	root    *kernel.Root
+	l       *launchfake.Launcher
+	s       *script
+	fiber   *kernel.Fiber
+	svc     def.Reload
+	next    launch.Composition
+	commits []launch.Digest
+}
+
+// newScripted mounts reload over s, with prev as the composition the tree runs: the
+// script holds its rows, ACTIVE unless mounts says otherwise.
+func newScripted(t *testing.T, s *script, mounts map[string]loader.Mount, prev ...launch.Row) *sworld {
+	t.Helper()
+	w := &sworld{t: t, root: kerneltest.New(t), s: s}
+	var lp kernel.Plugin
+	w.l, lp = launchfake.New()
+	w.l.Current = launch.Composition{Rows: prev, Digest: launch.Digest{1}}
+	w.l.ComposeFn = func(context.Context) (launch.Composition, error) { return w.next, nil }
+	w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
+	w.l.CommitFn = func(c launch.Composition) error { w.commits = append(w.commits, c.Digest); return nil }
+	for _, r := range prev {
+		s.rows[r.ID] = loader.Entry{Spec: loader.EntrySpec{ID: r.ID, Plugin: r.Plugin, Config: r.Config, Enabled: true},
+			Mount: cmp.Or(mounts[r.ID], loader.Mounted), State: kernel.Active}
+	}
+	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
+		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
+	kerneltest.Mount(w.root, lp, sp)
+	w.fiber = w.root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 8})
+	active(t, w.fiber)
+	w.svc = submitter(t, w.root, "aiops/submitter")
+	return w
+}
+
+// submitter mounts a row that needs reload and returns the service it was given.
+func submitter(t *testing.T, root *kernel.Root, id string) def.Reload {
+	t.Helper()
+	var svc def.Reload
+	p := kernel.Define(kernel.Plugin{ID: id, Inject: []kernel.Dep{kernel.Need(def.Key)},
+		Apply: func(c *kernel.Context, _ any) error { svc = def.Key.Of(c); return nil }})
+	active(t, root.Plugin(p, nil))
+	return svc
+}
+
+// await submits to svc and waits a bounded time for the result: a judge that waits
+// for one row before it reads another never answers in the tests that need it to.
+func await(t *testing.T, svc def.Reload) def.Result {
+	t.Helper()
+	id, err := svc.Submit(t.Context(), def.Op{Source: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	r, err := svc.Await(ctx, id)
+	if err != nil {
+		t.Fatalf("no result: %v", err)
+	}
+	return r
+}
 
 func outcome(rep composition.Report, id string) composition.RowReport {
 	for _, r := range rep.Rows {
@@ -19,6 +178,57 @@ func outcome(rep composition.Report, id string) composition.RowReport {
 		}
 	}
 	return composition.RowReport{}
+}
+
+// A consumer listed before its provider is PENDING while the provider loads, and a PENDING
+// fiber is not in a transition: the judge reads it again once the provider settled.
+func TestDependantListedBeforeItsProviderIsJudgedOnceTheTreeSettles(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("c", "aiops/p", nil), row("p", "aiops/p", nil)}}
+	s.start["c"] = kernel.Pending
+	s.after["p"] = func(context.Context) { s.set("c", kernel.Active) } // p is ACTIVE: c activates
+	r := await(t, w.svc)
+	if r.Status != def.Passed || !r.Report.Pass {
+		t.Fatalf("result = %+v: c was judged before the tree settled", r)
+	}
+	if got := outcome(r.Report, "c"); got.Outcome != "pass" || got.State != kernel.Active {
+		t.Errorf("c = %+v", got)
+	}
+}
+
+// A row that the generation created and whose Apply failed is a failed verdict, whatever an
+// unrelated row takes to load: restart-policy may retry it meanwhile, but the judge read it
+// when it settled.
+func TestRetriedRowIsJudgedWhenItSettledWhateverAnotherRowTakes(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil),
+		row("slow", "aiops/p", nil), row("flaky", "aiops/p", nil)}}
+	s.start["flaky"] = kernel.Failed
+	read := make(chan struct{})
+	var once sync.Once
+	s.after["flaky"] = func(context.Context) { once.Do(func() { close(read) }) }
+	s.after["slow"] = func(ctx context.Context) {
+		// slow loads for longer than flaky's backoff: restart-policy retries flaky and it is
+		// ACTIVE before slow is.
+		select {
+		case <-read:
+		case <-ctx.Done():
+			return
+		}
+		s.set("flaky", kernel.Active)
+	}
+	r := await(t, w.svc)
+	if r.Status != def.RolledBack {
+		t.Fatalf("result = %+v", r)
+	}
+	if got := outcome(r.Report, "flaky"); got.Outcome != "fail" || got.State != kernel.Failed {
+		t.Errorf("flaky = %+v: its Apply failed in this generation", got)
+	}
+	if got := outcome(r.Report, "slow"); got.Outcome != "pass" {
+		t.Errorf("slow = %+v", got)
+	}
 }
 
 // A row of the restart closure that was already PENDING before the generation (it waits

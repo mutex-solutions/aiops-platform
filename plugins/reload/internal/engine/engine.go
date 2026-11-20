@@ -382,9 +382,7 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 // ACTIVE, and so must every required row, and a row that was ACTIVE must still be; a
 // row that was inactive and is untouched is a warning. A row that the loader did not
 // mount (disabled, of another role) is not judged unless it is required, and then it
-// fails. Settling is loader.Await, which returns once a fiber is out of its
-// transition, and the kernel's three deadlines bound every transition, so the
-// settle deadline of the docs is those deadlines; ctx ends it at disposal.
+// fails.
 func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool) (composition.Report, error) {
 	need := e.Profile.Required()
 	required := map[string]bool{}
@@ -397,16 +395,18 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []l
 			touched[r.ID] = true
 		}
 	}
+	reads, err := e.settle(ctx, cand.Rows)
+	if err != nil {
+		return composition.Report{}, err
+	}
 	var states []launch.RowState
 	var rep composition.Report
-	for _, row := range cand.Rows {
+	for i, row := range cand.Rows {
 		if row.Required {
 			required[row.ID] = true
 		}
-		st, err := e.Loader.Await(ctx, row.ID)
+		st, err := reads[i].state, reads[i].err
 		switch {
-		case ctx.Err() != nil:
-			return rep, ctx.Err()
 		case err != nil && required[row.ID]:
 			rep.Rows = append(rep.Rows, composition.RowReport{ID: row.ID, Outcome: "fail", Detail: "required row is not mounted: " + err.Error()})
 			continue
@@ -440,6 +440,54 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []l
 	slices.SortFunc(rep.Rows, func(a, b composition.RowReport) int { return cmp.Compare(a.ID, b.ID) })
 	rep.Pass = !slices.ContainsFunc(rep.Rows, func(r composition.RowReport) bool { return r.Outcome == "fail" })
 	return rep, nil
+}
+
+// reading is what loader.Await said of one row.
+type reading struct {
+	state kernel.State
+	err   error
+}
+
+func same(a, b reading) bool { return a.state == b.state && (a.err == nil) == (b.err == nil) }
+
+// settle reads the rows, each once it is out of its transition (loader.Await), and reads
+// them again until a pass reads what the one before it read: a PENDING fiber is not in a
+// transition, so a dependant read while its provider loaded is read again after
+// ("settle, then judge", 03-c3-kernel.md:380). The rows of a pass are read together, so
+// each is read when it settles, whatever another takes. A row read FAILED stays FAILED
+// for the verdict: failure is sticky in the kernel, and a retry by restart-policy since
+// does not undo an Apply that failed in this generation (08-profiles-roadmap-adrs.md
+// §1.6: a live Apply error is a failed verdict). The kernel's deadlines bound each read
+// and ctx ends them at disposal.
+func (e *Engine) settle(ctx context.Context, rows []launch.Row) ([]reading, error) {
+	var last []reading
+	failed := make([]bool, len(rows))
+	for {
+		reads := make([]reading, len(rows))
+		var wg sync.WaitGroup
+		for i, row := range rows {
+			// Joined below, and each read ends with ctx: none outlives the engine's
+			// tracked goroutine.
+			wg.Go(func() { reads[i].state, reads[i].err = e.Loader.Await(ctx, row.ID) })
+		}
+		wg.Wait()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		for i, rd := range reads {
+			failed[i] = failed[i] || rd.state == kernel.Failed
+		}
+		if slices.EqualFunc(reads, last, same) {
+			break
+		}
+		last = reads
+	}
+	for i := range last {
+		if failed[i] {
+			last[i].state = kernel.Failed
+		}
+	}
+	return last, nil
 }
 
 func why(id string, touched, required map[string]bool) string {
