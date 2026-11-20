@@ -230,6 +230,9 @@ func TestComposeErrors(t *testing.T) {
 		{"insert intercept not map", files{bundle: "- insert: [{id: a, plugin: o/a, roles: [api], intercept: x}]\n"}, RuleType, "a", 1},
 		{"insert intercept bad key", files{bundle: "- insert: [{id: a, plugin: o/a, roles: [api], intercept: {'a b': 1}}]\n"}, RuleSyntaxID, "a", 1},
 		{"insert intercept bad value", files{bundle: "- insert: [{id: a, plugin: o/a, roles: [api], intercept: {k: 0755}}]\n"}, RuleType, "a", 1},
+		// config-refs resolves the config of a row only, so a reference in an intercept would reach the provider raw.
+		{"insert intercept reference", files{bundle: "- insert: [{id: a, plugin: o/a, roles: [api], intercept: {k: {m: [1, '${secret:x}']}}}]\n"}, RuleReference, "a", 1},
+		{"patch intercept reference", files{bundle: base, l2: "- {id: a, intercept: {k: '${env:AIOPS_REF_X}'}}\n"}, RuleReference, "a", 1},
 		{"insert config not map", files{bundle: "- insert: [{id: a, plugin: o/a, roles: [api], config: [1]}]\n"}, RuleType, "a", 1},
 		{"insert plugin not string", files{bundle: "- insert: [{id: a, plugin: 5, roles: [api]}]\n"}, RuleType, "a", 1},
 		{"id exists in layer", files{bundle: base + "- insert: [{id: a, plugin: o/b, roles: [api]}]\n"}, RuleDuplicateID, "a", 0},
@@ -597,7 +600,7 @@ func TestRefsPerRow(t *testing.T) {
     - id: a
       plugin: o/a
       roles: [api]
-      intercept: {k: {m: "${flag:x}"}}
+      intercept: {k: {m: "flag:x"}}
       config: {z: "${env:Z}", a: {s: "${secret:s}"}, l: ["${file:/p}", 1]}
 `
 	c, _, err := files{bundle: b}.compose(Options{Server: true})
@@ -608,7 +611,7 @@ func TestRefsPerRow(t *testing.T) {
 	for _, u := range c.Rows[0].Refs {
 		got = append(got, u.Path+"="+string(u.Ref.Scheme))
 	}
-	want := "config.a.s=secret config.l[0]=file config.z=env intercept.k.m=flag"
+	want := "config.a.s=secret config.l[0]=file config.z=env"
 	if strings.Join(got, " ") != want {
 		t.Errorf("got %v", got)
 	}

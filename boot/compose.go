@@ -337,11 +337,7 @@ func (c *composer) finish() Composition {
 		for j, n := range names {
 			prov.Fields[j] = FieldOrigin{Field: n, Origin: cr.origin[j]}
 		}
-		var refs []RefUse
-		refs = collectRefs(cr.row.Config, "config", refs)
-		for _, f := range cr.row.Intercept {
-			refs = collectRefs(f.Value, "intercept."+f.Key, refs)
-		}
+		refs := collectRefs(cr.row.Config, "config", nil) // the parser refuses one in an intercept
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
 		plain[i] = cr.row
 	}

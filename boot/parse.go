@@ -484,6 +484,12 @@ func (p *parser) intercept(b *fieldBag, n *yaml.Node, row string, depth int) err
 		if err != nil {
 			return err
 		}
+		// config-refs resolves references through internal/config, so in the config
+		// of a row only (03-c3-kernel.md:68); one in an intercept would reach the
+		// provider unresolved.
+		if refs := collectRefs(v, "intercept."+pr.key, nil); len(refs) > 0 {
+			return p.err(pr.v, RuleReference, row, "%s holds a reference: references are resolved in config only", refs[0].Path)
+		}
 		fields = append(fields, Field{Key: pr.key, Value: v})
 	}
 	sort.Slice(fields, func(i, j int) bool { return fields[i].Key < fields[j].Key })
