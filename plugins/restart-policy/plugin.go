@@ -65,6 +65,10 @@ var Plugin = kernel.Define(kernel.Plugin{
 			r.Status(ctx, e)
 			return nil, nil
 		})
+		// Every row activates with no order, so a fiber may have failed before this
+		// one listened, and its event reached no one. Catch up as for the notice that
+		// events were lost: read the tree and count the FAILED fibers in it.
+		r.Status(c.Std(), kernel.LedgerEvent{Kind: "overflow"})
 		return nil
 	},
 })

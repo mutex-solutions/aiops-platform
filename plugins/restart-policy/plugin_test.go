@@ -582,3 +582,41 @@ func TestBindingMapsMustListTheRow(t *testing.T) {
 		})
 	}
 }
+
+// A row activates with no order, so a fiber may fail before restart-policy listens:
+// its event reached no one, and it must be retried all the same.
+func TestRetriesAFiberThatFailedBeforeRestartPolicyWasActive(t *testing.T) {
+	logs := make(chan entry, 64)
+	root := kerneltest.New(t, kerneltest.WithConfig(func(c *kernel.Config) { c.LogHandler = logTap{logs} }))
+	l, lp := launchfake.New()
+	l.Modules = []launch.CatalogEntry{{ID: "aiops/other"}}
+	clk, kp := clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
+	comp, cp := compfake.New()
+	kerneltest.Mount(root, lp, kp, cp)
+	fl := newFlaky("aiops/other", true)
+	f := root.Plugin(fl.plugin(), nil)
+	if err := f.Await(t.Context()); err == nil {
+		t.Fatal("the flaky row applied")
+	}
+	comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
+		{ID: "late", Plugin: "aiops/other", Fiber: f.ID(), State: kernel.Failed}}})
+
+	rp := root.Plugin(restartpolicy.Plugin, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	if err := rp.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for e := range logs {
+		if e.msg == "fiber.retry" {
+			if e.attrs["fiber"] != f.ID() || e.attrs["failures"] != int64(1) {
+				t.Fatalf("retry = %v", e.attrs)
+			}
+			break
+		}
+	}
+	fl.failing.Store(false)
+	clk.Advance(time.Second)
+	fl.attempt(t, 2)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
