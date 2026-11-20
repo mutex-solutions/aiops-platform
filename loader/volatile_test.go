@@ -5,6 +5,10 @@ package loader
 import (
 	"slices"
 	"testing"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 type m = map[string]any
@@ -56,5 +60,34 @@ func TestVolatileOnly(t *testing.T) {
 	}
 	if _, only := volatileOnly(m{"window": 1}, m{"window": 2}, nil); only {
 		t.Error("with no volatile path nothing is volatile")
+	}
+}
+
+// A volatile value that is or was a reference is not committed in place: the
+// event carries the config as the tree holds it, unresolved, so the fiber restarts
+// and config-refs resolves the value at its activation.
+func TestVolatileChangeWithAReferenceRestarts(t *testing.T) {
+	p := newProbe()
+	ls := newListener("t/listener")
+	rv := row("v", "t/v")
+	rv.Config = m{"note": "plain", "rules": l{m{"url": "a"}}}
+	x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/v", nil)), pre: []kernel.Plugin{ls.plugin}, rows: []def.EntrySpec{rv},
+		modules: []launch.CatalogEntry{{ID: "t/v", Volatile: []string{"note", "rules"}}}})
+	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
+	for i, to := range []m{
+		{"note": ref, "rules": l{m{"url": "a"}}},                    // becomes a reference
+		{"note": "plain", "rules": l{m{"url": "a"}}},                // was one
+		{"note": "plain", "rules": l{m{"url": "a"}, m{"url": ref}}}, // holds one beneath
+	} {
+		rv.Config = to
+		if res := x.apply(update(rv)); res[0].Outcome != def.Restarted {
+			t.Fatalf("change %d: outcome %v", i, res)
+		}
+		x.want("v", kernel.Active)
+	}
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if p.count("t/v") != 4 || len(ls.volatile) != 0 {
+		t.Errorf("applies %d, volatile-update heard %+v", p.count("t/v"), ls.volatile)
 	}
 }
