@@ -299,6 +299,12 @@ func (r *run) run(ctx context.Context) int {
 	// 5. Settle under a bound, then the required audit over the live tree
 	// (03-c3-kernel.md:361).
 	bctx, cancel := r.bound(ctx, o.Limits.settleBound())
+	_ = root.Settle(bctx) // the verdict is the second one's: a blocked fiber is still blocked then
+	// config-refs becoming ACTIVE makes configRefsReady available through the observer
+	// of watch, which runs apart from the tree: Settle may return before it has told the
+	// kernel, with a row that holds a reference still PENDING for the key, and the audit
+	// would stop a healthy boot. Wait for the observer, then settle what it set going.
+	_ = root.AwaitObservers(bctx) // an overflow only says events were lost; the audit reads the tree itself
 	serr := root.Settle(bctx)
 	cancel()
 	if serr != nil {
