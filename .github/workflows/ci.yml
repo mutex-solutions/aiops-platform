@@ -136,6 +136,22 @@ jobs:
           S0_WORKER_RESTART_FULL_RECOVERY_IDS: "100"
           GOMAXPROCS: "8"
         run: go test -count=1 -v -timeout 15m -run '^TestWorkerRestartFullGate$' ./plugins/jobs-river/internal/s0workers
+      - name: Full restart gate at reduced scale, kernel-owned resources (informational, not acceptance)
+        # Same as the step above with the pool, River clients and listener owned by
+        # kernel fibers (S0WORKERS_RESTART_OWNER=kernel). The frozen-scale run is restart-full.yml.
+        continue-on-error: true
+        env:
+          S0_ADMIN_DSN: ${{ env.DSN_BASE }}/s0restartfull?sslmode=disable
+          S0_EXPECT_DATABASE: s0restartfull
+          S0_WORKER_RESTART_FULL: "1"
+          S0_WORKER_RESTART_FULL_CYCLES: "1"
+          S0_WORKER_RESTART_FULL_COMBINED_CYCLES: "1"
+          S0_WORKER_RESTART_FULL_WARMUP_SECONDS: "5"
+          S0_WORKER_RESTART_FULL_WINDOW_SECONDS: "20"
+          S0_WORKER_RESTART_FULL_RECOVERY_IDS: "100"
+          S0WORKERS_RESTART_OWNER: kernel
+          GOMAXPROCS: "8"
+        run: go test -count=1 -v -timeout 15m -run '^TestWorkerRestartFullGate$' ./plugins/jobs-river/internal/s0workers
       - name: Typed operations probe
         env:
           S0_TYPED_DSN: ${{ env.DSN_BASE }}/s0typed?sslmode=disable
