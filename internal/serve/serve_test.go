@@ -224,6 +224,22 @@ func TestStatusFileFailureIsAWarning(t *testing.T) {
 	}
 }
 
+// stubBoot replaces boot.Run for one test with f.
+func stubBoot(t *testing.T, f func(context.Context, boot.RunOptions) int) {
+	t.Cleanup(func() { bootRun = boot.Run })
+	bootRun = f
+}
+
+func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
+	h, dir := home(t, "[]"), t.TempDir()
+	var flags map[string]string
+	stubBoot(t, func(_ context.Context, o boot.RunOptions) int { flags = o.Flags; return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h, "--refs-dir", dir)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK || flags["refs-dir"] != dir {
+		t.Fatalf("exit %d, flags %v: %s", code, flags, stderr.String())
+	}
+}
+
 func TestOverlayPrefersTheFirstFile(t *testing.T) {
 	o := overlay{fstest.MapFS{"a": {Data: []byte("first")}}, fstest.MapFS{"a": {Data: []byte("second")}, "b": {Data: []byte("second")}}}
 	for name, want := range map[string]string{"a": "first", "b": "second"} {

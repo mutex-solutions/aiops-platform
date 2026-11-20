@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -133,9 +134,11 @@ func (r *Resolver) one(ref launch.Ref) (string, error) {
 	return fail("unknown scheme")
 }
 
-// file reads name from the one directory the root flag names. os.Root refuses a name
-// that leaves the directory, by ".." or by a link, and an absolute name. The docs say
-// only "one directory named by flag" (08-profiles-roadmap-adrs.md:162).
+// file reads name from the one directory the root flag names, which must be absolute
+// so that it does not depend on the working directory; the server's flag for it is
+// --refs-dir. os.Root refuses a name that leaves the directory, by ".." or by a link,
+// and an absolute name. The docs say only "one directory named by flag"
+// (08-profiles-roadmap-adrs.md:162).
 func (r *Resolver) file(name string) (string, string) {
 	if r.RootFlag == "" {
 		return "", "no file root is configured"
@@ -143,6 +146,9 @@ func (r *Resolver) file(name string) (string, string) {
 	dir, ok := r.Flag(r.RootFlag)
 	if !ok || dir == "" {
 		return "", "the flag " + r.RootFlag + " that names the file root is not set"
+	}
+	if !filepath.IsAbs(dir) {
+		return "", "the file root is not an absolute path"
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {

@@ -11,7 +11,10 @@
 // --role, --patch (repeatable, layer 4) and the home, --home or $AIOPS_HOME. Two
 // more are S1 additions of this package: --bundles, the directory of
 // bundles/<name>/bundle.yaml (default: the home) and --limits, a limits.yaml that
-// replaces the limits of the distribution (boot.ParseLimits).
+// replaces the limits of the distribution (boot.ParseLimits). A third, --refs-dir,
+// is the one directory that ${file:} reads when config-refs names the flag
+// "refs-dir" (08-profiles-roadmap-adrs.md:162: "one directory named by flag"), so
+// that a file reference need not read the home or the bundles.
 package serve
 
 import (
@@ -70,6 +73,7 @@ const usage = `usage: %s --profile <name> [flags]
   --role <role>      edge, api, worker or all (default: all)
   --patch <file>     layer 4 overlay; repeat for several
   --limits <file>    limits.yaml replacing the limits of the distribution
+  --refs-dir <dir>   absolute directory that ${file:} references read (flag "refs-dir")
 `
 
 // Run parses the flags and runs the launcher until it exits, and returns the exit
@@ -83,6 +87,7 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	bundles := fl.String("bundles", "", "")
 	role := fl.String("role", "", "")
 	limits := fl.String("limits", "", "")
+	refsDir := fl.String("refs-dir", "", "")
 	fl.Var(&patches, "patch", "")
 	if err := fl.Parse(e.Args); err != nil {
 		fmt.Fprintf(e.Stderr, "%s: %v\n"+usage, name, err, name)
@@ -114,7 +119,7 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	opts := boot.RunOptions{
 		Profile: *profile, Role: *role,
 		Args:  e.Args,
-		Flags: map[string]string{"profile": *profile, "home": *home, "bundles": *bundles, "role": *role},
+		Flags: map[string]string{"profile": *profile, "home": *home, "bundles": *bundles, "role": *role, "refs-dir": *refsDir},
 		Home:  overlay{os.DirFS(*home), d.Shipped}, Bundles: overlay{os.DirFS(*bundles), d.Shipped},
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
 		Registry: d.Registry, Dist: d.Manifest, Limits: lim, Clock: boot.SystemClock(),
@@ -127,8 +132,11 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	for _, p := range patches {
 		opts.Patches = append(opts.Patches, patchFile(p))
 	}
-	return boot.Run(ctx, opts)
+	return bootRun(ctx, opts)
 }
+
+// bootRun is boot.Run; a test replaces it to see the options and the status file.
+var bootRun = boot.Run
 
 // Status is the JSON form of boot.ProcessStatus in the status file.
 type Status struct {

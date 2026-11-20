@@ -3,9 +3,11 @@
 package refs_test
 
 import (
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
@@ -34,5 +36,19 @@ func TestFileLimitOfMaxInt64ReadsTheFile(t *testing.T) {
 	}
 	if v, err := resolveFile(resolver(dir, math.MaxInt64), "token"); err != nil || v != "tok-123" {
 		t.Fatalf("value %q, err %v", v, err)
+	}
+}
+
+// A relative root would be read from the working directory of the process.
+func TestFileRootMustBeAbsolute(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("d", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("d", "x"), []byte("v"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveFile(resolver("d", 8), "x"); !errors.Is(err, refs.ErrUnresolved) || !strings.Contains(err.Error(), "not an absolute path") {
+		t.Fatalf("err = %v", err)
 	}
 }
