@@ -127,6 +127,27 @@ func (p *process) waitState(ok func(teststate.State) bool) teststate.State {
 	return st
 }
 
+// waitTree is waitState until ok holds and the loader's mounted rows agree with the
+// kernel's fibers (teststate.TreeProblems), the oracle that the loader's own records
+// cannot be.
+func (p *process) waitTree(ok func(teststate.State) bool) teststate.State {
+	p.t.Helper()
+	var bad []string
+	defer func() {
+		if p.t.Failed() {
+			p.t.Logf("the loader's rows and the kernel's fibers differ: %v", bad)
+		}
+	}()
+	return p.waitState(func(s teststate.State) bool {
+		var fibers []teststate.Fiber
+		if !ok(s) || !p.read(teststate.KernelFile, &fibers) {
+			return false
+		}
+		bad = teststate.TreeProblems(s, fibers)
+		return len(bad) == 0
+	})
+}
+
 func rowState(s teststate.State, id string) string {
 	for _, r := range s.Rows {
 		if r.ID == id {
@@ -263,7 +284,7 @@ func TestLoaderSmoke(t *testing.T) {
 		settled := func(s teststate.State) bool {
 			return s.Ready && rowState(s, "grp") == "ACTIVE" && rowState(s, "grp:a") == "ACTIVE" && rowState(s, "grp:b") == "ACTIVE"
 		}
-		p.waitState(settled)
+		p.waitTree(settled)
 		gen := func(id uint64, body string) *teststate.Op {
 			write(live, body)
 			p.submit(string(rune('0' + id)))
@@ -274,12 +295,12 @@ func TestLoaderSmoke(t *testing.T) {
 		if op := gen(1, "- {id: grp, inject: [toy.store]}\n"); op.Status != "passed" || !slices.Contains(op.Applied["restarted"], "grp") {
 			t.Fatalf("the group did not restart: %+v", op)
 		}
-		p.waitState(settled)
+		p.waitTree(settled)
 		op := gen(2, "- {id: grp, inject: [toy.store]}\n- {id: \"grp:bad\", enabled: true}\n")
 		if op.Status != "rolled back" || op.Rollback == nil || op.Rollback.Error != "" {
 			t.Fatalf("operation %+v", op)
 		}
-		p.waitState(func(s teststate.State) bool {
+		p.waitTree(func(s teststate.State) bool {
 			for _, r := range s.Rows {
 				if r.ID == "grp:bad" && r.Mount != "disabled" {
 					return false

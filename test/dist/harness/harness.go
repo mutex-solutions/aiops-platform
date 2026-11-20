@@ -227,6 +227,8 @@ type Snapshot struct {
 	HaveStatus  bool
 	State       teststate.State
 	HaveState   bool
+	Kernel      []teststate.Fiber // the kernel's fibers (teststate.KernelFile)
+	HaveKernel  bool
 	Exited      bool
 	Code        int
 	Output      string
@@ -236,6 +238,15 @@ type Snapshot struct {
 func (p *Proc) read(name string, v any) bool {
 	data, err := os.ReadFile(filepath.Join(p.RunDir(), name))
 	return err == nil && json.Unmarshal(data, v) == nil
+}
+
+// TreeProblems says where the loader's mounted rows and the kernel's fibers of the
+// snapshot differ (teststate.TreeProblems).
+func (s Snapshot) TreeProblems() []string {
+	if !s.HaveState || !s.HaveKernel {
+		return []string{"the state file or the kernel's record is missing"}
+	}
+	return teststate.TreeProblems(s.State, s.Kernel)
 }
 
 // Snap reads the files now. When the process has ended, the files are read after it
@@ -252,6 +263,7 @@ func (p *Proc) Snap() Snapshot {
 	s.Output = p.Output()
 	s.HaveStatus = p.read(serve.StatusFile, &s.Status)
 	s.HaveState = p.read(teststate.File, &s.State)
+	s.HaveKernel = p.read(teststate.KernelFile, &s.Kernel)
 	var res struct {
 		Error string `json:"error"`
 	}

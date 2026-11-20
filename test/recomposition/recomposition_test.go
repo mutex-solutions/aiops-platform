@@ -81,7 +81,19 @@ func boot(t *testing.T, patches ...string) *world {
 	if !ok {
 		t.Fatalf("the process did not become ready: %+v", s.Status)
 	}
+	w.tree()
 	return w
+}
+
+// tree waits until the loader's mounted rows and the kernel's fibers agree, the oracle
+// that the loader's own records cannot be, and fails the test with the differences
+// otherwise.
+func (w *world) tree() {
+	w.t.Helper()
+	s, ok := w.p.Until(budget, func(s harness.Snapshot) bool { return len(s.TreeProblems()) == 0 })
+	if !ok {
+		w.t.Fatalf("the loader's rows and the kernel's fibers differ: %v", s.TreeProblems())
+	}
 }
 
 // submit writes the patch file of test/dist/patches into the live layer and submits one
@@ -140,9 +152,11 @@ func allActive(s harness.Snapshot) bool {
 	return len(s.State.Rows) > 0
 }
 
-// stop ends the process with SIGTERM and checks it stopped cleanly.
+// stop checks that the settled tree agrees with the kernel, then ends the process with
+// SIGTERM and checks it stopped cleanly.
 func (w *world) stop() {
 	w.t.Helper()
+	w.tree()
 	if code := w.p.Stop(20 * time.Second); code != 0 {
 		w.t.Fatalf("the process stopped with %d, want a clean stop; output:\n%s", code, w.p.Output())
 	}

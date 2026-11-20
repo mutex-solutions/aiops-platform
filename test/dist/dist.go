@@ -77,5 +77,5 @@ func Distribution() (serve.Distribution, error) {
 	if err != nil {
 		return serve.Distribution{}, fmt.Errorf("testdist: %w", err)
 	}
-	return serve.Distribution{Registry: reg, Manifest: man, Limits: lim, Shipped: shipped}, nil
+	return serve.Distribution{Registry: reg, Manifest: man, Limits: lim, Shipped: shipped, Kernel: teststate.RecordKernel}, nil
 }
