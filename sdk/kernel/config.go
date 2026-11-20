@@ -73,6 +73,67 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 	return w.run(ctx, r.aud, a, own)
 }
 
+// stageUpdates is the half of every UpdateOpWith of a batch that runs plugin code,
+// done before the batch is admitted (ADR-059 decision 2; see UpdateOpWith). It
+// marks native[i] as batchKeep where internal/update vetoed the restart. It returns
+// the function that puts the previous configs back, for a batch the core refuses.
+func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (undo func(), err error) {
+	type staged struct {
+		i                  int
+		cell               *cfgCell
+		cfg, resolved, old any
+		loaded             bool
+	}
+	var list []staged
+	for i, op := range ops {
+		if !op.hasCfg || op.fiber.cell == nil {
+			continue
+		}
+		snap, err := op.fiber.ref.snapshot(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !snap.Alive {
+			return nil, ErrInactive
+		}
+		s := staged{i: i, cell: op.fiber.cell, cfg: op.cfg, loaded: snap.Target != nil}
+		if s.loaded {
+			if s.resolved, err = s.cell.resolve(ctx, op.cfg); err != nil {
+				return nil, err
+			}
+		}
+		committed, err := runInner(ctx, InternalCommit, r, op.cfg, func(context.Context, any) (bool, error) { return true, nil })
+		if err != nil {
+			return nil, err
+		}
+		if !committed {
+			return nil, ErrCommitVetoed
+		}
+		list = append(list, s)
+	}
+	for _, s := range list {
+		if !s.loaded {
+			continue
+		}
+		restart := false
+		if _, err := runInner(ctx, InternalUpdate, r, s.resolved, func(context.Context, any) (any, error) { restart = true; return nil, nil }); err != nil {
+			return nil, err
+		}
+		if !restart {
+			native[s.i].Kind = batchKeep
+		}
+	}
+	for k := range list {
+		list[k].old = list[k].cell.load()
+		list[k].cell.retain(list[k].cfg)
+	}
+	return func() {
+		for k := len(list) - 1; k >= 0; k-- {
+			list[k].cell.retain(list[k].old)
+		}
+	}, nil
+}
+
 // Update replaces the fiber's config with cfg and restarts it, and returns once
 // the request is admitted; use Await for the restart (07-c4-plugin-sdk.md:205,
 // :239, :358; ADR-034 owner decision 9). The contract gives no signature: this

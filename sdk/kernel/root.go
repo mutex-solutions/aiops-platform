@@ -162,16 +162,59 @@ type BatchOp struct {
 	kind   batchKind
 	plugin Plugin
 	cfg    any
+	hasCfg bool // UpdateOpWith: cfg replaces the fiber's config.
 	fiber  *Fiber
+	parent *Context // Context.MountOp: the context the mount is a child of; nil for a top-level fiber.
 }
 
 // MountOp is the operation that mounts p, like Root.Plugin, as a top-level
 // fiber.
 func MountOp(p Plugin, cfg any) BatchOp { return BatchOp{kind: batchMount, plugin: p, cfg: cfg} }
 
+// MountOp is the operation that mounts p as a child fiber of c's fiber, with the
+// semantics of c.Plugin(p, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:197,
+// :367): the child inherits c's entry when p was not defined, sees c's isolate and
+// intercept chain, is an effect of c, and a declaration that is refused makes a
+// child that is mounted failed. What differs is that it is applied atomically with
+// the rest of the batch. A batch holding it is refused whole, with an error that
+// matches ErrInactive and ErrInactiveEffect and no effect, when c's activation has
+// ended or is ending when the batch is admitted, or when an earlier operation of
+// the same batch disposes c's fiber (c.Plugin would panic and fail c's fiber; a
+// batch has no fiber to fail). A c of another kernel is refused with an error. The
+// Fiber that Batch returns at this position is the new child. A nil c gives the
+// zero BatchOp, which Batch refuses.
+func (c *Context) MountOp(p Plugin, cfg any) BatchOp {
+	if c == nil {
+		return BatchOp{}
+	}
+	return BatchOp{kind: batchMount, plugin: p, cfg: cfg, parent: c}
+}
+
 // UpdateOp is the operation that restarts f with the config it retains. The
 // contract gives it no shape; it runs no config hook and decodes at activation.
 func UpdateOp(f *Fiber) BatchOp { return BatchOp{kind: batchUpdate, fiber: f} }
+
+// UpdateOpWith is the operation that gives f the config cfg and restarts it, with
+// the effect of f.Update(ctx, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:205,
+// :358; ADR-034 owner decisions 9, 12, 13 and 15). Before the batch is admitted,
+// Batch handles every UpdateOpWith in operation order, each as Update does: it
+// resolves cfg through internal/config and Decode when the fiber has a desired
+// target, then runs the waterfall internal/commit, which fails closed. The first
+// operation that errors, or whose commit is vetoed (ErrCommitVetoed), refuses the
+// whole batch: nothing is retained, nothing mounts, updates or disposes. Only then
+// is cfg of every operation retained (the last one wins when f appears twice) and
+// the waterfall internal/update run for each fiber that has a target, in operation
+// order. A listener of internal/update that does not call next vetoes the restart
+// of that fiber alone: as in Update, its cfg stays retained and applies at the next
+// restart, and the rest of the batch goes on. An error of internal/update refuses
+// the batch whole. A fiber with no target (gated on a need, FAILED, a disposal
+// pending) skips resolution and internal/update, as in Update. A batch the core
+// then refuses, such as one that disposes f before this operation, gets the
+// previous configs back. A fiber mounted with When takes no config, so the
+// operation is UpdateOp. The Fiber at this position is f.
+func UpdateOpWith(f *Fiber, cfg any) BatchOp {
+	return BatchOp{kind: batchUpdate, fiber: f, cfg: cfg, hasCfg: true}
+}
 
 // DisposeOp is the operation that disposes f, like Fiber.Dispose.
 func DisposeOp(f *Fiber) BatchOp { return BatchOp{kind: batchDispose, fiber: f} }
@@ -180,8 +223,10 @@ var errForeignFiber = errors.New("fiber belongs to another kernel")
 
 // Batch commits all of ops as one desired state before any resulting work is
 // admitted, so two updates cannot start an intermediate activation
-// (docs/design/plugin-system-2026-11.md:57). It returns one Fiber per operation, in order, or an
-// error and no effect. The contract names Batch but not its shape; this one maps
+// (docs/design/plugin-system-2026-11.md:57). It returns one Fiber per operation, in
+// order (ADR-059 decision 2): at a MountOp, from Root or from a Context, the new
+// fiber; at an UpdateOp, UpdateOpWith or DisposeOp, the fiber that was given. It
+// returns an error and no effect otherwise, and a refused batch retains no config. The contract names Batch but not its shape; this one maps
 // the core's batch directly.
 func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	native := make([]batchOp, len(ops))
@@ -189,7 +234,14 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	for i, op := range ops {
 		native[i].Kind = op.kind
 		if op.kind == batchMount {
-			native[i].Spec, cells[i] = r.ctx.mountSpec(op.plugin, op.cfg)
+			from := r.ctx
+			if op.parent != nil {
+				if op.parent.root != r {
+					return nil, fmt.Errorf("batch operation %d: %w", i, errForeignFiber)
+				}
+				from, native[i].Parent = op.parent, op.parent.h
+			}
+			native[i].Spec, cells[i] = from.mountSpec(op.plugin, op.cfg)
 			continue
 		}
 		if op.fiber == nil {
@@ -200,8 +252,13 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		}
 		native[i].Fiber = op.fiber.ref.id
 	}
+	undo, err := r.stageUpdates(ctx, ops, native)
+	if err != nil {
+		return nil, err
+	}
 	ids, err := r.core.batch(ctx, native)
 	if err != nil {
+		undo()
 		return nil, err
 	}
 	out := make([]*Fiber, len(ops))

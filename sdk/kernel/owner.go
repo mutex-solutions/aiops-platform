@@ -773,6 +773,13 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	prepared, err := prepareBatch(operations, func(id uint64) bool {
 		f := o.fibers[id]
 		return f != nil && alive(f)
+	}, func(h *handle) bool {
+		// The test of cmdMountChild: this exact activation is current and not ending.
+		if h.act == nil {
+			return false
+		}
+		_, err := o.current(h.act)
+		return err == nil && !h.act.selfDispose.Load()
 	})
 	if err != nil {
 		return nil, err
@@ -788,7 +795,11 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 		case batchMount:
 			// prepareBatch has validated the same mount declarations. IDs are
 			// consumed only now, after the entire prefix has been admitted.
-			f, _ := o.mount(op.Spec, nil)
+			var parent *activation
+			if op.Parent != nil {
+				parent = op.Parent.act
+			}
+			f, _ := o.mount(op.Spec, parent)
 			results[i] = f.id
 		case batchUpdate:
 			f := o.fibers[op.Fiber]
@@ -1416,10 +1427,12 @@ const (
 	batchMount batchKind = iota + 1
 	batchUpdate
 	batchDispose
+	batchKeep // An update whose restart internal/update vetoed: it admits and does nothing.
 )
 
-// batchOp is data. A mount uses Spec; the other operations use an existing nonzero
-// Fiber. Mount IDs are assigned only at actual commit.
+// batchOp is data. A mount uses Spec, and Parent when it is a child of that
+// activation's handle (nil: a top-level fiber); the other operations use an
+// existing nonzero Fiber. Mount IDs are assigned only at actual commit.
 //
 // A batch commits one validated desired-state prefix before admitting resulting
 // lifecycle and check work. Two updates increment the revision twice but cannot
@@ -1429,12 +1442,16 @@ type batchOp struct {
 	Kind  batchKind
 	Fiber uint64
 	Spec  pluginSpec
+	// Parent is the handle of the activation a mount is a child of. The whole batch
+	// is refused when that activation has ended or is ending, or when an earlier
+	// operation of the batch disposes its fiber, as a cmdMountChild would be.
+	Parent *handle
 }
 
 // prepareBatch copies declarations and checks every operation before any writer
 // mutates state. live is native state data read by the owner; it must not invoke
 // plugin code. False means absent or already disposing.
-func prepareBatch(operations []batchOp, live func(uint64) bool) ([]batchOp, error) {
+func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool) ([]batchOp, error) {
 	prepared := slices.Clone(operations)
 	disposed := make(map[uint64]bool)
 	for i := range prepared {
@@ -1445,7 +1462,10 @@ func prepareBatch(operations []batchOp, live func(uint64) bool) ([]batchOp, erro
 				return nil, fmt.Errorf("invalid batch Mount at operation %d", i)
 			}
 			op.Spec.Needs, op.Spec.Provides = slices.Clone(op.Spec.Needs), slices.Clone(op.Spec.Provides)
-		case batchUpdate, batchDispose:
+			if op.Parent != nil && (!parentLive(op.Parent) || disposed[op.Parent.fiber]) {
+				return nil, fmt.Errorf("batch operation %d: %w", i, inactive())
+			}
+		case batchUpdate, batchDispose, batchKeep:
 			if op.Fiber == 0 || !live(op.Fiber) {
 				return nil, fmt.Errorf("batch operation %d: %w", i, errUnknown)
 			}
