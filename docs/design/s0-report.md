@@ -1,0 +1,213 @@
+# S0 exit report
+
+- Date: 2026-11-20.
+- For: the project owner, who decides whether S0 is closed and whether S1 may start.
+- Sources: the roadmap S0 row and ADR table in [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md), the frozen criteria in [`s0-spike-criteria.md`](s0-spike-criteria.md), ADR-034, ADR-035, ADR-036 (draft) and ADR-045, and `test/spike/s0/results/`.
+- Status vocabulary: **met**, **met with recorded exception**, **pending** (a run or decision is still needed), **not met** (a recorded failure stands).
+
+## 1. Verdict
+
+| # | S0 exit criterion | Status | Evidence | Commit |
+|---|---|---|---|---|
+| 1 | Differential scenarios match the reference | **met with recorded exceptions**. Port: 31 of 32 cases match, plus diagnostics D06 and D23. D25 is an owner exception. D05 and D26 are not carried. | [`ADR-035`](../adr/ADR-035-cordis-tracking.md) (parity section); [`s0-causal-coverage.md`](s0-causal-coverage.md); `test/spike/s0/results/causal-kernel-port/` | `e34047e` |
+| 2 | Property test and `-race` clean | **pending**. The property workload (1,000 seeds × 1,000 operations, `-race`) passed on three backends, including the port. The criteria's `go test -race -count=3 ./...` is not recorded; CI runs `-count=1`. | `test/spike/s0/results/property-full-kernel-port/invocation.json` | `e34047e` |
+| 3 | `sdk/kernel` has no `require` line | **met**. A search of the module file finds no `require` line. | `sdk/kernel/go.mod`; CI step `kernelcheck modfile` (`.github/workflows/ci.yml`, line 71) | current tree |
+| 4 | Line budget fixed | **pending owner decision**. Measured 7,448 non-test lines. CI enforces a cap of 8,500. | `tools/kernelcheck`; `.github/workflows/ci.yml` line 73; section 6(b) | current tree |
+| 5 | Transaction spike (ADR-045) | **not met**. The raw-SQL authority gate failed and stays failed. Typed operations were adopted on 2026-11-19. The §5 numeric thresholds are not recorded. | [`ADR-045`](../adr/ADR-045-cross-plugin-transaction.md); `test/spike/s0/results/typedops-pg-arbitration.json` | not recorded |
+| 6 | Restart spike | **pending**. 100 of 100 cycles passed with section 10 accounting. The criteria also require a rerun with kernel-owned resources. The unowned-handler and two-client cases have no recorded pass. | `test/spike/s0/results/restart-full-section10/invocation.json`; `plugins/jobs-river/internal/s0workers/` | `e34047e` |
+| 7 | Both cores on the corpus | **met with recorded exceptions**. Prototype: 64 of 68 pairs match, in 100 of 100 runs under race and under two processors. The port is in row 1. | `docs/design/s0-causal-coverage.md`; ADR-035 | not recorded |
+| 8 | Both cores on a 10,000-fiber bench | **pending**. The run completed but is classified **invalid** by the noise rule (throughput variation above 10% in 15 buckets). No bound failed. The rerun on the final port is pending. | `test/spike/s0/results/scale-full-first/invocation.json` | `225ffbe` |
+| 9 | 500 tenant trees | **pending**. Same run as row 8: invalid by the noise rule, no bound failed. Detail in ADR-036. | `test/spike/s0/results/scale-full-first/invocation.json`; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `225ffbe` |
+| 10 | Cold mount on the ack path | **pending**. The prototype run passed with no reasons. It has no `invocation.json`. The port rerun is pending. | `test/spike/s0/results/coldmount-full-first/report.json`; ADR-034 (2026-11-19 cold-mount section) | `225ffbe` |
+| 11 | `sdk/testkit/kerneltest` | **met**. Built as a separate module and run in CI. | `sdk/testkit/kerneltest/`; `.github/workflows/ci.yml` lines 60 to 65 | current tree |
+| 12 | Coverage: 100% statements per production file | **pending**. The CI check exists. No coverage result is recorded. | `tools/kernelcheck` (`coverage`); `.github/workflows/ci.yml` lines 66 to 75 | current tree |
+| 13 | Fuzzing, 60 s per selected entry point | **pending**. Five fuzz targets exist. No fuzz run is recorded, and CI has no `-fuzz` step. | `sdk/kernel/fuzz_test.go` (`FuzzNewKey`, `FuzzHookDefinition`, `FuzzConfig`, `FuzzConfigPipeline`, `FuzzOperationSequence`) | current tree |
+| 14 | Notices | **met** for `sdk/kernel`. The NOTICE names the reference and keeps both copyright notices. Oracle package notices are in `s0-reference-pins.md` and were not re-checked here. | `sdk/kernel/LICENSE`; `sdk/kernel/NOTICE`; `docs/design/s0-reference-pins.md` | current tree |
+
+**Overall.** S0 is not closed. Rows 2, 5, 6, 8, 9, 10, 12 and 13 are open. Row 4 needs an owner decision. Row 5 has a recorded failure that stays recorded.
+
+## 2. What was built
+
+### 2.1 `sdk/kernel`
+
+One package, `kernel`, in module `github.com/mutex-solutions/aiops-platform/sdk/kernel` (`go 1.26.0`, no `require` line). Standard library only, as checked here: the non-test files that import a package use `context`, `reflect` or `testing`. `testing` is imported only by `root.go`, for the test constructor (ADR-034, decision 1). A full import listing was not produced.
+
+Line counts are newline counts of the 19 non-test `.go` files, the rule used by `kernelcheck lines`. The tool was not run for this report. Confirm with `go run ./tools/kernelcheck lines sdk/kernel 8500` before the budget is frozen.
+
+| File | Lines | Identifiers that show its role |
+|---|---:|---|
+| `owner.go` | 1,479 | owner goroutine and inbox (reconciler core) |
+| `effect.go` | 997 | effects, leases, `ErrInactive` |
+| `observe.go` | 850 | observer queue and overflow |
+| `transition.go` | 611 | transitions, deadline heap |
+| `hooks.go` | 455 | hook definitions and options (`OwnedBy`, `Stages`, `Scoped`, `Sealed`) |
+| `key.go` | 444 | `NewKey`, `Define`, `Need`, `Want`, `Available`, `Intercepts` |
+| `inspect.go` | 671 | `State` and inspection |
+| `context.go` | 368 | `Context`, `Isolate`, `Intercept`, `Enter`, `Defer`, `Go` |
+| `root.go` | 378 | `New`, `NewForTest`, `Root`, `Batch`, `Fiber` |
+| `rootview.go` | 258 | snapshots, `Inspect`, `Events`, `Observe`, `Notify` |
+| `config.go` | 137 | `Fiber.Update`, `ErrCommitVetoed` |
+| `waterfall.go` | 222 | `Waterfall`, `NewWaterfall` |
+| `event.go` | 225 | `Event`, `NewEvent` |
+| `effectscope.go` | 94 | `EffectScope`, `EffectHandle`, `Context.Dispose` |
+| `seam.go` | 151 | not described in this pass |
+| `builtin.go` | 65 | the four built-in keys |
+| `logger.go` | 30 | `Logger` |
+| `registry.go` | 10 | registry built-in |
+| `doc.go` | 3 | package documentation |
+| **Total** | **7,448** | CI cap 8,500 |
+
+The four built-ins are `reflect`, `registry`, `hooks` and `logger` (`ReflectKey`, `RegistryKey`, `HooksKey`, `LoggerKey`, in `builtin.go`).
+
+**Exported surface.** Root and constructors: `New`, `NewForTest`, and `Root` with `Context`, `Plugin`, `Batch`, `Settle`, `Close`, `Snapshots`, `Inspect`, `Events`, `Observe`, `Notify`. Context and plugin model: `Context` (`Extend`, `Isolate`, `Intercept`, `Effect`, `Defer`, `Go`, `Std`, `Enter`, `When`), `Plugin`, `Define`, `Config`, and `Fiber` (`State`, `Await`, `Dispose`, `Effects`, `Update`, `ID`). Keys and dependencies: `Key`, `NewKey`, `Need`, `NeedWith`, `Want`, `Available`, `Intercepts`, `ProviderBound`, `ConsumerBound`, `Signed`, `InterceptConfig`. Hooks, waterfalls, events and effect scopes: `HookOption`, `OwnedBy`, `Stages`, `Scoped`, `Sealed`, `Waterfall`, `NewWaterfall`, `Next`, `Event`, `NewEvent`, `EffectScope`, `EffectHandle`. Errors: `InjectError`, `ListenerError`, `PanicError`, `ScopePanicError`, `ErrInactive`, `ErrInactiveEffect`, `ErrCommitVetoed`. Batch operations: `MountOp`, `UpdateOp`, `DisposeOp`. Observers: `ObserverStatus`, `ObserverOverflow`, `RetentionStatus`, `Inspection`, `FiberSnapshot`, `Provision`, `LedgerEvent`, `OnOverflow`.
+
+### 2.2 `sdk/testkit/kerneltest`
+
+A separate test-only module (`kerneltest.go`, `doc.go`, `kerneltest_test.go`) that wraps the kernel test constructor (ADR-034, decision 1). File bodies were not read in this pass. CI builds and tests it on the real runtime.
+
+### 2.3 `tools/kernelcheck` and CI checks
+
+`tools/kernelcheck` has five subcommands: `modfile`, `vocab`, `lines`, `coverage` and `testctor`. The word list is `tools/kernelcheck/vocabulary.txt`. CI runs them in `.github/workflows/ci.yml`:
+
+- Module file (line 71): `kernelcheck modfile sdk/kernel`. No `require` line in the module.
+- Vocabulary (line 72): `kernelcheck vocab` against the word list. No product word in kernel source.
+- Line count (line 73): `kernelcheck lines sdk/kernel 8500`. Non-test total within cap.
+- Test constructor (line 74): `kernelcheck testctor .`. The test constructor has one caller, `kerneltest`.
+- Coverage (line 75): `kernelcheck coverage` on the coverage profile. Per-file statement coverage, under the rule named in the criteria; the function body was not read in this pass.
+
+CI also runs `go vet ./...` and `go test -race -count=1 ./...` for the main, kernel and testkit modules (lines 52 to 65).
+
+## 3. Decisions taken in S0
+
+- **Core is `reconciler`.** One owner goroutine holds all lifecycle state. The `graph-lock` core stays in `test/spike/s0/concurrency` as a test implementation and is not ported. (ADR-034, 2026-11-19.)
+- **Typed operations are the plugin transaction surface.** The plugin `Tx` has no SQL-string method. Infrastructure keeps a private raw-driver path on the same transaction. The raw-SQL authority gate stays failed. (ADR-045, 2026-11-19.)
+- **Jobs role outside row-level security on River's tables, with bounded retention.** River's five tables have RLS disabled and no policies. River's cleaner keeps finished jobs for 900 s in the restart gate. (ADR-045, 2026-11-18 decision.)
+- **Parity declared complete, with exceptions.** D06 and D23 are diagnostics. D05 and D26 are not carried. D25 is an owner exception for the port. (ADR-035, 2026-11-19.)
+- **Owner decisions 1 to 15 for the port** (ADR-034, 2026-11-19):
+  1. One test constructor takes `testing.TB`; `kerneltest.New` wraps it; a check forbids other callers.
+  2. `Isolate`, `Intercept`, `Plugin`, `Defer` and `Go` return no error; a refused call fails the fiber.
+  3. Capacity bounds (archive limit, event window, observer queue, owner inbox) are required at construction; no kernel defaults.
+  4. Load, drain and dispose deadlines are construction data for the whole kernel.
+  5. No test recorder in the kernel.
+  6. `Enter() (leave func(), ok bool)`, zero allocations per call.
+  7. An entry is a token minted by `Define`; no `unsafe`, no identity from a function value.
+  8. `Available` takes one argument.
+  9. `Plugin.Decode` is `func(raw any) (any, error)`; the kernel knows no configuration format.
+  10. A hook owner calls `Bind(c)` once in `Apply`; the hook value cannot dispatch.
+  11. Sealed hooks have a third binding map, filled by the launcher, switched off by the test constructor.
+  12. A waterfall fails closed; an erroring or panicking listener fails the dispatch. Event listeners are skipped and logged.
+  13. `reflect`, `registry` and `hooks` are valueless until a consumer exists; `internal/plugin`, `internal/status` and `internal/service` wait for S1.
+  14. D25 is not carried; `Plugin` has no second apply shape.
+  15. A failing commit aborts the update; the new config is not retained and the fiber is not restarted.
+
+## 4. Results
+
+Prototype results are candidate evidence. Port results are candidate evidence until the final-port reruns.
+
+### 4.1 Differential corpus
+
+- Prototype cores: 64 of 68 scenario and candidate pairs match. Each matching pair passes 100 of 100 runs under race and 100 of 100 with two processors. The other four are the D06 and D23 exceptions (ADR-035; `s0-causal-coverage.md`).
+- Port (`kernel` backend, `e34047e`): 31 of 32 cases match, plus the D06 and D23 diagnostics. D25 differs and is an owner exception. Logs: `test/spike/s0/results/causal-kernel-port/` (`gomaxprocs8.log`, `gomaxprocs2.log`).
+
+### 4.2 Property workload
+
+1,000 seeds × 1,000 operations under `-race`, exit code 0, on the reconciler, graph-lock and `kernel` backends. Elapsed 4,440.89 s on a shared development host; elapsed time is not a performance result. Evidence: `test/spike/s0/results/property-full-kernel-port/invocation.json`.
+
+### 4.3 Call-path gate (prototype, fourth run)
+
+- Evidence: `test/spike/s0/results/callpath-full-fourth/` (commit `c5f0a79`, 7,224 s, dedicated host). Classification **pass**.
+- `Enter` and `Leave` allocate nothing in every aggregate on both prototype cores (`allocsPerOp` 0 for `owner_enter_leave`).
+- `lookup_view` and `lookup_view_lease_call` report 3 allocations per operation. The zero-allocation rule covers Enter and leave only. Lookup costs are reported separately (criteria §8.3).
+- Six aggregates show throughput variation of 11.5% to 17.0% under the mutation stress arm. Amendment 2 records this as a candidate characteristic, not an invalid run.
+- Per-aggregate p99 values are in `report.json` and are not transcribed here. The criteria threshold is p99 at or below 2 µs. The port has not been rerun.
+
+### 4.4 Scale gate (prototype, invalid by the noise rule)
+
+Evidence: `test/spike/s0/results/scale-full-first/invocation.json` (commit `225ffbe`, 10,800 runs, 22,372 s, dedicated 24-vCPU guest, `GOMAXPROCS=8`).
+
+| Bound (criteria §8.1 to §8.2) | Reconciler | Graph lock | Result |
+|---|---|---|---|
+| 10,000-fiber mount and settle, p99 ≤ 2 s | 414 to 661 ms (worst: realms) | 298 to 644 ms | within bound |
+| 10,000-fiber leaf update, p99 ≤ 10 ms | 0.25 to 0.36 ms | 0.18 to 0.27 ms | within bound |
+| 10,000-fiber root restart, ≤ 5 s | max p99 1,020 ms (diamonds) | max p99 1,066 ms (diamonds) | within bound |
+| Retained heap, 1,000 roots, ≤ 128 MiB | 73.3 MiB (chain) | 74.3 MiB (chain) | within bound |
+| Cold tree mount, 500 × 4, < 50 ms | max 9.69 ms | max 9.05 ms | within bound |
+| Shared provider restart, 500 × 4, ≤ 5 s | p99 161.8 ms | p99 167.1 ms | within bound |
+| Goroutines at last checkpoint | 4 | 3 | recorded |
+| Timer overhead p99 | 64 ns | not applicable | recorded |
+
+Classification: **invalid by the noise rule only.** Fifteen buckets have throughput variation between 10.0% and 15.1%, against the frozen 10% limit. No bound failed on either backend. The gate is repeated unchanged on the final port.
+
+Caveats: the run predates the 2026-11-19 hazard fixes. The retained-heap slope fields are recorded but not interpreted here (ADR-036). The tree heap record lists `"roots": 100`, which the file does not explain.
+
+### 4.5 Cold-mount gate (prototype, pass)
+
+Evidence: `test/spike/s0/results/coldmount-full-first/` (commit `225ffbe`, 120 runs, 18,039 s). Classification **pass, no reasons**, per ADR-034. The directory has no `invocation.json`.
+
+- A cold mount on the acknowledged path adds about 0.7 ms at p99 to a 100-item request and about 2.8 ms to a 1 MiB request.
+- Churn beside pinned traffic moves p99 by 0.03 to 0.06 ms in the median matched pair and at most 0.16 ms (bound 5 ms).
+- Pinned p99: 1.4 ms for 100 items (bound 250 ms) and 7.2 ms for 1 MiB (bound 1 s).
+- The timeout fixture answers 503 with a retry hint, commits nothing, and never contributes from a foreign scope.
+- Harness defect: `coldEnsureCalls` reported a shared counter for arm A (fixed in `c5ce385`). Totals and latencies are unaffected.
+
+### 4.6 Restart gate (library probe, frozen scale with leak accounting)
+
+- Evidence: `test/spike/s0/results/restart-full-section10/invocation.json` (commit `e34047e`, 15,169 s, dedicated host). **100 of 100 cycles**: pool 30, client 30, listener 30, combined 10.
+- Every acknowledged ID completed. The section 10 accounting passed in all four arms.
+- The earlier frozen-scale rerun (`restart-full-frozen-scale`) recorded the longest acknowledgement-to-completion at about one second and the longest recovery at about 0.4 s (ADR-045).
+- This gate runs on the standalone library, not on kernel-owned resources. The criteria require that rerun once the kernel exists.
+
+### 4.7 Transaction authority (ADR-045)
+
+- The raw-SQL authority gate fails and stays failed. The recorded escapes are `SET LOCAL ROLE` to the jobs role, `RESET ROLE`, and `set_config` on the scope setting. Forced RLS did not prevent them.
+- Typed operations were adopted on 2026-11-19. The probe (`plugins/jobs-river/internal/s0typedops`) commits and rolls back all participants atomically and refuses cross-scope access. Its result file calls it a "closed-surface fixture diagnostic", not an original gate pass.
+- Criteria §5 thresholds (jobs-role round trip p99 at or below 2 ms; full caller transaction p99 at or below 25 ms; cost-control arm) are **not recorded**.
+- The SQL boundary probe `TestSQLViewBoundary` still fails for its recorded reason.
+
+## 5. Defects the harnesses found in the port
+
+Found by the adapter backend (`kernel`) on its first run and fixed to match the reference (ADR-034, "the final port under the acceptance harnesses"):
+
+1. **Liveness is decided first.** On an ended activation, `Provide` reported an undeclared key instead of inactive. Every entry point now reports inactive before any other refusal.
+2. **An update resolves its config whenever the fiber has a target.** The port resolved only on an ACTIVE fiber. The reference also resolves during a gated load and a blocked teardown (corpus D17 and D20).
+3. **D25 is an accepted exception, not a fix.** A load that disposes itself and then returns a disposer from apply has no Go equivalent. A plugin registers cleanup with `Defer` before disposing itself, so cleanup runs before the UNLOADING status. The owner accepted this on 2026-11-19 (ADR-035; decision 14).
+4. **A failing commit fails closed.** `internal/commit` is a waterfall. An error aborts the update: the new config is not retained and the fiber is not restarted (decision 15).
+
+Found by the restart harness, not by the port: River's fetch on a forced-RLS table chose a sequential scan once the table was large. The fix is the jobs-role and retention decision (§4.6 and ADR-045).
+
+## 6. Open items at S0 exit
+
+### (a) Pending runs
+
+- Call-path gate on the port. The prototype passed; the port has not run.
+- Scale gate on the port, unchanged protocol (10,000-fiber bench and 500-tree workloads). The prototype run is invalid by the noise rule.
+- Cold-mount gate on the port.
+- Property workload on the final commit. It ran on `e34047e`.
+- Restart gate with kernel-owned resources (criteria §6), and the unowned-handler snooze and two-client cases. The test code exists (`worker_test.go`); no pass is recorded.
+- `go test -race -count=3 ./...` for each module, as the criteria require.
+- Fuzzing, 60 s per selected entry point. Five targets; none run.
+- Per-file statement coverage result.
+- Criteria §5 transaction thresholds and cost-control arm.
+
+### (b) Proposals awaiting the owner
+
+- **Line budget.** Proposed cap: the measured count plus about 10%, rounded. 7,448 × 1.10 = 8,193, rounded to **8,200**. CI currently enforces **8,500** (`.github/workflows/ci.yml` line 73). Re-measure on the final port before the cap is written into ADR-034.
+- **ADR-036** (draft, `docs/adr/ADR-036-tenancy-cost.md`). The owner must decide the fiber total (1,297 against "about 1,200"), the tenant count (500 against 300) and the numeric leak budget.
+- **ADR-058** (change impact reasoning). Draft, proposed 2026-11-19, awaiting the owner. Not required for S0 exit.
+- **Scale protocol noise rule.** If the final-port rerun is invalid again for the same reason, the owner receives a written amendment proposal before any further run (ADR-034).
+
+### (c) Obligations to later steps
+
+- **S1 loader.** Payloads of `internal/plugin`, `internal/status` and `internal/service` are declared but not wired (ADR-034, decision 13). The `reflect`, `registry` and `hooks` surfaces stay valueless until a consumer exists.
+- **S3 typed operations.** The Go shape of the operation catalog; how a plugin declares it; review and versioning of catalog changes; the fake and conformance suite; migration admission (ADR-045, "What this does not settle").
+- **S4b.** The pod cost model and the numeric leak budget per replica (ADR-036).
+
+### (d) Repository housekeeping for the owner
+
+- Purge of pre-rewrite commits. Requires the hosting provider's support.
+- Old CI runs. Owner to review and remove.
+- The denylist secret. Owner to decide its handling. The hygiene check reads the denylist from an environment variable and does not store its terms in the repository. The value is not recorded here.
+
+## 7. Stop point
+
+S0 stops here. This report, ADR-034, ADR-035, ADR-036 (draft) and ADR-045 form the S0 exit record. The items in section 6 must be decided or run before the owner can close S0. S1 starts only on the owner's word.
