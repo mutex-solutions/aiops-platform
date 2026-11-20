@@ -268,7 +268,12 @@ func (c *handle) enter() (leave func(), ok bool) {
 	if !c.live.Load() {
 		return nil, false
 	}
-	s := c.lease.shard()
+	return c.confirm(c.lease.shard())
+}
+
+// confirm is the second half of enter: it takes the lease on shard s, then
+// re-checks live and rolls the lease back when quiescence began in between.
+func (c *handle) confirm(s *atomic.Int64) (leave func(), ok bool) {
 	s.Add(1)
 	if c.live.Load() {
 		return c.leave, true
