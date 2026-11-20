@@ -22,7 +22,11 @@ package failurematrix
 //	| Live recomposition   | the process boots healthy with a live layer file as the last     |
 //	|                      | --patch; the test writes the fault into that file and submits    |
 //	|                      | one generation through test-submit (the control file); the       |
-//	|                      | verdict is read from the state file of test-state.               |
+//	|                      | verdict is read from the state file of test-state. A fault that  |
+//	|                      | is a failure after the generation passed (a tracked goroutine, a |
+//	|                      | give-up) has a trigger: the test creates run/fault.go once the   |
+//	|                      | generation has passed, as in the next column. A fault that fails |
+//	|                      | the verdict is rolled back, and the cell says so.                |
 //	| While running        | the process boots with the fault latent in a row; once it is     |
 //	|                      | running the test creates run/fault.go, the trigger of the fault  |
 //	|                      | plugin (a provider fails, a goroutine panics). A fault that is   |
@@ -79,40 +83,11 @@ type deviation struct{ reason, problem string }
 // knownDeviations are the S1 cells whose real behaviour contradicts the outcome the
 // table documents. The cell id is "<row>.<column>/<fault>" (row and column are the
 // one-based positions in the table, "/<fault>" is left out for a cell with one fault
-// "none"). The suite reports them as failures in its summary and fails while any
-// exists, unless MATRIX_ALLOW_DEVIATIONS=1. A cell that is listed here and passes is an
-// error: remove the entry.
-var knownDeviations = map[string]deviation{
-	"2.3":                  {"a live generation with an optional row of an unknown plugin passes and detaches the row; documented: rejected", `"rejected" is not in`},
-	"3.3/rogue-provider":   {"a live generation whose optional row the gate denies passes and detaches the row; documented: rejected", `"rejected" is not in`},
-	"6.3/fail-apply":       {noRestore, "not rolled back"},
-	"6.3/panic-apply":      {noRestore, "not rolled back"},
-	"6.3/slow-apply":       {noRestore, "not rolled back"},
-	"9.3/fail-apply":       {noRestore, `"rolled back" is not in`},
-	"17.2/panic-apply":     {requiredStops, "exited with 3"},
-	"17.3/panic-apply":     {liveRequired, "ready is true"},
-	"19.1/slow-dispose":    {leakReplaces, "exited with 4"},
-	"19.1/leaky-goroutine": {drainNotLeak, `"leaked" is not in`},
-	"19.2/slow-dispose":    {requiredStops, "exited with 3"},
-	"19.2/leaky-goroutine": {requiredStops, "exited with 3"},
-	"19.3/slow-dispose":    {leakReplaces, "exited with 4"},
-	"19.3/leaky-goroutine": {drainNotLeak, `"leaked" is not in`},
-	"19.4/leaky-goroutine": {drainNotLeak, "did not exit"},
-	"21.2/fail-apply":      {requiredStops, "exited with 3"},
-	"21.3/fail-apply":      {liveRequired, "ready is true"},
-}
-
-const (
-	noRestore = "reload applies and judges a live generation and reports the failed verdict, but nothing restores the previous tree at S1 " +
-		"(plugins/reload/internal/engine: no committer, S4a); documented: the scope is rolled back"
-	requiredStops = "a required row that fails at boot stops the process (exit 3) at the required audit; documented: the process keeps running and readiness fails (or, for a leak, the leak is logged)"
-	liveRequired  = "a row with required: true that a live generation adds is judged by reload but not by readiness: Required() is the set of the booted composition, which nothing commits at S1; documented: readiness fails"
-	leakReplaces  = "a leak at boot or in a live generation replaces the process after the drain window (exit 4); documented: only while running; at boot and live the leak is logged and the fiber marked leaked"
-	drainNotLeak  = "a drain that passes its deadline is blocked and logged (drain deadline) but the fiber is not marked leaked and the process is not replaced: the kernel marks only a disposer past its deadline (sdk/kernel/transition.go:540); documented: drain or disposer"
-)
-
-// leakWindow is leakGrace of harness.Limits.
-const leakWindow = 500 * time.Millisecond
+// "none"). It is empty: the owner decided the twelve cells that were listed here on
+// 2026-11-20 (ADR-059 decisions 12 to 15) and each now does what the table says. An entry
+// makes the suite report the cell as a deviation and fail; a cell that is listed and
+// passes is an error: remove the entry.
+var knownDeviations = map[string]deviation{}
 
 // cellBudget bounds the run of one (cell, fault).
 const cellBudget = 30 * time.Second
@@ -157,19 +132,11 @@ type plan struct {
 	base    []string // patch files of test/dist/patches at boot
 	missing bool     // add a --patch file that does not exist
 	live    string   // a live generation: the patch file whose content is written to the live layer
-	trigger bool     // once running, create run/fault.go
+	trigger bool     // once running (and, with live, once the generation passed), create run/fault.go
 	code    int      // the exit code that boot/run.go fixes for this exit; 0: any non-zero
 	// rolledBack: the live generation's failed verdict must leave the tree as it was,
 	// "the composer rolls the scope back" ("Rolled back").
 	rolledBack bool
-	// leak: the fault leaks a fiber, which the launcher answers by replacing the process
-	// once the drain window (leakGrace) has passed. A cell that expects the process to keep
-	// running is checked again after a wait of ten windows: a process that has not exited by
-	// then is running. Without it the cell would pass or fail with the speed of the machine.
-	leak bool
-	// states replaces the cell's expected state of a row for one fault, where the
-	// fault changes what the required-set audit sees at the instant it runs.
-	states map[string]string
 }
 
 // liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
@@ -207,7 +174,7 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{live: "rogue-provider.isolate.yml"}, plan{}), true
 	case "apply":
 		return byColumn(col, plan{base: []string{opt + ".yml"}},
-			plan{base: []string{req + ".yml"}, code: boot.ExitRequired, states: slowApplyStates(fault)},
+			plan{base: []string{req + ".yml"}, code: boot.ExitRequired},
 			plan{live: opt + ".yml", rolledBack: true}, plan{}), true
 	case "noprov":
 		return byColumn(col, plan{base: []string{"no-provider.optional.yml"}},
@@ -221,8 +188,8 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{base: []string{"fail-apply.trigger.infra.yml"}, trigger: true}), true
 	case "tracked":
 		return byColumn(col, plan{base: []string{"panic-apply-tracked.optional.yml"}},
-			plan{base: []string{"panic-apply-tracked.required.yml"}},
-			plan{live: "panic-apply-tracked.required.yml"},
+			plan{base: []string{"panic-apply-tracked.required.yml"}, code: boot.ExitRequired},
+			plan{base: []string{"restart-policy.slow.yml"}, live: "panic-apply-tracked.trigger.required.yml", trigger: true},
 			plan{base: []string{"panic-apply-tracked.trigger.required.yml", "restart-policy.slow.yml"}, trigger: true}), true
 	case "untracked":
 		return byColumn(col, plan{base: []string{"panic-apply-untracked.optional.yml"}, code: 2},
@@ -230,30 +197,17 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{live: "panic-apply-untracked.optional.yml", code: 2},
 			plan{base: []string{"panic-apply-untracked.trigger.optional.yml"}, trigger: true, code: 2}), true
 	case "leak":
-		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}, leak: true},
-			plan{base: []string{fault + ".fail-apply.required.yml"}, leak: true},
-			plan{live: fault + ".fail-apply.optional.yml", leak: true},
+		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}, code: boot.ExitLeak},
+			plan{base: []string{fault + ".fail-apply.required.yml"}, code: boot.ExitRequired},
+			plan{live: fault + ".fail-apply.optional.yml", code: boot.ExitLeak},
 			plan{base: []string{opt + ".yml"}, live: "fault-disabled.yml", code: boot.ExitLeak}), true
 	case "giveup":
 		return byColumn(col, plan{base: []string{"fail-apply.optional.yml"}},
-			plan{base: []string{"fail-apply.required.yml"}},
-			plan{live: "fail-apply.required.yml"},
+			plan{base: []string{"fail-apply.required.yml"}, code: boot.ExitRequired},
+			plan{live: "fail-apply.trigger.required.yml", trigger: true},
 			plan{base: []string{"fail-apply.trigger.required.yml"}, trigger: true}), true
 	}
 	return plan{}, false
-}
-
-// slowApplyStates: a row that passed its load deadline is FAILED after its partial
-// effects unwind (the table). Settle returns once a fiber is blocked past its deadline,
-// which is while it is still UNLOADING, so the required-set audit may run before or
-// after the unwind ends and prints UNLOADING or FAILED. Both are the same row at two
-// instants of one failure; a state that is neither is a mismatch. fail-apply and
-// panic-apply are FAILED at once.
-func slowApplyStates(fault string) map[string]string {
-	if fault == "slow-apply" {
-		return map[string]string{"fault": "FAILED|UNLOADING"}
-	}
-	return nil
 }
 
 func byColumn(col string, opt, req, live, run plan) plan {
@@ -341,9 +295,6 @@ func checkExited(e boot.Expect, p plan, s harness.Snapshot) []string {
 		seen[m[1]] = m[2]
 	}
 	for _, st := range e.States {
-		if o, ok := p.states[st.Row]; ok {
-			st.State = o
-		}
 		if !slices.Contains(strings.Split(st.State, "|"), seen[st.Row]) {
 			bad = append(bad, fmt.Sprintf("the required-set audit says row %s is %q, expect %s", st.Row, seen[st.Row], st.State))
 		}
@@ -351,16 +302,21 @@ func checkExited(e boot.Expect, p plan, s harness.Snapshot) []string {
 	return bad
 }
 
-// rolledBackProblems says whether the tree is what it was before a failed generation:
-// the rows that generation created are gone or disabled.
+// rolledBackProblems says whether the live generation was rolled back and the tree is what
+// it was before it: reload says "rolled back" with a rollback that did not fail, numbered
+// after the failed generation, and the rows that generation created are gone.
 func rolledBackProblems(s harness.Snapshot) []string {
+	op := s.State.Reload
+	if op == nil || op.Status != "rolled back" || op.Rollback == nil {
+		return []string{"expected the failed verdict to be rolled back, but the operation is not"}
+	}
 	var bad []string
-	if op := s.State.Reload; op == nil || op.Status != "failed" {
-		return []string{"expected a failed verdict to be rolled back, but the operation is not failed"}
+	if op.Rollback.Error != "" || op.Rollback.Generation != op.Generation+1 {
+		bad = append(bad, fmt.Sprintf("the rollback is %+v, want no error and generation %d", *op.Rollback, op.Generation+1))
 	}
 	for _, r := range s.State.Rows {
-		if (r.ID == "fault" || r.ID == "dependant") && r.Mount == "mounted" {
-			bad = append(bad, fmt.Sprintf("not rolled back: row %s of the failed generation is still mounted (%s)", r.ID, r.State))
+		if (r.ID == "fault" || r.ID == "dependant") && r.Mount != "unknown" {
+			bad = append(bad, fmt.Sprintf("not rolled back: row %s of the failed generation is still in the tree (%s %s)", r.ID, r.Mount, r.State))
 		}
 	}
 	return bad
@@ -420,6 +376,14 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 		if err := proc.Submit("1"); err != nil {
 			return fail("%v", err)
 		}
+		if p.trigger {
+			// A fault that fails after the generation passed: the trigger comes once the
+			// verdict is in, and the verdict must be pass.
+			s, ok := proc.Until(left(), func(s harness.Snapshot) bool { return s.OpDone(1) })
+			if !ok || s.State.Reload.Status != "passed" {
+				return result{problems: []string{"the live generation did not pass before the trigger: " + reloadText(s)}, output: s.Output}
+			}
+		}
 	}
 	if p.trigger {
 		if err := proc.Touch("fault.go"); err != nil {
@@ -437,12 +401,6 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			}
 			return len(last) == 0
 		})
-		if len(last) == 0 && p.leak {
-			if end, exited := proc.Until(10*leakWindow, func(s harness.Snapshot) bool { return s.Exited }); exited {
-				last = []string{fmt.Sprintf("the process exited with %d after the leak, expect: running", end.Code)}
-				snap = end
-			}
-		}
 	} else {
 		snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
 			last = checkExited(e, p, s)
@@ -607,10 +565,6 @@ func TestFailureMatrix(t *testing.T) {
 	}
 	t.Log(b.String())
 	if len(ids) > 0 {
-		if os.Getenv("MATRIX_ALLOW_DEVIATIONS") == "1" {
-			t.Logf("MATRIX_ALLOW_DEVIATIONS=1: %d known deviation(s) are logged and do not fail the suite", len(ids))
-		} else {
-			t.Errorf("%d known deviation(s) from the documented outcomes; the suite fails until they are fixed (MATRIX_ALLOW_DEVIATIONS=1 logs them instead)", len(ids))
-		}
+		t.Errorf("%d known deviation(s) from the documented outcomes; the suite fails until they are fixed", len(ids))
 	}
 }

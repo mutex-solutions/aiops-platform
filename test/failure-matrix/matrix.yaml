@@ -198,7 +198,7 @@
   column: "Live recomposition"
   outcome: "Failed verdict: the composer rolls the scope back"
   fault: [fail-apply, panic-apply, slow-apply]
-  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rolled back"}
   since: S1
 
 - failure: "`Apply` errors, panics or passes the load deadline"
@@ -574,21 +574,21 @@
 
 - failure: "A tracked goroutine errors or panics"
   column: "Required at boot"
+  outcome: "Stop"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "tracked goroutine failed"}
+  since: S1
+
+- failure: "A tracked goroutine errors or panics"
+  column: "Live recomposition"
   outcome: "Readiness fails"
   fault: [panic-apply]
   expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
   since: S1
 
 - failure: "A tracked goroutine errors or panics"
-  column: "Live recomposition"
-  outcome: "Same"
-  fault: [panic-apply]
-  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
-  since: S1
-
-- failure: "A tracked goroutine errors or panics"
   column: "While running"
-  outcome: "Same"
+  outcome: "Readiness fails"
   fault: [panic-apply]
   expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
   since: S1
@@ -637,28 +637,28 @@
 
 - failure: "A process-scope drain or disposer passes its deadline"
   column: "Optional row at boot"
-  outcome: "Logged with its label; the fiber is marked leaked"
+  outcome: "Logged with its label; the fiber is marked leaked; readiness ends after the drain window and the process is replaced"
   fault: [slow-dispose, leaky-goroutine]
-  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "leaked"}
   since: S1
 
 - failure: "A process-scope drain or disposer passes its deadline"
   column: "Required at boot"
-  outcome: "Same"
+  outcome: "Stop"
   fault: [slow-dispose, leaky-goroutine]
-  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "leaked"}
   since: S1
 
 - failure: "A process-scope drain or disposer passes its deadline"
   column: "Live recomposition"
-  outcome: "Reported"
+  outcome: "Reported; the fiber is marked leaked; readiness ends after the drain window and the process is replaced"
   fault: [slow-dispose, leaky-goroutine]
-  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "leaked"}
   since: S1
 
 - failure: "A process-scope drain or disposer passes its deadline"
   column: "While running"
-  outcome: "Readiness ends after the drain window and the process is replaced"
+  outcome: "The fiber is marked leaked; readiness ends after the drain window and the process is replaced"
   fault: [slow-dispose, leaky-goroutine]
   expect: {exit: nonzero, ready: false, states: {}, diagnostic: "drain"}
   since: S1
@@ -714,21 +714,21 @@
 
 - failure: "`restart-policy` gives up (more than N failures in a window)"
   column: "Required at boot"
+  outcome: "Stop"
+  fault: [fail-apply]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "required row \"fault\" is FAILED"}
+  since: S1
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "Live recomposition"
   outcome: "Readiness fails"
   fault: [fail-apply]
   expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
   since: S1
 
 - failure: "`restart-policy` gives up (more than N failures in a window)"
-  column: "Live recomposition"
-  outcome: "Same"
-  fault: [fail-apply]
-  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
-  since: S1
-
-- failure: "`restart-policy` gives up (more than N failures in a window)"
   column: "While running"
-  outcome: "Same"
+  outcome: "Readiness fails"
   fault: [fail-apply]
   expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
   since: S1
