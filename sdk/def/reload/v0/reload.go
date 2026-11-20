@@ -23,6 +23,19 @@ var Key = kernel.NewKey[Reload]("reload", 0, kernel.ConsumerBound())
 // (03-c3-kernel.md:382).
 var Applied = composition.NewApplied(Key)
 
+// Operation is the reload/operation event, owned by Key, access open. reload emits it
+// with the Result as it stands when an operation is about to apply a generation
+// (Status Running, Stage apply), and again once that operation is final, whatever its
+// status. Between the two the rows of the tree are not judged: a failure there is
+// rolled back when the verdict fails (08-profiles-roadmap-adrs.md:470, :473), so
+// restart-policy holds its give-ups, and the exit an infrastructure provider's
+// give-up asks for, until the final event. Both dispatches carry the context of the
+// reload goroutine, which ends when the reload fiber unloads: an operation whose
+// final event never came is over once that context is done. The docs name
+// composition/applied only (07-c4-plugin-sdk.md:461); this event is the
+// definition's own (open point).
+var Operation = kernel.NewEvent[Result]("reload/operation", kernel.OwnedBy(Key))
+
 // The refusals of Submit and Await.
 var (
 	// ErrQueueFull refuses a Submit while the queue holds its bound of waiting

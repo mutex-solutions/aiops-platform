@@ -30,6 +30,9 @@ func TestKeyClassAndEvent(t *testing.T) {
 	if reload.Applied.Name() != "composition/applied" || reload.Applied.Owner().Name() != "reload" {
 		t.Fatalf("event = %s owned by %v", reload.Applied.Name(), reload.Applied.Owner())
 	}
+	if reload.Operation.Name() != "reload/operation" || reload.Operation.Owner().Name() != "reload" {
+		t.Fatalf("event = %s owned by %v", reload.Operation.Name(), reload.Operation.Owner())
+	}
 	_, prov := fake.New()
 	want := kernel.Define(kernel.Plugin{ID: "aiops/listed",
 		Inject: []kernel.Dep{kernel.Need(reload.Key)},

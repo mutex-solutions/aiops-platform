@@ -55,11 +55,16 @@ func TestSubmitAwaitResult(t *testing.T) {
 func TestPublishReachesListener(t *testing.T) {
 	f, p := fake.New()
 	var got []composition.Applied
+	var ops []reload.Status
 	l := kernel.Define(kernel.Plugin{ID: "aiops/listener",
-		Hooks: []kernel.HookUse{reload.Applied.Use(kernel.DefaultStage)},
+		Hooks: []kernel.HookUse{reload.Applied.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
 			reload.Applied.On(c, kernel.DefaultStage, func(_ context.Context, a composition.Applied) (any, error) {
 				got = append(got, a)
+				return nil, nil
+			})
+			reload.Operation.On(c, kernel.DefaultStage, func(_ context.Context, r reload.Result) (any, error) {
+				ops = append(ops, r.Status)
 				return nil, nil
 			})
 			return nil
@@ -70,5 +75,13 @@ func TestPublishReachesListener(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Generation != 4 {
 		t.Errorf("listener heard %v", got)
+	}
+	for _, s := range []reload.Status{reload.Running, reload.RolledBack} {
+		if err := f.Progress(t.Context(), reload.Result{ID: 1, Status: s}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(ops) != 2 || ops[0] != reload.Running || ops[1] != reload.RolledBack {
+		t.Errorf("listener heard %v", ops)
 	}
 }

@@ -2,8 +2,9 @@
 
 // Package fake is the in-memory reload of the reload definition: it queues nothing,
 // records each submission and answers it with the result a test scripts. Its plugin
-// provides reload.Key and binds composition/applied, so a listener of the event can
-// be driven with Publish (07-c4-plugin-sdk.md:1410). It imports the standard library,
+// provides reload.Key and binds composition/applied and reload/operation, so a
+// listener of either event can be driven with Publish and Progress
+// (07-c4-plugin-sdk.md:1410). It imports the standard library,
 // sdk/kernel and its definition only.
 package fake
 
@@ -25,10 +26,11 @@ type Reload struct {
 	Next      *reload.Result
 	SubmitErr error
 
-	mu      sync.Mutex
-	results map[reload.ID]reload.Result
-	subs    []reload.Op
-	applied kernel.EventDispatcher[composition.Applied]
+	mu        sync.Mutex
+	results   map[reload.ID]reload.Result
+	subs      []reload.Op
+	applied   kernel.EventDispatcher[composition.Applied]
+	operation kernel.EventDispatcher[reload.Result]
 }
 
 var _ reload.Reload = (*Reload)(nil)
@@ -42,6 +44,7 @@ func New() (*Reload, kernel.Plugin) {
 		Provides: []kernel.AnyKey{reload.Key},
 		Apply: func(c *kernel.Context, _ any) error {
 			f.applied = reload.Applied.Bind(c)
+			f.operation = reload.Operation.Bind(c)
 			return reload.Key.Provide(c, f)
 		},
 	})
@@ -95,4 +98,11 @@ func (f *Reload) Await(ctx context.Context, id reload.ID) (reload.Result, error)
 // Publish emits composition/applied to every listener.
 func (f *Reload) Publish(ctx context.Context, a composition.Applied) error {
 	return f.applied.Emit(ctx, kernel.Unscoped, a)
+}
+
+// Progress emits reload/operation with r to every listener, as reload does when an
+// operation is about to apply a generation and when it is final. ctx stands for the
+// context of the reload goroutine.
+func (f *Reload) Progress(ctx context.Context, r reload.Result) error {
+	return f.operation.Emit(ctx, kernel.Unscoped, r)
 }
