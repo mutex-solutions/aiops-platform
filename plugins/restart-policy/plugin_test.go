@@ -19,6 +19,8 @@ import (
 	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
+	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
@@ -110,6 +112,7 @@ type world struct {
 	launch *launchfake.Launcher
 	clk    *clockfake.Clock
 	comp   *compfake.Reader
+	reload *reloadfake.Reload
 	logs   chan entry
 	rp     *kernel.Fiber
 }
@@ -124,12 +127,13 @@ func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
 	w := &world{t: t, logs: make(chan entry, 4096)}
 	opts = append([]kerneltest.Option{kerneltest.WithConfig(func(c *kernel.Config) { c.LogHandler = logTap{w.logs} })}, opts...)
 	w.root = kerneltest.New(t, opts...)
-	var lp, kp, cp kernel.Plugin
+	var lp, kp, cp, rp kernel.Plugin
 	w.launch, lp = launchfake.New()
 	w.launch.Modules = []launch.CatalogEntry{{ID: "aiops/sql", Provides: []string{"sql"}}, {ID: "aiops/other"}}
 	w.clk, kp = clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
 	w.comp, cp = compfake.New()
-	kerneltest.Mount(w.root, lp, kp, cp)
+	w.reload, rp = reloadfake.New()
+	kerneltest.Mount(w.root, lp, kp, cp, rp)
 	w.rp = w.root.Plugin(restartpolicy.Plugin, cfg)
 	if err := w.rp.Await(t.Context()); err != nil {
 		t.Fatalf("restart-policy: %v", err)
@@ -509,6 +513,110 @@ func TestFailuresOfAReplacedConfigDoNotCarryOver(t *testing.T) {
 		t.Fatalf("%s %v, want the first failure of the restored config", e.msg, e.attrs)
 	}
 	if len(w.exits()) != 0 {
+		t.Errorf("exits = %v", w.exits())
+	}
+}
+
+// running and final are the two reload/operation events of one operation.
+var (
+	running = reload.Result{ID: 1, Status: reload.Running, Stage: reload.StageApply}
+	passed  = reload.Result{ID: 1, Status: reload.Passed, Stage: reload.StagePublish}
+	undone  = reload.Result{ID: 1, Status: reload.RolledBack, Stage: reload.StagePublish}
+)
+
+// progress emits reload/operation as reload does, with ctx as its goroutine's context.
+func (w *world) progress(ctx context.Context, r reload.Result) {
+	w.t.Helper()
+	if err := w.reload.Progress(ctx, r); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// failPastTheLimit makes an infrastructure provider fail twice under maxFailures 1
+// and returns it once restart-policy has decided on the second failure.
+func (w *world) failPastTheLimit() (*flaky, *kernel.Fiber) {
+	w.t.Helper()
+	fl := newFlaky("aiops/sql", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	fl.attempt(w.t, 2)
+	_ = f.Await(w.t.Context())
+	w.heard()
+	return fl, f
+}
+
+// gaveUp reports whether restart-policy has logged a give-up so far.
+func (w *world) gaveUp() bool {
+	for {
+		select {
+		case e := <-w.logs:
+			if e.msg == "fiber.gave-up" {
+				return true
+			}
+		default:
+			return false
+		}
+	}
+}
+
+// While reload applies a generation and until it is final, its rows are not judged: a
+// failure there is rolled back (08-profiles-roadmap-adrs.md:473). A fiber past its
+// limit is held, without the exit; once the operation is final, one still FAILED is
+// given up on.
+func TestGiveUpWaitsForTheReloadOperation(t *testing.T) {
+	w := newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0))
+	w.progress(t.Context(), running)
+	_, f := w.failPastTheLimit()
+	if w.gaveUp() || len(w.exits()) != 0 {
+		t.Fatalf("gave up while the operation was in flight: exits = %v", w.exits())
+	}
+	w.progress(t.Context(), passed)
+	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["fiber"] != f.ID() || e.attrs["failures"] != int64(2) {
+		t.Fatalf("%s %v, want the give-up once the operation is final", e.msg, e.attrs)
+	}
+	want := []launch.ExitRequest{{Reason: launch.ExitGaveUp, Detail: "aiops/sql"}}
+	if got := w.exits(); !slices.Equal(got, want) {
+		t.Errorf("exits = %v, want %v", got, want)
+	}
+}
+
+// A held fiber that the rollback restores is not given up on, and the process stays.
+func TestRolledBackFiberIsNotGivenUpOn(t *testing.T) {
+	w := newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0))
+	w.progress(t.Context(), running)
+	fl, f := w.failPastTheLimit()
+	fl.failing.Store(false)
+	if err := f.Update(t.Context(), nil); err != nil { // the rollback
+		t.Fatal(err)
+	}
+	fl.attempt(t, 3)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	w.progress(t.Context(), undone)
+	if w.gaveUp() || len(w.exits()) != 0 {
+		t.Errorf("gave up on a fiber the rollback restored: exits = %v", w.exits())
+	}
+}
+
+// An operation whose final event never comes, because the reload fiber unloaded,
+// ends with the context of its goroutine: the next event ends the hold.
+func TestHoldEndsWithTheReloadGoroutine(t *testing.T) {
+	w := newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0))
+	op, cancel := context.WithCancel(t.Context())
+	w.progress(op, running)
+	w.failPastTheLimit()
+	if w.gaveUp() {
+		t.Fatal("gave up while the operation was in flight")
+	}
+	cancel()
+	w.root.Plugin(newFlaky("aiops/other", false).plugin(), nil) // any event
+	if e := w.decision(); e.msg != "fiber.gave-up" {
+		t.Fatalf("%s %v, want the give-up", e.msg, e.attrs)
+	}
+	if len(w.exits()) != 1 {
 		t.Errorf("exits = %v", w.exits())
 	}
 }

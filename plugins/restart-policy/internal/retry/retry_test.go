@@ -321,6 +321,21 @@ func TestResyncRetriesATrackedFiberWhoseFailureWasLost(t *testing.T) {
 	}
 }
 
+// When a reload operation ends, a held fiber that left FAILED is left to its own
+// events, and one that a live event decided on meanwhile is not decided again.
+func TestEndOfAnOperationJudgesWhatItHeld(t *testing.T) {
+	g := newRig(t, policy)
+	g.r.Operation(t.Context(), false)
+	restored := g.reg.put(g.active())
+	decided := g.reg.put(g.failing())
+	g.r.recs[restored] = &record{held: true}
+	g.r.recs[decided] = &record{held: true, pending: true}
+	g.r.Operation(t.Context(), true)
+	if g.r.op != nil || g.r.recs[restored].held || g.r.recs[decided].gaveUp || g.clk.Pending() != 0 {
+		t.Errorf("op = %v, records = %+v, %+v, timers = %d", g.r.op, g.r.recs[restored], g.r.recs[decided], g.clk.Pending())
+	}
+}
+
 func TestBackoffNeverPassesTheBound(t *testing.T) {
 	r := New(Policy{BackoffMin: time.Second, BackoffMax: 5 * time.Second, Factor: 3}, Deps{})
 	for n, want := range []time.Duration{time.Second, 3 * time.Second, 5 * time.Second, 5 * time.Second} {

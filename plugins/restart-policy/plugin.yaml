@@ -20,3 +20,4 @@ needs:
   - {key: logger, major: 0}
 hooks:
   - {hook: internal/status, stage: default}
+  - {hook: reload/operation, stage: default}

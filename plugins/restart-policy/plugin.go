@@ -9,7 +9,10 @@
 // 08-profiles-roadmap-adrs.md:485).
 //
 // Every number comes from the row's config. Time comes from the clock key, so a test
-// moves it by hand. The rule itself is in internal/retry.
+// moves it by hand. The rule itself is in internal/retry. While reload applies a
+// generation and until it is final (reload/operation), a give-up waits: a failure of
+// a row that is not yet judged is rolled back, not given up on
+// (08-profiles-roadmap-adrs.md:473).
 //
 // The listener is sealed: the distribution lists this row for internal/status in
 // Config.Listeners, and for the registry key, which is consumer-bound, in
@@ -28,6 +31,7 @@ import (
 	clock "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0"
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -53,7 +57,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 	ID: "aiops/restart-policy",
 	Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(launch.CatalogKey), kernel.Need(launch.AppExitKey),
 		kernel.Need(kernel.RegistryKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
-	Hooks:  []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage)},
+	Hooks:  []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
 	Decode: decode,
 	Apply: func(c *kernel.Context, cfg any) error {
 		conf := cfg.(Config)
@@ -63,6 +67,11 @@ var Plugin = kernel.Define(kernel.Plugin{
 				Exit: launch.AppExitKey.Of(c), Rows: composition.Key.Of(c), Log: kernel.LoggerKey.Of(c).For(c)})
 		kernel.InternalStatus.On(c, kernel.DefaultStage, func(ctx context.Context, e kernel.LedgerEvent) (any, error) {
 			r.Status(ctx, e)
+			return nil, nil
+		})
+		// A give-up waits while reload applies a generation and judges it.
+		reload.Operation.On(c, kernel.DefaultStage, func(ctx context.Context, res reload.Result) (any, error) {
+			r.Operation(ctx, res.Status.Done())
 			return nil, nil
 		})
 		// Every row activates with no order, so a fiber may have failed before this
