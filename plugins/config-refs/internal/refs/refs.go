@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"strings"
 
@@ -155,7 +156,8 @@ func (r *Resolver) file(name string) (string, string) {
 		return "", "the path is outside the file root or cannot be opened"
 	}
 	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, r.MaxBytes+1))
+	// One byte past the limit shows a larger file; min keeps MaxInt64 from wrapping.
+	b, err := io.ReadAll(io.LimitReader(f, min(r.MaxBytes, math.MaxInt64-1)+1))
 	switch {
 	case err != nil:
 		return "", "the file cannot be read"
