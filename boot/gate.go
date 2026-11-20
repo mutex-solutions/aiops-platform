@@ -8,9 +8,10 @@ import (
 // The gate: admission of a composition (03-c3-kernel.md:357, "Admit"). It has
 // ten named slots in the order of the table at
 // 08-profiles-roadmap-adrs.md:495-506 (ADR-059 decision 4). It reads the
-// composition, the module table and the distribution manifest only and runs
-// no plugin code. Before the ten checks it resolves each enabled row's plugin
-// (03-c3-kernel.md:357).
+// composition, the module table and the distribution manifest, plus the keys
+// the root provides and the hooks the kernel seals, which no distribution
+// changes, and runs no plugin code. Before the ten checks it resolves each
+// enabled row's plugin (03-c3-kernel.md:357).
 //
 // A result is data. Per check and per row it is pass, fail with a reason, or
 // not evaluated until the step that builds the check. What a failure means
@@ -190,6 +191,11 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		sealed:   map[string][]string{},
 		required: map[string]bool{},
 	}
+	// The hooks of the kernel are sealed by their definition, whatever dist.yaml
+	// lists (07-c4-plugin-sdk.md:463): one it does not list admits no listener.
+	for _, h := range kernelHooks() {
+		g.sealed[h.Name()] = nil
+	}
 	for _, h := range dist.SealedHooks {
 		g.sealed[h.Hook] = h.Plugins
 	}
@@ -302,7 +308,12 @@ func (g *gate) classes(r Row) []RowResult {
 	const c = CheckKeyHookClass
 	e := g.mods[r.Plugin]
 	for _, k := range e.Provides {
-		if b, ok := g.provider[k]; ok && !inSet(r.Plugin, b...) {
+		b, ok := g.provider[k]
+		switch {
+		case isRootKey(k):
+			out = append(out, g.fail(c, r, RuleProviderBinding, false,
+				"row %q provides key %q, which the root provides before any row mounts (03-c3-kernel.md:62-63)", r.ID, k))
+		case ok && !inSet(r.Plugin, b...):
 			out = append(out, g.fail(c, r, RuleProviderBinding, false,
 				"row %q provides provider-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
 		}

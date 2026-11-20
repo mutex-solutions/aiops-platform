@@ -14,6 +14,8 @@ o/hook: {hooks: [{hook: sh, stage: 1}]}
 o/open: {provides: [ok]}
 o/needpk: {needs: [pk]}
 o/wantck: {wants: [ck]}
+o/ready: {provides: [ready]}
+o/inthook: {hooks: [{hook: internal/plugin, stage: 0}]}
 `
 
 const gateDist = `
@@ -85,6 +87,13 @@ func TestGateChecksTable(t *testing.T) {
 		// A Want resolves through the consumer binding as a Need does.
 		{name: "consumer outside binding by want", bundle: rows("id: a, plugin: o/wantck"),
 			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		// The root provides its keys and the kernel seals its hooks whatever dist.yaml lists.
+		{name: "provider of a key of the root", bundle: rows("id: a, plugin: o/ready"),
+			want: []string{"7 a provider-binding stop=false"}, detach: []string{"a"}},
+		{name: "listener on a hook of the kernel that dist.yaml does not list", bundle: rows("id: a, plugin: o/inthook"),
+			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
+		{name: "listener on a hook of the kernel that dist.yaml lists", bundle: rows("id: a, plugin: o/inthook"),
+			dist: "sealedHooks: {internal/plugin: [o/inthook]}", pass: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
