@@ -1308,6 +1308,6 @@ the event reach a reader together. An event for an observer that was detached is
 is in `Remaining`. Observers registered on
 a fiber's own handle by a test keep the old rule.
 
-The kernel is 7,899 physical lines of production Go (cap 8,200): 140 for G1 and
+The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
-27 for G7, 24 for G8 and 74 for G9 to G11.
+27 for G7, 24 for G8 and 75 for G9 to G11.

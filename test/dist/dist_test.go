@@ -339,7 +339,9 @@ func TestUnresolvedReferenceFollowsTheMatrix(t *testing.T) {
 }
 
 // TestLiveRecomposition enables a disabled row through test-submit and the real reload,
-// then a row that fails twice, which restart-policy retries until it is ACTIVE.
+// then a row that fails its first two applies: the generation that enables it has a failed
+// verdict, so reload rolls it back (ADR-059 decision 12) instead of waiting for
+// restart-policy to retry the row until it is ACTIVE, which the row does at boot.
 func TestLiveRecomposition(t *testing.T) {
 	live := filepath.Join(t.TempDir(), "live.yml")
 	write := func(body string) {
@@ -381,10 +383,22 @@ func TestLiveRecomposition(t *testing.T) {
 
 	write("- {id: extra, enabled: true}\n- {id: flaky, enabled: true}\n")
 	submit("2")
-	waitState(t, p, func(s teststate.State) bool {
-		return s.Reload != nil && s.Reload.ID == 2 && rowState(s, "flaky") == "ACTIVE" && s.Ready
+	st = waitState(t, p, func(s teststate.State) bool {
+		return s.Reload != nil && s.Reload.ID == 2 && s.Reload.Status != "queued" && s.Reload.Status != "running"
 	})
-	if code := p.stop(); code != boot.ExitOK || !strings.Contains(p.errb.String(), "fiber.retry") {
+	if st.Reload.Status != "rolled back" || st.Reload.Rollback == nil || st.Reload.Rollback.Error != "" ||
+		st.Reload.Generation != 2 || st.Reload.Rollback.Generation != 3 {
+		t.Fatalf("operation %+v", st.Reload)
+	}
+	waitState(t, p, func(s teststate.State) bool {
+		for _, r := range s.Rows {
+			if r.ID == "flaky" && r.Mount != "disabled" {
+				return false // still mounted: the rollback is not done
+			}
+		}
+		return rowState(s, "extra") == "ACTIVE" && s.Ready
+	})
+	if code := p.stop(); code != boot.ExitOK {
 		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
 	}
 }
