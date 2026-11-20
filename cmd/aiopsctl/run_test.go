@@ -30,6 +30,7 @@ func world(t *testing.T) fstest.MapFS {
 	m["work/p/bad.yml"] = &fstest.MapFile{Data: []byte("- {id: metrics, plugin: aiops/x}\n")}
 	m["work/p/rogue.yml"] = &fstest.MapFile{Data: []byte("- insert: [{id: rogue, plugin: aiops/kek-kms, roles: [api]}]\n")}
 	m["abs/iso.yml"] = &fstest.MapFile{Data: []byte("- insert: [{id: iso, plugin: aiops/secrets, roles: [api], isolate: [approval]}]\n")}
+	m["work/p/loader.yml"] = &fstest.MapFile{Data: []byte("- insert: [{id: loader, plugin: aiops/loader, roles: [api], required: true}]\n")}
 	return m
 }
 
@@ -140,6 +141,8 @@ func TestRunRefusals(t *testing.T) {
 		{"missing patch file", with("--patch", "p/nope.yml"), "file-missing"},
 		{"profile that does not exist", []string{"profile", "render", "--profile", "nope", "--home", "home", "--dist", "dist"}, "profiles/nope/profile.yaml"},
 		{"isolate on a bound key", with("--patch", "/abs/iso.yml", "--dump"), "static graph"},
+		// boot mounts the loader itself, so it refuses a composition that holds the row; render must too.
+		{"a row with the reserved id of the loader", with("--patch", "p/loader.yml", "--dump"), `the row id "loader" is reserved`},
 		{"no dist directory", []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "none"}, "modules.yaml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

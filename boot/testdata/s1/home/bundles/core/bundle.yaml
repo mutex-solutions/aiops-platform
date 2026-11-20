@@ -1,5 +1,4 @@
 - insert:
-    - {id: loader, plugin: aiops/loader, roles: [api, worker], required: true}
     - {id: sql, plugin: aiops/sql-pg, roles: [api, worker]}
     - {id: kek, plugin: aiops/kek-local, roles: [api, worker]}
     - {id: secrets, plugin: aiops/secrets, roles: [api, worker]}

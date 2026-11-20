@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"path"
-	"slices"
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
@@ -97,12 +96,13 @@ func run(args []string, _ io.Reader, stdout, stderr io.Writer, fsys fs.FS, env f
 	for _, w := range warns {
 		fmt.Fprintf(stderr, "warning: %s\n", w)
 	}
-	// boot mounts the loader itself, so a row may need what it provides; a profile that
-	// holds a row "loader" of its own (the fixtures of the boot package do) is admitted as it is.
-	if _, ok := mods[boot.LoaderID]; ok && !slices.ContainsFunc(comp.Rows, func(r boot.ComposedRow) bool { return r.ID == boot.LoaderRowID }) {
-		comp = boot.WithLoader(comp)
+	// boot mounts the loader itself and admits the composition with the loader's row,
+	// whose id no row of a profile may take (03-c3-kernel.md:64): render does the same.
+	if err := boot.CheckReserved(comp); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitRefused
 	}
-	a := boot.Admit(comp, mods, d, rs)
+	a := boot.Admit(boot.WithLoader(comp), mods, d, rs)
 	for _, line := range a.Diagnostics() {
 		fmt.Fprintln(stderr, line)
 	}

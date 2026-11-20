@@ -105,6 +105,19 @@ func TestAdmitFailureMatrixRows(t *testing.T) {
 	}
 }
 
+// The id of the loader's row is boot's: a composition that holds it is refused,
+// and the copy WithLoader makes of one that does not is what boot admits.
+func TestCheckReserved(t *testing.T) {
+	c := comp(t, rows("id: a, plugin: o/a"))
+	if err := CheckReserved(c); err != nil {
+		t.Fatal(err)
+	}
+	clash := comp(t, rows("id: a, plugin: o/a"), "- insert: [{id: loader, plugin: o/a}]")
+	if err := CheckReserved(clash); err == nil || !strings.Contains(err.Error(), `the row id "loader" is reserved`) {
+		t.Fatalf("got %v", err)
+	}
+}
+
 // A malformed, missing or empty layer is refused by Compose, before admission.
 func TestMalformedLayerIsRefusedByCompose(t *testing.T) {
 	for _, bundle := range []string{"", "not: a list", "- {id: x, plugin: o/a}"} {

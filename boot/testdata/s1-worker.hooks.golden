@@ -1,5 +1,5 @@
 # aiopsctl profile render --dump-hooks
-digest sha256:f90d0f2555fd3297d5b28d9b4e8a0bced306b518bd203545053426e9ac188c8e
+digest sha256:33ba62e6cebeac64414be5e3ad129218aa536573af75cd18b10fd964269d7747
 roles worker
 
 hook approval/gates sealed to aiops/approval, aiops/tool-search

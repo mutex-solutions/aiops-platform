@@ -1,11 +1,13 @@
 # aiopsctl profile render --dump
-digest sha256:f90d0f2555fd3297d5b28d9b4e8a0bced306b518bd203545053426e9ac188c8e
+digest sha256:33ba62e6cebeac64414be5e3ad129218aa536573af75cd18b10fd964269d7747
 roles all
 
-## bundle:core (layer 1)
+##  (layer 0)
 
-row loader plugin=aiops/loader enabled=true required=true group=false roles=api,worker
-  config {}
+row loader plugin=aiops/loader enabled=true required=true group=false roles=-
+  config null
+
+## bundle:core (layer 1)
 
 row sql plugin=aiops/sql-pg enabled=true required=false group=false roles=api,worker
   config {}
