@@ -1,0 +1,5 @@
+go test fuzz v1
+string("evt")
+string("")
+string("")
+byte('\x12')
