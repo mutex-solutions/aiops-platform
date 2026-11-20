@@ -1,0 +1,25 @@
+{
+ "classification": "PASS: fourth full callpath run, first under protocol amendment 2; six observations of candidate variation above 10% with a clean control, none invalidating; candidate evidence (prototype cores), not final-port evidence",
+ "commit": "c5f0a79",
+ "protocolAmendment": 2,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "4h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local"
+ },
+ "host": "dedicated KVM guest, 24 vCPU, idle before start",
+ "elapsedSeconds": 7224.08,
+ "allocationBound": "owner Enter+Leave: zero allocations per operation in every aggregate, both candidates",
+ "note": "raw per-run records stay on the measurement host"
+}

@@ -133,6 +133,12 @@ The owner declared S0 semantic parity with the pinned oracle complete on
   the replay adapter's documented request and completion mapping, not a candidate
   difference.
 - **D05 and D26**: unchecked `ctx.get` and awaited self-disposal are not carried.
+- **D25** (final port only): a load that disposes itself and then returns a
+  disposer from apply. The Go contract has no apply that returns a disposer; a
+  plugin registers cleanup with `Defer` before it disposes itself. The cleanup
+  therefore runs before the UNLOADING status instead of after it. The
+  unexported core keeps the reference order, and the prototype `reconciler`
+  matches D25. Owner decision, 2026-11-19.
 
 Basis: under the causal method and its four amendments, 64 of 68
 scenario and candidate pairs match in 100 of 100 runs under the race detector

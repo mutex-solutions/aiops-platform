@@ -995,3 +995,47 @@ One known defect of the harness binary used: the per-cell field
 `coldEnsureCalls` reports a shared counter for arm A (fixed later in
 `c5ce385`); totals and latencies are unaffected. This reading goes to ADR-036
 with the tenancy cost.
+
+## 2026-11-19 the final port under the acceptance harnesses
+
+The port in `sdk/kernel` is driven through its exported API by an adapter
+backend named `kernel`, registered beside the two prototype cores in every
+harness. Its first run found two port defects, both fixed to match the
+reference:
+
+- **Liveness is decided first.** On an ended activation `Provide` reported an
+  undeclared key instead of inactive. Every entry point of a context now
+  reports inactive before any other refusal.
+- **An update resolves its config whenever the fiber has a target.** The port
+  resolved only on an ACTIVE fiber; the reference resolves during a gated load
+  and a blocked teardown too (corpus D17 and D20).
+
+Results on commit `e34047e`:
+
+| Harness | `kernel` backend |
+|---|---|
+| Differential corpus under the causal comparator, live pinned oracle, GOMAXPROCS 8 and 2 | 31 of 32 cases match, plus the two diagnostics D06 and D23. D25 differs and is an owner-accepted exception (ADR-035) |
+| Property workload, 1,000 seeds × 1,000 operations, `-race` | pass (`results/property-full-kernel-port/`) |
+| Package tests of composition, hooks, observers, scale, callpath | pass |
+
+Evidence: `test/spike/s0/results/causal-kernel-port/` and
+`property-full-kernel-port/`. The performance gates on the port are not yet
+rerun; the adapter adds an availability function and an intercept lookup per
+provision, so a pass through it is conservative.
+
+### Owner decisions, 2026-11-19 (continued)
+
+14. **D25 is not carried** (ADR-035). `Plugin` gets no second apply shape.
+15. **A failing commit aborts the update.** `internal/commit` becomes a
+    waterfall, which fails closed (decision 12): the new config is not
+    retained and the fiber is not restarted. This matches the prototype.
+
+## 2026-11-19 fourth full callpath run
+
+Evidence: `test/spike/s0/results/callpath-full-fourth/` (commit `c5f0a79`,
+7,224 s, dedicated host). First run under protocol amendment 2.
+**Classification: pass.** Owner `Enter` and `Leave` allocate nothing in every
+aggregate on both candidates. Six aggregates show candidate throughput
+variation of 11.5% to 17.0% beside a clean control (1.7% to 6.2%); amendment 2
+records these as characteristics of the candidate, not as an invalid run. The
+run measures the prototype cores; the port reruns the gate.

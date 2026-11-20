@@ -1,0 +1,23 @@
+{
+ "classification": "PASS at frozen scale, 100/100 cycles, with section 10 leak accounting passed in all four arms; candidate evidence only",
+ "commit": "e34047e",
+ "argv": [
+  "go",
+  "test",
+  "./plugins/jobs-river/internal/s0workers",
+  "-run",
+  "^TestWorkerRestartFullGate$",
+  "-count=1",
+  "-v"
+ ],
+ "host": "dedicated KVM guest, 24 vCPU; PostgreSQL 16 in a local container",
+ "elapsedSeconds": 15168.94,
+ "arms": {
+  "pool": "30 cycles",
+  "client": "30 cycles",
+  "listener": "30 cycles",
+  "combined": "10 cycles"
+ },
+ "section10": "per arm: quiescence before measurement, teardown returns to the harness baseline, no file-descriptor growth, disposed generations own zero, connections accounted per owner generation, no open transaction or stuck statement: 0 findings each",
+ "note": "exact environment (database address and credentials) is deliberately not recorded; host and temporary paths in the log are replaced by placeholders"
+}

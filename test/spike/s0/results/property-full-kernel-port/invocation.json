@@ -1,0 +1,31 @@
+{
+ "classification": "PASS full frozen property workload on three backends: the two prototype cores and the final port in sdk/kernel driven through its exported API by the adapter backend named kernel",
+ "exitCode": 0,
+ "sourceSHA256": "22c573b918133d57f49097325a5f0ba5189bb4b166a1c208ad87a6ee227f910a",
+ "commit": "e34047e",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 4440.89,
+ "backendSeconds": {
+  "reconciler": 1702.02,
+  "graph-lock": 1145.26,
+  "kernel": 1593.33
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ }
+}

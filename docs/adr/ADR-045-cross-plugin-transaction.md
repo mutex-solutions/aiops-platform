@@ -520,3 +520,16 @@ Canonical record changed with this decision, in the same commit: `00-decisions.m
 (transaction contract), `07-c4-plugin-sdk.md` §4.4 (interface, example and rule
 2) and the plugin record's transaction contract (interface).
 
+
+## Restart gate with leak accounting, 2026-11-19
+
+Evidence: `test/spike/s0/results/restart-full-section10/` (commit `e34047e`,
+15,169 s, dedicated host). **Pass at frozen scale: 100 of 100 cycles** across
+the pool, client, listener and combined arms; every scheduled id was
+acknowledged and durably completed, with none unacknowledged and none durable
+without an acknowledgement. The leak accounting of the criteria's section 10
+passed in all four arms with no finding: quiescence before measurement,
+teardown back to the harness baseline, no file-descriptor growth, disposed
+generations owning nothing, connections accounted per owner generation, and no
+open transaction or stuck statement. This supersedes the earlier frozen-scale
+run, which predates the accounting.
