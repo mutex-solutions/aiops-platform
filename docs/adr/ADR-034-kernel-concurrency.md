@@ -1208,5 +1208,62 @@ entries that `Config.Consumers` lists resolve it, and `NewForTest` keeps every
 entry admitted. This is an open point for the project owner. `reflect`, `hooks`
 and `logger` stay open.
 
-The kernel is 7,725 physical lines of production Go (cap 8,200): 140 for G1 and
-G2, 24 for G3 and G4, 91 for the events and 19 for the registry lookup.
+**G6, a config committed without a restart.**
+
+```go
+func (f *Fiber) Commit(ctx context.Context, cfg any) error
+func CommitOp(f *Fiber, cfg any) BatchOp
+```
+
+`Commit` vets `cfg` exactly as `Fiber.Update` does: when the fiber has a desired
+target it resolves `cfg` through `internal/config` and `Decode`, then it runs
+`internal/commit`, which fails closed (a veto is `ErrCommitVetoed`). Only a
+commit that completes retains `cfg`. It runs no `internal/update` and does not
+restart the fiber: the running activation keeps the value it was applied with
+and its `Apply` is not called again. A plugin learns the new value from whoever
+commits it (the loader dispatches `loader/volatile-update`), and the next
+activation of the fiber, whatever starts it (a provider's epoch change, a
+retry, an `UpdateOp`), resolves the retained `cfg`. A fiber mounted with `When`
+takes no config and `Commit` ignores `cfg`. `CommitOp` is the same operation in
+a batch, handled with `UpdateOpWith` before the batch is admitted; the config is
+retained only if the batch is admitted, and a refused batch gets the previous
+config back.
+
+**G7, config changes of one fiber are serialised.** This closes the open point
+of G2: a batch retained its configs before the core admitted it and restored the
+old ones when the core refused it, so a concurrent `Update` or `Commit` of the
+same fiber in that window could be overwritten by the restore. Each fiber's
+config now has a change lock. `Update` and `Commit` take it only to retain. A
+batch takes the locks of the fibers it changes in ascending fiber id (a fiber
+named twice once), from before its first `internal/update` until the core has
+admitted or refused it, and releases them after the restore. So a restore never
+overwrites a newer value: the newer change waits and retains after it. The lock
+is held across the `internal/update` hooks of the batch, so such a hook must
+not change the config of a fiber of its own batch; no other plugin code runs
+under it. Two `Update`s of one fiber race as before (the last retain wins, as
+if they ran in that order, and each restart applies the retained config).
+
+**G8, the owner's built-in step is innermost in a waterfall.**
+
+```go
+func (d WaterfallDispatcher[A, R]) RunWith(ctx context.Context, aud Audience, a A,
+    inner func(context.Context, A) (R, error)) (R, error)
+```
+
+This is the contract of `07-c4-plugin-sdk.md:386`: listeners run outermost
+first, and a listener that does not call `next` vetoes the rest of the chain
+and the built-in behaviour. The next of the last listener calls `inner`, and
+with no listener `inner` runs alone; a listener that does not call `next` means
+`inner` does not run. An error of `inner` fails the dispatch as a listener's
+does, as a `*ListenerError` naming the owner's fiber, and `inner` is never
+skipped for an owner that is quiescing. `Run` is unchanged: a nil `inner`, and
+the zero result past the last listener. The loader uses it for
+`loader/patch-context`: the row's isolate and intercept are the innermost step,
+a listener wraps what `next` returns, and a veto (no `next`, or a nil context)
+fails that entry with `ErrPatchVetoed` and never runs its plugin. The docs do
+not say what a veto of this hook means; fail closed is a choice and an open
+point for the project owner.
+
+The kernel is 7,825 physical lines of production Go (cap 8,200): 140 for G1 and
+G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
+27 for G7 and 24 for G8.
