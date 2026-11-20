@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -380,23 +379,37 @@ func (c cmdline) Env(name string) (string, bool) {
 
 // latch is the ready service: a flag that readiness sets when the required set is
 // ACTIVE and drops while a provider restarts (03-c3-kernel.md:67). Every change
-// goes to changed, which the launcher publishes to the outside.
+// goes to changed, which the launcher publishes to the outside, under the latch's
+// lock, so that the outside reads what the latch holds. end drops it for good: after
+// a leak, and once the process stops, readiness has ended (ADR-059 decision 13) and
+// the readiness row's next Set changes nothing. changed must not call IsReady.
 type latch struct {
-	on      atomic.Bool
-	changed func(bool)
+	mu        sync.Mutex
+	on, ended bool
+	changed   func(bool)
 }
 
 var _ launch.Ready = (*latch)(nil)
 
-func (l *latch) set(v bool) {
-	if l.on.Swap(v) != v {
+func (l *latch) set(v, end bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ended = l.ended || end
+	if l.on != v && !(v && l.ended) {
+		l.on = v
 		l.changed(v)
 	}
 }
 
-func (l *latch) Set()          { l.set(true) }
-func (l *latch) Drop()         { l.set(false) }
-func (l *latch) IsReady() bool { return l.on.Load() }
+func (l *latch) Set()  { l.set(true, false) }
+func (l *latch) Drop() { l.set(false, false) }
+func (l *latch) end()  { l.set(false, true) }
+
+func (l *latch) IsReady() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.on
+}
 
 // switches is the killSwitches service, layer 6, read once at boot from the
 // environment (08-profiles-roadmap-adrs.md:111, :126; ReadKillSwitches).

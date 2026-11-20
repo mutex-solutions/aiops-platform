@@ -698,3 +698,75 @@ func TestRunSettleBound(t *testing.T) {
 		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
 	}
 }
+
+// Once a fiber leaked, readiness stays down until the process is replaced: the readiness
+// row sets the latch on its next event, and the latch does not come back (ADR-059 decision 13).
+func TestRunReadinessStaysDownAfterALeak(t *testing.T) {
+	var l launched
+	trigger, release := make(chan struct{}), make(chan struct{})
+	f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slow, roles: [api]}\n    - {id: probe, plugin: t/probe, roles: [api]}\n",
+		slowDispose(trigger, release), probe(&l))
+	bindExit(f, "t/probe")
+	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
+	f.opt.Limits.LeakGrace = 7 * time.Millisecond
+	f.opt.Clock = f.clock
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	ready := l.ready
+	l.mu.Unlock()
+	ready.Set()
+	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Ready })
+	close(trigger)
+	f.waitFor(t, done, func(s ProcessStatus) bool { return !s.Ready }) // the leak ends readiness
+	ready.Set()
+	if ready.IsReady() || f.lastStatus().Ready {
+		t.Errorf("readiness came back during the leak grace: latch %v, status %+v", ready.IsReady(), f.lastStatus())
+	}
+	for d := range f.clock.armed {
+		if d == 7*time.Millisecond {
+			break
+		}
+	}
+	f.clock.fire(7 * time.Millisecond)
+	close(release)
+	if code := <-done; code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+// The latch publishes the value it holds: a Drop that runs while a Set is still publishing
+// does not leave the outside reading ready.
+func TestLatchPublishesTheValueItHolds(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	var last bool
+	l := &latch{}
+	l.changed = func(v bool) {
+		if v {
+			close(entered)
+			<-release
+		}
+		mu.Lock()
+		last = v
+		mu.Unlock()
+	}
+	setDone, dropDone := make(chan struct{}), make(chan struct{})
+	go func() { l.Set(); close(setDone) }()
+	<-entered
+	go func() { l.Drop(); close(dropDone) }()
+	// The Drop either publishes now, which is the fault, or waits for the Set to finish
+	// publishing; the bound only lets the fault show.
+	select {
+	case <-dropDone:
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	<-setDone
+	<-dropDone
+	mu.Lock()
+	defer mu.Unlock()
+	if last != l.IsReady() {
+		t.Fatalf("published ready=%v, the latch holds %v", last, l.IsReady())
+	}
+}

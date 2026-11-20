@@ -594,7 +594,7 @@ func (r *run) loop(ctx context.Context) int {
 			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail))
 		case <-r.leakPing:
 			if graceUp == nil {
-				r.ready.Drop()
+				r.ready.end()
 				fmt.Fprintf(r.errw, "error: leaked: %s; readiness ended, the process is replaced after the drain window\n", *r.leakWhy.Load())
 				done := make(chan struct{})
 				stop := r.o.Clock.AfterFunc(r.o.Limits.leakGrace(), func() { close(done) })
@@ -623,7 +623,7 @@ func exitCodeOf(why launch.ExitReason) int {
 // shutdown bound, report. why is one line. A shutdown that overran its bound, or
 // that saw a fiber leak, is a replacement, not a clean stop.
 func (r *run) stop(ctx context.Context, code int, why string) int {
-	r.ready.Drop()
+	r.ready.end()
 	r.pub.update(func(s *ProcessStatus) { s.Phase, s.Detail = PhaseStopping, why })
 	if code == ExitOK {
 		fmt.Fprintf(r.errw, "aiops: stopping: %s\n", why)
