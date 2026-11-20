@@ -544,7 +544,7 @@ func (o *owner) expire(now time.Time) {
 			f.leaked = true
 			err := fmt.Errorf("fiber %d %s deadline: %w: %w", f.id, stage, context.DeadlineExceeded, ErrLeaked)
 			o.block(f, err)
-			go o.r.logError("fiber marked leaked", f.id, f.spec.ID, stage, err.Error())
+			go o.r.logError("fiber marked leaked", f.id, f.spec.ID, o.leakLabel(f, stage, at), err.Error())
 		} else {
 			o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		}
@@ -564,6 +564,27 @@ func (o *owner) expire(now time.Time) {
 		// the context's own deadline cancels blocked disposer work truthfully.
 		o.event(f, "deadline", stage, 0)
 	}
+}
+
+// leakLabel names what still runs at the deadline at of a fiber marked leaked
+// (08-profiles-roadmap-adrs.md §1.6, "Logged with its label"): the label of the
+// disposer in flight, or those of the tracked goroutines that had not returned,
+// sorted and comma-separated. A drain held by a lease alone is named by its stage.
+func (o *owner) leakLabel(f *fiber, stage string, at time.Time) string {
+	if stage == "dispose" {
+		return f.effects[len(f.effects)-1].label
+	}
+	var open []string
+	for _, w := range f.act.tracked {
+		if !w.run.inTime(at) {
+			open = append(open, w.label)
+		}
+	}
+	if len(open) == 0 {
+		return stage
+	}
+	slices.Sort(open)
+	return strings.Join(open, ",")
 }
 
 // stageOf names the stage a due deadline of f belongs to and returns the handshake

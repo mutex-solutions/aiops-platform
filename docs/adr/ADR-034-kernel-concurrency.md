@@ -1281,9 +1281,13 @@ snapshot.
 **G10, the kernel logs what it knows.** When a tracked goroutine returns an
 error or panics, and when a fiber is marked leaked, the kernel writes one record
 at level ERROR to `Config.LogHandler` (nothing when it is nil), with the
-attributes `fiber` (id), `plugin` (the plugin id), `label` (the label of the
-goroutine, or the stage of the deadline) and `error` (the error text), under the
-messages `tracked goroutine failed` and `fiber marked leaked`. No config value is
+attributes `fiber` (id), `plugin` (the plugin id), `label` and `error` (the error
+text), under the messages `tracked goroutine failed` and `fiber marked leaked`. The
+`label` of a failed goroutine is its own. The `label` of a leak is that of what still
+runs, as the failure matrix asks ("Logged with its label", 08 §1.6): the disposer in
+flight at the dispose deadline, or the tracked goroutines that had not returned by
+the drain deadline (sorted, comma-separated); a drain held by a lease alone has no
+label and gives its stage, `drain`. The stage is in `error` either way. No config value is
 in a record. The record of a goroutine is written on the goroutine's own worker,
 before the failure is reported to the owner, so the cause is in the log before
 the fiber is FAILED. The record of a leak is written by a goroutine that the

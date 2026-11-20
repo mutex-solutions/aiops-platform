@@ -196,21 +196,41 @@ func TestTrackedFailureIsLogged(t *testing.T) {
 }
 
 // A fiber marked leaked, for a drain and for a disposer, leaves one record naming the
-// stage; a handler that panics does not take the kernel down.
+// label of what still runs, the tracked goroutines past the drain deadline or the
+// disposer past the dispose deadline, with the stage in its error (08 §1.6, "Logged
+// with its label"). A drain held by a lease alone has no label and names its stage.
 func TestLeakIsLogged(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := &leakLog{}
 		r := newReconcilerWith(func(c *coreConfig) { c.logHandler = h })
 		ctx := context.Background()
 		gate := make(chan struct{})
+		var held *Handle
+		leased, err := r.Mount(ctx, Spec{ID: "leased", Apply: func(c *Handle) error { held = c; return nil }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if !held.Enter() {
+			t.Fatal("no lease")
+		}
 		drain, err := r.Mount(ctx, Spec{ID: "drainer", Apply: func(c *Handle) error {
-			return c.Go("stuck", func(context.Context) error { <-gate; return nil })
+			if err := c.Go("returned", func(context.Context) error { return nil }); err != nil {
+				return err
+			}
+			if err := c.Go("leaky-b", func(context.Context) error { <-gate; return nil }); err != nil {
+				return err
+			}
+			return c.Go("leaky-a", func(context.Context) error { <-gate; return nil })
 		}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		dispose, err := r.Mount(ctx, Spec{ID: "disposer", Apply: func(c *Handle) error {
-			return c.Defer("stuck", func(context.Context) error { <-gate; return nil })
+			if err := c.Defer("quick", func(context.Context) error { return nil }); err != nil {
+				return err
+			}
+			return c.Defer("slow-dispose", func(context.Context) error { <-gate; return nil })
 		}})
 		if err != nil {
 			t.Fatal(err)
@@ -218,21 +238,27 @@ func TestLeakIsLogged(t *testing.T) {
 		synctest.Wait()
 		_ = r.Dispose(ctx, drain)
 		_ = r.Dispose(ctx, dispose)
+		_ = r.Dispose(ctx, leased)
 		time.Sleep(testDrain + testDispose + time.Second)
 		synctest.Wait()
 		got := h.all()
-		stages := map[string]map[string]string{}
+		byPlugin := map[string]map[string]string{}
 		for _, rec := range got {
-			stages[rec["label"]] = rec
+			byPlugin[rec["plugin"]] = rec
 		}
-		if len(got) != 2 || stages["drain"]["plugin"] != "drainer" || stages["dispose"]["plugin"] != "disposer" {
-			t.Fatalf("records = %v, want one for the drain and one for the disposer", got)
+		if len(got) != 3 || byPlugin["drainer"]["label"] != "leaky-a,leaky-b" || byPlugin["disposer"]["label"] != "slow-dispose" ||
+			byPlugin["leased"]["label"] != "drain" {
+			t.Errorf("records = %v, want one for each leak, each with its label", got)
 		}
-		if rec := stages["drain"]; rec["msg"] != "fiber marked leaked" || rec["level"] != "ERROR" || rec["fiber"] != "1" ||
-			!strings.Contains(rec["error"], "fiber 1 drain deadline") || !strings.Contains(rec["error"], "fiber leaked") {
+		if rec := byPlugin["drainer"]; rec["msg"] != "fiber marked leaked" || rec["level"] != "ERROR" || rec["fiber"] != "2" ||
+			!strings.Contains(rec["error"], "fiber 2 drain deadline") || !strings.Contains(rec["error"], "fiber leaked") {
 			t.Errorf("record of the drain = %v", rec)
 		}
+		if rec := byPlugin["disposer"]; !strings.Contains(rec["error"], "fiber 3 dispose deadline") {
+			t.Errorf("record of the disposer = %v", rec)
+		}
 		close(gate)
+		held.Leave()
 		synctest.Wait()
 		if err := closeRuntime(ctx, r); err != nil {
 			t.Fatal(err)
