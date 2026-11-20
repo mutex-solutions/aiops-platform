@@ -1119,3 +1119,79 @@ func TestRollbackThatEndsWhileSettlingIsAbandoned(t *testing.T) {
 		t.Errorf("committed = %x: the loader had applied the inverse plan, so the previous composition", l.Current.Digest[:1])
 	}
 }
+
+// listenOps mounts a row that traces each reload/operation event as "op status stage"
+// and runs on for each.
+func (w *world) listenOps(on func(ctx context.Context, r def.Result)) {
+	w.t.Helper()
+	p := kernel.Define(kernel.Plugin{ID: "aiops/ops", Hooks: []kernel.HookUse{def.Operation.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			def.Operation.On(c, kernel.DefaultStage, func(ctx context.Context, r def.Result) (any, error) {
+				w.tr.add(fmt.Sprintf("op %s %s", r.Status, r.Stage))
+				if on != nil {
+					on(ctx, r)
+				}
+				return nil, nil
+			})
+			return nil
+		}})
+	active(w.t, w.root.Plugin(p, nil))
+}
+
+// An operation that applies a generation emits reload/operation as it begins to apply
+// and again once it is final, after its rollback was published; one refused before it
+// applied emits nothing (restart-policy holds its give-ups in between).
+func TestOperationEventsFrameTheApplyAndItsVerdict(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.listen(w.failing("born"), nil)
+	w.listenOps(nil)
+
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("n", "aiops/p", nil)}}
+	if r := w.submit("pass"); r.Status != def.Passed || r.Err != nil {
+		t.Fatalf("result = %+v", r)
+	}
+	want := []string{"compose", "admit", "plan", "op running apply", "apply:n", "applied", "op passed publish"}
+	if got := w.tr.get(); !slices.Equal(got, want) {
+		t.Errorf("trace = %q, want %q", got, want)
+	}
+	w.tr = &trace{}
+	w.next = launch.Composition{Digest: launch.Digest{3}, Rows: []launch.Row{row("a", "aiops/p", nil), row("n", "aiops/p", nil),
+		row("born", "aiops/p", nil)}}
+	if r := w.submit("fail"); r.Status != def.RolledBack {
+		t.Fatalf("result = %+v", r)
+	}
+	// The failed generation and the rollback are each published; the final event follows.
+	want = []string{"compose", "admit", "plan", "op running apply", "apply:born", "applied", "plan", "applied",
+		"op rolled back publish"}
+	if got := w.tr.get(); !slices.Equal(got, want) {
+		t.Errorf("trace = %q, want %q", got, want)
+	}
+	w.tr = &trace{}
+	w.l.AdmitFn = func(context.Context, launch.Composition) (launch.Admission, error) {
+		return launch.Admission{}, errors.New("refused")
+	}
+	if r := w.submit("refused"); r.Status != def.Rejected {
+		t.Fatalf("result = %+v", r)
+	}
+	if got := w.tr.get(); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "op ") }) {
+		t.Errorf("trace = %q: an operation refused before it applied emits nothing", got)
+	}
+}
+
+// An event that fails to dispatch is reported on the result and changes no status.
+func TestOperationEventThatFailsIsReportedOnTheResult(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed()
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("n", "aiops/p", nil)}}
+	w.listenOps(func(ctx context.Context, r def.Result) {
+		if r.Status == def.Running {
+			_ = w.fiber.Dispose(ctx)
+			<-ctx.Done() // the dispatch ends with the context: Emit reports it
+		}
+	})
+	r := w.submit("test")
+	if r.Status != def.Abandoned || r.Err == nil || !strings.Contains(r.Err.Error(), "emit reload/operation") {
+		t.Errorf("result = %+v", r)
+	}
+}

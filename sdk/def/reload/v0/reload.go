@@ -26,7 +26,9 @@ var Applied = composition.NewApplied(Key)
 // Operation is the reload/operation event, owned by Key, access open. reload emits it
 // with the Result as it stands when an operation is about to apply a generation
 // (Status Running, Stage apply), and again once that operation is final, whatever its
-// status. Between the two the rows of the tree are not judged: a failure there is
+// status. A passed generation that changes the reload row itself is final before that
+// change is applied, as the change may end the activation that would emit the event.
+// Between the two the rows of the tree are not judged: a failure there is
 // rolled back when the verdict fails (08-profiles-roadmap-adrs.md:470, :473), so
 // restart-policy holds its give-ups, and the exit an infrastructure provider's
 // give-up asks for, until the final event. Both dispatches carry the context of the

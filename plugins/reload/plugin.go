@@ -44,11 +44,14 @@ var Plugin = kernel.Define(kernel.Plugin{
 	Decode:   decode,
 	Apply: func(c *kernel.Context, cfg any) error {
 		conf := cfg.(Config)
-		applied := def.Applied.Bind(c)
+		applied, operation := def.Applied.Bind(c), def.Operation.Bind(c)
 		e := engine.New(engine.Deps{
 			Profile: launch.ProfileContextKey.Of(c), Catalog: launch.CatalogKey.Of(c), Loader: loader.Key.Of(c),
 			Publish: func(ctx context.Context, a composition.Applied) error {
 				return applied.Emit(ctx, kernel.Unscoped, a)
+			},
+			Progress: func(ctx context.Context, r def.Result) error {
+				return operation.Emit(ctx, kernel.Unscoped, r)
 			},
 			Self: id,
 			Go: func(label string, run func(context.Context) error) (err error) {

@@ -33,6 +33,8 @@ type Deps struct {
 	Loader  loader.Loader
 	// Publish emits composition/applied.
 	Publish func(ctx context.Context, a composition.Applied) error
+	// Progress emits reload/operation.
+	Progress func(ctx context.Context, r def.Result) error
 	// Self is the plugin id of the row that runs the engine (see split).
 	Self string
 	// Go starts a tracked goroutine of the row (kernel.Context.Go). It returns the
@@ -197,8 +199,16 @@ func (e *Engine) final(j *job) {
 }
 
 // process runs the stages of one operation. It touches no field of the engine that a
-// Submit reads.
-func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
+// Submit reads. An operation that gets as far as applying emits reload/operation as it
+// begins to apply and again with its final result, after any rollback was judged and
+// committed: in between, restart-policy holds its give-ups.
+func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
+	applying := false
+	defer func() {
+		if applying {
+			e.progress(ctx, &final)
+		}
+	}()
 	var tree *launch.Composition // set once the loader's entries hold the candidate
 	stop := func(stage def.Stage, err error) def.Result {
 		r.Stage, r.Err = stage, err
@@ -234,6 +244,8 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	}
 	before := e.activeBefore(prev)
 	ops, last := e.split(operations(r.Plan, prev, cand), prev)
+	r.Stage, applying = def.StageApply, true
+	e.progress(ctx, &r)
 	var partial error
 	if len(ops) > 0 {
 		// The loader refuses a plan whole and with no effect. An error that comes with
@@ -265,6 +277,10 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	e.commit(&r, cand)
 	e.publish(ctx, &r, cand.Digest, r.Generation, r.Report)
 	if len(last) > 0 {
+		// The generation is judged: the operation is final for reload/operation now, as
+		// the change of the reload row may end the activation that would emit it.
+		applying = false
+		e.progress(ctx, &r)
 		res, err := e.Loader.Apply(ctx, last)
 		r.Applied = append(r.Applied, res...)
 		if err != nil {
@@ -361,6 +377,14 @@ func (e *Engine) commit(r *def.Result, c launch.Composition) {
 func (e *Engine) publish(ctx context.Context, r *def.Result, d launch.Digest, generation uint64, rep composition.Report) {
 	if err := e.Publish(ctx, composition.Applied{Digest: composition.Digest(d), Generation: generation, Report: rep}); err != nil {
 		r.Err = errors.Join(r.Err, fmt.Errorf("publish composition/applied: %w", err))
+	}
+}
+
+// progress emits reload/operation with r. A failure is reported on the result and
+// changes no status.
+func (e *Engine) progress(ctx context.Context, r *def.Result) {
+	if err := e.Progress(ctx, *r); err != nil {
+		r.Err = errors.Join(r.Err, fmt.Errorf("emit reload/operation: %w", err))
 	}
 }
 
