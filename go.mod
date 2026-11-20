@@ -6,7 +6,9 @@ toolchain go1.26.8
 
 require (
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/mutex-solutions/aiops-platform/sdk/def v0.0.0
 	github.com/mutex-solutions/aiops-platform/sdk/kernel v0.0.0
+	github.com/mutex-solutions/aiops-platform/sdk/testkit v0.0.0
 	github.com/riverqueue/river v0.51.2
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.51.2
 	github.com/riverqueue/river/rivertype v0.51.2
@@ -30,4 +32,5 @@ require (
 replace (
 	github.com/mutex-solutions/aiops-platform/sdk/def => ./sdk/def
 	github.com/mutex-solutions/aiops-platform/sdk/kernel => ./sdk/kernel
+	github.com/mutex-solutions/aiops-platform/sdk/testkit => ./sdk/testkit
 )
