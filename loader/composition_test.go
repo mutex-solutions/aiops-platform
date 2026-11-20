@@ -44,6 +44,9 @@ func TestCompositionServesTheMountedRows(t *testing.T) {
 		t.Errorf("states %v", state)
 	}
 	r := gen.Rows[0]
+	if r.Fiber == 0 || r.Fiber == gen.Rows[3].Fiber {
+		t.Errorf("row r must carry its own fiber id: %d and %d", r.Fiber, gen.Rows[3].Fiber)
+	}
 	if r.Plugin != "t/hooked" || !slices.Equal(r.Hooks, []string{"loader/entry-init", "loader/patch-context"}) || !slices.Contains(r.Registrations, "registered") {
 		t.Errorf("row r: %+v", r)
 	}

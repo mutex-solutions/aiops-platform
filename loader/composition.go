@@ -53,6 +53,7 @@ func (r reader) Committed(scope composition.Scope) (composition.Generation, bool
 		}
 		if h.f != nil {
 			ctx := context.Background()
+			row.Fiber = h.f.ID()
 			row.State, _ = h.f.State(ctx)
 			row.Registrations, _ = h.f.Effects(ctx)
 		}
