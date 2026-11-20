@@ -180,7 +180,7 @@ func TestLoaderSmoke(t *testing.T) {
 		}
 	})
 
-	t.Run("live recomposition and a retry", func(t *testing.T) {
+	t.Run("live recomposition and a rollback", func(t *testing.T) {
 		live := filepath.Join(t.TempDir(), "live.yml")
 		write := func(body string) {
 			if err := os.WriteFile(live, []byte(body), 0o644); err != nil {
@@ -201,15 +201,27 @@ func TestLoaderSmoke(t *testing.T) {
 		}
 		p.waitState(func(s teststate.State) bool { return rowState(s, "extra") == "ACTIVE" })
 
-		// flaky fails its first two applies; restart-policy retries it, and readiness
-		// is back once it is ACTIVE.
+		// flaky fails its first two applies, so the generation that enables it has a failed
+		// verdict: reload rolls it back with one inverse plan (ADR-059 decision 12), the row
+		// is disabled again and the process stays ready. The retry itself is covered at boot.
 		write("- {id: extra, enabled: true}\n- {id: flaky, enabled: true}\n")
 		p.submit("2")
+		st = p.waitState(func(s teststate.State) bool {
+			return s.Reload != nil && s.Reload.ID == 2 && s.Reload.Status != "queued" && s.Reload.Status != "running"
+		})
+		if st.Reload.Status != "rolled back" || st.Reload.Rollback == nil || st.Reload.Rollback.Error != "" {
+			t.Fatalf("operation %+v", st.Reload)
+		}
 		p.waitState(func(s teststate.State) bool {
-			return s.Reload != nil && s.Reload.ID == 2 && rowState(s, "flaky") == "ACTIVE" && s.Ready
+			for _, r := range s.Rows {
+				if r.ID == "flaky" && r.Mount != "disabled" {
+					return false
+				}
+			}
+			return rowState(s, "extra") == "ACTIVE" && s.Ready
 		})
 		_ = p.cmd.Process.Signal(syscall.SIGTERM)
-		if code := p.wait(); code != boot.ExitOK || !strings.Contains(p.stderr.String(), "fiber.retry") {
+		if code := p.wait(); code != boot.ExitOK {
 			t.Fatalf("exit %d; stderr:\n%s", code, p.stderr.String())
 		}
 	})
