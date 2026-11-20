@@ -1315,7 +1315,10 @@ when the root is disposed, so the last events of the root are delivered too. The
 dispatcher already drained its queue before it stopped. When `Close` returns the
 diagnostic of a fiber that is still blocked, it now first waits, within its
 context, until the events accepted so far are delivered, so the diagnostic and
-the event reach a reader together. An event for an observer that was detached is counted in
+the event reach a reader together. During that wait an observer that delivers
+nothing for one drain deadline (a listener of a kernel event stuck in the relay, say)
+is detached by the overflow rule, so the wait is bounded even when the context of
+`Close` never ends. An event for an observer that was detached is counted in
 `ObserverStatus.EventsLost`, and one still waiting when the context of `Close` ends
 is in `Remaining`. Observers registered on
 a fiber's own handle by a test keep the old rule.

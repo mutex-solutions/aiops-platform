@@ -6,6 +6,7 @@ package kernel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -399,5 +400,66 @@ func TestObserverOfTheRootSeesTheEventsOfClose(t *testing.T) {
 			t.Fatal("Close did not complete after the disposer returned")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// A listener of a kernel event that never returns blames its own fiber alone and does
+// not hold Close: with a context that never ends, Close returns the leak of that fiber
+// after about two drain deadlines (ADR-034 G11).
+func TestCloseIsBoundedBehindAStuckKernelEventListener(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var stall, unstall sync.Once
+	defer unstall.Do(func() { close(release) })
+	listener := Define(Plugin{ID: "s1/stuck-listener", Hooks: []HookUse{InternalStatus.Use(DefaultStage)}, Apply: func(c *Context, _ any) error {
+		InternalStatus.On(c, DefaultStage, func(context.Context, LedgerEvent) (any, error) {
+			stall.Do(func() { close(entered); <-release })
+			return nil, nil
+		})
+		return nil
+	}})
+	cfg := frontConfig()
+	cfg.DrainDeadline, cfg.DisposeDeadline = 50*time.Millisecond, 50*time.Millisecond
+	cfg.Listeners = map[AnyHook][]Plugin{InternalStatus: {listener}}
+	r, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := frontCtx(t)
+	stuck := r.Plugin(listener, nil)
+	want(t, stuck, Active)
+	want(t, r.Plugin(plug("s1/trigger", nil, nil, nil), nil), Active)
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("the listener was never called")
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- r.Close(context.Background()) }()
+	var cerr error
+	select {
+	case cerr = <-closed:
+	case <-time.After(5 * time.Second):
+		st := r.ObserverStatus()
+		unstall.Do(func() { close(release) })
+		t.Fatalf("Close(context.Background()) did not return behind a stuck listener: %+v", st)
+	}
+	if !errors.Is(cerr, ErrLeaked) || !strings.Contains(cerr.Error(), fmt.Sprintf("fiber %d drain deadline", stuck.ID())) {
+		t.Fatalf("Close = %v, want the drain of the listener's fiber leaked", cerr)
+	}
+	if strings.Contains(cerr.Error(), "fiber 0 drain deadline") {
+		t.Fatalf("Close marked the root leaked for a plugin's listener: %v", cerr)
+	}
+	if st := r.ObserverStatus(); st.Overflowed != 1 {
+		t.Fatalf("the stuck relay was not detached: %+v", st)
+	}
+	unstall.Do(func() { close(release) })
+	select {
+	case <-r.core.done:
+	case <-ctx.Done():
+		t.Fatal("the kernel did not drain once the listener returned")
+	}
+	if err := r.Close(ctx); errors.Is(err, ErrLeaked) {
+		t.Fatalf("Close after the listener returned = %v", err)
 	}
 }

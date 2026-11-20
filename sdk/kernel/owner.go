@@ -371,8 +371,10 @@ func (r *core) close(ctx context.Context) error {
 		// path; otherwise nobody closes the observer queue. The events accepted so
 		// far, the deadline that made this diagnostic among them, are delivered
 		// before it is returned, within ctx: a launcher that reads the error and
-		// its observer's flag must not see the one without the other.
-		_ = r.observers.d.barrier(ctx) // a stalled observer is detached or ctx ends it
+		// its observer's flag must not see the one without the other. An observer
+		// that delivers nothing for a drain deadline (a stuck listener of a kernel
+		// event) is detached, so the wait is bounded even when ctx never ends.
+		_ = r.observers.d.stallBarrier(ctx, r.cfg.drainDeadline)
 		r.releaseWhenDrained()
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 )
 
 var (
@@ -433,6 +434,27 @@ func (d *dispatcher) overflowErrLocked() error {
 // settle and then this barrier.
 func (d *dispatcher) barrier(ctx context.Context) error {
 	return d.waitBarrier(ctx, d.snapshot().Accepted)
+}
+
+// stallBarrier is barrier for Close: each time no event is delivered for stall, it
+// detaches the observer the worker is inside, by the overflow rule, so a callback
+// that never returns delays the wait by stall and not without bound.
+func (d *dispatcher) stallBarrier(ctx context.Context, stall time.Duration) error {
+	sequence := d.snapshot().Accepted
+	for {
+		delivered := d.snapshot().Delivered
+		wait, cancel := context.WithTimeout(ctx, stall)
+		err := d.waitBarrier(wait, sequence)
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+			return err
+		}
+		d.mu.Lock()
+		if d.status.Delivered == delivered {
+			d.overflowLocked()
+		}
+		d.mu.Unlock()
+	}
 }
 
 // waitBarrier joins delivery through an already accepted sequence. Zero joins
