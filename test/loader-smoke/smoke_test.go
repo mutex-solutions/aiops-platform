@@ -148,15 +148,17 @@ func TestLoaderSmoke(t *testing.T) {
 
 	t.Run("boots every row, then stops on SIGTERM", func(t *testing.T) {
 		p := start(t, bin, []string{"AIOPS_REF_NOTE=from-env"}, patch("refs"))
-		// Ready is set by the real readiness row; every mounted row is ACTIVE.
-		st := p.waitState(func(s teststate.State) bool { return s.Ready && len(s.Rows) > 0 })
-		for _, r := range st.Rows {
-			switch {
-			case r.Mount == "disabled":
-			case r.Mount != "mounted" || r.State != "ACTIVE":
-				t.Fatalf("row %+v", r)
+		// Ready is set by the real readiness row once the required set is ACTIVE; a row that
+		// is not required, test-submit among them, may still be LOADING at that instant, so
+		// the wait is for every mounted row to be ACTIVE as well.
+		p.waitState(func(s teststate.State) bool {
+			for _, r := range s.Rows {
+				if r.Mount != "disabled" && (r.Mount != "mounted" || r.State != "ACTIVE") {
+					return false
+				}
 			}
-		}
+			return s.Ready && len(s.Rows) > 0
+		})
 		var status serve.Status
 		if !p.read(serve.StatusFile, &status) || status.Phase != "running" || !status.Ready {
 			t.Fatalf("status %+v", status)
