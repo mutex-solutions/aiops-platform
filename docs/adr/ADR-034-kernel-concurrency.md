@@ -1214,7 +1214,11 @@ func (r *registry) Fiber(id uint64) (*Fiber, bool)
 This is the method of the `registry` built-in that the retry plugin needs. It
 finds a live or archived fiber by id and is false for id 0, an id never issued
 and an evicted record. The `*Fiber` can dispose, await and restart that fiber,
-so whoever holds the registry has those powers over every fiber. The documents
+so whoever holds the registry has those powers over every fiber. It restarts with
+`Update(ctx, nil)`, which keeps the config the fiber retains. The core does not
+keep a fiber's config cell, so it cannot change that config: `Commit`, `Update`
+with a config, `UpdateOpWith` and `CommitOp` of it return an error (until the S1
+review they reported success and retained nothing). The documents
 do not say who may hold it, so `RegistryKey` is now consumer-bound: only the
 entries that `Config.Consumers` lists resolve it, and `NewForTest` keeps every
 entry admitted. This is an open point for the project owner. `reflect`, `hooks`

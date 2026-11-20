@@ -268,6 +268,9 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		if op.fiber.ref.c != r.core {
 			return nil, fmt.Errorf("batch operation %d: %w", i, errForeignFiber)
 		}
+		if op.hasCfg && op.fiber.cell == registryCell {
+			return nil, fmt.Errorf("batch operation %d: %w", i, errRegistryConfig)
+		}
 		native[i].Fiber = op.fiber.ref.id
 	}
 	done, err := r.stageUpdates(ctx, ops, native)
@@ -295,7 +298,7 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 // after the fiber is disposed, for as long as the kernel keeps its record.
 type Fiber struct {
 	ref  fiberRef
-	cell *cfgCell // The fiber's config; nil for a fiber that takes none (When).
+	cell *cfgCell // The fiber's config; nil for a fiber that takes none (When), registryCell when unknown.
 }
 
 // State returns the fiber's current state.

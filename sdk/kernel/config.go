@@ -203,6 +203,9 @@ func (f *Fiber) vet(ctx context.Context, cfg any) (resolved any, loaded bool, er
 // takes no config and Commit ignores cfg. Changes of one fiber's config are
 // serialised with those of Update and Batch (see cfgCell.cmu). Decode must be pure.
 func (f *Fiber) Commit(ctx context.Context, cfg any) error {
+	if f.cell == registryCell {
+		return errRegistryConfig
+	}
 	if f.cell == nil {
 		return nil
 	}
@@ -241,7 +244,10 @@ func (f *Fiber) Commit(ctx context.Context, cfg any) error {
 // Decode must be pure: it runs here for the candidate and again at the activation
 // that applies the retained cfg.
 func (f *Fiber) Update(ctx context.Context, cfg any) error {
-	if f.cell == nil {
+	if f.cell == registryCell && cfg != nil {
+		return errRegistryConfig
+	}
+	if f.cell == nil || f.cell == registryCell {
 		return f.ref.update(ctx)
 	}
 	resolved, loaded, err := f.vet(ctx, cfg)
