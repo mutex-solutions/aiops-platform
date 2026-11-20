@@ -142,6 +142,131 @@ role pool max 8 connections, worker `MaxWorkers=4`. Enqueue is one transaction
 caller side is being recreated the endpoint returns 503 (never counted as work)
 and worker handlers snooze.
 
+## Kernel-owned variant (`S0WORKERS_RESTART_OWNER=kernel`)
+
+`docs/design/s0-spike-criteria.md` section 6, last paragraph: after the final kernel
+exists the probe is rerun "with resources owned by its real effects and actual
+lease/quiesce behavior". The same test function runs both variants; the environment
+variable selects the owner (`library`, the default and unchanged, or `kernel`). Every
+threshold, schedule, ledger rule and leak bound is shared. The owner is in the report
+(`resource_owner`), in the classification string (`[resource_owner=kernel] ...`), in
+every cycle line, arm summary, `section10` arm block and printed section 10 line, so
+evidence of the two variants cannot be confused. Code: `restart_full_kernel_test.go`
+(database-free tests in `restart_full_kernel_unit_test.go`).
+
+Ownership (`kernel.New`, no binding maps, open keys; three fibers mounted on the root):
+
+| fiber | Needs | provides | created in `Context.Effect` | disposer | goroutines through `Context.Go` | leases (`Context.Enter`) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `s0restart/pool` | nothing | `pool` | caller pgx pool, trusted-jobs pgx pool (the fixture's two pools) | `Pool.Close` under the dispose deadline | none | taken by HTTP handlers and River jobs |
+| `s0restart/client` | `pool` | `client` | River insert client (caller pool), River worker client (worker pool, started) | revoke handler, `StopAndCancel` | `delivery-drain` (the delivery observer) | taken by HTTP handlers and River jobs |
+| `s0restart/listener` | `pool`, `client` | `listener` | loopback listener and `http.Server` on the same address | close | `http-serve` (accept loop), `http-quiesce` (shuts the server down when the fiber quiesces) | taken by HTTP handlers |
+
+An HTTP handler holds leases on the listener, client and pool fibers for the whole
+request (the 200 ms hold and the open transaction included); a River job holds
+leases on the client and pool fibers for the whole job. A lease the kernel refuses
+means the fiber is quiescing: HTTP 503, or a job snooze with no attempt consumed.
+Quiesce therefore waits for exactly what the criteria's in-flight hold creates, and
+the drain deadline bounds it. The River client's lifetime context is not the fiber's
+`Std`: `Std` is cancelled when the unload starts, and cancelling River then would
+kill the held jobs instead of letting the drain wait for them (the same reason the
+library variant keeps its own lifetime context). No pool, client or listener is created
+or closed outside a kernel effect.
+
+Restart: `Root.Batch(UpdateOp(fiber))` then `Root.Settle` (pool arm: the pool fiber,
+client arm: the client fiber, listener arm: the listener fiber, combined: all three in
+one Batch). Nothing names the dependants: a Need of a withdrawn provision unloads the
+consumer, which returns when the provision is ACTIVE again, so a pool restart also
+restarts the client and the listener and a client restart also restarts the listener.
+Dependants unload before their provider disposes (the provider's disposers wait for
+the withdrawn provision's dependants). After each restart request the harness waits
+with `Settle` and then applies the unchanged readiness and recovery checks. The
+epoch an ACK carries is the number of the listener activation that served it, so
+"served only by the recreated resources" still holds (the listener is the last to
+return). Recovery is still measured from the request instant to the first durable
+completion of an ACK with the final epoch.
+
+In-flight work. The restart request meets open leases (`held_*_at_restart_request`
+and the new `kernel_leases_open_at_restart_request`, at least one on every requested
+fiber). The kernel's record is read after every `Settle` and judged by the bounds
+`kernel_settle_returned_nil`, `kernel_no_fiber_leaked_blocked_or_failed` (every fiber's
+`Leaked`, `Error`, state, and the three provisions active),
+`kernel_restart_set_by_availability_alone` (the requested fibers got a new revision;
+every expected dependant went UNLOADING and ACTIVE again; nothing else did),
+`kernel_ledger_quiesce_then_drain_then_dispose` (per restarted fiber the ledger order is
+UNLOADING, every tracked goroutine's `go:done`, the first `dispose-effect`, ACTIVE; no
+`deadline` event) and `kernel_unload_waited_for_open_leases_within_drain_deadline`. The
+ledger has no lease events and no timestamps, so "the drain waited for the open leases"
+is shown by that order together with the harness's own lease counters: every disposer
+records the leases still open on its activation when it starts (always 0, although
+leases were open at the request; the cycle line gives `request_to_first_disposer_ms`
+and `leases_refused_in_this_activation`). `Snapshots`/`Inspect` give the leaked,
+blocked and provision facts, `Events` the order.
+
+`kernel.Config` (fixture data, printed as `config.kernel_config`; the kernel holds no
+default):
+
+| field | value | why |
+| --- | --- | --- |
+| `LoadDeadline` | 2 s | `Apply`: connect, `SELECT 1`, River start; below the 5 s recovery budget |
+| `DrainDeadline` | 2 s | leases and tracked goroutines: 200 ms holds plus a request in flight |
+| `DisposeDeadline` | 2 s | one fiber's whole effect walk: `Pool.Close`, `StopAndCancel`, `Shutdown` |
+| `ArchiveLimit` | 16 | fibers are only disposed by the final `Close` |
+| `EventWindow` | 8192 | one restart writes under 100 events; the harness reads them after `Settle` and fails if the window no longer holds the restart |
+| `ObserverQueue` | 1024 | no observer is attached; the dispatcher still exists |
+| `OwnerInbox` | 256 | owner backpressure; lease entry and exit do not use it |
+| `TerminalLimit` | 16 | diagnostics of past failed fibers |
+
+Each deadline is below the gate's 5 s recovery budget so that a stage that overruns is
+reported by the kernel (a blocked fiber and a deadline event) before the gate's own
+recovery bound is lost; the bound itself is unchanged and is still judged by the harness.
+
+Section 10 in the kernel variant. The closed owner set gains `kernel`
+(`s10KernelSet`, printed in `..._S10_DECLARED` as `declared_background_set`):
+the kernel's owner loop (`kernel.(*owner).run`, 1) and observer dispatcher
+(`kernel.(*dispatcher).run`, 1) exist while the application does and are declared
+at harness level; every goroutine started through `Context.Go` has the entry
+`kernel.(*handle).goTracked.func1` under the pprof role and generation of its fiber's
+resource: 2 per live `http-server` generation (`http-serve`, `http-quiesce`; this
+replaces the library's accept-loop entry) and 1 per live `river-worker` generation
+(`delivery-drain`; this replaces the library's harness-level `drain`). The accounting
+still proves the same things: teardown returns to the pre-application harness baseline,
+disposed generations own zero (goroutines, sessions, entries, retained objects),
+non-PostgreSQL descriptors equal the baseline and do not grow, connections are accounted
+per owner generation, no open transaction or stuck statement. After the final
+`Root.Close` any remaining kernel goroutine is an extra teardown finding. Quiescence
+before a checkpoint also waits for every kernel lease to be released.
+
+Two kernel behaviours shape the harness, and are reported rather than hidden:
+
+- The kernel keeps the value of every provision in its event ledger until `EventWindow`
+  more events have passed (`event.Value`, the retained tail and `Inspect`). A pool or
+  client provided as the value would stay reachable after its disposal, which section 10
+  reads as a retained disposed object. The three keys therefore carry small handles
+  (`kPoolH`, `kClientH`) into harness tables that the disposers empty; only the
+  `listener` key carries plain data (address, epoch).
+- `Fiber.Revision` counts updates, not restarts: a dependant that restarts because its
+  provider did keeps its revision. That a dependant restarted is read from the ledger
+  (UNLOADING then ACTIVE of that fiber after the request), not from the revision.
+
+Differences from the library variant, by design: while a fiber that the listener
+needs restarts, the listener restarts too, so the accept loop is closed (connection
+refused, retried inside the 5 s operation timeout) instead of answering 503 as the
+library variant does for the pool and client arms. The listener arm is the same in
+both. Failed attempts before the recovery instant are reported, not bounded, as before.
+
+CI: job `postgres` has a second reduced step, "Full restart gate at reduced scale with
+kernel-owned resources", identical to the first with `S0WORKERS_RESTART_OWNER: kernel`.
+
+Frozen-scale command for the kernel variant (about 4.3 hours, dedicated host,
+GOMAXPROCS 8, no race detector):
+
+```text
+S0_ADMIN_DSN=<dsn> S0_EXPECT_DATABASE=<database> S0_WORKER_RESTART_FULL=1 \
+S0WORKERS_RESTART_OWNER=kernel GOMAXPROCS=8 \
+  go test -count=1 -timeout 6h -v -run '^TestWorkerRestartFullGate$' ./plugins/jobs-river/internal/s0workers
+```
+
 ## Implementation notes (interpretations, stricter reading taken)
 
 - Pool: riverpgxv5 binds a concrete pool, so pool recreation recreates both pgx
@@ -169,7 +294,8 @@ and worker handlers snooze.
 - Held work: held HTTP transactions are capped at half the caller pool so the
   consumer is not starved; at least one HTTP transaction AND one worker handler
   must be in flight at the restart request or the cycle fails. The criteria's
-  "kernel leases" hold has no kernel here and is not simulated.
+  "kernel leases" hold has no kernel in the library variant and is not simulated
+  there; the kernel variant holds real kernel leases (next section).
 - Orphans: failed drain/stop/close/shutdown within 5 s, wrong live pool/client/
   listener count, or idle-in-transaction sessions of the fixture login after drain.
 - 30 s completion drain after the window is counted from the last ACK.

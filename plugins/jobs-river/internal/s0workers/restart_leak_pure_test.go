@@ -26,11 +26,28 @@ const (
 	ownerHarness      = "harness-coordinator"
 	ownerLoad         = "load-generator"
 	ownerUnclassified = "unclassified"
+	// ownerKernelRT exists only in the kernel-owned variant (S0WORKERS_RESTART_OWNER=kernel):
+	// the kernel's owner loop, its observer dispatcher and every goroutine tracked by
+	// Context.Go. It is never part of the library variant's closed set.
+	ownerKernelRT = "kernel"
 )
 
 // s10Owners is the closed set of owners. Anything else is "unclassified", which
 // is a failure unless pre-declared (it is never declared).
 var s10Owners = []string{ownerRuntime, ownerHTTPServer, ownerPgxPool, ownerRiver, ownerHarness, ownerLoad}
+
+// s10Set is the declared owner set of one resource-owner variant. The library set
+// is the one below and never changes; the kernel set is built in
+// restart_full_kernel_test.go. s10Active is chosen once per run, before any
+// measurement, from S0WORKERS_RESTART_OWNER.
+type s10Set struct {
+	Owner   string
+	Owners  []string
+	PerGen  map[string][]declEntry
+	Harness []declEntry
+}
+
+var s10Active *s10Set
 
 // Generation roles. A role is the kind of resource a generation counter belongs
 // to; the live generation of each role is known to the harness.
@@ -64,6 +81,7 @@ func (g gGroup) key() gKey { return gKey{g.Owner, g.Role, g.Gen, g.Entry} }
 var fnShort = strings.NewReplacer(
 	"github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers", "s0workers",
 	"github.com/riverqueue/river", "river",
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel", "kernel",
 	"github.com/jackc/pgx/v5", "pgx",
 	"github.com/jackc/puddle/v2", "puddle",
 )
@@ -84,6 +102,8 @@ func ownerOfFrame(fn string) string {
 		return ownerPgxPool
 	case strings.HasPrefix(fn, "river."), strings.HasPrefix(fn, "river/"):
 		return ownerRiver
+	case strings.HasPrefix(fn, "kernel."):
+		return ownerKernelRT
 	case strings.HasPrefix(fn, "net/http.(*persistConn)"), strings.HasPrefix(fn, "net/http.(*Transport)"):
 		return ownerLoad
 	case strings.HasPrefix(fn, "net/http.(*Server)"), strings.HasPrefix(fn, "net/http.(*conn)"):
@@ -342,18 +362,24 @@ var s10DeclaredHarness = []declEntry{{ownerHarness, "s0workers.(*fullApp).drain"
 // hijacked from the worker pool).
 var s10SessionAllowance = map[string]int{roleWorkerPool: 1}
 
+var s10Library = &s10Set{Owner: resOwnerLibrary, Owners: s10Owners, PerGen: s10Declared, Harness: s10DeclaredHarness}
+
 func expectedGoroutines(harness map[gKey]int, live map[string]int) map[gKey]int {
+	set := s10Active
+	if set == nil {
+		set = s10Library
+	}
 	out := map[gKey]int{}
 	for k, n := range harness {
 		out[k] = n
 	}
 	if len(live) > 0 {
-		for _, e := range s10DeclaredHarness {
+		for _, e := range set.Harness {
 			out[gKey{e.Owner, "", 0, e.Entry}] += e.Count
 		}
 	}
 	for role := range live {
-		for _, e := range s10Declared[role] {
+		for _, e := range set.PerGen[role] {
 			out[gKey{e.Owner, role, 0, e.Entry}] += e.Count
 		}
 	}
@@ -774,6 +800,14 @@ func s10Evaluate(mode string, harness, base, cur *s10Snapshot, prior []*s10Snaps
 	}
 	add(gbound, unclassified)
 	add(gbound, diffGoroutines(want, gnorm))
+	if mode == "teardown" {
+		// After the final Root.Close no kernel goroutine may remain, whatever the harness baseline held.
+		for _, g := range cur.Goroutines {
+			if g.Owner == ownerKernelRT {
+				add(bTeardown, []string{fmt.Sprintf("kernel goroutine remains after Root.Close: %d at %s", g.Count, g.Entry)})
+			}
+		}
+	}
 
 	// Disposed generations own zero of everything else, by key.
 	for k, n := range cur.FDs {

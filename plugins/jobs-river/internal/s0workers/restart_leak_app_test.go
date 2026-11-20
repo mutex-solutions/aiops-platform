@@ -280,15 +280,13 @@ func (a *fullApp) s10Collect(ctx context.Context, name string, cycle int, withAp
 	s.HarnessPools["admin"] = int(a.f.admin.Stat().TotalConns())
 	s.HarnessPools["fixture-caller"] = int(a.f.callerPool.Stat().TotalConns())
 
-	a.mu.Lock()
-	cur := a.cur
-	a.mu.Unlock()
+	callerPool, workerPool := a.appPools()
 	if withApp {
-		if cur != nil {
-			s.Pools = append(s.Pools, poolRec(roleCallerPool, a.gens.liveMap()[roleCallerPool], cur.pool))
+		if callerPool != nil {
+			s.Pools = append(s.Pools, poolRec(roleCallerPool, a.gens.liveMap()[roleCallerPool], callerPool))
 		}
-		if a.w != nil {
-			s.Pools = append(s.Pools, poolRec(roleWorkerPool, a.gens.liveMap()[roleWorkerPool], a.w.pool))
+		if workerPool != nil {
+			s.Pools = append(s.Pools, poolRec(roleWorkerPool, a.gens.liveMap()[roleWorkerPool], workerPool))
 		}
 	}
 	a.gens.mu.Lock()
@@ -356,6 +354,8 @@ func (a *fullApp) quiesce(ctx context.Context, floor int64) string {
 		switch {
 		case a.reqNow.Load() != 0 || a.inflightReq.Load() != 0:
 			why = fmt.Sprintf("requests in flight: server %d, client %d", a.reqNow.Load(), a.inflightReq.Load())
+		case a.kern != nil && a.kern.openLeases() != 0:
+			why = fmt.Sprintf("kernel leases open: %d", a.kern.openLeases())
 		case a.heldHTTPNow.Load() != 0 || a.heldWorkerNow.Load() != 0:
 			why = fmt.Sprintf("held work: http %d, worker %d", a.heldHTTPNow.Load(), a.heldWorkerNow.Load())
 		case len(a.deliveries) != 0:
@@ -398,10 +398,8 @@ func (a *fullApp) quiesce(ctx context.Context, floor int64) string {
 // worker-pool connections itself; an acquire that cannot be served within 2 s ends the
 // warm-up of that pool.
 func (a *fullApp) warmPools(ctx context.Context) {
-	a.mu.Lock()
-	cur := a.cur
-	a.mu.Unlock()
-	for _, p := range []*pgxpool.Pool{cur.pool, a.w.pool} {
+	callerPool, workerPool := a.appPools()
+	for _, p := range []*pgxpool.Pool{callerPool, workerPool} {
 		var held []*pgxpool.Conn
 		for i := 0; i < fullPoolConns; i++ {
 			c, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -445,11 +443,16 @@ type s10DeclaredReport struct {
 
 func s10DeclaredNow() s10DeclaredReport {
 	ex := map[string]int{roleCallerPool: 1, roleWorkerPool: 1, roleWorkerClient: 1, roleInsertClient: 1, roleListener: 1}
-	return s10DeclaredReport{Owners: s10Owners, PerGeneration: s10Declared, HarnessApp: s10DeclaredHarness, SessionAllowance: s10SessionAllowance, EntriesPerLive: s10DeclaredEntries(ex),
+	set := s10Active
+	if set == nil {
+		set = s10Library
+	}
+	return s10DeclaredReport{Owners: set.Owners, PerGeneration: set.PerGen, HarnessApp: set.Harness, SessionAllowance: s10SessionAllowance, EntriesPerLive: s10DeclaredEntries(ex),
 		Note: "declared before the first measurement; a goroutine group or entry outside this set, or with another count, is a failure, never an addition"}
 }
 
 type s10ArmReport struct {
+	Owner      string                   `json:"resource_owner"`
 	Arm        string                   `json:"arm"`
 	Label      string                   `json:"label"`
 	Planned    int                      `json:"cycles_planned"`
@@ -493,7 +496,7 @@ func newS10Arm(t *testing.T, a *fullApp, arm string, planned int, frozenScale bo
 	if arm == "combined" {
 		frozen = frozenCombinedCycles
 	}
-	x := &s10Arm{a: a, t: t, frozenScale: frozenScale, rep: &s10ArmReport{Arm: arm, Planned: planned, Required: s10RequiredCycles(frozen), Scheduled: s10CheckpointCycles(planned),
+	x := &s10Arm{a: a, t: t, frozenScale: frozenScale, rep: &s10ArmReport{Owner: a.ownerName(), Arm: arm, Planned: planned, Required: s10RequiredCycles(frozen), Scheduled: s10CheckpointCycles(planned),
 		Declared: s10DeclaredNow(), Failed: []string{}, CostMs: map[string]float64{}}}
 	x.rep.Label = s10NotEvaluated
 	return x
@@ -604,10 +607,10 @@ func (x *s10Arm) harness(ctx context.Context) {
 // baseline takes the warmed baseline (application up, warm traffic run) and checks
 // it against the declared background set.
 func (x *s10Arm) baseline(ctx context.Context) {
-	printS10("DECLARED", map[string]any{"arm": x.rep.Arm, "declared": x.rep.Declared, "rules": s10Rules})
+	printS10("DECLARED", map[string]any{"arm": x.rep.Arm, "resource_owner": x.a.ownerName(), "declared": x.rep.Declared, "rules": s10Rules})
 	snap, findings := x.take(ctx, "warmed_baseline", 0, "baseline")
 	x.rep.Baseline = snap
-	printS10("BASELINE", map[string]any{"arm": x.rep.Arm, "snapshot": snap})
+	printS10("BASELINE", map[string]any{"arm": x.rep.Arm, "resource_owner": x.a.ownerName(), "snapshot": snap})
 	for _, b := range s10Bounds(findings, s10BaselineBounds) {
 		if !b.Pass {
 			x.fail("warmed_baseline", b)
@@ -629,7 +632,7 @@ func (x *s10Arm) checkpoint(ctx context.Context, cycle int) (*s10Snapshot, []bou
 		}
 	}
 	if cycle == 0 {
-		printS10("CHECKPOINT", map[string]any{"arm": x.rep.Arm, "snapshot": snap, "bounds": bounds})
+		printS10("CHECKPOINT", map[string]any{"arm": x.rep.Arm, "resource_owner": x.a.ownerName(), "snapshot": snap, "bounds": bounds})
 	}
 	x.rep.Series = s10Series(x.rep.Checkpoint)
 	x.relabel()
@@ -639,12 +642,15 @@ func (x *s10Arm) checkpoint(ctx context.Context, cycle int) (*s10Snapshot, []bou
 // teardown stops the application and checks that counts return to the harness baseline.
 func (x *s10Arm) teardown() {
 	x.a.teardown()
+	if err := x.a.teardownErr(); err != nil {
+		x.t.Errorf("%s application teardown: %v", x.rep.Arm, err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	snap, findings := x.take(ctx, "teardown", -1, "teardown")
 	x.rep.Teardown = snap
 	bounds := s10Bounds(findings, s10TeardownBounds)
-	printS10("TEARDOWN", map[string]any{"arm": x.rep.Arm, "snapshot": snap, "bounds": bounds})
+	printS10("TEARDOWN", map[string]any{"arm": x.rep.Arm, "resource_owner": x.a.ownerName(), "snapshot": snap, "bounds": bounds})
 	for _, b := range bounds {
 		if !b.Pass {
 			x.fail("teardown", b)

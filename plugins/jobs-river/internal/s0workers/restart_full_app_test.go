@@ -88,6 +88,12 @@ type fullApp struct {
 	reqNow    atomic.Int64 // admitted requests/handlers not yet finished (section 10 quiescence)
 	serveDone chan struct{}
 	w         *workerGen // owned by the single controller goroutine
+
+	// kern is non-nil in the kernel-owned variant (S0WORKERS_RESTART_OWNER=kernel):
+	// every pool, River client and listener is then created by an effect of a kernel
+	// fiber, and cur, w, srv and the drain goroutine above are unused.
+	kern    *kernelApp
+	tearErr error
 }
 
 func newFullApp(f *fixture, retention time.Duration) *fullApp {
@@ -104,19 +110,37 @@ func (a *fullApp) drain() {
 	for {
 		select {
 		case d := <-a.deliveries:
-			if d.stage != "handled" {
-				continue
-			}
-			a.tallyMu.Lock()
-			a.handled[d.jobID]++
-			if a.handled[d.jobID] > 1 {
-				a.redelivered++
-			}
-			if !d.inserted {
-				a.insertedFalse++
-			}
-			a.tallyMu.Unlock()
+			a.tallyDelivery(d)
 		case <-a.stopDrain:
+			return
+		}
+	}
+}
+
+// tallyDelivery counts one delivery of the dispatcher's observer channel.
+func (a *fullApp) tallyDelivery(d delivery) {
+	if d.stage != "handled" {
+		return
+	}
+	a.tallyMu.Lock()
+	a.handled[d.jobID]++
+	if a.handled[d.jobID] > 1 {
+		a.redelivered++
+	}
+	if !d.inserted {
+		a.insertedFalse++
+	}
+	a.tallyMu.Unlock()
+}
+
+// drainUntil is the kernel variant's delivery observer loop: a goroutine tracked by
+// the client fiber (Context.Go) that ends when its Std is cancelled.
+func (a *fullApp) drainUntil(done <-chan struct{}) {
+	for {
+		select {
+		case d := <-a.deliveries:
+			a.tallyDelivery(d)
+		case <-done:
 			return
 		}
 	}
@@ -256,10 +280,16 @@ func riverRetention(d time.Duration) time.Duration {
 
 // makeWorker builds and STARTS a worker client. d is reused for client-only recreation.
 func (a *fullApp) makeWorker(pool *pgxpool.Pool, d *dispatcher) (*workerGen, error) {
+	return a.makeWorkerWith(pool, d, a.workerHandler)
+}
+
+// makeWorkerWith is makeWorker with the job handler factory chosen by the resource
+// owner: the library variant's gate, or the kernel variant's leases.
+func (a *fullApp) makeWorkerWith(pool *pgxpool.Pool, d *dispatcher, handler func(*dispatcher) handlerFunc) (*workerGen, error) {
 	if d == nil {
 		d = &dispatcher{pool: pool, schema: a.f.jobs, snooze: 10 * time.Millisecond, deliveries: a.deliveries}
 	}
-	if err := d.registry.install(a.workerHandler(d)); err != nil {
+	if err := d.registry.install(handler(d)); err != nil {
 		return nil, err
 	}
 	workers := river.NewWorkers()
@@ -338,7 +368,10 @@ func (a *fullApp) closeCaller() *callerGen {
 }
 
 func (a *fullApp) stopWorker() {
-	w := a.w
+	a.stopWorkerGen(a.w)
+}
+
+func (a *fullApp) stopWorkerGen(w *workerGen) {
 	if w == nil {
 		return
 	}
@@ -479,7 +512,37 @@ type fullRestart struct {
 	Epoch                    int64 // epoch served only by the recreated resources
 }
 
+// ownerName is the resource owner recorded in every report and cycle line.
+func (a *fullApp) ownerName() string {
+	if a.kern != nil {
+		return resOwnerKernel
+	}
+	return resOwnerLibrary
+}
+
+// appPools returns the live caller and worker pools (nil when absent).
+func (a *fullApp) appPools() (caller, worker *pgxpool.Pool) {
+	if a.kern != nil {
+		return a.kern.livePools()
+	}
+	a.mu.Lock()
+	cur := a.cur
+	a.mu.Unlock()
+	if cur != nil {
+		caller = cur.pool
+	}
+	if a.w != nil {
+		worker = a.w.pool
+	}
+	return caller, worker
+}
+
+func (a *fullApp) teardownErr() error { return a.tearErr }
+
 func (a *fullApp) start(ctx context.Context) error {
+	if a.kern != nil {
+		return a.kern.start(ctx)
+	}
 	a.drainOn = true
 	go a.drain()
 	cp, err := a.newCallerPool(ctx)
@@ -538,6 +601,9 @@ func (a *fullApp) recreate(ctx context.Context, newPools bool) (int64, error) {
 // client=both River clients on the same pools, listener=HTTP listener on the
 // same loopback address, combined=all three.
 func (a *fullApp) restart(ctx context.Context, kind string) (fullRestart, error) {
+	if a.kern != nil {
+		return a.kern.restart(ctx, kind)
+	}
 	rs := fullRestart{Requested: time.Now().UTC()}
 	var err error
 	switch kind {
@@ -569,6 +635,11 @@ func (a *fullApp) teardown() {
 }
 
 func (a *fullApp) teardownOnce() {
+	if a.kern != nil {
+		a.tearErr = a.kern.close()
+		a.httpClient.CloseIdleConnections()
+		return
+	}
 	a.stopListener()
 	if g := a.closeCaller(); g != nil {
 		a.gens.markDisposed(roleInsertClient, g.insGen)

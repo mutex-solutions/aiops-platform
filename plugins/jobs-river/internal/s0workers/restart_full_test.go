@@ -11,6 +11,11 @@ package s0workers
 // _WINDOW_SECONDS, _RECOVERY_IDS) only shrink the run; the same bounds apply but
 // the report is then labelled NOT acceptance. S0_WORKER_RESTART_FULL_FAILFAST=1
 // stops at the first failed cycle.
+//
+// S0WORKERS_RESTART_OWNER selects who owns the pool, River clients and listener:
+// "library" (default; plain library objects) or "kernel" (three kernel fibers, see
+// restart_full_kernel_test.go). The owner is in the report, the classification and
+// every cycle line.
 
 import (
 	"context"
@@ -29,6 +34,7 @@ import (
 )
 
 type fullCycleSummary struct {
+	ResourceOwner       string          `json:"resource_owner"`
 	Arm                 string          `json:"arm"`
 	Cycle               int             `json:"cycle"`
 	Scheduled           int             `json:"scheduled_ids"`
@@ -81,12 +87,14 @@ type fullCycleSummary struct {
 	LiveListeners       int64           `json:"live_listeners_after_cycle"`
 	Goroutines          int             `json:"goroutines_after_cycle"`
 	OpenFDs             int             `json:"open_fds_after_cycle"`
+	Kernel              *kernelCycle    `json:"kernel,omitempty"`    // the kernel's own record of this cycle's restart (kernel owner only)
 	Section10           *s10Snapshot    `json:"section10,omitempty"` // checkpoint taken after this cycle, between cycles
 	Bounds              []boundResult   `json:"bounds"`
 	Pass                bool            `json:"pass"`
 }
 
 type fullArmSummary struct {
+	ResourceOwner    string  `json:"resource_owner"`
 	Arm              string  `json:"arm"`
 	CyclesPlanned    int     `json:"cycles_planned"`
 	CyclesExecuted   int     `json:"cycles_executed"`
@@ -108,6 +116,7 @@ type fullArmSummary struct {
 }
 
 type fullReport struct {
+	ResourceOwner    string             `json:"resource_owner"`
 	Classification   string             `json:"classification"`
 	Status           string             `json:"status"`
 	Started          time.Time          `json:"started_utc"`
@@ -133,7 +142,8 @@ type fullReport struct {
 
 var fullSourceFiles = []string{"fixture_test.go", "worker_test.go", "diagnostic_test.go", "report_test.go", "restart_test.go", "restart_report_test.go",
 	"restart_full_pure_test.go", "restart_full_app_test.go", "restart_full_test.go", "restart_full_unit_test.go", "restart_full_race_test.go", "restart_full_norace_test.go",
-	"restart_leak_pure_test.go", "restart_leak_app_test.go", "restart_leak_unit_test.go", "restart_leak_db_test.go", "restart-README.md"}
+	"restart_leak_pure_test.go", "restart_leak_app_test.go", "restart_leak_unit_test.go", "restart_leak_db_test.go",
+	"restart_full_kernel_test.go", "restart_full_kernel_unit_test.go", "restart-README.md"}
 
 func fullSource(t *testing.T) map[string]string {
 	t.Helper()
@@ -150,16 +160,20 @@ func fullSource(t *testing.T) map[string]string {
 	return out
 }
 
-func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
+func newFullReport(t *testing.T, cfg fullConfig, owner string) *fullReport {
 	r := &fullReport{
-		Started: time.Now().UTC(), PID: os.Getpid(), GoVersion: runtime.Version(), GOMAXPROCS: runtime.GOMAXPROCS(0), RaceInstrumented: raceInstrumented,
+		ResourceOwner: owner,
+		Started:       time.Now().UTC(), PID: os.Getpid(), GoVersion: runtime.Version(), GOMAXPROCS: runtime.GOMAXPROCS(0), RaceInstrumented: raceInstrumented,
 		AcceptanceScale: cfg.Acceptance() && !raceInstrumented && runtime.GOMAXPROCS(0) == fullGOMAXPROCS, Before: fullSource(t),
 		Config: map[string]any{"cycles_per_kind": cfg.CyclesPerKind, "combined_cycles": cfg.Combined, "warmup_s": cfg.Warmup.Seconds(), "window_s": cfg.Window.Seconds(),
 			"restart_at_s_from_start": cfg.RestartAt().Seconds(), "recovery_ids": cfg.RecoveryIDs, "diagnostic_pregrow_rows": cfg.PregrowRows, "diagnostic_login_role_enable_seqscan_off": cfg.JobsNoSeqScan, "job_retention_s": cfg.JobRetention.Seconds(), "rate_per_s": fullRate, "hold_ms": fullHold.Milliseconds(),
-			"operation_timeout_s": fullOpTimeout.Seconds(), "pool_conns": fullPoolConns, "worker_max": fullWorkers},
+			"operation_timeout_s": fullOpTimeout.Seconds(), "pool_conns": fullPoolConns, "worker_max": fullWorkers, "resource_owner": owner},
 		Frozen: map[string]any{"cycles_each_pool_client_listener": frozenCyclesPerKind, "combined_cycles": frozenCombinedCycles, "recovery_seconds": 5,
 			"ack_to_completion_seconds": 30, "new_ids_per_recovery": frozenRecoveryIDs, "new_ids_per_second": fullRate, "warmup_s": 30, "window_s": 120, "restart_at_s": 60, "hold_ms": 200},
-		Interpretations: fullInterpretations, Limits: fullLimits, Section10: &s10Report{Rule: s10Rules},
+		Interpretations: fullInterpretationsFor(owner), Limits: fullLimitsFor(owner), Section10: &s10Report{Rule: s10Rules},
+	}
+	if owner == resOwnerKernel {
+		r.Config["kernel_config"] = kernelConfigReport()
 	}
 	firstCase := len(report.Cases)
 	t.Cleanup(func() {
@@ -202,6 +216,10 @@ func newFullReport(t *testing.T, cfg fullConfig) *fullReport {
 		default:
 			r.Classification = "REDUCED-SCALE or non-conforming run; same bounds met but NOT acceptance"
 			r.Status = fmt.Sprintf("reduced pass: %d/%d cycles", passed, want)
+		}
+		r.Classification = "[resource_owner=" + owner + "] " + r.Classification
+		for i := range r.Arms {
+			r.Arms[i].ResourceOwner = owner
 		}
 		data, err := json.Marshal(r)
 		must(t, safeError("full restart report serialization", err))
@@ -394,7 +412,7 @@ func (a *fullApp) idleInTransaction(ctx context.Context) (int, error) {
 
 func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle int, cfg fullConfig) fullCycleSummary {
 	t.Helper()
-	sum := fullCycleSummary{Arm: arm, Cycle: cycle}
+	sum := fullCycleSummary{ResourceOwner: a.ownerName(), Arm: arm, Cycle: cycle}
 	l := newLedger()
 	prefix := fmt.Sprintf("fk-%s-%s-c%02d-", a.f.id, arm, cycle)
 	floor, floorErr := a.idFloor(ctx)
@@ -488,6 +506,10 @@ func (a *fullApp) runCycle(t *testing.T, ctx context.Context, arm string, cycle 
 		GOMAXPROCS: runtime.GOMAXPROCS(0), LateArrivals: late, ScanSweepOK: sweepErr == nil && idleErr == nil,
 	}
 	bounds := evaluateBounds(in)
+	if a.kern != nil { // the kernel's own record of the restart; the library variant has none
+		sum.Kernel = a.kern.cycleRecord()
+		bounds = append(bounds, sum.Kernel.bounds()...)
+	}
 	sum.Scheduled, sum.Acked, sum.Durable, sum.Unacked, sum.DurableUnacked = rec.Scheduled, rec.Acked, rec.Durable, rec.Unacked, rec.DurableUnacked
 	sum.TimedOut, sum.HTTPAttempts, sum.Retries, sum.Failures = rec.TimedOut, rec.HTTPAttempts, rec.Retries, rec.Failures
 	for class, n := range rec.Failures {
@@ -588,7 +610,7 @@ func (a *fullApp) checkFetchPlan(t *testing.T, ctx context.Context, phase string
 	stats, err := a.riverStats(ctx)
 	must(t, err)
 	uses := planUsesFetchIndex(lines)
-	line, _ := json.Marshal(map[string]any{"phase": phase, "river_job_live_rows": stats.LiveTup, "uses_fetching_index": uses, "plan": lines})
+	line, _ := json.Marshal(map[string]any{"resource_owner": a.ownerName(), "phase": phase, "river_job_live_rows": stats.LiveTup, "uses_fetching_index": uses, "plan": lines})
 	fmt.Printf("S0WORKERS_RESTART_FULL_FETCH_PLAN %s\n", line)
 	if stats.LiveTup >= 10_000 && !uses {
 		t.Errorf("River's fetch as the jobs role does not use the fetching index (%s, %d rows)", phase, stats.LiveTup)
@@ -608,8 +630,17 @@ func TestWorkerRestartFullGate(t *testing.T) {
 	if os.Getenv("S0_ADMIN_DSN") == "" || os.Getenv("S0_EXPECT_DATABASE") == "" {
 		t.Fatal("full restart gate was requested but the fixture environment is incomplete: NOT measured, and not a skip")
 	}
+	owner, err := resourceOwnerFromEnv(os.Getenv)
+	if err != nil {
+		t.Fatal("invalid full restart configuration: ", err)
+	}
+	s10Active = s10Library
+	t.Cleanup(func() { s10Active = nil })
+	if owner == resOwnerKernel {
+		s10Active = s10KernelSet()
+	}
 	failFast := os.Getenv("S0_WORKER_RESTART_FULL_FAILFAST") == "1"
-	rep := newFullReport(t, cfg)
+	rep := newFullReport(t, cfg, owner)
 	arms := []struct {
 		name   string
 		cycles int
@@ -625,6 +656,9 @@ func TestWorkerRestartFullGate(t *testing.T) {
 				must(t, safeError("diagnostic jobs role setting", err))
 			}
 			app := newFullApp(f, cfg.JobRetention)
+			if owner == resOwnerKernel {
+				app.kern = newKernelApp(app)
+			}
 			t.Cleanup(app.teardown)
 			acct := newS10Arm(t, app, arm.name, arm.cycles, rep.AcceptanceScale)
 			rep.Section10.Arms = append(rep.Section10.Arms, acct.rep)
@@ -636,7 +670,7 @@ func TestWorkerRestartFullGate(t *testing.T) {
 				must(t, app.pregrow(ctx, cfg.PregrowRows))
 			}
 			app.checkFetchPlan(t, ctx, "before_cycles")
-			sum := fullArmSummary{Arm: arm.name, CyclesPlanned: arm.cycles}
+			sum := fullArmSummary{ResourceOwner: owner, Arm: arm.name, CyclesPlanned: arm.cycles}
 			rep.Arms = append(rep.Arms, sum)
 			idx := len(rep.Arms) - 1
 			floor, floorErr := app.idFloor(ctx)
