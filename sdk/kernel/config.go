@@ -43,6 +43,11 @@ func (c *cfgCell) retain(raw any) {
 	c.mu.Unlock()
 }
 
+// change retains raw as the config of every later activation.
+func (c *cfgCell) change(raw any) {
+	c.retain(raw)
+}
+
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
 // panic of Decode is contained as a *PanicError, as a listener's is.
 func (c *cfgCell) resolve(ctx context.Context, raw any) (v any, err error) {
@@ -73,16 +78,21 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 	return w.run(ctx, r.aud, a, own)
 }
 
-// stageUpdates is the half of every UpdateOpWith of a batch that runs plugin code,
-// done before the batch is admitted (ADR-059 decision 2; see UpdateOpWith). It
-// marks native[i] as batchKeep where internal/update vetoed the restart. It returns
-// the function that puts the previous configs back, for a batch the core refuses.
-func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (undo func(), err error) {
+// stageUpdates is the half of every UpdateOpWith and CommitOp of a batch that runs
+// plugin code, done before the batch is admitted (ADR-059 decision 2; see
+// UpdateOpWith). It marks native[i] as batchKeep where internal/update vetoed the
+// restart. It returns done, which the caller must call once the core has admitted
+// the batch (true) or refused it (false): a refused batch gets the previous configs
+// back,. A listener of
+// internal/update runs with those locks held, so it must not change the config of a
+// fiber of its own batch.
+func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(admitted bool), err error) {
 	type staged struct {
 		i                  int
+		id                 uint64
 		cell               *cfgCell
 		cfg, resolved, old any
-		loaded             bool
+		loaded, keep       bool
 	}
 	var list []staged
 	for i, op := range ops {
@@ -96,7 +106,7 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 		if !snap.Alive {
 			return nil, ErrInactive
 		}
-		s := staged{i: i, cell: op.fiber.cell, cfg: op.cfg, loaded: snap.Target != nil}
+		s := staged{i: i, id: op.fiber.ref.id, cell: op.fiber.cell, cfg: op.cfg, loaded: snap.Target != nil, keep: op.kind == batchKeep}
 		if s.loaded {
 			if s.resolved, err = s.cell.resolve(ctx, op.cfg); err != nil {
 				return nil, err
@@ -112,7 +122,7 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 		list = append(list, s)
 	}
 	for _, s := range list {
-		if !s.loaded {
+		if !s.loaded || s.keep {
 			continue
 		}
 		restart := false
@@ -127,11 +137,57 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 		list[k].old = list[k].cell.load()
 		list[k].cell.retain(list[k].cfg)
 	}
-	return func() {
-		for k := len(list) - 1; k >= 0; k-- {
+	return func(admitted bool) {
+		for k := len(list) - 1; k >= 0 && !admitted; k-- {
 			list[k].cell.retain(list[k].old)
 		}
 	}, nil
+}
+
+// vet is the half of Update and Commit that comes before anything is retained:
+// when the fiber has a desired target it resolves cfg through internal/config and
+// Decode, then it runs the waterfall internal/commit, which fails closed. It
+// returns the resolved config and whether the fiber has a target.
+func (f *Fiber) vet(ctx context.Context, cfg any) (resolved any, loaded bool, err error) {
+	snap, err := f.ref.snapshot(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if !snap.Alive {
+		return nil, false, ErrInactive
+	}
+	if loaded = snap.Target != nil; loaded {
+		if resolved, err = f.cell.resolve(ctx, cfg); err != nil {
+			return nil, false, err
+		}
+	}
+	committed, err := runInner(ctx, InternalCommit, f.cell.root, cfg, func(context.Context, any) (bool, error) { return true, nil })
+	if err == nil && !committed {
+		err = ErrCommitVetoed
+	}
+	return resolved, loaded, err
+}
+
+// Commit retains cfg as the fiber's config without restarting it (ADR-059 decision
+// 2; 07-c4-plugin-sdk.md:205, :1374). It vets cfg exactly as Update does (see
+// Update): when the fiber has a desired target it resolves cfg through
+// internal/config and Decode, then it runs the waterfall internal/commit, which
+// fails closed. An error, or a veto (ErrCommitVetoed), retains nothing. Only a
+// commit that completes retains cfg. Then no internal/update runs, the fiber is not
+// restarted and the running activation keeps the value it was applied with. Its
+// Apply is not called again: a plugin learns the new value from whoever commits it
+// (the loader dispatches loader/volatile-update), and the next activation of the
+// fiber, whatever starts it, resolves the retained cfg. A fiber mounted with When
+// takes no config and Commit ignores cfg. Decode must be pure.
+func (f *Fiber) Commit(ctx context.Context, cfg any) error {
+	if f.cell == nil {
+		return nil
+	}
+	if _, _, err := f.vet(ctx, cfg); err != nil {
+		return err
+	}
+	f.cell.change(cfg)
+	return nil
 }
 
 // Update replaces the fiber's config with cfg and restarts it, and returns once
@@ -165,33 +221,15 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 	if f.cell == nil {
 		return f.ref.update(ctx)
 	}
-	snap, err := f.ref.snapshot(ctx)
+	resolved, loaded, err := f.vet(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	if !snap.Alive {
-		return ErrInactive
-	}
-	root := f.cell.root
-	loaded := snap.Target != nil
-	var resolved any
-	if loaded {
-		if resolved, err = f.cell.resolve(ctx, cfg); err != nil {
-			return err
-		}
-	}
-	committed, err := runInner(ctx, InternalCommit, root, cfg, func(context.Context, any) (bool, error) { return true, nil })
-	if err != nil {
-		return err
-	}
-	if !committed {
-		return ErrCommitVetoed
-	}
-	f.cell.retain(cfg)
+	f.cell.change(cfg)
 	if !loaded {
 		return f.ref.update(ctx)
 	}
-	_, err = runInner(ctx, InternalUpdate, root, resolved, func(ctx context.Context, _ any) (any, error) {
+	_, err = runInner(ctx, InternalUpdate, f.cell.root, resolved, func(ctx context.Context, _ any) (any, error) {
 		return nil, f.ref.update(ctx)
 	})
 	return err

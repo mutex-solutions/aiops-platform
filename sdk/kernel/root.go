@@ -218,6 +218,17 @@ func UpdateOpWith(f *Fiber, cfg any) BatchOp {
 	return BatchOp{kind: batchUpdate, fiber: f, cfg: cfg, hasCfg: true}
 }
 
+// CommitOp is the operation that gives f the config cfg without restarting it, with
+// the effect of f.Commit(ctx, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:205,
+// :1374). It is handled with the other operations that carry a config (see
+// UpdateOpWith): resolved through internal/config and Decode when the fiber has a
+// target, committed through internal/commit, and retained only if the whole batch
+// is admitted; a refused batch gets the previous config back. It runs no
+// internal/update and does not restart f. The Fiber at this position is f.
+func CommitOp(f *Fiber, cfg any) BatchOp {
+	return BatchOp{kind: batchKeep, fiber: f, cfg: cfg, hasCfg: true}
+}
+
 // DisposeOp is the operation that disposes f, like Fiber.Dispose.
 func DisposeOp(f *Fiber) BatchOp { return BatchOp{kind: batchDispose, fiber: f} }
 
@@ -254,13 +265,13 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		}
 		native[i].Fiber = op.fiber.ref.id
 	}
-	undo, err := r.stageUpdates(ctx, ops, native)
+	done, err := r.stageUpdates(ctx, ops, native)
 	if err != nil {
 		return nil, err
 	}
 	ids, err := r.core.batch(ctx, native)
+	done(err == nil)
 	if err != nil {
-		undo()
 		return nil, err
 	}
 	out := make([]*Fiber, len(ops))
