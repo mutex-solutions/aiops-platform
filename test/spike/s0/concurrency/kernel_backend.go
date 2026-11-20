@@ -467,7 +467,6 @@ type kernelCfg struct {
 	noSave bool
 
 	mu        sync.Mutex
-	commitErr error
 	prefix    chan struct{} // Closed when the update hook has been entered: the end of the synchronous prefix.
 	once      sync.Once
 	version   uint64 // The cell's version and publication generation right after this request retained its raw config.
@@ -498,12 +497,10 @@ func kernelDecode(v any) (any, error) {
 }
 
 // configure maps ConfigHooks onto the kernel hooks internal/config (Resolve),
-// internal/commit (Commit) and internal/update (Update). Two differences are the
-// kernel's and are not hidden: internal/commit is an event, so a failing Commit
-// is skipped and logged and does not stop the update (ADR-034 owner decision 12),
-// where the spike aborts before retaining; and internal/update runs its listener to
-// completion inside Fiber.Update, so UpdateAsync, whose waiter outlives the
-// listener, is refused in plan.
+// internal/commit (Commit) and internal/update (Update). One difference is the
+// kernel's and is not hidden: internal/update runs its listener to completion
+// inside Fiber.Update, so UpdateAsync, whose waiter outlives the listener, is
+// refused in plan.
 func kernelResolveHook(ctx context.Context, a any, next kernel.Next[any]) (any, error) {
 	c, ok := a.(*kernelCfg)
 	if !ok || c.cell.hooks.Resolve == nil {
@@ -516,22 +513,25 @@ func kernelResolveHook(ctx context.Context, a any, next kernel.Next[any]) (any, 
 	return &kernelResolved{cell: c.cell, value: value, req: c}, nil
 }
 
-func kernelCommitHook(ctx context.Context, a any) (any, error) {
+func kernelCommitHook(ctx context.Context, a any, next kernel.Next[bool]) (bool, error) {
 	c, ok := a.(*kernelCfg)
 	if !ok {
-		return nil, nil
+		return next()
 	}
-	var err error
 	if !c.noSave && c.cell.hooks.Commit != nil {
-		err = c.cell.hooks.Commit(ctx, c.raw)
+		// A failing Commit aborts the update before anything is retained, as the
+		// spike's cell does (ADR-034 owner decision 15).
+		if err := c.cell.hooks.Commit(ctx, c.raw); err != nil {
+			return false, err
+		}
 	}
-	// The kernel retains the raw config right after this event: mirror it in the
-	// cell, which is what Snapshots reports.
+	// The kernel retains the raw config right after this waterfall: mirror it in
+	// the cell, which is what Snapshots reports.
 	version, publication := c.cell.retain(c.raw)
 	c.mu.Lock()
-	c.commitErr, c.version, c.published = err, version, publication
+	c.version, c.published = version, publication
 	c.mu.Unlock()
-	return nil, err
+	return next()
 }
 
 func kernelUpdateHook(ctx context.Context, a any, next kernel.Next[any]) (any, error) {
@@ -783,17 +783,7 @@ func (r *kernelRuntime) RequestUpdateConfig(ctx context.Context, id uint64, raw 
 		return none, ErrClosed
 	}
 	cfg := &kernelCfg{cell: f.cell, raw: raw, noSave: noSave}
-	result := func(err error) error {
-		cfg.mu.Lock()
-		defer cfg.mu.Unlock()
-		// The kernel does not stop at a failing Commit (see kernelCommitHook); the
-		// failure is still the caller's to see.
-		err = ownListener(err)
-		if cfg.commitErr != nil {
-			err = errors.Join(err, cfg.commitErr)
-		}
-		return fromKernel(err)
-	}
+	result := func(err error) error { return fromKernel(ownListener(err)) }
 	if f.cell.hooks.UpdateAsync == nil {
 		if err := result(f.f.Update(ctx, cfg)); err != nil {
 			return none, err

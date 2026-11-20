@@ -5,8 +5,16 @@ package kernel
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
+
+// ErrCommitVetoed is what Fiber.Update returns when a listener of the waterfall
+// internal/commit does not call next. A veto of the commit stops the update as an
+// error does: nothing is retained and the fiber is not restarted. It is an error
+// and not a silent success because, unlike a veto of internal/update, the update
+// did not happen at all (ADR-034 owner decision 15).
+var ErrCommitVetoed = errors.New("config commit vetoed")
 
 // The config pipeline of one fiber. The loader hands the kernel a raw config; the
 // kernel holds it, runs the kernel waterfall internal/config over it to get the
@@ -75,8 +83,14 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // resolves cfg through internal/config and Decode, so internal/config sees the
 // candidate at the time of the update, not at the next activation. If that fails,
 // Update returns the error in every state, retains nothing and leaves a running
-// activation untouched (ADR-034 owner decision 13). Otherwise it emits
-// internal/commit with cfg, retains cfg, and restarts the fiber through the
+// activation untouched (ADR-034 owner decision 13). Otherwise it runs
+// the waterfall internal/commit over cfg, whose result reports that the kernel's
+// own innermost step was reached. A commit listener that errors or panics fails
+// closed (decision 12), and one that does not call next vetoes the commit
+// (ErrCommitVetoed); either way Update returns that error, retains nothing, runs
+// no internal/update, does not restart the fiber and leaves a running activation
+// untouched (decision 15). Only a commit that completes retains cfg, and Update
+// then restarts the fiber through the
 // waterfall internal/update, whose payload is the resolved config: a listener that
 // does not call next vetoes the restart, and the retained cfg then applies at the
 // next restart. A fiber with no target (gated on a need, FAILED, a disposal
@@ -105,8 +119,12 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 			return err
 		}
 	}
-	if err = InternalCommit.emit(ctx, root.aud, cfg); err != nil {
+	committed, err := runInner(ctx, InternalCommit, root, cfg, func(context.Context, any) (bool, error) { return true, nil })
+	if err != nil {
 		return err
+	}
+	if !committed {
+		return ErrCommitVetoed
 	}
 	f.cell.retain(cfg)
 	if !loaded {

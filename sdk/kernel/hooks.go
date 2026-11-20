@@ -440,7 +440,9 @@ func (r *Root) logHook(err error) {
 // kernel root alone dispatches them. Treat them as constants: never assign to one.
 //
 // InternalConfig, InternalUpdate and InternalCommit are dispatched by the config
-// pipeline (config.go). InternalPlugin, InternalStatus and InternalService are
+// pipeline (config.go). InternalCommit is a waterfall of bool: true means the chain
+// reached the kernel's own step, so a listener that returns without calling next
+// is a veto, and one that fails aborts the update (ADR-034 owner decision 15). InternalPlugin, InternalStatus and InternalService are
 // declared and not dispatched: neither the contract nor the plugin record describes
 // their payload (ADR-034 owner decision 13).
 var (
@@ -449,5 +451,5 @@ var (
 	InternalService = newEvent[any](kernelPrefix+"service", true)
 	InternalConfig  = newWaterfall[any, any](kernelPrefix+"config", true)
 	InternalUpdate  = newWaterfall[any, any](kernelPrefix+"update", true)
-	InternalCommit  = newEvent[any](kernelPrefix+"commit", true)
+	InternalCommit  = newWaterfall[any, bool](kernelPrefix+"commit", true)
 )

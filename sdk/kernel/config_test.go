@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -286,9 +287,9 @@ func TestCommitListenersSeeTheRawConfigBeforeItIsRetained(t *testing.T) {
 	r := newKernel(t)
 	ctx := frontCtx(t)
 	var committed []any
-	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, raw any) (any, error) {
+	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[bool]) (bool, error) {
 		committed = append(committed, raw)
-		return nil, errors.New("a failing listener is contained")
+		return next()
 	})
 	rec := &cfgRecorder{}
 	f := r.Plugin(rec.plugin(nil), "a")
@@ -315,7 +316,7 @@ func TestCommitListenersSeeTheRawConfigBeforeItIsRetained(t *testing.T) {
 func TestACommitThatEndsTheContextStopsTheUpdate(t *testing.T) {
 	r := newKernel(t)
 	ctx, cancel := context.WithCancel(frontCtx(t))
-	InternalCommit.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { cancel(); return nil, nil })
+	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, _ any, next Next[bool]) (bool, error) { cancel(); return next() })
 	rec := &cfgRecorder{}
 	f := r.Plugin(rec.plugin(nil), "a")
 	want(t, f, Active)
@@ -415,7 +416,7 @@ func TestUpdateResolvesTheCandidateWhileTheFiberLoads(t *testing.T) {
 func TestUpdateRefusesABadCandidateWhileTheFiberLoads(t *testing.T) {
 	r := newKernel(t)
 	var commits atomic.Int64
-	InternalCommit.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { commits.Add(1); return nil, nil })
+	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, _ any, next Next[bool]) (bool, error) { commits.Add(1); return next() })
 	entered, release := make(chan struct{}, 1), make(chan struct{})
 	var seen cfgRecorder
 	p := seen.plugin(func(raw any) (any, error) {
@@ -463,5 +464,125 @@ func TestUpdateOfADisposedFiberIsInactive(t *testing.T) {
 	want(t, f, Disposed)
 	if err := f.Update(frontCtx(t), "v2"); !errors.Is(err, ErrInactive) {
 		t.Fatalf("%v, want ErrInactive", err)
+	}
+}
+
+// commitProbe records the order of the hooks of one update, and what Apply saw.
+type commitProbe struct {
+	mu    sync.Mutex
+	order []string
+}
+
+func (p *commitProbe) add(s string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.order = append(p.order, s)
+}
+
+func (p *commitProbe) got() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.order)
+}
+
+func probeUpdate(r *Root, p *commitProbe) {
+	InternalUpdate.On(r.Context(), DefaultStage, func(_ context.Context, _ any, next Next[any]) (any, error) {
+		p.add("update")
+		return next()
+	})
+}
+
+// A passing commit chain keeps the order resolve, commit, retain, update, restart
+// (the restart resolves the retained config again).
+func TestAPassingCommitChainKeepsTheUpdateOrder(t *testing.T) {
+	r := newKernel(t)
+	var p commitProbe
+	InternalConfig.On(r.Context(), DefaultStage, func(_ context.Context, a any, next Next[any]) (any, error) {
+		p.add("config:" + a.(string))
+		return next()
+	})
+	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, a any, next Next[bool]) (bool, error) {
+		p.add("commit:" + a.(string))
+		return next()
+	})
+	probeUpdate(r, &p)
+	rec := &cfgRecorder{}
+	f := r.Plugin(rec.plugin(nil), "a")
+	want(t, f, Active)
+	p.mu.Lock()
+	p.order = nil
+	p.mu.Unlock()
+	if err := f.Update(frontCtx(t), "b"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, f, Active)
+	if got := p.got(); !slices.Equal(got, []string{"config:b", "commit:b", "update", "config:b"}) {
+		t.Fatalf("order %v", got)
+	}
+	if rec.last() != "b" || f.cell.load() != "b" {
+		t.Fatalf("seen %v, retained %v", rec.seen, f.cell.load())
+	}
+}
+
+// A failing commit (error, panic or veto) aborts the update: the error returns,
+// nothing is retained, internal/update does not run, and the fiber is not
+// restarted (ADR-034 owner decision 15), in a fiber with a target and in one
+// without.
+func TestAFailingCommitAbortsTheUpdate(t *testing.T) {
+	boom := errors.New("commit refused")
+	cases := []struct {
+		name string
+		fn   WaterfallListener[any, bool]
+		is   func(error) bool
+	}{
+		{"error", func(context.Context, any, Next[bool]) (bool, error) { return false, boom },
+			func(err error) bool {
+				var le *ListenerError
+				return errors.Is(err, boom) && errors.As(err, &le)
+			}},
+		{"panic", func(context.Context, any, Next[bool]) (bool, error) { panic("commit blew up") },
+			func(err error) bool {
+				var pe *PanicError
+				return errors.As(err, &pe) && pe.Value == "commit blew up"
+			}},
+		{"veto", func(context.Context, any, Next[bool]) (bool, error) { return false, nil },
+			func(err error) bool { return err == ErrCommitVetoed }},
+	}
+	for _, tc := range cases {
+		for _, state := range []string{"active", "pending"} {
+			t.Run(tc.name+"/"+state, func(t *testing.T) {
+				r := newKernel(t)
+				var p commitProbe
+				probeUpdate(r, &p)
+				rec := &cfgRecorder{}
+				pl := rec.plugin(decodeUpper)
+				svc := NewKey[int]("svc", 0)
+				if state == "pending" {
+					pl.Inject = []Dep{Need(svc)}
+				}
+				f := r.Plugin(pl, "old")
+				want(t, f, map[string]State{"active": Active, "pending": Pending}[state])
+				InternalCommit.On(r.Context(), DefaultStage, tc.fn)
+				if err := f.Update(frontCtx(t), "new"); !tc.is(err) {
+					t.Fatalf("update: %v", err)
+				}
+				if f.cell.load() != "old" || len(p.got()) != 0 {
+					t.Fatalf("retained %v, hooks %v", f.cell.load(), p.got())
+				}
+				if state == "pending" {
+					want(t, f, Pending)
+					want(t, r.Plugin(plug("prov", nil, []AnyKey{svc}, func(c *Context) error { return svc.Provide(c, 1) }), nil), Active)
+					want(t, f, Active)
+					if rec.last() != "decoded:old" {
+						t.Fatalf("activated with %v", rec.seen)
+					}
+					return
+				}
+				want(t, f, Active)
+				if rec.count() != 1 || rec.last() != "decoded:old" {
+					t.Fatalf("restarted: %v", rec.seen)
+				}
+			})
+		}
 	}
 }

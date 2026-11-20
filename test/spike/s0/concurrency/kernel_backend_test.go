@@ -909,3 +909,83 @@ func TestKernelUpdateAsyncHookCompletesAfterTheRequestReturns(t *testing.T) {
 		t.Fatalf("next = %v", hookResult)
 	}
 }
+
+// failingCommitScenario drives a failing Commit on any backend, with the fiber
+// loaded or gated on a need, and returns what the caller sees.
+func failingCommitScenario(t *testing.T, build func() Runtime, gated bool) (error, Snapshot, []Event) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r := build()
+	defer func() { _ = r.Close(ctx) }()
+	failure := errors.New("commit failed")
+	cell := NewConfiguration("old", ConfigHooks{
+		Commit: func(context.Context, any) error { return failure },
+	})
+	spec := Spec{ID: "cfg", Config: cell, Apply: func(*Context) error { return nil }}
+	if gated {
+		spec.Needs = []string{"absent"}
+	}
+	id := kernelMount(t, ctx, r, spec)
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	err := r.(ConfigUpdater).UpdateConfig(ctx, id, "new", false)
+	if !errors.Is(err, failure) {
+		t.Fatalf("update error %v, want the Commit failure", err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	snapshots, serr := r.Snapshots(ctx)
+	if serr != nil || len(snapshots) != 1 {
+		t.Fatalf("snapshots %v, %v", snapshots, serr)
+	}
+	events, eerr := r.Events(ctx)
+	if eerr != nil {
+		t.Fatal(eerr)
+	}
+	for i := range events {
+		if len(events[i].Data) == 0 {
+			events[i].Data = nil
+		}
+	}
+	return err, snapshots[0], events
+}
+
+// TestKernelFailingCommitAbortsLikeTheReconciler requires the same returned error
+// identity, retained config and events from both backends on a failing Commit:
+// nothing is retained and the fiber is not restarted (ADR-034 owner decision 15).
+func TestKernelFailingCommitAbortsLikeTheReconciler(t *testing.T) {
+	for _, gated := range []bool{false, true} {
+		t.Run(map[bool]string{false: "loaded", true: "gated"}[gated], func(t *testing.T) {
+			err, snap, events := failingCommitScenario(t, NewRecordingKernel, gated)
+			wantErr, wantSnap, wantEvents := failingCommitScenario(t, NewRecordingReconciler, gated)
+			if err.Error() != wantErr.Error() || errors.Unwrap(err) != errors.Unwrap(wantErr) {
+				t.Errorf("error %v, reconciler %v", err, wantErr)
+			}
+			if snap.RawConfig != "old" || snap.ConfigVersion != 0 {
+				t.Errorf("retained %+v after a failing commit", snap)
+			}
+			if !reflect.DeepEqual(snap, wantSnap) {
+				t.Errorf("snapshot\n kernel     %+v\n reconciler %+v", snap, wantSnap)
+			}
+			if !reflect.DeepEqual(events, wantEvents) {
+				t.Errorf("events\n kernel     %+v\n reconciler %+v", events, wantEvents)
+			}
+		})
+	}
+}
+
+// A noSave update skips Commit, so a failing Commit does not stop it.
+func TestKernelNoSaveSkipsAFailingCommit(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	cell := NewConfiguration("old", ConfigHooks{Commit: func(context.Context, any) error { return errors.New("commit failed") }})
+	id := kernelMount(t, ctx, r, Spec{ID: "cfg", Config: cell, Apply: func(*Context) error { return nil }})
+	if err := r.(ConfigUpdater).UpdateConfig(ctx, id, "new", true); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _, version := cell.RawSnapshot(); raw != "new" || version != 1 {
+		t.Fatalf("raw %v version %d", raw, version)
+	}
+}
