@@ -75,8 +75,13 @@ func TestTheRootProvidesExactlyTheFourBuiltIns(t *testing.T) {
 		t.Fatalf("root provisions %v, want %v", names, builtinNames)
 	}
 	for _, k := range []AnyKey{ReflectKey, RegistryKey, HooksKey, LoggerKey} {
-		if k.Major() != 0 || !slices.Contains(builtinNames, k.Name()) || k.anyKey().provider != classOpen || k.anyKey().consumer != classOpen {
-			t.Errorf("key %s@%d is not an open key of major 0 named by the contract", k.Name(), k.Major())
+		// The registry hands out *Fiber, so it alone is consumer-bound (ADR-059 decision 2).
+		wantConsumer := classOpen
+		if k == AnyKey(RegistryKey) {
+			wantConsumer = classBound
+		}
+		if k.Major() != 0 || !slices.Contains(builtinNames, k.Name()) || k.anyKey().provider != classOpen || k.anyKey().consumer != wantConsumer {
+			t.Errorf("key %s@%d is not a key of major 0 named by the contract with its class", k.Name(), k.Major())
 		}
 	}
 }
