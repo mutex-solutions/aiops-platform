@@ -813,3 +813,14 @@ runs each, `-race` and `GOMAXPROCS=2`: causal match 100 of 100 in every pair
   comparator and are not receipts.
 - It is not S0 acceptance: no criterion is relaxed, no scenario is dropped, and
   D05 and D26 remain open.
+
+## Final port (`kernel` backend), 2026-11-19
+
+The port in `sdk/kernel`, driven through its exported API, runs the same
+table. It matches every covered case the prototype cores match except D25,
+which is a documented non-match on the port only (ADR-035): the exported
+contract has no apply that returns a disposer, so the cleanup of a
+self-disposing load is observed before UNLOADING. D25 on `kernel` is a row of
+the diagnostics table and must produce exactly that verdict; D06 and D23 keep
+their documented verdicts on all three backends. Evidence:
+`test/spike/s0/results/causal-kernel-port/`.

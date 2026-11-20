@@ -238,7 +238,8 @@ var causalCovered = []struct {
 	// events); matched 100 of 100 in both modes on both candidates.
 	{causalScenario{"D22", "../../../differential/corpus/revision-4/D22.json", true}, []string{"reconciler", "graph-lock", "kernel"}},
 	{causalScenario{"D24", corpusPath("D24"), true}, []string{"reconciler", "graph-lock", "kernel"}},
-	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock", "kernel"}},
+	// D25 on the final port is a documented non-match (ADR-035): see causalDiagnostics.
+	{causalScenario{"D25", corpusPath("D25"), true}, []string{"reconciler", "graph-lock"}},
 	{causalScenario{"D27", corpusPath("D27"), true}, []string{"reconciler", "graph-lock", "kernel"}},
 	{causalScenario{"D28", corpusPath("D28"), true}, []string{"reconciler", "graph-lock", "kernel"}},
 	{causalScenario{"D29", corpusPath("D29"), true}, []string{"reconciler", "graph-lock", "kernel"}},
@@ -270,6 +271,10 @@ var causalDiagnostics = []struct {
 	// D23: the caught effect error is observed after ACTIVE by the replay adapter
 	// (documented in s0-d23-request-mapping.md).
 	{causalScenario{"D23", corpusPath("D23"), true}, nil, []string{`caught "effect" error: event outside the frame of every possible owner`}, false},
+	// D25, final port only: the exported contract has no apply that returns a disposer,
+	// so the cleanup of a self-disposing load runs before UNLOADING (ADR-035, accepted
+	// exception; the prototype cores match D25 in causalCovered).
+	{causalScenario{"D25", corpusPath("D25"), true}, []string{"kernel"}, []string{`cleanup event of "self" outside UNLOADING or without a cleanup body`}, false},
 }
 
 func requireCausalLive(t *testing.T) {
