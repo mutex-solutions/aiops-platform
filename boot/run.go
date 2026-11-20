@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -188,7 +189,7 @@ func (r *run) main(ctx context.Context) (code int) {
 }
 
 func newRun(o RunOptions) *run {
-	r := &run{o: o, exits: make(chan launch.ExitRequest, 1), leakPing: make(chan struct{}, 1)}
+	r := &run{o: o, exits: make(chan launch.ExitRequest, 1), leakPing: make(chan struct{}, 1), moved: make(chan struct{}, 1)}
 	r.out, r.errw = &syncWriter{w: o.Stdout}, &syncWriter{w: o.Stderr}
 	r.pub = &publisher{fn: o.Publish, st: ProcessStatus{Phase: PhaseStarting, Profile: o.Profile}}
 	return r
@@ -206,9 +207,10 @@ type run struct {
 	leakPing chan struct{}
 	leakSeen atomic.Bool
 	leakWhy  atomic.Pointer[string] // the first leak the observer saw, as a line for the log
-	unload   unloads
+	moved    chan struct{}          // pinged at each change of state, for waitUnloads
 	reader   atomic.Pointer[reader]
-	afterNew func(*kernel.Root) // a seam of the tests: runs between kernel.New and prepare
+	afterNew func(*kernel.Root)       // a seam of the tests: runs between kernel.New and prepare
+	onEvent  func(kernel.LedgerEvent) // a seam of the tests: runs first in boot's observer
 }
 
 // reader is the launcher's own view of the tree: the composition key reads the rows
@@ -324,8 +326,7 @@ func (r *run) run(ctx context.Context) int {
 	// UNLOADING, which is its contract; the row is FAILED once its Apply returns and the
 	// partial effects unwind. The audit judges after that, within the bound of an unload.
 	uctx, ucancel := r.bound(boot, o.Limits.DrainDeadline+o.Limits.DisposeDeadline)
-	_ = root.AwaitObservers(uctx)
-	r.unload.wait(uctx)
+	r.waitUnloads(uctx)
 	ucancel()
 	stopBoot()
 	switch {
@@ -488,70 +489,66 @@ func envOf(f func(string) string) func(string) string {
 // (03-c3-kernel.md:372; 07-c4-plugin-sdk.md:359): the callback keeps what the event
 // says, sets a flag and pings the run loop. The event is the record, not the tree: a
 // fiber whose goroutine returns after the deadline is archived and is no longer
-// listed as live, and it has still leaked.
+// listed as live, and it has still leaked. A change of state wakes the wait for the
+// unloads of boot, which reads the tree itself. The kernel detaches whichever observer
+// it is inside when its queue passes Limits.ObserverQueue (ADR-034, "2026-11-19 bounded
+// observer queue and overflow rule"), a fast one too: boot's subscribes again and reads
+// the tree for the leaks whose events it lost.
 func (r *run) watch() error {
 	_, err := r.root.Observe("boot-watch", func(_ context.Context, e kernel.LedgerEvent) error {
+		if r.onEvent != nil {
+			r.onEvent(e)
+		}
 		switch {
 		case e.Kind == "state":
-			r.unload.set(e.Fiber, e.State == kernel.Unloading)
+			ping(r.moved)
 		case e.Kind == "deadline" && (e.Label == "dispose" || e.Label == "drain"):
-			r.unload.set(e.Fiber, false) // the kernel gave up on it: it is not waited for
-			why := fmt.Sprintf("fiber %d %s passed its %s deadline", e.Fiber, e.Plugin, e.Label)
-			r.leakWhy.CompareAndSwap(nil, &why)
-			r.leakSeen.Store(true)
-			select {
-			case r.leakPing <- struct{}{}:
-			default:
-			}
+			r.leak(fmt.Sprintf("fiber %d %s passed its %s deadline", e.Fiber, e.Plugin, e.Label))
 		}
 		return nil
-	})
+	}, kernel.OnOverflow(func(ctx context.Context, _ *kernel.ObserverOverflow) error { return r.resync(ctx) }))
 	return err
 }
 
-// unloads is the set of the fibers that are UNLOADING, kept from the state events that
-// watch sees, and a way to wait until it is empty.
-type unloads struct {
-	mu    sync.Mutex
-	open  map[uint64]bool
-	moved chan struct{} // closed, and replaced, at each change
+// resync subscribes boot's observer again after an overflow, then reads the tree: a
+// fiber marked Leaked may be a leak whose event was lost.
+func (r *run) resync(ctx context.Context) error {
+	werr := r.watch() // first, so that no event falls between the two
+	ins, err := r.root.Inspect(ctx)
+	for _, f := range ins.Fibers {
+		if f.Leaked {
+			r.leak(fmt.Sprintf("fiber %d %s passed its drain or dispose deadline", f.ID, f.Plugin))
+		}
+	}
+	ping(r.moved)
+	return errors.Join(werr, err)
 }
 
-func (u *unloads) set(fiber uint64, unloading bool) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if u.open[fiber] == unloading {
-		return
-	}
-	if u.open == nil {
-		u.open = map[uint64]bool{}
-	}
-	if unloading {
-		u.open[fiber] = true
-	} else {
-		delete(u.open, fiber)
-	}
-	if u.moved != nil {
-		close(u.moved)
-		u.moved = nil
+// leak records the first leak for the log and pings the run loop.
+func (r *run) leak(why string) {
+	r.leakWhy.CompareAndSwap(nil, &why)
+	r.leakSeen.Store(true)
+	ping(r.leakPing)
+}
+
+func ping(c chan struct{}) {
+	select {
+	case c <- struct{}{}:
+	default:
 	}
 }
 
-// wait returns when no fiber is UNLOADING, or when ctx ends.
-func (u *unloads) wait(ctx context.Context) {
+// waitUnloads returns when no fiber is UNLOADING, other than one the kernel gave up on
+// (Leaked), or when ctx ends. It reads the tree, and between two reads waits for a
+// change of state.
+func (r *run) waitUnloads(ctx context.Context) {
 	for {
-		u.mu.Lock()
-		if len(u.open) == 0 {
-			u.mu.Unlock()
+		ins, err := r.root.Inspect(ctx)
+		if err != nil || !slices.ContainsFunc(ins.Fibers, func(f kernel.FiberSnapshot) bool { return f.State == kernel.Unloading && !f.Leaked }) {
 			return
 		}
-		if u.moved == nil {
-			u.moved = make(chan struct{})
-		}
-		moved := u.moved
-		u.mu.Unlock()
 		select {
-		case <-moved:
+		case <-r.moved:
 		case <-ctx.Done():
 			return
 		}

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"testing/fstest"
@@ -917,5 +918,89 @@ func TestRunStopDuringBoot(t *testing.T) {
 				t.Fatalf("the boot went on after the stop request: stdout %q phases %v stderr:\n%s", f.out.String(), f.phases(), f.errb.String())
 			}
 		})
+	}
+}
+
+// boot's own observer can be detached for overflow like any other. It subscribes again and
+// reads the tree, so a leak after the detachment still ends readiness and replaces the
+// process.
+func TestRunActsOnALeakAfterItsObserverOverflowed(t *testing.T) {
+	trigger, release := make(chan struct{}), make(chan struct{})
+	f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slow, roles: [api]}\n", slowDispose(trigger, release))
+	const queue = 64
+	f.opt.Limits.ObserverQueue = queue
+	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
+	f.opt.Limits.LeakGrace = 7 * time.Millisecond
+	f.opt.Clock = f.clock
+	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	r := newRun(f.opt)
+	// boot's observer stalls on the first event after the trigger while the test appends
+	// more events than the queue holds, so that the kernel detaches it; an observer of the
+	// test, ahead of it, sees a later event once it has been, and the deadline event that
+	// boot's observer has lost.
+	var armed atomic.Bool
+	var blocked atomic.Uint64
+	stalled, unstall, detached, deadline := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var once, onceDeadline sync.Once
+	r.onEvent = func(e kernel.LedgerEvent) {
+		if armed.CompareAndSwap(true, false) {
+			blocked.Store(e.Sequence)
+			close(stalled)
+			<-unstall
+		}
+	}
+	roots := make(chan *kernel.Root, 1)
+	r.afterNew = func(root *kernel.Root) {
+		roots <- root
+		_, err := root.Observe("test", func(_ context.Context, e kernel.LedgerEvent) error {
+			if s := blocked.Load(); s > 0 && e.Sequence > s {
+				once.Do(func() { close(detached) })
+				if e.Kind == "deadline" {
+					onceDeadline.Do(func() { close(deadline) })
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	done := make(chan int, 1)
+	go func() { done <- r.main(t.Context()) }()
+	root := <-roots
+	f.waitReady(t, done)
+	armed.Store(true)
+	close(trigger)
+	<-stalled
+	for range queue + 1 {
+		if err := root.Notify(t.Context(), storeKey); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bound := time.After(10 * time.Second)
+	select {
+	case <-detached:
+	case <-bound:
+		t.Fatalf("precondition: boot's observer was not detached (stalled at %d)", blocked.Load())
+	}
+	select {
+	case <-deadline:
+	case <-bound:
+		t.Fatal("precondition: the fiber did not leak")
+	}
+	close(unstall)
+	for armed := false; !armed; {
+		select {
+		case d := <-f.clock.armed:
+			armed = d == 7*time.Millisecond
+		case <-bound:
+			close(release)
+			t.Fatalf("the leak was not acted on; exit %d, stderr:\n%s", stopAndWait(t, f, done), f.errb.String())
+		}
+	}
+	f.clock.fire(7 * time.Millisecond)
+	close(release)
+	if code := <-done; code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
 	}
 }
