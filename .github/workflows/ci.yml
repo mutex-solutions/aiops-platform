@@ -94,16 +94,15 @@ jobs:
           go test -count=1 -coverprofile=cover-boot.out ./boot
           go test -count=1 -coverprofile=cover-loader.out ./loader
       - name: Boot structural checks
-        # Provisional line cap: S1 measured 4285 lines + 15% rounded up to the next 100.
-        # ADR-059 decision 11 replaces it at the S1 exit with measured + 10%.
+        # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 5707 lines + 10%, rounded up to the next 100.
         # No vocabulary list: boot legitimately handles tenant (a scope class of its closed vocabulary).
         run: |
-          go run ./tools/kernelcheck lines boot 6500 provisional
+          go run ./tools/kernelcheck lines boot 6300
           go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
       - name: Loader structural checks
-        # Provisional line cap: S1 measured 1000 lines + 15% rounded up to the next 100.
+        # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 1000 lines + 10%, rounded up to the next 100.
         run: |
-          go run ./tools/kernelcheck lines loader 1200 provisional
+          go run ./tools/kernelcheck lines loader 1100
           go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
           go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
 

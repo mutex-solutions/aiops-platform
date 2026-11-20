@@ -103,3 +103,18 @@ deviation.
     `Commit` on `profileContext`, so `Committed` and `Required` are those of the
     applied generation (its rows with `required: true` plus the distribution's
     set); the six launch keys do not change.
+
+## Line budgets at the S1 exit
+
+Decision 11 is applied. The caps are the measured count at the S1 exit plus ten per
+cent, rounded up to the next hundred, in physical lines of production Go (comments
+and blank lines included, tests excluded), measured by `tools/kernelcheck lines`
+and enforced in CI and in the Makefile; the provisional caps are gone.
+
+| Package | Measured | Files | Cap |
+|---------|----------|-------|-----|
+| `boot` | 5,707 | 18 | 6,300 |
+| `loader` | 1,000 | 4 | 1,100 |
+
+Growth of either package past its cap, or a second package under `boot/` or
+`loader/`, needs an ADR.
