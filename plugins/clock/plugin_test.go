@@ -138,3 +138,31 @@ func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {
 		t.Errorf("effects = %d %v, want the one pending timer", len(labels), labels[:min(len(labels), 3)])
 	}
 }
+
+// A timer fires once its time has come while a later one stays pending: the row's
+// goroutine waits for the earliest pending timer.
+func TestTimerFiresAfterItsDurationBeforeALaterOne(t *testing.T) {
+	root := kerneltest.New(t)
+	var h holder
+	kerneltest.Mount(root, clock.Plugin, h.plugin("aiops/consumer"))
+	later, err := h.clk.After(h.c, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	soon, err := h.clk.After(h.c, 20*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case at := <-soon.C():
+		if at.Sub(start) < 20*time.Millisecond {
+			t.Errorf("fired %v after the start, want at least 20ms", at.Sub(start))
+		}
+	case <-t.Context().Done():
+		t.Fatal("the timer did not fire")
+	}
+	if !later.Stop() {
+		t.Error("the later timer fired with the earlier one")
+	}
+}
