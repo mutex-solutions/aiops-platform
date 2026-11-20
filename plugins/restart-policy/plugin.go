@@ -126,7 +126,8 @@ func decode(raw any) (any, error) {
 	return conf, nil
 }
 
-// integer reads a whole number from a parsed config value.
+// integer reads a whole number from a parsed config value. A refusal names the type
+// and never the value, which may be the text a reference resolved to (a secret).
 func integer(v any) (int, error) {
 	switch n := v.(type) {
 	case int64:
@@ -138,15 +139,21 @@ func integer(v any) (int, error) {
 			return int(n), nil
 		}
 	}
-	return 0, fmt.Errorf("want a whole number, got %v", v)
+	return 0, fmt.Errorf("want a whole number, got %T", v)
 }
 
+// duration reads a duration string. As for integer, a refusal does not quote the value,
+// so the error of time.ParseDuration, which does, is not wrapped.
 func duration(v any) (time.Duration, error) {
 	s, ok := v.(string)
 	if !ok {
-		return 0, fmt.Errorf("want a duration string such as \"30s\", got %v", v)
+		return 0, fmt.Errorf("want a duration string such as \"30s\", got %T", v)
 	}
-	return time.ParseDuration(s)
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, errors.New("not a duration such as \"30s\"")
+	}
+	return d, nil
 }
 
 func names(v any) ([]string, error) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -509,6 +510,21 @@ func TestFailuresOfAReplacedConfigDoNotCarryOver(t *testing.T) {
 	}
 	if len(w.exits()) != 0 {
 		t.Errorf("exits = %v", w.exits())
+	}
+}
+
+// A reference in a numeric or duration field resolves to text that may be a secret:
+// a refusal names the field and the type, never the value.
+func TestDecodeErrorsDoNotEchoTheValue(t *testing.T) {
+	const secret = "hunter2-db-password"
+	w := newWorld(t, conf(1, time.Second, time.Second, time.Second, 1, 0))
+	for _, k := range []string{"maxFailures", "factor", "window", "backoffMin", "backoffMax", "stable"} {
+		raw := map[string]any{"maxFailures": int64(3), "window": "10m", "backoffMin": "1s", "backoffMax": "1m",
+			"factor": int64(2), "infrastructure": []any{"sql"}, k: secret}
+		err := w.root.Plugin(restartpolicy.Plugin, raw).Await(t.Context())
+		if err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), k) {
+			t.Errorf("%s: err = %v, want a refusal that names the field and not the value", k, err)
+		}
 	}
 }
 
