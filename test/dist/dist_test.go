@@ -342,6 +342,9 @@ func TestUnresolvedReferenceFollowsTheMatrix(t *testing.T) {
 // then a row that fails its first two applies: the generation that enables it has a failed
 // verdict, so reload rolls it back (ADR-059 decision 12) instead of waiting for
 // restart-policy to retry the row until it is ACTIVE, which the row does at boot.
+// restart-policy waits an hour before a retry here: with the smoke backoff the row
+// could be ACTIVE again before reload judges it, and the verdict would hang on how
+// long the judge takes.
 func TestLiveRecomposition(t *testing.T) {
 	live := filepath.Join(t.TempDir(), "live.yml")
 	write := func(body string) {
@@ -350,7 +353,7 @@ func TestLiveRecomposition(t *testing.T) {
 		}
 	}
 	write("- {id: extra, enabled: false}\n")
-	p := startEnv(t, nil, "smoke", live)
+	p := startEnv(t, nil, "smoke", "restart-policy.slow", live)
 	p.ready()
 	waitState(t, p, func(s teststate.State) bool { return s.Ready })
 	submit := func(marker string) {
