@@ -1294,7 +1294,8 @@ record.
 **G11, the observer of the root sees the events of `Close`.** The report that the
 launcher made was true: the root quiesces when `Close` begins, so the lease of
 the root refused every callback from then on and the dispatcher skipped each
-later event (in a test, 31 events of a `Close` were accepted and none was
+later event (in a test with two fibers, `ObserverStatus.Skipped` was 13 after `Close` and
+the observer had seen only the events before it; none of the skipped ones were
 delivered), among them the `deadline` of a leaking fiber. The observer that
 `Root.Observe` registers now delivers an event accepted before the dispatcher
 closes even when the root's lease is refused, with the context of the callback
