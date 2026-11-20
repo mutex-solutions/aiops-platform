@@ -103,7 +103,7 @@ func TestDeniedCheckKeepsConsumerPendingAndNotifyRecordsService(t *testing.T) {
 			if len(notified) != 2 || loading < 0 || notified[1] < loading {
 				t.Fatalf("want the notify service event after consumer LOADING: loading=%d service=%v", loading, notified)
 			}
-			if e := events[notified[1]]; e.Value != "v" || e.UID == 0 {
+			if e := events[notified[1]]; e.UID == 0 {
 				t.Fatalf("notify event does not carry the provision: %+v", e)
 			}
 		})

@@ -667,7 +667,7 @@ func (o *owner) handle(m message) (answer, bool) {
 		f.effects = append(f.effects, effectRec{label: "provide:" + m.label, provision: p})
 		o.keyEvent(f, "provide", m.key, p.binding.uid)
 		if f.state == Active {
-			o.notifyService([]svcKey{m.key}, []ledgerEvent{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: f.state, Key: m.key, UID: p.binding.uid, Value: p.binding.value}})
+			o.notifyService([]svcKey{m.key}, []ledgerEvent{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: f.state, Key: m.key, UID: p.binding.uid}})
 		}
 	case cmdEffect:
 		f, err := o.current(m.act)
@@ -741,7 +741,7 @@ func (o *owner) handle(m message) (answer, bool) {
 			// event per key carrying the current provision, whatever its state.
 			if p := o.providers[key]; p != nil {
 				if owner := o.lookup(p.binding.owner); owner != nil {
-					events = append(events, ledgerEvent{Fiber: owner.id, Name: owner.spec.ID, Kind: "service", State: owner.state, Key: key, UID: p.binding.uid, Value: p.binding.value})
+					events = append(events, ledgerEvent{Fiber: owner.id, Name: owner.spec.ID, Kind: "service", State: owner.state, Key: key, UID: p.binding.uid})
 				}
 			}
 		}
@@ -1230,7 +1230,7 @@ func (o *owner) state(f *fiber, state State) {
 	if old == Active || state == Active {
 		for _, p := range slices.Clone(f.provisions) {
 			o.notifyService([]svcKey{p.key}, []ledgerEvent{{Fiber: f.id, Name: f.spec.ID, Kind: "service", State: state, Key: p.key,
-				UID: p.binding.uid, Value: p.binding.value}})
+				UID: p.binding.uid}})
 		}
 	}
 }
@@ -1390,13 +1390,7 @@ func (o *owner) event(f *fiber, kind, label string, uid uint64) {
 
 // keyEvent appends a ledger event for a service key.
 func (o *owner) keyEvent(f *fiber, kind string, key svcKey, uid uint64) {
-	e := ledgerEvent{Fiber: f.id, Name: f.spec.ID, Kind: kind, State: f.state, Key: key, UID: uid}
-	if kind == "service" || kind == "provide" {
-		if p := o.providers[key]; p != nil && p.binding.uid == uid {
-			e.Value = p.binding.value
-		}
-	}
-	o.appendEvent(e)
+	o.appendEvent(ledgerEvent{Fiber: f.id, Name: f.spec.ID, Kind: kind, State: f.state, Key: key, UID: uid})
 }
 
 // appendEvent assigns the next sequence number; callers never choose it.

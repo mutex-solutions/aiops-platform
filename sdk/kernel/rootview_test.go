@@ -108,7 +108,7 @@ func TestRootViewSnapshotsInspectAndEvents(t *testing.T) {
 				continue // The built-in services of the root.
 			}
 			service++
-			if e.Key != "svc@0" || e.Label != "" || e.Value != "value" || e.Fiber != p.ID {
+			if e.Key != "svc@0" || e.Label != "" || e.Fiber != p.ID {
 				t.Errorf("service event %+v", e)
 			}
 		case "effect":

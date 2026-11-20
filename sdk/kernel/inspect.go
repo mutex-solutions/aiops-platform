@@ -85,7 +85,6 @@ type ledgerEvent struct {
 	State    State
 	Key      svcKey // The service key, or a label for effect and tracked-work events.
 	UID      uint64
-	Value    any // Observed service value.
 }
 
 // Retention contract.

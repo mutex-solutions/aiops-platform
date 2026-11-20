@@ -73,7 +73,9 @@ type FiberSnapshot struct {
 }
 
 // Provision is one reserved provision, active or not, in creation order. Value is
-// the value of a plain Provide and nil for ProvideFor, whose view needs its caller.
+// the value of a plain Provide, read from the provision at the call and copied out;
+// it is nil for ProvideFor, whose view needs its caller. A provision that has ended
+// is no longer listed, so Value never outlives it.
 type Provision struct {
 	Key    string // "name@major", with "/label" in a named realm.
 	UID    uint64
@@ -94,7 +96,9 @@ type Inspection struct {
 // LedgerEvent is one event of the total order, before any observer runs. Sequence
 // is consecutive from 1. For a service event Key is the service key and Label is
 // empty; for every other kind Label is the effect or tracked-work label and Key is
-// empty. Value is as in Provision.
+// empty. An event never carries a provided value, only the key and the label: a
+// service value must stay collectable once its provision has ended, and the event
+// stream is read by observers that must not see it.
 type LedgerEvent struct {
 	Sequence uint64
 	Fiber    uint64
@@ -105,7 +109,6 @@ type LedgerEvent struct {
 	Key      string
 	Label    string
 	UID      uint64
-	Value    any
 }
 
 // renderKey renders a key of the core: an address as "name@major", a label as itself.
@@ -132,7 +135,7 @@ func plainValue(v any) any {
 func exportEvent(e ledgerEvent) LedgerEvent {
 	key, label := renderKey(e.Key)
 	return LedgerEvent{Sequence: e.Sequence, Fiber: e.Fiber, Plugin: e.Name, Kind: e.Kind, From: e.From, State: e.State,
-		Key: key, Label: label, UID: e.UID, Value: plainValue(e.Value)}
+		Key: key, Label: label, UID: e.UID}
 }
 
 func exportSnapshot(s fiberSnap) FiberSnapshot {
@@ -178,7 +181,9 @@ func (r *Root) Inspect(ctx context.Context) (Inspection, error) {
 }
 
 // Events returns the bounded event ledger: the most recent Config.EventWindow
-// events. Once older events were dropped it returns the tail with an error that
+// events. No event holds a provided value (see LedgerEvent), so a value is
+// collectable as soon as its provision has ended, not after EventWindow more events.
+// Once older events were dropped it returns the tail with an error that
 // matches ErrEventsTruncated, never a silent partial list.
 func (r *Root) Events(ctx context.Context) ([]LedgerEvent, error) {
 	evs, err := r.core.events(ctx)

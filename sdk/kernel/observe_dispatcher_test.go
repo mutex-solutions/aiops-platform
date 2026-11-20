@@ -435,7 +435,7 @@ func TestPopClearsReferencesAndReleasesDrainedBackingStorage(t *testing.T) {
 	d.queue = make([]envelope, count)
 	for index := range d.queue {
 		value := index
-		d.queue[index] = envelope{sequence: uint64(index + 1), event: ledgerEvent{Sequence: uint64(index + 1), Value: &value}}
+		d.queue[index] = envelope{sequence: uint64(index + 1), event: ledgerEvent{Sequence: uint64(index + 1), Key: &value}}
 	}
 	backing := d.queue
 	go d.run()
@@ -453,7 +453,7 @@ func TestPopClearsReferencesAndReleasesDrainedBackingStorage(t *testing.T) {
 		t.Fatal("drained queue retained event backing storage")
 	}
 	for index, event := range backing {
-		if event.event.Value != nil || event.listeners != nil || event.sequence != 0 {
+		if event.event.Key != nil || event.listeners != nil || event.sequence != 0 {
 			t.Fatalf("popped slot %d retained an envelope reference", index)
 		}
 	}

@@ -411,3 +411,29 @@ func TestDrainJudgesAReleasedLeaseByItsReleaseInstant(t *testing.T) {
 		t.Fatalf("deadline events = %v, want deadline/drain", got)
 	}
 }
+
+// An Update of a fiber whose disposal was requested and whose cleanup is still gated
+// is refused as inactive by the owner, not applied.
+func TestUpdateOfAFiberWithGatedDisposalIsInactive(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := hazardReconciler(t)
+		gate := make(chan struct{})
+		var once sync.Once
+		open := func() { once.Do(func() { close(gate) }) }
+		t.Cleanup(open)
+		id := rcMount(t, r, Spec{ID: "p", Apply: func(c *Handle) error {
+			return c.Defer("gated", func(context.Context) error { <-gate; return nil })
+		}})
+		rcSettle(t, r)
+		ctx := context.Background()
+		if err := r.Dispose(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait() // The cleanup waits on its gate.
+		if err := r.Update(ctx, id); !errors.Is(err, ErrInactive) {
+			t.Fatalf("Update = %v, want ErrInactive", err)
+		}
+		open()
+		synctest.Wait()
+	})
+}

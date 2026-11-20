@@ -1361,9 +1361,6 @@ func TestReconcilerWithdrawalValuePrecedesActualRemovalAndReload(t *testing.T) {
 		}
 		if event.Kind == "service" && event.State == Unloading && withdraw < 0 {
 			withdraw = i
-			if event.Value != "retained" {
-				t.Fatalf("withdrawal lost its real retained value: %+v", event)
-			}
 		}
 		if event.Kind == "remove" && removed < 0 {
 			removed = i

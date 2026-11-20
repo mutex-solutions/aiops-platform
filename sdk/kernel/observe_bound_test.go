@@ -128,64 +128,6 @@ func TestAppendRequiresPositiveConsecutiveSequence(t *testing.T) {
 	}
 }
 
-type opaquePayload struct {
-	Number  int
-	Data    map[string]any
-	Hook    func()
-	marshal *atomic.Int64
-}
-
-func (p opaquePayload) MarshalJSON() ([]byte, error) {
-	p.marshal.Add(1)
-	panic("generic observer payload must not be marshaled")
-}
-
-func TestAppendCopiesOnlyValueWithoutCallingUserHooks(t *testing.T) {
-	for name, factory := range candidates {
-		t.Run(name, func(t *testing.T) {
-			ctx, r := actualRuntime(t, factory)
-			owner, _ := actualOwner(t, ctx, r, "owner")
-			d := testDispatcher(t, nil)
-			started := make(chan struct{})
-			gate, release := releaseGate()
-			defer release()
-			var marshals, hooks atomic.Int64
-			var got []opaquePayload
-			if _, err := d.addObserver(owner, "opaque", func(_ context.Context, event ledgerEvent) error {
-				value := event.Value.(opaquePayload)
-				if value.Number == 1 {
-					close(started)
-					<-gate
-				}
-				got = append(got, value)
-				return nil
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if err := d.append(1, ledgerEvent{Sequence: 1, Value: opaquePayload{Number: 1, marshal: &marshals}}); err != nil {
-				t.Fatal(err)
-			}
-			awaitSignal(t, ctx, started, "first observer")
-			value := opaquePayload{Number: 2, Data: map[string]any{"stable": "original"}, Hook: func() { hooks.Add(1) }, marshal: &marshals}
-			if err := d.append(2, ledgerEvent{Sequence: 2, Value: value}); err != nil {
-				t.Fatal(err)
-			}
-			// Reassign the caller's top-level value, never mutate referenced data.
-			value.Number, value.Data = 99, map[string]any{"stable": "replacement"}
-			release()
-			if err := d.waitBarrier(ctx, 2); err != nil {
-				t.Fatal(err)
-			}
-			if len(got) != 2 || got[1].Number != 2 || got[1].Data["stable"] != "original" || got[1].Hook == nil {
-				t.Fatalf("value copy changed: %+v", got)
-			}
-			if marshals.Load() != 0 || hooks.Load() != 0 {
-				t.Fatalf("Append invoked user hooks: marshal=%d hook=%d", marshals.Load(), hooks.Load())
-			}
-		})
-	}
-}
-
 func TestEnqueueSnapshotSurvivesManualRemovalAndNewRegistration(t *testing.T) {
 	for name, factory := range candidates {
 		t.Run(name, func(t *testing.T) {
@@ -621,7 +563,7 @@ func TestRealEventLedgerTotalStateAndServiceOrder(t *testing.T) {
 				state = state || event.Kind == "state" && event.From != "" && event.State != ""
 				// The candidates currently use different ledger kind spellings;
 				// preserve their actual envelopes rather than normalize/rewrite.
-				published = published || (event.Kind == "service:publish" || event.Kind == "service" && event.State == Active) && event.UID > 0 && event.Value == "observed value"
+				published = published || (event.Kind == "service:publish" || event.Kind == "service" && event.State == Active) && event.UID > 0
 				revoked = revoked || (event.Kind == "service:withdraw" || event.Kind == "service" && event.State == Unloading) && event.UID > 0
 				fixture = fixture || markerOf(event) == "immutable"
 				if err := d.append(event.Sequence, event); err != nil {
