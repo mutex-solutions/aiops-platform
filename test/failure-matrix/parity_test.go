@@ -95,6 +95,19 @@ func TestMatrixMatchesTable(t *testing.T) {
 	}
 }
 
+// TestTableHasNoCopy: 08 section 1.6 is the only failure matrix, so the design record
+// links to it instead of holding a copy that drifts from it.
+func TestTableHasNoCopy(t *testing.T) {
+	const record = "../../docs/design/plugin-system-2026-11.md"
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), tableHead) {
+		t.Errorf("%s holds a copy of the failure policy table; link to 08 section 1.6 instead", record)
+	}
+}
+
 // TestS1CellsAreRunnable keeps the S1 cells honest: each states an exit, a
 // ready value and a diagnostic, and the tenant tree column is never S1.
 func TestS1CellsAreRunnable(t *testing.T) {
