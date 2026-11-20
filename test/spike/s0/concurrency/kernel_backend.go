@@ -889,7 +889,7 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 		enter: func() bool {
 			l, ok := kc.Enter()
 			if ok && leave.Load() == nil {
-				leave.CompareAndSwap(nil, &l)
+				keepLeave(&leave, l) // out of line: taking &l here would heap-allocate l on every call
 			}
 			return ok
 		},
@@ -1347,4 +1347,12 @@ func (r *kernelRuntime) RetentionStatus() RetentionStatus {
 		EventWindow: r.window, Windowed: int(min(s.EventsTotal-min(s.EventsTotal, r.base.events), uint64(r.window))),
 		EventsTotal:     s.EventsTotal - min(s.EventsTotal, r.base.events),
 		ObserverBacklog: s.ObserverBacklog, TerminalDropped: s.TerminalDropped}
+}
+
+// keepLeave stores the activation's leave function once. It is a separate
+// function so the lease path of the adapter allocates nothing after the first call.
+//
+//go:noinline
+func keepLeave(slot *atomic.Pointer[func()], l func()) {
+	slot.CompareAndSwap(nil, &l)
 }

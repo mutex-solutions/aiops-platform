@@ -1,0 +1,32 @@
+{
+ "classification": "PASS full frozen property workload on three backends, including the final port in sdk/kernel through its exported API (backend kernel); run in a frozen checkout of the commit",
+ "exitCode": 0,
+ "sourceSHA256": "64a0b38b21bd5958829f4a7dec82d7838195decd80c503e9c64c42c4995be03c",
+ "commit": "fbcba92",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 5281.69,
+ "backendSeconds": {
+  "reconciler": 1508.29,
+  "graph-lock": 1437.89,
+  "kernel": 2335.22
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ },
+ "supersedes": "property-full-kernel-port (commit e34047e), which predates the removal of unreachable core branches, the commit waterfall and the ledger value fix"
+}

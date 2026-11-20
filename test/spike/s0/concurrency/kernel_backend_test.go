@@ -989,3 +989,30 @@ func TestKernelNoSaveSkipsAFailingCommit(t *testing.T) {
 		t.Fatalf("raw %v version %d", raw, version)
 	}
 }
+
+// The callpath gate budgets zero allocations for the owner's Enter and Leave. The
+// kernel's own path allocates nothing; this holds the adapter to the same budget.
+func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	ctxs := make(chan *Context, 1)
+	id := kernelMount(t, ctx, r, Spec{ID: "leased", Apply: func(c *Context) error {
+		ctxs <- c
+		return nil
+	}})
+	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	c := <-ctxs
+	if !c.Enter() { // The first call keeps the activation's leave function.
+		t.Fatal("Enter refused on an active fiber")
+	}
+	c.Leave()
+	if got := testing.AllocsPerRun(1000, func() {
+		if !c.Enter() {
+			panic("Enter refused on an active fiber")
+		}
+		c.Leave()
+	}); got != 0 {
+		t.Fatalf("Enter+Leave allocated %v objects per call, want 0", got)
+	}
+}
