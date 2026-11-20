@@ -377,7 +377,7 @@ func TestSealedKernelHookCanBeListedForAPlugin(t *testing.T) {
 	want(t, r.Plugin(p, nil), Active)
 }
 
-func noopAny(context.Context, any) (any, error) { return nil, nil }
+func noopAny(context.Context, LedgerEvent) (any, error) { return nil, nil }
 
 func TestTheTestConstructorSwitchesTheSealedMapOff(t *testing.T) {
 	key := NewKey[int]("seal-key", 0)

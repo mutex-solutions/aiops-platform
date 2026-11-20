@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -76,7 +77,8 @@ type Root struct {
 	unbound   bool
 	host      entryID
 	ctx       *Context
-	aud       Audience // Reaches the listeners of this kernel only: see config.go.
+	aud       Audience  // Reaches the listeners of this kernel only: see config.go.
+	relayOnce sync.Once // Subscribes the relay of the kernel events: see relay.go.
 }
 
 // New constructs a kernel with the three binding maps of cfg (07-c4-plugin-sdk.md:1358;
