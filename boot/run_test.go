@@ -921,6 +921,62 @@ func TestRunStopDuringBoot(t *testing.T) {
 	}
 }
 
+// Admit decodes every config that the generation changes: a created, enabled or changed
+// row whose config its plugin's Decode refuses rejects the generation with nothing
+// applied (03-c3-kernel.md:377), and a row the generation does not change is not judged
+// again.
+func TestAdmitDecodesTheChangedConfigs(t *testing.T) {
+	var l launched
+	strict := kernel.Define(kernel.Plugin{ID: "t/strict",
+		Decode: func(raw any) (any, error) {
+			if m, _ := raw.(map[string]any); m["bad"] == true {
+				return nil, errors.New("bad is not allowed")
+			}
+			if m, _ := raw.(map[string]any); m["panic"] == true {
+				panic("boom")
+			}
+			return raw, nil
+		},
+		Apply: func(*kernel.Context, any) error { return nil }})
+	const base = "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: kept, plugin: t/strict, roles: [api], config: {bad: true}}\n    - {id: off, plugin: t/strict, roles: [api], enabled: false, config: {bad: false}}\n"
+	f := newFixture(t, base, probe(&l), ModuleEntry{ID: "t/strict", Module: "example.test/strict", Version: "v0.1.0", Plugin: strict})
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	admit := func(bundle string) error {
+		t.Helper()
+		f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(bundle)}
+		c, err := pc.Compose(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = pc.Admit(t.Context(), c)
+		return err
+	}
+	for _, tc := range []struct {
+		name, add, want string
+	}{
+		{"unchanged", "", ""},
+		{"created", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: true}}\n", `row "new": config: bad is not allowed`},
+		{"panics", "    - {id: new, plugin: t/strict, roles: [api], config: {panic: true}}\n", `row "new": config: Decode panicked: boom`},
+		{"created, good", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: false}}\n", ""},
+		{"created with a reference", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: \"${env:AIOPS_REF_X}\"}}\n", ""},
+		{"enabled", "- {id: off, enabled: true, config: {bad: true}}\n", `row "off": config: bad is not allowed`},
+		{"changed", "- {id: kept, config: {bad: true, n: 1}}\n", `row "kept": config: bad is not allowed`},
+	} {
+		err := admit(base + tc.add)
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
+		}
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
 // boot's own observer can be detached for overflow like any other. It subscribes again and
 // reads the tree, so a leak after the detachment still ends readiness and replaces the
 // process.

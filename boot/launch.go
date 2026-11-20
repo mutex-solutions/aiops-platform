@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -216,10 +217,49 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
 		}
 	}
-	if a.Refused() {
-		return out, errors.New(strings.Join(errorLines(a), "; "))
+	if errs := append(errorLines(a), p.configErrors(c)...); len(errs) > 0 {
+		return out, errors.New(strings.Join(errs, "; "))
 	}
 	return out, nil
+}
+
+// configErrors decodes, with the plugin's own Decode, the config of every row of c that
+// the process mounts and the committed composition does not mount with that config: a
+// created, enabled or changed row (03-c3-kernel.md:377, "every changed config"). A row
+// whose config holds a reference is left to its activation: only config-refs resolves a
+// reference, on internal/config, which the kernel runs for a mount alone.
+func (p *profileContext) configErrors(c Composition) []string {
+	p.mu.Lock()
+	old := p.committed
+	p.mu.Unlock()
+	act, was := ActiveRows(c, p.roles), ActiveRows(old, p.roles)
+	before := map[string]any{}
+	for _, r := range old.Rows {
+		before[r.ID] = plain(r.Config)
+	}
+	var out []string
+	for _, r := range c.Rows {
+		pl, ok := p.mods[r.Plugin].Plugin.(kernel.Plugin)
+		cfg := plain(r.Config)
+		if !act[r.ID] || len(r.Refs) > 0 || !ok || pl.Decode == nil || was[r.ID] && reflect.DeepEqual(before[r.ID], cfg) {
+			continue
+		}
+		if err := decodes(pl.Decode, cfg); err != nil {
+			out = append(out, fmt.Sprintf("row %q: config: %v", r.ID, err))
+		}
+	}
+	return out
+}
+
+// decodes runs a Decode as the kernel does: a panic is an error.
+func decodes(decode func(any) (any, error), raw any) (err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			err = fmt.Errorf("Decode panicked: %v", v)
+		}
+	}()
+	_, err = decode(raw)
+	return err
 }
 
 func checkName(n int) string {
