@@ -35,7 +35,7 @@ const (
 	ExitRefused  = 1 // boot stopped before any row mounted: a layer, the gate, the static graph, the distribution
 	ExitUsage    = 2 // bad flags; cmd/aiops returns it (it is also the code of a Go panic)
 	ExitRequired = 3 // the required set is not met once the tree settled (03-c3-kernel.md:361)
-	ExitLeak     = 4 // replaced: a fiber leaked past its dispose deadline, or shutdown overran its bound
+	ExitLeak     = 4 // replaced: a fiber leaked past its drain or dispose deadline, or shutdown overran its bound
 	ExitGaveUp   = 5 // replaced: restart-policy gave up on an infrastructure provider
 	ExitInternal = 6 // the launcher failed: the kernel refused its config, a launch key could not be provided
 	ExitRestore  = 7 // replaced: a restore failed
@@ -204,6 +204,8 @@ type run struct {
 	exits    chan launch.ExitRequest
 	leakPing chan struct{}
 	leakSeen atomic.Bool
+	leakWhy  atomic.Pointer[string] // the first leak the observer saw, as a line for the log
+	unload   unloads
 	// refsActive says config-refs is ACTIVE: the availability of configRefsReady.
 	refsActive atomic.Bool
 	reader     atomic.Pointer[reader]
@@ -307,6 +309,13 @@ func (r *run) run(ctx context.Context) int {
 	_ = root.AwaitObservers(bctx) // an overflow only says events were lost; the audit reads the tree itself
 	serr := root.Settle(bctx)
 	cancel()
+	// Settle returns while a fiber that is blocked past its load deadline is still
+	// UNLOADING, which is its contract; the row is FAILED once its Apply returns and the
+	// partial effects unwind. The audit judges after that, within the bound of an unload.
+	uctx, ucancel := r.bound(ctx, o.Limits.DrainDeadline+o.Limits.DisposeDeadline)
+	_ = root.AwaitObservers(uctx)
+	r.unload.wait(uctx)
+	ucancel()
 	if serr != nil {
 		fmt.Fprintf(r.errw, "warning: settle: %v\n", serr)
 	}
@@ -456,28 +465,85 @@ func envOf(f func(string) string) func(string) string {
 	return f
 }
 
-// watch subscribes to the events of the kernel. A dispose that passed its deadline
-// marks the fiber Leaked, and a goroutine cannot be killed (03-c3-kernel.md:372;
-// 07-c4-plugin-sdk.md:359): the callback only sets a flag and pings the run loop,
-// which inspects the tree. A change of state of config-refs makes configRefsReady
+// watch subscribes to the events of the kernel. A drain or a dispose that passed its
+// deadline marks the fiber Leaked, and a goroutine cannot be killed
+// (03-c3-kernel.md:372; 07-c4-plugin-sdk.md:359): the callback keeps what the event
+// says, sets a flag and pings the run loop. The event is the record, not the tree: a
+// fiber whose goroutine returns after the deadline is archived and is no longer
+// listed as live, and it has still leaked. A change of state of config-refs makes configRefsReady
 // available or not, and the kernel tells the rows that wait for it.
 func (r *run) watch() error {
 	_, err := r.root.Observe("boot-watch", func(ctx context.Context, e kernel.LedgerEvent) error {
 		switch {
-		case e.Kind == "deadline" && e.Label == "dispose":
+		case e.Kind == "state":
+			r.unload.set(e.Fiber, e.State == kernel.Unloading)
+			if e.Plugin == ConfigRefsID {
+				if active := e.State == kernel.Active; r.refsActive.Swap(active) != active {
+					return r.root.Notify(ctx, configRefsKey)
+				}
+			}
+		case e.Kind == "deadline" && (e.Label == "dispose" || e.Label == "drain"):
+			r.unload.set(e.Fiber, false) // the kernel gave up on it: it is not waited for
+			why := fmt.Sprintf("fiber %d %s passed its %s deadline", e.Fiber, e.Plugin, e.Label)
+			r.leakWhy.CompareAndSwap(nil, &why)
 			r.leakSeen.Store(true)
 			select {
 			case r.leakPing <- struct{}{}:
 			default:
 			}
-		case e.Kind == "state" && e.Plugin == ConfigRefsID:
-			if active := e.State == kernel.Active; r.refsActive.Swap(active) != active {
-				return r.root.Notify(ctx, configRefsKey)
-			}
 		}
 		return nil
 	})
 	return err
+}
+
+// unloads is the set of the fibers that are UNLOADING, kept from the state events that
+// watch sees, and a way to wait until it is empty.
+type unloads struct {
+	mu    sync.Mutex
+	open  map[uint64]bool
+	moved chan struct{} // closed, and replaced, at each change
+}
+
+func (u *unloads) set(fiber uint64, unloading bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.open[fiber] == unloading {
+		return
+	}
+	if u.open == nil {
+		u.open = map[uint64]bool{}
+	}
+	if unloading {
+		u.open[fiber] = true
+	} else {
+		delete(u.open, fiber)
+	}
+	if u.moved != nil {
+		close(u.moved)
+		u.moved = nil
+	}
+}
+
+// wait returns when no fiber is UNLOADING, or when ctx ends.
+func (u *unloads) wait(ctx context.Context) {
+	for {
+		u.mu.Lock()
+		if len(u.open) == 0 {
+			u.mu.Unlock()
+			return
+		}
+		if u.moved == nil {
+			u.moved = make(chan struct{})
+		}
+		moved := u.moved
+		u.mu.Unlock()
+		select {
+		case <-moved:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // view reads the live tree as the audit wants it: the state of each row by id, and
@@ -523,16 +589,16 @@ func (r *run) loop(ctx context.Context) int {
 		case req := <-r.exits:
 			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail))
 		case <-r.leakPing:
-			if why, ok := r.leaked(ctx); ok && graceUp == nil {
+			if graceUp == nil {
 				r.ready.Drop()
-				fmt.Fprintf(r.errw, "error: leaked: %s; readiness ended, the process is replaced after the drain window\n", why)
+				fmt.Fprintf(r.errw, "error: leaked: %s; readiness ended, the process is replaced after the drain window\n", *r.leakWhy.Load())
 				done := make(chan struct{})
 				stop := r.o.Clock.AfterFunc(r.o.Limits.leakGrace(), func() { close(done) })
 				defer stop()
 				graceUp = done
 			}
 		case <-graceUp:
-			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its dispose deadline")
+			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline")
 		}
 	}
 }
@@ -547,18 +613,6 @@ func exitCodeOf(why launch.ExitReason) int {
 		return ExitRestore
 	}
 	return ExitInternal
-}
-
-// leaked names the fibers whose snapshot says Leaked.
-func (r *run) leaked(ctx context.Context) (string, bool) {
-	ins, _ := r.root.Inspect(ctx)
-	var names []string
-	for _, f := range ins.Fibers {
-		if f.Leaked {
-			names = append(names, fmt.Sprintf("fiber %d %s passed its dispose deadline", f.ID, f.Plugin))
-		}
-	}
-	return strings.Join(names, "; "), len(names) > 0
 }
 
 // stop is the bounded shutdown: drop readiness, close the kernel under the
@@ -579,10 +633,9 @@ func (r *run) stop(ctx context.Context, code int, why string) int {
 	if err != nil {
 		fmt.Fprintf(r.errw, "warning: shutdown: %v\n", err)
 	}
-	// A leak during the close may reach the observer too late, so the diagnostic of
-	// Close is read as well. The kernel gives it no exported sentinel (errLeaked is
-	// unexported), which is a gap this launcher reports; it matches the text.
-	leaked := r.leakSeen.Load() || err != nil && strings.Contains(err.Error(), "fiber leaked")
+	// The observer of the root sees the events of Close, and the diagnostic of Close
+	// says it too.
+	leaked := r.leakSeen.Load() || errors.Is(err, kernel.ErrLeaked)
 	if code == ExitOK && (timedOut || leaked) {
 		code = ExitLeak
 		fmt.Fprintf(r.errw, "aiops: exit %d: shutdown did not finish cleanly: a fiber leaked or the bound of %s passed\n", code, r.o.Limits.ShutdownBound)

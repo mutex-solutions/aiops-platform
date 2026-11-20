@@ -571,6 +571,123 @@ func TestRunShutdownThatLeaksIsNotClean(t *testing.T) {
 	}
 }
 
+// A tracked goroutine that ignores its context past the drain deadline leaks the fiber as
+// a disposer past the dispose deadline does: readiness ends and the process is replaced.
+func slowDrain(trigger, release chan struct{}) ModuleEntry {
+	return toy(toySpec{id: "t/drain", apply: func(c *kernel.Context, _ any) error {
+		c.Go("stuck", func(context.Context) error { <-release; return nil })
+		c.Go("trigger", func(ctx context.Context) error {
+			select {
+			case <-trigger:
+				return c.Dispose()
+			case <-ctx.Done():
+				return nil
+			}
+		})
+		return nil
+	}})
+}
+
+func TestRunDrainPastItsDeadlineReplacesTheProcess(t *testing.T) {
+	trigger, release := make(chan struct{}), make(chan struct{})
+	f := newFixture(t, happyBundle+"    - {id: drain, plugin: t/drain, roles: [api]}\n", slowDrain(trigger, release))
+	f.opt.Limits.DrainDeadline = 30 * time.Millisecond
+	f.opt.Limits.LeakGrace = 7 * time.Millisecond
+	f.opt.Clock = f.clock
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	close(trigger)
+	for d := range f.clock.armed { // the grace timer is armed
+		if d == 7*time.Millisecond {
+			break
+		}
+	}
+	f.clock.fire(7 * time.Millisecond)
+	close(release) // the goroutine ends, so that the close can finish
+	if code := <-done; code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	for _, want := range []string{"error: leaked: fiber ", "t/drain passed its drain deadline", "fiber leaked"} {
+		if !strings.Contains(f.errb.String(), want) {
+			t.Errorf("stderr lacks %q:\n%s", want, f.errb.String())
+		}
+	}
+}
+
+// Settle returns while a fiber that is blocked past its load deadline is still UNLOADING:
+// that is its contract. The audit waits for the row to leave UNLOADING, so that it
+// judges a row that is FAILED, within the bound of an unload.
+func TestRunAuditWaitsForARowToLeaveUnloading(t *testing.T) {
+	slow := toy(toySpec{id: "t/slowapply", apply: func(c *kernel.Context, _ any) error {
+		<-c.Std().Done() // the kernel cancels it at the load deadline
+		time.Sleep(100 * time.Millisecond)
+		return c.Std().Err()
+	}})
+	f := newFixture(t, "- insert:\n    - {id: bad, plugin: t/slowapply, roles: [api], required: true}\n", slow)
+	f.opt.Limits.LoadDeadline = 30 * time.Millisecond
+	code := f.run(t.Context())
+	if code != ExitRequired || !strings.Contains(f.errb.String(), `required row "bad" is FAILED`) || strings.Contains(f.errb.String(), "UNLOADING") {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+// A row that is still UNLOADING when the bound of an unload passes is judged as it is.
+func TestRunAuditJudgesARowThatStaysUnloading(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	stuck := toy(toySpec{id: "t/stuck", apply: func(c *kernel.Context, _ any) error {
+		<-c.Std().Done()
+		<-release
+		return c.Std().Err()
+	}})
+	f := newFixture(t, "- insert:\n    - {id: bad, plugin: t/stuck, roles: [api], required: true}\n", stuck)
+	f.opt.Limits.LoadDeadline, f.opt.Limits.DrainDeadline, f.opt.Limits.DisposeDeadline = 30*time.Millisecond, 20*time.Millisecond, 20*time.Millisecond
+	f.opt.Limits.ShutdownBound = 200 * time.Millisecond
+	code := f.run(t.Context())
+	if code != ExitRequired || !strings.Contains(f.errb.String(), `required row "bad" is UNLOADING`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+// Commit makes a composition that Compose returned the committed one: Committed, Layers
+// and Required follow it (a row a layer marked required is in the set), and the one it
+// replaces is remembered, so that a rollback commits it again.
+func TestCommitFollowsTheAppliedGeneration(t *testing.T) {
+	var l launched
+	f := newFixture(t, "- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n    - {id: user, plugin: t/user, roles: [api], required: true}\n    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
+	f.dist.RequiredKeys = []string{"store"}
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	pc := l.profile
+	booted := pc.Committed()
+	if got := pc.Required().Rows; !slices.Equal(got, []string{"user"}) {
+		t.Fatalf("required rows at boot = %v", got)
+	}
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte("- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n    - {id: user, plugin: t/user, roles: [api], required: true}\n    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: later, plugin: t/user, roles: [api], required: true}\n")}
+	next, err := pc.Compose(t.Context())
+	if err != nil || next.Digest == booted.Digest {
+		t.Fatalf("compose: %v", err)
+	}
+	if err := pc.Commit(next); err != nil || pc.Committed().Digest != next.Digest {
+		t.Fatalf("Commit = %v, committed %x", err, pc.Committed().Digest)
+	}
+	if got := pc.Required().Rows; !slices.Equal(got, []string{"later", "user"}) {
+		t.Errorf("required rows after the commit = %v: the set is the applied generation's", got)
+	}
+	if err := pc.Commit(booted); err != nil || pc.Committed().Digest != booted.Digest || !slices.Equal(pc.Required().Rows, []string{"user"}) {
+		t.Errorf("Commit of the previous composition = %v, required %v", err, pc.Required().Rows)
+	}
+	if err := pc.Commit(launch.Composition{Digest: launch.Digest{9}}); err == nil || pc.Committed().Digest != booted.Digest {
+		t.Errorf("Commit of a stranger = %v: it must be refused and change nothing", err)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
 func TestRunSettleBound(t *testing.T) {
 	hang := toy(toySpec{id: "t/hang", apply: func(c *kernel.Context, _ any) error { <-c.Std().Done(); return c.Std().Err() }})
 	f := newFixture(t, "- insert:\n    - {id: hang, plugin: t/hang, roles: [api], required: true}\n", hang)

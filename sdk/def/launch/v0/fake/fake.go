@@ -18,7 +18,7 @@ import (
 
 // Launcher serves every launch key. Set the exported fields before the plugin is
 // mounted; they are read, never written, by the services. The func fields script
-// Compose, Admit and Plan, and a nil one returns the zero value and no error.
+// Compose, Admit, Plan and Commit, and a nil one returns the zero value and no error.
 type Launcher struct {
 	ProfileName string
 	RoleName    string
@@ -30,12 +30,13 @@ type Launcher struct {
 	Flags       map[string]string
 	Switches    map[string]bool
 	Environ     map[string]string  // for Cmdline.Env
-	Current     launch.Composition // for ProfileContext.Committed
+	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
 	Needed      launch.RequiredSet // for ProfileContext.Required
 
 	ComposeFn func(context.Context) (launch.Composition, error)
 	AdmitFn   func(context.Context, launch.Composition) (launch.Admission, error)
 	PlanFn    func(context.Context, launch.Composition, launch.Composition) (launch.Plan, error)
+	CommitFn  func(launch.Composition) error // a non-nil error refuses the commit
 
 	mu    sync.Mutex
 	ready bool
@@ -109,7 +110,24 @@ func (f *Launcher) Plan(ctx context.Context, from, to launch.Composition) (launc
 	return f.PlanFn(ctx, from, to)
 }
 
-func (f *Launcher) Committed() launch.Composition { return f.Current }
+func (f *Launcher) Committed() launch.Composition {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Current
+}
+
+// Commit makes c the committed composition, unless CommitFn refuses it.
+func (f *Launcher) Commit(c launch.Composition) error {
+	if f.CommitFn != nil {
+		if err := f.CommitFn(c); err != nil {
+			return err
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Current = c
+	return nil
+}
 
 func (f *Launcher) Required() launch.RequiredSet {
 	return launch.RequiredSet{Rows: slices.Clone(f.Needed.Rows), Keys: slices.Clone(f.Needed.Keys)}

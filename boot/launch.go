@@ -90,6 +90,10 @@ func (p *profileContext) Layers() []launch.Layer {
 func (p *profileContext) remember(c Composition) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.rememberLocked(c)
+}
+
+func (p *profileContext) rememberLocked(c Composition) {
 	if _, ok := p.known[c.Digest]; ok {
 		return
 	}
@@ -117,13 +121,27 @@ func (p *profileContext) lookup(d launch.Digest) (Composition, error) {
 	return Composition{}, fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", d[:6])
 }
 
-// Committed is the composition the process booted. At S1 nothing commits a later one:
-// reload applies and judges a generation and keeps its own record of what it applied
-// (ADR-059 decision 5; the committer is S4a), so this does not move.
+// Committed is the composition the process runs: the one it booted until reload commits
+// another (ADR-059 decision 15; the committer of S4a replaces the caller).
 func (p *profileContext) Committed() launch.Composition {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return launchComposition(p.committed)
+}
+
+// Commit makes a composition that Compose returned the committed one, so that Committed,
+// Layers and Required follow what the tree runs. The composition it replaces is
+// remembered, so that a rollback can commit it again.
+func (p *profileContext) Commit(lc launch.Composition) error {
+	c, err := p.lookup(lc.Digest)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rememberLocked(p.committed)
+	p.committed = c
+	return nil
 }
 
 // Required is the required set of the committed composition for the role. The loader

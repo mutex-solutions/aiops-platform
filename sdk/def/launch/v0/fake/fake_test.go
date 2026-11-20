@@ -110,6 +110,23 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if pc.Committed().Digest != (launch.Digest{7}) {
 			t.Errorf("Committed = %v", pc.Committed())
 		}
+		boom := errors.New("refused")
+		l.CommitFn = func(c launch.Composition) error {
+			if c.Digest == (launch.Digest{9}) {
+				return boom
+			}
+			return nil
+		}
+		if err := pc.Commit(launch.Composition{Digest: launch.Digest{9}}); !errors.Is(err, boom) || pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Commit of a refused composition = %v, committed %v", err, pc.Committed().Digest)
+		}
+		if err := pc.Commit(cand); err != nil || pc.Committed().Digest != cand.Digest {
+			t.Errorf("Commit = %v, committed %v", err, pc.Committed().Digest)
+		}
+		l.CommitFn = nil
+		if err := pc.Commit(launch.Composition{Digest: launch.Digest{7}}); err != nil || pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Commit with no script = %v", err)
+		}
 		if req := pc.Required(); len(req.Rows) != 1 || req.Rows[0] != "r" || req.Keys[0] != "sql" {
 			t.Errorf("Required = %v", req)
 		}

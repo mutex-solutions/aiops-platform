@@ -80,9 +80,10 @@ type Denial struct {
 	Reason string
 }
 
-// Admission is the result of admitting a candidate: the denied rows. A denied
-// optional row is detached as disabled; a denied required row is an error of
-// Admit instead (03-c3-kernel.md:358, :1361).
+// Admission is the result of admitting a candidate: the denied rows. At boot a denied
+// optional row is detached as disabled; reload rejects a generation that has one
+// (ADR-059 decision 15). A denied required row is an error of Admit instead
+// (03-c3-kernel.md:358, :1361).
 type Admission struct{ Denied []Denial }
 
 // Action is what a Plan does to one row.
@@ -183,11 +184,17 @@ type ProfileContext interface {
 	// Plan diffs two compositions by row id and computes the restart closure,
 	// pure (03-c3-kernel.md:378).
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
-	// Committed is the composition the process runs: the one boot composed, and
-	// from the committer of S4a the one it committed last. reload plans from it.
-	// Added in S1 for reload, which has no other way to know what it diffs against
-	// (docs silent; open point).
+	// Committed is the composition the process runs: the one boot composed until
+	// Commit says another. reload plans from it. Added in S1 for reload, which has no
+	// other way to know what it diffs against (docs silent; open point).
 	Committed() Composition
+	// Commit records c as the composition the tree runs: Committed returns it and
+	// Required is its required set from then on. c is one that Compose returned.
+	// reload calls it after a generation passed its verdict, and after a rollback
+	// with the composition it restored (ADR-059 decision 15). It returns an error for
+	// a composition that this launcher did not compose, or has forgotten, and then
+	// changes nothing. Added in S1; the committer of S4a replaces the caller (open point).
+	Commit(c Composition) error
 	// Required is the required set of the committed composition for the process role:
 	// the distribution's rows and keys plus the rows that a layer marked required
 	// (00-decisions.md:492). readiness and reload judge by it. Added in S1: the docs
@@ -281,7 +288,7 @@ type ExitReason string
 // The reasons: the three cases in which the process is replaced rather than
 // restarted in place (03-c3-kernel.md:372).
 const (
-	ExitDisposeLeak ExitReason = "dispose-leak"   // a process-scope fiber leaked past its dispose deadline
+	ExitDisposeLeak ExitReason = "dispose-leak"   // a process-scope fiber leaked past its drain or dispose deadline
 	ExitRestoreFail ExitReason = "restore-fail"   // a restore failed
 	ExitGaveUp      ExitReason = "restart-giveup" // restart-policy gave up on an infrastructure provider
 )
