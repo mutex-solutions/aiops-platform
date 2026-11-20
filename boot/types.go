@@ -110,7 +110,8 @@ type Row struct {
 	Group     bool
 }
 
-// FieldName names one of the ten row fields.
+// FieldName names one of the ten row fields, or "intercept.<key>", the provenance of
+// one key of a row's intercept (see Provenance).
 type FieldName string
 
 // The ten row fields, in canonical order.
@@ -187,6 +188,9 @@ type FieldOrigin struct {
 
 // Provenance holds, for each of the ten fields in canonical order, the
 // origin of its current value: the insert, or the latest patch that set it.
+// After the ten, Compose appends one field "intercept.<key>" per key the row's
+// intercept has held, with the origin of the item that last added, changed or
+// removed that key (compose.go interceptField).
 type Provenance struct {
 	Fields []FieldOrigin
 }
