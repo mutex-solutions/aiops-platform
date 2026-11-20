@@ -13,6 +13,7 @@ o/want: {wants: [pk]}
 o/hook: {hooks: [{hook: sh, stage: 1}]}
 o/open: {provides: [ok]}
 o/needpk: {needs: [pk]}
+o/wantck: {wants: [ck]}
 `
 
 const gateDist = `
@@ -81,6 +82,9 @@ func TestGateChecksTable(t *testing.T) {
 		{name: "one provider left", bundle: rows("id: a, plugin: o/prov", "id: b, plugin: o/prov"),
 			patches: []string{"- {id: a, enabled: false}"}, pass: true},
 		{name: "key not composed", bundle: rows("id: b, plugin: o/open"), pass: true},
+		// A Want resolves through the consumer binding as a Need does.
+		{name: "consumer outside binding by want", bundle: rows("id: a, plugin: o/wantck"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

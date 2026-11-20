@@ -307,10 +307,11 @@ func (g *gate) classes(r Row) []RowResult {
 				"row %q provides provider-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
 		}
 	}
-	for _, k := range union(e.Needs, r.Inject) {
+	// A Want resolves through the consumer binding as a Need does.
+	for _, k := range union(e.Needs, e.Wants, r.Inject) {
 		if b, ok := g.consumer[k]; ok && !inSet(r.Plugin, b...) {
 			out = append(out, g.fail(c, r, RuleConsumerBinding, false,
-				"row %q needs consumer-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
+				"row %q injects consumer-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
 		}
 	}
 	for _, k := range e.Wants {
@@ -408,14 +409,13 @@ func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 	return out
 }
 
-// union returns the sorted union of two string sets.
-func union(a, b []string) []string {
+// union returns the sorted union of string sets.
+func union(sets ...[]string) []string {
 	m := map[string]bool{}
-	for _, s := range a {
-		m[s] = true
-	}
-	for _, s := range b {
-		m[s] = true
+	for _, set := range sets {
+		for _, s := range set {
+			m[s] = true
+		}
 	}
 	return sortedKeys(m)
 }
