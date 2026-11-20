@@ -241,13 +241,13 @@ func TestSlowDisposeLeaksAtShutdown(t *testing.T) {
 }
 
 // TestLeakyGoroutineDelaysDrain: a tracked goroutine that ignores its context holds
-// the unload past the drain deadline, which the shutdown reports.
+// the unload past the drain deadline, so the fiber is marked leaked and a stop is a
+// replacement, not a clean exit (ADR-059 decision 13).
 func TestLeakyGoroutineDelaysDrain(t *testing.T) {
 	p := start(t, "smoke", "leaky-goroutine.optional")
 	p.ready()
-	code := p.stop()
-	if !strings.Contains(p.errb.String(), "drain") {
-		t.Fatalf("exit %d; stderr lacks drain:\n%s", code, p.errb.String())
+	if code := p.stop(); code != boot.ExitLeak || !strings.Contains(p.errb.String(), "drain deadline") {
+		t.Fatalf("exit %d, want %d and the drain deadline in stderr:\n%s", code, boot.ExitLeak, p.errb.String())
 	}
 }
 
