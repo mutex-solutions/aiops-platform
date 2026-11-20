@@ -100,8 +100,8 @@ func importReasons(rel string, test bool, imp string) []string {
 			add("boot imports the standard library, go.yaml.in/yaml/v3, sdk/kernel and sdk/def/{launch,loader,composition} only; nothing from plugins, loader, cmd, test, dist", docBoot)
 		}
 	case hasPath(rel, "loader"):
-		if !(std || isKernel(imp) || isDef(imp) || tk) {
-			add("loader imports the standard library, sdk/kernel and sdk/def only; nothing from plugins, boot, cmd, test, dist", docBoot)
+		if !(std || isKernel(imp) || isDef(imp, bootDefs...) || tk) {
+			add("loader imports the standard library, sdk/kernel and sdk/def/{launch,loader,composition} only; nothing from plugins, boot, cmd, test, dist", docBoot)
 		}
 	case hasPath(rel, "plugins") && len(seg) > 2:
 		third := false
