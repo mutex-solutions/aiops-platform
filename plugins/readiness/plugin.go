@@ -10,8 +10,11 @@
 // It recomputes on every event of internal/status and on composition/applied. The
 // computation reads the live states through the composition key and keeps no event
 // state, so the overflow notice, which says events were lost, needs nothing but a
-// recomputation: every event, the notice included, does exactly that. It drops the
-// latch when it is disposed.
+// recomputation: every event, the notice included, does exactly that. A read of the
+// tree is two owner round trips per row, so the listener of internal/status only
+// marks the latch due and returns, and the row's own goroutine recomputes: a burst
+// of events costs one recomputation, not one per event on the observer dispatcher,
+// which would overflow Config.ObserverQueue. It drops the latch when it is disposed.
 //
 // The listener on internal/status is sealed: the distribution lists this row for it in
 // Config.Listeners (ADR-034, "S1 additions"; 07-c4-plugin-sdk.md:463).
@@ -41,10 +44,24 @@ var Plugin = kernel.Define(kernel.Plugin{
 			rows: composition.Key.Of(c), log: kernel.LoggerKey.Of(c).For(c),
 		}
 		// Registered first, so that it runs last: no listener can set the latch again
-		// after the drop.
+		// after the drop, and the goroutine is awaited before any disposer runs.
 		c.Defer("readiness latch", func(context.Context) error { r.ready.Drop(); return nil })
+		due := make(chan struct{}, 1)
+		c.Go("readiness", func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-due:
+					r.evaluate()
+				}
+			}
+		})
 		kernel.InternalStatus.On(c, kernel.DefaultStage, func(context.Context, kernel.LedgerEvent) (any, error) {
-			r.evaluate()
+			select {
+			case due <- struct{}{}:
+			default: // a recomputation is due already, and it reads the states after this event
+			}
 			return nil, nil
 		})
 		reload.Applied.On(c, kernel.DefaultStage, func(context.Context, composition.Applied) (any, error) {
@@ -55,8 +72,8 @@ var Plugin = kernel.Define(kernel.Plugin{
 	},
 })
 
-// latch is the one computation. Its listeners run on two goroutines (the kernel's
-// observer dispatcher and reload's), so evaluate is serialised.
+// latch is the one computation. It runs on two goroutines (the row's own and
+// reload's), so evaluate is serialised.
 type latch struct {
 	pc    launch.ProfileContext
 	cat   launch.Catalog
@@ -71,8 +88,7 @@ type latch struct {
 
 // evaluate sets or drops the latch from the live states and logs a change of what the
 // process waits for: "readiness" is the diagnostic of the failure matrix
-// (test/failure-matrix/matrix.yaml). It costs one read of the tree per event.
-// ponytail: O(rows) per status event; coalesce with a dirty flag if boot shows it.
+// (test/failure-matrix/matrix.yaml). It costs one read of the tree.
 func (r *latch) evaluate() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

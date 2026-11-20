@@ -29,16 +29,38 @@ type world struct {
 	root   *kernel.Root
 	launch *launchfake.Launcher
 	comp   *compfake.Reader
+	tree   *tree
 	reload *reloadfake.Reload
 	ticks  int
+}
+
+// tree serves the composition key from the fake. It tells the test that a read
+// started, keeping one notice, and a read waits until held is closed.
+type tree struct {
+	*compfake.Reader
+	reads chan struct{}
+	held  chan struct{}
+}
+
+func (t *tree) Committed(s composition.Scope) (composition.Generation, bool) {
+	select {
+	case t.reads <- struct{}{}:
+	default:
+	}
+	<-t.held
+	return t.Reader.Committed(s)
 }
 
 func newWorld(t *testing.T, opts ...kerneltest.Option) *world {
 	t.Helper()
 	w := &world{t: t, root: kerneltest.New(t, opts...)}
-	var lp, cp, rp kernel.Plugin
+	var lp, rp kernel.Plugin
 	w.launch, lp = launchfake.New()
-	w.comp, cp = compfake.New()
+	w.comp, _ = compfake.New()
+	w.tree = &tree{Reader: w.comp, reads: make(chan struct{}, 1), held: make(chan struct{})}
+	close(w.tree.held)
+	cp := kernel.Define(kernel.Plugin{ID: "aiops/tree", Provides: []kernel.AnyKey{composition.Key},
+		Apply: func(c *kernel.Context, _ any) error { return composition.Key.Provide(c, w.tree) }})
 	w.reload, rp = reloadfake.New()
 	w.launch.Needed = launch.RequiredSet{Rows: []string{"db"}, Keys: []string{"sql"}}
 	w.launch.Modules = []launch.CatalogEntry{{ID: "aiops/sql", Provides: []string{"sql"}}}
@@ -46,16 +68,42 @@ func newWorld(t *testing.T, opts ...kerneltest.Option) *world {
 	return w
 }
 
-// settle makes one more fiber, which gives the kernel events that cannot be
-// predicted, and waits for every listener to have been called for what happened so far.
-func (w *world) settle() {
+// tick makes one more fiber, which gives the kernel events that cannot be predicted.
+func (w *world) tick() {
 	w.t.Helper()
 	w.ticks++
 	kerneltest.Mount(w.root, kernel.Define(kernel.Plugin{ID: fmt.Sprintf("aiops/tick-%d", w.ticks),
 		Apply: func(*kernel.Context, any) error { return nil }}))
-	if err := w.root.AwaitObservers(w.t.Context()); err != nil && !errors.Is(err, kernel.ErrObserverOverflow) {
-		w.t.Fatal(err)
+}
+
+// read makes events until a read of the tree starts. An event may be lost to an
+// overflow, so it does not wait for the read of one event.
+func (w *world) read() {
+	w.t.Helper()
+	for {
+		select {
+		case <-w.tree.reads:
+			return
+		case <-w.t.Context().Done():
+			w.t.Fatal("the tree was not read")
+		default:
+			w.tick()
+		}
 	}
+}
+
+// settle waits until the latch has acted on the tree as it is now. It drops the
+// notice of a read that may have started earlier, waits for a read, which reads
+// the tree as it is now, and then for one more: reads are serialised, so the first
+// has acted when the second starts.
+func (w *world) settle() {
+	w.t.Helper()
+	select {
+	case <-w.tree.reads:
+	default:
+	}
+	w.read()
+	w.read()
 }
 
 func (w *world) rows(db, sql kernel.State) {
@@ -140,7 +188,10 @@ func TestLatchIsDroppedOnDisposal(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.wantReady(false)
-	w.settle() // later events no longer reach it
+	w.tick() // later events no longer reach it
+	if err := w.root.AwaitObservers(t.Context()); err != nil && !errors.Is(err, kernel.ErrObserverOverflow) {
+		t.Fatal(err)
+	}
 	w.wantReady(false)
 }
 
@@ -195,23 +246,13 @@ func TestOverflowNoticeResyncs(t *testing.T) {
 		case <-t.Context().Done():
 			t.Fatal("the dispatcher was never held")
 		default:
-			w.ticks++
-			f := w.root.Plugin(kernel.Define(kernel.Plugin{ID: fmt.Sprintf("aiops/tick-%d", w.ticks),
-				Apply: func(*kernel.Context, any) error { return nil }}), nil)
-			if err := f.Await(t.Context()); err != nil {
-				t.Fatal(err)
-			}
+			w.tick()
 		}
 	}
 
 	w.rows(kernel.Active, kernel.Active) // this change has no event of its own
 	for range queue * 3 {                // the events behind the held one overflow the queue
-		w.ticks++
-		f := w.root.Plugin(kernel.Define(kernel.Plugin{ID: fmt.Sprintf("aiops/tick-%d", w.ticks),
-			Apply: func(*kernel.Context, any) error { return nil }}), nil)
-		if err := f.Await(t.Context()); err != nil {
-			t.Fatal(err)
-		}
+		w.tick()
 	}
 	s.released.Store(true)
 	close(s.release)
@@ -223,6 +264,41 @@ func TestOverflowNoticeResyncs(t *testing.T) {
 	if !s.saw("overflow") {
 		t.Fatalf("the listeners were not given the overflow notice: %v", s.kinds)
 	}
+	w.wantReady(true)
+}
+
+// A read of the tree is two round trips to the owner per row (loader/composition.go).
+// The latch must not make them on the observer dispatcher: one per status event, a
+// burst of events, such as the restart of a provider with many consumers, overflows
+// Config.ObserverQueue and every listener of a kernel hook loses events. The test
+// makes too few events to overflow and asserts that they are delivered while a read
+// is held; the bound only ends the wait when the read holds the dispatcher.
+func TestSlowTreeReadDoesNotHoldTheDispatcher(t *testing.T) {
+	w := newWorld(t)
+	w.tree.held = make(chan struct{})
+	release := sync.OnceFunc(func() { close(w.tree.held) })
+	defer release()
+	if err := w.root.Plugin(readiness.Plugin, nil).Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.tick()
+	select { // the latch is inside a read that does not end
+	case <-w.tree.reads:
+	case <-t.Context().Done():
+		t.Fatal("the tree was not read")
+	}
+
+	w.rows(kernel.Active, kernel.Active)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	for range 3 {
+		w.tick()
+		if err := w.root.AwaitObservers(ctx); err != nil {
+			t.Fatalf("a held read of the tree holds the dispatcher: %v", err)
+		}
+	}
+	release()
+	w.settle()
 	w.wantReady(true)
 }
 
