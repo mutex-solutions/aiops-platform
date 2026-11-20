@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: fail-apply as a required provider that fails while
+# running, once the file run/fault.go exists.
+- insert:
+    - {id: fault, plugin: aiops-test/fail-apply, roles: [api], required: true, config: {trigger: fault.go}}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

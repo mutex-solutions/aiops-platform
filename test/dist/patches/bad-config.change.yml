@@ -1,0 +1,3 @@
+# Layer 4 patch, written by a live recomposition: the config of the row "fault" becomes one
+# its plugin refuses.
+- {id: fault, config: {broken: true}}

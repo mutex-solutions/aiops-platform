@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: fail-apply as an optional provider that fails while
+# running, once the file run/fault.go exists (the harness creates it after boot).
+- insert:
+    - {id: fault, plugin: aiops-test/fail-apply, roles: [api], config: {trigger: fault.go}}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

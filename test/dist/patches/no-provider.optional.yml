@@ -1,0 +1,4 @@
+# Layer 4 patch for the failure matrix: an optional row that injects toy.fault, which no
+# row provides, so it is PENDING and waits for it.
+- insert:
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

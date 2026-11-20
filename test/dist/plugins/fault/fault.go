@@ -14,9 +14,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
+	"github.com/mutex-solutions/aiops-platform/internal/runfile"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
 )
@@ -36,28 +40,76 @@ func provideFault(c *kernel.Context, owner string) error {
 	return def.FaultKey.Provide(c, def.Fault{Owner: owner})
 }
 
+// triggerPath is the file whose appearance fires a fault that has a trigger: a name in
+// the runtime directory of the home. A test creates it once the process has booted, so
+// that the fault happens to a running process at a moment the test chose, not after a
+// guessed delay.
+func triggerPath(c *kernel.Context, name string) (string, error) {
+	home, ok := launch.CmdlineKey.Of(c).Flag("home")
+	if !ok {
+		return "", errors.New("a trigger needs --home")
+	}
+	return filepath.Join(runfile.Dir(home), name), nil
+}
+
+// await polls for the file until it exists or stop is closed, and reports whether it
+// exists. The poll is a timer, not a sleep of a fixed length that a test relies on.
+func await(path string, stop <-chan struct{}) bool {
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		if !def.Wait(10*time.Millisecond, stop) {
+			return false
+		}
+	}
+}
+
 // FailApply is a plugin whose Apply returns an error: "Apply errors" (matrix cell
 // "Apply errors, panics or passes the load deadline"). Config: message (string) and
 // failTimes (whole number): with failTimes it fails that many activations and then
 // succeeds, so that a retry by restart-policy can be seen to recover; with none it
 // always fails. The count is kept per plugin value, which a distribution creates
-// once.
+// once. With trigger (the name of a file in the runtime directory) it is a provider
+// that fails while running: Apply succeeds and a tracked goroutine returns the error
+// once the file exists, which is "a tracked goroutine errors", so the fiber is FAILED
+// after it was ACTIVE; once the file exists Apply itself fails, so the provider stays
+// broken and each retry fails again.
 func FailApply() kernel.Plugin {
 	type cfg struct {
 		message string
+		trigger string
 		times   int
 	}
 	var applied atomic.Int64
 	return kernel.Define(kernel.Plugin{
 		ID:       FailApplyID,
+		Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
 		Provides: []kernel.AnyKey{def.FaultKey},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
-			out := cfg{message: c.String("message", "fail-apply: apply failed on purpose"), times: c.Int("failTimes", 0)}
+			out := cfg{message: c.String("message", "fail-apply: apply failed on purpose"), times: c.Int("failTimes", 0),
+				trigger: c.String("trigger", "")}
 			return out, c.Err()
 		},
 		Apply: func(c *kernel.Context, raw any) error {
 			cf := raw.(cfg)
+			if cf.trigger != "" {
+				path, err := triggerPath(c, cf.trigger)
+				if err != nil {
+					return err
+				}
+				if _, err := os.Stat(path); err == nil {
+					return errors.New(cf.message)
+				}
+				c.Go("fail-apply-trigger", func(ctx context.Context) error {
+					if !await(path, ctx.Done()) {
+						return nil
+					}
+					return errors.New(cf.message)
+				})
+				return provideFault(c, FailApplyID)
+			}
 			if n := applied.Add(1); cf.times == 0 || n <= int64(cf.times) {
 				return errors.New(cf.message)
 			}
@@ -72,29 +124,50 @@ func FailApply() kernel.Plugin {
 // goroutine the kernel does not know, which ends the process ("An untracked
 // goroutine panics: Fatal"). The untracked goroutine is made by a timer callback,
 // which the runtime runs on a goroutine of its own, so that no plugin of the test
-// distribution holds a bare go statement.
+// distribution holds a bare go statement. With trigger (the name of a file in the
+// runtime directory) the panic of "tracked" and "untracked" waits for the file, so that
+// it happens to a running process: Apply returns at once, as it should.
 func PanicApply() kernel.Plugin {
-	type cfg struct{ mode string }
+	type cfg struct{ mode, trigger string }
 	return kernel.Define(kernel.Plugin{
 		ID:       PanicApplyID,
+		Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
 		Provides: []kernel.AnyKey{def.FaultKey},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
-			out := cfg{mode: c.String("mode", "apply")}
+			out := cfg{mode: c.String("mode", "apply"), trigger: c.String("trigger", "")}
 			if out.mode != "apply" && out.mode != "tracked" && out.mode != "untracked" {
 				return nil, fmt.Errorf("invalid config: mode %q is not apply, tracked or untracked", out.mode)
 			}
 			return out, c.Err()
 		},
 		Apply: func(c *kernel.Context, raw any) error {
-			switch raw.(cfg).mode {
+			cf := raw.(cfg)
+			var path string
+			if cf.trigger != "" {
+				var err error
+				if path, err = triggerPath(c, cf.trigger); err != nil {
+					return err
+				}
+			}
+			switch cf.mode {
 			case "tracked":
 				if err := provideFault(c, PanicApplyID); err != nil {
 					return err
 				}
-				c.Go("panic-tracked", func(context.Context) error { panic("panic-apply: tracked goroutine panics on purpose") })
+				c.Go("panic-tracked", func(ctx context.Context) error {
+					if path != "" && !await(path, ctx.Done()) {
+						return nil
+					}
+					panic("panic-apply: tracked goroutine panics on purpose")
+				})
 			case "untracked":
-				time.AfterFunc(0, func() { panic("panic-apply: untracked goroutine panics on purpose") })
+				time.AfterFunc(0, func() {
+					if path != "" {
+						await(path, nil)
+					}
+					panic("panic-apply: untracked goroutine panics on purpose")
+				})
 			default:
 				panic("panic-apply: Apply panics on purpose")
 			}
@@ -166,23 +239,31 @@ func RogueProvider() kernel.Plugin {
 
 // LeakyGoroutine starts a tracked goroutine that ignores its context: it holds a
 // lease past the drain deadline, so the unload of the fiber passes its drain
-// deadline. Config: hold (duration, default 1m; the goroutine ends then).
+// deadline. Config: hold (duration, default 1m; the goroutine ends then) and failApply
+// (true: Apply returns an error after it started the goroutine, so the partial effects
+// unwind at boot with no recomposition).
 func LeakyGoroutine() kernel.Plugin {
-	type cfg struct{ hold time.Duration }
+	type cfg struct {
+		hold      time.Duration
+		failApply bool
+	}
 	return kernel.Define(kernel.Plugin{
 		ID:       LeakyGoroutineID,
 		Provides: []kernel.AnyKey{def.FaultKey},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
-			out := cfg{hold: c.Duration("hold", time.Minute)}
+			out := cfg{hold: c.Duration("hold", time.Minute), failApply: c.Bool("failApply")}
 			return out, c.Err()
 		},
 		Apply: func(c *kernel.Context, raw any) error {
-			hold := raw.(cfg).hold
+			cf := raw.(cfg)
 			c.Go("leaky", func(context.Context) error {
-				def.Wait(hold, nil)
+				def.Wait(cf.hold, nil)
 				return nil
 			})
+			if cf.failApply {
+				return errors.New("leaky-goroutine: apply failed after it started its goroutine")
+			}
 			return provideFault(c, LeakyGoroutineID)
 		},
 	})
@@ -191,23 +272,30 @@ func LeakyGoroutine() kernel.Plugin {
 // SlowDispose has a disposer that ignores its context: it passes the dispose
 // deadline, so the fiber is marked leaked and the launcher replaces the process
 // ("A process-scope drain or disposer passes its deadline"). Config: delay
-// (duration, default 1m; the disposer ends then).
+// (duration, default 1m; the disposer ends then) and failApply (true: Apply returns an
+// error after it registered the disposer, so the partial effects unwind at boot).
 func SlowDispose() kernel.Plugin {
-	type cfg struct{ delay time.Duration }
+	type cfg struct {
+		delay     time.Duration
+		failApply bool
+	}
 	return kernel.Define(kernel.Plugin{
 		ID:       SlowDisposeID,
 		Provides: []kernel.AnyKey{def.FaultKey},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
-			out := cfg{delay: c.Duration("delay", time.Minute)}
+			out := cfg{delay: c.Duration("delay", time.Minute), failApply: c.Bool("failApply")}
 			return out, c.Err()
 		},
 		Apply: func(c *kernel.Context, raw any) error {
-			delay := raw.(cfg).delay
+			cf := raw.(cfg)
 			c.Defer("slow-dispose", func(context.Context) error {
-				def.Wait(delay, nil)
+				def.Wait(cf.delay, nil)
 				return nil
 			})
+			if cf.failApply {
+				return errors.New("slow-dispose: apply failed after it registered its disposer")
+			}
 			return provideFault(c, SlowDisposeID)
 		},
 	})

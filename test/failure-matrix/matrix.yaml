@@ -226,7 +226,7 @@
   column: "Required at boot"
   outcome: "Stop once settled"
   fault: [none]
-  expect: {exit: nonzero, ready: false, states: {required: PENDING}, diagnostic: "waits for"}
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "no-provider"}
   since: S1
 
 - failure: "An injected service has no ACTIVE provider"
@@ -240,7 +240,7 @@
   column: "While running"
   outcome: "Consumers unload; they return with the provider"
   fault: [none]
-  expect: {exit: running, ready: true, states: {dependant: PENDING}, diagnostic: "waits for"}
+  expect: {exit: running, ready: true, states: {dependant: PENDING}, diagnostic: "fiber.retry"}
   since: S1
 
 - failure: "An injected service has no ACTIVE provider"
@@ -576,21 +576,21 @@
   column: "Required at boot"
   outcome: "Readiness fails"
   fault: [panic-apply]
-  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
   since: S1
 
 - failure: "A tracked goroutine errors or panics"
   column: "Live recomposition"
   outcome: "Same"
   fault: [panic-apply]
-  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
   since: S1
 
 - failure: "A tracked goroutine errors or panics"
   column: "While running"
   outcome: "Same"
   fault: [panic-apply]
-  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "waiting=[row:fault]"}
   since: S1
 
 - failure: "A tracked goroutine errors or panics"

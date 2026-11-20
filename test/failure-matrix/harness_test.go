@@ -1,0 +1,602 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package failurematrix
+
+// The harness: it runs every cell of matrix.yaml whose since is S1 on the built test
+// binary (test/dist/cmd/aiops-test), once for each fault the cell names, and asserts
+// the cell's expect (ADR-059 decision 3: S1 passes every cell marked S1 and may skip
+// none; a cell of a later step is "not yet" and is never a pass).
+//
+// HOW A COLUMN ENTERS THE PROCESS (08-profiles-roadmap-adrs.md section 1.6). Each
+// scenario is a profile ("smoke", or a variant of it), layer 4 patch files from
+// test/dist/patches, a fresh home and the short limits of harness.Limits.
+//
+//	| Column               | Procedure                                                       |
+//	|----------------------|-----------------------------------------------------------------|
+//	| Optional row at boot | the fault is an optional row (id "fault", with a row "dependant" |
+//	|                      | that injects what it provides) in a --patch file; or, for a      |
+//	|                      | layer failure, a missing --patch file. Run until it exits or     |
+//	|                      | the launcher says it is running.                                |
+//	| Required at boot     | the same with "required: true" on the row; for a layer failure   |
+//	|                      | a profile that names a bundle that does not exist.               |
+//	| Live recomposition   | the process boots healthy with a live layer file as the last     |
+//	|                      | --patch; the test writes the fault into that file and submits    |
+//	|                      | one generation through test-submit (the control file); the       |
+//	|                      | verdict is read from the state file of test-state.               |
+//	| While running        | the process boots with the fault latent in a row; once it is     |
+//	|                      | running the test creates run/fault.go, the trigger of the fault  |
+//	|                      | plugin (a provider fails, a goroutine panics). A fault that is   |
+//	|                      | an unload (a disposer or a drain that passes its deadline) is    |
+//	|                      | made by a live generation that disables the row: no other event  |
+//	|                      | unloads a running fiber without a failure.                       |
+//	| Tenant tree          | not yet: S4b (the column has no cell of S1)                      |
+//
+// WHAT IS ASSERTED. exit "running": the launcher's status says phase running, never
+// that the process exited, and then the readiness latch, the fiber state of each named
+// row (the state file of test-state) and the diagnostic hold in one snapshot, within a
+// deadline. exit "nonzero": the process exits, with a code that the scenario fixes
+// when boot/run.go does (3 for a required set that is not met, 1 for a refusal, 4 for a
+// leak, 5 for a give-up), the diagnostic is in its output, the states are those the
+// required-set audit printed (the process is gone, so the state file only says
+// DISPOSED), and readiness is not claimed by a final status. A launcher that
+// crashed on a Go panic leaves no final status; a dead process is not ready.
+//
+// THE DIAGNOSTIC is a substring of what the process printed (stdout and stderr, which
+// hold the log) and, for a live recomposition, of the verdict of reload that test-state
+// writes: "reload op <id>: <status> at <stage>: <error>; <row>=<outcome> ...". Reload
+// logs nothing itself.
+//
+// "fault", "dependant" and "required" are row ids of the patch files of test/dist.
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"slices"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/test/dist/harness"
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	harness.Cleanup()
+	os.Exit(code)
+}
+
+// deviation is a known failure: why in one line, and the text that the failure must
+// show among its problems, so that a cell that fails for another reason is not hidden
+// by its entry.
+type deviation struct{ reason, problem string }
+
+// knownDeviations are the S1 cells whose real behaviour contradicts the outcome the
+// table documents. The cell id is "<row>.<column>/<fault>" (row and column are the
+// one-based positions in the table, "/<fault>" is left out for a cell with one fault
+// "none"). The suite reports them as failures in its summary and fails while any
+// exists, unless MATRIX_ALLOW_DEVIATIONS=1. A cell that is listed here and passes is an
+// error: remove the entry.
+var knownDeviations = map[string]deviation{
+	"2.3":                  {"a live generation with an optional row of an unknown plugin passes and detaches the row; documented: rejected", `"rejected" is not in`},
+	"3.3/rogue-provider":   {"a live generation whose optional row the gate denies passes and detaches the row; documented: rejected", `"rejected" is not in`},
+	"6.3/fail-apply":       {noRestore, "not rolled back"},
+	"6.3/panic-apply":      {noRestore, "not rolled back"},
+	"6.3/slow-apply":       {noRestore, "not rolled back"},
+	"9.3/fail-apply":       {noRestore, `"rolled back" is not in`},
+	"17.2/panic-apply":     {requiredStops, "exited with 3"},
+	"17.3/panic-apply":     {liveRequired, "ready is true"},
+	"19.1/slow-dispose":    {leakReplaces, "exited with 4"},
+	"19.1/leaky-goroutine": {drainNotLeak, `"leaked" is not in`},
+	"19.2/slow-dispose":    {requiredStops, "exited with 3"},
+	"19.2/leaky-goroutine": {requiredStops, "exited with 3"},
+	"19.3/slow-dispose":    {leakReplaces, "exited with 4"},
+	"19.3/leaky-goroutine": {drainNotLeak, `"leaked" is not in`},
+	"19.4/leaky-goroutine": {drainNotLeak, "did not exit"},
+	"21.2/fail-apply":      {requiredStops, "exited with 3"},
+	"21.3/fail-apply":      {liveRequired, "ready is true"},
+}
+
+const (
+	noRestore = "reload applies and judges a live generation and reports the failed verdict, but nothing restores the previous tree at S1 " +
+		"(plugins/reload/internal/engine: no committer, S4a); documented: the scope is rolled back"
+	requiredStops = "a required row that fails at boot stops the process (exit 3) at the required audit; documented: the process keeps running and readiness fails (or, for a leak, the leak is logged)"
+	liveRequired  = "a row with required: true that a live generation adds is judged by reload but not by readiness: Required() is the set of the booted composition, which nothing commits at S1; documented: readiness fails"
+	leakReplaces  = "a leak at boot or in a live generation replaces the process after the drain window (exit 4); documented: only while running; at boot and live the leak is logged and the fiber marked leaked"
+	drainNotLeak  = "a drain that passes its deadline is blocked and logged (drain deadline) but the fiber is not marked leaked and the process is not replaced: the kernel marks only a disposer past its deadline (sdk/kernel/transition.go:540); documented: drain or disposer"
+)
+
+// cellBudget bounds the run of one (cell, fault).
+const cellBudget = 30 * time.Second
+
+// Column kinds.
+const (
+	colOpt  = "Optional row at boot"
+	colReq  = "Required at boot"
+	colLive = "Live recomposition"
+	colRun  = "While running"
+	colTen  = "Tenant tree"
+)
+
+// failure rows by the start of their text in the table.
+var rowKeys = []struct{ key, prefix string }{
+	{"files", "Profile, bundle or"},
+	{"unknown", "Plugin id not in"},
+	{"gate", "Gate or signature"},
+	{"config", "Config fails"},
+	{"static", "Static graph error"},
+	{"apply", "`Apply` errors"},
+	{"noprov", "An injected service"},
+	{"infra", "An infrastructure provider"},
+	{"tracked", "A tracked goroutine"},
+	{"untracked", "An untracked goroutine"},
+	{"leak", "A process-scope drain"},
+	{"giveup", "`restart-policy` gives up"},
+}
+
+func rowKey(failure string) string {
+	for _, r := range rowKeys {
+		if strings.HasPrefix(failure, r.prefix) {
+			return r.key
+		}
+	}
+	return ""
+}
+
+// plan is how one (row, column, fault) is run.
+type plan struct {
+	profile string   // default smoke
+	base    []string // patch files of test/dist/patches at boot
+	missing bool     // add a --patch file that does not exist
+	live    string   // a live generation: the patch file whose content is written to the live layer
+	trigger bool     // once running, create run/fault.go
+	code    int      // the exit code that boot/run.go fixes for this exit; 0: any non-zero
+	// rolledBack: the live generation's failed verdict must leave the tree as it was,
+	// "the composer rolls the scope back" ("Rolled back").
+	rolledBack bool
+	// states replaces the cell's expected state of a row for one fault, where the
+	// fault changes what the required-set audit sees at the instant it runs.
+	states map[string]string
+}
+
+// liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
+const liveBase = "- {id: extra, enabled: false}\n"
+
+// planFor returns the scenario for a cell and one of its faults, and false when this
+// harness has none (the test then fails: no S1 cell may be skipped).
+func planFor(row, col, fault string) (plan, bool) {
+	opt, req := fault+".optional", fault+".required"
+	switch row {
+	case "files":
+		switch col {
+		case colOpt:
+			return plan{missing: true, code: boot.ExitRefused}, true
+		case colReq:
+			return plan{profile: "smoke-missing-bundle", code: boot.ExitRefused}, true
+		case colLive:
+			return plan{live: "layer-malformed.yml"}, true
+		}
+	case "unknown":
+		return byColumn(col, plan{base: []string{"unknown-plugin.optional.yml"}},
+			plan{base: []string{"unknown-plugin.required.yml"}, code: boot.ExitRefused},
+			plan{live: "unknown-plugin.optional.yml"}, plan{}), true
+	case "gate":
+		return byColumn(col, plan{base: []string{"rogue-provider.optional.yml"}},
+			plan{base: []string{"rogue-provider.required.yml"}, code: boot.ExitRefused},
+			plan{live: "rogue-provider.optional.yml"}, plan{}), true
+	case "config":
+		return byColumn(col, plan{base: []string{"bad-config.optional.yml"}},
+			plan{base: []string{"bad-config.required.yml"}, code: boot.ExitRequired},
+			plan{base: []string{"bad-config.ok.yml"}, live: "bad-config.change.yml"}, plan{}), true
+	case "static":
+		return byColumn(col, plan{base: []string{"rogue-provider.isolate.yml"}, code: boot.ExitRefused},
+			plan{base: []string{"rogue-provider.isolate.required.yml"}, code: boot.ExitRefused},
+			plan{live: "rogue-provider.isolate.yml"}, plan{}), true
+	case "apply":
+		return byColumn(col, plan{base: []string{opt + ".yml"}},
+			plan{base: []string{req + ".yml"}, code: boot.ExitRequired, states: slowApplyStates(fault)},
+			plan{live: opt + ".yml", rolledBack: true}, plan{}), true
+	case "noprov":
+		return byColumn(col, plan{base: []string{"no-provider.optional.yml"}},
+			plan{base: []string{"no-provider.required.yml"}, code: boot.ExitRefused},
+			plan{live: "no-provider.optional.yml"},
+			plan{base: []string{"fail-apply.trigger.optional.yml"}, trigger: true}), true
+	case "infra":
+		return byColumn(col, plan{},
+			plan{base: []string{"fail-apply.required.yml"}, code: boot.ExitRequired},
+			plan{live: "fail-apply.required.yml", rolledBack: true},
+			plan{base: []string{"fail-apply.trigger.infra.yml"}, trigger: true}), true
+	case "tracked":
+		return byColumn(col, plan{base: []string{"panic-apply-tracked.optional.yml"}},
+			plan{base: []string{"panic-apply-tracked.required.yml"}},
+			plan{live: "panic-apply-tracked.required.yml"},
+			plan{base: []string{"panic-apply-tracked.trigger.required.yml", "restart-policy.slow.yml"}, trigger: true}), true
+	case "untracked":
+		return byColumn(col, plan{base: []string{"panic-apply-untracked.optional.yml"}, code: 2},
+			plan{base: []string{"panic-apply-untracked.required.yml"}, code: 2},
+			plan{live: "panic-apply-untracked.optional.yml", code: 2},
+			plan{base: []string{"panic-apply-untracked.trigger.optional.yml"}, trigger: true, code: 2}), true
+	case "leak":
+		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}},
+			plan{base: []string{fault + ".fail-apply.required.yml"}},
+			plan{live: fault + ".fail-apply.optional.yml"},
+			plan{base: []string{opt + ".yml"}, live: "fault-disabled.yml", code: boot.ExitLeak}), true
+	case "giveup":
+		return byColumn(col, plan{base: []string{"fail-apply.optional.yml"}},
+			plan{base: []string{"fail-apply.required.yml"}},
+			plan{live: "fail-apply.required.yml"},
+			plan{base: []string{"fail-apply.trigger.required.yml"}, trigger: true}), true
+	}
+	return plan{}, false
+}
+
+// slowApplyStates: a row that passed its load deadline is FAILED after its partial
+// effects unwind (the table). Settle returns once a fiber is blocked past its deadline,
+// which is while it is still UNLOADING, so the required-set audit may run before or
+// after the unwind ends and prints UNLOADING or FAILED. Both are the same row at two
+// instants of one failure; a state that is neither is a mismatch. fail-apply and
+// panic-apply are FAILED at once.
+func slowApplyStates(fault string) map[string]string {
+	if fault == "slow-apply" {
+		return map[string]string{"fault": "FAILED|UNLOADING"}
+	}
+	return nil
+}
+
+func byColumn(col string, opt, req, live, run plan) plan {
+	switch col {
+	case colOpt:
+		return opt
+	case colReq:
+		return req
+	case colLive:
+		return live
+	}
+	return run
+}
+
+// result of one run.
+type result struct {
+	problems []string // empty: the cell passed
+	output   string
+}
+
+var stateLine = regexp.MustCompile(`"([a-z-]+)" is ([A-Z]+)`)
+
+// reloadText renders the last operation of reload as the diagnostic corpus.
+func reloadText(s harness.Snapshot) string {
+	op := s.State.Reload
+	if op == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "reload op %d: %s at %s: %s;", op.ID, op.Status, op.Stage, op.Error)
+	for _, v := range op.Verdict {
+		fmt.Fprintf(&b, " %s=%s(%s %s)", v.ID, v.Outcome, v.State, v.Detail)
+	}
+	for _, d := range op.Denied {
+		fmt.Fprintf(&b, " denied=%s", d)
+	}
+	return b.String()
+}
+
+// check returns what in s does not match e, for a process that is running.
+func checkRunning(e boot.Expect, p plan, s harness.Snapshot) []string {
+	var bad []string
+	wantReady := e.Ready == "true"
+	switch {
+	case s.Exited:
+		return []string{fmt.Sprintf("the process exited with %d, expect: running", s.Code)}
+	case !s.Running():
+		bad = append(bad, "the launcher is not in phase running")
+	case s.Status.Ready != wantReady:
+		bad = append(bad, fmt.Sprintf("ready is %v, expect %v", s.Status.Ready, wantReady))
+	}
+	if p.live != "" && !s.OpDone(1) {
+		bad = append(bad, "the live generation has no verdict yet")
+	}
+	for _, st := range e.States {
+		if got := s.RowState(st.Row); got != st.State {
+			bad = append(bad, fmt.Sprintf("row %s is %q, expect %s", st.Row, got, st.State))
+		}
+	}
+	if !strings.Contains(s.Output+"\n"+reloadText(s), e.Diagnostic) {
+		bad = append(bad, fmt.Sprintf("the diagnostic %q is not in the output or the verdict", e.Diagnostic))
+	}
+	return bad
+}
+
+// checkExited returns what does not match e, for a process that exited.
+func checkExited(e boot.Expect, p plan, s harness.Snapshot) []string {
+	var bad []string
+	switch {
+	case !s.Exited:
+		return []string{"the process did not exit, expect: nonzero"}
+	case s.Code == 0:
+		bad = append(bad, "the process exited with 0, expect non-zero")
+	case p.code != 0 && s.Code != p.code:
+		bad = append(bad, fmt.Sprintf("the process exited with %d, boot/run.go fixes %d here", s.Code, p.code))
+	}
+	if s.HaveStatus && s.Status.Phase == "stopped" && s.Status.Ready {
+		bad = append(bad, "the final status says ready")
+	}
+	if !strings.Contains(s.Output+"\n"+reloadText(s), e.Diagnostic) {
+		bad = append(bad, fmt.Sprintf("the diagnostic %q is not in the output", e.Diagnostic))
+	}
+	seen := map[string]string{}
+	for _, m := range stateLine.FindAllStringSubmatch(s.Output, -1) {
+		seen[m[1]] = m[2]
+	}
+	for _, st := range e.States {
+		if o, ok := p.states[st.Row]; ok {
+			st.State = o
+		}
+		if !slices.Contains(strings.Split(st.State, "|"), seen[st.Row]) {
+			bad = append(bad, fmt.Sprintf("the required-set audit says row %s is %q, expect %s", st.Row, seen[st.Row], st.State))
+		}
+	}
+	return bad
+}
+
+// rolledBackProblems says whether the tree is what it was before a failed generation:
+// the rows that generation created are gone or disabled.
+func rolledBackProblems(s harness.Snapshot) []string {
+	var bad []string
+	if op := s.State.Reload; op == nil || op.Status != "failed" {
+		return []string{"expected a failed verdict to be rolled back, but the operation is not failed"}
+	}
+	for _, r := range s.State.Rows {
+		if (r.ID == "fault" || r.ID == "dependant") && r.Mount == "mounted" {
+			bad = append(bad, fmt.Sprintf("not rolled back: row %s of the failed generation is still mounted (%s)", r.ID, r.State))
+		}
+	}
+	return bad
+}
+
+func runScenario(bin string, e boot.Expect, p plan) result {
+	opts := harness.Options{Profile: p.profile}
+	var livePath string
+	for _, f := range p.base {
+		opts.Patches = append(opts.Patches, harness.PatchFile(f))
+	}
+	if p.missing {
+		opts.Patches = append(opts.Patches, filepath.Join(os.TempDir(), "aiops-matrix-no-such-patch.yml"))
+	}
+	var dir string
+	if p.live != "" {
+		d, err := os.MkdirTemp("", "aiops-matrix-live-")
+		if err != nil {
+			return result{problems: []string{err.Error()}}
+		}
+		dir = d
+		defer os.RemoveAll(dir)
+		livePath = filepath.Join(dir, "live.yml")
+		if err := os.WriteFile(livePath, []byte(liveBase), 0o644); err != nil {
+			return result{problems: []string{err.Error()}}
+		}
+		opts.Patches = append(opts.Patches, livePath)
+	}
+	proc, err := harness.Start(bin, opts)
+	if err != nil {
+		return result{problems: []string{err.Error()}}
+	}
+	defer proc.Release()
+	fail := func(format string, a ...any) result {
+		return result{problems: []string{fmt.Sprintf(format, a...)}, output: proc.Output()}
+	}
+	deadline := time.Now().Add(cellBudget)
+	left := func() time.Duration { return max(time.Until(deadline), time.Millisecond) }
+
+	needsBoot := p.live != "" || p.trigger
+	if needsBoot {
+		// The process must be running healthy before the live generation or the
+		// trigger. A boot that fails here is a failed cell, not a pass.
+		s, ok := proc.Until(left(), func(s harness.Snapshot) bool { return s.Running() && s.State.Ready })
+		if !ok {
+			return result{problems: []string{"the process did not boot healthy before the fault: " + status(s)}, output: s.Output}
+		}
+	}
+	if p.live != "" {
+		body, err := os.ReadFile(harness.PatchFile(p.live))
+		if err != nil {
+			return fail("%v", err)
+		}
+		if err := os.WriteFile(livePath, body, 0o644); err != nil {
+			return fail("%v", err)
+		}
+		if err := proc.Submit("1"); err != nil {
+			return fail("%v", err)
+		}
+	}
+	if p.trigger {
+		if err := proc.Touch("fault.go"); err != nil {
+			return fail("%v", err)
+		}
+	}
+
+	var last []string
+	var snap harness.Snapshot
+	if e.Exit == "running" {
+		snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
+			last = checkRunning(e, p, s)
+			if len(last) == 0 && p.rolledBack {
+				last = rolledBackProblems(s)
+			}
+			return len(last) == 0
+		})
+	} else {
+		snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
+			last = checkExited(e, p, s)
+			return s.Exited && len(last) == 0
+		})
+		if !snap.Exited {
+			last = append(last, "the process did not exit within the budget")
+		}
+	}
+	return result{problems: last, output: snap.Output + "\n" + reloadText(snap)}
+}
+
+func status(s harness.Snapshot) string {
+	return fmt.Sprintf("exited=%v code=%d status=%+v ready=%v", s.Exited, s.Code, s.Status, s.State.Ready)
+}
+
+// cellRun is the outcome of one cell, over its faults.
+type cellRun struct {
+	id        string
+	mark      string // pass, FAIL, not yet, n/a
+	deviation bool
+}
+
+func TestFailureMatrix(t *testing.T) {
+	if testing.Short() {
+		t.Log(harness.SkipMessage)
+		t.Skip(harness.SkipMessage)
+	}
+	data, err := os.ReadFile(matrixPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := boot.ParseMatrix(matrixPath, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := harness.Binary(t)
+	workers := min(runtime.GOMAXPROCS(0), 4)
+	sem := make(chan struct{}, workers)
+	var mu sync.Mutex
+	active := map[string]bool{}
+	runs := make([]cellRun, len(m.Cells))
+	var rowOrder []string
+	rowIdx := map[string]int{}
+	for i := range m.Cells {
+		f := m.Cells[i].Failure
+		if _, ok := rowIdx[f]; !ok {
+			rowIdx[f] = len(rowOrder) + 1
+			rowOrder = append(rowOrder, f)
+		}
+	}
+	colIdx := map[string]int{colOpt: 1, colReq: 2, colLive: 3, colRun: 4, colTen: 5}
+
+	t.Run("cells", func(t *testing.T) {
+		for i, c := range m.Cells {
+			id := fmt.Sprintf("%d.%d", rowIdx[c.Failure], colIdx[c.Column])
+			run := cellRun{id: id}
+			switch {
+			case c.Since == boot.NotApplicable:
+				run.mark = "n/a"
+				runs[i] = run
+				continue
+			case c.Since != "S1":
+				run.mark = "not yet (" + c.Since + ")"
+				runs[i] = run
+				continue
+			}
+			key := rowKey(c.Failure)
+			for _, fault := range c.Fault {
+				cid := id
+				if fault != "none" {
+					cid += "/" + fault
+				}
+				name := fmt.Sprintf("%s_%s_%s", strings.ReplaceAll(cid, "/", "_"), key, strings.ReplaceAll(c.Column, " ", "_"))
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+					p, ok := planFor(key, c.Column, fault)
+					var res result
+					if !ok {
+						res = result{problems: []string{"the harness has no procedure for this cell: an S1 cell may not be skipped"}}
+					} else {
+						res = runScenario(bin, c.Expect, p)
+					}
+					dv, known := knownDeviations[cid]
+					if known && len(res.problems) > 0 && !strings.Contains(strings.Join(res.problems, "\n"), dv.problem) {
+						known = false // it fails, but not in the way that the entry says
+					}
+					mu.Lock()
+					defer mu.Unlock()
+					r := &runs[i]
+					r.id = id
+					switch {
+					case len(res.problems) == 0 && known:
+						r.mark = "FAIL"
+						t.Errorf("cell %s passes, but knownDeviations lists it (%s): remove the entry", cid, dv.reason)
+					case len(res.problems) == 0:
+						if r.mark == "" {
+							r.mark = "pass"
+						}
+					case known:
+						r.mark, r.deviation = "FAIL", true
+						active[cid] = true
+						t.Logf("KNOWN DEVIATION %s: %s\n%s\noutput:\n%s", cid, dv.reason, strings.Join(res.problems, "\n"), res.output)
+					default:
+						r.mark = "FAIL"
+						t.Errorf("cell %s (%q, %s, fault %s) failed:\n  %s\noutput:\n%s", cid, c.Failure, c.Column, fault, strings.Join(res.problems, "\n  "), res.output)
+					}
+					if os.Getenv("MATRIX_VERBOSE") != "" {
+						t.Logf("cell %s output:\n%s", cid, res.output)
+					}
+				})
+			}
+		}
+	})
+
+	// Summary: the parallel subtests have all ended.
+	var b strings.Builder
+	counts := map[string]int{}
+	cols := []string{colOpt, colReq, colLive, colRun, colTen}
+	fmt.Fprintf(&b, "\nfailure matrix: %d rows x %d columns, %d cells\n", len(rowOrder), len(cols), len(m.Cells))
+	fmt.Fprintf(&b, "%-4s %-60s", "row", "failure")
+	for _, c := range cols {
+		fmt.Fprintf(&b, " | %-14s", c)
+	}
+	b.WriteString("\n")
+	for r, f := range rowOrder {
+		short := strings.NewReplacer("`", "").Replace(f)
+		if len(short) > 58 {
+			short = short[:55] + "..."
+		}
+		fmt.Fprintf(&b, "%-4d %-60s", r+1, short)
+		for _, col := range cols {
+			mark := "?"
+			for i, c := range m.Cells {
+				if c.Failure == f && c.Column == col {
+					mark = runs[i].mark
+				}
+			}
+			label := mark
+			if strings.HasPrefix(mark, "not yet") {
+				counts["not yet"]++
+			} else {
+				counts[mark]++
+			}
+			fmt.Fprintf(&b, " | %-14s", label)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "cells: %d pass, %d FAIL, %d not yet, %d n/a\n", counts["pass"], counts["FAIL"], counts["not yet"], counts["n/a"])
+	var ids []string
+	for id := range active {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	if len(ids) > 0 {
+		b.WriteString("known deviations from the documented outcomes (cell id: reason):\n")
+		for _, id := range ids {
+			fmt.Fprintf(&b, "  %s: %s\n", id, knownDeviations[id].reason)
+		}
+	}
+	t.Log(b.String())
+	if len(ids) > 0 {
+		if os.Getenv("MATRIX_ALLOW_DEVIATIONS") == "1" {
+			t.Logf("MATRIX_ALLOW_DEVIATIONS=1: %d known deviation(s) are logged and do not fail the suite", len(ids))
+		} else {
+			t.Errorf("%d known deviation(s) from the documented outcomes; the suite fails until they are fixed (MATRIX_ALLOW_DEVIATIONS=1 logs them instead)", len(ids))
+		}
+	}
+}

@@ -18,8 +18,26 @@ import (
 // Store is what toy.store serves: the id of the plugin that provides it.
 type Store struct{ Owner string }
 
-// Spine is what toy.spine serves: the number of workers its provider holds.
-type Spine struct{ Workers int }
+// Spine is what toy.spine serves: the number of workers its provider holds, and Call,
+// a call into the provider under a lease of its fiber, as a dispatcher makes one.
+type Spine struct {
+	Workers int
+	call    func(hold time.Duration) error
+}
+
+// NewSpine returns the value of a spine whose Call is call.
+func NewSpine(workers int, call func(hold time.Duration) error) Spine {
+	return Spine{Workers: workers, call: call}
+}
+
+// Call calls the provider and holds its lease for hold. It returns the error of the
+// provider: kernel.ErrInactive once the provider has begun to unload.
+func (s Spine) Call(hold time.Duration) error {
+	if s.call == nil {
+		return nil
+	}
+	return s.call(hold)
+}
 
 // Policy is what toy.policy serves.
 type Policy struct{ Owner string }
@@ -109,6 +127,19 @@ func (c *Config) String(name, def string) string {
 		return def
 	}
 	return s
+}
+
+// Bool reads a boolean; false when absent.
+func (c *Config) Bool(name string) bool {
+	v, ok := c.get(name)
+	if !ok {
+		return false
+	}
+	b, isBool := v.(bool)
+	if !isBool {
+		c.errs = append(c.errs, fmt.Errorf("%s must be true or false, got %v", name, v))
+	}
+	return b
 }
 
 // Err returns the errors found, with the fields that no read asked for, or nil.
