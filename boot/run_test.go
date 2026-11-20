@@ -42,7 +42,7 @@ func TestRunBootsAndStopsOnSignal(t *testing.T) {
 	if s := f.lastStatus(); s.Ready || s.Exit != 0 || s.Digest == "" || s.Role != "all" || s.Profile != "p" {
 		t.Fatalf("final status %+v", s)
 	}
-	if !strings.Contains(f.out.String(), "aiops: ready profile=p role=all") || !strings.Contains(f.errb.String(), "aiops: stopping: signal") {
+	if !strings.Contains(f.out.String(), "aiops: booted profile=p role=all") || !strings.Contains(f.errb.String(), "aiops: stopping: signal") {
 		t.Fatalf("stdout %q stderr %q", f.out.String(), f.errb.String())
 	}
 }
@@ -101,7 +101,13 @@ func bindExit(f *fixture, ids ...string) {
 
 func TestLaunchServices(t *testing.T) {
 	var l launched
-	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
+	f := newFixture(t, `
+- insert:
+    - {id: store, plugin: t/store, roles: [api]}
+    - {id: user, plugin: t/user, roles: [api], required: true}
+    - {id: probe, plugin: t/probe, roles: [api]}
+`, probe(&l))
+	f.dist.RequiredKeys, f.dist.RequiredRows = []string{"store"}, []string{"loader"}
 	bindExit(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
@@ -124,8 +130,18 @@ func TestLaunchServices(t *testing.T) {
 	if !l.sw.On(launch.AgentsPaused) || l.sw.On(launch.TelemetryDisabled) || l.sw.On("unknown") {
 		t.Fatal("kill switches")
 	}
-	if !l.ready.IsReady() {
-		t.Fatal("ready latch not set")
+	if l.ready.IsReady() {
+		t.Fatal("boot sets no latch: the readiness row does")
+	}
+	l.ready.Set() // the row that owns the latch sets it, and the process says so
+	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Ready })
+	l.ready.Drop()
+	f.waitFor(t, done, func(s ProcessStatus) bool { return !s.Ready })
+	if env, ok := l.cmd.Env("AIOPS_AGENTS_PAUSED"); !ok || env != "1" {
+		t.Fatalf("env %q %v", env, ok)
+	}
+	if _, ok := l.cmd.Env("AIOPS_NOT_SET"); ok {
+		t.Fatal("an unset variable")
 	}
 
 	// catalog
@@ -157,13 +173,18 @@ func TestLaunchServices(t *testing.T) {
 		t.Fatal("key of an unknown name")
 	}
 
+	// The required set: the key and the row a layer marked, with no row "loader".
+	if got := l.profile.Required(); !slices.Equal(got.Keys, []string{"store"}) || !slices.Equal(got.Rows, []string{"user"}) {
+		t.Fatalf("required %+v", got)
+	}
+
 	// compose, admit, plan
 	ctx := t.Context()
 	if _, err := l.profile.Compose(ctx); err != nil { // composed twice: remembered once
 		t.Fatal(err)
 	}
 	c, err := l.profile.Compose(ctx)
-	if err != nil || len(c.Rows) != 3 || c.Digest == (launch.Digest{}) {
+	if err != nil || len(c.Rows) != 3 || c.Digest == (launch.Digest{}) || l.profile.Committed().Digest != c.Digest {
 		t.Fatalf("compose: %v %+v", err, c)
 	}
 	if c.Rows[0].ID != "store" || c.Rows[0].Plugin != "t/store" || !c.Rows[0].Enabled || !slices.Equal(c.Rows[0].Roles, []string{"api"}) {
@@ -243,17 +264,30 @@ func TestLaunchServices(t *testing.T) {
 		t.Fatal("plan with an ended context")
 	}
 
-	// The candidates are bounded: the oldest is forgotten, the committed one is not.
-	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle)}
-	first, _ := l.profile.Compose(ctx)
-	for i := range maxKnown + 1 {
-		f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + "    - {id: n" + string(rune('a'+i)) + ", plugin: t/store, roles: [api]}\n")}
-		if _, err := l.profile.Compose(ctx); err != nil {
+	// The candidates are bounded: the oldest is forgotten, the committed one is not, and
+	// one that is looked up again counts as the newest.
+	compose := func(extra string) launch.Composition {
+		f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + extra)}
+		c, err := l.profile.Compose(ctx)
+		if err != nil {
 			t.Fatal(err)
 		}
+		return c
 	}
-	if _, err := l.profile.Admit(ctx, first); err == nil {
+	first, second := compose(""), compose("    - {id: n0, plugin: t/store, roles: [api]}\n")
+	for i := range maxKnown - 2 {
+		compose("    - {id: n" + string(rune('a'+i)) + "1, plugin: t/store, roles: [api]}\n")
+	}
+	if _, err := l.profile.Plan(ctx, first, first); err != nil { // first is in use again
+		t.Fatal(err)
+	}
+	compose("    - {id: x1, plugin: t/store, roles: [api]}\n")
+	compose("    - {id: x2, plugin: t/store, roles: [api]}\n")
+	if _, err := l.profile.Admit(ctx, second); err == nil {
 		t.Fatal("the oldest candidate should be forgotten")
+	}
+	if _, err := l.profile.Admit(ctx, first); err != nil {
+		t.Fatalf("the candidate in use is kept: %v", err)
 	}
 	if _, err := l.profile.Admit(ctx, c); err != nil {
 		t.Fatalf("the committed composition is kept: %v", err)

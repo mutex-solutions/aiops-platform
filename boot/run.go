@@ -200,8 +200,10 @@ type run struct {
 	exits    chan launch.ExitRequest
 	leakPing chan struct{}
 	leakSeen atomic.Bool
-	reader   atomic.Pointer[reader]
-	afterNew func(*kernel.Root) // a seam of the tests: runs between kernel.New and prepare
+	// refsActive says config-refs is ACTIVE: the availability of configRefsReady.
+	refsActive atomic.Bool
+	reader     atomic.Pointer[reader]
+	afterNew   func(*kernel.Root) // a seam of the tests: runs between kernel.New and prepare
 }
 
 // reader is the launcher's own view of the tree: the composition key reads the rows
@@ -283,7 +285,7 @@ func (r *run) run(ctx context.Context) int {
 	if r.afterNew != nil {
 		r.afterNew(root)
 	}
-	if err := errors.Join(r.prepare(pc, cat), r.watchLeaks()); err != nil {
+	if err := errors.Join(r.prepare(pc, cat), r.watch()); err != nil {
 		_ = root.Close(context.WithoutCancel(ctx))
 		return r.fail(ExitInternal, "prepare: %v", err)
 	}
@@ -308,9 +310,10 @@ func (r *run) run(ctx context.Context) int {
 	if len(errs) > 0 {
 		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)))
 	}
-	r.ready.Set()
+	// The latch is the readiness row's, not boot's (03-c3-kernel.md:67): a distribution
+	// that links no readiness row is never ready, and says so by its required set.
 	r.pub.update(func(s *ProcessStatus) { s.Phase = PhaseRunning })
-	fmt.Fprintf(r.out, "aiops: ready profile=%s role=%s\n", o.Profile, role)
+	fmt.Fprintf(r.out, "aiops: booted profile=%s role=%s\n", o.Profile, role)
 	return r.loop(ctx)
 }
 
@@ -428,10 +431,11 @@ func (r *run) prepare(pc *profileContext, cat *catalog) error {
 	return errors.Join(
 		launch.ProfileContextKey.Provide(c, pc),
 		launch.CatalogKey.Provide(c, cat),
-		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags}),
+		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags, env: envOf(o.Env)}),
 		launch.ReadyKey.Provide(c, r.ready),
 		launch.KillSwitchesKey.Provide(c, switches(ReadKillSwitches(envOf(o.Env)))),
 		launch.AppExitKey.Provide(c, appExit{reqs: r.exits}),
+		configRefsKey.Provide(c, struct{}{}, kernel.Available(func(*kernel.Context) bool { return r.refsActive.Load() })),
 	)
 }
 
@@ -442,17 +446,23 @@ func envOf(f func(string) string) func(string) string {
 	return f
 }
 
-// watchLeaks subscribes to the kernel's events and notes a dispose that passed its
-// deadline: the fiber is then marked Leaked, and a goroutine cannot be killed
-// (03-c3-kernel.md:372; 07-c4-plugin-sdk.md:359). The callback only sets a flag and
-// pings the run loop, which inspects the tree.
-func (r *run) watchLeaks() error {
-	_, err := r.root.Observe("boot-leak", func(_ context.Context, e kernel.LedgerEvent) error {
-		if e.Kind == "deadline" && e.Label == "dispose" {
+// watch subscribes to the events of the kernel. A dispose that passed its deadline
+// marks the fiber Leaked, and a goroutine cannot be killed (03-c3-kernel.md:372;
+// 07-c4-plugin-sdk.md:359): the callback only sets a flag and pings the run loop,
+// which inspects the tree. A change of state of config-refs makes configRefsReady
+// available or not, and the kernel tells the rows that wait for it.
+func (r *run) watch() error {
+	_, err := r.root.Observe("boot-watch", func(ctx context.Context, e kernel.LedgerEvent) error {
+		switch {
+		case e.Kind == "deadline" && e.Label == "dispose":
 			r.leakSeen.Store(true)
 			select {
 			case r.leakPing <- struct{}{}:
 			default:
+			}
+		case e.Kind == "state" && e.Plugin == ConfigRefsID:
+			if active := e.State == kernel.Active; r.refsActive.Swap(active) != active {
+				return r.root.Notify(ctx, configRefsKey)
 			}
 		}
 		return nil
@@ -466,7 +476,7 @@ func (r *run) watchLeaks() error {
 func (r *run) view(ctx context.Context, loader *kernel.Fiber) StateView {
 	ins, _ := r.root.Inspect(ctx) // an error leaves the view empty, which the audit reports as unmet
 	v := StateView{Rows: map[string]State{}, Providers: map[string]bool{}}
-	for _, k := range launchKeyNames {
+	for _, k := range rootKeyNames {
 		v.Providers[k] = true
 	}
 	for _, p := range ins.Provisions {

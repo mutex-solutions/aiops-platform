@@ -108,12 +108,13 @@ type builder struct {
 
 func (b *builder) provides(id string) []string { return b.mods[b.rows[id].Plugin].Provides }
 
-// needs returns the keys a row waits for. The six launch keys are left out: the
-// launcher provides them from the root before any row mounts (03-c3-kernel.md:360),
-// so no row provides them and none waits for them. A manifest lists them in needs
-// all the same (the loader needs profileContext and catalog).
+// needs returns the keys a row waits for. The keys of the root are left out: the
+// launcher provides the six launch keys before any row mounts (03-c3-kernel.md:360)
+// and the kernel its four built-ins, so no row provides them and none waits for
+// them. A manifest lists them in needs all the same (the loader needs profileContext
+// and catalog, readiness needs logger).
 func (b *builder) needs(id string) []string {
-	return withoutLaunch(union(b.mods[b.rows[id].Plugin].Needs, b.rows[id].Inject))
+	return withoutRoot(union(b.mods[b.rows[id].Plugin].Needs, b.rows[id].Inject))
 }
 
 // realm returns the realm of a key at a row.

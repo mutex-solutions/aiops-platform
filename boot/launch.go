@@ -20,15 +20,36 @@ import (
 // 07-c4-plugin-sdk.md:1359). Each key is provider-bound to the launcher, which
 // provides it from the root context before any row mounts.
 
-// launchKeyNames are the six launch keys. The launcher provides them, so no row
-// provides them and none waits for them: the static graph leaves them out of the
-// needs of a row (builder.needs) and the run-time audit counts them provided.
-var launchKeyNames = []string{
+// ConfigRefsID is the plugin id of config-refs, the row that resolves references.
+const ConfigRefsID = "aiops/config-refs"
+
+// configRefsKey is the one key of the launcher that is not a launch service: it is
+// available once config-refs is ACTIVE, and every row whose config holds a reference
+// has it as a row-level inject (refsInject), so that no such row is applied before
+// its references can resolve. It is provider-bound, so only the launcher provides it.
+var configRefsKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.ProviderBound())
+
+// rootKeyNames are the keys that the root provides: the six launch keys, the four
+// built-ins of the kernel and configRefsKey. No row provides them and none waits for
+// them: the static graph leaves them out of the needs of a row (builder.needs) and
+// the run-time audit counts them provided.
+var rootKeyNames = []string{
 	launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
 	launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name(),
+	kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name(),
+	configRefsKey.Name(),
 }
 
-func isLaunchKey(name string) bool { return slices.Contains(launchKeyNames, name) }
+func isRootKey(name string) bool { return slices.Contains(rootKeyNames, name) }
+
+// refsInject returns the inject of a row for the loader: its own, and configRefsReady
+// when its config holds a reference. config-refs itself never waits for itself.
+func refsInject(r ComposedRow) []string {
+	if len(r.Refs) == 0 || r.Plugin == ConfigRefsID || slices.Contains(r.Inject, configRefsKey.Name()) {
+		return slices.Clone(r.Inject)
+	}
+	return slices.Sorted(slices.Values(append(slices.Clone(r.Inject), configRefsKey.Name())))
+}
 
 // profileContext is the profileContext service. Compose reads the layer files
 // again, so it sees a file that changed since boot; Admit and Plan work on
@@ -78,6 +99,8 @@ func (p *profileContext) remember(c Composition) {
 	}
 }
 
+// lookup finds a composition by digest. A composition that is looked up again is the
+// newest, so the one that reload plans from is not forgotten while it is in use.
 func (p *profileContext) lookup(d launch.Digest) (Composition, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -85,9 +108,32 @@ func (p *profileContext) lookup(d launch.Digest) (Composition, error) {
 		return p.committed, nil
 	}
 	if c, ok := p.known[Digest(d)]; ok {
+		i := slices.Index(p.order, c.Digest) // a known digest is always in order
+		p.order = append(slices.Delete(p.order, i, i+1), c.Digest)
 		return c, nil
 	}
 	return Composition{}, fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", d[:6])
+}
+
+// Committed is the composition the process booted. At S1 nothing commits a later one:
+// reload applies and judges a generation and keeps its own record of what it applied
+// (ADR-059 decision 5; the committer is S4a), so this does not move.
+func (p *profileContext) Committed() launch.Composition {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return launchComposition(p.committed)
+}
+
+// Required is the required set of the committed composition for the role. The loader
+// is not a row of the composition it serves, so its id is left out: boot's own mount
+// of it is checked at boot, and readiness would otherwise wait for a row it cannot
+// see.
+func (p *profileContext) Required() launch.RequiredSet {
+	p.mu.Lock()
+	c := withLoader(p.committed)
+	p.mu.Unlock()
+	set := RequiredFor(c, p.mods, p.dist, p.roles)
+	return launch.RequiredSet{Rows: slices.DeleteFunc(set.Rows, func(id string) bool { return id == LoaderRowID }), Keys: set.Keys}
 }
 
 func (p *profileContext) Compose(ctx context.Context) (launch.Composition, error) {
@@ -206,8 +252,8 @@ func newCatalog(reg Registry) (*catalog, error) {
 		c.keys[k.Name()] = k
 	}
 	for _, k := range []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey, launch.ReadyKey,
-		launch.KillSwitchesKey, launch.AppExitKey, loaderdef.Key, composition.Key, kernel.ReflectKey, kernel.RegistryKey,
-		kernel.HooksKey, kernel.LoggerKey} {
+		launch.KillSwitchesKey, launch.AppExitKey, configRefsKey, loaderdef.Key, composition.Key, kernel.ReflectKey,
+		kernel.RegistryKey, kernel.HooksKey, kernel.LoggerKey} {
 		add(k)
 	}
 	for _, k := range reg.Keys {
@@ -232,14 +278,14 @@ func newCatalog(reg Registry) (*catalog, error) {
 			add(d.Key())
 			if d.Optional() {
 				wants = append(wants, d.Key().Name())
-			} else if !isLaunchKey(d.Key().Name()) {
+			} else if !isRootKey(d.Key().Name()) {
 				needs = append(needs, d.Key().Name())
 			}
 		}
 		for _, f := range []struct {
 			what       string
 			plugin, ds []string
-		}{{"provides", provides, e.Provides}, {"needs", needs, withoutLaunch(e.Needs)}, {"wants", wants, e.Wants}} {
+		}{{"provides", provides, e.Provides}, {"needs", needs, withoutRoot(e.Needs)}, {"wants", wants, e.Wants}} {
 			if !sameSet(f.plugin, f.ds) {
 				errs = append(errs, fmt.Errorf("module %q: the plugin %s %v and the module entry %s %v differ", id, f.what, sorted(f.plugin), f.what, sorted(f.ds)))
 			}
@@ -275,10 +321,10 @@ func sorted(s []string) []string {
 
 func sameSet(a, b []string) bool { return slices.Equal(sorted(a), sorted(b)) }
 
-func withoutLaunch(in []string) []string {
+func withoutRoot(in []string) []string {
 	var out []string
 	for _, s := range in {
-		if !isLaunchKey(s) {
+		if !isRootKey(s) {
 			out = append(out, s)
 		}
 	}
@@ -292,6 +338,7 @@ func withoutLaunch(in []string) []string {
 type cmdline struct {
 	args  []string
 	flags map[string]string
+	env   func(string) string
 }
 
 var _ launch.Cmdline = cmdline{}
@@ -301,6 +348,14 @@ func (c cmdline) Args() []string { return slices.Clone(c.args) }
 func (c cmdline) Flag(name string) (string, bool) {
 	v, ok := c.flags[name]
 	return v, ok
+}
+
+// Env reads the environment of the process: a variable that is empty is not set. It
+// filters nothing; the AIOPS_REF_ prefix rule is config-refs's
+// (08-profiles-roadmap-adrs.md:162).
+func (c cmdline) Env(name string) (string, bool) {
+	v := c.env(name)
+	return v, v != ""
 }
 
 // latch is the ready service: a flag that readiness sets when the required set is

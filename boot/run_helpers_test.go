@@ -268,9 +268,11 @@ func (f *fixture) waitFor(t *testing.T, done <-chan int, ok func(ProcessStatus) 
 	}
 }
 
+// waitReady waits until the process has booted: the required set was audited and the
+// run loop started. The latch itself is the readiness row's, not boot's.
 func (f *fixture) waitReady(t *testing.T, done <-chan int) {
 	t.Helper()
-	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Ready })
+	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Phase == PhaseRunning })
 }
 
 // safeBuf is a buffer that the test may read while Run writes.

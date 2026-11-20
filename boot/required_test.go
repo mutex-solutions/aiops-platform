@@ -8,7 +8,7 @@ import (
 const reqMods = `
 o/loader: {provides: [loader]}
 o/sql: {provides: [sql]}
-o/auth: {provides: [auth], needs: [sql, logger]}
+o/auth: {provides: [auth], needs: [sql, vault]}
 o/svc: {provides: [svc], needs: [auth]}
 o/extra: {provides: [extra]}
 o/uses-extra: {needs: [extra, sql]}
@@ -117,10 +117,10 @@ func TestAuditRequired(t *testing.T) {
 				Rows:      map[string]State{"loader": StatePending, "sql": StateActive, "auth": StateFailed, "web": StatePending},
 				Providers: map[string]bool{"sql": true, "svc": false}},
 			errs: []string{`required row "loader" is PENDING, not ACTIVE`, `required key "auth" has no ACTIVE provider`},
-			warn: `3 rows are not ACTIVE: "auth" is FAILED and waits for logger; "svc" is without a fiber and waits for auth; "web" is PENDING and waits for svc`},
+			warn: `3 rows are not ACTIVE: "auth" is FAILED and waits for vault; "svc" is without a fiber and waits for auth; "web" is PENDING and waits for svc`},
 		{name: "a required row without a fiber",
 			view: StateView{Rows: map[string]State{"sql": StateActive, "auth": StateActive, "svc": StateActive, "web": StateActive},
-				Providers: map[string]bool{"sql": true, "auth": true, "logger": true, "svc": true}},
+				Providers: map[string]bool{"sql": true, "auth": true, "vault": true, "svc": true}},
 			errs: []string{`required row "loader" is without a fiber, not ACTIVE`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
