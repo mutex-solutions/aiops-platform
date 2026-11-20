@@ -174,8 +174,9 @@ type RunOptions struct {
 // steps of 03-c3-kernel.md:355-361: compose, admit, static graph and required
 // audit, prepare and mount the loader, settle and the run-time required audit.
 //
-// Goroutines: Run starts none. The clock's timers are the bounds of the settle,
-// the shutdown and the leak grace period, each stopped by the step that made it.
+// Goroutines: Run starts one, which turns a signal during boot into the end of the
+// boot waits and returns when boot does. The clock's timers are the bounds of the
+// settle, the shutdown and the leak grace period, each stopped by the step that made it.
 func Run(ctx context.Context, o RunOptions) int { return newRun(o).main(ctx) }
 
 // main runs and publishes the final status.
@@ -297,12 +298,28 @@ func (r *run) run(ctx context.Context) int {
 		_ = root.Close(context.WithoutCancel(ctx))
 		return r.fail(ExitInternal, "prepare: %v", err)
 	}
+	// A stop request during boot ends the boot waits at once: a signal or the end of ctx
+	// is not held up by the settle bound, the unload wait or the audit, and no audit
+	// judges a tree that is being stopped.
+	boot, stopBoot := context.WithCancel(ctx)
+	defer stopBoot()
+	signalled := make(chan bool, 1)
+	//kernelcheck:allow-go the signal watch of boot, which returns when boot ends
+	go func() {
+		select {
+		case <-o.Signals:
+			signalled <- true
+			stopBoot()
+		case <-boot.Done():
+			signalled <- false
+		}
+	}()
 	loader := root.Plugin(loaderPlugin, o.Registry.LoaderConfig(entrySpecs(a.Admitted), root.Batch))
 	root.Plugin(r.auditPlugin(), nil)
 
 	// 5. Settle under a bound, then the required audit over the live tree
 	// (03-c3-kernel.md:361).
-	bctx, cancel := r.bound(ctx, o.Limits.settleBound())
+	bctx, cancel := r.bound(boot, o.Limits.settleBound())
 	_ = root.Settle(bctx) // the verdict is the second one's: a blocked fiber is still blocked then
 	// config-refs becoming ACTIVE makes configRefsReady available through the observer
 	// of watch, which runs apart from the tree: Settle may return before it has told the
@@ -314,14 +331,22 @@ func (r *run) run(ctx context.Context) int {
 	// Settle returns while a fiber that is blocked past its load deadline is still
 	// UNLOADING, which is its contract; the row is FAILED once its Apply returns and the
 	// partial effects unwind. The audit judges after that, within the bound of an unload.
-	uctx, ucancel := r.bound(ctx, o.Limits.DrainDeadline+o.Limits.DisposeDeadline)
+	uctx, ucancel := r.bound(boot, o.Limits.DrainDeadline+o.Limits.DisposeDeadline)
 	_ = root.AwaitObservers(uctx)
 	r.unload.wait(uctx)
 	ucancel()
+	stopBoot()
+	switch {
+	case <-signalled:
+		return r.stop(ctx, ExitOK, "signal")
+	case ctx.Err() != nil:
+		return r.stop(ctx, ExitOK, "context ended")
+	}
 	if serr != nil {
 		fmt.Fprintf(r.errw, "warning: settle: %v\n", serr)
 	}
-	errs, wls := AuditRequired(a.Graph, a.Required, r.view(ctx, loader))
+	// The audit reads the tree whatever happens to ctx meanwhile: the run loop sees its end.
+	errs, wls := AuditRequired(a.Graph, a.Required, r.view(context.WithoutCancel(ctx), loader))
 	for _, w := range wls {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}

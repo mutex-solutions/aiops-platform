@@ -885,3 +885,37 @@ func TestAdmitListsADeniedRequiredRow(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 }
+
+// A stop request during boot ends the boot waits: the process stops cleanly at once, runs
+// no audit and never says it booted.
+func TestRunStopDuringBoot(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		signal bool
+	}{{"signal", true}, {"context", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			entered := make(chan struct{})
+			slow := toy(toySpec{id: "t/slowboot", apply: func(c *kernel.Context, _ any) error {
+				close(entered)
+				<-c.Std().Done()
+				return c.Std().Err()
+			}})
+			f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slowboot, roles: [api]}\n", slow)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := f.start(ctx)
+			<-entered
+			if tc.signal {
+				f.signal <- syscall.SIGTERM
+			} else {
+				cancel()
+			}
+			if code := <-done; code != ExitOK {
+				t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+			}
+			if strings.Contains(f.out.String(), "booted") || slices.Contains(f.phases(), PhaseRunning) || strings.Contains(f.errb.String(), "error:") {
+				t.Fatalf("the boot went on after the stop request: stdout %q phases %v stderr:\n%s", f.out.String(), f.phases(), f.errb.String())
+			}
+		})
+	}
+}
