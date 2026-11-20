@@ -27,4 +27,7 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-replace github.com/mutex-solutions/aiops-platform/sdk/kernel => ./sdk/kernel
+replace (
+	github.com/mutex-solutions/aiops-platform/sdk/def => ./sdk/def
+	github.com/mutex-solutions/aiops-platform/sdk/kernel => ./sdk/kernel
+)
