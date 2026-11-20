@@ -92,9 +92,11 @@ func (p *profileContext) remember(c Composition) {
 	p.rememberLocked(c)
 }
 
+// rememberLocked keeps c as the composition of its digest, replacing an older one: the
+// digest leaves provenance out, and the newest compose is the one to judge.
 func (p *profileContext) rememberLocked(c Composition) {
-	if _, ok := p.known[c.Digest]; ok {
-		return
+	if i := slices.Index(p.order, c.Digest); i >= 0 {
+		p.order = slices.Delete(p.order, i, i+1)
 	}
 	p.known[c.Digest] = c
 	p.order = append(p.order, c.Digest)
@@ -104,24 +106,48 @@ func (p *profileContext) rememberLocked(c Composition) {
 	}
 }
 
-// lookup finds a composition by digest. A composition that is looked up again is the
-// newest, so the one that reload plans from is not forgotten while it is in use.
-func (p *profileContext) lookup(d launch.Digest) (Composition, error) {
+// lookup finds the composition lc stands for. Two can share a digest: the committed one,
+// which is the launcher's admitted copy, and the newest that Compose returned, which may
+// enable a row the copy has detached or carry other provenance. Admit judges the newest
+// (newest); Plan and Commit take the committed one when lc is it, row for row. A
+// composition that is looked up again is the newest, so the one that reload plans from
+// is not forgotten while it is in use.
+func (p *profileContext) lookup(lc launch.Composition, newest bool) (Composition, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.committed.Digest == Digest(d) {
-		return p.committed, nil
+	d := Digest(lc.Digest)
+	k, known := p.known[d]
+	if known {
+		p.rememberLocked(k)
 	}
-	if c, ok := p.known[Digest(d)]; ok {
-		i := slices.Index(p.order, c.Digest) // a known digest is always in order
-		p.order = append(slices.Delete(p.order, i, i+1), c.Digest)
-		return c, nil
+	switch {
+	case p.committed.Digest == d && (!known || !newest && sameEnabled(lc, p.committed)):
+		return p.committed, nil
+	case known:
+		return k, nil
 	}
 	return Composition{}, fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", d[:6])
 }
 
+// sameEnabled reports whether lc has the rows of c, each enabled as in c: the launcher's
+// copy differs from what it was composed from in that only.
+func sameEnabled(lc launch.Composition, c Composition) bool {
+	return slices.EqualFunc(lc.Rows, c.Rows, func(a launch.Row, b ComposedRow) bool { return a.ID == b.ID && a.Enabled == b.Enabled })
+}
+
+// admitted is the launcher's copy of c, what the tree runs of it: every row the gate
+// denies is disabled (GateResult.Admitted). The loader's row is not in it.
+func (p *profileContext) admitted(c Composition) Composition {
+	w := WithLoader(c)
+	a := Gate(w, p.mods, p.dist).Admitted(w)
+	a.Rows = a.Rows[1:]
+	return a
+}
+
 // Committed is the composition the process runs: the one it booted until reload commits
-// another (ADR-059 decision 15; the committer of S4a replaces the caller).
+// another (ADR-059 decision 15; the committer of S4a replaces the caller). It is the
+// launcher's admitted copy, so a row the gate detached at boot is disabled in it and a
+// rollback to it does not mount the row.
 func (p *profileContext) Committed() launch.Composition {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -132,13 +158,16 @@ func (p *profileContext) Committed() launch.Composition {
 // Layers and Required follow what the tree runs. The composition it replaces is
 // remembered, so that a rollback can commit it again.
 func (p *profileContext) Commit(lc launch.Composition) error {
-	c, err := p.lookup(lc.Digest)
+	c, err := p.lookup(lc, false)
 	if err != nil {
 		return err
 	}
+	c = p.admitted(c)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.rememberLocked(p.committed)
+	if p.committed.Digest != c.Digest {
+		p.rememberLocked(p.committed)
+	}
 	p.committed = c
 	return nil
 }
@@ -171,7 +200,7 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	if err := ctx.Err(); err != nil {
 		return launch.Admission{}, err
 	}
-	c, err := p.lookup(lc.Digest)
+	c, err := p.lookup(lc, true)
 	if err != nil {
 		return launch.Admission{}, err
 	}
@@ -210,11 +239,11 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 	if err := ctx.Err(); err != nil {
 		return launch.Plan{}, err
 	}
-	f, err := p.lookup(from.Digest)
+	f, err := p.lookup(from, false)
 	if err != nil {
 		return launch.Plan{}, err
 	}
-	t, err := p.lookup(to.Digest)
+	t, err := p.lookup(to, false)
 	if err != nil {
 		return launch.Plan{}, err
 	}

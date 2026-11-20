@@ -276,8 +276,10 @@ func (r *run) run(ctx context.Context) int {
 	r.pub.update(func(s *ProcessStatus) { s.Role, s.Digest = role, fmt.Sprintf("%x", comp.Digest[:]) })
 
 	// 4. Build the kernel and prepare (03-c3-kernel.md:360).
+	// The committed composition is what the loader mounts: the admitted copy, without
+	// the loader's own row.
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
-		committed: comp, known: map[Digest]Composition{}}
+		committed: Composition{Rows: a.Admitted.Rows[1:], Digest: comp.Digest}, known: map[Digest]Composition{}}
 	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {

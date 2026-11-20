@@ -774,3 +774,89 @@ func TestLatchPublishesTheValueItHolds(t *testing.T) {
 		t.Fatalf("published ready=%v, the latch holds %v", last, l.IsReady())
 	}
 }
+
+// The committed composition is what the tree runs: a row the gate detached at boot is
+// disabled in it, so a rollback to it does not mount the row.
+func TestCommittedHoldsTheAdmittedRows(t *testing.T) {
+	var l launched
+	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: ghost, plugin: t/ghost, roles: [api]}\n", probe(&l))
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	for _, r := range pc.Committed().Rows {
+		if r.ID == "ghost" && r.Enabled {
+			t.Errorf("the committed composition enables the detached row: %+v", r)
+		}
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+// Admit judges the provenance of the composition Compose just returned, not that of an older
+// one with the same digest (the digest leaves provenance out, gate check 8 reads it).
+func TestAdmitJudgesTheNewestProvenance(t *testing.T) {
+	const moved = "- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n    - {id: user, plugin: t/user, roles: [api]}\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
+	const inBundle = "- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n    - {id: user, plugin: t/user, roles: [api], intercept: {policy: p}}\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
+	const site = "- {id: user, intercept: {policy: p}}\n"
+	for _, tc := range []struct {
+		name               string
+		bootBundle, bundle string
+		bootSite, nextSite bool
+		denied             bool
+	}{
+		{name: "into a patch layer", bootBundle: inBundle, bundle: moved, nextSite: true, denied: true},
+		{name: "back into the bundle", bootBundle: moved, bootSite: true, bundle: inBundle},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var l launched
+			f := newFixture(t, tc.bootBundle, probe(&l))
+			bindExit(f, "t/probe")
+			f.dist.Providers = []Binding{{Key: "policy", Plugins: []string{"t/store"}}}
+			if tc.bootSite {
+				f.files["aiops.patch.yml"] = &fstest.MapFile{Data: []byte(site)}
+			}
+			done := f.start(t.Context())
+			f.waitReady(t, done)
+			l.mu.Lock()
+			pc := l.profile
+			l.mu.Unlock()
+			booted := pc.Committed()
+			f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(tc.bundle)}
+			delete(f.files, "aiops.patch.yml")
+			if tc.nextSite {
+				f.files["aiops.patch.yml"] = &fstest.MapFile{Data: []byte(site)}
+			}
+			next, err := pc.Compose(t.Context())
+			if err != nil || next.Digest != booted.Digest {
+				t.Fatalf("compose: %v; the move must keep the digest", err)
+			}
+			adm, err := pc.Admit(t.Context(), next)
+			if err != nil || (len(adm.Denied) == 1 && adm.Denied[0].Row == "user") != tc.denied || !tc.denied && len(adm.Denied) != 0 {
+				t.Fatalf("admit: %v %+v, want denied=%v", err, adm, tc.denied)
+			}
+			if !tc.denied {
+				// The plan from what the tree runs (user detached) enables the row.
+				pl, err := pc.Plan(t.Context(), booted, next)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var act launch.Action
+				for _, e := range pl.Entries {
+					if e.ID == "user" {
+						act = e.Action
+					}
+				}
+				if act != launch.ActionUpdate {
+					t.Errorf("plan of user: %q, want update (enabled); plan %+v", act, pl)
+				}
+			}
+			if code := stopAndWait(t, f, done); code != ExitOK {
+				t.Fatalf("exit %d", code)
+			}
+		})
+	}
+}
