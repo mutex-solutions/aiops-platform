@@ -5,6 +5,8 @@ package fake_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
@@ -49,13 +51,14 @@ func newListener(id string) *listener {
 
 func TestConsumerCallsEveryMethod(t *testing.T) {
 	f, provider := fake.New()
+	f.Volatile = map[string][]string{"aiops/mod": {"level"}}
 	hear := newListener("aiops/listener")
 	var patched *kernel.Context
 	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(loader.Key)}, Apply: func(c *kernel.Context, _ any) error {
 		ctx := context.Background()
 		l := loader.Key.Of(c)
-		spec := loader.EntrySpec{ID: "g:a", Parent: "g", Plugin: "aiops/mod", Config: 1}
-		if _, ok := l.Locate("g:a"); ok {
+		spec := loader.EntrySpec{ID: "a", Plugin: "aiops/mod", Config: map[string]any{"level": 1}, Enabled: true}
+		if _, ok := l.Locate("a"); ok {
 			t.Error("Locate found an entry before Create")
 		}
 		if err := l.Create(ctx, spec); err != nil {
@@ -64,26 +67,26 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if err := l.Create(ctx, spec); !errors.Is(err, loader.ErrExists) {
 			t.Errorf("second Create: %v", err)
 		}
-		if st, err := l.Await(ctx, "g:a"); err != nil || st != kernel.Active {
+		if st, err := l.Await(ctx, "a"); err != nil || st != kernel.Active {
 			t.Errorf("Await = %v, %v", st, err)
 		}
-		spec.Config = 2
+		spec.Config = map[string]any{"level": 2}
 		if err := l.Update(ctx, spec); err != nil {
 			t.Errorf("Update: %v", err)
 		}
-		if e, ok := l.Locate("g:a"); !ok || e.Spec.Config != 2 || e.State != kernel.Active {
+		if e, ok := l.Locate("a"); !ok || fmt.Sprint(e.Spec.Config) != "map[level:2]" || e.State != kernel.Active || e.Mount != loader.Mounted {
 			t.Errorf("Locate = %v, %v", e, ok)
 		}
-		if err := l.Remove(ctx, "g:a"); err != nil {
+		if err := l.Remove(ctx, "a"); err != nil {
 			t.Errorf("Remove: %v", err)
 		}
-		if err := l.Remove(ctx, "g:a"); !errors.Is(err, loader.ErrNotFound) {
+		if err := l.Remove(ctx, "a"); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("second Remove: %v", err)
 		}
 		if err := l.Update(ctx, spec); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("Update of a removed entry: %v", err)
 		}
-		if _, err := l.Await(ctx, "g:a"); !errors.Is(err, loader.ErrNotFound) {
+		if _, err := l.Await(ctx, "a"); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("Await of a removed entry: %v", err)
 		}
 		patched = c
@@ -92,14 +95,14 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, provider, hear.plugin, consumer)
-	if len(hear.inits) != 1 || hear.inits[0].Entry.ID != "g:a" {
+	if len(hear.inits) != 1 || hear.inits[0].Entry.ID != "a" || hear.inits[0].Context == nil {
 		t.Errorf("entry-init heard %v", hear.inits)
 	}
-	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "g:a" || hear.volatiles[0].Config != 2 {
+	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "a" || !slices.Equal(hear.volatiles[0].Paths, []string{"level"}) {
 		t.Errorf("volatile-update heard %v", hear.volatiles)
 	}
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, patched)
-	if err != nil || got == nil || got == patched || len(hear.patched) != 1 {
+	if err != nil || got == nil || got == patched || !slices.Equal(hear.patched, []string{"a", "p"}) {
 		t.Errorf("Patch = %v, %v, heard %v", got, err, hear.patched)
 	}
 }
@@ -110,7 +113,7 @@ func TestScriptedStatesAndEntries(t *testing.T) {
 	kerneltest.Mount(root, provider)
 	ctx := context.Background()
 	for _, id := range []string{"b", "a"} {
-		if err := f.Create(ctx, loader.EntrySpec{ID: id}); err != nil {
+		if err := f.Create(ctx, loader.EntrySpec{ID: id, Enabled: true}); err != nil {
 			t.Fatal(err)
 		}
 	}

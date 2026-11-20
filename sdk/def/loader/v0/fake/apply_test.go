@@ -18,12 +18,12 @@ func TestApplyIsAllOrNothing(t *testing.T) {
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, provider)
 	ctx := context.Background()
-	if err := f.Create(ctx, loader.EntrySpec{ID: "a"}); err != nil {
+	if err := f.Create(ctx, loader.EntrySpec{ID: "a", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	res, err := f.Apply(ctx, []loader.Op{
-		{Kind: loader.OpCreate, Entry: loader.EntrySpec{ID: "b"}},
-		{Kind: loader.OpUpdate, Entry: loader.EntrySpec{ID: "a", Config: 1}},
+		{Kind: loader.OpCreate, Entry: loader.EntrySpec{ID: "b", Enabled: true}},
+		{Kind: loader.OpUpdate, Entry: loader.EntrySpec{ID: "a", Config: 1, Enabled: true}},
 		{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: "a"}},
 	})
 	if err != nil || len(res) != 3 || res[0].Outcome != loader.Created || res[2].Outcome != loader.Removed {
@@ -62,6 +62,9 @@ func TestApplyReportsADeadDispatcher(t *testing.T) {
 	_ = fiber.Await(ctx)
 	if err := f.Create(ctx, loader.EntrySpec{ID: "b"}); !errors.Is(err, kernel.ErrInactive) {
 		t.Errorf("Create after the provider ended: %v", err)
+	}
+	if _, ok := f.Locate("b"); ok {
+		t.Error("a refused Create recorded its entry")
 	}
 	if err := f.Update(ctx, loader.EntrySpec{ID: "a"}); !errors.Is(err, kernel.ErrInactive) {
 		t.Errorf("Update after the provider ended: %v", err)
