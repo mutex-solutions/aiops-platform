@@ -157,6 +157,19 @@ func Signed() KeyOption { return func(k *keyData) { k.consumer = classSigned } }
 // config is dynamically typed.
 func InterceptConfig[C any]() KeyOption { return func(k *keyData) { k.config = reflect.TypeFor[C]() } }
 
+// InterceptType returns the config type that the intercepts of k take, as declared
+// with InterceptConfig, so a caller that holds only an AnyKey can build the value
+// that Context.Intercept accepts (ADR-059 decision 2; 07-c4-plugin-sdk.md:177,
+// :190). ok is false for a nil or zero key and for a key whose intercept config is
+// dynamically typed.
+func InterceptType(k AnyKey) (t reflect.Type, ok bool) {
+	d, err := dataOf(k)
+	if err != nil || d.config == nil {
+		return nil, false
+	}
+	return d.config, true
+}
+
 // NewKey declares a key (07-c4-plugin-sdk.md:179). It is called in a definition
 // package. An empty name or a negative major is a programming error and panics.
 func NewKey[T any](name string, major int, opts ...KeyOption) Key[T] {
@@ -291,6 +304,17 @@ func Need[T any](k Key[T]) Dep { return Dep{key: k.k} }
 // NeedWith is Need plus the per-consumer intercept config cfg, which joins the
 // intercept chain of the fiber's context (07-c4-plugin-sdk.md:188).
 func NeedWith[T, C any](k Key[T], cfg C) Dep { return Dep{key: k.k, config: cfg, hasCfg: true} }
+
+// NeedKey is Need for a key held as AnyKey, as the loader holds the keys of
+// an inject list (ADR-059 decision 2; 07-c4-plugin-sdk.md:187). It declares k as
+// required with the checks and the effects of Need, and there is no untyped Want.
+// A nil or zero k gives a Dep that a mount refuses with ErrKey.
+func NeedKey(k AnyKey) Dep {
+	if k == nil {
+		return Dep{}
+	}
+	return Dep{key: k.anyKey()}
+}
 
 // Want declares a When on k. It never gates the plugin itself and does not allow a
 // read of k; a Want on a provider-bound key is refused (07-c4-plugin-sdk.md:189,
