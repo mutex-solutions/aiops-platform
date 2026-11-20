@@ -286,12 +286,18 @@ func (p *Proc) Touch(name string) error {
 // RowState is the state of row id in the snapshot, "" when the state file does not
 // hold it or it has no fiber.
 func (s Snapshot) RowState(id string) string {
+	r, _ := s.Row(id)
+	return r.State
+}
+
+// Row returns row id of the state file, false when it does not hold it.
+func (s Snapshot) Row(id string) (teststate.Row, bool) {
 	for _, r := range s.State.Rows {
 		if r.ID == id {
-			return r.State
+			return r, true
 		}
 	}
-	return ""
+	return teststate.Row{}, false
 }
 
 // Running reports whether the launcher says it finished booting and is serving.

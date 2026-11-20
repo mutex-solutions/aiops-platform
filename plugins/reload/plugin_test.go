@@ -227,6 +227,9 @@ func TestGenerationIsComposedAdmittedPlannedAppliedJudgedAndPublished(t *testing
 	if got, ok := w.svc.Result(r.ID); !ok || got.Status != def.Passed {
 		t.Errorf("Result = %+v, %v", got, ok)
 	}
+	if w.l.Current.Digest != (launch.Digest{2}) {
+		t.Errorf("committed = %x: a passed generation is committed to the launcher", w.l.Current.Digest[:1])
+	}
 
 	// The second generation is planned from the first and carries it as previous.
 	w.next = launch.Composition{Digest: launch.Digest{3}, Rows: w.next.Rows[:4]}
@@ -293,8 +296,8 @@ func TestStagesThatRefuseTheGenerationTouchNothing(t *testing.T) {
 			if slices.Contains(w.tr.get(), "applied") {
 				t.Error("composition/applied was published for a rejected generation")
 			}
-			if len(w.ld.Entries()) != 1 {
-				t.Errorf("the tree changed: %v", w.ld.Entries())
+			if len(w.ld.Entries()) != 1 || w.l.Current.Digest != (launch.Digest{1}) {
+				t.Errorf("the tree or the committed composition changed: %v, %x", w.ld.Entries(), w.l.Current.Digest[:1])
 			}
 			// The generation counter and the running composition did not move.
 			w.next = w.l.Current
@@ -308,25 +311,38 @@ func TestStagesThatRefuseTheGenerationTouchNothing(t *testing.T) {
 	}
 }
 
-func TestDeniedOptionalRowIsDetachedAsDisabled(t *testing.T) {
+func TestGenerationWithADeniedRowIsRejectedWhole(t *testing.T) {
 	w := newWorld(t, 4, 8)
-	w.seed()
-	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("ok", "aiops/p", nil), row("denied", "aiops/p", nil)}}
+	w.seed(row("a", "aiops/p", nil))
+	before := w.l.Current
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("ok", "aiops/p", nil), row("denied", "aiops/p", nil)}}
 	w.l.AdmitFn = func(context.Context, launch.Composition) (launch.Admission, error) {
-		return launch.Admission{Denied: []launch.Denial{{Row: "denied", Check: "4", Reason: "stability"}}}, nil
+		return launch.Admission{Denied: []launch.Denial{{Row: "denied", Check: "4 stability", Reason: "below the minimum"},
+			{Row: "ghost", Check: "module table", Reason: "not in the module table"}}}, nil
 	}
-	var created []loader.EntrySpec
-	w.listen(func(a loader.EntryInitArgs) { created = append(created, a.Entry) }, nil)
+	w.listen(nil, nil)
 	r := w.submit("test")
-	if r.Status != def.Passed || len(r.Admission.Denied) != 1 {
+	if r.Status != def.Rejected || r.Stage != def.StageAdmit || r.Generation != 0 || !errors.Is(r.Err, def.ErrDenied) {
 		t.Fatalf("result = %+v", r)
 	}
-	if len(created) != 2 || !created[0].Enabled || created[1].Enabled {
-		t.Errorf("entries created = %+v: the denied row must be created disabled", created)
+	for _, want := range []string{`row "denied" (4 stability): below the minimum`, `row "ghost" (module table)`} {
+		if !strings.Contains(r.Err.Error(), want) {
+			t.Errorf("err %q lacks %q", r.Err, want)
+		}
+	}
+	if len(r.Admission.Denied) != 2 || len(r.Applied) != 0 || len(w.ld.Entries()) != 1 {
+		t.Errorf("admission %+v, applied %v, entries %v: nothing may be applied, not even the rows that were not denied",
+			r.Admission, r.Applied, w.ld.Entries())
+	}
+	if got := w.tr.get(); slices.Contains(got, "plan") || slices.Contains(got, "applied") {
+		t.Errorf("order = %v: the generation went past admission", got)
+	}
+	if w.l.Current.Digest != before.Digest {
+		t.Error("a rejected generation was committed")
 	}
 }
 
-func TestFailedVerdictIsReportedAndTheTreeStaysAsApplied(t *testing.T) {
+func TestFailedVerdictWhoseRollbackLeavesRowsInactiveIsReportedWithBothVerdicts(t *testing.T) {
 	w := newWorld(t, 4, 8)
 	w.l.Needed = launch.RequiredSet{Rows: []string{"must", "gone", "pend"}, Keys: []string{"sql", "queue"}}
 	w.seed(row("keep", "aiops/p", nil), row("idle", "aiops/p", nil), row("must", "aiops/p", nil), row("db", "aiops/sqlp", nil),
@@ -350,7 +366,7 @@ func TestFailedVerdictIsReportedAndTheTreeStaysAsApplied(t *testing.T) {
 	w.listen2(&heard)
 
 	r := w.submit("test")
-	if r.Status != def.Failed || !errors.Is(r.Err, def.ErrVerdict) || r.Report.Pass {
+	if r.Status != def.RollbackFailed || !errors.Is(r.Err, def.ErrVerdict) || !errors.Is(r.Err, def.ErrRollback) || r.Report.Pass {
 		t.Fatalf("result = %+v", r)
 	}
 	got := map[string]composition.RowReport{}
@@ -367,13 +383,36 @@ func TestFailedVerdictIsReportedAndTheTreeStaysAsApplied(t *testing.T) {
 		t.Errorf("details: new %q, db %q", got["new"].Detail, got["db"].Detail)
 	}
 	if r.Previous.Digest != (launch.Digest{1}) || len(r.Previous.Rows) != 5 {
-		t.Errorf("previous = %+v: a later step must be able to restore it", r.Previous)
+		t.Errorf("previous = %+v", r.Previous)
+	}
+	// The scripted states stay FAILED, so the restored rows are not ACTIVE: the rollback
+	// failed, and the result says both verdicts. It was tried once.
+	rb := r.Rollback
+	if rb == nil || rb.Err == nil || rb.Report.Pass || rb.Generation != 0 || !strings.Contains(rb.Err.Error(), "not ACTIVE again") {
+		t.Fatalf("rollback = %+v", rb)
+	}
+	if r.Stage != def.StageRollback || r.Generation != 1 {
+		t.Errorf("stage %q generation %d", r.Stage, r.Generation)
+	}
+	back := map[string]string{}
+	for _, rr := range rb.Report.Rows {
+		back[rr.ID] = rr.Outcome
+	}
+	if back["keep"] != "fail" || back["db"] != "fail" || back["new"] != "" {
+		t.Errorf("rollback report = %+v", rb.Report)
+	}
+	if got := w.tr.get(); strings.Count(strings.Join(got, " "), "compose") != 1 {
+		t.Errorf("order = %v: one composition, and the rollback does not compose again", got)
 	}
 	if heard.Generation != 1 || heard.Report.Pass {
-		t.Errorf("composition/applied = %+v: a failed verdict is published as failed", heard)
+		t.Errorf("composition/applied = %+v: only the failed generation is published, the restore did not happen", heard)
 	}
-	if _, ok := w.ld.Locate("new"); !ok {
-		t.Error("the failed generation was undone: S1 only reports it")
+	if _, ok := w.ld.Locate("new"); ok {
+		t.Error("the row that the failed generation created is still in the tree")
+	}
+	// The loader's entries are the previous composition's, and that is what is committed.
+	if w.l.Current.Digest != (launch.Digest{1}) {
+		t.Errorf("committed = %x, want the previous composition", w.l.Current.Digest[:1])
 	}
 }
 
@@ -403,7 +442,7 @@ func TestRequiredRowThatIsNotMountedFailsTheVerdict(t *testing.T) {
 		return launch.Plan{}, nil // the fake loader mounts what it is given, so give it nothing
 	}
 	r := w.submit("test")
-	if r.Status != def.Failed {
+	if r.Status != def.RollbackFailed { // the previous composition has no such row either
 		t.Fatalf("result = %+v", r)
 	}
 	if rr := r.Report.Rows; len(rr) != 1 || rr[0].ID != "off" || !strings.Contains(rr[0].Detail, "not mounted") {
@@ -419,8 +458,11 @@ func TestRequiredFlagOfARowCountsAsRequired(t *testing.T) {
 	w.next = launch.Composition{Rows: []launch.Row{must}}
 	w.listen(func(loader.EntryInitArgs) { w.ld.SetState("must", kernel.Failed) }, nil)
 	r := w.submit("test")
-	if r.Status != def.Failed {
+	if r.Status != def.RolledBack || r.Report.Pass || r.Rollback == nil || !r.Rollback.Report.Pass {
 		t.Fatalf("result = %+v", r)
+	}
+	if _, ok := w.ld.Locate("must"); ok {
+		t.Error("the required row of the failed generation is still in the tree")
 	}
 }
 
@@ -794,4 +836,277 @@ func failure(t *testing.T, f *kernel.Fiber) error {
 		t.Fatalf("state = %s, err = %v, want FAILED with an error", st, err)
 	}
 	return err
+}
+
+// failing makes every entry that a generation creates FAILED, as a Create that the kernel
+// mounts and whose Apply fails does.
+func (w *world) failing(ids ...string) func(loader.EntryInitArgs) {
+	return func(a loader.EntryInitArgs) {
+		if slices.Contains(ids, a.Entry.ID) {
+			w.ld.SetState(a.Entry.ID, kernel.Failed)
+		}
+	}
+}
+
+func TestFailedVerdictIsRolledBackWithOneInversePlan(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.l.Needed = launch.RequiredSet{Rows: []string{"keep"}}
+	w.seed(row("gone", "aiops/p", nil), child("gone", "k", "aiops/p"), row("upd", "aiops/p", "old"), row("keep", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("upd", "aiops/p", "new"), row("keep", "aiops/p", nil),
+		row("born", "aiops/p", nil), child("born", "k", "aiops/p")}}
+	var heard []composition.Applied
+	var mu sync.Mutex
+	w.listen(w.failing("born"), func(_ context.Context, a composition.Applied) { mu.Lock(); heard = append(heard, a); mu.Unlock() })
+
+	r := w.submit("test")
+	if r.Status != def.RolledBack || !errors.Is(r.Err, def.ErrVerdict) || errors.Is(r.Err, def.ErrRollback) || r.Stage != def.StagePublish {
+		t.Fatalf("result = %+v", r)
+	}
+	if r.Report.Pass || r.Generation != 1 {
+		t.Errorf("the failed verdict and its generation are kept: pass %v, generation %d", r.Report.Pass, r.Generation)
+	}
+	rb := r.Rollback
+	if rb == nil || rb.Err != nil || !rb.Report.Pass || rb.Generation != 2 || rb.Plan.From != (launch.Digest{2}) || rb.Plan.To != (launch.Digest{1}) {
+		t.Fatalf("rollback = %+v", rb)
+	}
+	// The rows the failed generation created are removed, children first; the updated row has
+	// its old config back; the rows it removed are created again, parents first.
+	want := []string{"removed born:k", "removed born", "committed upd", "created gone", "created gone:k"}
+	if got := ids(rb.Applied); !slices.Equal(got, want) {
+		t.Errorf("rollback loader results = %v, want %v", got, want)
+	}
+	for id, cfg := range map[string]any{"upd": "old"} {
+		if e, ok := w.ld.Locate(id); !ok || e.Spec.Config != cfg {
+			t.Errorf("row %s = %+v, %v: its previous config must be back", id, e, ok)
+		}
+	}
+	for _, id := range []string{"gone", "gone:k", "upd", "keep"} {
+		if e, ok := w.ld.Locate(id); !ok || e.State != kernel.Active {
+			t.Errorf("row %s = %+v, %v: it must run again", id, e, ok)
+		}
+	}
+	for _, id := range []string{"born", "born:k"} {
+		if _, ok := w.ld.Locate(id); ok {
+			t.Errorf("row %s of the failed generation is still in the tree", id)
+		}
+	}
+	if w.l.Current.Digest != (launch.Digest{1}) {
+		t.Errorf("committed = %x, want the previous composition", w.l.Current.Digest[:1])
+	}
+	// The failed generation is published as failed, then the restored one: N and N+1.
+	mu.Lock()
+	heard = slices.Clone(heard)
+	mu.Unlock()
+	if len(heard) != 2 || heard[0].Generation != 1 || heard[0].Digest != (composition.Digest{2}) || heard[0].Report.Pass ||
+		heard[1].Generation != 2 || heard[1].Digest != (composition.Digest{1}) || !heard[1].Report.Pass {
+		t.Errorf("composition/applied = %+v", heard)
+	}
+
+	// The next generation counts on from the restored one and is planned from it.
+	w.next = launch.Composition{Digest: launch.Digest{3}, Rows: w.l.Current.Rows}
+	if r2 := w.submit("next"); r2.Status != def.Passed || r2.Generation != 3 || r2.Previous.Digest != (launch.Digest{1}) {
+		t.Errorf("next result = %+v", r2)
+	}
+}
+
+func TestRollbackThatTheLoaderRefusesIsNotTriedAgain(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("born", "aiops/p", nil)}}
+	var heard []composition.Applied
+	var mu sync.Mutex
+	w.listen(w.failing("born"), func(_ context.Context, a composition.Applied) { mu.Lock(); heard = append(heard, a); mu.Unlock() })
+	plans := 0
+	w.l.PlanFn = func(_ context.Context, from, to launch.Composition) (launch.Plan, error) {
+		plans++
+		p := diff(from, to)
+		if plans == 2 { // the inverse plan creates a row that exists
+			for i := range p.Entries {
+				if p.Entries[i].ID == "a" {
+					p.Entries[i].Action = launch.ActionCreate
+				}
+			}
+		}
+		return p, nil
+	}
+
+	r := w.submit("test")
+	if r.Status != def.RollbackFailed || !errors.Is(r.Err, def.ErrVerdict) || !errors.Is(r.Err, def.ErrRollback) || !errors.Is(r.Err, loader.ErrExists) {
+		t.Fatalf("result = %+v", r)
+	}
+	if r.Report.Pass || r.Rollback == nil || !errors.Is(r.Rollback.Err, loader.ErrExists) || len(r.Rollback.Applied) != 0 {
+		t.Errorf("both verdicts: forward %+v, rollback %+v", r.Report, r.Rollback)
+	}
+	if plans != 2 {
+		t.Errorf("plans = %d: the rollback is tried once", plans)
+	}
+	// The loader refused the inverse plan whole, so its entries are the failed generation's, and
+	// that is what is committed: readiness and the next generation follow the real tree.
+	if w.l.Current.Digest != (launch.Digest{2}) {
+		t.Errorf("committed = %x, want the failed generation's composition", w.l.Current.Digest[:1])
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(heard) != 1 || heard[0].Generation != 1 || heard[0].Report.Pass {
+		t.Errorf("composition/applied = %+v: the failed generation only", heard)
+	}
+}
+
+func TestRollbackThatCannotBePlannedFails(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("born", "aiops/p", nil)}}
+	w.listen(w.failing("born"), nil)
+	boom := errors.New("boom")
+	plans := 0
+	w.l.PlanFn = func(_ context.Context, from, to launch.Composition) (launch.Plan, error) {
+		if plans++; plans == 2 {
+			return launch.Plan{}, boom
+		}
+		return diff(from, to), nil
+	}
+	r := w.submit("test")
+	if r.Status != def.RollbackFailed || !errors.Is(r.Err, boom) || !errors.Is(r.Rollback.Err, boom) {
+		t.Fatalf("result = %+v", r)
+	}
+	if _, ok := w.ld.Locate("born"); !ok {
+		t.Error("the plan was refused, so nothing was undone")
+	}
+}
+
+func TestRollbackThatEndsWithTheFiberIsAbandoned(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("born", "aiops/p", nil)}}
+	w.listen(w.failing("born"), nil)
+	plans := 0
+	w.l.PlanFn = func(ctx context.Context, from, to launch.Composition) (launch.Plan, error) {
+		if plans++; plans == 2 {
+			_ = w.fiber.Dispose(ctx)
+			<-ctx.Done()
+			return launch.Plan{}, ctx.Err()
+		}
+		return diff(from, to), nil
+	}
+	r := w.submit("test")
+	if r.Status != def.Abandoned || r.Stage != def.StageRollback || !errors.Is(r.Err, def.ErrAbandoned) || !errors.Is(r.Err, def.ErrVerdict) {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
+func TestVolatileCommitIsRevertedThroughTheCommitPath(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("u", "aiops/p", map[string]any{"level": "info"}), row("bad", "aiops/p", nil))
+	w.ld.SetState("bad", kernel.Failed) // it was inactive before and untouched: a warning, not a failure
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("u", "aiops/p", map[string]any{"level": "debug"}),
+		row("bad", "aiops/p", nil), row("born", "aiops/p", nil)}}
+	w.listen(w.failing("born"), nil)
+	var commits []string
+	p := kernel.Define(kernel.Plugin{ID: "aiops/volatile", Hooks: []kernel.HookUse{loader.VolatileUpdate.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			loader.VolatileUpdate.On(c, kernel.DefaultStage, func(_ context.Context, a loader.VolatileUpdateArgs) (any, error) {
+				commits = append(commits, fmt.Sprint(a.ID, a.Config))
+				return nil, nil
+			})
+			return nil
+		}})
+	active(t, w.root.Plugin(p, nil))
+
+	r := w.submit("test")
+	if r.Status != def.RolledBack {
+		t.Fatalf("result = %+v", r)
+	}
+	// The fake loader says Committed for an update: the config goes forward and back as
+	// a commit, which the hook of the loader announces each time.
+	if want := []string{"umap[level:debug]", "umap[level:info]"}; !slices.Equal(commits, want) {
+		t.Errorf("volatile commits = %v, want %v", commits, want)
+	}
+}
+
+func TestCommitThatTheLauncherRefusesIsReportedOnTheResult(t *testing.T) {
+	boom := errors.New("forgotten")
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("n", "aiops/p", nil)}}
+	w.l.CommitFn = func(launch.Composition) error { return boom }
+	r := w.submit("test")
+	if r.Status != def.Passed || !errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "commit the composition") {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
+// settleLoader is a loader that applies whatever it is given, reports "born" FAILED while
+// the first generation settles, and holds the Await of the rollback until its context
+// ends, as a settle does while a fiber is out of its transition.
+type settleLoader struct {
+	blockingLoader
+	mu       sync.Mutex
+	applies  int
+	rollback chan struct{} // signalled when the settle of the rollback waits
+}
+
+func (s *settleLoader) Apply(_ context.Context, ops []loader.Op) ([]loader.Result, error) {
+	s.mu.Lock()
+	s.applies++
+	s.mu.Unlock()
+	var res []loader.Result
+	for _, op := range ops {
+		o := loader.Created
+		if op.Kind == loader.OpRemove {
+			o = loader.Removed
+		}
+		res = append(res, loader.Result{ID: op.Entry.ID, Outcome: o})
+	}
+	return res, nil
+}
+
+func (s *settleLoader) Await(ctx context.Context, id string) (kernel.State, error) {
+	s.mu.Lock()
+	n := s.applies
+	s.mu.Unlock()
+	if n < 2 {
+		if id == "born" {
+			return kernel.Failed, nil
+		}
+		return kernel.Active, nil
+	}
+	s.rollback <- struct{}{}
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+func TestRollbackThatEndsWhileSettlingIsAbandoned(t *testing.T) {
+	root := kerneltest.New(t)
+	l, lp := launchfake.New()
+	sl := &settleLoader{rollback: make(chan struct{}, 4)}
+	lpl := kernel.Define(kernel.Plugin{ID: "aiops/settle-loader", Provides: []kernel.AnyKey{loader.Key},
+		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, sl) }})
+	l.Current = launch.Composition{Digest: launch.Digest{1}, Rows: []launch.Row{row("a", "aiops/p", nil)}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("born", "aiops/p", nil)}}, nil
+	}
+	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
+	kerneltest.Mount(root, lp, lpl)
+	rf := root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4})
+	active(t, rf)
+	var svc def.Reload
+	caller := kernel.Define(kernel.Plugin{ID: "aiops/caller", Inject: []kernel.Dep{kernel.Need(def.Key)},
+		Apply: func(c *kernel.Context, _ any) error { svc = def.Key.Of(c); return nil }})
+	active(t, root.Plugin(caller, nil))
+	id, err := svc.Submit(t.Context(), def.Op{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-sl.rollback // the worker settles the restored rows
+	if err := rf.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	r, err := svc.Await(t.Context(), id)
+	if err != nil || r.Status != def.Abandoned || r.Stage != def.StageRollback || !errors.Is(r.Err, def.ErrAbandoned) ||
+		!errors.Is(r.Err, def.ErrVerdict) || r.Rollback == nil || !errors.Is(r.Rollback.Err, context.Canceled) {
+		t.Fatalf("result = %+v, %v", r, err)
+	}
+	if l.Current.Digest != (launch.Digest{1}) {
+		t.Errorf("committed = %x: the loader had applied the inverse plan, so the previous composition", l.Current.Digest[:1])
+	}
 }

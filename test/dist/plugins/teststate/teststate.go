@@ -65,7 +65,7 @@ type Verdict struct {
 // Op is the last operation of reload.
 type Op struct {
 	ID         uint64 `json:"id"`
-	Status     string `json:"status"` // queued, running, passed, failed, rejected or abandoned
+	Status     string `json:"status"` // queued, running, passed, rolled back, rollback failed, rejected or abandoned
 	Stage      string `json:"stage"`
 	Error      string `json:"error"`
 	Generation uint64 `json:"generation"` // the number reload gave the applied generation; 0 until one is applied
@@ -77,8 +77,19 @@ type Op struct {
 	// Applied lists what the loader did, by outcome (created, restarted, committed...),
 	// with the ids of the rows: Result.Applied.
 	Applied map[string][]string `json:"applied,omitempty"`
-	Denied  []string            `json:"denied"` // rows the gate detached
+	Denied  []string            `json:"denied"` // rows the gate denied: the generation is rejected
 	Verdict []Verdict           `json:"verdict"`
+	// Rollback is what restoring the previous composition did after a failed verdict
+	// (Result.Rollback), absent when none was attempted.
+	Rollback *Rollback `json:"rollback,omitempty"`
+}
+
+// Rollback is the outcome of a rollback: the number reload gave the restored generation, why
+// it failed if it did, and the verdict on the restored rows.
+type Rollback struct {
+	Generation uint64    `json:"generation"`
+	Error      string    `json:"error"`
+	Verdict    []Verdict `json:"verdict"`
 }
 
 // State is the file.
@@ -215,10 +226,22 @@ func opOf(r reload.Result) *Op {
 	for _, d := range r.Admission.Denied {
 		op.Denied = append(op.Denied, d.Row)
 	}
-	for _, v := range r.Report.Rows {
-		op.Verdict = append(op.Verdict, Verdict{ID: v.ID, Outcome: v.Outcome, State: string(v.State), Detail: v.Detail})
+	op.Verdict = verdicts(r.Report)
+	if rb := r.Rollback; rb != nil {
+		op.Rollback = &Rollback{Generation: rb.Generation, Verdict: verdicts(rb.Report)}
+		if rb.Err != nil {
+			op.Rollback.Error = rb.Err.Error()
+		}
 	}
 	return op
+}
+
+func verdicts(rep composition.Report) []Verdict {
+	var out []Verdict
+	for _, v := range rep.Rows {
+		out = append(out, Verdict{ID: v.ID, Outcome: v.Outcome, State: string(v.State), Detail: v.Detail})
+	}
+	return out
 }
 
 // write writes the state if it differs from the last one written.

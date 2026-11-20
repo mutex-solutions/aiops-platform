@@ -5,9 +5,9 @@
 // settle and judge, then publish composition/applied (03-c3-kernel.md:65, :374-382;
 // plugin-system-2026-11.md:363-371).
 //
-// At S1 there is no committer and no restore (ADR-059 decision 5; S4a): a failed
-// verdict is reported, and the tree stays as applied. The report names the previous
-// composition so that a later step can restore it.
+// At S1 there is no committer (ADR-059 decision 5; S4a), so a passed verdict is
+// committed to the launcher with Profile.Commit, and a failed one is rolled back at
+// once with one inverse plan through the loader (decision 12).
 package engine
 
 import (
@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
@@ -47,10 +48,8 @@ type Engine struct {
 	finished []def.ID // ids of final jobs, oldest first, for the bound on history
 	wake     chan struct{}
 
-	// The worker's own: the composition the tree runs, and the generation number.
-	current    launch.Composition
+	// The worker's own: the number of the last generation applied or restored.
 	generation uint64
-	started    bool
 }
 
 var _ def.Reload = (*Engine)(nil)
@@ -64,8 +63,8 @@ type job struct {
 type nested struct{}
 
 // New returns an engine whose queue holds at most queueMax waiting operations and
-// whose history keeps the results of the last historyMax final ones. The tree is
-// taken to run Profile.Committed as it is at the first operation.
+// whose history keeps the results of the last historyMax final ones. The tree runs
+// Profile.Committed as it is at each operation.
 func New(d Deps, queueMax, historyMax int) *Engine {
 	return &Engine{Deps: d, queueMax: queueMax, historyMax: historyMax, jobs: map[def.ID]*job{},
 		wake: make(chan struct{}, 1)}
@@ -204,10 +203,8 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 		}
 		return r
 	}
-	if !e.started {
-		e.started, e.current = true, e.Profile.Committed()
-	}
-	r.Previous = e.current
+	prev := e.Profile.Committed()
+	r.Previous = prev
 	cand, err := e.Profile.Compose(ctx)
 	if err != nil {
 		return stop(def.StageCompose, err)
@@ -217,53 +214,122 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	if err != nil {
 		return stop(def.StageAdmit, err)
 	}
-	cand = detach(cand, r.Admission)
-	r.Plan, err = e.Profile.Plan(ctx, e.current, cand)
+	if len(r.Admission.Denied) > 0 {
+		// At boot a denied optional row is detached as disabled; a live generation is
+		// rejected as a whole (ADR-059 decision 15).
+		return stop(def.StageAdmit, denied(r.Admission))
+	}
+	r.Plan, err = e.Profile.Plan(ctx, prev, cand)
 	if err != nil {
 		return stop(def.StagePlan, err)
 	}
-	before := e.activeBefore()
-	ops := operations(r.Plan, e.current, cand)
+	before := e.activeBefore(prev)
+	ops := operations(r.Plan, prev, cand)
 	if len(ops) > 0 {
 		if r.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
 			return stop(def.StageApply, err)
 		}
 	}
 	// The loader refuses a plan whole and with no effect, so from here the tree is
-	// the candidate. A generation whose verdict fails stays applied at S1.
-	e.current = cand
+	// the candidate.
 	e.generation++
 	r.Generation, r.Stage = e.generation, def.StageSettle
 	r.Report, err = e.judge(ctx, cand, r.Plan, r.Applied, before)
 	if err != nil {
 		return stop(def.StageSettle, err)
 	}
-	r.Status = def.Passed
-	if !r.Report.Pass {
-		r.Status, r.Err = def.Failed, def.ErrVerdict
-	}
 	r.Stage = def.StagePublish
-	if err := e.Publish(ctx, composition.Applied{Digest: composition.Digest(cand.Digest), Generation: r.Generation, Report: r.Report}); err != nil {
-		r.Err = errors.Join(r.Err, fmt.Errorf("publish composition/applied: %w", err))
+	if !r.Report.Pass {
+		// The failed generation is published as failed, then rolled back; what it
+		// restored is published after it. The committed composition stays the previous
+		// one until the rollback says what the tree runs.
+		r.Err = def.ErrVerdict
+		e.publish(ctx, &r, cand.Digest, r.Generation, r.Report)
+		return e.rollback(ctx, r, cand, prev, before)
 	}
+	// Committed before it is published: a listener of composition/applied, readiness
+	// among them, reads the required set of this generation.
+	r.Status = def.Passed
+	e.commit(&r, cand)
+	e.publish(ctx, &r, cand.Digest, r.Generation, r.Report)
 	return r
 }
 
-// detach disables the optional rows the gate denied: "a denied optional row is
-// detached as disabled" (03-c3-kernel.md:358). A denied required row is an error of
-// Admit and never reaches here.
-func detach(c launch.Composition, a launch.Admission) launch.Composition {
-	if len(a.Denied) == 0 {
-		return c
+// rollback restores prev after the verdict on cand failed (ADR-059 decision 12): one
+// inverse plan through the loader, which creates the rows that cand removed once
+// their previous fibers are DISPOSED (the loader's rule), removes the rows that cand
+// created, gives the rows that cand changed their previous config and reverts its
+// volatile commits through the commit path. The restored rows are settled and judged by
+// the rule that judges a generation, against what was ACTIVE before cand. It is tried
+// once: a failure is reported with both verdicts and is not retried, and the committed
+// composition is the one the loader's entries hold afterwards, so that readiness and
+// the next generation follow the real tree. (There is no committer, no lock and no
+// audit: those are S4a.)
+func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.Composition, before map[string]bool) def.Result {
+	rb := &def.Rollback{}
+	r.Rollback, r.Stage = rb, def.StageRollback
+	tree := cand // what the loader's entries hold
+	fail := func(err error) def.Result {
+		rb.Err = err
+		e.commit(&r, tree)
+		if ctx.Err() != nil {
+			r.Status, r.Err = def.Abandoned, errors.Join(r.Err, def.ErrAbandoned, err)
+		} else {
+			r.Status, r.Err = def.RollbackFailed, errors.Join(r.Err, def.ErrRollback, err)
+		}
+		return r
 	}
-	rows := slices.Clone(c.Rows)
-	for i := range rows {
-		if slices.ContainsFunc(a.Denied, func(d launch.Denial) bool { return d.Row == rows[i].ID }) {
-			rows[i].Enabled = false
+	var err error
+	if rb.Plan, err = e.Profile.Plan(ctx, cand, prev); err != nil {
+		return fail(err)
+	}
+	if ops := operations(rb.Plan, cand, prev); len(ops) > 0 {
+		if rb.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
+			return fail(err)
 		}
 	}
-	c.Rows = rows
-	return c
+	tree = prev
+	if rb.Report, err = e.judge(ctx, prev, rb.Plan, rb.Applied, before); err != nil {
+		return fail(err)
+	}
+	if !rb.Report.Pass {
+		return fail(errNotRestored)
+	}
+	e.generation++
+	rb.Generation, r.Status = e.generation, def.RolledBack
+	e.commit(&r, prev)
+	r.Stage = def.StagePublish
+	e.publish(ctx, &r, prev.Digest, rb.Generation, rb.Report)
+	return r
+}
+
+// errNotRestored is why a rollback fails when its loader plan was applied and the
+// restored rows are not ACTIVE: its report says which.
+var errNotRestored = errors.New("the rows of the previous composition are not ACTIVE again")
+
+// commit tells the launcher what the tree runs, so that Committed and Required follow
+// it. A refusal is reported on the result and changes no status.
+func (e *Engine) commit(r *def.Result, c launch.Composition) {
+	if err := e.Profile.Commit(c); err != nil {
+		r.Err = errors.Join(r.Err, fmt.Errorf("commit the composition: %w", err))
+	}
+}
+
+// publish emits composition/applied for a generation. A failure is reported on the
+// result and changes no status.
+func (e *Engine) publish(ctx context.Context, r *def.Result, d launch.Digest, generation uint64, rep composition.Report) {
+	if err := e.Publish(ctx, composition.Applied{Digest: composition.Digest(d), Generation: generation, Report: rep}); err != nil {
+		r.Err = errors.Join(r.Err, fmt.Errorf("publish composition/applied: %w", err))
+	}
+}
+
+// denied is the cause of a rejected generation: the gate denied these rows.
+func denied(a launch.Admission) error {
+	parts := make([]string, len(a.Denied))
+	for i, d := range a.Denied {
+		parts[i] = fmt.Sprintf("row %q (%s): %s", d.Row, d.Check, d.Reason)
+	}
+	return fmt.Errorf("%w: %s", def.ErrDenied, strings.Join(parts, "; "))
 }
 
 // operations turns a plan into the one batch the loader applies: removes, children
@@ -298,10 +364,11 @@ func spec(r launch.Row) loader.EntrySpec {
 		Roles: r.Roles, Inject: r.Inject, Isolate: r.Isolate, Intercept: r.Intercept}
 }
 
-// activeBefore lists the rows of the running composition that are ACTIVE now.
-func (e *Engine) activeBefore() map[string]bool {
+// activeBefore lists the rows of the composition c, the one the tree runs, that are ACTIVE
+// now.
+func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 	out := map[string]bool{}
-	for _, row := range e.current.Rows {
+	for _, row := range c.Rows {
 		if en, ok := e.Loader.Locate(row.ID); ok && en.Mount == loader.Mounted && en.State == kernel.Active {
 			out[row.ID] = true
 		}

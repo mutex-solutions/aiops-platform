@@ -15,7 +15,7 @@ import (
 func TestStatusDone(t *testing.T) {
 	for s, want := range map[reload.Status]bool{
 		reload.Queued: false, reload.Running: false, reload.Passed: true,
-		reload.Failed: true, reload.Rejected: true, reload.Abandoned: true,
+		reload.RolledBack: true, reload.RollbackFailed: true, reload.Rejected: true, reload.Abandoned: true,
 	} {
 		if s.Done() != want {
 			t.Errorf("%s.Done() = %v, want %v", s, !want, want)

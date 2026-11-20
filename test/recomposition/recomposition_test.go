@@ -261,8 +261,9 @@ func TestJudgeWaitsForAnUnloadingFiber(t *testing.T) {
 }
 
 // (d) A row that the generation enables never activates: the verdict reports it, the rows
-// that were ACTIVE stay so, and the result names the composition that the tree ran before
-// (Result.Previous), which a later step restores.
+// that were ACTIVE stay so, and reload rolls the generation back with one inverse plan: the
+// result names the composition that the tree ran before (Result.Previous), which is
+// running again, with the row disabled as it was (ADR-059 decision 12).
 func TestNewlyEnabledRowThatNeverActivates(t *testing.T) {
 	w := boot(t)
 	boot0, _ := w.p.Until(budget, func(s harness.Snapshot) bool { return s.HaveState && s.State.Digest != "" })
@@ -270,8 +271,16 @@ func TestNewlyEnabledRowThatNeverActivates(t *testing.T) {
 	id := w.submit("never-active.yml", "")
 	s := w.verdictOf(id)
 	op := s.State.Reload
-	if op.Status != "failed" || !strings.Contains(op.Error, "failed verdict") {
-		t.Fatalf("the generation should have a failed verdict: %+v", op)
+	if op.Status != "rolled back" || !strings.Contains(op.Error, "failed verdict") || op.Rollback == nil || op.Rollback.Error != "" {
+		t.Fatalf("the generation should have a failed verdict and be rolled back: %+v", op)
+	}
+	if op.Generation != 1 || op.Rollback.Generation != 2 {
+		t.Errorf("the failed generation is 1 and the restored one 2: %d and %d", op.Generation, op.Rollback.Generation)
+	}
+	for _, v := range op.Rollback.Verdict {
+		if v.Outcome == "fail" {
+			t.Errorf("the restored tree has a failed row: %+v", v)
+		}
 	}
 	v, ok := verdict(op, "extra")
 	if !ok || v.Outcome != "fail" || v.State != "PENDING" || !strings.Contains(v.Detail, "enabled by this generation") {
@@ -285,12 +294,16 @@ func TestNewlyEnabledRowThatNeverActivates(t *testing.T) {
 			t.Errorf("row %s is %q after the failed generation", row, got)
 		}
 	}
+	// The row is disabled again, as it was before the generation: not mounted, no fiber.
+	if rs, ok := s.Row("extra"); !ok || rs.Mount != "disabled" {
+		t.Errorf("row extra after the rollback: %+v (present %v), want disabled", rs, ok)
+	}
 	if op.PreviousDigest != was || op.PreviousRows == 0 || op.Digest == was {
 		t.Errorf("Result.Previous is not the composition that booted: previous %q (%d rows), candidate %q, booted %q",
 			op.PreviousDigest, op.PreviousRows, op.Digest, was)
 	}
 	if !s.Status.Ready || !s.Running() {
-		t.Errorf("the process is not serving after a failed verdict: %+v", s.Status)
+		t.Errorf("the process is not serving after a rolled back generation: %+v", s.Status)
 	}
 	w.stop()
 }

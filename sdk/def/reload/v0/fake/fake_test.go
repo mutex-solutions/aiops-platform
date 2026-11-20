@@ -23,10 +23,10 @@ func TestSubmitAwaitResult(t *testing.T) {
 	if err != nil || id != 1 {
 		t.Fatalf("Submit = %v, %v", id, err)
 	}
-	f.Next = &reload.Result{Status: reload.Failed, Err: reload.ErrVerdict}
+	f.Next = &reload.Result{Status: reload.RolledBack, Err: reload.ErrVerdict}
 	id2, _ := f.Submit(ctx, reload.Op{Source: "b"})
 	r, err := f.Await(ctx, id2)
-	if err != nil || r.Status != reload.Failed || r.ID != id2 || r.Op.Source != "b" {
+	if err != nil || r.Status != reload.RolledBack || r.ID != id2 || r.Op.Source != "b" {
 		t.Errorf("Await = %+v, %v", r, err)
 	}
 	if r, ok := f.Result(id); !ok || r.Status != reload.Passed {

@@ -43,6 +43,12 @@ var (
 	// ErrVerdict is the cause of a result whose generation was applied and judged
 	// failed.
 	ErrVerdict = errors.New("reload: failed verdict")
+	// ErrDenied is the cause of a generation that the gate denied rows of: it is
+	// rejected whole (ADR-059 decision 15).
+	ErrDenied = errors.New("reload: the gate denied rows of the generation")
+	// ErrRollback is part of the cause of a result whose failed generation could not
+	// be rolled back.
+	ErrRollback = errors.New("reload: rollback failed")
 )
 
 // ID names one submitted operation. The first is 1.
@@ -64,6 +70,9 @@ const (
 	StageApply   Stage = "apply"
 	StageSettle  Stage = "settle"
 	StagePublish Stage = "publish"
+	// StageRollback is the stage after a failed verdict: the previous composition is
+	// applied again and judged.
+	StageRollback Stage = "rollback"
 )
 
 // Status is where an operation stands.
@@ -75,12 +84,18 @@ const (
 	Running Status = "running"
 	// Passed: the generation was applied and the verdict is pass.
 	Passed Status = "passed"
-	// Failed: the generation was applied and the verdict is fail. At S1 there is no
-	// committer and no restore (ADR-059 decision 5, S4a), so the tree stays as
-	// applied; Result.Previous is what a later step restores.
-	Failed Status = "failed"
+	// RolledBack: the generation was applied and its verdict is fail, and reload applied Result.Previous again with one
+	// inverse plan, and judged that its rows are ACTIVE again (ADR-059 decision 12).
+	// Result.Report is the failed verdict and Result.Rollback the outcome.
+	RolledBack Status = "rolled back"
+	// RollbackFailed: the verdict failed and the rollback failed too: the inverse plan
+	// was refused, or the restored rows are not ACTIVE. Result.Report and
+	// Result.Rollback hold both verdicts. The rollback is not tried again.
+	RollbackFailed Status = "rollback failed"
 	// Rejected: a stage before the apply, or the apply itself, refused the
-	// generation, and the tree was not touched.
+	// generation, and the tree was not touched. A generation that holds a row the
+	// gate denied, or of a plugin that is not in the module table, is rejected at the
+	// admit stage with ErrDenied (ADR-059 decision 15).
 	Rejected Status = "rejected"
 	// Abandoned: the reload fiber was disposed first. An operation that was running
 	// may have touched the tree, and Stage says how far it got.
@@ -99,16 +114,33 @@ type Result struct {
 	// Stage is the stage that rejected or was running when the operation was
 	// abandoned, and the last stage reached otherwise.
 	Stage Stage
-	// Err is the cause of Rejected, Abandoned (ErrAbandoned) and Failed (ErrVerdict).
+	// Err is the cause of Rejected, of Abandoned (ErrAbandoned), of RolledBack
+	// (ErrVerdict) and of RollbackFailed (ErrVerdict and ErrRollback, and why the
+	// rollback failed).
 	Err error
 
 	Generation uint64             // the number of the applied generation; 0 until one is applied
 	Digest     launch.Digest      // the digest of the candidate
-	Previous   launch.Composition // the composition the tree ran before this operation: what a later step restores
+	Previous   launch.Composition // the composition the tree ran before this operation: what a rollback restores
 	Admission  launch.Admission
 	Plan       launch.Plan
-	Applied    []loader.Result // what the loader did, in the order of its operations
-	Report     composition.Report
+	Applied    []loader.Result    // what the loader did, in the order of its operations
+	Report     composition.Report // the verdict on the generation; when it failed, the failed verdict
+	// Rollback is what restoring Previous did after a failed verdict, nil when the
+	// verdict passed or the generation was not applied.
+	Rollback *Rollback
+}
+
+// Rollback is the outcome of restoring the previous composition after a failed
+// verdict (ADR-059 decision 12): one inverse plan, applied through the loader and
+// judged. The generation numbers are those that composition/applied carries: the
+// failed generation is N and the restored one is N+1, published after it.
+type Rollback struct {
+	Plan       launch.Plan        // the diff from the failed generation back to Previous
+	Applied    []loader.Result    // what the loader did, in the order of its operations
+	Report     composition.Report // the verdict on the restored rows: Pass says they are ACTIVE again
+	Generation uint64             // N+1; 0 when the rollback failed
+	Err        error              // nil when the previous composition is running again
 }
 
 // Reload is what the reload key serves (03-c3-kernel.md:65, :87).
