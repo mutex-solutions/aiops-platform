@@ -229,10 +229,28 @@ type ModuleEntry struct {
 	Plugin   any
 	Provides []string // key names the plugin provides
 	Needs    []string // key names the plugin needs
+	// Wants lists the keys the plugin reads optionally (a When body). A want
+	// is no edge of the graph, and a provider-bound key refuses it
+	// (07-c4-plugin-sdk.md:553). Added at S1 for gate check 7.
+	Wants []string
+	// Hooks lists the hooks the plugin listens on, with their declared stage
+	// (07-c4-plugin-sdk.md:438). Added at S1 for --dump-hooks and the sealed
+	// hook part of gate check 7.
+	Hooks []HookDecl
 	// Volatile lists the config field paths that can change without a
 	// restart, until S2a derives them (ADR-059 decision 10). A path is
 	// dotted, as in RefUse.Path.
 	Volatile []string
+}
+
+// HookDecl is one hook a plugin listens on. Stage is the ordinal of the
+// declared stage in the definition that owns the hook: a chain runs by Stage
+// ascending, then plugin id (07-c4-plugin-sdk.md:438). StageName is for the
+// dump only. Added at S1.
+type HookDecl struct {
+	Hook      string
+	Stage     int
+	StageName string
 }
 
 // ModuleTable maps a plugin id to its entry.
@@ -280,6 +298,10 @@ const (
 	ActionUnchanged Action = "unchanged"
 )
 
+// Effect is what the loader does for one row of a plan: see the constants in
+// plan.go. Added at S1.
+type Effect string
+
 // PlanEntry is the change of one row between two compositions. Changed lists
 // the row fields that differ and ConfigPaths the config paths that differ, so
 // that a later package can tell a volatile-only update from a restart.
@@ -288,6 +310,10 @@ type PlanEntry struct {
 	Action      Action
 	Changed     []FieldName
 	ConfigPaths []string
+	// Effect is what the loader does for the row, derived from the change and
+	// from whether the row is mounted before and after (see Effect). Added at
+	// S1 so that a volatile update is told from a restart.
+	Effect Effect
 }
 
 // Plan is the diff between two compositions by row id
