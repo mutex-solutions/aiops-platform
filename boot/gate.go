@@ -3,6 +3,7 @@ package boot
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // The gate: admission of a composition (03-c3-kernel.md:357, "Admit"). It has
@@ -394,12 +395,13 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 			}
 		}
 	}
-	if o, _ := r.Provenance.Of(FieldIntercept); o.Layer != 1 {
-		for _, f := range r.Intercept {
-			if _, ok := g.provider[f.Key]; ok {
-				out = append(out, g.fail(c, r.Row, RuleInterceptBound, false,
-					"row %q: intercept of provider-bound key %q is set by layer %d (%s), and only bundle layers may", r.ID, f.Key, o.Layer, o.Source))
-			}
+	// Compose keeps the origin of each intercept key apart (interceptField): only
+	// bundle layers add, change or remove the intercept of a provider-bound key.
+	for _, fo := range r.Provenance.Fields {
+		k, ok := strings.CutPrefix(string(fo.Field), string(interceptField("")))
+		if _, bound := g.provider[k]; ok && bound && fo.Origin.Layer != 1 {
+			out = append(out, g.fail(c, r.Row, RuleInterceptBound, false,
+				"row %q: the intercept of provider-bound key %q is set by layer %d (%s), and only bundle layers may", r.ID, k, fo.Origin.Layer, fo.Origin.Source))
 		}
 	}
 	return out

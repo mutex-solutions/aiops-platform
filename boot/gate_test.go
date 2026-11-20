@@ -101,6 +101,23 @@ func TestGateChecksTable(t *testing.T) {
 		{name: "inject patched on the group of a provider of a bound key", bundle: rows("id: g, plugin: core:group, config: [{id: a, plugin: o/prov}]"),
 			patches: []string{"- {id: g, inject: [nothere]}"},
 			want:    []string{"8 g:a bound-provider-field stop=true"}, refused: true},
+		// The intercept of a bound key is the bundle's: a later patch may not add, change or drop it.
+		{name: "a patch drops the bundle intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}, ok: {y: 1}}"),
+			patches: []string{"- {id: a, intercept: {ok: {y: 2}}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch empties the intercept", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}"),
+			patches: []string{"- {id: a, intercept: {}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch changes the intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}"),
+			patches: []string{"- {id: a, intercept: {pk: {x: 2}}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch keeps the bound intercept and changes an open one", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}, ok: {y: 1}}"),
+			patches: []string{"- {id: a, intercept: {pk: {x: 1}, ok: {y: 2}}}", "- {id: a, intercept: {pk: {x: 1}}}"}, pass: true},
+		{name: "a bundle patch drops the intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}") + "- {id: a, intercept: {}}\n",
+			pass: true},
+		{name: "a row inserted by a patch intercepts a bound key", bundle: rows("id: b, plugin: o/open"),
+			patches: []string{"- insert: [{id: a, plugin: o/open, intercept: {pk: {x: 1}}}]"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

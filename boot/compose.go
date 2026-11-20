@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 )
@@ -52,7 +54,9 @@ type Options struct {
 //
 //   - insert adds a new id only; an existing id fails in every layer;
 //   - a patch targets a row by id; an unknown id is a warning;
-//   - config in a patch replaces the whole config; there is no deep merge;
+//   - config in a patch replaces the whole config, and intercept the whole
+//     intercept; there is no deep merge (the provenance keeps the origin of
+//     each intercept key, see interceptField);
 //   - plugin and roles are fixed at insert and no patch carries them;
 //   - required may be raised, never lowered;
 //   - a patch never sets inject, isolate or group on a required row (the
@@ -163,7 +167,15 @@ const (
 type crow struct {
 	row    Row
 	origin [numFields]Origin
+	icpt   map[string]Origin // per intercept key, the item that last added, changed or removed it
 }
+
+// interceptField names the provenance of one key of an intercept. A patch
+// replaces the whole intercept, but only bundle layers may set the intercept of a
+// provider-bound key (08-profiles-roadmap-adrs.md:148), so gate check 8 needs to
+// know which keys a later layer added, changed or dropped. Provenance lists one
+// such field per key a row's intercept has held, after the ten row fields.
+func interceptField(key string) FieldName { return FieldIntercept + "." + FieldName(key) }
 
 // layer parses one layer file and applies it. An absent optional file is
 // skipped.
@@ -227,10 +239,13 @@ func (c *composer) insert(pr ParsedRow, parent string, l Layer, f File, depth in
 		return fail(RuleLimit, "more than %d rows", MaxRows)
 	}
 	o := Origin{Layer: l.Number, Source: l.Source, File: f.Path, Line: pr.Line}
-	cr := &crow{row: pr.Row}
+	cr := &crow{row: pr.Row, icpt: map[string]Origin{}}
 	cr.row.ID, cr.row.Parent = id, parent
 	for i := range cr.origin {
 		cr.origin[i] = o
+	}
+	for _, f := range pr.Intercept {
+		cr.icpt[f.Key] = o
 	}
 	c.index[id] = len(c.rows)
 	c.rows = append(c.rows, cr)
@@ -324,6 +339,17 @@ func (c *composer) patch(pt Patch, l Layer, line int) error {
 		r.Inject, cr.origin[iInject] = *pt.Inject, o
 	}
 	if pt.Intercept != nil {
+		old, nw := fieldMap(Value{Kind: KindMap, Map: r.Intercept}), fieldMap(Value{Kind: KindMap, Map: *pt.Intercept})
+		for k := range old {
+			if _, kept := nw[k]; !kept {
+				cr.icpt[k] = o
+			}
+		}
+		for k, v := range nw {
+			if ov, had := old[k]; !had || !equalValue(ov, v) {
+				cr.icpt[k] = o
+			}
+		}
 		r.Intercept, cr.origin[iIntercept] = *pt.Intercept, o
 	}
 	if pt.Isolate != nil {
@@ -342,9 +368,12 @@ func (c *composer) finish() Composition {
 	plain := make([]Row, len(c.rows))
 	names := FieldNames()
 	for i, cr := range c.rows {
-		prov := Provenance{Fields: make([]FieldOrigin, numFields)}
+		prov := Provenance{Fields: make([]FieldOrigin, numFields, numFields+len(cr.icpt))}
 		for j, n := range names {
 			prov.Fields[j] = FieldOrigin{Field: n, Origin: cr.origin[j]}
+		}
+		for _, k := range slices.Sorted(maps.Keys(cr.icpt)) {
+			prov.Fields = append(prov.Fields, FieldOrigin{Field: interceptField(k), Origin: cr.icpt[k]})
 		}
 		refs := collectRefs(cr.row.Config, "config", nil) // the parser refuses one in an intercept
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
