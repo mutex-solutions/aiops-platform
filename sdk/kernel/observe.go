@@ -482,19 +482,18 @@ func (d *dispatcher) close(ctx context.Context) error {
 	}
 	select {
 	case <-d.done:
-		return d.overflowErr()
 	case <-ctx.Done():
-		select {
-		case <-d.done:
-			return d.overflowErr()
-		default:
-			var err error = &closeError{Cause: ctx.Err(), Status: d.snapshot()}
-			if overflow := d.overflowErr(); overflow != nil {
-				err = errors.Join(err, overflow)
-			}
-			return err
-		}
 	}
+	select {
+	case <-d.done: // A worker that finished as ctx ended counts as joined.
+		return d.overflowErr()
+	default:
+	}
+	var err error = &closeError{Cause: ctx.Err(), Status: d.snapshot()}
+	if overflow := d.overflowErr(); overflow != nil {
+		err = errors.Join(err, overflow)
+	}
+	return err
 }
 
 func (d *dispatcher) fromCallback(ctx context.Context) bool {

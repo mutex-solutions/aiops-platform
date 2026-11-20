@@ -78,9 +78,6 @@ func (c *handle) owns(key svcKey) bool {
 // ownership serializes writes; readers observe an immutable COW key set.
 func (c *handle) unpublishOwned(key svcKey) {
 	previous := c.owned.Load()
-	if previous == nil {
-		return
-	}
 	next := &ownedProvisions{keys: make(map[svcKey]struct{}, len(previous.keys))}
 	for existing := range previous.keys {
 		if existing != key {
@@ -893,9 +890,6 @@ func cloneEffectMeta(meta effectMeta) effectMeta {
 	return meta
 }
 func (o *owner) scopeWork(f *fiber) bool {
-	if f.phase != phIdle || f.invalid || f.remove {
-		return false
-	}
 	for _, effect := range f.effects {
 		e := effect.scope
 		if e == nil || e.cleanupFinished() {
@@ -924,14 +918,9 @@ func (o *owner) scopeWork(f *fiber) bool {
 				err = e.runCleanup(ctx)
 				cancel()
 			} else {
-				err = e.runSetup(a.ctx.std, func() (context.Context, context.CancelFunc) {
+				err = scopeSetupResult(e, e.runSetup(a.ctx.std, func() (context.Context, context.CancelFunc) {
 					return context.WithTimeout(context.Background(), o.r.cfg.disposeDeadline)
-				})
-				if err == errScopeStarted && e.cleanupFinished() {
-					// Quiescence can seal this admitted slot between scheduling
-					// and worker entry. No setup callback ran or failed here.
-					err = nil
-				}
+				}))
 			}
 			at := run.finish()
 			o.r.completed(message{kind: cmdScopeDone, id: id, act: a, scope: e, withdraw: withdraw, err: err, errText: errorText(err), at: at})
@@ -941,11 +930,21 @@ func (o *owner) scopeWork(f *fiber) bool {
 	return false
 }
 
-func (o *owner) scopeDone(m message) {
-	f := o.lookup(m.id)
-	if f == nil || f.act != m.act || f.phase != phScoping || f.scopeRunning != m.scope {
-		return
+// scopeSetupResult is what the scope worker reports for the result of runSetup.
+// Quiescence can seal an admitted slot between scheduling and worker entry: no
+// setup callback ran or failed then, so the worker reports success.
+func scopeSetupResult(e *scopeEffect, err error) error {
+	if err == errScopeStarted && e.cleanupFinished() {
+		return nil
 	}
+	return err
+}
+
+func (o *owner) scopeDone(m message) {
+	// f stays in phScoping, with this activation and this scope, until this
+	// message: scopeWork starts one scope at a time and only scopeDone leaves the
+	// phase. A deadline or a quiescence marks f but never replaces it.
+	f := o.lookup(m.id)
 	f.scopeRunning, f.run = nil, nil
 	f.phase = phIdle
 	o.touch(f)
@@ -973,20 +972,13 @@ func (o *owner) scopeDone(m message) {
 }
 
 func (o *owner) trackedDone(m message) {
+	// The record exists and its activation is still f's: a worker reports once,
+	// and a quiesced activation is drained only after its last record is deleted
+	// here (ownBusy), so f is neither replaced nor removed before this message.
 	a := m.act
-	if a == nil {
-		return
-	}
-	work, exists := a.tracked[m.id]
-	if !exists {
-		return
-	}
-	label := work.label
+	label := a.tracked[m.id].label
 	delete(a.tracked, m.id)
 	f := o.lookup(a.ctx.fiber)
-	if f == nil || f.act != a {
-		return
-	}
 	o.event(f, "go:done", label, 0)
 	if m.err != nil && !f.invalid && !f.remove && !a.selfDispose.Load() && f.target != nil && slices.Equal(f.target, a.epoch) {
 		// A detached worker may fail after Apply became ACTIVE. Treat this as an

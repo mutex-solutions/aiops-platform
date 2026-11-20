@@ -173,10 +173,10 @@ func invokeCallback(fn func() error) (err error) {
 
 // loaded handles the completion of an apply callback.
 func (o *owner) loaded(m message) {
+	// An activation has exactly one Apply, and f stays in phApplying, with this
+	// activation, until this message: only loaded leaves that phase, and nothing
+	// replaces or removes f before it.
 	f := o.fibers[m.id]
-	if f == nil || f.act != m.act || f.phase != phApplying {
-		return
-	}
 	f.run = nil
 	if m.err == nil && m.dispose != nil {
 		// A returned plugin disposer is collected after all body effects, even
@@ -351,10 +351,10 @@ func (o *owner) disposeNext(f *fiber) {
 }
 
 func (o *owner) effectDone(m message) {
+	// At most one disposer is in flight, and f stays in phDisposing, with this
+	// activation, while effectRunning is set: disposeNext sets it as it starts the
+	// disposer and only this message clears it.
 	f := o.lookup(m.id)
-	if f == nil || f.act != m.act || f.phase != phDisposing || !f.effectRunning {
-		return
-	}
 	f.effectRunning, f.run = false, nil
 	// Disposal has one total deadline for this activation, not a fresh budget
 	// per effect. Once it expires, retain the blocked diagnostic until all
@@ -573,10 +573,7 @@ func (o *owner) stageOf(f *fiber) (string, *handshake) {
 	case f.phase == phDraining:
 		return "drain", nil
 	case f.phase == phDisposing:
-		if f.effectRunning {
-			return "dispose", f.run
-		}
-		return "dispose", nil
+		return "dispose", f.run // Nil unless a disposer is in flight: effectDone clears it.
 	case f.checking != nil && f.phase == phIdle:
 		return "check", f.checking.run
 	}
@@ -592,9 +589,6 @@ func (o *owner) stageOf(f *fiber) (string, *handshake) {
 // lease count instead of being blamed for the owner's delay.
 func (o *owner) drainInTime(f *fiber, at time.Time) bool {
 	a := f.act
-	if a == nil {
-		return false
-	}
 	finished := int64(0)
 	for _, w := range a.tracked {
 		if !w.run.inTime(at) {

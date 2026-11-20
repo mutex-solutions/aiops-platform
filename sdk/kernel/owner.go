@@ -498,9 +498,7 @@ func (r *core) completed(msg message) {
 }
 func (o *owner) run() {
 	timer := time.NewTimer(time.Hour)
-	if !timer.Stop() {
-		<-timer.C
-	}
+	timer.Stop() // A fresh hour timer has not fired; since Go 1.23 Stop leaves no stale tick.
 	defer timer.Stop()
 	for {
 		o.consumeNotices()
@@ -707,10 +705,8 @@ func (o *owner) handle(m message) (answer, bool) {
 	case cmdScopeWithdraw:
 		f := o.lookup(m.act.ctx.fiber)
 		if f == nil || f.act != m.act || !slices.ContainsFunc(f.effects, func(e effectRec) bool { return e.scope == m.scope }) {
-			if m.scope != nil && m.scope.cleanupFinished() {
-				return answer{}, false
-			}
-			return answer{err: ErrInactive}, false
+			// A scope leaves its fiber's effects only after its cleanup finished.
+			return answer{}, false
 		}
 		m.scope.markWithdraw()
 		o.enqueue(f)
@@ -910,10 +906,7 @@ func validateSpec(spec pluginSpec) error {
 }
 
 func (o *owner) current(a *activation) (*fiber, error) {
-	if a == nil {
-		return nil, ErrInactive
-	}
-	f := o.lookup(a.ctx.fiber)
+	f := o.lookup(a.ctx.fiber) // a is never nil: every sender is a closure of activation.
 	if f == nil || f.act != a || f.invalid || f.remove || !a.ctx.live.Load() {
 		return nil, ErrInactive
 	}
@@ -961,10 +954,7 @@ func (o *owner) work() {
 	for o.workHead < len(o.queue) {
 		id := o.queue[o.workHead]
 		o.workHead++
-		f := o.lookup(id)
-		if f == nil {
-			continue
-		}
+		f := o.lookup(id) // Never nil: only work removes a fiber, and only a fiber whose own turn this is.
 		f.queued = false
 		if f.id == 0 {
 			if f.phase == phIdle && !f.invalid && !f.remove {
@@ -1083,12 +1073,9 @@ func providerActive(f *fiber) bool {
 	return f != nil && f.state == Active && !f.invalid && alive(f)
 }
 
-func uids(epoch []uint64) []uint64 {
-	if len(epoch) == 0 {
-		return nil
-	}
-	return epoch[1:]
-}
+// uids is epoch without its revision. epoch is never empty: it is a checked epoch,
+// and every epoch starts with its revision.
+func uids(epoch []uint64) []uint64 { return epoch[1:] }
 
 func (o *owner) refreshTarget(f *fiber, epoch []uint64) {
 	if epoch == nil {
@@ -1104,10 +1091,10 @@ func (o *owner) refreshTarget(f *fiber, epoch []uint64) {
 		return
 	}
 	if f.checked == f.checkVersion && slices.Equal(f.checkedEpoch, epoch) {
+		// A denied result also set deniedEpoch, which was handled above.
+		f.target = nil
 		if f.checkAllowed {
 			f.target = slices.Clone(epoch)
-		} else {
-			f.target = nil
 		}
 		return
 	}
@@ -1167,10 +1154,9 @@ func (o *owner) checkedResult(m message) {
 		held.pending--
 	}
 	m.check.holds = nil
+	// f exists and still owns this check: work does not remove a fiber while its
+	// check is in flight, and a fiber has one check at a time.
 	f := o.fibers[m.id]
-	if f == nil || f.checking != m.check {
-		return
-	}
 	q := m.check
 	q.cancel()
 	q.ctx.released.Store(true)
@@ -1449,20 +1435,6 @@ type batchOp struct {
 	Kind  batchKind
 	Fiber uint64
 	Spec  pluginSpec
-}
-
-func batchUnique(keys []svcKey) bool {
-	seen := make(map[svcKey]struct{}, len(keys))
-	for _, key := range keys {
-		if key == nil {
-			return false
-		}
-		if _, exists := seen[key]; exists {
-			return false
-		}
-		seen[key] = struct{}{}
-	}
-	return true
 }
 
 // prepareBatch copies declarations and checks every operation before any writer

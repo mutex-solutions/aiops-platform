@@ -320,24 +320,10 @@ func (o *owner) snapshots() []fiberSnap {
 		archived.Epoch = slices.Clone(archived.Epoch)
 		archived.Effects = slices.Clone(archived.Effects)
 		archived.EffectTree = slices.Clone(archived.EffectTree)
-		for i := range archived.EffectTree {
-			archived.EffectTree[i] = cloneEffectMeta(archived.EffectTree[i])
-		}
 		archived.Tracked = slices.Clone(archived.Tracked)
-		if archived.Target != nil {
-			archived.Target = &epochSnap{Revision: archived.Target.Revision, UIDs: slices.Clone(archived.Target.UIDs)}
-		}
 		ss = append(ss, archived)
 	})
-	slices.SortFunc(ss, func(a, b fiberSnap) int {
-		if a.ID < b.ID {
-			return -1
-		}
-		if a.ID > b.ID {
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(ss, func(a, b fiberSnap) int { return cmp.Compare(a.ID, b.ID) })
 	return ss
 }
 
@@ -353,15 +339,7 @@ func (o *owner) inspect() graphView {
 		}
 		view.Provisions = append(view.Provisions, entry)
 	}
-	slices.SortFunc(view.Provisions, func(a, b provisionSnap) int {
-		if a.UID < b.UID {
-			return -1
-		}
-		if a.UID > b.UID {
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(view.Provisions, func(a, b provisionSnap) int { return cmp.Compare(a.UID, b.UID) })
 	return view
 }
 
@@ -421,10 +399,7 @@ func (o *owner) consumeCancelled() {
 			continue
 		}
 		n.done = true
-		err := n.ctx.Err()
-		if err == nil {
-			err = context.Canceled
-		}
+		err := n.ctx.Err() // Non-nil: only the AfterFunc of a finished context queues a waiter.
 		switch n.kind {
 		case cmdSettle, cmdClose:
 			if !haveKnown {
@@ -534,9 +509,6 @@ func (o *owner) finishWaiters() {
 
 func (o *owner) replyAll(waiters *[]*waiter, err error) {
 	for _, w := range *waiters {
-		if w.done {
-			continue
-		}
 		w.done = true
 		w.stop()
 		switch {
@@ -585,9 +557,6 @@ func (o *owner) block(f *fiber, err error) {
 // dependants that still hold its provisions, its structural children while it
 // joins them, or, for the closing root, every fiber. Sorted by id.
 func (o *owner) awaited(f *fiber) []*fiber {
-	if f.act == nil {
-		return nil
-	}
 	var out []*fiber
 	switch {
 	case f.phase == phDraining && !o.ownBusy(f):
