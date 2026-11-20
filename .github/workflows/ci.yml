@@ -79,6 +79,30 @@ jobs:
           go run ./tools/kernelcheck lines sdk/kernel 8200
           go run ./tools/kernelcheck testctor .
           go run ./tools/kernelcheck coverage sdk/kernel/cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel
+      - name: Import boundaries
+        # docs/architecture/07-c4-plugin-sdk.md:27-48, ADR-059 decision 6; skips the
+        # server-closure part until cmd/aiops exists.
+        run: go run ./tools/kernelcheck imports .
+      - name: Plugin vet
+        # plugin-system-2026-11.md:500; allow-var and allow-go exemptions are counted in the output.
+        run: go run ./tools/kernelcheck pluginvet plugins loader boot
+      - name: Boot and loader statement coverage profiles
+        run: |
+          go test -count=1 -coverprofile=cover-boot.out ./boot
+          go test -count=1 -coverprofile=cover-loader.out ./loader
+      - name: Boot structural checks
+        # Provisional line cap: S1 measured 4285 lines + 15% rounded up to the next 100.
+        # ADR-059 decision 11 replaces it at the S1 exit with measured + 10%.
+        # No vocabulary list: boot legitimately handles tenant (a scope class of its closed vocabulary).
+        run: |
+          go run ./tools/kernelcheck lines boot 5000 provisional
+          go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
+      - name: Loader structural checks
+        # Provisional line cap: S1 measured 1000 lines + 15% rounded up to the next 100.
+        run: |
+          go run ./tools/kernelcheck lines loader 1200 provisional
+          go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
+          go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
 
   postgres:
     name: PostgreSQL probes
