@@ -1,0 +1,7 @@
+# Layout: 07-c4-plugin-sdk.md:529-537 (R13). Schema validation is a later step.
+# Contract: 03-c3-kernel.md:64 (`composition` is class `-`, provided by loader).
+key: composition
+version: "0.1"
+stability: preview
+class: {provider: open, consumer: open}
+remote: "no"
