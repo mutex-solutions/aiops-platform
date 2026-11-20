@@ -1,0 +1,7 @@
+# The limits of the release distribution (boot.ParseLimits). The documents give no
+# values for the three deadlines of the kernel; these are the launcher defaults and
+# an open point of S1.
+loadDeadline: 10s
+drainDeadline: 10s
+disposeDeadline: 10s
+shutdownBound: 30s

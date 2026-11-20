@@ -1,0 +1,5 @@
+# The release distribution manifest, the part the launcher reads
+# (08-profiles-roadmap-adrs.md:451). At S1 the distribution holds the loader only;
+# the bindings and the required set of each core plugin are added with the plugin.
+# The loader is mounted by boot and is satisfied by that mount.
+requiredRows: [loader]

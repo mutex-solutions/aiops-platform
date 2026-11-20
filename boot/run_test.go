@@ -373,7 +373,7 @@ func TestKernelConfigNamesUnknownPlugins(t *testing.T) {
 func TestRunWithSealedHookAndObserverLog(t *testing.T) {
 	f := newFixture(t, happyBundle)
 	f.reg.Hooks["t/hook"] = kernel.NewEvent[string]("t/hook", kernel.OwnedBy(storeKey), kernel.Sealed())
-	f.dist.SealedHooks = []HookListeners{{Hook: "t/hook", Plugins: []string{"t/store"}}}
+	f.dist.SealedHooks = []HookListeners{{Hook: "t/hook", Plugins: []string{"t/store"}}, {Hook: "internal/status", Plugins: []string{"t/user"}}}
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	if code := stopAndWait(t, f, done); code != ExitOK {
@@ -386,7 +386,7 @@ func TestRunWithSealedHookAndObserverLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, err := r.kernelConfig(cat, f.dist)
-	if err != nil || len(cfg.Listeners) != 1 {
+	if err != nil || len(cfg.Listeners) != 2 {
 		t.Fatalf("config: %v %+v", err, cfg.Listeners)
 	}
 	cfg.ObserverLog(errors.New("slow observer"))

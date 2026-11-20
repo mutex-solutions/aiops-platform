@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"strings"
 	"sync"
@@ -73,7 +74,9 @@ type Registry struct {
 	// built-in keys of the kernel; a row names a key by string in inject, isolate
 	// and intercept (07-c4-plugin-sdk.md:1244, :1347).
 	Keys map[string]kernel.AnyKey
-	// Hooks maps the name of every sealed hook that dist.yaml lists to its value.
+	// Hooks maps the name of every sealed hook that dist.yaml lists to its value. The
+	// six hooks of the kernel (internal/plugin, internal/status and so on) are always
+	// known and need no entry.
 	Hooks map[string]kernel.AnyHook
 	// LoaderConfig builds the config of the loader plugin from the rows to mount
 	// and the batch function (loader.Config{Rows, Batch}). boot may not import the
@@ -81,6 +84,11 @@ type Registry struct {
 	// may, carries this one function.
 	LoaderConfig func(rows []loaderdef.EntrySpec, batch BatchFunc) any
 }
+
+// kernelHooks are the sealed hooks of the kernel itself. Only the entries that
+// Config.Listeners lists may listen on them (ADR-034, "S1 additions", G5).
+var kernelHooks = []kernel.AnyHook{kernel.InternalPlugin, kernel.InternalStatus, kernel.InternalService,
+	kernel.InternalConfig, kernel.InternalUpdate, kernel.InternalCommit}
 
 // Clock is the clock of the launcher's own bounds. It is not the clock key: the
 // launcher runs before any row.
@@ -389,8 +397,13 @@ func (r *run) kernelConfig(cat *catalog, dist DistManifest) (kernel.Config, erro
 	}
 	cfg.Providers, cfg.Consumers = resolve("provider", dist.Providers), resolve("consumer", dist.Consumers)
 	cfg.Listeners = map[kernel.AnyHook][]kernel.Plugin{}
+	hooks := map[string]kernel.AnyHook{}
+	for _, h := range kernelHooks {
+		hooks[h.Name()] = h
+	}
+	maps.Copy(hooks, r.o.Registry.Hooks)
 	for _, h := range dist.SealedHooks {
-		hook, ok := r.o.Registry.Hooks[h.Hook]
+		hook, ok := hooks[h.Hook]
 		if !ok {
 			errs = append(errs, fmt.Errorf("the sealed hook %q is not in Registry.Hooks", h.Hook))
 			continue
