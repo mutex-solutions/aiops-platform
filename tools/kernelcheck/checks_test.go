@@ -192,6 +192,24 @@ func TestPluginVet(t *testing.T) {
 		{"boot allow-go far away", "boot/a.go", pk("", "func f() {\n\t//kernelcheck:allow-go why\n\n\tgo f()\n}\n"), "boot needs"},
 		{"boot signal.Notify", "boot/a.go", pk("import \"os/signal\"\n", "func f() { signal.Notify(nil) }\n"), "signal.Notify"},
 		{"boot init", "boot/a.go", pk("", "func init() {}\n"), "init function"},
+		{"time.AfterFunc", "plugins/a/plugin.go", pk("import \"time\"\n", "func f() { time.AfterFunc(1, f) }\n"), "time.AfterFunc starts an untracked goroutine"},
+		{"context.AfterFunc", "loader/a.go", pk("import \"context\"\n", "func f() { context.AfterFunc(nil, f) }\n"), "context.AfterFunc starts an untracked goroutine"},
+		{"boot time.AfterFunc", "boot/a.go", pk("import \"time\"\n", "func f() { time.AfterFunc(1, f) }\n"), ""},
+		{"WaitGroup.Go", "plugins/a/plugin.go", pk("import \"sync\"\n", "type T struct{ wg sync.WaitGroup }\nfunc (t *T) f() { t.wg.Go(t.f) }\n"), "plugin.go:4: (*sync.WaitGroup).Go starts an untracked goroutine"},
+		{"embedded WaitGroup.Go", "plugins/a/internal/x/x.go", pk("import \"sync\"\n", "type T struct{ sync.WaitGroup }\nfunc f(t *T) { g := t.Go; g(nil) }\n"), "(*sync.WaitGroup).Go starts"},
+		{"WaitGroup wait fine", "plugins/a/plugin.go", pk("import \"sync\"\n", "func f() { var wg sync.WaitGroup; wg.Add(1); wg.Done(); wg.Wait() }\n"), ""},
+		{"kernel Go fine", "plugins/a/plugin.go", pk(kimp, "func f(c *kernel.Context) { c.Go(\"x\", nil) }\n"), ""},
+		{"ListenAndServe nil", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServe(\":0\", nil) }\n"), "http.ListenAndServe with a nil handler serves http.DefaultServeMux"},
+		{"ListenAndServeTLS nil", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServeTLS(\":0\", \"c\", \"k\", nil) }\n"), "http.ListenAndServeTLS with a nil handler"},
+		{"Serve nil", "plugins/a/plugin.go", pk("import h \"net/http\"\n", "func f() { h.Serve(nil, nil) }\n"), "h.Serve with a nil handler"},
+		{"ServeTLS nil", "boot/a.go", pk("import \"net/http\"\n", "func f() { http.ServeTLS(nil, nil, \"c\", \"k\") }\n"), "http.ServeTLS with a nil handler"},
+		{"fcgi nil", "plugins/a/plugin.go", pk("import \"net/http/fcgi\"\n", "func f() { fcgi.Serve(nil, nil) }\n"), "fcgi.Serve with a nil handler"},
+		{"serve own mux fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServe(\":0\", http.NewServeMux()); http.ServeTLS(nil, http.NewServeMux(), \"\", \"\") }\n"), ""},
+		{"Server without handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\"} }\n"), "http.Server without a Handler serves http.DefaultServeMux"},
+		{"Server nil handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = http.Server{Handler: nil} }\n"), "http.Server without a Handler"},
+		{"Server with handler fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\", Handler: http.NewServeMux()} }\n"), ""},
+		{"dot import exit", "plugins/a/plugin.go", pk("import . \"os\"\n", "func f() { Exit(1) }\n"), "plugin.go:2: dot import of os"},
+		{"dot import signal in boot", "boot/a.go", pk("import . \"os/signal\"\n", "func f() { Notify(nil) }\n"), "dot import of os/signal"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()
@@ -213,6 +231,16 @@ func TestPluginVetCountsExemptions(t *testing.T) {
 	r, err := vetFile(filepath.Join(d, "plugins/a/plugin.go"), "plugins/a/plugin.go", false)
 	if err != nil || len(r.violations) != 0 || len(r.exemptions) != 2 || r.exemptions[0] != "plugins/a/plugin.go:4: allow-var: one" {
 		t.Fatalf("%+v %v", r, err)
+	}
+}
+
+func TestPluginVetWaitGroupTypeInOtherFile(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "plugins/a/internal/x/a.go", "package x\n\nimport \"sync\"\n\ntype runner struct{ wg sync.WaitGroup }\n")
+	write(t, d, "plugins/a/internal/x/b.go", "package x\n\nfunc (r *runner) start() { r.wg.Go(r.start) }\n")
+	err := checkPluginVet([]string{filepath.Join(d, "plugins")})
+	if err == nil || !strings.Contains(err.Error(), "internal/x/b.go:3: (*sync.WaitGroup).Go starts an untracked goroutine") {
+		t.Fatalf("got %v", err)
 	}
 }
 

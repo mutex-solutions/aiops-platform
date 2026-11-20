@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -39,6 +41,62 @@ var forbiddenCalls = map[string][]string{
 	"github.com/prometheus/client_golang/prometheus":          {"DefaultRegisterer", "DefaultGatherer", "MustRegister", "Register", "Unregister"},
 	"github.com/prometheus/client_golang/prometheus/promhttp": {"Handler"},
 	"github.com/prometheus/client_golang/prometheus/promauto": {"!With"},
+}
+
+// goFuncs start an untracked goroutine like a bare go statement does. Plugin
+// code may not call them; boot keeps its own clock on time.AfterFunc.
+var goFuncs = map[string]string{"time": "AfterFunc", "context": "AfterFunc"}
+
+// goMethods start an untracked goroutine too. Matching one needs the type of
+// the receiver, so plugin code is type-checked per directory (vetMethods).
+var goMethods = map[string]bool{"(*sync.WaitGroup).Go": true}
+
+// serveHandler gives the handler argument of the functions that serve
+// http.DefaultServeMux when that argument is nil.
+var serveHandler = map[string]int{
+	"net/http.Serve": 1, "net/http.ServeTLS": 1, "net/http.ListenAndServe": 1, "net/http.ListenAndServeTLS": 3,
+	"net/http/fcgi.Serve": 1, "net/http/cgi.Serve": 0,
+}
+
+func isNil(e ast.Expr) bool { id, ok := e.(*ast.Ident); return ok && id.Name == "nil" }
+
+// stdOnly imports the standard library and fails any other path: plugin vet
+// needs no type of the SDK or of a third party to find a goMethods call.
+type stdOnly struct{ types.Importer }
+
+func (s stdOnly) Import(p string) (*types.Package, error) {
+	if !isStd(p) {
+		return nil, fmt.Errorf("%s: not type-checked by plugin vet", p)
+	}
+	return s.Importer.Import(p)
+}
+
+var stdImporter = stdOnly{importer.Default()}
+
+// vetMethods type-checks the files of one directory, given as path to report
+// name, and reports each use of a goMethods method. Type errors are expected,
+// as imports outside the standard library stay unresolved; they are ignored.
+func vetMethods(files map[string]string) ([]string, error) {
+	fset := token.NewFileSet()
+	var parsed []*ast.File
+	for p := range files {
+		f, err := parser.ParseFile(fset, p, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		parsed = append(parsed, f)
+	}
+	info := &types.Info{Selections: map[*ast.SelectorExpr]*types.Selection{}}
+	conf := types.Config{Importer: stdImporter, Error: func(error) {}}
+	_, _ = conf.Check("p", fset, parsed, info)
+	var out []string
+	for sel, s := range info.Selections {
+		if fn, ok := s.Obj().(*types.Func); ok && goMethods[fn.FullName()] {
+			pos := fset.PositionFor(sel.Sel.Pos(), false)
+			out = append(out, fmt.Sprintf("%s:%d: %s starts an untracked goroutine; use the kernel's tracked goroutines (%s)", files[pos.Filename], pos.Line, fn.FullName(), docVet))
+		}
+	}
+	return out, nil
 }
 
 type vetResult struct {
@@ -104,6 +162,9 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 	if err != nil {
 		return r, err
 	}
+	bad := func(pos token.Pos, msg, doc string) {
+		r.violations = append(r.violations, fmt.Sprintf("%s:%d: %s (%s)", rel, fset.Position(pos).Line, msg, doc))
+	}
 	imports := map[string]string{}
 	for _, im := range f.Imports {
 		path, _ := strconv.Unquote(im.Path.Value)
@@ -111,10 +172,17 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 		if im.Name != nil {
 			name = im.Name.Name
 		}
+		if name == "." {
+			bad(im.Pos(), "dot import of "+path+"; plugin vet reads a call through its package name", docVet)
+		}
 		imports[name] = path
 	}
-	bad := func(pos token.Pos, msg, doc string) {
-		r.violations = append(r.violations, fmt.Sprintf("%s:%d: %s (%s)", rel, fset.Position(pos).Line, msg, doc))
+	// pkgOf returns the import path of the package that e names, if any.
+	pkgOf := func(e ast.Expr) string {
+		if id, ok := e.(*ast.Ident); ok {
+			return imports[id.Name]
+		}
+		return ""
 	}
 	// Comment groups by the line they end on, for allow-go.
 	ends := map[int]*ast.CommentGroup{}
@@ -184,6 +252,30 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 					break
 				}
 			}
+			if !boot && goFuncs[path] == x.Sel.Name {
+				bad(x.Pos(), fmt.Sprintf("%s.%s starts an untracked goroutine; use the kernel's tracked goroutines", id.Name, x.Sel.Name), docVet)
+			}
+		case *ast.CallExpr:
+			sel, ok := x.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if i, ok := serveHandler[pkgOf(sel.X)+"."+sel.Sel.Name]; ok && i < len(x.Args) && isNil(x.Args[i]) {
+				bad(x.Pos(), fmt.Sprintf("%s.%s with a nil handler serves http.DefaultServeMux", sel.X.(*ast.Ident).Name, sel.Sel.Name), docVet)
+			}
+		case *ast.CompositeLit:
+			sel, ok := x.Type.(*ast.SelectorExpr)
+			if !ok || pkgOf(sel.X) != "net/http" || sel.Sel.Name != "Server" {
+				return true
+			}
+			for _, e := range x.Elts {
+				if kv, ok := e.(*ast.KeyValueExpr); ok && !isNil(kv.Value) {
+					if k, ok := kv.Key.(*ast.Ident); ok && k.Name == "Handler" {
+						return true
+					}
+				}
+			}
+			bad(x.Pos(), sel.X.(*ast.Ident).Name+".Server without a Handler serves http.DefaultServeMux; set Handler in the literal", docVet)
 		}
 		return true
 	})
@@ -217,23 +309,38 @@ func vetSkipped(p string) bool {
 }
 
 // checkPluginVet reads the non-test Go files under each dir. A dir whose base
-// name is boot gets the allow-go relaxation.
+// name is boot gets the allow-go relaxation and no goroutine-starter checks.
 func checkPluginVet(dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
 		dir = filepath.Clean(dir)
 		boot := filepath.Base(dir) == "boot"
+		pkgs := map[string]map[string]string{} // directory -> file path -> report name
 		err := walkGo(dir, func(p, rel string, test bool) error {
 			if test || vetSkipped(filepath.Dir(p)) {
 				return nil
 			}
-			r, err := vetFile(p, filepath.ToSlash(filepath.Join(dir, rel)), boot)
+			name := filepath.ToSlash(filepath.Join(dir, rel))
+			r, err := vetFile(p, name, boot)
 			res.violations = append(res.violations, r.violations...)
 			res.exemptions = append(res.exemptions, r.exemptions...)
+			if d := filepath.Dir(p); !boot {
+				if pkgs[d] == nil {
+					pkgs[d] = map[string]string{}
+				}
+				pkgs[d][p] = name
+			}
 			return err
 		})
 		if err != nil {
 			return err
+		}
+		for _, files := range pkgs {
+			v, err := vetMethods(files)
+			if err != nil {
+				return err
+			}
+			res.violations = append(res.violations, v...)
 		}
 	}
 	sort.Strings(res.exemptions)
