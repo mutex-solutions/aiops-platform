@@ -186,7 +186,9 @@ func TestCommitRefusesACompositionItDidNotCompose(t *testing.T) {
 			t.Fatalf("Commit(%x) = %v, committed %x", c.Digest[0], err, l.Committed().Digest[0])
 		}
 	}
-	l.ComposeFn = func(context.Context) (launch.Composition, error) { return launch.Composition{Digest: launch.Digest{3}}, errors.New("no") }
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{3}}, errors.New("no")
+	}
 	if _, err := l.Compose(t.Context()); err == nil || l.Commit(launch.Composition{Digest: launch.Digest{3}}) == nil {
 		t.Fatal("a composition whose Compose failed was committed")
 	}

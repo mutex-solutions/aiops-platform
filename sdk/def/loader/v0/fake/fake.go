@@ -258,7 +258,9 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 	return loader.Restarted // in place: the fiber and its scripted state stay
 }
 
-func isGroup(plugin string) bool { return plugin == loader.GroupPlugin || plugin == loader.IncludePlugin }
+func isGroup(plugin string) bool {
+	return plugin == loader.GroupPlugin || plugin == loader.IncludePlugin
+}
 
 func sameSet(a, b []string) bool {
 	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
@@ -355,7 +357,10 @@ func (f *Loader) Entries() []loader.Entry {
 func (f *Loader) Patch(ctx context.Context, e loader.EntrySpec, c *kernel.Context) (*kernel.Context, error) {
 	var built *kernel.Context
 	out, err := f.patch.RunWith(ctx, kernel.Unscoped, loader.PatchContextArgs{Entry: e, Context: c},
-		func(context.Context, loader.PatchContextArgs) (*kernel.Context, error) { built = c.Extend(); return built, nil })
+		func(context.Context, loader.PatchContextArgs) (*kernel.Context, error) {
+			built = c.Extend()
+			return built, nil
+		})
 	if err == nil && (built == nil || out == nil) {
 		err = loader.ErrPatchVetoed
 	}

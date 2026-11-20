@@ -288,4 +288,6 @@ func child(parent, id, plugin string) loader.EntrySpec {
 
 func create(e loader.EntrySpec) loader.Op { return loader.Op{Kind: loader.OpCreate, Entry: e} }
 func update(e loader.EntrySpec) loader.Op { return loader.Op{Kind: loader.OpUpdate, Entry: e} }
-func remove(id string) loader.Op          { return loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}} }
+func remove(id string) loader.Op {
+	return loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}}
+}
