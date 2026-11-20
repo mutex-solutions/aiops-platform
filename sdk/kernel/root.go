@@ -204,16 +204,17 @@ func UpdateOp(f *Fiber) BatchOp { return BatchOp{kind: batchUpdate, fiber: f} }
 // target, then runs the waterfall internal/commit, which fails closed. The first
 // operation that errors, or whose commit is vetoed (ErrCommitVetoed), refuses the
 // whole batch: nothing is retained, nothing mounts, updates or disposes. Only then
-// is cfg of every operation retained (the last one wins when f appears twice) and
-// the waterfall internal/update run for each fiber that has a target, in operation
-// order. A listener of internal/update that does not call next vetoes the restart
-// of that fiber alone: as in Update, its cfg stays retained and applies at the next
+// is the waterfall internal/update run for each fiber that has a target, in
+// operation order, and cfg of every operation is retained (the last one wins when f
+// appears twice) when the core admits the batch, before any activation it starts.
+// A listener of internal/update that does not call next vetoes the restart of that
+// fiber alone: as in Update, its cfg is still retained and applies at the next
 // restart, and the rest of the batch goes on. An error of internal/update refuses
 // the batch whole. A fiber with no target (gated on a need, FAILED, a disposal
 // pending) skips resolution and internal/update, as in Update. A batch the core
-// then refuses, such as one that disposes f before this operation, gets the
-// previous configs back. A fiber mounted with When takes no config, so the
-// operation is UpdateOp. The Fiber at this position is f.
+// then refuses, such as one that disposes f before this operation, retains
+// nothing. A fiber mounted with When takes no config, so the operation is
+// UpdateOp. The Fiber at this position is f.
 func UpdateOpWith(f *Fiber, cfg any) BatchOp {
 	return BatchOp{kind: batchUpdate, fiber: f, cfg: cfg, hasCfg: true}
 }
@@ -222,8 +223,8 @@ func UpdateOpWith(f *Fiber, cfg any) BatchOp {
 // the effect of f.Commit(ctx, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:205,
 // :1374). It is handled with the other operations that carry a config (see
 // UpdateOpWith): resolved through internal/config and Decode when the fiber has a
-// target, committed through internal/commit, and retained only if the whole batch
-// is admitted; a refused batch gets the previous config back. It runs no
+// target, committed through internal/commit, and retained only when the core admits
+// the whole batch; a refused batch retains nothing. It runs no
 // internal/update and does not restart f. The Fiber at this position is f.
 func CommitOp(f *Fiber, cfg any) BatchOp {
 	return BatchOp{kind: batchKeep, fiber: f, cfg: cfg, hasCfg: true}
@@ -270,7 +271,7 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		return nil, err
 	}
 	ids, err := r.core.batch(ctx, native)
-	done(err == nil)
+	done()
 	if err != nil {
 		return nil, err
 	}

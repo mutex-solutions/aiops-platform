@@ -32,12 +32,13 @@ type cfgCell struct {
 	mu     sync.Mutex
 	raw    any
 	// cmu serialises the changes of raw after the mount. Invariant: a value is
-	// retained only by change, which takes cmu, or by stageUpdates, which holds cmu
-	// from before the first internal/update of its batch until the core has admitted
-	// or refused the batch. So the restore of a refused batch never overwrites a
-	// newer Update or Commit: that one waits and retains after the restore. cmu is
-	// held across nothing but the internal/update hooks, the core's admission and
-	// plain assignments, and a batch takes it in ascending fiber id.
+	// retained only by change, which takes cmu, or by the owner in the turn that
+	// admits a batch (batchOp.cell), whose caller holds cmu from before the first
+	// internal/update of the batch until the core has admitted or refused it. So a
+	// refused batch retains nothing, no activation reads a config its batch then
+	// loses, and a newer Update or Commit waits and retains after the admission.
+	// cmu is held across nothing but the internal/update hooks, the core's
+	// admission and plain assignments, and a batch takes it in ascending fiber id.
 	cmu sync.Mutex
 }
 
@@ -93,18 +94,19 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // stageUpdates is the half of every UpdateOpWith and CommitOp of a batch that runs
 // plugin code, done before the batch is admitted (ADR-059 decision 2; see
 // UpdateOpWith). It marks native[i] as batchKeep where internal/update vetoed the
-// restart. It returns done, which the caller must call once the core has admitted
-// the batch (true) or refused it (false): a refused batch gets the previous configs
-// back, and either way the config locks of cell.cmu are released. A listener of
-// internal/update runs with those locks held, so it must not change the config of a
-// fiber of its own batch.
-func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(admitted bool), err error) {
+// restart, and gives native[i] the cell and the config that the owner retains in the
+// turn that admits the batch: nothing is retained before, so an activation cannot
+// apply the config of a batch the core then refuses. It returns done, which the
+// caller must call once the core has admitted or refused the batch, to release the
+// config locks of cell.cmu. A listener of internal/update runs with those locks
+// held, so it must not change the config of a fiber of its own batch.
+func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(), err error) {
 	type staged struct {
-		i                  int
-		id                 uint64
-		cell               *cfgCell
-		cfg, resolved, old any
-		loaded, keep       bool
+		i             int
+		id            uint64
+		cell          *cfgCell
+		cfg, resolved any
+		loaded, keep  bool
 	}
 	var list []staged
 	for i, op := range ops {
@@ -158,16 +160,10 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 			native[s.i].Kind = batchKeep
 		}
 	}
-	for k := range list {
-		list[k].old = list[k].cell.load()
-		list[k].cell.retain(list[k].cfg)
+	for _, s := range list {
+		native[s.i].cell, native[s.i].cfg = s.cell, s.cfg
 	}
-	return func(admitted bool) {
-		for k := len(list) - 1; k >= 0 && !admitted; k-- {
-			list[k].cell.retain(list[k].old)
-		}
-		unlock()
-	}, nil
+	return unlock, nil
 }
 
 // vet is the half of Update and Commit that comes before anything is retained:

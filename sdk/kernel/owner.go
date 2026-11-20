@@ -800,6 +800,9 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	touched := make([]*fiber, 0, len(prepared))
 	o.batchDepth++
 	for i, op := range prepared {
+		if op.cell != nil {
+			op.cell.retain(op.cfg)
+		}
 		switch op.Kind {
 		case batchMount:
 			// prepareBatch has validated the same mount declarations. IDs are
@@ -1455,6 +1458,11 @@ type batchOp struct {
 	// is refused when that activation has ended or is ending, or when an earlier
 	// operation of the batch disposes its fiber, as a cmdMountChild would be.
 	Parent *handle
+	// cell, when set, takes cfg in the owner turn that admits the batch, before any
+	// activation can read it (UpdateOpWith and CommitOp; see stageUpdates). The
+	// owner only takes cell.mu, which guards plain assignments.
+	cell *cfgCell
+	cfg  any
 }
 
 // prepareBatch copies declarations and checks every operation before any writer

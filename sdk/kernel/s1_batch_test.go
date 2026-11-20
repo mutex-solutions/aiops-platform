@@ -496,3 +496,52 @@ func TestUpdateOpWithOnAFiberWithNoTargetOrNoConfig(t *testing.T) {
 	}
 	mu.Unlock()
 }
+
+// A batch that the core refuses never had its config applied, even by an activation
+// that a concurrent restart of the same fiber starts while the batch is pending.
+func TestRefusedBatchConfigIsNeverAppliedByAConcurrentRestart(t *testing.T) {
+	r := newKernel(t)
+	ctx := frontCtx(t)
+	var x cfgFixture
+	a := r.Plugin(x.plugin("s1/a"), "init")
+	b := r.Plugin(x.plugin("s1/b"), "init")
+	want(t, a, Active)
+	want(t, b, Active)
+	// One goroutine restarts b without a config, one activation after the other, while
+	// batches that carry a config for b are refused by the core.
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if _, err := r.Batch(ctx, UpdateOp(b)); err != nil {
+				t.Error(err)
+				return
+			}
+			_ = b.Await(ctx)
+		}
+	}()
+	for i := 0; i < 300; i++ {
+		if _, err := r.Batch(ctx, UpdateOpWith(b, "refused"), DisposeOp(a), UpdateOp(a)); err == nil {
+			t.Fatal("a batch that updates a fiber it disposes was admitted")
+		}
+	}
+	close(stop)
+	wg.Wait()
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := x.got("s1/b")
+	if n := len(got) - len(slices.DeleteFunc(slices.Clone(got), func(v any) bool { return v == "refused" })); n != 0 {
+		t.Fatalf("%d of %d activations applied the config of a refused batch", n, len(got))
+	}
+	if raw := b.cell.load(); raw != "init" {
+		t.Fatalf("retained config %v, want init", raw)
+	}
+}

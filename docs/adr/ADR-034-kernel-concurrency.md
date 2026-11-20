@@ -1138,16 +1138,17 @@ Its effect is that of `f.Update(ctx, cfg)`. Before the batch is admitted,
 resolves each through `internal/config` and `Decode` (when the fiber has a
 desired target), then commits it through `internal/commit`. A refused config,
 an error, a failed commit or a veto (`ErrCommitVetoed`) refuses the whole batch
-and nothing is retained. When all have passed, the configs are retained, the
-last winning when a fiber appears twice, and `internal/update` runs for each
-fiber that has a target, in operation order. A veto of `internal/update` follows
-`Fiber.Update`: the config stays retained, that fiber is not restarted, and the
+and nothing is retained. When all have passed, `internal/update` runs for each
+fiber that has a target, in operation order, and the configs are retained, the
+last winning when a fiber appears twice, in the owner turn that admits the batch,
+before any activation it starts (see G7). A veto of `internal/update` follows
+`Fiber.Update`: the config is still retained, that fiber is not restarted, and the
 rest of the batch goes on. An error of `internal/update` refuses the batch whole
 and retains nothing, which departs from `Fiber.Update` (it retains before it
 runs that waterfall) because a batch is all or nothing. A batch that the core
-refuses after this, for example one that disposes the fiber earlier, gives the
-previous configs back. A fiber with no target skips resolution and
-`internal/update`, and a `When` fiber takes no config.
+refuses after this, for example one that disposes the fiber earlier, retains
+nothing. A fiber with no target skips resolution and `internal/update`, and a
+`When` fiber takes no config.
 
 **G3, a dependency from an untyped key.**
 
@@ -1233,8 +1234,8 @@ activation of the fiber, whatever starts it (a provider's epoch change, a
 retry, an `UpdateOp`), resolves the retained `cfg`. A fiber mounted with `When`
 takes no config and `Commit` ignores `cfg`. `CommitOp` is the same operation in
 a batch, handled with `UpdateOpWith` before the batch is admitted; the config is
-retained only if the batch is admitted, and a refused batch gets the previous
-config back.
+retained in the owner turn that admits the batch, and a refused batch retains
+nothing.
 
 **G7, config changes of one fiber are serialised.** This closes the open point
 of G2: a batch retained its configs before the core admitted it and restored the
@@ -1249,6 +1250,15 @@ is held across the `internal/update` hooks of the batch, so such a hook must
 not change the config of a fiber of its own batch; no other plugin code runs
 under it. Two `Update`s of one fiber race as before (the last retain wins, as
 if they ran in that order, and each restart applies the retained config).
+
+The S1 review found that the restore was not enough: a restart that takes no lock
+(an `UpdateOp`, the registry's `Update(ctx, nil)`, a provider's epoch change)
+could start an activation in that window and apply a config that the core then
+refused, and keep running with it. A batch now retains nothing before it is
+admitted: `Root.Batch` hands each config and its cell to the core, and the owner
+retains them in the turn that admits the batch, before it starts any activation.
+There is no restore; the locks are still held, as above, until the core has
+admitted or refused the batch, so a newer `Update` or `Commit` retains after it.
 
 **G8, the owner's built-in step is innermost in a waterfall.**
 
