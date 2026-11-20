@@ -145,12 +145,18 @@ func (t *tree) mount(e *entry) def.Mount {
 	return def.Mounted
 }
 
-// parentCtx is the context e is mounted from, nil while its group has none.
+// parentCtx is the context e is mounted from: nil while its group has none, and
+// while the activation it has is ending, which mounts nothing more (a MountOp from
+// it refuses the whole batch) and whose successor mounts e itself.
 func (t *tree) parentCtx(e *entry) *kernel.Context {
-	if e.spec.Parent == "" {
-		return t.lc
+	c := t.lc
+	if e.spec.Parent != "" {
+		c = t.entries[e.spec.Parent].kids // a child always has its group: Remove takes both
 	}
-	return t.entries[e.spec.Parent].kids // a child always has its group: Remove takes both
+	if c == nil || c.Std().Err() != nil {
+		return nil
+	}
+	return c
 }
 
 func cloneSpec(e def.EntrySpec) def.EntrySpec {

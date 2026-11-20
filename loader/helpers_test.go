@@ -268,6 +268,17 @@ func (x *fx) consistent() {
 	}
 }
 
+// ended returns the context of an activation that has ended.
+func ended(t *testing.T, root *kernel.Root) *kernel.Context {
+	t.Helper()
+	var c *kernel.Context
+	f := root.Plugin(kernel.Plugin{ID: "t/ended", Apply: func(cc *kernel.Context, _ any) error { c = cc; return nil }}, nil)
+	_ = f.Await(t.Context())
+	_ = f.Dispose(t.Context())
+	_ = f.Await(t.Context())
+	return c
+}
+
 // ledger records the ledger events of a kernel from the moment it is made.
 type ledger struct {
 	mu  sync.Mutex

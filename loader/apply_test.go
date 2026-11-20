@@ -5,6 +5,7 @@ package loader
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -197,6 +198,60 @@ func TestVolatileOnlyUpdateOfAFailedFiberRestartsIt(t *testing.T) {
 	defer l.mu.Unlock()
 	if applies.Load() != 1 || len(l.volatile) != 0 {
 		t.Errorf("applies %d, volatile-update heard %v", applies.Load(), l.volatile)
+	}
+}
+
+// gated is a group g that injects the key named gate.
+func gated() def.EntrySpec {
+	g := group("g")
+	g.Inject = []string{"gate"}
+	return g
+}
+
+// provider is a row plugin that provides gate.
+func provider(p *probe, id string, gate kernel.Key[int]) kernel.Plugin {
+	pl := p.plugin(id, func(c *kernel.Context, _ any) error { return gate.Provide(c, 1) })
+	pl.Provides = []kernel.AnyKey{gate}
+	return kernel.Define(pl)
+}
+
+// A plan that restarts the provider a group injects and replaces a child of the
+// group: the first batch quiesces the group's activation, so the second must not
+// mount the child from it. The group's next activation mounts the child, and the
+// plan, whose first batch is committed, is not an error.
+func TestSecondBatchSkipsAnEndingGroupActivation(t *testing.T) {
+	gate := kernel.NewKey[int]("gate", 0)
+	p := newProbe()
+	slow := newSlowGate() // its disposal holds the group's old activation open
+	rp := row("p", "t/p")
+	rp.Config = "v1"
+	fails := kernel.Define(kernel.Plugin{ID: "t/n", Apply: func(*kernel.Context, any) error { return errors.New("n fails") }})
+	x := newFx(t, fxOpt{plugins: plugins(provider(p, "t/p", gate), p.plugin("t/k", nil), p.plugin("t/k2", nil), slow.plugin(), fails),
+		keys: map[string]kernel.AnyKey{"gate": gate},
+		rows: []def.EntrySpec{rp, gated(), child("g", "k", "t/k"), child("g", "slow", "t/slow")}})
+	x.want("g:k", kernel.Active)
+	rp.Config = "v2"
+	res, err := x.ld.Apply(t.Context(), []def.Op{update(rp), update(child("g", "k", "t/k2")), create(row("n", "t/n"))})
+	close(slow.release)
+	want := []def.Result{{ID: "p", Outcome: def.Restarted}, {ID: "g:k", Outcome: def.Restarted}, {ID: "n", Outcome: def.Created}}
+	if err != nil || !slices.Equal(res, want) {
+		t.Fatalf("Apply = %v, %v", res, err)
+	}
+	x.settle()
+	x.want("g:k", kernel.Active)
+	x.want("n", kernel.Failed)
+	x.consistent()
+	if p.count("t/k2") != 1 {
+		t.Errorf("t/k2 applied %d times", p.count("t/k2"))
+	}
+
+	// An activation that has ended mounts nothing more, whatever the tree says.
+	c := ended(t, x.root)
+	x.tree.mu.Lock()
+	x.tree.entries["g"].kids, x.tree.entries["g:k"].fiber = c, nil
+	x.tree.mu.Unlock()
+	if items := x.tree.mountItems(t.Context(), []string{"g:k"}); len(items) != 0 {
+		t.Errorf("mounts from an ended activation: %v", items)
 	}
 }
 
