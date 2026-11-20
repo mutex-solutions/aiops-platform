@@ -1068,3 +1068,35 @@ or restarted, while the kernel is alive and before the window has moved.
 - A tracked goroutine must end when the fiber's context is cancelled, so a
   server's accept loop stops at quiesce. While a listener restarts as a
   dependant, clients see refused connections rather than a 503.
+
+## Line budget, frozen 2026-11-20
+
+The project owner fixed the hard cap of `sdk/kernel` at **8,200 physical
+lines** of production Go (comments and blank lines included, tests excluded),
+measured by `tools/kernelcheck lines` and enforced in CI. The count at the
+freeze is 7,451 lines in 20 files, one package. Growth past the cap, or a second
+package under `sdk/kernel`, needs an ADR. This closes the last open point of
+this ADR besides the performance gates on the port.
+
+```
+    65 sdk/kernel/builtin.go
+   137 sdk/kernel/config.go
+   368 sdk/kernel/context.go
+     3 sdk/kernel/doc.go
+  1002 sdk/kernel/effect.go
+    94 sdk/kernel/effectscope.go
+   225 sdk/kernel/event.go
+   455 sdk/kernel/hooks.go
+   670 sdk/kernel/inspect.go
+   444 sdk/kernel/key.go
+    30 sdk/kernel/logger.go
+   850 sdk/kernel/observe.go
+  1473 sdk/kernel/owner.go
+    10 sdk/kernel/registry.go
+   378 sdk/kernel/root.go
+   263 sdk/kernel/rootview.go
+   151 sdk/kernel/seam.go
+   611 sdk/kernel/transition.go
+   222 sdk/kernel/waterfall.go
+  7451 total (cap 8200)
+```

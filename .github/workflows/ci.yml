@@ -70,7 +70,7 @@ jobs:
         run: |
           go run ./tools/kernelcheck modfile sdk/kernel
           go run ./tools/kernelcheck vocab sdk/kernel tools/kernelcheck/vocabulary.txt
-          go run ./tools/kernelcheck lines sdk/kernel 8500
+          go run ./tools/kernelcheck lines sdk/kernel 8200
           go run ./tools/kernelcheck testctor .
           go run ./tools/kernelcheck coverage sdk/kernel/cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel
 
