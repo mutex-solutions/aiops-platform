@@ -47,12 +47,13 @@ row flaky plugin=aiops-test/fail-apply enabled=false required=false group=false 
 
 ## required set
 rows loader, readiness, reload, restart-policy
-keys clock, toy.spine, toy.store
-closure clock, loader, readiness, reload, restart-policy, spine, store
+keys clock, configRefsReady, toy.spine, toy.store
+closure clock, loader, readiness, refs, reload, restart-policy, spine, store
 
 ## providers
 key clock: clock
 key composition: loader
+key configRefsReady: refs
 key loader: loader
 key reload: reload
 key toy.policy: store
