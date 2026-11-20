@@ -327,6 +327,13 @@ type kernelRuntime struct {
 
 	recMu   sync.Mutex
 	records map[uint64]map[string]any // Record payloads by the kernel sequence of their marker.
+
+	// The kernel's events carry no provided value, so the adapter, which performs
+	// every Provide, keeps the value of each provision by the provision identity
+	// that the kernel gave it and joins it to the events that name that identity.
+	valMu    sync.Mutex
+	vals     map[uint64]any
+	keyLocks sync.Map // string -> *sync.Mutex: one Provide per key at a time, so the newest provide event is its own.
 }
 
 var (
@@ -364,7 +371,7 @@ func NewKernelWith(retention Retention) Runtime {
 		ObserverQueue: retention.ObserverBacklog, OwnerInbox: 256, TerminalLimit: rcTerminalLimit,
 	}
 	return &kernelRuntime{root: newKernelRoot(cfg), cfg: cfg, base: base, window: window,
-		fibers: make(map[uint64]kernelFiber), records: make(map[uint64]map[string]any)}
+		fibers: make(map[uint64]kernelFiber), records: make(map[uint64]map[string]any), vals: make(map[uint64]any)}
 }
 
 // newKernelRoot builds the kernel. Both binding maps stay empty: every key of this
@@ -928,9 +935,13 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 			}
 		}()
 		k := r.key(key)
+		lock, _ := r.keyLocks.LoadOrStore(key, new(sync.Mutex))
+		lock.(*sync.Mutex).Lock()
+		defer lock.(*sync.Mutex).Unlock()
 		if err := k.Provide(kc, value, r.available(k)); err != nil {
 			return fromKernel(err)
 		}
+		r.keep(key, value)
 		c.publishOwned(key)
 		return nil
 	}
@@ -1044,6 +1055,62 @@ func (r *kernelRuntime) uids(list []uint64) []uint64 {
 	return out
 }
 
+// keep records value under the identity of the provision that key was just given:
+// the kernel appended its provide event before Provide returned, and the key lock
+// holds every later provision of the key back, so the newest provide event of the
+// key is this one.
+//
+// ponytail: found in the kernel's event window; an event flood wider than the window
+// between Provide and this read leaves the value unreported (nil). Widen the window
+// or ask the kernel for the identity if that ever shows.
+func (r *kernelRuntime) keep(key string, value any) {
+	events, _ := r.root.Events(context.Background())
+	r.valMu.Lock()
+	defer r.valMu.Unlock()
+	for i := len(events) - 1; i >= 0; i-- {
+		if e := events[i]; e.Kind == "provide" && serviceName(e.Key) == key {
+			r.vals[e.UID] = value
+			break
+		}
+	}
+	if len(r.vals) > 4*r.window+256 {
+		r.prune()
+	}
+}
+
+// prune drops the values that no event of the window and no live provision can
+// name any more. The caller holds valMu. The provisions are read before the events,
+// so a provision that ends between the two reads still has its events in the window.
+func (r *kernelRuntime) prune() {
+	view, _ := r.root.Inspect(context.Background())
+	events, _ := r.root.Events(context.Background())
+	if len(view.Provisions) == 0 && len(events) == 0 {
+		return // The kernel is closed: nothing can be told apart.
+	}
+	keep := make(map[uint64]bool, len(view.Provisions)+len(events))
+	for _, p := range view.Provisions {
+		keep[p.UID] = true
+	}
+	for _, e := range events {
+		keep[e.UID] = true
+	}
+	for uid := range r.vals {
+		if !keep[uid] {
+			delete(r.vals, uid)
+		}
+	}
+}
+
+// value is the provided value that a service event reports, by provision identity.
+func (r *kernelRuntime) value(e kernel.LedgerEvent) any {
+	if e.UID == 0 || (e.Kind != "service" && e.Kind != "provide") {
+		return nil
+	}
+	r.valMu.Lock()
+	defer r.valMu.Unlock()
+	return r.vals[e.UID]
+}
+
 // serviceName is the key a service event or provision names: the kernel renders it
 // "name@major", and every key of this adapter has major 0.
 func serviceName(key string) string { return strings.TrimSuffix(key, "@0") }
@@ -1117,7 +1184,7 @@ func (r *kernelRuntime) event(e kernel.LedgerEvent) (Event, bool) {
 		return Event{}, false
 	}
 	out := Event{Sequence: e.Sequence - r.base.events, Fiber: e.Fiber, Name: e.Plugin, Kind: e.Kind, From: State(e.From),
-		State: State(e.State), UID: r.uid(e.UID), Value: e.Value}
+		State: State(e.State), UID: r.uid(e.UID), Value: r.value(e)}
 	switch {
 	case e.Key != "":
 		out.Key = serviceName(e.Key)
