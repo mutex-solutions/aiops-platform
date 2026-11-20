@@ -324,7 +324,7 @@ func (r *run) run(ctx context.Context) int {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
 	for _, e := range errs {
-		fmt.Fprintf(r.errw, "error: %s\n", e)
+		fmt.Fprintf(r.errw, "error: %s\n", e.Error())
 	}
 	if len(errs) > 0 {
 		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)))

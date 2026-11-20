@@ -460,7 +460,8 @@ func TestRunWarnings(t *testing.T) {
 func TestRunRequiredRowFails(t *testing.T) {
 	bad := toy(toySpec{id: "t/bad", apply: func(*kernel.Context, any) error { return errors.New("boom") }})
 	f := newFixture(t, "- insert:\n    - {id: bad, plugin: t/bad, roles: [api], required: true}\n", bad)
-	if code := f.run(t.Context()); code != ExitRequired || !strings.Contains(f.errb.String(), `required row "bad" is FAILED`) {
+	// The finding is printed as its line, as the static audit prints it, not as a Go value.
+	if code := f.run(t.Context()); code != ExitRequired || !strings.Contains(f.errb.String(), "error: required set: required-missing: required row \"bad\" is FAILED, not ACTIVE\n") {
 		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
 	}
 	if s := f.lastStatus(); s.Ready || s.Phase != PhaseStopped || s.Exit != ExitRequired || !strings.Contains(s.Detail, "required set is not met") {
