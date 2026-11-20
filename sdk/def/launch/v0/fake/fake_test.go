@@ -34,6 +34,9 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
+	l.Environ = map[string]string{"AIOPS_REF_X": "v"}
+	l.Current = launch.Composition{Digest: launch.Digest{7}}
+	l.Needed = launch.RequiredSet{Rows: []string{"r"}, Keys: []string{"sql"}}
 	cand := launch.Composition{Rows: []launch.Row{{ID: "a"}}, Digest: launch.Digest{1}}
 	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
 	l.AdmitFn = func(_ context.Context, c launch.Composition) (launch.Admission, error) {
@@ -96,6 +99,19 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		}
 		if _, ok := cl.Flag("nope"); ok {
 			t.Error("Flag found an unknown name")
+		}
+
+		if v, ok := cl.Env("AIOPS_REF_X"); !ok || v != "v" {
+			t.Errorf("Env = %q, %v", v, ok)
+		}
+		if _, ok := cl.Env("nope"); ok {
+			t.Error("Env found an unknown name")
+		}
+		if pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Committed = %v", pc.Committed())
+		}
+		if req := pc.Required(); len(req.Rows) != 1 || req.Rows[0] != "r" || req.Keys[0] != "sql" {
+			t.Errorf("Required = %v", req)
 		}
 
 		rd := launch.ReadyKey.Of(c)

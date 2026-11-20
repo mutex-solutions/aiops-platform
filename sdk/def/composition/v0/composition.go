@@ -27,6 +27,7 @@ type Digest [32]byte
 // state. The field names are the definition's own, a minimal reading (open point).
 type Row struct {
 	ID            string
+	Fiber         uint64       // the id of the row's fiber, as kernel.Fiber.ID gives it; 0 when it has none
 	Plugin        string       // "<owner>/<name>"
 	Parent        string       // composed id of the enclosing group, or ""
 	State         kernel.State // the row's fiber state now

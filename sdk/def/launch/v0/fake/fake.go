@@ -29,6 +29,9 @@ type Launcher struct {
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
+	Environ     map[string]string  // for Cmdline.Env
+	Current     launch.Composition // for ProfileContext.Committed
+	Needed      launch.RequiredSet // for ProfileContext.Required
 
 	ComposeFn func(context.Context) (launch.Composition, error)
 	AdmitFn   func(context.Context, launch.Composition) (launch.Admission, error)
@@ -106,6 +109,12 @@ func (f *Launcher) Plan(ctx context.Context, from, to launch.Composition) (launc
 	return f.PlanFn(ctx, from, to)
 }
 
+func (f *Launcher) Committed() launch.Composition { return f.Current }
+
+func (f *Launcher) Required() launch.RequiredSet {
+	return launch.RequiredSet{Rows: slices.Clone(f.Needed.Rows), Keys: slices.Clone(f.Needed.Keys)}
+}
+
 // Catalog.
 
 func (f *Launcher) Entries() []launch.CatalogEntry { return slices.Clone(f.Modules) }
@@ -135,6 +144,11 @@ func (f *Launcher) Args() []string { return slices.Clone(f.Argv) }
 
 func (f *Launcher) Flag(name string) (string, bool) {
 	v, ok := f.Flags[name]
+	return v, ok
+}
+
+func (f *Launcher) Env(name string) (string, bool) {
+	v, ok := f.Environ[name]
 	return v, ok
 }
 

@@ -4,6 +4,7 @@ package launch
 
 import (
 	"context"
+	"slices"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -113,6 +114,54 @@ type Plan struct {
 	Closure  []string
 }
 
+// RequiredSet is the required set of the process: the ids of the rows that must be
+// ACTIVE and the key names that must each have an ACTIVE provider, both sorted
+// (00-decisions.md:492; 08-profiles-roadmap-adrs.md:451-459). It is boot.RequiredSet
+// with the role filter applied.
+type RequiredSet struct {
+	Rows []string
+	Keys []string
+}
+
+// RowState is the state of one mounted row, as RequiredSet.Unmet reads it.
+type RowState struct {
+	ID     string
+	Plugin string // "<owner>/<name>"
+	State  kernel.State
+}
+
+// Unmet lists what of the set is not ACTIVE, sorted: "row:<id>" for a required row
+// that is absent or not ACTIVE, and "key:<name>" for a required key that no ACTIVE
+// row provides. provides gives the key names a plugin provides (Catalog.Lookup). It
+// is the one reading of "the required set is ACTIVE" (03-c3-kernel.md:67, :392) that
+// readiness and reload share.
+func (s RequiredSet) Unmet(rows []RowState, provides func(plugin string) []string) []string {
+	var out []string
+	active := map[string]bool{}
+	served := map[string]bool{}
+	for _, r := range rows {
+		if r.State != kernel.Active {
+			continue
+		}
+		active[r.ID] = true
+		for _, k := range provides(r.Plugin) {
+			served[k] = true
+		}
+	}
+	for _, id := range s.Rows {
+		if !active[id] {
+			out = append(out, "row:"+id)
+		}
+	}
+	for _, k := range s.Keys {
+		if !served[k] {
+			out = append(out, "key:"+k)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // ProfileContext is the profileContext service: the profile locations and
 // layers (plugin-system-2026-11.md:178) and, by ADR-059 decision 7, the compose,
 // admit and plan steps that reload calls (03-c3-kernel.md:84, :376-378). The
@@ -134,6 +183,16 @@ type ProfileContext interface {
 	// Plan diffs two compositions by row id and computes the restart closure,
 	// pure (03-c3-kernel.md:378).
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
+	// Committed is the composition the process runs: the one boot composed, and
+	// from the committer of S4a the one it committed last. reload plans from it.
+	// Added in S1 for reload, which has no other way to know what it diffs against
+	// (docs silent; open point).
+	Committed() Composition
+	// Required is the required set of the committed composition for the process role:
+	// the distribution's rows and keys plus the rows that a layer marked required
+	// (00-decisions.md:492). readiness and reload judge by it. Added in S1: the docs
+	// say readiness reads it from the launch definition and name no method (open point).
+	Required() RequiredSet
 }
 
 // RoleAll is the role of a process that mounts every row: "--role all mounts every
@@ -187,6 +246,11 @@ type Cmdline interface {
 	// Flag returns the value of a named flag, which is what the ${flag:name}
 	// reference reads (03-c3-kernel.md:68).
 	Flag(name string) (string, bool)
+	// Env returns the value of an environment variable of the process, which is what
+	// the ${env:name} reference reads (03-c3-kernel.md:68). It filters nothing: the
+	// AIOPS_REF_ prefix rule (08-profiles-roadmap-adrs.md:162) is config-refs's.
+	// Added in S1: the launch definition had no environment reader (open point).
+	Env(name string) (string, bool)
 }
 
 // Ready is the readiness latch (03-c3-kernel.md:67; 07-c4-plugin-sdk.md:1348).
