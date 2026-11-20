@@ -159,9 +159,14 @@ func TestLoaderSmoke(t *testing.T) {
 			}
 			return s.Ready && len(s.Rows) > 0
 		})
+		// The latch is set while boot may still be at its required audit, so the status file
+		// says "running" a moment after the state file says ready.
 		var status serve.Status
-		if !p.read(serve.StatusFile, &status) || status.Phase != "running" || !status.Ready {
-			t.Fatalf("status %+v", status)
+		for end := time.Now().Add(30 * time.Second); !p.read(serve.StatusFile, &status) || status.Phase != "running" || !status.Ready; {
+			if time.Now().After(end) {
+				t.Fatalf("status %+v", status)
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
 		if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			t.Fatal(err)
