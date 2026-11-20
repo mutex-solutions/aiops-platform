@@ -84,11 +84,10 @@ func kernelConfigReport() map[string]any {
 	}
 }
 
-// The service values are small handles, never the resources. The kernel keeps the
-// value of every provision in its event ledger until EventWindow events have passed
-// (event.Value, the retained tail), so a pool or client handed over as the value
-// would stay reachable after its disposal and section 10 would read it as a retained
-// disposed object. The resources live in kernelApp tables that the disposers empty.
+// The service values are small handles, never the resources: the resources live in
+// kernelApp tables that the disposers empty, so section 10 can attribute each one to
+// its generation. (The kernel itself no longer keeps a provided value after its
+// provision ends; the handles predate that fix and are kept for attribution.)
 type (
 	kPoolH     struct{ tok uint64 }
 	kClientH   struct{ tok uint64 }

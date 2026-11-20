@@ -1039,3 +1039,32 @@ aggregate on both candidates. Six aggregates show candidate throughput
 variation of 11.5% to 17.0% beside a clean control (1.7% to 6.2%); amendment 2
 records these as characteristics of the candidate, not as an invalid run. The
 run measures the prototype cores; the port reruns the gate.
+
+## 2026-11-20 findings from the restart gate on kernel-owned resources
+
+The restart gate was rebuilt with the pool, the job clients and the listener
+owned by kernel fibers (ADR-045 records the runs). Writing it found one defect
+and three limits of the launcher read API.
+
+**Fixed: the ledger kept provided values.** A `provide` or `service` event
+referenced the provided value until the event window moved past it, so a
+disposed resource stayed reachable from the kernel and any service value was
+visible in the event stream. Events now carry numbers and strings only: the
+key, the label and the provision uid. `Root.Inspect` reports the value of a
+live provision and nothing for one that has ended. Tests hold a weak pointer
+to a provided value and require it to be collected after its fiber is disposed
+or restarted, while the kernel is alive and before the window has moved.
+
+**Recorded for the loader (S1), not changed:**
+
+- The ledger has no lease events and no timestamps. That an unload waited for
+  open leases is read from event order (UNLOADING, tracked goroutines done,
+  first disposer, no deadline event), not from a record of the leases.
+- `Fiber` revision counts updates, not restarts. A dependant that restarts
+  because its provider did keeps its revision; the restart set is read from
+  the status events.
+- A goroutine the kernel starts carries no profiler labels; a plugin that
+  wants attribution labels its own work.
+- A tracked goroutine must end when the fiber's context is cancelled, so a
+  server's accept loop stops at quiesce. While a listener restarts as a
+  dependant, clients see refused connections rather than a 503.
