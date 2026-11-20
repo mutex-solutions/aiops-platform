@@ -1,0 +1,15 @@
+# The hand-written half of the manifest (07-c4-plugin-sdk.md section 2). The
+# generated half (uses, registers, configSchema, requires) comes with plugingen, S2a.
+manifestVersion: "1.0"
+id: aiops/clock
+version: 0.1.0
+title: Clock
+description: Now and one-shot timers over the standard library; a timer is an effect of the fiber that starts it.
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+provides:
+  - {key: clock, major: 0}
+hooks: []
