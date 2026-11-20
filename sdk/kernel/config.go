@@ -4,8 +4,10 @@
 package kernel
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"sync"
 )
 
@@ -29,6 +31,14 @@ type cfgCell struct {
 	decode func(raw any) (any, error)
 	mu     sync.Mutex
 	raw    any
+	// cmu serialises the changes of raw after the mount. Invariant: a value is
+	// retained only by change, which takes cmu, or by stageUpdates, which holds cmu
+	// from before the first internal/update of its batch until the core has admitted
+	// or refused the batch. So the restore of a refused batch never overwrites a
+	// newer Update or Commit: that one waits and retains after the restore. cmu is
+	// held across nothing but the internal/update hooks, the core's admission and
+	// plain assignments, and a batch takes it in ascending fiber id.
+	cmu sync.Mutex
 }
 
 func (c *cfgCell) load() any {
@@ -45,7 +55,9 @@ func (c *cfgCell) retain(raw any) {
 
 // change retains raw as the config of every later activation.
 func (c *cfgCell) change(raw any) {
+	c.cmu.Lock()
 	c.retain(raw)
+	c.cmu.Unlock()
 }
 
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
@@ -83,7 +95,7 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // UpdateOpWith). It marks native[i] as batchKeep where internal/update vetoed the
 // restart. It returns done, which the caller must call once the core has admitted
 // the batch (true) or refused it (false): a refused batch gets the previous configs
-// back,. A listener of
+// back, and either way the config locks of cell.cmu are released. A listener of
 // internal/update runs with those locks held, so it must not change the config of a
 // fiber of its own batch.
 func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(admitted bool), err error) {
@@ -121,12 +133,25 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 		}
 		list = append(list, s)
 	}
+	var held []*cfgCell
+	for _, s := range slices.SortedStableFunc(slices.Values(list), func(a, b staged) int { return cmp.Compare(a.id, b.id) }) {
+		if len(held) == 0 || held[len(held)-1] != s.cell {
+			s.cell.cmu.Lock()
+			held = append(held, s.cell)
+		}
+	}
+	unlock := func() {
+		for _, c := range held {
+			c.cmu.Unlock()
+		}
+	}
 	for _, s := range list {
 		if !s.loaded || s.keep {
 			continue
 		}
 		restart := false
 		if _, err := runInner(ctx, InternalUpdate, r, s.resolved, func(context.Context, any) (any, error) { restart = true; return nil, nil }); err != nil {
+			unlock()
 			return nil, err
 		}
 		if !restart {
@@ -141,6 +166,7 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 		for k := len(list) - 1; k >= 0 && !admitted; k-- {
 			list[k].cell.retain(list[k].old)
 		}
+		unlock()
 	}, nil
 }
 
@@ -178,7 +204,8 @@ func (f *Fiber) vet(ctx context.Context, cfg any) (resolved any, loaded bool, er
 // Apply is not called again: a plugin learns the new value from whoever commits it
 // (the loader dispatches loader/volatile-update), and the next activation of the
 // fiber, whatever starts it, resolves the retained cfg. A fiber mounted with When
-// takes no config and Commit ignores cfg. Decode must be pure.
+// takes no config and Commit ignores cfg. Changes of one fiber's config are
+// serialised with those of Update and Batch (see cfgCell.cmu). Decode must be pure.
 func (f *Fiber) Commit(ctx context.Context, cfg any) error {
 	if f.cell == nil {
 		return nil
