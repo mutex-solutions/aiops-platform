@@ -229,6 +229,9 @@ func (p *Proc) Snap() Snapshot {
 		s.Exited, s.Code = true, p.code
 	default:
 	}
+	// The output is read first: the launcher drops readiness before it says why, so a
+	// status read after the output is never older than what the output tells.
+	s.Output = p.Output()
 	s.HaveStatus = p.read(serve.StatusFile, &s.Status)
 	s.HaveState = p.read(teststate.File, &s.State)
 	var res struct {
@@ -237,7 +240,6 @@ func (p *Proc) Snap() Snapshot {
 	if p.read("submit.result.json", &res) {
 		s.SubmitError = res.Error
 	}
-	s.Output = p.Output()
 	return s
 }
 

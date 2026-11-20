@@ -111,6 +111,9 @@ const (
 	drainNotLeak  = "a drain that passes its deadline is blocked and logged (drain deadline) but the fiber is not marked leaked and the process is not replaced: the kernel marks only a disposer past its deadline (sdk/kernel/transition.go:540); documented: drain or disposer"
 )
 
+// leakWindow is leakGrace of harness.Limits.
+const leakWindow = 500 * time.Millisecond
+
 // cellBudget bounds the run of one (cell, fault).
 const cellBudget = 30 * time.Second
 
@@ -159,6 +162,11 @@ type plan struct {
 	// rolledBack: the live generation's failed verdict must leave the tree as it was,
 	// "the composer rolls the scope back" ("Rolled back").
 	rolledBack bool
+	// leak: the fault leaks a fiber, which the launcher answers by replacing the process
+	// once the drain window (leakGrace) has passed. A cell that expects the process to keep
+	// running is checked again after a wait of ten windows: a process that has not exited by
+	// then is running. Without it the cell would pass or fail with the speed of the machine.
+	leak bool
 	// states replaces the cell's expected state of a row for one fault, where the
 	// fault changes what the required-set audit sees at the instant it runs.
 	states map[string]string
@@ -222,9 +230,9 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{live: "panic-apply-untracked.optional.yml", code: 2},
 			plan{base: []string{"panic-apply-untracked.trigger.optional.yml"}, trigger: true, code: 2}), true
 	case "leak":
-		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}},
-			plan{base: []string{fault + ".fail-apply.required.yml"}},
-			plan{live: fault + ".fail-apply.optional.yml"},
+		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}, leak: true},
+			plan{base: []string{fault + ".fail-apply.required.yml"}, leak: true},
+			plan{live: fault + ".fail-apply.optional.yml", leak: true},
 			plan{base: []string{opt + ".yml"}, live: "fault-disabled.yml", code: boot.ExitLeak}), true
 	case "giveup":
 		return byColumn(col, plan{base: []string{"fail-apply.optional.yml"}},
@@ -429,6 +437,12 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			}
 			return len(last) == 0
 		})
+		if len(last) == 0 && p.leak {
+			if end, exited := proc.Until(10*leakWindow, func(s harness.Snapshot) bool { return s.Exited }); exited {
+				last = []string{fmt.Sprintf("the process exited with %d after the leak, expect: running", end.Code)}
+				snap = end
+			}
+		}
 	} else {
 		snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
 			last = checkExited(e, p, s)
