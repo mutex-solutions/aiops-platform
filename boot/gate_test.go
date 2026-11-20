@@ -94,6 +94,13 @@ func TestGateChecksTable(t *testing.T) {
 			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
 		{name: "listener on a hook of the kernel that dist.yaml lists", bundle: rows("id: a, plugin: o/inthook"),
 			dist: "sealedHooks: {internal/plugin: [o/inthook]}", pass: true},
+		// A row in a disabled group is not mounted, and a patch on a group reaches its children.
+		{name: "last provider in a disabled group", bundle: rows("id: g, plugin: core:group, config: [{id: h, plugin: core:group, config: [{id: a, plugin: o/prov}]}]"),
+			patches: []string{"- {id: g, enabled: false}"},
+			want:    []string{"8 g:h:a last-provider stop=true"}, refused: true},
+		{name: "inject patched on the group of a provider of a bound key", bundle: rows("id: g, plugin: core:group, config: [{id: a, plugin: o/prov}]"),
+			patches: []string{"- {id: g, inject: [nothere]}"},
+			want:    []string{"8 g:a bound-provider-field stop=true"}, refused: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -190,6 +190,8 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		consumer: bindingSet(dist.Consumers),
 		sealed:   map[string][]string{},
 		required: map[string]bool{},
+		rows:     map[string]ComposedRow{},
+		mounted:  ActiveRows(c, nil),
 	}
 	// The hooks of the kernel are sealed by their definition, whatever dist.yaml
 	// lists (07-c4-plugin-sdk.md:463): one it does not list admits no listener.
@@ -203,6 +205,7 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		g.required[id] = true
 	}
 	for _, r := range c.Rows {
+		g.rows[r.ID] = r
 		if r.Required {
 			g.required[r.ID] = true
 		}
@@ -270,6 +273,8 @@ type gate struct {
 	consumer map[string][]string
 	sealed   map[string][]string
 	required map[string]bool
+	rows     map[string]ComposedRow
+	mounted  map[string]bool // enabled with every group above it, in any role (ActiveRows)
 }
 
 func bindingSet(bs []Binding) map[string][]string {
@@ -377,10 +382,15 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 		if !g.required[r.ID] {
 			rule, what = RuleBoundProvider, "a provider of a bound key"
 		}
+		// The inject, isolate and group of a group reach the rows it holds, so a
+		// patch of a group above the row counts as a patch of the row.
 		for _, f := range []FieldName{FieldInject, FieldIsolate, FieldGroup} {
-			if o, p := patched(r, f); p {
-				out = append(out, g.fail(c, r.Row, rule, boundProvider,
-					"row %q: %s is never patched on %s, and layer %d (%s, %s:%d) patched it", r.ID, f, what, o.Layer, o.Source, o.File, o.Line))
+			for a, ok := r, true; ok; a, ok = g.rows[a.Parent] {
+				if o, p := patched(a, f); p {
+					out = append(out, g.fail(c, r.Row, rule, boundProvider,
+						"row %q: %s is never patched on %s or a group that holds it, and layer %d (%s, %s:%d) patched it on row %q", r.ID, f, what, o.Layer, o.Source, o.File, o.Line, a.ID))
+					break
+				}
 			}
 		}
 	}
@@ -397,7 +407,8 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 
 // lastProvider finds a provider-bound key whose candidate providers are all
 // disabled: the last enabled provider was disabled (08-profiles-roadmap-adrs.md:145).
-// A key with no candidate row is not composed by this profile and is fine.
+// A provider in a disabled group is not mounted, so it counts as disabled. A key
+// with no candidate row is not composed by this profile and is fine.
 func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 	var out []RowResult
 	for _, b := range dist.Providers {
@@ -406,7 +417,7 @@ func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 		for _, r := range c.Rows {
 			if inSet(b.Key, g.mods[r.Plugin].Provides...) && inSet(r.Plugin, b.Plugins...) {
 				cands = append(cands, r)
-				enabled = enabled || r.Enabled
+				enabled = enabled || g.mounted[r.ID]
 			}
 		}
 		if enabled {
