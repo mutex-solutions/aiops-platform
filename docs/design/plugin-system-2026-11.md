@@ -316,7 +316,7 @@ Rules that differ from Cordis, each deliberate:
 
 | Hook | Kind | Owner | Access | Remote: what crosses the process boundary | Used for |
 |---|---|---|---|---|---|
-| `internal/plugin`, `internal/status`, `internal/service`; `internal/config`, `internal/update`, `internal/commit`; `loader/patch-context`, `loader/entry-init`, `loader/volatile-update` | three events; waterfall, waterfall, event; waterfall, event, event | kernel; `loader` | sealed | no | Inventory, `restart-policy`, metrics; reference resolution, reload log; isolate and intercept handling, volatile commits |
+| `internal/plugin`, `internal/status`, `internal/service`; `internal/config`, `internal/update`, `internal/commit`; `loader/patch-context`, `loader/entry-init`, `loader/volatile-update` | three events; waterfall, waterfall, waterfall (a failing commit aborts the update, ADR-034 decision 15); waterfall, event, event | kernel; `loader` | sealed | no | Inventory, `restart-policy`, metrics; reference resolution, reload log; isolate and intercept handling, volatile commits |
 | `composition/applied` | event | `reload` | open | no | Drift detection, inventory, audit |
 | `http/request`, `signal/admit` | gate | `http-server`, `signal-core` | signed | no | Tenant resolution, rate limits; per-row buckets and body limits, before any write |
 | `signal/normalize` | waterfall | `signal-core` | signed | no: it runs before the scrub and near the ack path | Label maps, `signal_type` lift |
