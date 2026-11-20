@@ -45,30 +45,52 @@ func (h logTap) Handle(_ context.Context, r slog.Record) error {
 func (h logTap) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h logTap) WithGroup(string) slog.Handler      { return h }
 
-// flaky is a row whose Apply fails while failing is set. attempts counts Apply calls
-// and signals each on tried.
+// flaky is a row whose Apply fails while failing is set or its config is "bad".
+// attempts counts Apply calls and signals each on tried. An Apply that works starts
+// a tracked goroutine that fails, and so fails the fiber, when the test sends on die.
 type flaky struct {
 	id       string
 	failing  atomic.Bool
 	attempts atomic.Int32
 	tried    chan int32
+	die      chan struct{}
 }
 
 func newFlaky(id string, failing bool) *flaky {
-	f := &flaky{id: id, tried: make(chan int32, 64)}
+	f := &flaky{id: id, tried: make(chan int32, 64), die: make(chan struct{})}
 	f.failing.Store(failing)
 	return f
 }
 
-func (f *flaky) plugin() kernel.Plugin {
-	return kernel.Define(kernel.Plugin{ID: f.id, Apply: func(*kernel.Context, any) error {
+func (f *flaky) plugin(needs ...kernel.Dep) kernel.Plugin {
+	return kernel.Define(kernel.Plugin{ID: f.id, Inject: needs, Apply: func(c *kernel.Context, cfg any) error {
 		n := f.attempts.Add(1)
 		f.tried <- n
-		if f.failing.Load() {
+		if f.failing.Load() || cfg == "bad" {
 			return errors.New("apply failed")
 		}
+		c.Go("flaky work", func(ctx context.Context) error {
+			select {
+			case <-f.die:
+				return errors.New("crashed")
+			case <-ctx.Done():
+				return nil
+			}
+		})
 		return nil
 	}})
+}
+
+// crash fails the ACTIVE fiber f from its own goroutine, once Apply n has run and
+// restart-policy has heard that f is ACTIVE.
+func (w *world) crash(fl *flaky, f *kernel.Fiber, n int32) {
+	w.t.Helper()
+	fl.attempt(w.t, n)
+	if err := f.Await(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	w.heard()
+	fl.die <- struct{}{}
 }
 
 // attempt waits for the n-th Apply of f to have started.
@@ -125,6 +147,21 @@ func (w *world) logged(msg string) entry {
 			}
 		case <-w.t.Context().Done():
 			w.t.Fatalf("no %q was logged", msg)
+		}
+	}
+}
+
+// decision waits for what restart-policy decided next: a retry or a give-up.
+func (w *world) decision() entry {
+	w.t.Helper()
+	for {
+		select {
+		case e := <-w.logs:
+			if e.msg == "fiber.retry" || e.msg == "fiber.gave-up" {
+				return e
+			}
+		case <-w.t.Context().Done():
+			w.t.Fatal("neither a retry nor a give-up")
 		}
 	}
 }
@@ -290,8 +327,12 @@ func TestNoRetryForAFiberThatIsNotFailedAnymore(t *testing.T) {
 	}
 	w.heard()
 	w.clk.Advance(time.Second)
-	if e := w.logged("fiber.retry-skipped"); e.attrs["why"] != "not failed" || e.attrs["state"] != kernel.Active {
+	// The operator's update started a fresh record, so the old timer finds none.
+	if e := w.logged("fiber.retry-skipped"); e.attrs["why"] != "forgotten" {
 		t.Errorf("skipped = %v", e.attrs)
+	}
+	if st := w.state(f); st != kernel.Active {
+		t.Errorf("state = %s, want ACTIVE", st)
 	}
 	if n := fl.attempts.Load(); n != 2 {
 		t.Errorf("attempts = %d", n)
@@ -328,8 +369,9 @@ func TestReplacedFiberIsNotRetriedUnderItsOldId(t *testing.T) {
 // The failures of a fiber are counted from its last stable period and inside the
 // window only.
 func TestWindowAndStablePeriod(t *testing.T) {
-	// fail1 fails, is retried and works, then fails again at once: is that a second
-	// failure of the same run (the fiber was not stable) or the first of a new one?
+	// The fiber fails, is retried and works, then fails on its own after wait: is that
+	// a second failure of the same run (the fiber was not stable) or the first of a new
+	// one?
 	run := func(t *testing.T, w *world, wait time.Duration) (gaveUp bool) {
 		fl := newFlaky("aiops/other", true)
 		f := w.root.Plugin(fl.plugin(), nil)
@@ -342,27 +384,12 @@ func TestWindowAndStablePeriod(t *testing.T) {
 		}
 		w.heard() // ACTIVE is noted at the clock's time
 		w.clk.Advance(wait)
-		fl.failing.Store(true)
-		if err := f.Update(t.Context(), nil); err != nil {
-			t.Fatal(err)
-		}
-		for {
-			select {
-			case e := <-w.logs:
-				switch e.msg {
-				case "fiber.gave-up":
-					return true
-				case "fiber.retry":
-					return false
-				}
-			case <-t.Context().Done():
-				t.Fatal("neither a retry nor a give-up")
-			}
-		}
+		fl.die <- struct{}{}
+		return w.decision().msg == "fiber.gave-up"
 	}
-	t.Run("a success resets the count when no stable period is asked", func(t *testing.T) {
-		if run(t, newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0)), 0) {
-			t.Error("gave up although the fiber had worked in between")
+	t.Run("with no stable period a failure after a success still counts", func(t *testing.T) {
+		if !run(t, newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0)), 0) {
+			t.Error("did not give up: a success forgot the failures although no stable period was asked")
 		}
 	})
 	t.Run("a fiber that did not stay up long enough keeps its count", func(t *testing.T) {
@@ -380,6 +407,109 @@ func TestWindowAndStablePeriod(t *testing.T) {
 			t.Error("gave up on a failure that left the window")
 		}
 	})
+}
+
+// An infrastructure provider whose goroutine fails each time after its Apply worked
+// is given up on after more than N failures in the window, stable omitted
+// (03-c3-kernel.md:66, :372).
+func TestGivesUpOnAFiberThatFailsAfterItWasActive(t *testing.T) {
+	w := newWorld(t, conf(2, time.Hour, time.Second, time.Minute, 2, 0))
+	fl := newFlaky("aiops/sql", false)
+	f := w.root.Plugin(fl.plugin(), nil)
+	for i, d := range []time.Duration{time.Second, 2 * time.Second} {
+		w.crash(fl, f, int32(i+1))
+		w.retryLogged(i+1, d)
+		w.clk.Advance(d)
+	}
+	w.crash(fl, f, 3)
+	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["failures"] != int64(3) {
+		t.Fatalf("%s %v, want a give-up at failure 3", e.msg, e.attrs)
+	}
+	want := []launch.ExitRequest{{Reason: launch.ExitGaveUp, Detail: "aiops/sql"}}
+	if got := w.exits(); !slices.Equal(got, want) {
+		t.Errorf("exits = %v, want %v", got, want)
+	}
+}
+
+// The stable period is time ACTIVE: time PENDING for a provider after a short ACTIVE
+// period does not forget the failures.
+func TestTimePendingIsNotStable(t *testing.T) {
+	w := newWorld(t, conf(2, time.Hour, time.Second, time.Minute, 2, 10*time.Minute))
+	key := kernel.NewKey[int]("test.dep", 0)
+	provider := kernel.Define(kernel.Plugin{ID: "aiops/dep", Provides: []kernel.AnyKey{key},
+		Apply: func(c *kernel.Context, _ any) error { return key.Provide(c, 1) }})
+	p := w.root.Plugin(provider, nil)
+	fl := newFlaky("aiops/other", true)
+	f := w.root.Plugin(fl.plugin(kernel.Need(key)), nil)
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	w.retryLogged(2, 2*time.Second)
+	fl.failing.Store(false)
+	w.clk.Advance(2 * time.Second)
+	fl.attempt(t, 3)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	w.clk.Advance(time.Second) // ACTIVE for one second
+	if err := p.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st := w.state(f); st != kernel.Pending {
+		t.Fatalf("state = %s, want PENDING without its provider", st)
+	}
+	w.heard()
+	w.clk.Advance(15 * time.Minute)
+	fl.failing.Store(true)
+	w.root.Plugin(provider, nil) // the provider returns and the fiber fails to load
+	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["failures"] != int64(3) {
+		t.Fatalf("%s %v, want a give-up at failure 3: the fiber was ACTIVE for one second only", e.msg, e.attrs)
+	}
+}
+
+// A fiber that someone else restarts is tracked afresh: the failures of a config
+// that reload applied and then rolled back do not count against the config it
+// restored.
+func TestFailuresOfAReplacedConfigDoNotCarryOver(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, time.Hour))
+	fl := newFlaky("aiops/sql", false)
+	f := w.root.Plugin(fl.plugin(), "good")
+	fl.attempt(t, 1)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	// The candidate fails three times and is retried in place each time.
+	if err := f.Update(t.Context(), "bad"); err != nil {
+		t.Fatal(err)
+	}
+	for i, d := range []time.Duration{time.Second, 2 * time.Second} {
+		w.retryLogged(i+1, d)
+		w.clk.Advance(d)
+	}
+	w.retryLogged(3, 4*time.Second)
+	// The rollback restores the previous config while the fiber waits for its retry,
+	// which then falls due with nothing to do.
+	if err := f.Update(t.Context(), "good"); err != nil {
+		t.Fatal(err)
+	}
+	fl.attempt(t, 5)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	w.clk.Advance(4 * time.Second)
+	w.logged("fiber.retry-skipped")
+	fl.die <- struct{}{} // one transient failure of the restored config
+	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the first failure of the restored config", e.msg, e.attrs)
+	}
+	if len(w.exits()) != 0 {
+		t.Errorf("exits = %v", w.exits())
+	}
 }
 
 // stall holds the observer dispatcher on the first event after it is armed.

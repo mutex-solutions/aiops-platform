@@ -184,6 +184,60 @@ func TestRetryUpdatesAFailedFiber(t *testing.T) {
 	g.waitLog("fiber.retried")
 }
 
+// A timer that falls due before the event of someone else's restart is heard finds a
+// fiber that is not FAILED and does nothing.
+func TestRetryOfAFiberThatIsNoLongerFailed(t *testing.T) {
+	g := newRig(t, policy)
+	fixed := false
+	f := g.root.Plugin(kernel.Define(kernel.Plugin{ID: "aiops/f", Apply: func(*kernel.Context, any) error {
+		if !fixed {
+			return errors.New("no")
+		}
+		return nil
+	}}), nil)
+	_ = f.Await(t.Context())
+	id := g.reg.put(f)
+	g.r.Status(t.Context(), failedEvent(id))
+	fixed = true
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	g.clk.Advance(time.Second)
+	g.waitLog("fiber.retry-skipped")
+	g.r.mu.Lock()
+	defer g.r.mu.Unlock()
+	if rec := g.r.recs[id]; rec == nil || rec.pending || rec.retried {
+		t.Errorf("record = %+v: the skipped retry must clear the wait and update nothing", rec)
+	}
+}
+
+// A fiber that leaves FAILED through restart-policy's own update keeps its record;
+// one that someone else updates, or restarts while it is live, is tracked afresh; one
+// that returns from PENDING keeps its count.
+func TestRestartsBySomeoneElse(t *testing.T) {
+	g := newRig(t, policy)
+	ev := func(id uint64, from, to kernel.State) {
+		g.r.Status(t.Context(), kernel.LedgerEvent{Kind: "state", Fiber: id, From: from, State: to})
+	}
+	g.r.recs[1] = &record{retried: true}
+	g.r.recs[2] = &record{}
+	g.r.recs[3] = &record{}
+	g.r.recs[4] = &record{}
+	ev(1, kernel.Failed, kernel.Loading)    // its own retry
+	ev(2, kernel.Failed, kernel.Pending)    // an operator, a rollback
+	ev(3, kernel.Unloading, kernel.Loading) // a candidate config of a live fiber
+	ev(4, kernel.Pending, kernel.Loading)   // its provider returned
+	if rec := g.r.recs[1]; rec == nil || rec.retried {
+		t.Errorf("own retry: record = %+v", rec)
+	}
+	if g.r.recs[2] != nil || g.r.recs[3] != nil || g.r.recs[4] == nil {
+		t.Errorf("records = %v", g.r.recs)
+	}
+}
+
 func TestOtherEventsOfTheLifecycle(t *testing.T) {
 	g := newRig(t, policy)
 	g.r.recs[1] = &record{gaveUp: true}

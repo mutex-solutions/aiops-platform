@@ -40,7 +40,7 @@ type Config struct {
 	BackoffMin  time.Duration // the delay before the first retry; positive
 	BackoffMax  time.Duration // the delay never grows past this; at least BackoffMin
 	Factor      int           // each further failure in the window multiplies the delay; at least 1
-	Stable      time.Duration // a fiber ACTIVE this long has its failures forgotten; 0 forgets at its first success
+	Stable      time.Duration // a fiber ACTIVE this long has its failures forgotten; 0 never: only Window counts
 	// Infrastructure lists the key names whose providers are infrastructure providers
 	// (03-c3-kernel.md:371 names sql, jobs, events and http); giving up on one asks the
 	// launcher to replace the process. It must not be empty: an empty list would turn

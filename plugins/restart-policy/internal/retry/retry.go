@@ -37,7 +37,7 @@ type Policy struct {
 	BackoffMin  time.Duration // the delay before the first retry
 	BackoffMax  time.Duration // the delay never grows past this
 	Factor      int           // each further failure in the window multiplies the delay
-	Stable      time.Duration // a fiber ACTIVE this long has its failures forgotten; 0 forgets at once
+	Stable      time.Duration // a fiber ACTIVE this long has its failures forgotten; 0 never: only Window counts
 	// Infrastructure lists the key names whose providers are infrastructure providers
 	// (03-c3-kernel.md:371: `sql`, `jobs`, `events`, `http`).
 	Infrastructure []string
@@ -63,10 +63,12 @@ type Retrier struct {
 	recs map[uint64]*record
 }
 
-// record is what is known of one fiber that failed.
+// record is what is known of one fiber that failed, since restart-policy last saw
+// someone else restart it.
 type record struct {
 	fails    []time.Time
 	pending  bool      // a retry is scheduled and has not fired
+	retried  bool      // restart-policy updated the fiber and has not yet seen it leave FAILED
 	gaveUp   bool      // the fiber stays FAILED until someone updates it
 	activeAt time.Time // when the fiber was last seen ACTIVE; zero while it is not
 }
@@ -89,7 +91,7 @@ func (r *Retrier) Status(ctx context.Context, e kernel.LedgerEvent) {
 	case e.State == kernel.Disposed:
 		r.forget(e.Fiber)
 	default:
-		r.updated(e.Fiber)
+		r.updated(e)
 	}
 }
 
@@ -114,10 +116,7 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 		r.mu.Unlock() // a repeated event, from a resync that crossed a live one
 		return
 	}
-	if !rec.activeAt.IsZero() && now.Sub(rec.activeAt) >= r.Stable {
-		rec.fails = nil
-	}
-	rec.activeAt = time.Time{}
+	r.endActive(rec, now)
 	rec.fails = append(slices.DeleteFunc(rec.fails, func(t time.Time) bool { return now.Sub(t) > r.Window }), now)
 	n := len(rec.fails)
 	if n > r.MaxFailures {
@@ -132,14 +131,14 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 	delay := r.backoff(n)
 	t, err := r.Clock.After(r.Context, delay)
 	if err != nil {
-		r.clearPending(id) // the restart-policy fiber is unloading
+		r.clearPending(id, rec) // the restart-policy fiber is unloading
 		return
 	}
 	r.Log.Info("fiber.retry", "fiber", id, "plugin", plugin, "failures", n, "delay", delay)
 	r.Context.Go("restart-policy retry", func(ctx context.Context) error {
 		select {
 		case <-t.C():
-			r.retry(ctx, id)
+			r.retry(ctx, id, rec)
 		case <-ctx.Done():
 		}
 		return nil
@@ -156,9 +155,9 @@ func (r *Retrier) backoff(n int) time.Duration {
 	return min(d, r.BackoffMax)
 }
 
-// retry runs when the timer of a failure fires.
-func (r *Retrier) retry(ctx context.Context, id uint64) {
-	if !r.clearPending(id) {
+// retry runs when the timer of a failure of rec fires.
+func (r *Retrier) retry(ctx context.Context, id uint64, rec *record) {
+	if !r.clearPending(id, rec) {
 		r.Log.Debug("fiber.retry-skipped", "fiber", id, "why", "forgotten")
 		return
 	}
@@ -173,18 +172,22 @@ func (r *Retrier) retry(ctx context.Context, id uint64) {
 		return
 	}
 	// The update is admitted or refused at once; the restart that follows is the next
-	// event of the fiber. A refusal means the fiber was disposed since the check.
+	// event of the fiber, which updated tells from a restart by someone else. A
+	// refusal means the fiber was disposed since the check.
+	r.mu.Lock()
+	rec.retried = true
+	r.mu.Unlock()
 	err := f.Update(ctx, nil)
 	r.Log.Debug("fiber.retried", "fiber", id, "err", err)
 }
 
-// clearPending ends the wait for fiber id and reports whether the fiber is still
-// tracked: a record is dropped when its fiber is disposed or gone.
-func (r *Retrier) clearPending(id uint64) bool {
+// clearPending ends the wait of rec and reports whether rec is still the record of
+// fiber id: a record is dropped when its fiber is disposed, gone or restarted by
+// someone else.
+func (r *Retrier) clearPending(id uint64, rec *record) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rec := r.recs[id]
-	if rec == nil || rec.gaveUp {
+	if r.recs[id] != rec || rec.gaveUp {
 		return false
 	}
 	rec.pending = false
@@ -224,14 +227,36 @@ func (r *Retrier) active(id uint64) {
 	}
 }
 
-// updated handles a fiber that is loading, pending or unloading. One that was given
-// up on is being updated by someone else, so it is tracked afresh.
-func (r *Retrier) updated(id uint64) {
+// updated handles a fiber that is loading, pending or unloading. A fiber that leaves
+// FAILED is restarted by an update: restart-policy's own retry, or someone else's (an
+// operator, or reload applying or rolling back a generation, which restarts a fiber
+// in place with another config). A live fiber that unloads and loads again without
+// waiting PENDING is restarted by someone else too; one that waits PENDING was
+// unloaded by the kernel because a provider left, and keeps its count. A fiber that
+// someone else restarted is tracked afresh. For any other the ACTIVE period, if any,
+// is over.
+func (r *Retrier) updated(e kernel.LedgerEvent) {
+	now := r.Clock.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if rec := r.recs[id]; rec != nil && rec.gaveUp {
-		delete(r.recs, id)
+	switch rec := r.recs[e.Fiber]; {
+	case rec == nil:
+	case e.From == kernel.Failed && rec.retried:
+		rec.retried = false
+	case rec.gaveUp, e.From == kernel.Failed, e.State == kernel.Loading && e.From == kernel.Unloading:
+		delete(r.recs, e.Fiber)
+	default:
+		r.endActive(rec, now)
 	}
+}
+
+// endActive ends the ACTIVE period of rec at now, if one is running: a period of at
+// least Stable forgets the failures. r.mu is held.
+func (r *Retrier) endActive(rec *record, now time.Time) {
+	if r.Stable > 0 && !rec.activeAt.IsZero() && now.Sub(rec.activeAt) >= r.Stable {
+		rec.fails = nil
+	}
+	rec.activeAt = time.Time{}
 }
 
 func (r *Retrier) forget(id uint64) {
