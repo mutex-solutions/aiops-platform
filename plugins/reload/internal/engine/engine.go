@@ -234,7 +234,7 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	// the candidate.
 	e.generation++
 	r.Generation, r.Stage = e.generation, def.StageSettle
-	r.Report, err = e.judge(ctx, cand, r.Plan, r.Applied, before)
+	r.Report, err = e.judge(ctx, cand, r.Applied, before)
 	if err != nil {
 		return stop(def.StageSettle, err)
 	}
@@ -289,7 +289,7 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 		}
 	}
 	tree = prev
-	if rb.Report, err = e.judge(ctx, prev, rb.Plan, rb.Applied, before); err != nil {
+	if rb.Report, err = e.judge(ctx, prev, rb.Applied, before); err != nil {
 		return fail(err)
 	}
 	if !rb.Report.Pass {
@@ -378,13 +378,14 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 
 // judge settles and judges the generation by the rule of 03-c3-kernel.md:380 and
 // plugin-system-2026-11.md:369: every row this generation created, changed or enabled
-// must be ACTIVE, and so must every required row, and a row that was ACTIVE must
-// still be; a row that was inactive and is untouched is a warning. A row that the
-// loader did not mount (disabled, of another role) is not judged unless it is
-// required, and then it fails. Settling is loader.Await, which returns once a fiber is out of its
+// (by the loader's outcomes; a row of the restart closure is none of these) must be
+// ACTIVE, and so must every required row, and a row that was ACTIVE must still be; a
+// row that was inactive and is untouched is a warning. A row that the loader did not
+// mount (disabled, of another role) is not judged unless it is required, and then it
+// fails. Settling is loader.Await, which returns once a fiber is out of its
 // transition, and the kernel's three deadlines bound every transition, so the
 // settle deadline of the docs is those deadlines; ctx ends it at disposal.
-func (e *Engine) judge(ctx context.Context, cand launch.Composition, plan launch.Plan, applied []loader.Result, before map[string]bool) (composition.Report, error) {
+func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool) (composition.Report, error) {
 	need := e.Profile.Required()
 	required := map[string]bool{}
 	for _, id := range need.Rows {
@@ -395,9 +396,6 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, plan launch
 		if r.Outcome == loader.Created || r.Outcome == loader.Restarted || r.Outcome == loader.Committed {
 			touched[r.ID] = true
 		}
-	}
-	for _, id := range plan.Closure {
-		touched[id] = true
 	}
 	var states []launch.RowState
 	var rep composition.Report
