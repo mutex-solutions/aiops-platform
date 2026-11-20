@@ -373,7 +373,7 @@ func TestRunRefusals(t *testing.T) {
 			if tc.name == "prepare fails" {
 				f.opt.Registry, f.opt.Dist = f.reg, f.dist
 				r := newRun(f.opt)
-				r.afterNew = func(root *kernel.Root) { _ = root.Close(context.Background()) }
+				r.o.Kernel = func(root *kernel.Root) { _ = root.Close(context.Background()) }
 				code = r.main(t.Context())
 			} else {
 				code = f.run(t.Context())
@@ -1033,7 +1033,7 @@ func TestRunActsOnALeakAfterItsObserverOverflowed(t *testing.T) {
 		}
 	}
 	roots := make(chan *kernel.Root, 1)
-	r.afterNew = func(root *kernel.Root) {
+	r.o.Kernel = func(root *kernel.Root) {
 		roots <- root
 		_, err := root.Observe("test", func(_ context.Context, e kernel.LedgerEvent) error {
 			if s := blocked.Load(); s > 0 && e.Sequence > s {

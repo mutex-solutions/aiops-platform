@@ -16,6 +16,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 // readyWriter is a stdout that tells the test when the launcher says it is ready.
@@ -237,6 +238,27 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 	e, stderr, _ := env("--profile", "p", "--home", h, "--refs-dir", dir)
 	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK || flags["refs-dir"] != dir {
 		t.Fatalf("exit %d, flags %v: %s", code, flags, stderr.String())
+	}
+}
+
+// The distribution's Kernel seam reaches boot with the runtime directory of the home;
+// with none, boot gets none.
+func TestRunPassesTheKernelSeamWithTheRunDir(t *testing.T) {
+	h := home(t, "[]")
+	var seam func(*kernel.Root)
+	stubBoot(t, func(_ context.Context, o boot.RunOptions) int { seam = o.Kernel; return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK || seam != nil {
+		t.Fatalf("exit %d, seam set %v: %s", code, seam != nil, stderr.String())
+	}
+	d, gotDir := distribution(t), ""
+	d.Kernel = func(_ *kernel.Root, dir string) { gotDir = dir }
+	if code := Run(context.Background(), "aiops", e, d); code != boot.ExitOK || seam == nil {
+		t.Fatalf("exit %d, seam set %v: %s", code, seam != nil, stderr.String())
+	}
+	seam(nil)
+	if gotDir != filepath.Join(h, "run") {
+		t.Errorf("run dir = %q", gotDir)
 	}
 }
 

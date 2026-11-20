@@ -168,6 +168,10 @@ type RunOptions struct {
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)
+	// Kernel is called once with the kernel of the run, after kernel.New and before
+	// anything is mounted: a seam of the test binary (test/dist/cmd/aiops-test), which
+	// records the kernel's fibers beside the state file. Nil in a release binary.
+	Kernel func(*kernel.Root)
 }
 
 // Run boots the composition and runs it until a signal, an exit request of a row
@@ -209,7 +213,6 @@ type run struct {
 	leakWhy  atomic.Pointer[string] // the first leak the observer saw, as a line for the log
 	moved    chan struct{}          // pinged at each change of state, for waitUnloads
 	reader   atomic.Pointer[reader]
-	afterNew func(*kernel.Root)       // a seam of the tests: runs between kernel.New and prepare
 	onEvent  func(kernel.LedgerEvent) // a seam of the tests: runs first in boot's observer
 }
 
@@ -291,8 +294,8 @@ func (r *run) run(ctx context.Context) int {
 		return r.fail(ExitInternal, "kernel: %v", err)
 	}
 	r.root = root
-	if r.afterNew != nil {
-		r.afterNew(root)
+	if r.o.Kernel != nil {
+		r.o.Kernel(root)
 	}
 	if err := errors.Join(r.prepare(pc, cat), r.watch()); err != nil {
 		_ = root.Close(context.WithoutCancel(ctx))

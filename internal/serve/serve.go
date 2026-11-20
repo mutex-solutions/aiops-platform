@@ -32,6 +32,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 // Distribution is what a server binary links: the module table as Go values, the
@@ -45,6 +46,9 @@ type Distribution struct {
 	Manifest boot.DistManifest
 	Limits   boot.Limits
 	Shipped  fs.FS
+	// Kernel is boot.RunOptions.Kernel with the runtime directory of the home: a seam
+	// of the test binary. Nil in a release binary.
+	Kernel func(root *kernel.Root, runDir string)
 }
 
 // Env is everything Run takes from the process.
@@ -134,6 +138,9 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
 		Registry: d.Registry, Dist: d.Manifest, Limits: lim, Clock: boot.SystemClock(),
 		Publish: publish,
+	}
+	if d.Kernel != nil {
+		opts.Kernel = func(root *kernel.Root) { d.Kernel(root, runDir) }
 	}
 	for _, p := range patches {
 		opts.Patches = append(opts.Patches, patchFile(p))

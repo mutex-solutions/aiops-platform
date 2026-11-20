@@ -254,7 +254,7 @@ func startRefsRun(t *testing.T, bundle string, extra ...ModuleEntry) *refsRun {
 	rr := &refsRun{f: f, r: newRun(f.opt), done: make(chan int, 1), held: make(chan struct{}), release: make(chan struct{}), gate: gate}
 	t.Cleanup(rr.unhold)
 	roots := make(chan *kernel.Root, 1)
-	rr.r.afterNew = func(root *kernel.Root) {
+	rr.r.o.Kernel = func(root *kernel.Root) {
 		_, err := root.Observe("test-hold", func(_ context.Context, e kernel.LedgerEvent) error {
 			if h := rr.hold.Load(); h != nil && (*h)(e) {
 				rr.hold.Store(nil)
