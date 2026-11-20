@@ -1,6 +1,16 @@
-// Package boot is the launcher library. This part is the pure half: it reads
-// a profile and its layers and builds one immutable composition. It reads no
-// environment, no clock and no process, and it does not import the kernel.
+// Package boot is the launcher library. It has two halves.
+//
+// The pure half reads a profile and its layers and builds one immutable
+// composition, admits it and plans changes (compose.go, gate.go, graph.go,
+// required.go, plan.go and the dumps). It reads no environment, no clock and no
+// process, and does not import the kernel.
+//
+// The run half (run.go, launch.go, convert.go, limits.go) runs a composition on
+// the kernel: the five boot steps, the six launch services, signals, bounded
+// shutdown and exit codes. It takes every input as a value (RunOptions) and is the
+// only part that imports sdk/kernel and the launch, loader and composition
+// definitions. The package imports nothing from plugins/ or loader/: the loader
+// arrives as a kernel.Plugin value in the module table (Registry).
 //
 // The contract is ADR-059 (docs/adr/ADR-059-s1-scope.md) and, in order of
 // authority, docs/architecture/00-decisions.md section 6.1,
@@ -219,8 +229,9 @@ type Composition struct {
 }
 
 // ModuleEntry is what the launcher knows of one plugin of the module table.
-// Plugin is an opaque handle for the kernel plugin value; boot never looks
-// inside it and it takes no part in the digest.
+// Plugin holds the kernel.Plugin value that kernel.Define returned, which only
+// the run half reads (Run checks its declarations against this entry); it takes
+// no part in the digest and the pure half never looks inside it.
 type ModuleEntry struct {
 	ID       string // manifest id "<owner>/<name>"
 	Module   string // Go module path

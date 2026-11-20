@@ -1,0 +1,548 @@
+package boot
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"testing/fstest"
+	"time"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+)
+
+const happyBundle = `
+- insert:
+    - {id: store, plugin: t/store, roles: [api]}
+    - {id: user, plugin: t/user, roles: [api]}
+`
+
+// stop sends the signal and waits for the exit code.
+func stopAndWait(t *testing.T, f *fixture, done <-chan int) int {
+	t.Helper()
+	f.signal <- syscall.SIGTERM
+	return <-done
+}
+
+func TestRunBootsAndStopsOnSignal(t *testing.T) {
+	f := newFixture(t, happyBundle)
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	if got := f.phases(); !slices.Equal(got, []Phase{PhaseStarting, PhaseRunning, PhaseStopping, PhaseStopped}) {
+		t.Fatalf("phases %v", got)
+	}
+	if s := f.lastStatus(); s.Ready || s.Exit != 0 || s.Digest == "" || s.Role != "all" || s.Profile != "p" {
+		t.Fatalf("final status %+v", s)
+	}
+	if !strings.Contains(f.out.String(), "aiops: ready profile=p role=all") || !strings.Contains(f.errb.String(), "aiops: stopping: signal") {
+		t.Fatalf("stdout %q stderr %q", f.out.String(), f.errb.String())
+	}
+}
+
+func TestRunStopsWhenContextEnds(t *testing.T) {
+	f := newFixture(t, happyBundle)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := f.start(ctx)
+	f.waitReady(t, done)
+	cancel()
+	if code := <-done; code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+func TestRunRoleFilter(t *testing.T) {
+	f := newFixture(t, happyBundle+"    - {id: other, plugin: t/store, roles: [worker]}\n")
+	f.opt.Role = "api"
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	if got := f.lastStatus().Role; got != "api" {
+		t.Fatalf("role %q", got)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+// launched records the launch services that a row resolved.
+type launched struct {
+	mu      sync.Mutex
+	profile launch.ProfileContext
+	cat     launch.Catalog
+	cmd     launch.Cmdline
+	ready   launch.Ready
+	sw      launch.KillSwitches
+	exit    launch.AppExit
+}
+
+func probe(l *launched) ModuleEntry {
+	return toy(toySpec{id: "t/probe", needs: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey,
+		launch.ReadyKey, launch.KillSwitchesKey, launch.AppExitKey},
+		apply: func(c *kernel.Context, _ any) error {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			l.profile, l.cat, l.cmd = launch.ProfileContextKey.Of(c), launch.CatalogKey.Of(c), launch.CmdlineKey.Of(c)
+			l.ready, l.sw, l.exit = launch.ReadyKey.Of(c), launch.KillSwitchesKey.Of(c), launch.AppExitKey.Of(c)
+			return nil
+		}})
+}
+
+// bindExit lets the plugins of ids resolve appExit, which is consumer-bound.
+func bindExit(f *fixture, ids ...string) {
+	f.dist.Consumers = append(f.dist.Consumers, Binding{Key: "appExit", Plugins: ids})
+}
+
+func TestLaunchServices(t *testing.T) {
+	var l launched
+	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.profile.Profile() != "p" || l.profile.Role() != "all" {
+		t.Fatalf("profile %q role %q", l.profile.Profile(), l.profile.Role())
+	}
+	layers := l.profile.Layers()
+	if len(layers) != 1 || layers[0] != (launch.Layer{Number: 1, Source: "bundle:b", File: "bundles/b/bundle.yaml"}) {
+		t.Fatalf("layers %+v", layers)
+	}
+	if c, _ := l.cmd.Flag("home"); c != "/h" {
+		t.Fatalf("flag home %q", c)
+	}
+	if _, ok := l.cmd.Flag("nope"); ok || !slices.Equal(l.cmd.Args(), []string{"--profile", "p"}) {
+		t.Fatalf("cmdline %v", l.cmd.Args())
+	}
+	if !l.sw.On(launch.AgentsPaused) || l.sw.On(launch.TelemetryDisabled) || l.sw.On("unknown") {
+		t.Fatal("kill switches")
+	}
+	if !l.ready.IsReady() {
+		t.Fatal("ready latch not set")
+	}
+
+	// catalog
+	ids := []string{}
+	for _, e := range l.cat.Entries() {
+		ids = append(ids, e.ID)
+	}
+	if !slices.Equal(ids, []string{"aiops/loader", "t/probe", "t/store", "t/user"}) {
+		t.Fatalf("entries %v", ids)
+	}
+	if e, ok := l.cat.Lookup("t/user"); !ok || !slices.Equal(e.Needs, []string{"store"}) {
+		t.Fatalf("lookup %+v", e)
+	}
+	if _, ok := l.cat.Lookup("t/none"); ok {
+		t.Fatal("lookup of an unknown id")
+	}
+	if p, ok := l.cat.Plugin("t/store"); !ok || p.ID != "t/store" {
+		t.Fatal("plugin")
+	}
+	if _, ok := l.cat.Plugin("t/none"); ok {
+		t.Fatal("plugin of an unknown id")
+	}
+	for _, name := range []string{"store", "profileContext", "loader", "composition", "registry", "logger"} {
+		if k, ok := l.cat.Key(name); !ok || k.Name() != name {
+			t.Fatalf("key %q: %v", name, ok)
+		}
+	}
+	if _, ok := l.cat.Key("ghost"); ok {
+		t.Fatal("key of an unknown name")
+	}
+
+	// compose, admit, plan
+	ctx := t.Context()
+	if _, err := l.profile.Compose(ctx); err != nil { // composed twice: remembered once
+		t.Fatal(err)
+	}
+	c, err := l.profile.Compose(ctx)
+	if err != nil || len(c.Rows) != 3 || c.Digest == (launch.Digest{}) {
+		t.Fatalf("compose: %v %+v", err, c)
+	}
+	if c.Rows[0].ID != "store" || c.Rows[0].Plugin != "t/store" || !c.Rows[0].Enabled || !slices.Equal(c.Rows[0].Roles, []string{"api"}) {
+		t.Fatalf("row %+v", c.Rows[0])
+	}
+	adm, err := l.profile.Admit(ctx, c)
+	if err != nil || len(adm.Denied) != 0 {
+		t.Fatalf("admit: %v %+v", err, adm)
+	}
+	same, err := l.profile.Plan(ctx, c, c)
+	if err != nil || same.From != same.To {
+		t.Fatalf("plan: %v %+v", err, same)
+	}
+	for _, e := range same.Entries {
+		if e.Action != launch.ActionUnchanged {
+			t.Fatalf("entry %+v", e)
+		}
+	}
+
+	// A new generation: one row added, one optional row denied.
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + `
+    - {id: probe, plugin: t/probe, roles: [api]}
+    - {id: cached, plugin: t/user, roles: [api]}
+    - {id: ghost, plugin: t/ghost, roles: [api]}
+`)}
+	next, err := l.profile.Compose(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adm, err = l.profile.Admit(ctx, next)
+	if err != nil || len(adm.Denied) != 1 || adm.Denied[0].Row != "ghost" || adm.Denied[0].Check != "module table" {
+		t.Fatalf("admit: %v %+v", err, adm)
+	}
+	pl, err := l.profile.Plan(ctx, c, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]launch.Action{}
+	for _, e := range pl.Entries {
+		got[e.ID] = e.Action
+	}
+	if got["cached"] != launch.ActionCreate || got["store"] != launch.ActionUnchanged || got["ghost"] != launch.ActionCreate {
+		t.Fatalf("plan %v", got)
+	}
+
+	// A composition that the launcher did not make is refused, and so is a bad file.
+	if _, err := l.profile.Admit(ctx, launch.Composition{Digest: launch.Digest{1}}); err == nil {
+		t.Fatal("admit of a stranger")
+	}
+	if _, err := l.profile.Plan(ctx, launch.Composition{Digest: launch.Digest{1}}, c); err == nil {
+		t.Fatal("plan from a stranger")
+	}
+	if _, err := l.profile.Plan(ctx, c, launch.Composition{Digest: launch.Digest{2}}); err == nil {
+		t.Fatal("plan to a stranger")
+	}
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + "    - {id: loop1, plugin: t/store, roles: [api]}\n    - {id: loop2, plugin: t/store, roles: [api]}\n")}
+	bad, err := l.profile.Compose(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.profile.Admit(ctx, bad); err == nil || !strings.Contains(err.Error(), "two-providers") {
+		t.Fatalf("admit of two providers: %v", err)
+	}
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte("")}
+	if _, err := l.profile.Compose(ctx); err == nil {
+		t.Fatal("compose of an empty file")
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := l.profile.Compose(cctx); err == nil {
+		t.Fatal("compose with an ended context")
+	}
+	if _, err := l.profile.Admit(cctx, c); err == nil {
+		t.Fatal("admit with an ended context")
+	}
+	if _, err := l.profile.Plan(cctx, c, c); err == nil {
+		t.Fatal("plan with an ended context")
+	}
+
+	// The candidates are bounded: the oldest is forgotten, the committed one is not.
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle)}
+	first, _ := l.profile.Compose(ctx)
+	for i := range maxKnown + 1 {
+		f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + "    - {id: n" + string(rune('a'+i)) + ", plugin: t/store, roles: [api]}\n")}
+		if _, err := l.profile.Compose(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := l.profile.Admit(ctx, first); err == nil {
+		t.Fatal("the oldest candidate should be forgotten")
+	}
+	if _, err := l.profile.Admit(ctx, c); err != nil {
+		t.Fatalf("the committed composition is kept: %v", err)
+	}
+
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+func TestRunRefusals(t *testing.T) {
+	cyc1 := toy(toySpec{id: "t/cyc1", provides: []kernel.AnyKey{storeKey}, needs: []kernel.AnyKey{cacheKey}})
+	cyc2 := toy(toySpec{id: "t/cyc2", provides: []kernel.AnyKey{cacheKey}, needs: []kernel.AnyKey{storeKey}})
+	tests := []struct {
+		name   string
+		bundle string
+		tweak  func(f *fixture)
+		extra  []ModuleEntry
+		code   int
+		want   string
+	}{
+		{name: "missing file", bundle: happyBundle, tweak: func(f *fixture) { delete(f.files, "bundles/b/bundle.yaml") }, code: ExitRefused, want: "file-missing"},
+		{name: "unknown plugin, required row", bundle: happyBundle + "    - {id: ghost, plugin: t/ghost, roles: [api], required: true}\n",
+			code: ExitRefused, want: "not in the module table"},
+		{name: "cycle", bundle: "- insert:\n    - {id: a, plugin: t/cyc1, roles: [api]}\n    - {id: b, plugin: t/cyc2, roles: [api]}\n",
+			extra: []ModuleEntry{cyc1, cyc2}, code: ExitRefused, want: "static graph"},
+		{name: "required key has no provider", bundle: happyBundle, tweak: func(f *fixture) { f.dist.RequiredKeys = []string{"cache"} },
+			code: ExitRequired, want: "required key"},
+		{name: "reserved row id", bundle: "- insert:\n    - {id: loader, plugin: t/store, roles: [api]}\n", code: ExitRefused, want: "is reserved"},
+		{name: "bad role", bundle: happyBundle, tweak: func(f *fixture) { f.opt.Role = "root" }, code: ExitUsage, want: "role \"root\""},
+		{name: "bad limits", bundle: happyBundle, tweak: func(f *fixture) { f.opt.Limits.OwnerInbox = 0 }, code: ExitRefused, want: "OwnerInbox"},
+		{name: "no loader", bundle: happyBundle, tweak: func(f *fixture) { delete(f.reg.Modules, LoaderID) }, code: ExitRefused, want: "has no aiops/loader"},
+		{name: "no loader config", bundle: happyBundle, tweak: func(f *fixture) { f.reg.LoaderConfig = nil }, code: ExitRefused, want: "no LoaderConfig"},
+		{name: "plugin is not defined", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/store"]
+			e.Plugin = "x"
+			f.reg.Modules["t/store"] = e
+		}, code: ExitRefused, want: "want a kernel.Plugin"},
+		{name: "plugin id differs", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/store"]
+			e.ID = "t/store"
+			p := e.Plugin.(kernel.Plugin)
+			p.ID = "t/other"
+			e.Plugin = p
+			f.reg.Modules["t/store"] = e
+		}, code: ExitRefused, want: "declares the id \"t/other\""},
+		{name: "entry and plugin disagree", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/user"]
+			e.Needs = []string{"cache"}
+			f.reg.Modules["t/user"] = e
+		}, code: ExitRefused, want: "differ"},
+		{name: "key not in the table", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/user"]
+			e.Wants = []string{"ghost"}
+			f.reg.Modules["t/user"] = e
+		}, code: ExitRefused, want: "not in the key table"},
+		{name: "major clash", bundle: happyBundle, tweak: func(f *fixture) {
+			f.reg.Keys["store"] = kernel.NewKey[string]("store", 1)
+		}, code: ExitRefused, want: "two keys are named \"store\""},
+		{name: "binding names an unknown key", bundle: happyBundle, tweak: func(f *fixture) {
+			f.dist.Providers = []Binding{{Key: "ghost", Plugins: []string{"t/store"}}}
+		}, code: ExitRefused, want: "not in the key table"},
+		{name: "sealed hook not registered", bundle: happyBundle, tweak: func(f *fixture) {
+			f.dist.SealedHooks = []HookListeners{{Hook: "t/hook", Plugins: []string{"t/store"}}}
+		}, code: ExitRefused, want: "not in Registry.Hooks"},
+		{name: "sealed hook names an unknown plugin", bundle: happyBundle, tweak: func(f *fixture) {
+			f.reg.Hooks["t/hook"] = kernel.NewEvent[string]("t/hook", kernel.OwnedBy(storeKey), kernel.Sealed())
+			f.dist.SealedHooks = []HookListeners{{Hook: "t/hook", Plugins: []string{"t/ghost"}}}
+		}, code: ExitRefused, want: "not in the module table"},
+		{name: "kernel refuses the bindings", bundle: happyBundle, tweak: func(f *fixture) {
+			f.dist.Providers = []Binding{{Key: "store", Plugins: []string{"t/store"}}} // an open key
+		}, code: ExitInternal, want: "kernel:"},
+		{name: "prepare fails", bundle: happyBundle, tweak: func(f *fixture) {}, code: ExitInternal, want: "prepare:"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, tc.bundle, tc.extra...)
+			if tc.tweak != nil {
+				tc.tweak(f)
+			}
+			var code int
+			if tc.name == "prepare fails" {
+				f.opt.Registry, f.opt.Dist = f.reg, f.dist
+				r := newRun(f.opt)
+				r.afterNew = func(root *kernel.Root) { _ = root.Close(context.Background()) }
+				code = r.main(t.Context())
+			} else {
+				code = f.run(t.Context())
+			}
+			if code != tc.code || !strings.Contains(f.errb.String(), tc.want) {
+				t.Fatalf("exit %d, want %d with %q; stderr:\n%s", code, tc.code, tc.want, f.errb.String())
+			}
+			if s := f.lastStatus(); s.Phase != PhaseStopped || s.Exit != tc.code {
+				t.Fatalf("status %+v", s)
+			}
+		})
+	}
+}
+
+func TestKernelConfigNamesUnknownPlugins(t *testing.T) {
+	f := newFixture(t, happyBundle)
+	f.opt.Registry = f.reg
+	r := newRun(f.opt)
+	cat, err := newCatalog(f.reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.kernelConfig(cat, DistManifest{
+		Providers: []Binding{{Key: "policy", Plugins: []string{"t/ghost"}}},
+		Consumers: []Binding{{Key: "appExit", Plugins: []string{"t/ghost2"}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), `provider binding of key "policy" names plugin "t/ghost"`) || !strings.Contains(err.Error(), `consumer binding of key "appExit" names plugin "t/ghost2"`) {
+		t.Fatalf("error: %v", err)
+	}
+}
+
+func TestRunWithSealedHookAndObserverLog(t *testing.T) {
+	f := newFixture(t, happyBundle)
+	f.reg.Hooks["t/hook"] = kernel.NewEvent[string]("t/hook", kernel.OwnedBy(storeKey), kernel.Sealed())
+	f.dist.SealedHooks = []HookListeners{{Hook: "t/hook", Plugins: []string{"t/store"}}}
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	// The log of the kernel's observers goes to stderr.
+	r := newRun(f.opt)
+	cat, err := newCatalog(f.reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := r.kernelConfig(cat, f.dist)
+	if err != nil || len(cfg.Listeners) != 1 {
+		t.Fatalf("config: %v %+v", err, cfg.Listeners)
+	}
+	cfg.ObserverLog(errors.New("slow observer"))
+	if !strings.Contains(f.errb.String(), "warning: observer: slow observer") {
+		t.Fatalf("stderr:\n%s", f.errb.String())
+	}
+}
+
+func TestRunWarnings(t *testing.T) {
+	// A patch of an unknown id is a warning; an optional row that fails, and one that
+	// waits for a key, are one grouped warning; the process still becomes ready.
+	bad := toy(toySpec{id: "t/bad", apply: func(*kernel.Context, any) error { return errors.New("boom") }})
+	wanter := toy(toySpec{id: "t/wanter", wants: []kernel.AnyKey{storeKey}})
+	f := newFixture(t, `
+- insert:
+    - {id: store, plugin: t/store, roles: [api]}
+    - {id: wanter, plugin: t/wanter, roles: [api]}
+    - {id: bad, plugin: t/bad, roles: [api]}
+    - {id: waits, plugin: t/user, roles: [api]}
+    - {id: waits2, plugin: t/user, roles: [api], inject: [cache]}
+- {id: nobody, enabled: false}
+`, bad, wanter)
+	f.dist.RequiredRows = nil
+	f.dist.RequiredKeys = []string{"store"}
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	for _, want := range []string{"warning: ", "unknown-id", `"bad" is FAILED`, `"waits2" is PENDING and waits for cache`, "settle:"} {
+		if !strings.Contains(f.errb.String(), want) {
+			t.Errorf("stderr lacks %q:\n%s", want, f.errb.String())
+		}
+	}
+}
+
+func TestRunRequiredRowFails(t *testing.T) {
+	bad := toy(toySpec{id: "t/bad", apply: func(*kernel.Context, any) error { return errors.New("boom") }})
+	f := newFixture(t, "- insert:\n    - {id: bad, plugin: t/bad, roles: [api], required: true}\n", bad)
+	if code := f.run(t.Context()); code != ExitRequired || !strings.Contains(f.errb.String(), `required row "bad" is FAILED`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	if s := f.lastStatus(); s.Ready || s.Phase != PhaseStopped || s.Exit != ExitRequired || !strings.Contains(s.Detail, "required set is not met") {
+		t.Fatalf("status %+v", s)
+	}
+}
+
+func TestRunRequiredKeyMissingAtRunTime(t *testing.T) {
+	// The provider is optional and fails, so the key has no ACTIVE provider at run time.
+	bad := toy(toySpec{id: "t/badstore", provides: []kernel.AnyKey{storeKey}, apply: func(*kernel.Context, any) error { return errors.New("boom") }})
+	f := newFixture(t, "- insert:\n    - {id: s, plugin: t/badstore, roles: [api]}\n", bad)
+	f.dist.RequiredKeys = []string{"store"}
+	if code := f.run(t.Context()); code != ExitRequired || !strings.Contains(f.errb.String(), `required key "store" has no ACTIVE provider`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+func TestRunLoaderFails(t *testing.T) {
+	f := newFixture(t, happyBundle)
+	f.reg.LoaderConfig = func([]loaderdef.EntrySpec, BatchFunc) any { return "not a config" }
+	code := f.run(t.Context())
+	if code != ExitRequired || !strings.Contains(f.errb.String(), "error: loader:") || !strings.Contains(f.errb.String(), `required row "loader" is FAILED`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+func TestRunAppExit(t *testing.T) {
+	for _, tc := range []struct {
+		reason launch.ExitReason
+		code   int
+	}{
+		{launch.ExitDisposeLeak, ExitLeak}, {launch.ExitGaveUp, ExitGaveUp}, {launch.ExitRestoreFail, ExitRestore}, {"mystery", ExitInternal},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			exiter := toy(toySpec{id: "t/exiter", needs: []kernel.AnyKey{launch.AppExitKey}, apply: func(c *kernel.Context, _ any) error {
+				x := launch.AppExitKey.Of(c)
+				x.RequestExit(launch.ExitRequest{Reason: tc.reason, Detail: "the detail"})
+				x.RequestExit(launch.ExitRequest{Reason: launch.ExitRestoreFail}) // dropped: the first request wins
+				x.RequestExit(launch.ExitRequest{Reason: launch.ExitRestoreFail})
+				return nil
+			}})
+			f := newFixture(t, happyBundle+"    - {id: exiter, plugin: t/exiter, roles: [api]}\n", exiter)
+			bindExit(f, "t/exiter")
+			code := f.run(t.Context())
+			if code != tc.code || !strings.Contains(f.errb.String(), "process replaced: "+string(tc.reason)+": the detail") {
+				t.Fatalf("exit %d, want %d; stderr:\n%s", code, tc.code, f.errb.String())
+			}
+		})
+	}
+}
+
+// slowDispose is a plugin whose disposer ignores its context until release is closed,
+// and which disposes itself when trigger is closed: a fiber that leaks.
+func slowDispose(trigger, release chan struct{}) ModuleEntry {
+	return toy(toySpec{id: "t/slow", apply: func(c *kernel.Context, _ any) error {
+		c.Defer("slow", func(context.Context) error { <-release; return nil })
+		c.Go("trigger", func(ctx context.Context) error {
+			select {
+			case <-trigger:
+				return c.Dispose()
+			case <-ctx.Done():
+				return nil
+			}
+		})
+		return nil
+	}})
+}
+
+func TestRunLeakedFiberReplacesTheProcess(t *testing.T) {
+	trigger, release := make(chan struct{}), make(chan struct{})
+	f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slow, roles: [api]}\n", slowDispose(trigger, release))
+	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
+	f.opt.Limits.LeakGrace = 7 * time.Millisecond
+	f.opt.Clock = f.clock
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	close(trigger)
+	f.waitFor(t, done, func(s ProcessStatus) bool { return !s.Ready }) // readiness ends at once
+	for d := range f.clock.armed {                                     // the grace timer is armed
+		if d == 7*time.Millisecond {
+			break
+		}
+	}
+	// A second ping while the grace period runs changes nothing.
+	f.clock.fire(7 * time.Millisecond)
+	close(release) // the leaked disposer ends, so that the close can finish
+	if code := <-done; code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	if !strings.Contains(f.errb.String(), "error: leaked: fiber ") || !strings.Contains(f.errb.String(), "t/slow passed its dispose deadline") {
+		t.Fatalf("stderr:\n%s", f.errb.String())
+	}
+}
+
+func TestRunShutdownThatLeaksIsNotClean(t *testing.T) {
+	trigger, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slow, roles: [api]}\n", slowDispose(trigger, release))
+	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
+	f.opt.Limits.ShutdownBound = 300 * time.Millisecond
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	if code := stopAndWait(t, f, done); code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+	if !strings.Contains(f.errb.String(), "shutdown did not finish cleanly") {
+		t.Fatalf("stderr:\n%s", f.errb.String())
+	}
+}
+
+func TestRunSettleBound(t *testing.T) {
+	hang := toy(toySpec{id: "t/hang", apply: func(c *kernel.Context, _ any) error { <-c.Std().Done(); return c.Std().Err() }})
+	f := newFixture(t, "- insert:\n    - {id: hang, plugin: t/hang, roles: [api], required: true}\n", hang)
+	f.opt.Limits.SettleBound = 40 * time.Millisecond
+	code := f.run(t.Context())
+	if code != ExitRequired || !strings.Contains(f.errb.String(), "warning: settle:") || !strings.Contains(f.errb.String(), `required row "hang" is LOADING`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
