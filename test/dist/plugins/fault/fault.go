@@ -73,8 +73,8 @@ func await(path string, stop <-chan struct{}) bool {
 // once. With trigger (the name of a file in the runtime directory) it is a provider
 // that fails while running: Apply succeeds and a tracked goroutine returns the error
 // once the file exists, which is "a tracked goroutine errors", so the fiber is FAILED
-// after it was ACTIVE; once the file exists Apply itself fails, so the provider stays
-// broken and each retry fails again.
+// after it was ACTIVE; while the file exists Apply itself fails, so each retry fails
+// again, and once it is removed the next retry succeeds: the provider comes back.
 func FailApply() kernel.Plugin {
 	type cfg struct {
 		message string

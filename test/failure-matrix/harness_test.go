@@ -32,7 +32,9 @@ package failurematrix
 //	|                      | plugin (a provider fails, a goroutine panics). A fault that is   |
 //	|                      | an unload (a disposer or a drain that passes its deadline) is    |
 //	|                      | made by a live generation that disables the row: no other event  |
-//	|                      | unloads a running fiber without a failure.                       |
+//	|                      | unloads a running fiber without a failure. Where the outcome has |
+//	|                      | the provider come back, the test then removes run/fault.go, and  |
+//	|                      | the next retry of the provider succeeds.                         |
 //	| Tenant tree          | not yet: S4b (the column has no cell of S1)                      |
 //
 // WHAT IS ASSERTED. exit "running": the launcher's status says phase running, never
@@ -137,6 +139,10 @@ type plan struct {
 	// rolledBack: the live generation's failed verdict must leave the tree as it was,
 	// "the composer rolls the scope back" ("Rolled back").
 	rolledBack bool
+	// heal: once the cell's expect holds, remove run/fault.go, so the fault recovers at
+	// its next retry; the fault and every row of the expect must then be ACTIVE again
+	// ("they return with the provider").
+	heal bool
 }
 
 // liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
@@ -180,7 +186,7 @@ func planFor(row, col, fault string) (plan, bool) {
 		return byColumn(col, plan{base: []string{"no-provider.optional.yml"}},
 			plan{base: []string{"no-provider.required.yml"}, code: boot.ExitRefused},
 			plan{live: "no-provider.optional.yml"},
-			plan{base: []string{"fail-apply.trigger.optional.yml"}, trigger: true}), true
+			plan{base: []string{"fail-apply.trigger.optional.yml", "restart-policy.patient.yml"}, trigger: true, heal: true}), true
 	case "infra":
 		return byColumn(col, plan{},
 			plan{base: []string{"fail-apply.required.yml"}, code: boot.ExitRequired},
@@ -401,6 +407,23 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			}
 			return len(last) == 0
 		})
+		if p.heal && len(last) == 0 {
+			if err := os.Remove(filepath.Join(proc.RunDir(), "fault.go")); err != nil {
+				return fail("%v", err)
+			}
+			healed := e
+			healed.States = []boot.StateExpect{{Row: "fault", State: "ACTIVE"}}
+			for _, st := range e.States {
+				healed.States = append(healed.States, boot.StateExpect{Row: st.Row, State: "ACTIVE"})
+			}
+			snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
+				last = checkRunning(healed, p, s)
+				return len(last) == 0
+			})
+			for i := range last {
+				last[i] = "once run/fault.go was removed: " + last[i]
+			}
+		}
 	} else {
 		snap, _ = proc.Until(left(), func(s harness.Snapshot) bool {
 			last = checkExited(e, p, s)
