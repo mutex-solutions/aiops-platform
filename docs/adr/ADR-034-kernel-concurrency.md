@@ -1074,7 +1074,7 @@ or restarted, while the kernel is alive and before the window has moved.
 The project owner fixed the hard cap of `sdk/kernel` at **8,200 physical
 lines** of production Go (comments and blank lines included, tests excluded),
 measured by `tools/kernelcheck lines` and enforced in CI. The count at the
-freeze is 7,451 lines in 20 files, one package. Growth past the cap, or a second
+freeze is 7,451 lines in 19 files, one package. Growth past the cap, or a second
 package under `sdk/kernel`, needs an ADR. This closes the last open point of
 this ADR besides the performance gates on the port.
 
