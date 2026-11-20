@@ -354,12 +354,17 @@ func FuzzConfigPipeline(f *testing.F) {
 	f.Add(uint8(1), "x", uint8(3), "y")
 	f.Add(uint8(0), "\xff", uint8(5), "\x00")
 	f.Fuzz(func(t *testing.T, mode1 uint8, payload1 string, mode2 uint8, payload2 string) {
-		r, err := New(fuzzConfig())
+		// This target checks decoding, not deadlines: under many fuzz workers a
+		// 20 ms load deadline can pass before Decode is even scheduled, and the
+		// kernel then rightly reports the deadline instead of the decode error.
+		cfg := fuzzConfig()
+		cfg.LoadDeadline, cfg.DrainDeadline, cfg.DisposeDeadline = time.Minute, time.Minute, time.Minute
+		r, err := New(cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer func() { _ = closeKernel(t, r) }()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
 		var mu sync.Mutex

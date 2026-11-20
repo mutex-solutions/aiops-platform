@@ -1,0 +1,27 @@
+== module .: go vet ./...
+vet-exit=0
+== module .: go test -race -count=3 ./...
+ok  	github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0probe	1.027s
+ok  	github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0txprobe	1.093s
+ok  	github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0typedops	1.176s
+ok  	github.com/mutex-solutions/aiops-platform/plugins/jobs-river/internal/s0workers	3.364s
+ok  	github.com/mutex-solutions/aiops-platform/test/differential	16.046s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/callpath	28.814s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/composition	1.406s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/concurrency	26.196s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/contextmodel	1.082s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/hooks	1.438s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/internal/eventqueue	1.047s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/observers	1.652s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/properties	22.959s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/replay	34.928s
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/scale	61.536s
+ok  	github.com/mutex-solutions/aiops-platform/tools/kernelcheck	1.102s
+== module sdk/kernel: go vet ./...
+vet-exit=0
+== module sdk/kernel: go test -race -count=3 ./...
+ok  	github.com/mutex-solutions/aiops-platform/sdk/kernel	12.066s
+== module sdk/testkit: go vet ./...
+vet-exit=0
+== module sdk/testkit: go test -race -count=3 ./...
+ok  	github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest	1.115s

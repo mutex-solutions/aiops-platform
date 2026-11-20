@@ -1,0 +1,20 @@
+    65 sdk/kernel/builtin.go
+   137 sdk/kernel/config.go
+   368 sdk/kernel/context.go
+     3 sdk/kernel/doc.go
+  1002 sdk/kernel/effect.go
+    94 sdk/kernel/effectscope.go
+   225 sdk/kernel/event.go
+   455 sdk/kernel/hooks.go
+   670 sdk/kernel/inspect.go
+   444 sdk/kernel/key.go
+    30 sdk/kernel/logger.go
+   850 sdk/kernel/observe.go
+  1473 sdk/kernel/owner.go
+    10 sdk/kernel/registry.go
+   378 sdk/kernel/root.go
+   263 sdk/kernel/rootview.go
+   151 sdk/kernel/seam.go
+   611 sdk/kernel/transition.go
+   222 sdk/kernel/waterfall.go
+  7451 total (cap 8500)

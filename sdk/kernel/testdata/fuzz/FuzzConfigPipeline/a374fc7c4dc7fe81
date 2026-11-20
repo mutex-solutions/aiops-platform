@@ -1,0 +1,5 @@
+go test fuzz v1
+byte('\t')
+string(".")
+byte('\x15')
+string("0")

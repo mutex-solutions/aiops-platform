@@ -1,0 +1,22 @@
+{
+ "classification": "final-port checks of criteria section 11: vet and race tests three times per module, per-file statement coverage, line count, 60 s of fuzzing per target",
+ "commit": "83b2746 (vet, race, coverage, lines, four fuzz targets); the config-pipeline fuzz target was rerun after its fix in the commit that adds this file",
+ "commands": [
+  "go vet ./... && go test -race -count=3 ./...   (in the root module, sdk/kernel and sdk/testkit)",
+  "cd sdk/kernel && go test -count=1 -coverprofile=cover.out ./... && go run ./tools/kernelcheck coverage cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel",
+  "go run ./tools/kernelcheck lines sdk/kernel 8500",
+  "cd sdk/kernel && go test -run '^$' -fuzz '^<Target>$' -fuzztime 60s .   (FuzzNewKey, FuzzHookDefinition, FuzzConfig, FuzzConfigPipeline, FuzzOperationSequence)"
+ ],
+ "results": {
+  "vet": "exit 0 in all three modules",
+  "raceCount3": "all packages ok in all three modules",
+  "coverage": "100.0% of statements in every production file of sdk/kernel",
+  "lines": "7451 production lines, enforced cap 8500",
+  "fuzz": "five targets pass 60 s each; no kernel defect found"
+ },
+ "limits": [
+  "PostgreSQL-backed and oracle-backed tests skip in this local run; they run in CI (jobs 'PostgreSQL probes' and 'Reference oracle comparison') and in the lab gates, which are the evidence for them",
+  "FuzzConfigPipeline first failed: its oracle expected a decode error while the kernel reported the 20 ms load deadline, which had passed before Decode was scheduled under 24 fuzz workers. The target, not the kernel, was wrong; it now uses one-minute deadlines because it does not test deadlines. Two failing inputs are kept as seeds",
+  "shared development host; durations are not performance observations"
+ ]
+}

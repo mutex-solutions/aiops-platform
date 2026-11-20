@@ -1,0 +1,33 @@
+== FuzzNewKey
+fuzz: elapsed: 1m0s, execs: 11401935 (181474/sec), new interesting: 18 (total: 252)
+fuzz: elapsed: 1m0s, execs: 11401935 (0/sec), new interesting: 18 (total: 252)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/sdk/kernel	60.574s
+== FuzzHookDefinition
+fuzz: elapsed: 1m0s, execs: 9676281 (169030/sec), new interesting: 20 (total: 265)
+fuzz: elapsed: 1m0s, execs: 9676281 (0/sec), new interesting: 20 (total: 265)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/sdk/kernel	60.228s
+== FuzzConfig
+fuzz: elapsed: 1m0s, execs: 7046962 (110752/sec), new interesting: 22 (total: 106)
+fuzz: elapsed: 1m0s, execs: 7046962 (0/sec), new interesting: 22 (total: 106)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/sdk/kernel	60.116s
+== FuzzConfigPipeline (first attempt at commit 83b2746: the target's own 20 ms load deadline passed under fuzz load; see invocation.json)
+fuzz: minimizing 64-byte failing input file
+--- FAIL: FuzzConfigPipeline (10.26s)
+    --- FAIL: FuzzConfigPipeline (0.04s)
+        fuzz_test.go:386: decode failure of {Mode:9 Payload:.}: Settle=fiber 1: fiber 1 load deadline: context deadline exceeded state=FAILED
+    
+    Failing input written to testdata/fuzz/FuzzConfigPipeline/a374fc7c4dc7fe81
+    To re-run:
+    go test -run=FuzzConfigPipeline/a374fc7c4dc7fe81
+== FuzzConfigPipeline (after the target fix, three runs)
+fuzz: elapsed: 1m0s, execs: 2762652, new interesting: 10 (total: 96) PASS
+fuzz: elapsed: 1m0s, execs: 2912775, new interesting: 10 (total: 106) PASS
+fuzz: elapsed: 1m0s, execs: 2733379, new interesting: 8 (total: 114) PASS
+== FuzzOperationSequence
+fuzz: elapsed: 1m0s, execs: 211551 (3458/sec), new interesting: 79 (total: 536)
+fuzz: elapsed: 1m2s, execs: 211551 (0/sec), new interesting: 79 (total: 536)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/sdk/kernel	61.600s

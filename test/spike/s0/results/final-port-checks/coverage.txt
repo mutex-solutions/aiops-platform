@@ -1,0 +1,18 @@
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/builtin.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/config.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/context.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/effect.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/effectscope.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/event.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/hooks.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/inspect.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/key.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/logger.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/observe.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/owner.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/root.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/rootview.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/seam.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/transition.go
+ 100.0% github.com/mutex-solutions/aiops-platform/sdk/kernel/waterfall.go
+exit=0
