@@ -1,0 +1,12 @@
+- insert:
+    - {id: loader, plugin: aiops/loader, roles: [api, worker], required: true}
+    - {id: sql, plugin: aiops/sql-pg, roles: [api, worker]}
+    - {id: kek, plugin: aiops/kek-local, roles: [api, worker]}
+    - {id: secrets, plugin: aiops/secrets, roles: [api, worker]}
+    - {id: approval, plugin: aiops/approval, roles: [api]}
+    - id: tools
+      plugin: aiops/tool-search
+      roles: [api, worker]
+      config: {timeout: 5, auth: {token: "${secret:search-token}", url: "http://search.example.test"}}
+    - {id: runbook, plugin: aiops/tool-runbook, roles: [worker], enabled: false}
+    - {id: metrics, plugin: aiops/metrics-query-http, roles: [edge, api], config: {endpoint: "http://prom.example.test"}}

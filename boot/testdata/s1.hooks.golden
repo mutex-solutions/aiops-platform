@@ -1,0 +1,7 @@
+# aiopsctl profile render --dump-hooks
+digest sha256:f90d0f2555fd3297d5b28d9b4e8a0bced306b518bd203545053426e9ac188c8e
+roles all
+
+hook approval/gates sealed to aiops/approval, aiops/tool-search
+  1. stage 10 (early) plugin aiops/tool-search row tools
+  2. stage 20 (policy) plugin aiops/approval row approval

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "grp": {
+      "x-aiops-plugin": "core:group"
+    },
+    "grp:c1": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "o/open",
+      "x-aiops-volatile": [
+        "config.x"
+      ]
+    },
+    "grp:c2": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "o/open",
+      "x-aiops-volatile": [
+        "config.x"
+      ]
+    },
+    "kinds": {
+      "additionalProperties": true,
+      "properties": {
+        "b": {
+          "type": "boolean"
+        },
+        "f": {
+          "type": "number"
+        },
+        "i": {
+          "type": "integer"
+        },
+        "l": {
+          "type": "array"
+        },
+        "m": {
+          "properties": {
+            "r": {
+              "type": "string",
+              "x-aiops-ref": "env"
+            },
+            "s": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "n": {}
+      },
+      "type": "object",
+      "x-aiops-plugin": "o/kinds"
+    },
+    "open1": {
+      "additionalProperties": true,
+      "properties": {
+        "x": {
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-aiops-plugin": "o/open",
+      "x-aiops-volatile": [
+        "config.x"
+      ]
+    },
+    "prov": {
+      "additionalProperties": true,
+      "properties": {
+        "list": {
+          "type": "array"
+        },
+        "pw": {
+          "type": "string",
+          "x-aiops-ref": "secret"
+        }
+      },
+      "type": "object",
+      "x-aiops-plugin": "o/prov"
+    },
+    "same2": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "o/same"
+    }
+  },
+  "title": "aiops composition sha256:adfd8aa2c7091e4b08e8aaf814f12459d74bd9b5b3fc156ec03b379bef6ccefa",
+  "type": "object",
+  "x-aiops-limit": "S1: the per-plugin configSchema is not derived until S2a; each row's schema is inferred from its composed config"
+}

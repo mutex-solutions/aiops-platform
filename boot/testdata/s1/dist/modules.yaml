@@ -1,0 +1,36 @@
+aiops/loader:
+  module: example.test/loader
+  version: v0.1.0
+  sum: "h1:loader"
+  provides: [loader]
+aiops/sql-pg:
+  module: example.test/sql-pg
+  version: v0.1.0
+  provides: [sql]
+aiops/kek-local:
+  provides: [kek]
+aiops/kek-kms:
+  provides: [kek]
+aiops/secrets:
+  provides: [secrets]
+  needs: [kek, sql]
+aiops/approval:
+  provides: [approval]
+  needs: [sql]
+  hooks:
+    - {hook: approval/gates, stage: 20, name: policy}
+aiops/tool-search:
+  provides: [tools]
+  needs: [approval]
+  wants: [metricsQuery]
+  volatile: [timeout, auth.token]
+  hooks:
+    - {hook: approval/gates, stage: 10, name: early}
+aiops/tool-runbook:
+  needs: [tools]
+  hooks:
+    - {hook: approval/gates, stage: 10, name: early}
+    - {hook: tool/call, stage: 5}
+aiops/metrics-query-http:
+  provides: [metricsQuery]
+  volatile: [endpoint]

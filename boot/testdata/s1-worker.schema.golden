@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "kek": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "aiops/kek-local"
+    },
+    "loader": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "aiops/loader"
+    },
+    "secrets": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "aiops/secrets"
+    },
+    "sql": {
+      "additionalProperties": true,
+      "properties": {},
+      "type": "object",
+      "x-aiops-plugin": "aiops/sql-pg"
+    },
+    "tools": {
+      "additionalProperties": true,
+      "properties": {
+        "auth": {
+          "properties": {
+            "token": {
+              "type": "string",
+              "x-aiops-ref": "secret"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "timeout": {
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-aiops-plugin": "aiops/tool-search",
+      "x-aiops-volatile": [
+        "config.auth.token",
+        "config.timeout"
+      ]
+    }
+  },
+  "title": "aiops composition sha256:f90d0f2555fd3297d5b28d9b4e8a0bced306b518bd203545053426e9ac188c8e",
+  "type": "object",
+  "x-aiops-limit": "S1: the per-plugin configSchema is not derived until S2a; each row's schema is inferred from its composed config"
+}

@@ -1,0 +1,62 @@
+# aiopsctl profile render --dump
+digest sha256:f90d0f2555fd3297d5b28d9b4e8a0bced306b518bd203545053426e9ac188c8e
+roles api
+
+## bundle:core (layer 1)
+
+row loader plugin=aiops/loader enabled=true required=true group=false roles=api,worker
+  config {}
+
+row sql plugin=aiops/sql-pg enabled=true required=false group=false roles=api,worker
+  config {}
+
+row kek plugin=aiops/kek-local enabled=true required=false group=false roles=api,worker
+  config {}
+
+row secrets plugin=aiops/secrets enabled=true required=false group=false roles=api,worker
+  config {}
+
+row approval plugin=aiops/approval enabled=true required=false group=false roles=api
+  config {}
+
+row tools plugin=aiops/tool-search enabled=true required=false group=false roles=api,worker
+  config {auth: {token: ${secret:search-token}, url: "http://search.example.test"}, timeout: int(5)}
+  ref config.auth.token = secret:search-token
+
+row runbook plugin=aiops/tool-runbook enabled=true required=false group=false roles=worker
+  config {}
+  # enabled set by layer 2 (profile:demo) profiles/demo/aiops.patch.yml:2
+  # gate: detached as disabled: check 7, rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]
+
+row metrics plugin=aiops/metrics-query-http enabled=true required=false group=false roles=api,edge
+  config {endpoint: "http://prom2.example.test"}
+  # config set by layer 2 (profile:demo) profiles/demo/aiops.patch.yml:1
+
+## required set
+rows loader
+keys approval, kek, secrets, sql
+closure approval, kek, loader, secrets, sql
+
+## providers
+key approval: approval
+key kek: kek
+key loader: loader
+key metricsQuery: metrics
+key secrets: secrets
+key sql: sql
+key tools: tools
+
+## gate
+check 1 Manifest schema and author API: not evaluated until S2a
+check 2 Definition versions: not evaluated until S2a
+check 3 Remote protocol: not evaluated until S2b
+check 4 Stability: not evaluated until S2a
+check 5 Trust: not evaluated until S2a
+check 6 Licence: not evaluated until S2a
+check 7 Key and hook classes: 1 failed (not read yet: signed keys and hooks and fakes in a server graph need trust data (S2a))
+check 8 Layer rules: pass (not read yet: the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b)
+check 9 Remote scope: not evaluated until S2b
+check 10 Attestation: not evaluated until S2a
+
+## diagnostics
+warning: row "runbook" detached as disabled: gate check 7 (Key and hook classes), rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]

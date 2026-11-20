@@ -1,0 +1,2 @@
+- {id: metrics, config: {endpoint: "http://prom2.example.test"}}
+- {id: runbook, enabled: true}

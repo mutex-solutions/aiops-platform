@@ -1,0 +1,10 @@
+# S1 test distribution: the part of the signed manifest the launcher reads.
+providers:
+  approval: [aiops/approval]
+  kek: [aiops/kek-kms, aiops/kek-local]
+consumers:
+  kek: [aiops/secrets]
+sealedHooks:
+  approval/gates: [aiops/approval, aiops/tool-search]
+requiredKeys: [approval, kek, secrets, sql]
+requiredRows: [loader]

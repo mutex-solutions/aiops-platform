@@ -1,0 +1,73 @@
+# aiopsctl profile render --dump
+digest sha256:adfd8aa2c7091e4b08e8aaf814f12459d74bd9b5b3fc156ec03b379bef6ccefa
+roles all
+
+## bundle:b (layer 1)
+
+row prov plugin=o/prov enabled=true required=true group=false roles=api
+  config {list: [int(1), float(2.5), true, null, "s", {k: "v"}], pw: ${secret:db-password}}
+  ref config.pw = secret:db-password
+
+row open1 plugin=o/open enabled=true required=false group=false roles=api,worker
+  config {x: int(2)}
+  inject pk
+  intercept {pk: {mode: "strict"}}
+  # config set by layer 4 (patch:patch1.yml) patch1.yml:1
+
+row grp plugin=core:group enabled=true required=false group=false roles=-
+  config []
+  isolate ok
+
+row grp:c1 plugin=o/open enabled=true required=false group=false roles=- parent=grp
+  config {}
+
+row grp:c2 plugin=o/open enabled=true required=false group=false roles=- parent=grp
+  config {}
+
+row kinds plugin=o/kinds enabled=true required=false group=false roles=-
+  config {b: true, f: float(1.5), i: int(3), l: [int(1)], m: {r: ${env:X}, s: "x"}, n: null}
+  ref config.m.r = env:X
+
+row same2 plugin=o/same enabled=true required=false group=false roles=-
+  config {}
+
+row rogue plugin=o/other enabled=true required=false group=false roles=-
+  config {}
+  # gate: detached as disabled: check 7, rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
+
+row missing plugin=x/none enabled=true required=false group=false roles=-
+  config {}
+  # gate: detached as disabled: check 0, rule module-missing: plugin "x/none" is not in the module table (a remote plugin and plugins.lock are not read before S2a)
+
+row iso plugin=o/open enabled=true required=false group=false roles=-
+  config {}
+  isolate pk
+  # gate: denied, stops boot: check 7, rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
+
+## required set
+rows prov
+keys pk
+closure prov
+
+## providers
+key ok: open1
+key ok (realm of grp): grp:c1, grp:c2
+key pk: prov
+
+## gate
+check 1 Manifest schema and author API: not evaluated until S2a
+check 2 Definition versions: not evaluated until S2a
+check 3 Remote protocol: not evaluated until S2b
+check 4 Stability: not evaluated until S2a
+check 5 Trust: not evaluated until S2a
+check 6 Licence: not evaluated until S2a
+check 7 Key and hook classes: 2 failed (not read yet: signed keys and hooks and fakes in a server graph need trust data (S2a))
+check 8 Layer rules: pass (not read yet: the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b)
+check 9 Remote scope: not evaluated until S2b
+check 10 Attestation: not evaluated until S2a
+
+## diagnostics
+warning: row "missing" is inactive: plugin "x/none" is not in the module table (a remote plugin and plugins.lock are not read before S2a)
+error: static graph: gate check 7 (Key and hook classes), rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
+warning: row "rogue" detached as disabled: gate check 7 (Key and hook classes), rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
+error: static graph: two-providers: rows "grp:c1", "grp:c2" all provide key "ok" in the realm of row "grp"; one provider per key per realm
