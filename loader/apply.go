@@ -41,10 +41,18 @@ func (t *tree) snapshot() snapshot {
 	return s
 }
 
+// restore puts the tree back as s holds it. Only a group activation that ended
+// meanwhile can have changed it, since one that mounts waits for excl, and that
+// activation's children went with it: they are forgotten again.
 func (t *tree) restore(s snapshot) {
 	t.entries, t.order, t.prev = make(map[string]*entry, len(s.entries)), s.order, s.prev
 	for id, e := range s.entries {
 		t.entries[id] = &e
+	}
+	for id, e := range t.entries {
+		if e.kids != nil && e.kids.Std().Err() != nil {
+			t.forget(id, e.kids)
+		}
 	}
 }
 
@@ -62,6 +70,10 @@ func (t *tree) restore(s snapshot) {
 // earlier one, goes in a second batch after the wait for that disposal. The docs do
 // not say what happens when the wait is cut short: the first batch stays committed,
 // the entry stays in the tree with no fiber, and the error is returned (open point).
+//
+// A group activation that mounts its children waits while a plan is staged and its
+// first batch runs, and the plan waits for it, so a refused plan is put back exactly
+// and no activation mounts a child of a plan that is then refused.
 func (t *tree) Apply(ctx context.Context, ops []def.Op) ([]def.Result, error) {
 	if t.batch == nil {
 		return nil, def.ErrUnsupported
@@ -73,9 +85,40 @@ func (t *tree) Apply(ctx context.Context, ops []def.Op) ([]def.Result, error) {
 	}
 	defer func() { <-t.sem }()
 	t.sweep(ctx)
-	p, err := t.stage(ctx, ops)
+	p, later, err := t.first(ctx, ops)
 	if err != nil {
 		return nil, err
+	}
+	for _, a := range p.announce {
+		_ = t.volatile.Emit(ctx, kernel.Unscoped, a) // the commit is done: see adopt
+	}
+	if len(later) == 0 {
+		return p.results, nil
+	}
+	if err := t.settle(ctx, later); err != nil {
+		return p.results, err
+	}
+	items := t.mountItems(ctx, later)
+	var kops []kernel.BatchOp
+	for _, m := range items {
+		kops = append(kops, m.op)
+	}
+	return p.results, t.commit(ctx, kops, items)
+}
+
+// first stages ops and commits the plan's first batch, holding excl, and puts the
+// tree back when the kernel refuses the batch. It returns the mounts that wait for
+// a previous fiber.
+func (t *tree) first(ctx context.Context, ops []def.Op) (*plan, []string, error) {
+	select {
+	case t.excl <- struct{}{}:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+	defer func() { <-t.excl }()
+	p, err := t.stage(ctx, ops)
+	if err != nil {
+		return nil, nil, err
 	}
 	now, later := t.split(p.mounts)
 	items := t.mountItems(ctx, now)
@@ -91,23 +134,9 @@ func (t *tree) Apply(ctx context.Context, ops []def.Op) ([]def.Result, error) {
 		t.mu.Lock()
 		t.restore(p.snap)
 		t.mu.Unlock()
-		return nil, err
+		return nil, nil, err
 	}
-	for _, a := range p.announce {
-		_ = t.volatile.Emit(ctx, kernel.Unscoped, a) // the commit is done: see adopt
-	}
-	if len(later) == 0 {
-		return p.results, nil
-	}
-	if err := t.settle(ctx, later); err != nil {
-		return p.results, err
-	}
-	items = t.mountItems(ctx, later)
-	kops = nil
-	for _, m := range items {
-		kops = append(kops, m.op)
-	}
-	return p.results, t.commit(ctx, kops, items)
+	return p, later, nil
 }
 
 // commit runs the kernel batch and adopts the fibers of its mounts, which are its

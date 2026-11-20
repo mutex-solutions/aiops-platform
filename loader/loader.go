@@ -67,7 +67,7 @@ func New() kernel.Plugin {
 			cfg := raw.(Config)
 			t := &tree{
 				role: launch.ProfileContextKey.Of(c).Role(), cat: launch.CatalogKey.Of(c), batch: cfg.Batch,
-				sem: make(chan struct{}, 1), lc: c,
+				sem: make(chan struct{}, 1), excl: make(chan struct{}, 1), lc: c,
 				patch: def.PatchContext.Bind(c), init: def.EntryInit.Bind(c), volatile: def.VolatileUpdate.Bind(c),
 				entries: map[string]*entry{}, prev: map[string][]*kernel.Fiber{},
 			}
@@ -105,6 +105,10 @@ type tree struct {
 	cat   launch.Catalog
 	batch BatchFunc
 	sem   chan struct{} // one Apply at a time; a channel so that a wait can end with its context
+	// excl is held by a group activation while it mounts its children and by a plan
+	// from its stage until its first batch is committed or undone (Apply), so neither
+	// sees the other half done. A listener of a loader hook must not call Apply.
+	excl chan struct{}
 
 	patch    kernel.WaterfallDispatcher[def.PatchContextArgs, *kernel.Context]
 	init     kernel.EventDispatcher[def.EntryInitArgs]
@@ -253,6 +257,11 @@ func (t *tree) group(e def.EntrySpec) kernel.Plugin {
 func (t *tree) detach(id string, c *kernel.Context) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.forget(id, c)
+}
+
+// forget is detach with mu held.
+func (t *tree) forget(id string, c *kernel.Context) {
 	if g := t.entries[id]; g != nil && g.kids == c {
 		g.kids = nil
 		for _, k := range t.order {
@@ -274,6 +283,12 @@ func (t *tree) addPrev(id string, f *kernel.Fiber) { t.prev[id] = append(slices.
 // clock of c's (ADR-034, 2026-11-19 teardown order). Their disposers may overlap,
 // and each is held to the child's own deadlines.
 func (t *tree) mountUnder(c *kernel.Context, parent string) {
+	select {
+	case t.excl <- struct{}{}:
+	case <-c.Std().Done():
+		return // the activation ends: its successor mounts the entries
+	}
+	defer func() { <-t.excl }()
 	t.mu.Lock()
 	if g := t.entries[parent]; g != nil {
 		g.kids = c

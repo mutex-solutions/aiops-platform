@@ -255,6 +255,57 @@ func TestSecondBatchSkipsAnEndingGroupActivation(t *testing.T) {
 	}
 }
 
+// A plan that the kernel refuses is undone without undoing what a group's
+// activation did meanwhile: here the provider the group injects goes while the
+// plan is in flight, and the group unloads with its children.
+func TestRefusedPlanKeepsWhatAGroupDidMeanwhile(t *testing.T) {
+	gate := kernel.NewKey[int]("gate", 0)
+	p := newProbe()
+	prov := kernel.Define(kernel.Plugin{ID: "t/gate", Provides: []kernel.AnyKey{gate}, Apply: func(c *kernel.Context, _ any) error { return gate.Provide(c, 1) }})
+	var pf *kernel.Fiber
+	var arm atomic.Bool
+	x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/a", nil), p.plugin("t/c", nil)), keys: map[string]kernel.AnyKey{"gate": gate},
+		rows: []def.EntrySpec{gated(), child("g", "a", "t/a")},
+		batch: func(r *kernel.Root) BatchFunc {
+			return func(ctx context.Context, ops ...kernel.BatchOp) ([]*kernel.Fiber, error) {
+				if arm.Swap(false) {
+					if err := pf.Dispose(ctx); err != nil {
+						return nil, err
+					}
+					_ = r.Settle(ctx)
+				}
+				return r.Batch(ctx, ops...)
+			}
+		}})
+	pf = x.root.Plugin(prov, nil)
+	x.settle()
+	x.want("g:a", kernel.Active)
+
+	arm.Store(true)
+	if _, err := x.ld.Apply(t.Context(), []def.Op{create(child("g", "c", "t/c"))}); !errors.Is(err, kernel.ErrInactive) {
+		t.Fatalf("Apply = %v", err)
+	}
+	if _, ok := x.ld.Locate("g:c"); ok {
+		t.Error("g:c survived the refused plan")
+	}
+	if e, _ := x.ld.Locate("g:a"); e.Mount != def.Mounted || e.State != kernel.Pending {
+		t.Errorf("g:a, whose group unloaded: %+v", e)
+	}
+	x.consistent()
+
+	// The provider returns and the group mounts the tree as it was before the plan.
+	x.root.Plugin(prov, nil)
+	x.settle()
+	x.want("g:a", kernel.Active)
+	x.consistent()
+	x.apply(create(child("g", "c", "t/c")), remove("g:a"))
+	x.want("g:c", kernel.Active)
+	x.consistent()
+	if x.fibers("t/a") != 0 || p.count("t/c") != 1 {
+		t.Errorf("live t/a %d, t/c applied %d times", x.fibers("t/a"), p.count("t/c"))
+	}
+}
+
 // slowGate is a plugin whose disposal waits: it says when the disposal starts and
 // whether a second fiber of the plugin was applied while one was disposing.
 type slowGate struct {
@@ -524,6 +575,14 @@ func TestOneApplyAtATime(t *testing.T) {
 	if _, err := x.ld.Apply(t.Context(), nil); err != nil {
 		t.Errorf("an empty plan: %v", err)
 	}
+	// A plan and a group activation that mounts wait for each other: the plan's wait
+	// ends with its context, the activation's when the activation ends.
+	x.tree.excl <- struct{}{}
+	if _, _, err := x.tree.first(ctx, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("a plan waiting for a group activation: %v", err)
+	}
+	x.tree.mountUnder(ended(t, x.root), "")
+	<-x.tree.excl
 	// Await ends with its context, for a mounted entry and for a child that waits for its group.
 	if _, err := x.ld.Await(ctx, "a"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Await: %v", err)
