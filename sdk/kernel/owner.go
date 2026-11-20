@@ -691,7 +691,7 @@ func (o *owner) handle(m message) (answer, bool) {
 	case cmdScopeRequest:
 		f, err := o.current(m.act)
 		if err != nil {
-			return answer{err: err}, false
+			return answer{err: errors.Join(ErrInactiveEffect, err)}, false
 		}
 		if err := validateScope(m.label, m.setup); err != nil {
 			return answer{err: err}, false
