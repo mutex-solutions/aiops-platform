@@ -66,6 +66,7 @@ type Retrier struct {
 // record is what is known of one fiber that failed, since restart-policy last saw
 // someone else restart it.
 type record struct {
+	plugin   string
 	fails    []time.Time
 	pending  bool      // a retry is scheduled and has not fired
 	retried  bool      // restart-policy updated the fiber and has not yet seen it leave FAILED
@@ -109,7 +110,7 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 	r.mu.Lock()
 	rec := r.recs[id]
 	if rec == nil {
-		rec = &record{}
+		rec = &record{plugin: plugin}
 		r.recs[id] = rec
 	}
 	if rec.gaveUp || rec.pending {
@@ -117,6 +118,7 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 		return
 	}
 	r.endActive(rec, now)
+	rec.retried = false // this failure ends the retry, whose restart a lost event may hide
 	rec.fails = append(slices.DeleteFunc(rec.fails, func(t time.Time) bool { return now.Sub(t) > r.Window }), now)
 	n := len(rec.fails)
 	if n > r.MaxFailures {
@@ -266,18 +268,19 @@ func (r *Retrier) forget(id uint64) {
 }
 
 // resync answers the notice that events were lost. It drops the fibers it tracks that
-// are gone, notes the ones that are ACTIVE, and counts the FAILED fibers of the committed tree that it has
-// not heard of. The plugin has no Root, so the tree is read through the composition
-// key, whose rows carry the fiber id. Events that follow the notice are all newer than
-// it, and an event for a state the fiber has left is ignored by failed.
+// are gone, notes the ones that are ACTIVE, counts a lost failure of the ones that are
+// FAILED, and counts the FAILED fibers of the committed tree that it has not heard of.
+// The plugin has no Root, so the tree is read through the composition key, whose rows
+// carry the fiber id. Events that follow the notice are all newer than it, and an
+// event for a state the fiber has left is ignored by failed.
 func (r *Retrier) resync(ctx context.Context) {
 	r.mu.Lock()
-	ids := make([]uint64, 0, len(r.recs))
-	for id := range r.recs {
-		ids = append(ids, id)
+	tracked := make(map[uint64]string, len(r.recs))
+	for id, rec := range r.recs {
+		tracked[id] = rec.plugin
 	}
 	r.mu.Unlock()
-	for _, id := range ids {
+	for id, plugin := range tracked {
 		f, ok := r.Fibers.Fiber(id)
 		if !ok {
 			r.forget(id)
@@ -288,6 +291,8 @@ func (r *Retrier) resync(ctx context.Context) {
 			r.forget(id)
 		case st == kernel.Active:
 			r.active(id)
+		case st == kernel.Failed:
+			r.failed(ctx, id, plugin) // one given up on or waiting for its retry is left as it is
 		}
 	}
 	g, _ := r.Rows.Committed(composition.ScopeProcess)

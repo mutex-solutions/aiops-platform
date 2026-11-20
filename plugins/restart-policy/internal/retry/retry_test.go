@@ -303,6 +303,24 @@ func TestResyncDropsWhatIsGoneAndCountsWhatWasLost(t *testing.T) {
 	}
 }
 
+// The resync finds again a lost failure of a fiber the retrier tracks, whether or
+// not the committed tree lists that fiber.
+func TestResyncRetriesATrackedFiberWhoseFailureWasLost(t *testing.T) {
+	g := newRig(t, policy)
+	f := g.failing()
+	id := g.reg.put(f)
+	g.r.Status(t.Context(), failedEvent(id))
+	g.clk.Advance(time.Second)
+	g.waitLog("fiber.retried") // the update fails again, and the rig delivers no event
+	_ = f.Await(t.Context())
+	g.r.Status(t.Context(), kernel.LedgerEvent{Kind: "overflow"})
+	g.r.mu.Lock()
+	defer g.r.mu.Unlock()
+	if rec := g.r.recs[id]; rec == nil || !rec.pending || len(rec.fails) != 2 {
+		t.Errorf("record = %+v: the lost second failure was not counted and retried", rec)
+	}
+}
+
 func TestBackoffNeverPassesTheBound(t *testing.T) {
 	r := New(Policy{BackoffMin: time.Second, BackoffMax: 5 * time.Second, Factor: 3}, Deps{})
 	for n, want := range []time.Duration{time.Second, 3 * time.Second, 5 * time.Second, 5 * time.Second} {
