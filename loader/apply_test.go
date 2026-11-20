@@ -172,6 +172,34 @@ func TestVolatileOnlyUpdateCommitsInPlace(t *testing.T) {
 	}
 }
 
+// Only an ACTIVE fiber takes volatile values in place: a FAILED one is restarted
+// with the new config, which is how an operator fixes it.
+func TestVolatileOnlyUpdateOfAFailedFiberRestartsIt(t *testing.T) {
+	var applies atomic.Int32
+	v := kernel.Define(kernel.Plugin{ID: "t/v", Decode: func(raw any) (any, error) {
+		if raw.(map[string]any)["window"] == int64(-1) {
+			return nil, errors.New("window must not be negative")
+		}
+		return raw, nil
+	}, Apply: func(*kernel.Context, any) error { applies.Add(1); return nil }})
+	l := newListener("t/listener")
+	rv := row("v", "t/v")
+	rv.Config = map[string]any{"window": int64(-1)}
+	x := newFx(t, fxOpt{plugins: plugins(v), pre: []kernel.Plugin{l.plugin}, rows: []def.EntrySpec{rv},
+		modules: []launch.CatalogEntry{{ID: "t/v", Volatile: []string{"window"}}}})
+	x.want("v", kernel.Failed)
+	rv.Config = map[string]any{"window": int64(5)}
+	if res := x.apply(update(rv)); res[0].Outcome != def.Restarted {
+		t.Fatalf("outcome %v", res)
+	}
+	x.want("v", kernel.Active)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if applies.Load() != 1 || len(l.volatile) != 0 {
+		t.Errorf("applies %d, volatile-update heard %v", applies.Load(), l.volatile)
+	}
+}
+
 // slowGate is a plugin whose disposal waits: it says when the disposal starts and
 // whether a second fiber of the plugin was applied while one was disposing.
 type slowGate struct {

@@ -231,9 +231,11 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 // :1375). A change of the plugin, inject, isolate or intercept replaces the fiber,
 // because a fiber's needs and context are fixed when it is mounted; a change of
 // config restarts it with the new config, unless only volatile paths changed
-// (volatile.go). A volatile commit is the tree's new config, the same config
-// retained by the kernel with kernel.CommitOp in the plan's batch, and a
-// loader/volatile-update event once the batch is committed. The two records change
+// (volatile.go) and the fiber is ACTIVE, as in the oracle: a FAILED or PENDING
+// fiber has no activation to take values in place. A volatile commit is the tree's
+// new config, the same config retained by the kernel with kernel.CommitOp in the
+// plan's batch, and a loader/volatile-update event once the batch is committed. The
+// two records change
 // together or not at all: a plan whose batch the kernel refuses, for a config that
 // internal/config, Decode or internal/commit refuses as for any other, puts the tree
 // back and the kernel's retained config is put back with the batch, and the error is
@@ -276,7 +278,7 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	switch {
 	case len(paths) == 0:
 		return def.Unchanged
-	case only:
+	case only && active(ctx, cur.fiber): // a fiber that is not ACTIVE runs no activation to tell
 		p.updates = append(p.updates, kernel.CommitOp(cur.fiber, e.Config))
 		p.announce = append(p.announce, def.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
 		return def.Committed
@@ -330,6 +332,11 @@ func (t *tree) retire(ctx context.Context, id string) (dispose []*kernel.Fiber) 
 func gone(ctx context.Context, f *kernel.Fiber) bool {
 	st, err := f.State(ctx)
 	return st == kernel.Disposed || errors.Is(err, kernel.ErrExpired)
+}
+
+func active(ctx context.Context, f *kernel.Fiber) bool {
+	st, _ := f.State(ctx)
+	return st == kernel.Active
 }
 
 // settle waits until every previous fiber of the ids is DISPOSED, the rule of
