@@ -44,11 +44,13 @@ type Limits struct {
 }
 
 // DefaultLimits returns the launcher's defaults: 10s for each of the three
-// deadlines, a bounded history, a shutdown bound of 30s.
+// deadlines, a bounded history, a shutdown bound of 30s. The observer queue is the
+// 65,536 events that ADR-034 sized it at ("2026-11-19 bounded observer queue and
+// overflow rule"): a burst of state events of a few hundred rows passes a smaller one.
 func DefaultLimits() Limits {
 	return Limits{
 		LoadDeadline: 10 * time.Second, DrainDeadline: 10 * time.Second, DisposeDeadline: 10 * time.Second,
-		ArchiveLimit: 256, EventWindow: 1024, ObserverQueue: 1024, OwnerInbox: 256, TerminalLimit: 256,
+		ArchiveLimit: 256, EventWindow: 1024, ObserverQueue: 65536, OwnerInbox: 256, TerminalLimit: 256,
 		ShutdownBound: 30 * time.Second,
 	}
 }
@@ -71,7 +73,7 @@ func (l Limits) leakGrace() time.Duration {
 //
 //	loadDeadline: 10s      drainDeadline: 10s     disposeDeadline: 10s
 //	settleBound: 30s       shutdownBound: 30s     leakGrace: 10s
-//	archiveLimit: 256      eventWindow: 1024      observerQueue: 1024
+//	archiveLimit: 256      eventWindow: 1024      observerQueue: 65536
 //	ownerInbox: 256        terminalLimit: 256
 //
 // Durations are strings in the form of time.ParseDuration.
