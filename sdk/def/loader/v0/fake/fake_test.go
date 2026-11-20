@@ -39,7 +39,7 @@ func newListener(id string) *listener {
 			})
 			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
 				l.patched = append(l.patched, a.Entry.ID)
-				return a.Context, nil
+				return next()
 			})
 			return nil
 		},
@@ -135,10 +135,20 @@ func TestPatchWaterfallResultAndFailure(t *testing.T) {
 	f, provider := fake.New()
 	root := kerneltest.New(t)
 	other := root.Context().Extend()
+	replace := kernel.Define(kernel.Plugin{ID: "aiops/replace", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, _ loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				if _, err := next(); err != nil {
+					return nil, err
+				}
+				return other, nil
+			})
+			return nil
+		}})
 	veto := kernel.Define(kernel.Plugin{ID: "aiops/veto", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
-			loader.PatchContext.On(c, kernel.DefaultStage, func(context.Context, loader.PatchContextArgs, kernel.Next[*kernel.Context]) (*kernel.Context, error) {
-				return other, nil
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, _ kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				return a.Context, nil
 			})
 			return nil
 		}})
@@ -149,10 +159,15 @@ func TestPatchWaterfallResultAndFailure(t *testing.T) {
 			})
 			return nil
 		}})
-	kerneltest.Mount(root, provider, veto)
+	kerneltest.Mount(root, provider, replace)
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context())
 	if err != nil || got != other {
 		t.Fatalf("Patch = %v, %v, want the listener's context", got, err)
+	}
+	// A listener that does not call next vetoes the entry.
+	kerneltest.Mount(root, veto)
+	if _, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context()); !errors.Is(err, loader.ErrPatchVetoed) {
+		t.Fatalf("a listener that skips next: %v, want ErrPatchVetoed", err)
 	}
 	kerneltest.Mount(root, boom)
 	if _, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context()); err == nil {

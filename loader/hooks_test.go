@@ -23,22 +23,33 @@ func TestTheThreeHooksFireWithTheirPayloads(t *testing.T) {
 		seen.set(cfg.(string), tag.Of(c))
 		return nil
 	}})
-	// The listener adds a link to the intercept chain of one row, keeps another row's
-	// context by returning nothing, and fails a third.
+	// The listener wraps the context that the built-in step returns for one row (the
+	// row's own link is already in it), keeps another row's context, fails a third,
+	// and vetoes a fourth by not calling next, a fifth by returning no context.
 	l.patch = func(a def.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
 		switch a.Entry.ID {
 		case "patched":
-			return a.Context.Intercept(tag, "listener"), nil
+			c, err := next()
+			if err != nil {
+				return nil, err
+			}
+			return c.Intercept(tag, "listener"), nil
 		case "bad":
 			return nil, errors.New("listener refuses")
+		case "skip":
+			return a.Context, nil
+		case "nothing":
+			_, err := next()
+			return nil, err
 		}
-		return nil, nil
+		return next()
 	}
 	user1, user2, bad := row("patched", "t/user"), row("kept", "t/user"), row("bad", "t/user")
-	user1.Config, user2.Config, bad.Config = "patched", "kept", "bad"
+	skip, nothing := row("skip", "t/user"), row("nothing", "t/user")
+	user1.Config, user2.Config, bad.Config, skip.Config, nothing.Config = "patched", "kept", "bad", "skip", "nothing"
 	user1.Intercept = map[string]any{"tag": "row"}
 	x := newFx(t, fxOpt{plugins: plugins(user, tags, p.plugin("t/a", nil)), keys: map[string]kernel.AnyKey{"tag": tag},
-		pre: []kernel.Plugin{l.plugin}, rows: []def.EntrySpec{row("tags", "t/tags"), user1, user2, bad}})
+		pre: []kernel.Plugin{l.plugin}, rows: []def.EntrySpec{row("tags", "t/tags"), user1, user2, bad, skip, nothing}})
 	x.want("patched", kernel.Active)
 	x.want("kept", kernel.Active)
 	x.want("bad", kernel.Failed)
@@ -53,7 +64,16 @@ func TestTheThreeHooksFireWithTheirPayloads(t *testing.T) {
 	}
 
 	// entry-init follows every created entry, initial or applied, with its context.
-	if ids := l.initIDs(); !slices.Equal(ids, []string{"tags", "patched", "kept", "bad"}) {
+	for _, id := range []string{"skip", "nothing"} {
+		x.want(id, kernel.Failed)
+		if err := x.failure(id); !contains(err, def.ErrPatchVetoed.Error()) || !contains(err, "loader/patch-context") {
+			t.Errorf("%s: a vetoed entry failed with %q", id, err)
+		}
+		if seen.get(id) != nil {
+			t.Errorf("%s: the plugin of a vetoed entry ran", id)
+		}
+	}
+	if ids := l.initIDs(); !slices.Equal(ids, []string{"tags", "patched", "kept", "bad", "skip", "nothing"}) {
 		t.Errorf("entry-init heard %v", ids)
 	}
 	x.apply(create(group("g")), create(child("g", "k", "t/a")), create(row("late", "t/a")))

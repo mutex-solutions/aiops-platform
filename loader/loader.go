@@ -329,8 +329,9 @@ func (t *tree) adopt(ctx context.Context, m mountItem, f *kernel.Fiber) {
 
 // build makes what mounts e from pc: the plugin, its config and the context. A row
 // that cannot be built (an unknown plugin or key name, an isolate or intercept the
-// kernel refuses, a listener of loader/patch-context that fails) is mounted as a
-// fiber whose Apply returns the reason: that row is FAILED and the loader is not.
+// kernel refuses, a listener of loader/patch-context that fails or vetoes with
+// def.ErrPatchVetoed) is mounted as a fiber whose Apply returns the reason: that row
+// is FAILED, its plugin never runs, and the loader and the other rows are not.
 func (t *tree) build(ctx context.Context, pc *kernel.Context, e def.EntrySpec) (kernel.Plugin, any, *kernel.Context) {
 	p, cfg, mc, err := t.resolve(ctx, pc, e)
 	if err != nil {
@@ -356,6 +357,31 @@ func (t *tree) resolve(ctx context.Context, pc *kernel.Context, e def.EntrySpec)
 		}
 		return k, nil
 	}
+	scope := func(mc *kernel.Context) (*kernel.Context, error) {
+		for _, n := range e.Isolate {
+			k, err := key("isolate", n)
+			if err == nil {
+				mc, err = guard(func() *kernel.Context { return mc.Isolate(k) })
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, n := range slices.Sorted(maps.Keys(e.Intercept)) {
+			k, err := key("intercept", n)
+			var v any
+			if err == nil {
+				v, err = typed(k, e.Intercept[n])
+			}
+			if err == nil {
+				mc, err = guard(func() *kernel.Context { return mc.Intercept(k, v) })
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		return mc, nil
+	}
 	p.Inject = slices.Clone(p.Inject)
 	for _, n := range e.Inject {
 		k, err := key("inject", n)
@@ -366,37 +392,28 @@ func (t *tree) resolve(ctx context.Context, pc *kernel.Context, e def.EntrySpec)
 			p.Inject = append(p.Inject, kernel.NeedKey(k))
 		}
 	}
-	mc = pc
-	for _, n := range e.Isolate {
-		k, err := key("isolate", n)
-		if err == nil {
-			mc, err = guard(func() *kernel.Context { return mc.Isolate(k) })
-		}
-		if err != nil {
-			return p, nil, nil, err
-		}
-	}
-	for _, n := range slices.Sorted(maps.Keys(e.Intercept)) {
-		k, err := key("intercept", n)
-		var v any
-		if err == nil {
-			v, err = typed(k, e.Intercept[n])
-		}
-		if err == nil {
-			mc, err = guard(func() *kernel.Context { return mc.Intercept(k, v) })
-		}
-		if err != nil {
-			return p, nil, nil, err
-		}
-	}
-	patched, err := t.patch.Run(ctx, kernel.Unscoped, def.PatchContextArgs{Entry: e, Context: mc})
-	if err != nil {
+	// The row's isolate and intercept are the built-in step of loader/patch-context,
+	// innermost (07-c4-plugin-sdk.md:386): a listener wraps what next returns, and one
+	// that does not call next vetoes the entry. built is set by the step alone, so a
+	// listener cannot hide its error.
+	var built *kernel.Context
+	var berr error
+	patched, err := t.patch.RunWith(ctx, kernel.Unscoped, def.PatchContextArgs{Entry: e, Context: pc},
+		func(context.Context, def.PatchContextArgs) (*kernel.Context, error) {
+			if built, berr = scope(pc); berr != nil {
+				return nil, berr
+			}
+			return built, nil
+		})
+	switch {
+	case berr != nil:
+		return p, nil, nil, berr
+	case err != nil:
 		return p, nil, nil, fmt.Errorf("row %q: loader/patch-context: %w", e.ID, err)
+	case built == nil || patched == nil:
+		return p, nil, nil, fmt.Errorf("row %q: loader/patch-context: %w", e.ID, def.ErrPatchVetoed)
 	}
-	if patched != nil {
-		mc = patched
-	}
-	return p, cfg, mc, nil
+	return p, cfg, patched, nil
 }
 
 func sameKey(a, b kernel.AnyKey) bool { return a.Name() == b.Name() && a.Major() == b.Major() }

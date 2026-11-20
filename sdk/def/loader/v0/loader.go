@@ -45,7 +45,10 @@ var (
 	// ErrUnknownKey and ErrUnknownPlugin are why a row's fiber is FAILED: a key name
 	// that the catalog does not hold, a plugin id that the module table does not
 	// hold. They fail the row, never the loader.
-	ErrUnknownKey    = errors.New("loader: unknown key name")
+	ErrUnknownKey = errors.New("loader: unknown key name")
+	// ErrPatchVetoed is why an entry is FAILED when a listener of
+	// loader/patch-context did not call next or returned no context.
+	ErrPatchVetoed   = errors.New("loader: patch-context vetoed the entry")
 	ErrUnknownPlugin = errors.New("loader: unknown plugin")
 )
 
