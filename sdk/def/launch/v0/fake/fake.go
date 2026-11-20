@@ -24,7 +24,8 @@ import (
 // ProfileContext keeps the rules of boot's: Commit takes only a composition that
 // Compose returned, the committed one or one committed before, and Required is
 // Needed, the distribution's set, plus the rows of Current marked required, both
-// filtered by the role as boot.RequiredFor does (ADR-059 decision 15).
+// filtered by the role as boot.RequiredFor does (ADR-059 decision 15). RequiredOf
+// applies the same rule to a composition that Commit would take.
 type Launcher struct {
 	ProfileName string
 	RoleName    string
@@ -145,18 +146,39 @@ func (f *Launcher) Commit(c launch.Composition) error {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if c.Digest != f.Current.Digest && !f.known[c.Digest] {
-		return fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", c.Digest[:6])
+	if err := f.knownLocked(c); err != nil {
+		return err
 	}
 	f.known[f.Current.Digest], f.Current = true, c
 	return nil
 }
 
-// Required is Needed plus the rows of Current marked required, sorted. For a role
-// other than RoleAll ("" is RoleAll) a row of Current whose roles do not name it
-// drops out, and so does a key whose provider rows in Current all run elsewhere.
-func (f *Launcher) Required() launch.RequiredSet {
-	cur := f.Committed()
+// knownLocked is the refusal of a composition that Commit does not take. f.mu is held.
+func (f *Launcher) knownLocked(c launch.Composition) error {
+	if c.Digest != f.Current.Digest && !f.known[c.Digest] {
+		return fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", c.Digest[:6])
+	}
+	return nil
+}
+
+// Required is RequiredOf(Current).
+func (f *Launcher) Required() launch.RequiredSet { return f.requiredOf(f.Committed()) }
+
+// RequiredOf is the required set of c, a composition that Commit would take.
+func (f *Launcher) RequiredOf(c launch.Composition) (launch.RequiredSet, error) {
+	f.mu.Lock()
+	err := f.knownLocked(c)
+	f.mu.Unlock()
+	if err != nil {
+		return launch.RequiredSet{}, err
+	}
+	return f.requiredOf(c), nil
+}
+
+// requiredOf is Needed plus the rows of cur marked required, sorted. For a role other
+// than RoleAll ("" is RoleAll) a row of cur whose roles do not name it drops out, and
+// so does a key whose provider rows in cur all run elsewhere.
+func (f *Launcher) requiredOf(cur launch.Composition) launch.RequiredSet {
 	runs := func(r launch.Row) bool {
 		return f.RoleName == "" || f.RoleName == launch.RoleAll || len(r.Roles) == 0 || slices.Contains(r.Roles, f.RoleName)
 	}

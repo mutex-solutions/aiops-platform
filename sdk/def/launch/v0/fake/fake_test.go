@@ -228,6 +228,28 @@ func TestRequiredFollowsTheCommittedComposition(t *testing.T) {
 	}
 }
 
+// RequiredOf is the required set of a composition that Commit would take, by the rule
+// of Required, and refuses any other.
+func TestRequiredOfACandidate(t *testing.T) {
+	l, _ := fake.New()
+	l.Needed = launch.RequiredSet{Rows: []string{"dist"}}
+	l.Current = launch.Composition{Digest: launch.Digest{1}, Rows: []launch.Row{{ID: "old", Required: true}}}
+	cand := launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{{ID: "new", Required: true}}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
+	if _, err := l.RequiredOf(cand); err == nil || !strings.Contains(err.Error(), "not composed by this launcher") {
+		t.Fatalf("RequiredOf before Compose returned it = %v", err)
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := l.RequiredOf(cand); err != nil || !slices.Equal(got.Rows, []string{"dist", "new"}) {
+		t.Errorf("RequiredOf(candidate) = %+v, %v", got, err)
+	}
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"dist", "old"}) {
+		t.Errorf("Required = %+v: the candidate is not committed", got)
+	}
+}
+
 func TestUnscriptedComposeAdmitPlanReturnZero(t *testing.T) {
 	l, _ := fake.New()
 	ctx := context.Background()

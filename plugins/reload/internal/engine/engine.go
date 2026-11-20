@@ -448,21 +448,13 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 // ACTIVE, and so must every required row, and a row that was ACTIVE must still be; a
 // row that was inactive and is untouched is a warning. A row that the loader did not
 // mount (disabled, of another role) is not judged unless it is required, and then it
-// fails; a row's own required flag counts in the role that mounts it, as in boot's
-// required set.
+// fails. The required set is cand's own for the process role (Profile.RequiredOf): the
+// candidate forward, the composition restored for a rollback.
 func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool) (composition.Report, error) {
-	need := e.Profile.Required()
+	need, needErr := e.Profile.RequiredOf(cand)
 	required := map[string]bool{}
 	for _, id := range need.Rows {
 		required[id] = true
-	}
-	for _, row := range cand.Rows {
-		if !row.Required {
-			continue
-		}
-		if en, ok := e.Loader.Locate(row.ID); !ok || en.Mount != loader.OtherRole {
-			required[row.ID] = true
-		}
 	}
 	touched := map[string]bool{}
 	for _, r := range applied {
@@ -476,6 +468,9 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []l
 	}
 	var states []launch.RowState
 	var rep composition.Report
+	if needErr != nil { // with no required set, the generation cannot pass
+		rep.Rows = append(rep.Rows, composition.RowReport{ID: "required set", Outcome: "fail", Detail: needErr.Error()})
+	}
 	for i, row := range cand.Rows {
 		st, err := reads[i].state, reads[i].err
 		switch {

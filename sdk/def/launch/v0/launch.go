@@ -200,6 +200,11 @@ type ProfileContext interface {
 	// (00-decisions.md:492). readiness and reload judge by it. Added in S1: the docs
 	// say readiness reads it from the launch definition and name no method (open point).
 	Required() RequiredSet
+	// RequiredOf is the required set of c for the process role, by the rule of
+	// Required, which is RequiredOf(Committed()). reload judges a candidate by it
+	// before it commits the candidate. c is one that Commit would take; for another it
+	// returns an error. Added in S1 (open point, as Required).
+	RequiredOf(c Composition) (RequiredSet, error)
 }
 
 // RoleAll is the role of a process that mounts every row: "--role all mounts every

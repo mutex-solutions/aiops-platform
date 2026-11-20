@@ -182,9 +182,22 @@ func (p *profileContext) Commit(lc launch.Composition) error {
 // see.
 func (p *profileContext) Required() launch.RequiredSet {
 	p.mu.Lock()
-	c := WithLoader(p.committed)
+	c := p.committed
 	p.mu.Unlock()
-	set := RequiredFor(c, p.mods, p.dist, p.roles)
+	return p.requiredOf(c)
+}
+
+// RequiredOf is the required set of a composition that Commit would take.
+func (p *profileContext) RequiredOf(lc launch.Composition) (launch.RequiredSet, error) {
+	c, err := p.lookup(lc, false)
+	if err != nil {
+		return launch.RequiredSet{}, err
+	}
+	return p.requiredOf(c), nil
+}
+
+func (p *profileContext) requiredOf(c Composition) launch.RequiredSet {
+	set := RequiredFor(WithLoader(c), p.mods, p.dist, p.roles)
 	return launch.RequiredSet{Rows: slices.DeleteFunc(set.Rows, func(id string) bool { return id == LoaderRowID }), Keys: set.Keys}
 }
 

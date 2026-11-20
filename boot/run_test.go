@@ -677,6 +677,13 @@ func TestCommitFollowsTheAppliedGeneration(t *testing.T) {
 	if err != nil || next.Digest == booted.Digest {
 		t.Fatalf("compose: %v", err)
 	}
+	// RequiredOf reads a candidate's set before it is committed.
+	if got, err := pc.RequiredOf(next); err != nil || !slices.Equal(got.Rows, []string{"later", "user"}) || !slices.Equal(pc.Required().Rows, []string{"user"}) {
+		t.Errorf("RequiredOf the candidate = %v, %v; Required = %v", got.Rows, err, pc.Required().Rows)
+	}
+	if _, err := pc.RequiredOf(launch.Composition{Digest: launch.Digest{9}}); err == nil {
+		t.Error("RequiredOf a stranger: no error")
+	}
 	if err := pc.Commit(next); err != nil || pc.Committed().Digest != next.Digest {
 		t.Fatalf("Commit = %v, committed %x", err, pc.Committed().Digest)
 	}

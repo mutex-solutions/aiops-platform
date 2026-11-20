@@ -351,6 +351,67 @@ func TestRetriedRowIsJudgedWhenItSettledWhateverAnotherRowTakes(t *testing.T) {
 	}
 }
 
+// A generation is judged by its own required set: one that removes a row the committed
+// composition marks required passes, and a rollback is judged by the required set of
+// the composition it restores.
+func TestGenerationIsJudgedByItsOwnRequiredSet(t *testing.T) {
+	s := newScript()
+	extra := row("extra", "aiops/p", nil)
+	extra.Required = true
+	w := newScripted(t, s, nil, row("a", "aiops/p", nil), extra)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil)}}
+	if r := await(t, w.svc); r.Status != def.Passed || !r.Report.Pass {
+		t.Fatalf("a generation that removes a row the committed one requires: result = %+v", r)
+	}
+	// The candidate requires a row that is not ACTIVE: it fails, and the rollback to a
+	// composition that does not require it passes.
+	bad := row("bad", "aiops/p", nil)
+	bad.Required = true
+	s.start["bad"] = kernel.Failed
+	w.next = launch.Composition{Digest: launch.Digest{4}, Rows: []launch.Row{row("a", "aiops/p", nil), bad}}
+	r := await(t, w.svc)
+	if r.Status != def.RolledBack || outcome(r.Report, "bad").Outcome != "fail" || r.Rollback == nil || !r.Rollback.Report.Pass {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
+// forgetful is a launcher that cannot say the required set of any composition.
+type forgetful struct{ *launchfake.Launcher }
+
+var errForgotten = errors.New("composition was forgotten")
+
+func (forgetful) RequiredOf(launch.Composition) (launch.RequiredSet, error) {
+	return launch.RequiredSet{}, errForgotten
+}
+
+// A generation whose required set the launcher cannot give fails its verdict, and so
+// does the rollback for the same reason.
+func TestGenerationWithNoRequiredSetFailsItsVerdict(t *testing.T) {
+	root := kerneltest.New(t)
+	l, _ := launchfake.New()
+	l.Current = launch.Composition{Digest: launch.Digest{1}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil)}}, nil
+	}
+	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
+	lp := kernel.Define(kernel.Plugin{ID: "aiops/forgetful", Provides: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey},
+		Apply: func(c *kernel.Context, _ any) error {
+			if err := launch.ProfileContextKey.Provide(c, forgetful{l}); err != nil {
+				return err
+			}
+			return launch.CatalogKey.Provide(c, l)
+		}})
+	s := newScript()
+	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
+		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
+	kerneltest.Mount(root, lp, sp)
+	active(t, root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4}))
+	r := await(t, submitter(t, root, "aiops/caller"))
+	if got := outcome(r.Report, "required set"); r.Status != def.RollbackFailed || got.Outcome != "fail" || !strings.Contains(got.Detail, errForgotten.Error()) {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
 // A required row of another role is not mounted in this process, so it is not judged:
 // boot's required set leaves it out (boot.RequiredFor), and so does the verdict.
 func TestRequiredRowOfAnotherRoleIsNotJudged(t *testing.T) {
