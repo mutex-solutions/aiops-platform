@@ -16,16 +16,21 @@
 // The control file is <home>/run/submit.json. The outcome of each submission is
 // written, again atomically, to <home>/run/submit.result.json:
 //
-//	{"request": "<sha256 of the control file>", "id": 3, "ok": true, "error": "", "leased": false, "ran": false}
+//	{"request": "<sha256 of the control file>", "id": 3, "ok": true, "error": "", "leased": false, "ran": false,
+//	 "openAtUnload": false, "disposedOpen": false}
 //
 // "ok" says that reload accepted the operation, not that the generation passed: the
 // verdict is the last operation of reload in the state file of test-state.
 //
 // A control file that starts with "leased" is a submission from a leased call, as an
-// admin call makes one (plugin-system-2026-11.md:363): the row takes a lease of its own
-// fiber, submits, and holds the lease until reload has begun the operation ("ran"), which
-// a Submit that waited for the apply could never see, because the apply of a generation
-// that restarts this row waits for this lease. Then it leaves and writes the outcome.
+// admin call makes one (plugin-system-2026-11.md:363), and on a goroutine that this row
+// does not track, as an admin call runs on: a lease of the row's fiber, the submission,
+// and the lease is held until reload has begun the operation ("ran"), which a Submit that
+// waited for the apply could never see, because the apply of a generation that restarts
+// this row waits for this lease. The lease is held on into the unload of the row, when
+// the generation restarts it ("openAtUnload"), and a while past its start: only the lease
+// holds the drain back, so the row's disposer must not begin while it is open
+// ("disposedOpen" says it did). Then the call leaves and writes the outcome.
 package testsubmit
 
 import (
@@ -65,6 +70,10 @@ type Outcome struct {
 	Error   string `json:"error"`
 	Leased  bool   `json:"leased"` // the submission was made inside a lease of this row
 	Ran     bool   `json:"ran"`    // leased: reload had begun the operation while the lease was held
+	// OpenAtUnload (leased): the lease was open when the unload of this row began.
+	OpenAtUnload bool `json:"openAtUnload"`
+	// DisposedOpen (leased): the disposer of this row began while the lease was open.
+	DisposedOpen bool `json:"disposedOpen"`
 }
 
 // New returns the plugin. Config: interval (duration, default 25ms), dir (default
@@ -103,6 +112,8 @@ func New() kernel.Plugin {
 				dir = runfile.Dir(home)
 			}
 			rl, clk := reload.Key.Of(c), clock.Key.Of(c)
+			disposing := make(chan struct{})
+			c.Defer("test-submit-dispose", func(context.Context) error { close(disposing); return nil })
 			c.Go("test-submit-poll", func(ctx context.Context) error {
 				for {
 					if data, err := os.ReadFile(filepath.Join(dir, cf.file)); err == nil {
@@ -111,9 +122,11 @@ func New() kernel.Plugin {
 						fresh := sum != last
 						last = sum
 						mu.Unlock()
-						if fresh {
-							leased := bytes.HasPrefix(data, []byte("leased"))
-							if err := runfile.Write(dir, Result, outcome(ctx, rl, sum, leased, c.Enter)); err != nil {
+						if fresh && bytes.HasPrefix(data, []byte("leased")) {
+							// A failed write leaves no outcome, which the test reports.
+							go func() { _ = runfile.Write(dir, Result, outcome(ctx, rl, sum, c.Enter, disposing)) }()
+						} else if fresh {
+							if err := runfile.Write(dir, Result, outcome(ctx, rl, sum, nil, nil)); err != nil {
 								return err
 							}
 						}
@@ -134,10 +147,13 @@ func New() kernel.Plugin {
 	})
 }
 
-// outcome submits one generation and renders the result file. A leased submission is
-// made inside the lease that enter takes, and keeps it until the operation has begun or
-// the row is unloading, which the apply of the operation itself may be the cause of.
-func outcome(ctx context.Context, rl reload.Reload, sum [sha256.Size]byte, leased bool, enter func() (func(), bool)) []byte {
+// outcome submits one generation and renders the result file. A leased submission (enter
+// is not nil) is made inside the lease that enter takes, and keeps it until the operation
+// has begun or the row is unloading, which the apply of the operation itself may be the
+// cause of, then into that unload as the package says. ctx is the row's, which ends when
+// the unload begins; disposing is closed when the row's disposer begins.
+func outcome(ctx context.Context, rl reload.Reload, sum [sha256.Size]byte, enter func() (func(), bool), disposing <-chan struct{}) []byte {
+	leased := enter != nil
 	o := Outcome{Request: fmt.Sprintf("%x", sum[:]), Leased: leased}
 	if leased {
 		leave, ok := enter()
@@ -164,6 +180,10 @@ func outcome(ctx context.Context, rl reload.Reload, sum [sha256.Size]byte, lease
 		}
 		r, ok := rl.Result(id)
 		o.Ran = ok && r.Status != reload.Queued
+		if !def.Wait(5*time.Second, ctx.Done()) { // bounded: a generation may leave the row alone
+			o.OpenAtUnload = true
+			o.DisposedOpen = !def.Wait(300*time.Millisecond, disposing) // well under the drain deadline
+		}
 	}
 	return render(o)
 }

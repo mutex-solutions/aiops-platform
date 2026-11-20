@@ -214,7 +214,9 @@ func TestSpineRestartsInPlaceUnderLoad(t *testing.T) {
 // Submit never waits, so the lease can be held until reload has begun the operation, which
 // then waits for that lease at the drain of the row and goes on once it is released: no
 // deadlock, and the result is delivered, both in the outcome that the row writes and in
-// the verdict that reload gives.
+// the verdict that reload gives. The call runs on a goroutine that the row does not track,
+// as an admin call's, so only its lease holds the drain back: it is open when the unload
+// begins, and the row's disposer does not begin before it is released.
 func TestSubmissionFromALeasedCall(t *testing.T) {
 	w := boot(t)
 	id := w.submit("submit-restart.yml", "leased")
@@ -223,12 +225,19 @@ func TestSubmissionFromALeasedCall(t *testing.T) {
 	if op.Status != "passed" || op.Generation != 1 || !contains(op.Applied["restarted"], "submit") {
 		t.Fatalf("the generation did not restart the submitter and pass: %+v", op)
 	}
+	// The call writes the outcome after it left, which is before the drain ends.
 	var out testsubmit.Outcome
-	if !w.p.ReadJSON(testsubmit.Result, &out) {
+	if _, ok := w.p.Until(budget, func(harness.Snapshot) bool { return w.p.ReadJSON(testsubmit.Result, &out) }); !ok {
 		t.Fatal("the submitter wrote no outcome")
 	}
 	if !out.OK || out.ID != id || !out.Leased || !out.Ran || out.Error != "" {
 		t.Fatalf("outcome %+v: the submission was not made inside a lease and delivered", out)
+	}
+	if !out.OpenAtUnload {
+		t.Errorf("outcome %+v: the lease was not open when the unload of the row began, so the drain had none to wait for", out)
+	}
+	if out.DisposedOpen {
+		t.Errorf("outcome %+v: the disposer of the row began while the leased call was open", out)
 	}
 	if s, ok := w.p.Until(budget, func(s harness.Snapshot) bool { return s.Status.Ready && allActive(s) }); !ok {
 		t.Fatalf("the tree did not settle: %+v", s.State.Rows)
