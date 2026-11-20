@@ -39,6 +39,27 @@ type leaseHolder interface {
 	tryDefer(label string, dispose disposer) error
 }
 
+// lateDelivery is implemented by a leaseHolder whose observer still receives, once
+// its lease is refused, every event accepted before the dispatcher closes: the
+// observer of the root, which sees the whole of Close (see rootLease).
+type lateDelivery interface{ deliverLate() bool }
+
+// rootLease is the leaseHolder of an observer of the root (Root.Observe). The root
+// quiesces when Close begins, so with the plain lease every event of Close would be
+// skipped, among them the deadline of a leaking fiber, which is what a launcher
+// watches for. This lease is the root's while the root is active, and after that it
+// delivers without one: the dispatcher drains every accepted event before it stops
+// (advanceLocked), and Close joins it. Its cleanup effect is an empty one, so the
+// observer is not removed when the root is disposed and sees the events of that too.
+// The Disposer that Observe returns still removes it.
+type rootLease struct{ *handle }
+
+func (rootLease) deliverLate() bool { return true }
+
+func (l rootLease) tryDefer(label string, _ disposer) error {
+	return l.handle.tryDefer(label, func(context.Context) error { return nil })
+}
+
 // observerFunc runs on the dispatcher worker, never inline in append. The
 // event, including any referenced slices, pointers, or interface values, must
 // remain immutable. No cloning, marshaling, filtering, or event callbacks occur
@@ -664,7 +685,10 @@ func invoke(ctx context.Context, r *registration, event ledgerEvent) (called boo
 	}()
 	leave, ok := r.owner.enter()
 	if !ok {
-		return false, nil
+		if l, ok := r.owner.(lateDelivery); !ok || !l.deliverLate() {
+			return false, nil
+		}
+		leave = func() {}
 	}
 	defer leave()
 	called = true
@@ -770,7 +794,7 @@ func (n *observerSet) append(e ledgerEvent) error {
 // outlives its activation's quiescence. The caller has already checked that owner
 // belongs to this core: registration calls the owner's tryDefer and can reenter
 // the core, so it never runs on the owner goroutine.
-func (n *observerSet) observe(owner *handle, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
+func (n *observerSet) observe(owner *handle, root bool, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
 	var callback observerFunc
 	if fn != nil {
 		callback = func(dispatcherCtx context.Context, event ledgerEvent) error {
@@ -794,7 +818,11 @@ func (n *observerSet) observe(owner *handle, label string, fn func(context.Conte
 			return onOverflow(ctx, failure)
 		}
 	}
-	dispose, err := n.d.addObserverWith(owner, label, callback, terminal)
+	var lease leaseHolder = owner
+	if root {
+		lease = rootLease{owner}
+	}
+	dispose, err := n.d.addObserverWith(lease, label, callback, terminal)
 	if errors.Is(err, errObserverInactive) {
 		return nil, ErrInactive
 	}
@@ -834,7 +862,13 @@ func (r *core) observe(owner *handle, label string, fn func(context.Context, led
 	if owner == nil || owner.core != r {
 		return nil, errObserverBinding
 	}
-	return r.observers.observe(owner, label, fn, onOverflow)
+	return r.observers.observe(owner, false, label, fn, onOverflow)
+}
+
+// observeRoot is observe for the observer of the root (Root.Observe): it keeps
+// receiving the events of Close (see rootLease).
+func (r *core) observeRoot(owner *handle, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
+	return r.observers.observe(owner, true, label, fn, onOverflow)
 }
 
 // awaitObservers joins only the accepted watermark captured at the call, not

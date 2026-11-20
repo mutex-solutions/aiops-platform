@@ -369,7 +369,7 @@ func TestDisposerPastTheDeadlineMarksTheFiberLeaked(t *testing.T) {
 		time.Sleep(testDispose + time.Second)
 		synctest.Wait()
 		err = r.Settle(ctx)
-		if !errors.Is(err, errLeaked) || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "fiber 1 dispose deadline") {
+		if !errors.Is(err, ErrLeaked) || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "fiber 1 dispose deadline") {
 			t.Fatalf("Settle = %v, want the dispose deadline marked leaked", err)
 		}
 		if s := snapshotOf(t, r, id); !s.Leaked || !strings.Contains(s.Error, "leaked") {

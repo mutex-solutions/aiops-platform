@@ -536,13 +536,15 @@ func (o *owner) expire(now time.Time) {
 			f.checking.timedOut = true
 			f.checking.cancel()
 		}
-		if stage == "dispose" && f.effectRunning {
-			// A disposer is still running past the dispose deadline. A goroutine
-			// cannot be killed, so the contract marks the fiber leaked and has the
-			// launcher replace the process after the drain window
-			// (07-c4-plugin-sdk.md:359 and 03-c3-kernel.md:372).
+		if stage == "drain" || stage == "dispose" && f.effectRunning {
+			// A drain whose tracked goroutines or leases are still open, or a disposer
+			// still running, past its deadline: a goroutine cannot be killed, so the
+			// contract marks the fiber leaked and has the launcher replace the process
+			// after the drain window (07-c4-plugin-sdk.md:359 and 03-c3-kernel.md:372).
 			f.leaked = true
-			o.block(f, fmt.Errorf("fiber %d %s deadline: %w: %w", f.id, stage, context.DeadlineExceeded, errLeaked))
+			err := fmt.Errorf("fiber %d %s deadline: %w: %w", f.id, stage, context.DeadlineExceeded, ErrLeaked)
+			o.block(f, err)
+			go o.r.logError("fiber marked leaked", f.id, f.spec.ID, stage, err.Error())
 		} else {
 			o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		}
@@ -605,7 +607,7 @@ func (o *owner) drainInTime(f *fiber, at time.Time) bool {
 	return f.checking == nil || f.checking.run.inTime(at)
 }
 
-// errLeaked marks a fiber whose disposer is still running past the dispose
-// deadline. It is wrapped in the blocked diagnostic that settle and close report,
+// ErrLeaked marks a fiber whose drain or disposer is still running past its
+// deadline. It is wrapped in the blocked diagnostic that Settle and Close report,
 // and the fiber's snapshot carries Leaked until the incarnation is archived.
-var errLeaked = errors.New("fiber leaked")
+var ErrLeaked = errors.New("fiber leaked")

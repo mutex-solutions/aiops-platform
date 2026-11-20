@@ -298,6 +298,7 @@ func (c *handle) release() {
 func (o *owner) activation(f *fiber, epoch []uint64, bindings map[svcKey]*liveProvision) *activation {
 	std, cancel := context.WithCancel(context.Background())
 	c := newHandle(o.r, std, f.id, make(map[svcKey]provision, len(bindings)))
+	plugin := f.spec.ID
 	a := &activation{ctx: c, cancel: cancel, epoch: epoch}
 	c.act = a
 	a.notice.act = a
@@ -355,7 +356,12 @@ func (o *owner) activation(f *fiber, epoch []uint64, bindings map[svcKey]*livePr
 			// run and even Error() belong to the worker. Completion uses a
 			// non-canceled transport context so quiescence cannot lose its record.
 			at := run.finish()
-			o.r.exchange(context.Background(), message{kind: cmdTrackedDone, act: a, id: id, err: err, errText: errorText(err), at: at})
+			text := errorText(err)
+			if err != nil {
+				// The cause reaches the log before the fiber is FAILED, from the worker.
+				o.r.logError("tracked goroutine failed", a.ctx.fiber, plugin, label, text)
+			}
+			o.r.exchange(context.Background(), message{kind: cmdTrackedDone, act: a, id: id, err: err, errText: text, at: at})
 		}, nil
 	}
 	c.childFn = func(spec pluginSpec) (uint64, error) {

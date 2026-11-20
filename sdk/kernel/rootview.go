@@ -68,7 +68,7 @@ type FiberSnapshot struct {
 	Tracked    []string     // Labels of tracked work that has not returned.
 	Error      string       // The startup, blocked and cleanup diagnostics, joined.
 	Alive      bool         // False once disposal is requested, before cleanup.
-	Leaked     bool         // A disposer ran past the dispose deadline.
+	Leaked     bool         // A drain or a disposer ran past its deadline.
 	Target     *TargetEpoch // Nil when the desired epoch is inactive.
 }
 
@@ -228,7 +228,7 @@ func (r *Root) Observe(label string, fn func(context.Context, LedgerEvent) error
 	if fn != nil {
 		callback = func(ctx context.Context, e ledgerEvent) error { return fn(ctx, exportEvent(e)) }
 	}
-	return r.core.observe(r.ctx.h, label, callback, o.onOverflow)
+	return r.core.observeRoot(r.ctx.h, label, callback, o.onOverflow)
 }
 
 // AwaitObservers returns when every observer has been handed the events accepted

@@ -63,7 +63,7 @@ func (c Config) core() coreConfig {
 	return coreConfig{
 		loadDeadline: c.LoadDeadline, drainDeadline: c.DrainDeadline, disposeDeadline: c.DisposeDeadline,
 		archiveLimit: c.ArchiveLimit, eventWindow: c.EventWindow, observerQueue: c.ObserverQueue,
-		ownerInbox: c.OwnerInbox, terminalLimit: c.TerminalLimit, observerLog: c.ObserverLog,
+		ownerInbox: c.OwnerInbox, terminalLimit: c.TerminalLimit, observerLog: c.ObserverLog, logHandler: c.LogHandler,
 	}
 }
 
@@ -111,7 +111,7 @@ func NewForTest(tb testing.TB, cfg Config) *Root {
 	}
 	tb.Cleanup(func() {
 		switch err := r.Close(context.Background()); {
-		case errors.Is(err, errLeaked):
+		case errors.Is(err, ErrLeaked):
 			tb.Errorf("kernel close: %v", err)
 		case err != nil:
 			tb.Logf("kernel close: %v", err)

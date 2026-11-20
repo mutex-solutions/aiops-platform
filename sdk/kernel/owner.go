@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"slices"
 	"sync"
@@ -175,7 +176,7 @@ type fiber struct {
 	remove          bool
 	queued          bool
 	failure         error
-	leaked          bool  // A disposer ran past the dispose deadline (see expire); sticky for the incarnation.
+	leaked          bool  // A drain or a disposer ran past its deadline (see expire); sticky for the incarnation.
 	awaitErr        error // Activation/startup failure retained by Await, not cleanup diagnostics.
 	failureText     string
 	awaitText       string
@@ -253,6 +254,7 @@ type core struct {
 	cancelled atomic.Pointer[waiter] // Parked waiters whose context ended.
 	rootErr   error                  // Published before done closes; retained host-lifetime failure.
 	observers *observerSet
+	log       *slog.Logger // The kernel's own records: see logError.
 	// History bounds (inspect.go). The owner is the only writer; status readers
 	// use the atomic counters inside these values.
 	ledger  *eventLedger
@@ -314,8 +316,9 @@ func (r *core) notifyKeys(ctx context.Context, keys ...svcKey) error {
 //
 // Settle returns when no fiber is mid-transition except fibers blocked past one of their own deadlines. It returns nil when nothing is blocked, otherwise one joined diagnostic per blocked fiber naming the fiber and the stage. It never returns while an unblocked fiber is mid-transition. If ctx ends first it returns ctx's error joined with the diagnostics known so far.
 //
-// A blocked fiber whose disposer ran past the dispose deadline is reported as
-// leaked: its diagnostic wraps errLeaked and its snapshot has Leaked set.
+// A blocked fiber whose disposer ran past the dispose deadline, or whose drain passed
+// its deadline with tracked goroutines or leases still open, is reported as leaked:
+// its diagnostic wraps ErrLeaked and its snapshot has Leaked set.
 func (r *core) settle(ctx context.Context) error {
 	return r.exchange(ctx, message{kind: cmdSettle}).err
 }
@@ -365,7 +368,11 @@ func (r *core) close(ctx context.Context) error {
 	if err != nil {
 		// The diagnostic is returned while the owner may still be alive. The
 		// owner replies before it closes done, so join that exit off this call
-		// path; otherwise nobody closes the observer queue.
+		// path; otherwise nobody closes the observer queue. The events accepted so
+		// far, the deadline that made this diagnostic among them, are delivered
+		// before it is returned, within ctx: a launcher that reads the error and
+		// its observer's flag must not see the one without the other.
+		_ = r.observers.d.barrier(ctx) // a stalled observer is detached or ctx ends it
 		r.releaseWhenDrained()
 		return err
 	}
