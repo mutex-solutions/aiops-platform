@@ -1,0 +1,584 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package restartpolicy_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
+	clockfake "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0/fake"
+	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
+	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+)
+
+// entry is one record of the kernel's logger.
+type entry struct {
+	msg   string
+	attrs map[string]any
+}
+
+// logTap is the kernel's log handler: it hands every record to a channel, which is
+// how a test waits for what restart-policy decided without sleeping.
+type logTap struct{ ch chan entry }
+
+func (h logTap) Enabled(context.Context, slog.Level) bool { return true }
+func (h logTap) Handle(_ context.Context, r slog.Record) error {
+	e := entry{msg: r.Message, attrs: map[string]any{}}
+	r.Attrs(func(a slog.Attr) bool { e.attrs[a.Key] = a.Value.Any(); return true })
+	select {
+	case h.ch <- e:
+	default:
+	}
+	return nil
+}
+func (h logTap) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h logTap) WithGroup(string) slog.Handler      { return h }
+
+// flaky is a row whose Apply fails while failing is set. attempts counts Apply calls
+// and signals each on tried.
+type flaky struct {
+	id       string
+	failing  atomic.Bool
+	attempts atomic.Int32
+	tried    chan int32
+}
+
+func newFlaky(id string, failing bool) *flaky {
+	f := &flaky{id: id, tried: make(chan int32, 64)}
+	f.failing.Store(failing)
+	return f
+}
+
+func (f *flaky) plugin() kernel.Plugin {
+	return kernel.Define(kernel.Plugin{ID: f.id, Apply: func(*kernel.Context, any) error {
+		n := f.attempts.Add(1)
+		f.tried <- n
+		if f.failing.Load() {
+			return errors.New("apply failed")
+		}
+		return nil
+	}})
+}
+
+// attempt waits for the n-th Apply of f to have started.
+func (f *flaky) attempt(t *testing.T, n int32) {
+	t.Helper()
+	for got := range f.tried {
+		if got == n {
+			return
+		}
+	}
+}
+
+type world struct {
+	t      *testing.T
+	root   *kernel.Root
+	launch *launchfake.Launcher
+	clk    *clockfake.Clock
+	comp   *compfake.Reader
+	logs   chan entry
+	rp     *kernel.Fiber
+}
+
+func conf(max int, window, min, maxd time.Duration, factor int, stable time.Duration) restartpolicy.Config {
+	return restartpolicy.Config{MaxFailures: max, Window: window, BackoffMin: min, BackoffMax: maxd, Factor: factor,
+		Stable: stable, Infrastructure: []string{"sql"}}
+}
+
+func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
+	t.Helper()
+	w := &world{t: t, logs: make(chan entry, 4096)}
+	opts = append([]kerneltest.Option{kerneltest.WithConfig(func(c *kernel.Config) { c.LogHandler = logTap{w.logs} })}, opts...)
+	w.root = kerneltest.New(t, opts...)
+	var lp, kp, cp kernel.Plugin
+	w.launch, lp = launchfake.New()
+	w.launch.Modules = []launch.CatalogEntry{{ID: "aiops/sql", Provides: []string{"sql"}}, {ID: "aiops/other"}}
+	w.clk, kp = clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
+	w.comp, cp = compfake.New()
+	kerneltest.Mount(w.root, lp, kp, cp)
+	w.rp = w.root.Plugin(restartpolicy.Plugin, cfg)
+	if err := w.rp.Await(t.Context()); err != nil {
+		t.Fatalf("restart-policy: %v", err)
+	}
+	return w
+}
+
+// logged waits for the next record with this message.
+func (w *world) logged(msg string) entry {
+	w.t.Helper()
+	for {
+		select {
+		case e := <-w.logs:
+			if e.msg == msg {
+				return e
+			}
+		case <-w.t.Context().Done():
+			w.t.Fatalf("no %q was logged", msg)
+		}
+	}
+}
+
+// retryLogged waits for a retry and checks the delay and the count it names.
+func (w *world) retryLogged(failures int, delay time.Duration) {
+	w.t.Helper()
+	e := w.logged("fiber.retry")
+	if e.attrs["failures"] != int64(failures) || e.attrs["delay"] != delay {
+		w.t.Fatalf("retry = %v, want failure %d after %v", e.attrs, failures, delay)
+	}
+}
+
+// heard waits until every listener has seen what the kernel did so far.
+func (w *world) heard() {
+	w.t.Helper()
+	if err := w.root.AwaitObservers(w.t.Context()); err != nil && !errors.Is(err, kernel.ErrObserverOverflow) {
+		w.t.Fatal(err)
+	}
+}
+
+func (w *world) state(f *kernel.Fiber) kernel.State {
+	w.t.Helper()
+	st, err := f.State(w.t.Context())
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return st
+}
+
+func (w *world) exits() []launch.ExitRequest { return w.launch.Exits() }
+
+func TestRetriesInPlaceWithGrowingBackoffUntilItWorks(t *testing.T) {
+	w := newWorld(t, conf(4, time.Hour, time.Second, 3*time.Second, 2, 0))
+	fl := newFlaky("aiops/other", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+
+	// Four failures, each retried: the delay doubles and then stays at the bound.
+	delays := []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 3 * time.Second}
+	w.retryLogged(1, delays[0])
+	for i, d := range delays {
+		w.clk.Advance(d / 2)
+		if w.clk.Pending() != 1 {
+			t.Fatalf("retry %d fired before its backoff", i+1)
+		}
+		if i == len(delays)-1 {
+			fl.failing.Store(false)
+		}
+		w.clk.Advance(d - d/2)
+		fl.attempt(t, int32(i+2))
+		if i+1 < len(delays) {
+			w.retryLogged(i+2, delays[i+1])
+		}
+	}
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st := w.state(f); st != kernel.Active {
+		t.Errorf("state = %s, want ACTIVE", st)
+	}
+	if len(w.exits()) != 0 {
+		t.Errorf("exits = %v", w.exits())
+	}
+}
+
+func TestGivesUpOnAnInfrastructureProviderAndAsksForExit(t *testing.T) {
+	w := newWorld(t, conf(2, time.Hour, time.Second, time.Minute, 2, 0))
+	fl := newFlaky("aiops/sql", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	w.retryLogged(2, 2*time.Second)
+	w.clk.Advance(2 * time.Second)
+	e := w.logged("fiber.gave-up")
+	if e.attrs["fiber"] != f.ID() || e.attrs["plugin"] != "aiops/sql" || e.attrs["failures"] != int64(3) || e.attrs["infrastructure"] != true {
+		t.Errorf("gave-up = %v", e.attrs)
+	}
+	want := []launch.ExitRequest{{Reason: launch.ExitGaveUp, Detail: "aiops/sql"}}
+	if got := w.exits(); !slices.Equal(got, want) {
+		t.Errorf("exits = %v, want %v", got, want)
+	}
+	if st := w.state(f); st != kernel.Failed {
+		t.Errorf("state = %s: the fiber stays FAILED", st)
+	}
+	if w.clk.Pending() != 0 {
+		t.Error("a retry is still scheduled after the give-up")
+	}
+	w.clk.Advance(24 * time.Hour)
+	if n := fl.attempts.Load(); n != 3 {
+		t.Errorf("attempts = %d, want 3", n)
+	}
+}
+
+func TestGivesUpOnAnOrdinaryRowWithoutExit(t *testing.T) {
+	w := newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0))
+	fl := newFlaky("aiops/other", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	e := w.logged("fiber.gave-up")
+	if e.attrs["infrastructure"] != false {
+		t.Errorf("gave-up = %v", e.attrs)
+	}
+	if len(w.exits()) != 0 {
+		t.Errorf("exits = %v: only an infrastructure provider replaces the process", w.exits())
+	}
+
+	// An operator updates the fiber: it is tracked afresh, and a failure is retried.
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	w.retryLogged(1, time.Second)
+	// And one that works clears the give-up for good.
+	fl.failing.Store(false)
+	w.clk.Advance(time.Second)
+	fl.attempt(t, 4)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	fl.failing.Store(true)
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	w.retryLogged(1, time.Second)
+}
+
+func TestNoRetryForAFiberThatWasDisposed(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	fl := newFlaky("aiops/other", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+	w.retryLogged(1, time.Second)
+
+	if err := f.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Await(t.Context()) // it returns the startup error that the fiber failed with
+	w.heard()
+	w.clk.Advance(time.Second)
+	if e := w.logged("fiber.retry-skipped"); e.attrs["why"] != "forgotten" {
+		t.Errorf("skipped = %v", e.attrs)
+	}
+	if n := fl.attempts.Load(); n != 1 {
+		t.Errorf("attempts = %d: a disposed fiber was retried", n)
+	}
+}
+
+func TestNoRetryForAFiberThatIsNotFailedAnymore(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	fl := newFlaky("aiops/other", true)
+	f := w.root.Plugin(fl.plugin(), nil)
+	w.retryLogged(1, time.Second)
+
+	// An operator fixes the row before the timer fires.
+	fl.failing.Store(false)
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	fl.attempt(t, 2)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard()
+	w.clk.Advance(time.Second)
+	if e := w.logged("fiber.retry-skipped"); e.attrs["why"] != "not failed" || e.attrs["state"] != kernel.Active {
+		t.Errorf("skipped = %v", e.attrs)
+	}
+	if n := fl.attempts.Load(); n != 2 {
+		t.Errorf("attempts = %d", n)
+	}
+}
+
+func TestReplacedFiberIsNotRetriedUnderItsOldId(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	old := newFlaky("aiops/other", true)
+	fo := w.root.Plugin(old.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	// The row is replaced: the old fiber is disposed and a new one, with a new id,
+	// takes its place and works.
+	if err := fo.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	_ = fo.Await(t.Context())
+	repl := newFlaky("aiops/other", false)
+	fn := w.root.Plugin(repl.plugin(), nil)
+	if err := fn.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if fn.ID() == fo.ID() {
+		t.Fatal("a replacement reused an id")
+	}
+	w.heard()
+	w.clk.Advance(time.Second)
+	w.logged("fiber.retry-skipped")
+	if old.attempts.Load() != 1 || repl.attempts.Load() != 1 {
+		t.Errorf("attempts = %d and %d", old.attempts.Load(), repl.attempts.Load())
+	}
+}
+
+// The failures of a fiber are counted from its last stable period and inside the
+// window only.
+func TestWindowAndStablePeriod(t *testing.T) {
+	// fail1 fails, is retried and works, then fails again at once: is that a second
+	// failure of the same run (the fiber was not stable) or the first of a new one?
+	run := func(t *testing.T, w *world, wait time.Duration) (gaveUp bool) {
+		fl := newFlaky("aiops/other", true)
+		f := w.root.Plugin(fl.plugin(), nil)
+		w.retryLogged(1, time.Second)
+		fl.failing.Store(false)
+		w.clk.Advance(time.Second)
+		fl.attempt(t, 2)
+		if err := f.Await(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		w.heard() // ACTIVE is noted at the clock's time
+		w.clk.Advance(wait)
+		fl.failing.Store(true)
+		if err := f.Update(t.Context(), nil); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			select {
+			case e := <-w.logs:
+				switch e.msg {
+				case "fiber.gave-up":
+					return true
+				case "fiber.retry":
+					return false
+				}
+			case <-t.Context().Done():
+				t.Fatal("neither a retry nor a give-up")
+			}
+		}
+	}
+	t.Run("a success resets the count when no stable period is asked", func(t *testing.T) {
+		if run(t, newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0)), 0) {
+			t.Error("gave up although the fiber had worked in between")
+		}
+	})
+	t.Run("a fiber that did not stay up long enough keeps its count", func(t *testing.T) {
+		if !run(t, newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, time.Hour)), time.Minute) {
+			t.Error("did not give up on a fiber that failed again inside the stable period")
+		}
+	})
+	t.Run("a fiber that stayed up the stable period starts again", func(t *testing.T) {
+		if run(t, newWorld(t, conf(1, 24*time.Hour, time.Second, time.Minute, 2, time.Hour)), time.Hour) {
+			t.Error("gave up although the fiber stayed up for the stable period")
+		}
+	})
+	t.Run("failures older than the window no longer count", func(t *testing.T) {
+		if run(t, newWorld(t, conf(1, 10*time.Second, time.Second, time.Minute, 2, 24*time.Hour)), time.Minute) {
+			t.Error("gave up on a failure that left the window")
+		}
+	})
+}
+
+// stall holds the observer dispatcher on the first event after it is armed.
+type stall struct {
+	armed   atomic.Bool
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s *stall) plugin() kernel.Plugin {
+	return kernel.Define(kernel.Plugin{ID: "aiops/stall",
+		Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			kernel.InternalStatus.On(c, kernel.DefaultStage, func(_ context.Context, e kernel.LedgerEvent) (any, error) {
+				if s.armed.CompareAndSwap(true, false) {
+					close(s.entered)
+					<-s.release
+				}
+				return nil, nil
+			})
+			return nil
+		}})
+}
+
+// A failure whose event was lost is found again from the committed tree.
+func TestOverflowNoticeFindsAFailureThatWasLost(t *testing.T) {
+	const queue = 4
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0),
+		kerneltest.WithConfig(func(c *kernel.Config) { c.ObserverQueue = queue }))
+	s := &stall{entered: make(chan struct{}), release: make(chan struct{})}
+	kerneltest.Mount(w.root, s.plugin())
+	w.heard()
+	s.armed.Store(true)
+	ticks := 0
+	tick := func() *kernel.Fiber {
+		ticks++
+		return w.root.Plugin(kernel.Define(kernel.Plugin{ID: fmt.Sprintf("aiops/tick-%d", ticks),
+			Apply: func(*kernel.Context, any) error { return nil }}), nil)
+	}
+	// Make events until the dispatcher is held inside one. With a queue this small the
+	// relay may have been detached by an overflow of its own at setup, and the events of
+	// that time reach no listener.
+held:
+	for {
+		select {
+		case <-s.entered:
+			break held
+		case <-t.Context().Done():
+			t.Fatal("the dispatcher was never held")
+		default:
+			if err := tick().Await(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	lost := newFlaky("aiops/sql", true)
+	f := w.root.Plugin(lost.plugin(), nil)
+	if err := f.Await(t.Context()); err == nil {
+		t.Fatal("the fiber did not fail")
+	}
+	w.comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
+		{ID: "lost", Plugin: "aiops/sql", Fiber: f.ID(), State: kernel.Failed},
+		{ID: "fine", Plugin: "aiops/other", Fiber: 9999, State: kernel.Active}, // not failed: ignored
+		{ID: "unmounted", Plugin: "aiops/other", State: kernel.Failed},         // no fiber: ignored
+	}})
+	for range queue * 3 { // overflow the queue behind the held event
+		if err := tick().Await(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(s.release)
+	// The kernel subscribes again once the stalled listener returns, and the notice that
+	// events were lost comes with the first event after that: make events until
+	// restart-policy has found the failure that was lost.
+	for {
+		select {
+		case e := <-w.logs:
+			if e.msg == "fiber.retry" && e.attrs["fiber"] == f.ID() {
+				if e.attrs["failures"] != int64(1) {
+					t.Errorf("retry = %v", e.attrs)
+				}
+				return
+			}
+		case <-t.Context().Done():
+			t.Fatal("the failure whose event was lost was not found again")
+		default:
+			if err := tick().Await(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			w.heard()
+		}
+	}
+}
+
+func TestDecode(t *testing.T) {
+	good := map[string]any{"maxFailures": int64(3), "window": "10m", "backoffMin": "1s", "backoffMax": "1m",
+		"factor": 2.0, "stable": "30s", "infrastructure": []any{"sql", "http"}}
+	with := func(k string, v any) map[string]any {
+		m := map[string]any{}
+		for kk, vv := range good {
+			m[kk] = vv
+		}
+		if v == nil {
+			delete(m, k)
+		} else {
+			m[k] = v
+		}
+		return m
+	}
+	for _, tc := range []struct {
+		name string
+		raw  any
+		ok   bool
+	}{
+		{"map", good, true},
+		{"map with int and no stable", with("stable", nil), true},
+		{"struct", conf(1, time.Second, time.Second, time.Second, 1, 0), true},
+		{"nil", nil, false},
+		{"wrong type", 3, false},
+		{"unknown field", with("bogus", 1), false},
+		{"no failures allowed", with("maxFailures", int64(0)), false},
+		{"fractional count", with("maxFailures", 1.5), false},
+		{"count as int", with("maxFailures", 2), true},
+		{"count as text", with("maxFailures", "2"), false},
+		{"window missing", with("window", nil), false},
+		{"window not a string", with("window", 5), false},
+		{"window malformed", with("window", "soon"), false},
+		{"backoff min zero", with("backoffMin", "0s"), false},
+		{"backoff max below min", with("backoffMax", "500ms"), false},
+		{"factor zero", with("factor", int64(0)), false},
+		{"stable negative", with("stable", "-1s"), false},
+		{"no infrastructure", with("infrastructure", nil), false},
+		{"infrastructure not a list", with("infrastructure", "sql"), false},
+		{"infrastructure item not a name", with("infrastructure", []any{1}), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t, conf(1, time.Second, time.Second, time.Second, 1, 0))
+			err := w.root.Plugin(restartpolicy.Plugin, tc.raw).Await(t.Context())
+			if (err == nil) != tc.ok {
+				t.Errorf("err = %v, want ok = %v", err, tc.ok)
+			}
+		})
+	}
+}
+
+// bound is a kernel with the binding maps on. The launch keys are provider-bound;
+// appExit and the registry are consumer-bound; internal/status is sealed.
+func bound(t *testing.T, launcher kernel.Plugin, consumers, listeners []kernel.Plugin) *kernel.Root {
+	t.Helper()
+	const n = 64
+	r, err := kernel.New(kernel.Config{
+		LoadDeadline: 10 * time.Second, DrainDeadline: 10 * time.Second, DisposeDeadline: 10 * time.Second,
+		ArchiveLimit: n, EventWindow: n, ObserverQueue: n, OwnerInbox: n, TerminalLimit: n,
+		Providers: kernel.Bindings{
+			launch.ProfileContextKey: {launcher}, launch.CatalogKey: {launcher}, launch.CmdlineKey: {launcher},
+			launch.ReadyKey: {launcher}, launch.KillSwitchesKey: {launcher}, launch.AppExitKey: {launcher},
+		},
+		Consumers: kernel.Bindings{launch.AppExitKey: consumers, kernel.RegistryKey: consumers},
+		Listeners: map[kernel.AnyHook][]kernel.Plugin{kernel.InternalStatus: listeners},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close(context.Background()) })
+	return r
+}
+
+func TestBindingMapsMustListTheRow(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		consumers, listens bool
+		want               error
+	}{
+		{"listed everywhere", true, true, nil},
+		{"not a registry and appExit consumer", false, true, kernel.ErrBinding},
+		{"not a listener of the sealed hook", true, false, kernel.ErrSealed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, lp := launchfake.New()
+			_, kp := clockfake.New(time.Time{})
+			_, cp := compfake.New()
+			var consumers, listeners []kernel.Plugin
+			if tc.consumers {
+				consumers = []kernel.Plugin{restartpolicy.Plugin}
+			}
+			if tc.listens {
+				listeners = []kernel.Plugin{restartpolicy.Plugin}
+			}
+			root := bound(t, lp, consumers, listeners)
+			for _, p := range []kernel.Plugin{lp, kp, cp} {
+				if err := root.Plugin(p, nil).Await(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := root.Plugin(restartpolicy.Plugin, conf(1, time.Second, time.Second, time.Second, 1, 0)).Await(t.Context())
+			if tc.want == nil && err != nil || tc.want != nil && !errors.Is(err, tc.want) {
+				t.Errorf("err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
