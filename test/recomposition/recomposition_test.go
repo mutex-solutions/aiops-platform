@@ -58,7 +58,7 @@ func boot(t *testing.T, patches ...string) *world {
 	if err := os.WriteFile(w.live, []byte(liveBase), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var opts harness.Options
+	opts := harness.Options{Context: t.Context()}
 	for _, f := range patches {
 		opts.Patches = append(opts.Patches, harness.PatchFile(f))
 	}

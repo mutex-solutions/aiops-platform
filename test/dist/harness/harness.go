@@ -14,6 +14,7 @@ package harness
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
 )
 
 // PollInterval is the period of every poll of the process's files.
@@ -91,11 +93,12 @@ const Limits = "loadDeadline: 1s\ndrainDeadline: 1s\ndisposeDeadline: 1s\nshutdo
 
 // Options is how a process is started.
 type Options struct {
-	Profile string   // default "smoke"
-	Role    string   // default: not passed
-	Patches []string // --patch files, in order
-	Env     []string // extra environment variables, NAME=value
-	Limits  string   // content of the --limits file; default Limits
+	Profile string          // default "smoke"
+	Role    string          // default: not passed
+	Patches []string        // --patch files, in order
+	Env     []string        // extra environment variables, NAME=value
+	Limits  string          // content of the --limits file; default Limits
+	Context context.Context // ends the process when done (a test timeout); default Background
 }
 
 // syncBuf is the combined output of the process.
@@ -111,6 +114,7 @@ func (s *syncBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(
 type Proc struct {
 	Home   string
 	cmd    *exec.Cmd
+	child  *proc.Child
 	out    *syncBuf
 	exited chan struct{}
 	code   int
@@ -143,15 +147,22 @@ func Start(bin string, o Options) (*Proc, error) {
 		args = append(args, "--patch", p)
 	}
 	p := &Proc{Home: home, out: &syncBuf{}, exited: make(chan struct{})}
-	p.cmd = exec.Command(bin, args...)
+	ctx := o.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	p.cmd = proc.Command(ctx, bin, args...)
 	p.cmd.Env = append(os.Environ(), o.Env...)
 	p.cmd.Stdout, p.cmd.Stderr = p.out, p.out
-	if err := p.cmd.Start(); err != nil {
+	// proc starts it so that it dies with this process (see package proc).
+	child, err := proc.Start(p.cmd)
+	if err != nil {
 		_ = os.RemoveAll(home)
 		return nil, err
 	}
+	p.child = child
 	go func() {
-		_ = p.cmd.Wait()
+		<-child.Done()
 		p.code = p.cmd.ProcessState.ExitCode()
 		close(p.exited)
 	}()
@@ -192,7 +203,7 @@ func (p *Proc) Kill() {
 	select {
 	case <-p.exited:
 	default:
-		_ = p.cmd.Process.Kill()
+		p.child.Kill()
 		<-p.exited
 	}
 }

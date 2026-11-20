@@ -23,6 +23,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
 )
 
 type syncBuf struct {
@@ -48,6 +49,7 @@ type process struct {
 	t      *testing.T
 	home   string
 	cmd    *exec.Cmd
+	child  *proc.Child
 	stderr *syncBuf
 	exited chan int
 }
@@ -72,14 +74,17 @@ func start(t *testing.T, bin string, env []string, patches ...string) *process {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	t.Cleanup(cancel)
 	p := &process{t: t, home: home, stderr: &syncBuf{}, exited: make(chan int, 1)}
-	p.cmd = exec.CommandContext(ctx, bin, args...)
+	p.cmd = proc.Command(ctx, bin, args...)
 	p.cmd.Env = append(os.Environ(), env...)
 	p.cmd.Stderr = p.stderr
-	if err := p.cmd.Start(); err != nil {
+	child, err := proc.Start(p.cmd)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(child.Kill)
+	p.child = child
 	go func() {
-		_ = p.cmd.Wait()
+		<-child.Done()
 		p.exited <- p.cmd.ProcessState.ExitCode()
 	}()
 	return p
@@ -90,7 +95,7 @@ func (p *process) wait() int {
 	case code := <-p.exited:
 		return code
 	case <-time.After(60 * time.Second):
-		_ = p.cmd.Process.Kill()
+		p.child.Kill()
 		p.t.Fatalf("the process did not exit; stderr:\n%s", p.stderr.String())
 		return -1
 	}
