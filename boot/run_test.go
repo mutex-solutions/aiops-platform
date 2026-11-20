@@ -860,3 +860,28 @@ func TestAdmitJudgesTheNewestProvenance(t *testing.T) {
 		})
 	}
 }
+
+// A denied required row rejects the generation, and the admission names it as it names a
+// denied optional row, so that reload reports the cause as ErrDenied (ADR-059 decision 15).
+func TestAdmitListsADeniedRequiredRow(t *testing.T) {
+	var l launched
+	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(happyBundle + "    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: ghost, plugin: t/ghost, roles: [api], required: true}\n")}
+	next, err := pc.Compose(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	adm, err := pc.Admit(t.Context(), next)
+	if err == nil || len(adm.Denied) != 1 || adm.Denied[0].Row != "ghost" || adm.Denied[0].Check != "module table" {
+		t.Fatalf("admit: %v %+v", err, adm)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}

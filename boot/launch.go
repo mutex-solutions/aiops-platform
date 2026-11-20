@@ -205,14 +205,16 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 		return launch.Admission{}, err
 	}
 	a := Admit(WithLoader(c), p.mods, p.dist, p.roles)
-	if a.Refused() {
-		return launch.Admission{}, errors.New(strings.Join(errorLines(a), "; "))
-	}
+	// Every denied row is listed, a required one too: its denial is also an error that
+	// rejects the generation, and reload reports either as ErrDenied (ADR-059 decision 15).
 	var out launch.Admission
 	for _, id := range a.Gate.Rows {
 		if d, ok := a.Gate.Denial(id); ok {
 			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
 		}
+	}
+	if a.Refused() {
+		return out, errors.New(strings.Join(errorLines(a), "; "))
 	}
 	return out, nil
 }
