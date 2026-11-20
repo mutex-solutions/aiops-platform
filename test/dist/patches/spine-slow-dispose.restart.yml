@@ -1,0 +1,2 @@
+# Layer 4 patch, written by a live recomposition: the slow spine restarts.
+- {id: spine, config: {workers: 3, disposeDelay: 600ms}}

@@ -1,0 +1,8 @@
+# Layer 4 patch for the recomposition suite: the spine keeps a report of the calls made
+# into it, and three consumers call it all the time, holding its lease for a few
+# milliseconds each, so that a restart of the spine happens under load.
+- {id: spine, config: {workers: 2, report: spine.json}}
+- insert:
+    - {id: loada, plugin: aiops-test/toy-consumer, roles: [api], config: {note: a, callEvery: 1ms, callHold: 3ms}}
+    - {id: loadb, plugin: aiops-test/toy-consumer, roles: [api], config: {note: b, callEvery: 2ms, callHold: 1ms}}
+    - {id: loadc, plugin: aiops-test/toy-consumer, roles: [api], config: {note: c, callEvery: 1ms, callHold: 5ms}}

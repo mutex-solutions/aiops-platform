@@ -16,13 +16,20 @@
 // The control file is <home>/run/submit.json. The outcome of each submission is
 // written, again atomically, to <home>/run/submit.result.json:
 //
-//	{"request": "<sha256 of the control file>", "id": 3, "ok": true, "error": ""}
+//	{"request": "<sha256 of the control file>", "id": 3, "ok": true, "error": "", "leased": false, "ran": false}
 //
 // "ok" says that reload accepted the operation, not that the generation passed: the
 // verdict is the last operation of reload in the state file of test-state.
+//
+// A control file that starts with "leased" is a submission from a leased call, as an
+// admin call makes one (plugin-system-2026-11.md:363): the row takes a lease of its own
+// fiber, submits, and holds the lease until reload has begun the operation ("ran"), which
+// a Submit that waited for the apply could never see, because the apply of a generation
+// that restarts this row waits for this lease. Then it leaves and writes the outcome.
 package testsubmit
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -30,6 +37,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
@@ -55,6 +63,8 @@ type Outcome struct {
 	ID      uint64 `json:"id"`
 	OK      bool   `json:"ok"`
 	Error   string `json:"error"`
+	Leased  bool   `json:"leased"` // the submission was made inside a lease of this row
+	Ran     bool   `json:"ran"`    // leased: reload had begun the operation while the lease was held
 }
 
 // New returns the plugin. Config: interval (duration, default 25ms), dir (default
@@ -64,6 +74,13 @@ func New() kernel.Plugin {
 		interval  time.Duration
 		dir, file string
 	}
+	// The marker last submitted is kept per plugin value, which a distribution creates
+	// once, so that a restart of this row (an epoch change, a new config) does not
+	// submit the same control file again.
+	var (
+		mu   sync.Mutex
+		last [sha256.Size]byte
+	)
 	return kernel.Define(kernel.Plugin{
 		ID:     ID,
 		Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(launch.CmdlineKey), kernel.Need(reload.Key)},
@@ -86,13 +103,17 @@ func New() kernel.Plugin {
 				dir = runfile.Dir(home)
 			}
 			rl, clk := reload.Key.Of(c), clock.Key.Of(c)
-			var last [sha256.Size]byte
 			c.Go("test-submit-poll", func(ctx context.Context) error {
 				for {
 					if data, err := os.ReadFile(filepath.Join(dir, cf.file)); err == nil {
-						if sum := sha256.Sum256(data); sum != last {
-							last = sum
-							if err := runfile.Write(dir, Result, outcome(ctx, rl, sum)); err != nil {
+						mu.Lock()
+						sum := sha256.Sum256(data)
+						fresh := sum != last
+						last = sum
+						mu.Unlock()
+						if fresh {
+							leased := bytes.HasPrefix(data, []byte("leased"))
+							if err := runfile.Write(dir, Result, outcome(ctx, rl, sum, leased, c.Enter)); err != nil {
 								return err
 							}
 						}
@@ -113,14 +134,41 @@ func New() kernel.Plugin {
 	})
 }
 
-// outcome submits one generation and renders the result file.
-func outcome(ctx context.Context, rl reload.Reload, sum [sha256.Size]byte) []byte {
-	o := Outcome{Request: fmt.Sprintf("%x", sum[:])}
-	if id, err := rl.Submit(ctx, reload.Op{Source: Source}); err != nil {
-		o.Error = err.Error()
-	} else {
-		o.ID, o.OK = uint64(id), true
+// outcome submits one generation and renders the result file. A leased submission is
+// made inside the lease that enter takes, and keeps it until the operation has begun or
+// the row is unloading, which the apply of the operation itself may be the cause of.
+func outcome(ctx context.Context, rl reload.Reload, sum [sha256.Size]byte, leased bool, enter func() (func(), bool)) []byte {
+	o := Outcome{Request: fmt.Sprintf("%x", sum[:]), Leased: leased}
+	if leased {
+		leave, ok := enter()
+		if !ok {
+			o.Error = "test-submit: no lease: the row is unloading"
+			return render(o)
+		}
+		defer leave()
 	}
+	id, err := rl.Submit(ctx, reload.Op{Source: Source})
+	if err != nil {
+		o.Error = err.Error()
+		return render(o)
+	}
+	o.ID, o.OK = uint64(id), true
+	if leased {
+		for i := 0; i < 500; i++ { // bounded: five seconds
+			if r, ok := rl.Result(id); ok && r.Status != reload.Queued {
+				break
+			}
+			if !def.Wait(10*time.Millisecond, ctx.Done()) {
+				break
+			}
+		}
+		r, ok := rl.Result(id)
+		o.Ran = ok && r.Status != reload.Queued
+	}
+	return render(o)
+}
+
+func render(o Outcome) []byte {
 	b, _ := json.MarshalIndent(o, "", "  ")
 	return append(b, '\n')
 }

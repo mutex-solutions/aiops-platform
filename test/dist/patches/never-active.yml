@@ -1,0 +1,3 @@
+# Layer 4 patch, written by a live recomposition: the disabled row "extra" is enabled and
+# injects toy.fault, which no row provides, so it never activates.
+- {id: extra, enabled: true, inject: [toy.fault]}

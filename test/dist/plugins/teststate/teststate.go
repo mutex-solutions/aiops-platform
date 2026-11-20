@@ -64,14 +64,21 @@ type Verdict struct {
 
 // Op is the last operation of reload.
 type Op struct {
-	ID         uint64    `json:"id"`
-	Status     string    `json:"status"` // queued, running, passed, failed, rejected or abandoned
-	Stage      string    `json:"stage"`
-	Error      string    `json:"error"`
-	Generation uint64    `json:"generation"` // the number reload gave the applied generation; 0 until one is applied
-	Digest     string    `json:"digest"`
-	Denied     []string  `json:"denied"` // rows the gate detached
-	Verdict    []Verdict `json:"verdict"`
+	ID         uint64 `json:"id"`
+	Status     string `json:"status"` // queued, running, passed, failed, rejected or abandoned
+	Stage      string `json:"stage"`
+	Error      string `json:"error"`
+	Generation uint64 `json:"generation"` // the number reload gave the applied generation; 0 until one is applied
+	Digest     string `json:"digest"`
+	// Previous is the composition the tree ran before the operation (Result.Previous),
+	// which a later step restores: its digest and its number of rows.
+	PreviousDigest string `json:"previousDigest"`
+	PreviousRows   int    `json:"previousRows"`
+	// Applied lists what the loader did, by outcome (created, restarted, committed...),
+	// with the ids of the rows: Result.Applied.
+	Applied map[string][]string `json:"applied,omitempty"`
+	Denied  []string            `json:"denied"` // rows the gate detached
+	Verdict []Verdict           `json:"verdict"`
 }
 
 // State is the file.
@@ -191,9 +198,15 @@ func (w *writer) snapshot() State {
 
 func opOf(r reload.Result) *Op {
 	op := &Op{ID: uint64(r.ID), Status: string(r.Status), Stage: string(r.Stage), Generation: r.Generation,
-		Digest: fmt.Sprintf("%x", r.Digest[:])}
+		Digest: fmt.Sprintf("%x", r.Digest[:]), PreviousDigest: fmt.Sprintf("%x", r.Previous.Digest[:]), PreviousRows: len(r.Previous.Rows)}
 	if r.Err != nil {
 		op.Error = r.Err.Error()
+	}
+	for _, a := range r.Applied {
+		if op.Applied == nil {
+			op.Applied = map[string][]string{}
+		}
+		op.Applied[string(a.Outcome)] = append(op.Applied[string(a.Outcome)], a.ID)
 	}
 	for _, d := range r.Admission.Denied {
 		op.Denied = append(op.Denied, d.Row)
