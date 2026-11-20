@@ -5,6 +5,8 @@ package fake_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
@@ -160,6 +162,67 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	}
 	if ex := l.Exits(); len(ex) != 1 || ex[0].Reason != launch.ExitGaveUp || ex[0].Detail != "sql" {
 		t.Fatalf("exits = %v", ex)
+	}
+}
+
+// Commit takes a composition that the launcher composed, the committed one or one it
+// committed before, and refuses any other with nothing changed, as boot's does.
+func TestCommitRefusesACompositionItDidNotCompose(t *testing.T) {
+	l, _ := fake.New()
+	boot, next := launch.Composition{Digest: launch.Digest{1}}, launch.Composition{Digest: launch.Digest{2}}
+	l.Current = boot
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return next, nil }
+	if err := l.Commit(launch.Composition{Digest: launch.Digest{9}}); err == nil || !strings.Contains(err.Error(), "not composed by this launcher") {
+		t.Fatalf("Commit of a stranger = %v", err)
+	}
+	if err := l.Commit(next); err == nil || l.Committed().Digest != boot.Digest {
+		t.Fatalf("Commit before Compose returned it = %v, committed %x", err, l.Committed().Digest[0])
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []launch.Composition{next, boot, boot} { // forward, rollback, and the committed one again
+		if err := l.Commit(c); err != nil || l.Committed().Digest != c.Digest {
+			t.Fatalf("Commit(%x) = %v, committed %x", c.Digest[0], err, l.Committed().Digest[0])
+		}
+	}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return launch.Composition{Digest: launch.Digest{3}}, errors.New("no") }
+	if _, err := l.Compose(t.Context()); err == nil || l.Commit(launch.Composition{Digest: launch.Digest{3}}) == nil {
+		t.Fatal("a composition whose Compose failed was committed")
+	}
+}
+
+// Required is the distribution's set (Needed) plus the rows of the committed
+// composition marked required, for the process role (ADR-059 decision 15): it
+// follows Commit.
+func TestRequiredFollowsTheCommittedComposition(t *testing.T) {
+	l, _ := fake.New()
+	l.RoleName = "api"
+	l.Modules = []launch.CatalogEntry{{ID: "aiops/sqlp", Provides: []string{"sql"}}, {ID: "aiops/q", Provides: []string{"queue"}}}
+	l.Needed = launch.RequiredSet{Rows: []string{"away", "dist"}, Keys: []string{"none", "queue", "sql"}}
+	must, other, plain := launch.Row{ID: "must", Required: true}, launch.Row{ID: "other", Required: true, Roles: []string{"worker"}}, launch.Row{ID: "plain"}
+	away := launch.Row{ID: "away", Roles: []string{"worker"}}
+	sql := launch.Row{ID: "db", Plugin: "aiops/sqlp", Roles: []string{"worker"}}
+	q := launch.Row{ID: "q", Plugin: "aiops/q", Roles: []string{"worker", "api"}}
+	cand := launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{must, other, plain, away, sql, q}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"away", "dist"}) || !slices.Equal(got.Keys, []string{"none", "queue", "sql"}) {
+		t.Fatalf("Required before the commit = %+v", got)
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Commit(cand); err != nil {
+		t.Fatal(err)
+	}
+	// "other" and "away" run in another role; so does every provider of sql. A key
+	// with no provider row stays.
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"dist", "must"}) || !slices.Equal(got.Keys, []string{"none", "queue"}) {
+		t.Errorf("Required after the commit = %+v", got)
+	}
+	l.RoleName = launch.RoleAll
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"away", "dist", "must", "other"}) || !slices.Equal(got.Keys, []string{"none", "queue", "sql"}) {
+		t.Errorf("Required for every role = %+v", got)
 	}
 }
 
