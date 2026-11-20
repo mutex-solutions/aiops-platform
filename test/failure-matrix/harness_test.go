@@ -147,10 +147,17 @@ type plan struct {
 	// its next retry; the fault and every row of the expect must then be ACTIVE again
 	// ("they return with the provider").
 	heal bool
+	// label: the label that the kernel's record of the leak must name ("Logged with its
+	// label"): the effect or tracked goroutine of the fault that is still open, which
+	// boot's log handler prints as label=<label>.
+	label string
 	// then is a second run of the cell with an expect of its own, for a part of the
 	// outcome that the first run cannot show in the same process.
 	then *variant
 }
+
+// leakLabel is the label of the open work of each leak fault (test/dist/plugins/fault).
+var leakLabel = map[string]string{"leaky-goroutine": "leaky", "slow-dispose": "slow-dispose"}
 
 type variant struct {
 	plan
@@ -223,10 +230,12 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{live: "panic-apply-untracked.optional.yml", code: 2},
 			plan{base: []string{"panic-apply-untracked.trigger.optional.yml"}, trigger: true, code: 2}), true
 	case "leak":
-		return byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}, code: boot.ExitLeak},
+		p := byColumn(col, plan{base: []string{fault + ".fail-apply.optional.yml"}, code: boot.ExitLeak},
 			plan{base: []string{fault + ".fail-apply.required.yml"}, code: boot.ExitRequired},
 			plan{live: fault + ".fail-apply.optional.yml", code: boot.ExitLeak},
-			plan{base: []string{opt + ".yml"}, live: "fault-disabled.yml", code: boot.ExitLeak}), true
+			plan{base: []string{opt + ".yml"}, live: "fault-disabled.yml", code: boot.ExitLeak})
+		p.label = leakLabel[fault]
+		return p, true
 	case "giveup":
 		return byColumn(col, plan{base: []string{"fail-apply.optional.yml"}},
 			plan{base: []string{"fail-apply.required.yml"}, code: boot.ExitRequired},
@@ -315,6 +324,9 @@ func checkExited(e boot.Expect, p plan, s harness.Snapshot) []string {
 	}
 	if !strings.Contains(s.Output+"\n"+reloadText(s), e.Diagnostic) {
 		bad = append(bad, fmt.Sprintf("the diagnostic %q is not in the output", e.Diagnostic))
+	}
+	if p.label != "" && !strings.Contains(s.Output, "label="+p.label) {
+		bad = append(bad, fmt.Sprintf("no record of the leak names its label %q", p.label))
 	}
 	seen := map[string]string{}
 	for _, m := range stateLine.FindAllStringSubmatch(s.Output, -1) {
