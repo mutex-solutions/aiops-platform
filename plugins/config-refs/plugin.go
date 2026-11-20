@@ -31,7 +31,8 @@ type Config struct {
 	// MaxFileBytes is the largest file a ${file:} reference reads. It must be positive.
 	MaxFileBytes int64
 	// FileRootFlag is the name of the flag that holds the one directory ${file:} may
-	// read from. Empty means no file reference can resolve.
+	// read from, an absolute path; the server's flag for it is refs-dir. Empty means no
+	// file reference can resolve.
 	FileRootFlag string
 }
 

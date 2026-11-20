@@ -33,9 +33,8 @@ var Applied = composition.NewApplied(Key)
 // restart-policy holds its give-ups, and the exit an infrastructure provider's
 // give-up asks for, until the final event. Both dispatches carry the context of the
 // reload goroutine, which ends when the reload fiber unloads: an operation whose
-// final event never came is over once that context is done. The docs name
-// composition/applied only (07-c4-plugin-sdk.md:461); this event is the
-// definition's own (open point).
+// final event never came is over once that context is done. The hooks table lists it
+// as an S1 addition (07-c4-plugin-sdk.md:462).
 var Operation = kernel.NewEvent[Result]("reload/operation", kernel.OwnedBy(Key))
 
 // The refusals of Submit and Await.

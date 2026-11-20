@@ -10,7 +10,8 @@ publisher: {id: aiops}
 stability: experimental
 scope: [process]
 runtimes: [inproc]
-provides: []
+provides:
+  - {key: configRefsReady, major: 0}
 needs:
   - {key: cmdline, major: 0}
 hooks:
