@@ -8,6 +8,7 @@ package fake
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -43,15 +44,23 @@ func (f *Clock) Now() time.Time {
 	return f.now
 }
 
-// After starts a timer, as an effect of c's fiber.
+// After starts a timer and records its stop as an effect scope of c's fiber, which
+// is withdrawn when the timer fires or is stopped, as the clock row does.
 func (f *Clock) After(c *kernel.Context, d time.Duration) (clock.Timer, error) {
-	var t *timer
-	err := c.Effect("clock timer", func() (kernel.Disposer, error) {
-		t = f.start(d)
-		return func(context.Context) error { t.Stop(); return nil }, nil
+	t := f.start(d)
+	h, err := c.RequestEffectScope("clock timer", func(s *kernel.EffectScope) error {
+		return s.Defer("clock timer", func(context.Context) error { t.stop(); return nil })
 	})
 	if err != nil {
+		t.stop()
 		return nil, err
+	}
+	f.mu.Lock()
+	t.h = h
+	fired := !slices.Contains(f.pending, t)
+	f.mu.Unlock()
+	if fired {
+		_ = h.RequestWithdraw()
 	}
 	return t, nil
 }
@@ -71,8 +80,16 @@ func (f *Clock) start(d time.Duration) *timer {
 
 // Advance moves the clock forward by d and fires, in order of time and then of
 // start, every timer that falls due on the way. Each timer fires with the clock
-// standing at its own time. A d of zero or less does nothing.
+// standing at its own time. A d of zero or less does nothing. The effects of the
+// timers that fired are withdrawn before it returns.
 func (f *Clock) Advance(d time.Duration) {
+	for _, h := range f.advance(d) {
+		_ = h.RequestWithdraw()
+	}
+}
+
+// advance is Advance under the lock: it returns the effects of the timers that fired.
+func (f *Clock) advance(d time.Duration) (fired []*kernel.EffectHandle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	target := f.now.Add(d)
@@ -93,10 +110,14 @@ func (f *Clock) Advance(d time.Duration) {
 		f.pending = append(f.pending[:next], f.pending[next+1:]...)
 		f.now = t.at
 		t.ch <- t.at
+		if t.h != nil { // nil while After has not returned: it withdraws then
+			fired = append(fired, t.h)
+		}
 	}
 	if target.After(f.now) {
 		f.now = target
 	}
+	return fired
 }
 
 // Pending is the number of timers that have not fired and not been stopped.
@@ -111,11 +132,21 @@ type timer struct {
 	at  time.Time
 	seq int
 	ch  chan time.Time
+	h   *kernel.EffectHandle // set by After under f.mu
 }
 
 func (t *timer) C() <-chan time.Time { return t.ch }
 
 func (t *timer) Stop() bool {
+	if !t.stop() {
+		return false
+	}
+	_ = t.h.RequestWithdraw()
+	return true
+}
+
+// stop takes t off the pending timers and reports whether it was there.
+func (t *timer) stop() bool {
 	t.f.mu.Lock()
 	defer t.f.mu.Unlock()
 	for i, p := range t.f.pending {

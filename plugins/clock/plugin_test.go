@@ -4,6 +4,7 @@ package clock_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -75,6 +76,11 @@ func TestTimersStopWithTheirFiber(t *testing.T) {
 	if len(labels) != 1 || labels[0] != "clock timer" {
 		t.Errorf("effects of the caller = %v, want the one timer", labels)
 	}
+	// The stop is recorded by the scope's setup on the fiber's lane; a fiber that
+	// quiesced before it ran would leave its timer to run out (see After).
+	if err := root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := f.Dispose(t.Context()); err != nil {
 		t.Fatal(err)
@@ -90,5 +96,45 @@ func TestTimersStopWithTheirFiber(t *testing.T) {
 	}
 	if _, err := gone.clk.After(gone.c, time.Hour); !errors.Is(err, kernel.ErrInactiveEffect) {
 		t.Errorf("After on a disposed fiber = %v, want ErrInactiveEffect", err)
+	}
+}
+
+// A timer that fires or is stopped leaves its fiber's effect ledger, so a fiber that
+// starts one timer after another holds only those still pending.
+func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {
+	root := kerneltest.New(t)
+	var h holder
+	kerneltest.Mount(root, clock.Plugin)
+	f := root.Plugin(h.plugin("aiops/consumer"), nil)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for range 100 {
+		tm, err := h.clk.After(h.c, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-tm.C():
+		case <-t.Context().Done():
+			t.Fatal("a zero timer did not fire")
+		}
+	}
+	stopped, err := h.clk.After(h.c, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stopped.Stop() {
+		t.Fatal("Stop reported a pending timer as fired")
+	}
+	if _, err := h.clk.After(h.c, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	// The kernel withdraws an effect on the fiber's lane; Settle joins that work.
+	if err := root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if labels, _ := f.Effects(t.Context()); !slices.Equal(labels, []string{"clock timer"}) {
+		t.Errorf("effects = %d %v, want the one pending timer", len(labels), labels[:min(len(labels), 3)])
 	}
 }

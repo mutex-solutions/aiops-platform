@@ -29,21 +29,51 @@ type system struct{}
 
 func (system) Now() time.Time { return time.Now() }
 
-// After starts the timer inside Effect, so that a fiber that is unloading is refused
-// with kernel.ErrInactiveEffect and an unloaded one has its timer stopped.
+// After starts the timer and records its stop as an effect scope of c's fiber, so
+// that a fiber that is unloading is refused with kernel.ErrInactiveEffect and an
+// unloaded one has its timer stopped. The scope is withdrawn when the timer fires or
+// is stopped, so the ledger holds the pending timers only. The kernel runs the
+// scope's setup on the fiber's lane after After returns; a fiber that quiesces before
+// that never records the stop, and its timer runs out unread.
 func (system) After(c *kernel.Context, d time.Duration) (def.Timer, error) {
-	var t *time.Timer
-	err := c.Effect("clock timer", func() (kernel.Disposer, error) {
-		t = time.NewTimer(d)
-		return func(context.Context) error { t.Stop(); return nil }, nil
+	t := &timer{ch: make(chan time.Time, 1), owned: make(chan struct{})}
+	t.t = time.AfterFunc(d, t.fire)
+	h, err := c.RequestEffectScope("clock timer", func(s *kernel.EffectScope) error {
+		return s.Defer("clock timer", func(context.Context) error { t.t.Stop(); return nil })
 	})
+	t.h = h
+	close(t.owned)
 	if err != nil {
+		t.t.Stop()
 		return nil, err
 	}
-	return timer{t}, nil
+	return t, nil
 }
 
-type timer struct{ t *time.Timer }
+type timer struct {
+	ch    chan time.Time
+	t     *time.Timer
+	h     *kernel.EffectHandle // nil when After was refused
+	owned chan struct{}        // closed once h is set
+}
 
-func (t timer) C() <-chan time.Time { return t.t.C }
-func (t timer) Stop() bool          { return t.t.Stop() }
+// fire asks for the withdrawal before it delivers the time, so that whoever receives
+// it finds the timer already on its way out of the ledger.
+func (t *timer) fire() {
+	now := time.Now()
+	<-t.owned
+	if t.h != nil {
+		_ = t.h.RequestWithdraw()
+	}
+	t.ch <- now
+}
+
+func (t *timer) C() <-chan time.Time { return t.ch }
+
+func (t *timer) Stop() bool {
+	if !t.t.Stop() {
+		return false
+	}
+	_ = t.h.RequestWithdraw()
+	return true
+}
