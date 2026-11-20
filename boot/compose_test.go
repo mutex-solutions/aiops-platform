@@ -421,6 +421,51 @@ func TestIncludeDepthAndRowLimits(t *testing.T) {
 	}
 }
 
+// countFS counts the opens of each path.
+type countFS struct {
+	fstest.MapFS
+	opens map[string]int
+}
+
+func (c countFS) Open(name string) (fs.File, error) {
+	c.opens[name]++
+	return c.MapFS.Open(name)
+}
+
+// Include rows that name one file again and again mount it again and again: three
+// per file, four levels deep, mount the deepest file 3^4 times. Each mount counts
+// against MaxComposeBytes, so near-full files stop the composition after about
+// MaxComposeBytes/MaxFileBytes mounts instead of parsing all 121 of them.
+func TestIncludeFanOutBound(t *testing.T) {
+	pad := "#" + strings.Repeat("x", MaxFileBytes-1024) + "\n"
+	fan := func(next string) string {
+		var b strings.Builder
+		b.WriteString(pad + "- insert:\n")
+		for i := range 3 {
+			fmt.Fprintf(&b, "  - {id: i%d, plugin: core:include, roles: [api], config: {path: %s}}\n", i, next)
+		}
+		return b.String()
+	}
+	bund := countFS{MapFS: fstest.MapFS{"bundles/b/bundle.yaml": {Data: []byte(fan("f1.yaml"))}}, opens: map[string]int{}}
+	for i := 1; i < MaxIncludeDepth; i++ {
+		bund.MapFS[fmt.Sprintf("bundles/b/f%d.yaml", i)] = &fstest.MapFile{Data: []byte(fan(fmt.Sprintf("f%d.yaml", i+1)))}
+	}
+	bund.MapFS[fmt.Sprintf("bundles/b/f%d.yaml", MaxIncludeDepth)] = &fstest.MapFile{Data: []byte(pad + "- insert: [{id: leaf, plugin: o/a, roles: [api]}]\n")}
+	home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}}
+	_, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: bund}, Options{Server: true})
+	var ce *Error
+	if !errors.As(err, &ce) || ce.Rule != RuleLimit || !strings.Contains(ce.Msg, "counted at each include") {
+		t.Fatalf("want the composition bound, got %v", err)
+	}
+	opens := 0
+	for _, n := range bund.opens {
+		opens += n
+	}
+	if limit := MaxComposeBytes/(MaxFileBytes-1024) + 1; opens > limit {
+		t.Errorf("%d files opened, want at most %d", opens, limit)
+	}
+}
+
 func TestGroupNestingLimit(t *testing.T) {
 	nest := func(n int) string {
 		var b strings.Builder

@@ -24,6 +24,10 @@ const (
 	MaxRows = 20000
 	// MaxIncludeDepth is the deepest nesting of core:include rows.
 	MaxIncludeDepth = 4
+	// MaxComposeBytes bounds the bytes one composition parses: its layer files,
+	// and an included file at each of its mounts (a shipped profile parses a few
+	// tens of KiB).
+	MaxComposeBytes = 16 << 20
 )
 
 // How YAML scalars are typed. A plain scalar is typed by the YAML core rules

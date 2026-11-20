@@ -62,9 +62,10 @@ type Options struct {
 //     "<group>:<id>"; a core:include row mounts the rows of a file, resolved
 //     against the directory of the file that holds the include row.
 //
-// A missing required file, an empty file or any rule violation is an *Error
-// and composition stops. The rule "the last enabled provider of a bound key
-// cannot be disabled" needs the distribution manifest and is not checked here.
+// A missing required file, an empty file, a composition that parses more than
+// MaxComposeBytes or any rule violation is an *Error and composition stops. The
+// rule "the last enabled provider of a bound key cannot be disabled" needs the
+// distribution manifest and is not checked here.
 func Compose(src Sources, opt Options) (Composition, []Warning, error) {
 	c := &composer{opt: opt, index: map[string]int{}}
 	if !okIdent(src.Profile) {
@@ -141,6 +142,7 @@ type composer struct {
 	rows  []*crow
 	index map[string]int
 	warns []Warning
+	read  int // bytes of the layer files and of each include mount, against MaxComposeBytes
 }
 
 // The ten fields in canonical order, as indexes of crow.origin.
@@ -173,7 +175,7 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 		}
 		return fileError(f.Path, err)
 	}
-	items, err := c.parseItems(f.Path, data)
+	items, err := c.parseItems(f, data)
 	if err != nil {
 		return err
 	}
@@ -193,12 +195,19 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 	return nil
 }
 
-func (c *composer) parseItems(file string, data []byte) ([]Item, error) {
-	root, err := parseDocument(file, data)
+// parseItems parses a layer file or a mount of an included one. Each counts
+// against MaxComposeBytes, so include rows that name the same file again and
+// again cannot make a composition cost more than its bound.
+func (c *composer) parseItems(f File, data []byte) ([]Item, error) {
+	if c.read += len(data); c.read > MaxComposeBytes {
+		return nil, &Error{File: f.Path, Rule: RuleLimit,
+			Msg: "the layer files and included files of the composition, counted at each include, hold more than " + strconv.Itoa(MaxComposeBytes) + " bytes"}
+	}
+	root, err := parseDocument(f.Path, data)
 	if err != nil {
 		return nil, err
 	}
-	p := &parser{file: file, server: c.opt.Server}
+	p := &parser{file: f.Path, server: c.opt.Server}
 	return p.layerItems(root)
 }
 
@@ -258,7 +267,7 @@ func (c *composer) include(pr ParsedRow, id string, l Layer, f File, depth int) 
 		return &Error{File: f.Path, Line: pr.Line, Row: id, Rule: RuleInclude,
 			Msg: fmt.Sprintf("cannot read included file %s: %v", inc.Path, err), Err: err}
 	}
-	items, err := c.parseItems(inc.Path, data)
+	items, err := c.parseItems(inc, data)
 	if err != nil {
 		return err
 	}
