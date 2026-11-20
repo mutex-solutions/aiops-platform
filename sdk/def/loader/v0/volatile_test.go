@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 )
 
@@ -58,5 +59,25 @@ func TestVolatileOnly(t *testing.T) {
 	}
 	if _, only := loader.VolatileOnly(m{"window": 1}, m{"window": 2}, nil); only {
 		t.Error("with no volatile path nothing is volatile")
+	}
+}
+
+// A change whose old or new value is or holds a reference is not volatile: the tree
+// holds it unresolved, and loader/volatile-update would announce the reference.
+func TestVolatileOnlyRefusesAReference(t *testing.T) {
+	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
+	vol := []string{"note", "rules"}
+	for i, tc := range []struct{ old, new m }{
+		{m{"note": "plain"}, m{"note": ref}},                                        // becomes a reference
+		{m{"note": ref}, m{"note": "plain"}},                                        // was one
+		{m{"rules": l{m{"url": "a"}}}, m{"rules": l{m{"url": "a"}, m{"url": ref}}}}, // holds one beneath
+		{m{"rules": l{}}, m{"rules": l{}, "note": m{"k": l{ref}}}},                  // a new key holds one
+	} {
+		if paths, only := loader.VolatileOnly(tc.old, tc.new, vol); only || len(paths) == 0 {
+			t.Errorf("case %d: VolatileOnly = %q, %v; want not volatile", i, paths, only)
+		}
+	}
+	if _, only := loader.VolatileOnly(m{"note": ref}, m{"note": ref}, vol); !only {
+		t.Error("an unchanged reference is no change")
 	}
 }

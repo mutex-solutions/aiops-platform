@@ -261,7 +261,7 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 // :1375). A change of the plugin, inject, isolate or intercept replaces the fiber,
 // because a fiber's needs and context are fixed when it is mounted; a change of
 // config restarts it with the new config, unless only volatile paths changed
-// (volatile.go) and the fiber is ACTIVE, as in the oracle: a FAILED or PENDING
+// (def.VolatileOnly) and the fiber is ACTIVE, as in the oracle: a FAILED or PENDING
 // fiber has no activation to take values in place. A volatile commit is the tree's
 // new config, the same config retained by the kernel with kernel.CommitOp in the
 // plan's batch, and a loader/volatile-update event once the batch is committed. The
@@ -304,7 +304,7 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	if ce, ok := t.cat.Lookup(e.Plugin); ok {
 		volatile = ce.Volatile
 	}
-	paths, only := volatileOnly(old.Config, e.Config, volatile)
+	paths, only := def.VolatileOnly(old.Config, e.Config, volatile)
 	switch {
 	case len(paths) == 0:
 		return def.Unchanged
