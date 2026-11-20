@@ -1147,7 +1147,8 @@ rest of the batch goes on. An error of `internal/update` refuses the batch whole
 and retains nothing, which departs from `Fiber.Update` (it retains before it
 runs that waterfall) because a batch is all or nothing. A batch that the core
 refuses after this, for example one that disposes the fiber earlier, retains
-nothing. A fiber with no target skips resolution and `internal/update`, and a
+nothing; the core refuses every operation but a dispose after a dispose of the
+same fiber, so a vetoed update and a `CommitOp` there are refused as an update is. A fiber with no target skips resolution and `internal/update`, and a
 `When` fiber takes no config.
 
 **G3, a dependency from an untyped key.**

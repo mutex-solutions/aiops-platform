@@ -1448,8 +1448,9 @@ const (
 //
 // A batch commits one validated desired-state prefix before admitting resulting
 // lifecycle and check work. Two updates increment the revision twice but cannot
-// start an intermediate activation. Repeated dispose is allowed; an update after
-// dispose is rejected before the entire prefix commits. No callback runs.
+// start an intermediate activation. Repeated dispose is allowed; any other
+// operation after a dispose of its fiber (an update, a vetoed one or a commit, both
+// batchKeep) is rejected before the entire prefix commits. No callback runs.
 type batchOp struct {
 	Kind  batchKind
 	Fiber uint64
@@ -1490,7 +1491,7 @@ func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(
 				len(op.Spec.Needs) != 0 || len(op.Spec.Provides) != 0 {
 				return nil, fmt.Errorf("batch operation %d carries an unused Mount specification", i)
 			}
-			if disposed[op.Fiber] && op.Kind == batchUpdate {
+			if disposed[op.Fiber] && op.Kind != batchDispose {
 				return nil, fmt.Errorf("batch operation %d updates a disposed target", i)
 			}
 			if op.Kind == batchDispose {

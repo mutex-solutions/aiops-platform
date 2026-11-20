@@ -545,3 +545,32 @@ func TestRefusedBatchConfigIsNeverAppliedByAConcurrentRestart(t *testing.T) {
 		t.Fatalf("retained config %v, want init", raw)
 	}
 }
+
+// An update or a commit after a dispose of the same fiber refuses the batch whether
+// or not a listener of internal/update vetoes the restart.
+func TestAnUpdateOrCommitAfterADisposeRefusesTheBatch(t *testing.T) {
+	r := newKernel(t)
+	ctx := frontCtx(t)
+	var x cfgFixture
+	o := order{fail: map[string]string{"update:late": "veto"}}
+	a := r.Plugin(x.plugin("s1/a"), "init")
+	want(t, a, Active)
+	o.listen(r)
+	for _, c := range []struct {
+		name string
+		op   BatchOp
+	}{{"update", UpdateOpWith(a, "go")}, {"vetoed update", UpdateOpWith(a, "late")}, {"commit", CommitOp(a, "late")}} {
+		if _, err := r.Batch(ctx, DisposeOp(a), c.op); err == nil {
+			t.Fatalf("%s after a dispose of the same fiber was admitted", c.name)
+		}
+		if err := r.Settle(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if s, err := a.State(ctx); err != nil || s != Active {
+			t.Fatalf("%s: a refused batch left the fiber %s (%v)", c.name, s, err)
+		}
+		if raw := a.cell.load(); raw != "init" {
+			t.Fatalf("%s: a refused batch retained %v", c.name, raw)
+		}
+	}
+}
