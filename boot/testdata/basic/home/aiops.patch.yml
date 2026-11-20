@@ -1,0 +1,4 @@
+# layer 3
+- id: notifier
+  config: {url: "${env:AIOPS_REF_HOOK}"}
+- {id: loader, required: true}

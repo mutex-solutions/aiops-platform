@@ -1,0 +1,52 @@
+digest sha256:8a6bd42ff56ca33d5653d4e66e9fa92b77d1f43875a562adc3b89697aab04740
+warning profiles/demo/aiops.patch.yml:5: unknown-id: patch targets unknown id "ghost" and is skipped
+
+row loader plugin=aiops/loader parent="" enabled=true required=true group=false roles=[api worker] inject=[] isolate=[]
+  config {big: float(1000), mode: "0755", name: "yes", nothing: null, on: true, ratio: float(0.5), when: "2001-12-14", workers: int(4)}
+  inserted L1 bundle:core bundles/core/bundle.yaml:3
+  required set by L3 site aiops.patch.yml:4
+
+row metrics-query plugin=aiops/metrics-query-http parent="" enabled=true required=false group=false roles=[api] inject=[metrics] isolate=[logsQuery]
+  config {endpoint: "https://prometheus.example.internal"}
+  intercept {logsQuery: {mode: "strict"}}
+  inserted L1 bundle:core bundles/core/bundle.yaml:16
+  config set by L2 profile:demo profiles/demo/aiops.patch.yml:2
+  inject set by L1 bundle:extra bundles/extra/bundle.yaml:13
+  isolate set by L1 bundle:extra bundles/extra/bundle.yaml:13
+
+row pillar-incident plugin=core:group parent="" enabled=true required=false group=true roles=[api worker] inject=[tools] isolate=[]
+  config []
+  inserted L1 bundle:core bundles/core/bundle.yaml:24
+
+row pillar-incident:remediation plugin=aiops/remediation parent="pillar-incident" enabled=true required=false group=false roles=[worker] inject=[] isolate=[]
+  config {actions: ["scale", "cordon"]}
+  inserted L1 bundle:core bundles/core/bundle.yaml:30
+  config set by L4 patch:patch2.yml patch2.yml:2
+
+row pillar-incident:inner plugin=core:group parent="pillar-incident" enabled=true required=false group=false roles=[worker] inject=[] isolate=[]
+  config []
+  inserted L1 bundle:core bundles/core/bundle.yaml:34
+
+row pillar-incident:inner:leaf plugin=aiops/leaf parent="pillar-incident:inner" enabled=true required=false group=false roles=[worker] inject=[] isolate=[]
+  config {}
+  inserted L1 bundle:core bundles/core/bundle.yaml:38
+
+row notifier plugin=aiops/notifier-webhook parent="" enabled=true required=false group=false roles=[worker] inject=[] isolate=[webhook]
+  config {url: ${env:AIOPS_REF_HOOK}}
+  ref config.url = env:AIOPS_REF_HOOK
+  inserted L1 bundle:extra bundles/extra/bundle.yaml:3
+  config set by L3 site aiops.patch.yml:2
+  enabled set by L2 profile:demo profiles/demo/aiops.patch.yml:4
+
+row tools-part plugin=core:include parent="" enabled=true required=false group=false roles=[api] inject=[] isolate=[]
+  config {path: "parts/tools.yaml"}
+  inserted L1 bundle:extra bundles/extra/bundle.yaml:9
+
+row tools-part:tool-a plugin=aiops/tool-a parent="tools-part" enabled=true required=false group=false roles=[api] inject=[] isolate=[]
+  config {limit: int(5)}
+  inserted L1 bundle:extra bundles/extra/parts/tools.yaml:2
+
+row scratch plugin=aiops/scratch parent="" enabled=false required=false group=false roles=[worker] inject=[] isolate=[]
+  config {}
+  inserted L4 patch:patch1.yml patch1.yml:5
+  enabled set by L4 patch:patch2.yml patch2.yml:4

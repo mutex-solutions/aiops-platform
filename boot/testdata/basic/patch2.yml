@@ -1,0 +1,4 @@
+# layer 4, second --patch: wins over the first
+- id: pillar-incident:remediation
+  config: {actions: [scale, cordon]}
+- {id: scratch, enabled: false}

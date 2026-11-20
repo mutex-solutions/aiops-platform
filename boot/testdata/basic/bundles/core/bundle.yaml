@@ -1,0 +1,40 @@
+# layer 1, first bundle of the profile
+- insert:
+    - id: loader
+      plugin: aiops/loader
+      roles: [worker, api]
+      required: true
+      config:
+        workers: 4
+        ratio: 0.5
+        big: 1e3
+        name: "yes"
+        mode: "0755"
+        when: 2001-12-14
+        nothing: ~
+        on: true
+    - id: metrics-query
+      plugin: aiops/metrics-query-http
+      roles: [api]
+      intercept: {logsQuery: {mode: strict}}
+      config:
+        endpoint: "${flag:metrics-url}"
+        auth: {token: "${secret:service-token}"}
+        paths: ["${file:/etc/ca.pem}", "${env:AIOPS_REF_CA}"]
+    - id: pillar-incident
+      plugin: core:group
+      roles: [api, worker]
+      group: true
+      inject: [tools]
+      config:
+        - id: remediation
+          plugin: aiops/remediation
+          roles: [worker]
+          config: {actions: [scale, restart]}
+        - id: inner
+          plugin: core:group
+          roles: [worker]
+          config:
+            - id: leaf
+              plugin: aiops/leaf
+              roles: [worker]

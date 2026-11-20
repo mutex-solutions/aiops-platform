@@ -1,0 +1,15 @@
+# layer 1, second bundle: inserts, one include, and a patch of a row of the first
+- insert:
+    - id: notifier
+      plugin: aiops/notifier-webhook
+      roles: [worker]
+      enabled: false
+      isolate: [webhook]
+      config: {url: "https://hooks.example"}
+    - id: tools-part
+      plugin: core:include
+      roles: [api]
+      config: {path: parts/tools.yaml}
+- id: metrics-query
+  inject: [metrics]
+  isolate: [logsQuery]

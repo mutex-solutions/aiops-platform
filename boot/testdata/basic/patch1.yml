@@ -1,0 +1,7 @@
+# layer 4, first --patch
+- id: pillar-incident:remediation
+  config: {actions: [scale]}
+- insert:
+    - id: scratch
+      plugin: aiops/scratch
+      roles: [worker]
