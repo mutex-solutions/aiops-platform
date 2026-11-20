@@ -1,0 +1,741 @@
+# The failure matrix: one cell for each cell of the table in
+# docs/architecture/08-profiles-roadmap-adrs.md section 1.6, in table order.
+# Schema and field meanings: boot/matrix.go. The parity test in this directory
+# keeps failure, column and outcome equal to the table; every other field is
+# the contract of the harness that runs the cell.
+# since: the roadmap step from which the cell must pass (ADR-059 decision 3).
+
+- failure: "Profile, bundle or `--patch` file missing; a layer malformed or empty"
+  column: "Optional row at boot"
+  outcome: "Stop"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "file-missing"}
+  since: S1
+
+- failure: "Profile, bundle or `--patch` file missing; a layer malformed or empty"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "file-missing"}
+  since: S1
+
+- failure: "Profile, bundle or `--patch` file missing; a layer malformed or empty"
+  column: "Live recomposition"
+  outcome: "Rejected whole"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rejected"}
+  since: S1
+
+- failure: "Profile, bundle or `--patch` file missing; a layer malformed or empty"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "Profile, bundle or `--patch` file missing; a layer malformed or empty"
+  column: "Tenant tree"
+  outcome: "Overlay refused at the API"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "overlay refused"}
+  since: S4b
+
+- failure: "Plugin id not in the module table and not remote"
+  column: "Optional row at boot"
+  outcome: "Warn; inactive"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "not in the module table"}
+  since: S1
+
+- failure: "Plugin id not in the module table and not remote"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "not in the module table"}
+  since: S1
+
+- failure: "Plugin id not in the module table and not remote"
+  column: "Live recomposition"
+  outcome: "Rejected; an older image reports `module-missing`"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rejected"}
+  since: S1
+
+- failure: "Plugin id not in the module table and not remote"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "Plugin id not in the module table and not remote"
+  column: "Tenant tree"
+  outcome: "Overlay refused"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "overlay refused"}
+  since: S4b
+
+- failure: "Gate or signature denies"
+  column: "Optional row at boot"
+  outcome: "Detached as disabled; listed"
+  fault: [rogue-provider]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "detached"}
+  since: S1
+
+- failure: "Gate or signature denies"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [rogue-provider]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "denied"}
+  since: S1
+
+- failure: "Gate or signature denies"
+  column: "Live recomposition"
+  outcome: "Rejected"
+  fault: [rogue-provider]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rejected"}
+  since: S1
+
+- failure: "Gate or signature denies"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "Gate or signature denies"
+  column: "Tenant tree"
+  outcome: "Overlay refused"
+  fault: [rogue-provider]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "overlay refused"}
+  since: S4b
+
+- failure: "Config fails schema or `Validate`; a reference does not resolve"
+  column: "Optional row at boot"
+  outcome: "Warn; FAILED"
+  fault: [bad-config]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "invalid config"}
+  since: S1
+
+- failure: "Config fails schema or `Validate`; a reference does not resolve"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [bad-config]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "invalid config"}
+  since: S1
+
+- failure: "Config fails schema or `Validate`; a reference does not resolve"
+  column: "Live recomposition"
+  outcome: "Rejected; the row keeps its instance"
+  fault: [bad-config]
+  expect: {exit: running, ready: true, states: {fault: ACTIVE}, diagnostic: "rejected"}
+  since: S1
+
+- failure: "Config fails schema or `Validate`; a reference does not resolve"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "Config fails schema or `Validate`; a reference does not resolve"
+  column: "Tenant tree"
+  outcome: "Same, that tenant"
+  fault: [bad-config]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "invalid config"}
+  since: S4b
+
+- failure: "Static graph error: cycle, two providers in a realm, a binding broken, `isolate` on a bound key"
+  column: "Optional row at boot"
+  outcome: "Stop"
+  fault: [rogue-provider]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "static graph"}
+  since: S1
+
+- failure: "Static graph error: cycle, two providers in a realm, a binding broken, `isolate` on a bound key"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [rogue-provider]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "static graph"}
+  since: S1
+
+- failure: "Static graph error: cycle, two providers in a realm, a binding broken, `isolate` on a bound key"
+  column: "Live recomposition"
+  outcome: "Rejected"
+  fault: [rogue-provider]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rejected"}
+  since: S1
+
+- failure: "Static graph error: cycle, two providers in a realm, a binding broken, `isolate` on a bound key"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "Static graph error: cycle, two providers in a realm, a binding broken, `isolate` on a bound key"
+  column: "Tenant tree"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "`Apply` errors, panics or passes the load deadline"
+  column: "Optional row at boot"
+  outcome: "FAILED after partial effects unwind; `restart-policy` retries"
+  fault: [fail-apply, panic-apply, slow-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "restart-policy"}
+  since: S1
+
+- failure: "`Apply` errors, panics or passes the load deadline"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [fail-apply, panic-apply, slow-apply]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "required"}
+  since: S1
+
+- failure: "`Apply` errors, panics or passes the load deadline"
+  column: "Live recomposition"
+  outcome: "Failed verdict: the composer rolls the scope back"
+  fault: [fail-apply, panic-apply, slow-apply]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  since: S1
+
+- failure: "`Apply` errors, panics or passes the load deadline"
+  column: "While running"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "`Apply` errors, panics or passes the load deadline"
+  column: "Tenant tree"
+  outcome: "FAILED for that tenant"
+  fault: [fail-apply, panic-apply, slow-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "failed verdict"}
+  since: S4b
+
+- failure: "An injected service has no ACTIVE provider"
+  column: "Optional row at boot"
+  outcome: "PENDING; one grouped warning"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {dependant: PENDING}, diagnostic: "waits for"}
+  since: S1
+
+- failure: "An injected service has no ACTIVE provider"
+  column: "Required at boot"
+  outcome: "Stop once settled"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {required: PENDING}, diagnostic: "waits for"}
+  since: S1
+
+- failure: "An injected service has no ACTIVE provider"
+  column: "Live recomposition"
+  outcome: "Failed verdict if the row was created, changed or enabled by this generation"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  since: S1
+
+- failure: "An injected service has no ACTIVE provider"
+  column: "While running"
+  outcome: "Consumers unload; they return with the provider"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {dependant: PENDING}, diagnostic: "waits for"}
+  since: S1
+
+- failure: "An injected service has no ACTIVE provider"
+  column: "Tenant tree"
+  outcome: "PENDING"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {dependant: PENDING}, diagnostic: "waits for"}
+  since: S4b
+
+- failure: "A policy provider fails (`approval`, `changes`, `credentials`, `audit`, `pii`)"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A policy provider fails (`approval`, `changes`, `credentials`, `audit`, `pii`)"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [fail-apply]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "policy provider"}
+  since: S5
+
+- failure: "A policy provider fails (`approval`, `changes`, `credentials`, `audit`, `pii`)"
+  column: "Live recomposition"
+  outcome: "Rolled back"
+  fault: [fail-apply]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rolled back"}
+  since: S5
+
+- failure: "A policy provider fails (`approval`, `changes`, `credentials`, `audit`, `pii`)"
+  column: "While running"
+  outcome: "Consumers unload; their routes answer 503; write readiness fails; retried in place; the process stays up"
+  fault: [fail-apply]
+  expect: {exit: running, ready: false, states: {dependant: PENDING, fault: FAILED}, diagnostic: "503"}
+  since: S5
+
+- failure: "A policy provider fails (`approval`, `changes`, `credentials`, `audit`, `pii`)"
+  column: "Tenant tree"
+  outcome: "Per-tenant required: writes refused for that tenant"
+  fault: [fail-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "writes refused"}
+  since: S4b
+
+- failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [fail-apply]
+  expect: {exit: nonzero, ready: false, states: {fault: FAILED}, diagnostic: "required"}
+  since: S1
+
+- failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"
+  column: "Live recomposition"
+  outcome: "Rolled back"
+  fault: [fail-apply]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "rolled back"}
+  since: S1
+
+- failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"
+  column: "While running"
+  outcome: "Everything unloads; readiness fails; retried in place; exit non-zero only when `restart-policy` gives up"
+  fault: [fail-apply]
+  expect: {exit: running, ready: false, states: {dependant: PENDING, fault: FAILED}, diagnostic: "readiness"}
+  since: S1
+
+- failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"
+  column: "Tenant tree"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A gate listener in the expected set is absent, FAILED, PENDING, unloading or unreachable"
+  column: "Optional row at boot"
+  outcome: "Checks on that gate deny"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "gate"}
+  since: S5
+
+- failure: "A gate listener in the expected set is absent, FAILED, PENDING, unloading or unreachable"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "gate"}
+  since: S5
+
+- failure: "A gate listener in the expected set is absent, FAILED, PENDING, unloading or unreachable"
+  column: "Live recomposition"
+  outcome: "Failed verdict"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  since: S5
+
+- failure: "A gate listener in the expected set is absent, FAILED, PENDING, unloading or unreachable"
+  column: "While running"
+  outcome: "Checks deny for that scope until it is ACTIVE or an operator disables the row (audited)"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "gate"}
+  since: S5
+
+- failure: "A gate listener in the expected set is absent, FAILED, PENDING, unloading or unreachable"
+  column: "Tenant tree"
+  outcome: "Denied for that tenant only"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "denied"}
+  since: S4b
+
+- failure: "Remote unreachable or handshake mismatch"
+  column: "Optional row at boot"
+  outcome: "PENDING or FAILED; reconnect"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {fault: PENDING}, diagnostic: "handshake"}
+  since: S2b
+
+- failure: "Remote unreachable or handshake mismatch"
+  column: "Required at boot"
+  outcome: "Stop"
+  fault: [stub-remote-hang]
+  expect: {exit: nonzero, ready: false, states: {fault: PENDING}, diagnostic: "handshake"}
+  since: S2b
+
+- failure: "Remote unreachable or handshake mismatch"
+  column: "Live recomposition"
+  outcome: "Failed verdict"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  since: S2b
+
+- failure: "Remote unreachable or handshake mismatch"
+  column: "While running"
+  outcome: "Breaker opens; calls fail fast; dispatcher falls back; unload after the budget"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {fault: UNLOADING}, diagnostic: "breaker"}
+  since: S2b
+
+- failure: "Remote unreachable or handshake mismatch"
+  column: "Tenant tree"
+  outcome: "One tenant"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {fault: PENDING}, diagnostic: "handshake"}
+  since: S4b
+
+- failure: "A remote instance is disabled, removed or quarantined"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A remote instance is disabled, removed or quarantined"
+  column: "Required at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A remote instance is disabled, removed or quarantined"
+  column: "Live recomposition"
+  outcome: "Identity and virtual key revoked before the pod is deleted"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "revoked"}
+  since: S8a
+
+- failure: "A remote instance is disabled, removed or quarantined"
+  column: "While running"
+  outcome: "Its stream and callbacks are refused on every replica"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "refused"}
+  since: S4b
+
+- failure: "A remote instance is disabled, removed or quarantined"
+  column: "Tenant tree"
+  outcome: "One tenant"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "refused"}
+  since: S4b
+
+- failure: "A contribution hangs or errors"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A contribution hangs or errors"
+  column: "Required at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A contribution hangs or errors"
+  column: "Live recomposition"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A contribution hangs or errors"
+  column: "While running"
+  outcome: "Deadline, concurrency cap and breaker per (tenant, row); fallback; timeline says so"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "breaker"}
+  since: S4b
+
+- failure: "A contribution hangs or errors"
+  column: "Tenant tree"
+  outcome: "One tenant"
+  fault: [stub-remote-hang]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "breaker"}
+  since: S4b
+
+- failure: "The harness a pillar or a tenant selected is not ACTIVE"
+  column: "Optional row at boot"
+  outcome: "PENDING or FAILED; listed"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {fault: PENDING}, diagnostic: "harness"}
+  since: S8a
+
+- failure: "The harness a pillar or a tenant selected is not ACTIVE"
+  column: "Required at boot"
+  outcome: "n/a: no harness is in a required set"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "The harness a pillar or a tenant selected is not ACTIVE"
+  column: "Live recomposition"
+  outcome: "Failed verdict if this generation created, changed or enabled the row"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "failed verdict"}
+  since: S8a
+
+- failure: "The harness a pillar or a tenant selected is not ACTIVE"
+  column: "While running"
+  outcome: "The run waits inside the cold budget, then goes to the default harness, and the timeline names both"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "default harness"}
+  since: S8a
+
+- failure: "The harness a pillar or a tenant selected is not ACTIVE"
+  column: "Tenant tree"
+  outcome: "One tenant"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "default harness"}
+  since: S8a
+
+- failure: "The worker runs out of memory or stalls during an agent run (the loop and the read tools run in the kernel process, W12)"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "The worker runs out of memory or stalls during an agent run (the loop and the read tools run in the kernel process, W12)"
+  column: "Required at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "The worker runs out of memory or stalls during an agent run (the loop and the read tools run in the kernel process, W12)"
+  column: "Live recomposition"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "The worker runs out of memory or stalls during an agent run (the loop and the read tools run in the kernel process, W12)"
+  column: "While running"
+  outcome: "The process is replaced and the run restarts, which is safe because every tool is a read. Pages already scheduled fire after the restart, and the `platform-page-path` route reaches the platform-health receiver meanwhile"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "run restarts"}
+  since: S8a
+
+- failure: "The worker runs out of memory or stalls during an agent run (the loop and the read tools run in the kernel process, W12)"
+  column: "Tenant tree"
+  outcome: "Every tenant with a run on that replica"
+  fault: [none]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "run restarts"}
+  since: S8a
+
+- failure: "A hook listener errors or times out"
+  column: "Optional row at boot"
+  outcome: "Gate: the strictest verdict. Event: skipped and logged"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "listener"}
+  since: S5
+
+- failure: "A hook listener errors or times out"
+  column: "Required at boot"
+  outcome: "Same"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "listener"}
+  since: S5
+
+- failure: "A hook listener errors or times out"
+  column: "Live recomposition"
+  outcome: "Same"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "listener"}
+  since: S5
+
+- failure: "A hook listener errors or times out"
+  column: "While running"
+  outcome: "Same"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "listener"}
+  since: S5
+
+- failure: "A hook listener errors or times out"
+  column: "Tenant tree"
+  outcome: "Same"
+  fault: [none]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "listener"}
+  since: S4b
+
+- failure: "A tracked goroutine errors or panics"
+  column: "Optional row at boot"
+  outcome: "FAILED; not fatal"
+  fault: [panic-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "goroutine"}
+  since: S1
+
+- failure: "A tracked goroutine errors or panics"
+  column: "Required at boot"
+  outcome: "Readiness fails"
+  fault: [panic-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  since: S1
+
+- failure: "A tracked goroutine errors or panics"
+  column: "Live recomposition"
+  outcome: "Same"
+  fault: [panic-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  since: S1
+
+- failure: "A tracked goroutine errors or panics"
+  column: "While running"
+  outcome: "Same"
+  fault: [panic-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "goroutine"}
+  since: S1
+
+- failure: "A tracked goroutine errors or panics"
+  column: "Tenant tree"
+  outcome: "FAILED for that tenant"
+  fault: [panic-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "goroutine"}
+  since: S4b
+
+- failure: "An untracked goroutine panics"
+  column: "Optional row at boot"
+  outcome: "Fatal"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "panic"}
+  since: S1
+
+- failure: "An untracked goroutine panics"
+  column: "Required at boot"
+  outcome: "Fatal"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "panic"}
+  since: S1
+
+- failure: "An untracked goroutine panics"
+  column: "Live recomposition"
+  outcome: "Fatal"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "panic"}
+  since: S1
+
+- failure: "An untracked goroutine panics"
+  column: "While running"
+  outcome: "Fatal: every tenant on that replica"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "panic"}
+  since: S1
+
+- failure: "An untracked goroutine panics"
+  column: "Tenant tree"
+  outcome: "Fatal"
+  fault: [panic-apply]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "panic"}
+  since: S4b
+
+- failure: "A process-scope drain or disposer passes its deadline"
+  column: "Optional row at boot"
+  outcome: "Logged with its label; the fiber is marked leaked"
+  fault: [slow-dispose, leaky-goroutine]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  since: S1
+
+- failure: "A process-scope drain or disposer passes its deadline"
+  column: "Required at boot"
+  outcome: "Same"
+  fault: [slow-dispose, leaky-goroutine]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  since: S1
+
+- failure: "A process-scope drain or disposer passes its deadline"
+  column: "Live recomposition"
+  outcome: "Reported"
+  fault: [slow-dispose, leaky-goroutine]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "leaked"}
+  since: S1
+
+- failure: "A process-scope drain or disposer passes its deadline"
+  column: "While running"
+  outcome: "Readiness ends after the drain window and the process is replaced"
+  fault: [slow-dispose, leaky-goroutine]
+  expect: {exit: nonzero, ready: false, states: {}, diagnostic: "drain"}
+  since: S1
+
+- failure: "A process-scope drain or disposer passes its deadline"
+  column: "Tenant tree"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A tenant-scope disposer passes its deadline (a remote that ignores `Deactivate`, a slow client close)"
+  column: "Optional row at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A tenant-scope disposer passes its deadline (a remote that ignores `Deactivate`, a slow client close)"
+  column: "Required at boot"
+  outcome: "n/a"
+  fault: [none]
+  expect: {exit: n/a, ready: n/a}
+  since: n/a
+
+- failure: "A tenant-scope disposer passes its deadline (a remote that ignores `Deactivate`, a slow client close)"
+  column: "Live recomposition"
+  outcome: "Reported"
+  fault: [stub-remote-ignore-deactivate]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "deadline"}
+  since: S2b
+
+- failure: "A tenant-scope disposer passes its deadline (a remote that ignores `Deactivate`, a slow client close)"
+  column: "While running"
+  outcome: "That (tenant, row) is quarantined on the replica and counted; the replica is recycled only above the leak budget"
+  fault: [stub-remote-ignore-deactivate]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "quarantined"}
+  since: S6b
+
+- failure: "A tenant-scope disposer passes its deadline (a remote that ignores `Deactivate`, a slow client close)"
+  column: "Tenant tree"
+  outcome: "One tenant"
+  fault: [stub-remote-ignore-deactivate]
+  expect: {exit: running, ready: true, states: {}, diagnostic: "quarantined"}
+  since: S6b
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "Optional row at boot"
+  outcome: "FAILED until `Update`; `fiber.gave-up`"
+  fault: [fail-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
+  since: S1
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "Required at boot"
+  outcome: "Readiness fails"
+  fault: [fail-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
+  since: S1
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "Live recomposition"
+  outcome: "Same"
+  fault: [fail-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
+  since: S1
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "While running"
+  outcome: "Same"
+  fault: [fail-apply]
+  expect: {exit: running, ready: false, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
+  since: S1
+
+- failure: "`restart-policy` gives up (more than N failures in a window)"
+  column: "Tenant tree"
+  outcome: "Same"
+  fault: [fail-apply]
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "fiber.gave-up"}
+  since: S4b
