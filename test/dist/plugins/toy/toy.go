@@ -110,6 +110,7 @@ type SpineReport struct {
 	HalfDisposed int64 `json:"halfDisposed"` // calls that saw the disposer run, or still ran, inside their lease: always 0
 	InFlight     int64 `json:"inFlight"`     // calls open right now
 	AtDispose    int64 `json:"atDispose"`    // calls open when a disposer began: always 0, the unload drains leases first
+	OpenAtUnload int64 `json:"openAtUnload"` // calls of the outside caller open when their incarnation began to unload
 	Active       bool  `json:"active"`
 }
 
@@ -123,26 +124,34 @@ var ErrHalfDisposed = errors.New("toy-spine: a call ran while the provider was b
 //
 // Config: applyDelay (default 0), workers (whole number, default 2), drainDelay (how
 // long each worker takes to end once its context is cancelled, default 0),
-// disposeDelay (how long its disposer runs, default 0) and report (the name of a file
+// disposeDelay (how long its disposer runs, default 0), report (the name of a file
 // in the runtime directory that the row keeps up to date with its SpineReport; default
-// none). A delay that is longer than the matching deadline of the kernel is cut at the
-// deadline by the context it waits on: the spine is slow, never a leak. The leaks are
-// the fault plugins. The tally is kept per plugin value, which a distribution creates
+// none) and outsideHold (default 0, none; see below). A delay that is longer than the
+// matching deadline of the kernel is cut at the deadline by the context it waits on:
+// the spine is slow, never a leak. The leaks are the fault plugins. The tally is kept per plugin value, which a distribution creates
 // once, so it spans the restarts of the row.
+//
+// With outsideHold each incarnation has an outside caller: a goroutine that no fiber
+// tracks and no dependant owns, as an admin call or the dispatcher of another row has
+// one, so that only its lease keeps the disposer from running under its call
+// (07-c4-plugin-sdk.md:373). It takes a lease at once and holds it until the unload
+// begins and for outsideHold more, which the drain waits for, then calls again, which
+// is refused. A disposer that began within outsideHold is a half-disposed call.
 func Spine() kernel.Plugin {
 	type cfg struct {
-		applyDelay, drainDelay, disposeDelay time.Duration
-		workers                              int
-		report                               string
+		applyDelay, drainDelay, disposeDelay, outsideHold time.Duration
+		workers                                           int
+		report                                            string
 	}
 	var (
-		incarnations, calls, refused, half, inFlight, atDispose atomic.Int64
-		active                                                  atomic.Bool
-		reportMu                                                sync.Mutex
+		incarnations, calls, refused, half, inFlight, atDispose, openAtUnload atomic.Int64
+		active                                                                atomic.Bool
+		reportMu                                                              sync.Mutex
 	)
 	snapshot := func() SpineReport {
 		return SpineReport{Incarnations: incarnations.Load(), Calls: calls.Load(), Refused: refused.Load(),
-			HalfDisposed: half.Load(), InFlight: inFlight.Load(), AtDispose: atDispose.Load(), Active: active.Load()}
+			HalfDisposed: half.Load(), InFlight: inFlight.Load(), AtDispose: atDispose.Load(),
+			OpenAtUnload: openAtUnload.Load(), Active: active.Load()}
 	}
 	return kernel.Define(kernel.Plugin{
 		ID:       SpineID,
@@ -151,7 +160,8 @@ func Spine() kernel.Plugin {
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
 			out := cfg{applyDelay: c.Duration("applyDelay", 0), drainDelay: c.Duration("drainDelay", 0),
-				disposeDelay: c.Duration("disposeDelay", 0), workers: c.Int("workers", 2), report: c.String("report", "")}
+				disposeDelay: c.Duration("disposeDelay", 0), outsideHold: c.Duration("outsideHold", 0),
+				workers: c.Int("workers", 2), report: c.String("report", "")}
 			return out, c.Err()
 		},
 		Apply: func(c *kernel.Context, raw any) error {
@@ -180,6 +190,7 @@ func Spine() kernel.Plugin {
 				}
 			}
 			var disposed atomic.Bool
+			disposing := make(chan struct{}) // closed when the disposer begins
 			call := func(hold time.Duration) error {
 				leave, ok := c.Enter()
 				if !ok {
@@ -211,6 +222,7 @@ func Spine() kernel.Plugin {
 			c.Defer("spine-dispose", func(ctx context.Context) error {
 				atDispose.Add(inFlight.Load())
 				disposed.Store(true)
+				close(disposing)
 				active.Store(false)
 				def.Wait(cf.disposeDelay, ctx.Done())
 				if write != nil {
@@ -229,6 +241,28 @@ func Spine() kernel.Plugin {
 						}
 					}
 				})
+			}
+			if cf.outsideHold > 0 {
+				std := c.Std()
+				go func() { // the outside caller: deliberately untracked, see Spine
+					leave, ok := c.Enter()
+					if !ok {
+						refused.Add(1)
+						return
+					}
+					inFlight.Add(1)
+					<-std.Done()
+					openAtUnload.Add(1)
+					def.Wait(cf.outsideHold, disposing)
+					if disposed.Load() {
+						half.Add(1)
+					} else {
+						calls.Add(1)
+					}
+					inFlight.Add(-1)
+					leave()
+					_ = call(0) // the unload began: refused
+				}()
 			}
 			incarnations.Add(1)
 			active.Store(true)

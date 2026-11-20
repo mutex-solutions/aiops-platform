@@ -48,8 +48,8 @@ type world struct {
 	ops  uint64 // submissions so far
 }
 
-// boot starts the binary on "smoke" with the patch files of test/dist/patches and the
-// live layer last, and waits for it to say it is ready.
+// boot starts the binary on "smoke" with the patch files (a name in test/dist/patches or
+// an absolute path) and the live layer last, and waits for it to say it is ready.
 func boot(t *testing.T, patches ...string) *world {
 	t.Helper()
 	bin := harness.Binary(t)
@@ -60,7 +60,10 @@ func boot(t *testing.T, patches ...string) *world {
 	}
 	opts := harness.Options{Context: t.Context()}
 	for _, f := range patches {
-		opts.Patches = append(opts.Patches, harness.PatchFile(f))
+		if !filepath.IsAbs(f) {
+			f = harness.PatchFile(f)
+		}
+		opts.Patches = append(opts.Patches, f)
 	}
 	opts.Patches = append(opts.Patches, w.live)
 	p, err := harness.Start(bin, opts)
@@ -146,12 +149,22 @@ func (w *world) stop() {
 }
 
 // (a) The heavy spine provider restarts in place while three consumers call it in a
-// loop, each call holding a lease of the spine's fiber. The restart drains the leases
-// before the disposer runs: no call is open when the disposer begins and none sees a
-// provider that is being disposed. Calls that arrive once the unload began are refused,
-// and the consumers are unloaded and come back, so calls go on after the restart.
+// loop, each call holding a lease of the spine's fiber, and while an outside caller that
+// no fiber tracks and no dependant owns holds a lease across the start of the unload
+// (toy.Spine, outsideHold). The consumers are dependants, so the unload waits for them
+// anyway; the outside call is held back by its lease alone. The restart drains the
+// leases before the disposer runs: no call is open when the disposer begins and none
+// sees a provider that is being disposed. A call that arrives once the unload began is
+// refused, and the consumers are unloaded and come back, so calls go on after the
+// restart.
 func TestSpineRestartsInPlaceUnderLoad(t *testing.T) {
-	w := boot(t, "spine-load.yml")
+	outside := filepath.Join(t.TempDir(), "spine-outside.yml")
+	// A config in a patch replaces the whole config: this is spine-load.yml's plus the
+	// outside caller. spine-restart.yml replaces it again, so the new incarnation has none.
+	if err := os.WriteFile(outside, []byte("- {id: spine, config: {workers: 2, report: spine.json, outsideHold: 300ms}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := boot(t, "spine-load.yml", outside)
 	before, ok := w.p.Until(budget, func(harness.Snapshot) bool { return w.spine().Calls >= 100 })
 	if !ok {
 		t.Fatalf("the consumers made no load: %+v\n%s", w.spine(), before.Output)
@@ -185,8 +198,11 @@ func TestSpineRestartsInPlaceUnderLoad(t *testing.T) {
 	if r.HalfDisposed != 0 || r.AtDispose != 0 {
 		t.Errorf("a call met a provider that was being disposed: %+v", r)
 	}
+	if r.OpenAtUnload != 1 {
+		t.Errorf("the outside call was not open when the unload began, so the drain had no lease to wait for: %+v", r)
+	}
 	if r.Refused == 0 {
-		t.Logf("no call arrived between the start of the unload and the unload of its caller: %+v", r)
+		t.Errorf("no call made after the unload began was refused: %+v", r)
 	}
 	w.stop()
 	if r := w.spine(); r.HalfDisposed != 0 || r.AtDispose != 0 || r.InFlight != 0 {
