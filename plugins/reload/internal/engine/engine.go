@@ -382,12 +382,21 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 // ACTIVE, and so must every required row, and a row that was ACTIVE must still be; a
 // row that was inactive and is untouched is a warning. A row that the loader did not
 // mount (disabled, of another role) is not judged unless it is required, and then it
-// fails.
+// fails; a row's own required flag counts in the role that mounts it, as in boot's
+// required set.
 func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool) (composition.Report, error) {
 	need := e.Profile.Required()
 	required := map[string]bool{}
 	for _, id := range need.Rows {
 		required[id] = true
+	}
+	for _, row := range cand.Rows {
+		if !row.Required {
+			continue
+		}
+		if en, ok := e.Loader.Locate(row.ID); !ok || en.Mount != loader.OtherRole {
+			required[row.ID] = true
+		}
 	}
 	touched := map[string]bool{}
 	for _, r := range applied {
@@ -402,9 +411,6 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []l
 	var states []launch.RowState
 	var rep composition.Report
 	for i, row := range cand.Rows {
-		if row.Required {
-			required[row.ID] = true
-		}
 		st, err := reads[i].state, reads[i].err
 		switch {
 		case err != nil && required[row.ID]:

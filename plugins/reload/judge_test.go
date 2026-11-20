@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -228,6 +229,40 @@ func TestRetriedRowIsJudgedWhenItSettledWhateverAnotherRowTakes(t *testing.T) {
 	}
 	if got := outcome(r.Report, "slow"); got.Outcome != "pass" {
 		t.Errorf("slow = %+v", got)
+	}
+}
+
+// A required row of another role is not mounted in this process, so it is not judged:
+// boot's required set leaves it out (boot.RequiredFor), and so does the verdict.
+func TestRequiredRowOfAnotherRoleIsNotJudged(t *testing.T) {
+	s := newScript()
+	worker := row("w", "aiops/p", nil)
+	worker.Required, worker.Roles = true, []string{"worker"}
+	w := newScripted(t, s, map[string]loader.Mount{"w": loader.OtherRole}, worker)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{worker, row("n", "aiops/p", nil)}}
+	r := await(t, w.svc)
+	if r.Status != def.Passed || !r.Report.Pass {
+		t.Fatalf("result = %+v", r)
+	}
+	if got := outcome(r.Report, "w"); got.Outcome != "" {
+		t.Errorf("w = %+v: a row of another role has no fiber to judge", got)
+	}
+
+	// The same row in this role is judged, and fails when it is not mounted.
+	off := row("off", "aiops/p", nil)
+	off.Required = true
+	w.next = launch.Composition{Digest: launch.Digest{3}, Rows: []launch.Row{worker, off}}
+	s.onApply = func(context.Context, int, []loader.Op) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if e, ok := s.rows["off"]; ok {
+			e.Mount = loader.Disabled
+			s.rows["off"] = e
+		}
+		return nil
+	}
+	if r := await(t, w.svc); r.Report.Pass || !strings.Contains(outcome(r.Report, "off").Detail, "not mounted") {
+		t.Errorf("result = %+v", r)
 	}
 }
 
