@@ -94,6 +94,7 @@ type fxOpt struct {
 	keys    map[string]kernel.AnyKey
 	modules []launch.CatalogEntry
 	pre     []kernel.Plugin // mounted before the loader
+	kopts   []kerneltest.Option
 	batch   func(*kernel.Root) BatchFunc
 	cfg     any // replaces the loader's config
 	// bound builds the kernel with kernel.New and the binding maps of a
@@ -145,7 +146,7 @@ func newFx(t *testing.T, o fxOpt) *fx {
 		root = r
 		mount(lp)
 	} else {
-		root = kerneltest.New(t)
+		root = kerneltest.New(t, o.kopts...)
 		mount = func(ps ...kernel.Plugin) { kerneltest.Mount(root, ps...) }
 		mount(lp)
 	}
@@ -238,6 +239,69 @@ func (x *fx) failure(plugin string) string {
 	}
 	x.t.Fatalf("no FAILED fiber of %s", plugin)
 	return ""
+}
+
+// consistent fails the test unless each mounted row of the composition names the
+// one fiber of its plugin that is not DISPOSED, or none while it has no fiber: the
+// tree and the kernel agree. Each row of a test that calls it has its own plugin.
+func (x *fx) consistent() {
+	x.t.Helper()
+	g, _ := x.rd.Committed(composition.ScopeProcess)
+	in, err := x.root.Inspect(x.t.Context())
+	if err != nil {
+		x.t.Fatal(err)
+	}
+	live := map[string][]uint64{}
+	for _, f := range in.Fibers {
+		if f.State != kernel.Disposed {
+			live[f.Plugin] = append(live[f.Plugin], f.ID)
+		}
+	}
+	for _, r := range g.Rows {
+		var want []uint64
+		if r.Fiber != 0 {
+			want = []uint64{r.Fiber}
+		}
+		if !slices.Equal(live[r.Plugin], want) {
+			x.t.Errorf("row %s (%s) names fiber %d, the kernel has %v of %s", r.ID, r.State, r.Fiber, live[r.Plugin], r.Plugin)
+		}
+	}
+}
+
+// ledger records the ledger events of a kernel from the moment it is made.
+type ledger struct {
+	mu  sync.Mutex
+	evs []kernel.LedgerEvent
+}
+
+func record(t *testing.T, root *kernel.Root) *ledger {
+	t.Helper()
+	l := &ledger{}
+	if _, err := root.Observe("t/ledger", func(_ context.Context, e kernel.LedgerEvent) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.evs = append(l.evs, e)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+// of returns the plugin ids of the events of kind, in order.
+func (l *ledger) of(t *testing.T, root *kernel.Root, kind string) (plugins []string) {
+	t.Helper()
+	if err := root.AwaitObservers(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, e := range l.evs {
+		if e.Kind == kind {
+			plugins = append(plugins, e.Plugin)
+		}
+	}
+	return plugins
 }
 
 func (x *fx) fibers(plugin string) (n int) {

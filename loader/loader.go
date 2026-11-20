@@ -262,7 +262,11 @@ func (t *tree) addPrev(id string, f *kernel.Fiber) { t.prev[id] = append(slices.
 
 // mountUnder mounts, from c, every entry that is to be mounted under parent: the
 // loader's own activation for "" and a group's for its id. It runs in the Apply of
-// that fiber, so it uses Context.Plugin.
+// that fiber, so it uses Context.Plugin. Each child is an effect of c, so the
+// kernel disposes the children when c unloads: it requests their disposals in
+// reverse order of their mounts and joins them after c's own disposers, with no
+// clock of c's (ADR-034, 2026-11-19 teardown order). Their disposers may overlap,
+// and each is held to the child's own deadlines.
 func (t *tree) mountUnder(c *kernel.Context, parent string) {
 	t.mu.Lock()
 	if g := t.entries[parent]; g != nil {
@@ -279,30 +283,6 @@ func (t *tree) mountUnder(c *kernel.Context, parent string) {
 		p, cfg, mc := t.build(c.Std(), c, s)
 		f := mc.Plugin(p, cfg)
 		t.adopt(c.Std(), mountItem{spec: s, pc: c, mc: mc}, f)
-	}
-	// Registered after the children, so it runs before the kernel's own walk of them.
-	c.Defer("children-in-reverse", func(ctx context.Context) error { t.teardown(ctx, parent); return nil })
-}
-
-// teardown disposes the fibers of the entries under parent one at a time, the last
-// created first, each until it is DISPOSED. The kernel disposes the children of a
-// fiber as the effects that mounted them, in reverse order, but it does not wait for
-// one before it starts the next, so their disposers overlap; the tree must come down
-// in reverse (03-c3-kernel.md:370 "disposers in strict reverse order"). It reads the
-// tree when it runs, so it covers the entries that a batch mounted later. A failure
-// to dispose is left to the kernel's own walk.
-func (t *tree) teardown(ctx context.Context, parent string) {
-	t.mu.Lock()
-	var fibers []*kernel.Fiber
-	for _, id := range slices.Backward(t.order) {
-		if e := t.entries[id]; e.spec.Parent == parent && e.fiber != nil {
-			fibers = append(fibers, e.fiber)
-		}
-	}
-	t.mu.Unlock()
-	for _, f := range fibers {
-		_ = f.Dispose(ctx)
-		_ = f.Await(ctx)
 	}
 }
 
