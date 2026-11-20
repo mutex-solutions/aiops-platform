@@ -1100,3 +1100,113 @@ this ADR besides the performance gates on the port.
    222 sdk/kernel/waterfall.go
   7451 total (cap 8200)
 ```
+
+## S1 additions to the kernel API (ADR-059)
+
+ADR-059 decision 2 approves five additions for the loader. Each is built on
+what the kernel already does and changes no existing call. A batch with none of
+the new operations behaves as before.
+
+**G1, a child mount in a batch.**
+
+```go
+func (c *Context) MountOp(p Plugin, cfg any) BatchOp
+```
+
+It has the semantics of `c.Plugin(p, cfg)`: the child inherits c's entry when
+`p` was not defined, sees c's isolate and intercept chain, is an effect of c,
+and a refused declaration gives a child that is mounted failed. It is applied
+with the rest of the batch. `Root.Batch` returns one `*Fiber` per operation in
+operation order, so the position of a `MountOp` holds the new child. The batch
+is refused whole, with no effect and an error that matches `ErrInactive` and
+`ErrInactiveEffect`, when c's activation has ended, is ending or was replaced by
+a restart, and when an earlier operation of the same batch disposes c's fiber
+(later in the batch is allowed: the child is mounted and goes with its parent).
+
+**G2, an update with a config in a batch.**
+
+```go
+func UpdateOpWith(f *Fiber, cfg any) BatchOp
+```
+
+Its effect is that of `f.Update(ctx, cfg)`. Before the batch is admitted,
+`Root.Batch` takes the operations that carry a config in operation order and
+resolves each through `internal/config` and `Decode` (when the fiber has a
+desired target), then commits it through `internal/commit`. A refused config,
+an error, a failed commit or a veto (`ErrCommitVetoed`) refuses the whole batch
+and nothing is retained. When all have passed, the configs are retained, the
+last winning when a fiber appears twice, and `internal/update` runs for each
+fiber that has a target, in operation order. A veto of `internal/update` follows
+`Fiber.Update`: the config stays retained, that fiber is not restarted, and the
+rest of the batch goes on. An error of `internal/update` refuses the batch whole
+and retains nothing, which departs from `Fiber.Update` (it retains before it
+runs that waterfall) because a batch is all or nothing. A batch that the core
+refuses after this, for example one that disposes the fiber earlier, gives the
+previous configs back. A fiber with no target skips resolution and
+`internal/update`, and a `When` fiber takes no config.
+
+**G3, a dependency from an untyped key.**
+
+```go
+func NeedKey(k AnyKey) Dep
+```
+
+It is `Need` for a key held as `AnyKey`. A nil or zero key gives a `Dep` that a
+mount refuses with `ErrKey`. There is no untyped `Want`.
+
+**G4, the intercept config type.**
+
+```go
+func InterceptType(k AnyKey) (reflect.Type, bool)
+```
+
+It returns the type declared by `InterceptConfig[C]()`. `ok` is false for a nil
+or zero key and for a key whose intercept config is dynamically typed.
+
+**G5, the three kernel events and the registry lookup.**
+`InternalPlugin`, `InternalStatus` and `InternalService` are now
+`*Event[LedgerEvent]`. The kernel dispatches them from one internal observer of
+the dispatcher that `Root.Observe` uses. It is subscribed when the first
+listener of any of the three is registered, so a kernel with no listener
+subscribes to nothing and the owner does no work for these hooks. A listener
+runs off the owner, one event at a time in the order of `Sequence`. A failing,
+panicking or slow listener is skipped and logged to `Config.ObserverLog`, and
+cannot block or fail the kernel. Listeners are admitted only through
+`Config.Listeners` or the root context. The stream is bounded by
+`Config.ObserverQueue`: a listener that stalls the dispatcher until that many
+events wait detaches the kernel's subscription by the overflow rule, so the
+events of that time are lost for every listener and no listener is removed. The
+kernel then subscribes again, and just before the first event it delivers it
+dispatches to all three hooks a `LedgerEvent` of Kind `overflow` whose
+`Sequence` is the one before that event. A listener resyncs by calling
+`Root.Inspect` and ignoring every later event whose `Sequence` is not above
+`Inspection.Sequence`.
+
+| Ledger Kind | Hook | Meaning |
+|---|---|---|
+| `mount` | `internal/plugin` | a fiber was created |
+| `state` | `internal/status` | the fiber changed state (`From`, `State`) |
+| `state` with `State` DISPOSED | `internal/plugin`, after `internal/status` | the fiber was removed |
+| `provide` | `internal/service` | a provision appeared (`Key`, `UID`) |
+| `service` | `internal/service` | a provision changed availability (`State` is its provider's) |
+| `remove` | `internal/service` | a provision ended |
+| `overflow` | all three | events were lost, see above |
+
+Every other Kind (`effect`, `dispose-effect`, `dispose:request`, `scope:*`,
+`go:*`, `deadline`) reaches no hook.
+
+```go
+func (r *registry) Fiber(id uint64) (*Fiber, bool)
+```
+
+This is the method of the `registry` built-in that the retry plugin needs. It
+finds a live or archived fiber by id and is false for id 0, an id never issued
+and an evicted record. The `*Fiber` can dispose, await and restart that fiber,
+so whoever holds the registry has those powers over every fiber. The documents
+do not say who may hold it, so `RegistryKey` is now consumer-bound: only the
+entries that `Config.Consumers` lists resolve it, and `NewForTest` keeps every
+entry admitted. This is an open point for the project owner. `reflect`, `hooks`
+and `logger` stay open.
+
+The kernel is 7,725 physical lines of production Go (cap 8,200): 140 for G1 and
+G2, 24 for G3 and G4, 91 for the events and 19 for the registry lookup.
