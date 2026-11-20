@@ -260,6 +260,18 @@ func TestUpdateWithUnresolvedReferenceIsRefused(t *testing.T) {
 	}
 }
 
+// A Decode error names the field and the type, never the value: a value may come from
+// a resolved reference.
+func TestDecodeErrorDoesNotEchoTheValue(t *testing.T) {
+	_, lp := fake.New()
+	root := kerneltest.New(t)
+	kerneltest.Mount(root, lp)
+	err := root.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": "hunter2-secret"}).Await(t.Context())
+	if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "maxFileBytes") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestDecode(t *testing.T) {
 	_, lp := fake.New()
 	for _, tc := range []struct {

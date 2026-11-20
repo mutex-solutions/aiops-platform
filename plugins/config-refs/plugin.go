@@ -116,5 +116,5 @@ func integer(v any) (int64, error) {
 			return int64(n), nil
 		}
 	}
-	return 0, fmt.Errorf("want a whole number, got %v", v)
+	return 0, fmt.Errorf("want a whole number, got %T", v) // never the value: it may be a resolved reference
 }
