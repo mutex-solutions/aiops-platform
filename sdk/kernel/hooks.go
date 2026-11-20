@@ -258,6 +258,7 @@ type listener[F any] struct {
 	stage  int    // Index in the hook's declared stages, the first ordering key.
 	ctx    *Context
 	scoped bool // The listener's context carries a scope value.
+	own    bool // The owner's own innermost step (Waterfall RunWith): its dispatch holds the lease.
 	fn     F
 }
 
@@ -285,7 +286,12 @@ func (r *listener[F]) admits(a Audience) (ok bool, err error) {
 
 // lease takes the in-flight lease of the listener's fiber; ok is false once it
 // is quiescing, and the listener is then not called (07-c4-plugin-sdk.md:203, :373).
-func (r *listener[F]) lease() (leave func(), ok bool) { return r.ctx.h.enter() }
+func (r *listener[F]) lease() (leave func(), ok bool) {
+	if r.own {
+		return func() {}, true
+	}
+	return r.ctx.h.enter()
+}
 
 // fail contains a listener failure of an event: it is skipped and logged
 // (07-c4-plugin-sdk.md:385).
