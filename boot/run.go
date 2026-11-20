@@ -257,8 +257,8 @@ func (r *run) run(ctx context.Context) int {
 	for _, w := range warns {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
-	if _, clash := findRow(comp, LoaderRowID); clash {
-		return r.fail(ExitRefused, "the row id %q is reserved: boot mounts the loader and no bundle holds it (03-c3-kernel.md:65)", LoaderRowID)
+	if err := CheckReserved(comp); err != nil {
+		return r.fail(ExitRefused, "%v", err)
 	}
 	// 2 and 3. Admit, then the static graph and the static required audit
 	// (03-c3-kernel.md:357-359). The admitted tree holds the loader as a row, so that

@@ -206,6 +206,9 @@ func (p *profileContext) Compose(ctx context.Context) (launch.Composition, error
 		return launch.Composition{}, err
 	}
 	c, _, err := Compose(p.src, p.opt)
+	if err == nil {
+		err = CheckReserved(c)
+	}
 	if err != nil {
 		return launch.Composition{}, err
 	}

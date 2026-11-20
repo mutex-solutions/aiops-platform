@@ -701,6 +701,26 @@ func TestCommitFollowsTheAppliedGeneration(t *testing.T) {
 	}
 }
 
+// A live generation is refused at Compose when it holds a row with the loader's id, as
+// boot refuses one: Admit would otherwise see two rows with that id.
+func TestComposeRefusesTheReservedRowWhileRunning(t *testing.T) {
+	var l launched
+	f := newFixture(t, "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte("- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: loader, plugin: t/probe, roles: [api]}\n")}
+	if _, err := pc.Compose(t.Context()); err == nil || !strings.Contains(err.Error(), `the row id "loader" is reserved`) {
+		t.Errorf("Compose = %v", err)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
 func TestRunSettleBound(t *testing.T) {
 	hang := toy(toySpec{id: "t/hang", apply: func(c *kernel.Context, _ any) error { <-c.Std().Done(); return c.Std().Err() }})
 	f := newFixture(t, "- insert:\n    - {id: hang, plugin: t/hang, roles: [api], required: true}\n", hang)
