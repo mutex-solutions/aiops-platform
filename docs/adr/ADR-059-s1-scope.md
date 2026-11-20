@@ -64,3 +64,42 @@ binary. S0 was not yet closed when S1 work began.
 - The kernel grows by about 230 lines and is measured again after the merge.
 - The root module gains its first parsing dependency; the kernel module still
   has none.
+
+## Decisions of 2026-11-20 on the failure matrix
+
+The failure matrix (`test/failure-matrix/matrix.yaml`) ran red at the S1 exit:
+twelve cells did not do what the table says. The project owner decided each
+case on 2026-11-20, and the matrix passes every cell marked S1 with no known
+deviation.
+
+12. **A live generation whose verdict fails is rolled back.** `reload` applies
+    the previous composition again with one inverse plan through the loader,
+    settles, judges that the previous rows are ACTIVE again and reports the
+    operation as `rolled back`, with the failed verdict and the rollback outcome
+    on the result. If the rollback itself fails the status is `rollback failed`
+    with both verdicts, it is not tried again and readiness follows the real
+    tree. There is still no committer, lock or audit (S4a), and
+    `composition/applied` is published for the failed generation as N and for
+    the restored one as N+1.
+
+13. **A drain past its deadline is a leak, and a leak replaces the process.**
+    The kernel marks a fiber leaked when its drain deadline passes with a tracked
+    goroutine or a lease still open, as it does for a disposer past the dispose
+    deadline, and exports `ErrLeaked` to match it. The launcher drops readiness on
+    either kind of leak and exits to be replaced after its grace period, in every
+    column of the table; the kernel details are in ADR-034, "S1 additions".
+
+14. **At boot an unmet required set stops boot.** The launcher keeps exiting
+    non-zero at the required audit, so the cells of the column "Required at boot"
+    for a failed tracked goroutine, a leak and a `restart-policy` that gave up say
+    "Stop". "Readiness fails" is the outcome of the column "While running" only,
+    and of a required row of a live generation that fails after the generation
+    passed.
+
+15. **A live generation with an unknown or denied row is rejected whole, and the
+    required set follows the applied generation.** The detach rule applies at boot
+    only; `reload` rejects a live generation at the admit stage with nothing
+    applied. After a generation passes, and after a rollback, `reload` calls
+    `Commit` on `profileContext`, so `Committed` and `Required` are those of the
+    applied generation (its rows with `required: true` plus the distribution's
+    set); the six launch keys do not change.

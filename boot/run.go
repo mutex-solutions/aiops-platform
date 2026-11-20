@@ -479,7 +479,11 @@ func (r *run) watch() error {
 			r.unload.set(e.Fiber, e.State == kernel.Unloading)
 			if e.Plugin == ConfigRefsID {
 				if active := e.State == kernel.Active; r.refsActive.Swap(active) != active {
-					return r.root.Notify(ctx, configRefsKey)
+					err := r.root.Notify(ctx, configRefsKey)
+					if ctx.Err() != nil {
+						return nil // Close: the observer of the root sees its events with the context of the shutdown
+					}
+					return err
 				}
 			}
 		case e.Kind == "deadline" && (e.Label == "dispose" || e.Label == "drain"):

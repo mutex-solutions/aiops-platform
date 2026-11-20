@@ -111,8 +111,8 @@ jobs:
     name: S1 exit suites on the built binary
     # ADR-059 decisions 3 and 5, 08-profiles-roadmap-adrs.md:693: the failure matrix
     # (process-scope columns), the recomposition suite and the loader smoke test build
-    # test/dist/cmd/aiops-test and run it. MATRIX_ALLOW_DEVIATIONS is not set here: a known
-    # deviation of the matrix from the documented outcomes fails this job.
+    # test/dist/cmd/aiops-test and run it. A cell that does not do what the table says fails
+    # this job; there is no list of known deviations (ADR-059 decisions 12 to 15).
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

@@ -1264,6 +1264,50 @@ fails that entry with `ErrPatchVetoed` and never runs its plugin. The docs do
 not say what a veto of this hook means; fail closed is a choice and an open
 point for the project owner.
 
-The kernel is 7,825 physical lines of production Go (cap 8,200): 140 for G1 and
+**G9, a drain past its deadline is a leak (ADR-059 decision 13).** When the drain
+deadline of a fiber falls due and the fiber's own work is not over (a tracked
+goroutine or a lease still open, judged by the rule that already decides whether
+the deadline is a verdict), the fiber is marked leaked exactly as one whose
+disposer is still running past the dispose deadline: the snapshot says `Leaked`
+for the rest of the incarnation, the archived one included, and the diagnostic
+of `Settle` and `Close` wraps the exported sentinel `ErrLeaked` together with
+`context.DeadlineExceeded`. The text "fiber leaked" is no longer the way to match
+it: the launcher uses `errors.Is(err, kernel.ErrLeaked)`. A drain that ends in
+time is not a leak, and nothing else about the lifecycle changes: the mark is the
+only effect. The `deadline` ledger event of the stage (`drain` or `dispose`) is
+appended after the mark, so an observer that sees it also sees `Leaked` in the
+snapshot.
+
+**G10, the kernel logs what it knows.** When a tracked goroutine returns an
+error or panics, and when a fiber is marked leaked, the kernel writes one record
+at level ERROR to `Config.LogHandler` (nothing when it is nil), with the
+attributes `fiber` (id), `plugin` (the plugin id), `label` (the label of the
+goroutine, or the stage of the deadline) and `error` (the error text), under the
+messages `tracked goroutine failed` and `fiber marked leaked`. No config value is
+in a record. The record of a goroutine is written on the goroutine's own worker,
+before the failure is reported to the owner, so the cause is in the log before
+the fiber is FAILED. The record of a leak is written by a goroutine that the
+owner starts, because the owner runs no foreign code; a panic of the handler is
+contained. A goroutine that ends because its context was cancelled writes no
+record.
+
+**G11, the observer of the root sees the events of `Close`.** The report that the
+launcher made was true: the root quiesces when `Close` begins, so the lease of
+the root refused every callback from then on and the dispatcher skipped each
+later event (in a test, 31 events of a `Close` were accepted and none was
+delivered), among them the `deadline` of a leaking fiber. The observer that
+`Root.Observe` registers now delivers an event accepted before the dispatcher
+closes even when the root's lease is refused, with the context of the callback
+already cancelled by the quiescence, and its cleanup effect no longer removes it
+when the root is disposed, so the last events of the root are delivered too. The
+dispatcher already drained its queue before it stopped. When `Close` returns the
+diagnostic of a fiber that is still blocked, it now first waits, within its
+context, until the events accepted so far are delivered, so the diagnostic and
+the event reach a reader together. An event for an observer that was detached is counted in
+`ObserverStatus.EventsLost`, and one still waiting when the context of `Close` ends
+is in `Remaining`. Observers registered on
+a fiber's own handle by a test keep the old rule.
+
+The kernel is 7,899 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
-27 for G7 and 24 for G8.
+27 for G7, 24 for G8 and 74 for G9 to G11.

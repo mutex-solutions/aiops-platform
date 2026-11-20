@@ -356,7 +356,7 @@ What the example shows:
 | `FAILED` | `DISPOSED` | The row was removed. |
 | `Provider` | `Epoch` | A provider swap changes the provision uid, so every consumer restarts. A provider keeps its implementation until its dependants have finished unloading. |
 | `Epoch` | `ACTIVE` | A fiber is ACTIVE only for the epoch it loaded with. A superseded load cannot fail the new target. |
-| `Effects` | `UNLOADING` | Disposers run last in, first out, one at a time, each under the dispose deadline. A process-scope disposer past its deadline marks the fiber leaked, and the process is replaced after the drain window. |
+| `Effects` | `UNLOADING` | Disposers run last in, first out, one at a time, each under the dispose deadline. A process-scope disposer past its deadline, or a drain past its deadline with a lease or a tracked goroutine still open, marks the fiber leaked (`kernel.ErrLeaked`, and `Leaked` in its snapshot), and the process is replaced after the drain window. |
 | `restart-policy` | `FAILED` | Calls `Update`. When it gives up, the fiber stays FAILED until an operator updates it; for an infrastructure provider the process then exits non-zero. |
 
 **What is an effect.** Everything a plugin starts or registers, so that unloading is total.
@@ -370,7 +370,7 @@ What the example shows:
 | A goroutine | `c.Go(label, run)` | Its context is cancelled and it is awaited |
 | A resource of the plugin's own | `c.Effect(label, setup)`, `c.Defer(label, d)` | The disposer that `setup` returned |
 
-**Unload is quiesce, then dispose.** The kernel module cancels `Std()`, refuses new leases and new effects, waits for open `Enter` leases and tracked goroutines up to the drain deadline, then runs the disposers in strict reverse. A dispatcher takes an `Enter` lease on a contribution's fiber around each call, so a call in flight finishes before the contribution is disposed. Go cannot revoke an interface value, so every definition's suite asserts that a call after the provider is disposed returns `ErrInactive`, and a registration on an unloading or disposed fiber returns `ErrInactiveEffect`.
+**Unload is quiesce, then dispose.** The kernel module cancels `Std()`, refuses new leases and new effects, waits for open `Enter` leases and tracked goroutines up to the drain deadline, then runs the disposers in strict reverse. A lease or a goroutine still open when the drain deadline passes marks the fiber leaked, as a disposer past its deadline does. A dispatcher takes an `Enter` lease on a contribution's fiber around each call, so a call in flight finishes before the contribution is disposed. Go cannot revoke an interface value, so every definition's suite asserts that a call after the provider is disposed returns `ErrInactive`, and a registration on an unloading or disposed fiber returns `ErrInactiveEffect`.
 
 **Runtime effects and durable effects.** A runtime effect lives in one replica and is reverted when that replica's fiber unloads. State that must outlive a fiber (a schema, a key prefix, job kinds, a secret scope, a sidecar instance, an external step) is not an effect: it is declared in `Spec.Durable` and reconciled by the `durable` leader from committed generations, so one replica that unloads a fiber never drops a schema or a tenant's pod (§5.2).
 
@@ -1384,7 +1384,7 @@ The unit of reload is the row and the unit of change is a generation (§6.1). Ev
 | A kill switch | Nothing through config, and no listener. The readers ask the `killSwitches` launch service: `casefile`, `agent-runs` and `llm-gateway` read `agents-paused`, so no run starts and every model call is refused; `telemetry` reads `telemetry-disabled`, stays ACTIVE and exports nothing |
 | A tenant overlay that inserts a row, sets `plugin`, `roles` or `required`, or sets a field that is not tenant-writable; an installed artifact's bundle that changes an existing row | Never reaches a plugin: refused when written, or at install |
 
-The process is replaced, not restarted in place, in three cases only: a process-scope fiber leaked past its dispose deadline, a restore failed, or `restart-policy` gave up on an infrastructure provider. `reload` publishes `composition/applied` with the digest, the generation and the report, so replicas that disagree show up as drift.
+The process is replaced, not restarted in place, in three cases only: a process-scope fiber leaked past its drain or dispose deadline, a restore failed, or `restart-policy` gave up on an infrastructure provider. `reload` publishes `composition/applied` with the digest, the generation and the report, so replicas that disagree show up as drift.
 
 ## 8. Tests
 

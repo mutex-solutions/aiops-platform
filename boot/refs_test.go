@@ -95,6 +95,11 @@ func TestRowWithAReferenceWaitsForConfigRefs(t *testing.T) {
 	if code := stopAndWait(t, f, done); code != ExitOK {
 		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
 	}
+	// The observer of the root sees the events of the shutdown with the context of the
+	// shutdown: config-refs unloading is not a failure of the observer.
+	if strings.Contains(f.errb.String(), "warning: observer") {
+		t.Errorf("the shutdown made the observer fail:\n%s", f.errb.String())
+	}
 }
 
 func mapsEqual(got any, want map[string]any) bool {
