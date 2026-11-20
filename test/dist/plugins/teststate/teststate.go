@@ -168,7 +168,19 @@ type writer struct {
 }
 
 func (w *writer) snapshot() State {
-	s := State{Ready: w.ready.IsReady(), Closing: w.closing, Digest: w.digest}
+	s := State{Closing: w.closing, Digest: w.digest}
+	// The last operation is read first and the rows after it, so that the rows are never
+	// older than the verdict beside them: a reader that sees a verdict must see the rows it
+	// created. The latch is read last, for the same reason.
+	for {
+		if _, ok := w.rl.Result(w.lastOp + 1); !ok {
+			break
+		}
+		w.lastOp++
+	}
+	if r, ok := w.rl.Result(w.lastOp); ok {
+		s.Reload = opOf(r)
+	}
 	ids := slices.Clone(w.ids)
 	if g, ok := w.rd.Committed(composition.ScopeProcess); ok {
 		for _, r := range g.Rows {
@@ -184,15 +196,7 @@ func (w *writer) snapshot() State {
 		}
 		s.Rows = append(s.Rows, row)
 	}
-	for {
-		if _, ok := w.rl.Result(w.lastOp + 1); !ok {
-			break
-		}
-		w.lastOp++
-	}
-	if r, ok := w.rl.Result(w.lastOp); ok {
-		s.Reload = opOf(r)
-	}
+	s.Ready = w.ready.IsReady()
 	return s
 }
 
