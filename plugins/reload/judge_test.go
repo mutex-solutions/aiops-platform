@@ -5,7 +5,9 @@ package reload_test
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -181,6 +183,41 @@ func outcome(rep composition.Report, id string) composition.RowReport {
 	return composition.RowReport{}
 }
 
+// When the reload fiber is disposed while a generation it applied settles, the operation
+// is abandoned, and the composition the loader holds, the candidate, is committed.
+func TestAbandonAfterTheApplyCommitsWhatTheLoaderHolds(t *testing.T) {
+	root := kerneltest.New(t)
+	l, lp := launchfake.New()
+	bl := &blockingLoader{entered: make(chan struct{}, 4), release: make(chan struct{}), awaiting: make(chan struct{}, 4)}
+	close(bl.release)
+	lpl := kernel.Define(kernel.Plugin{ID: "aiops/blocking-loader", Provides: []kernel.AnyKey{loader.Key},
+		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, bl) }})
+	l.Current = launch.Composition{Digest: launch.Digest{1}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil)}}, nil
+	}
+	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
+	kerneltest.Mount(root, lp, lpl)
+	rf := root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4})
+	active(t, rf)
+	svc := submitter(t, root, "aiops/caller")
+	id, err := svc.Submit(t.Context(), def.Op{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-bl.awaiting
+	if err := rf.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	r, err := svc.Await(t.Context(), id)
+	if err != nil || r.Status != def.Abandoned || r.Stage != def.StageSettle {
+		t.Fatalf("result = %+v, %v", r, err)
+	}
+	if l.Committed().Digest != (launch.Digest{2}) {
+		t.Errorf("committed = %x: the loader holds the candidate, so the next generation must plan from it", l.Committed().Digest)
+	}
+}
+
 // A consumer listed before its provider is PENDING while the provider loads, and a PENDING
 // fiber is not in a transition: the judge reads it again once the provider settled.
 func TestDependantListedBeforeItsProviderIsJudgedOnceTheTreeSettles(t *testing.T) {
@@ -285,5 +322,35 @@ func TestClosureRowThatWasPendingBeforeIsAWarning(t *testing.T) {
 	}
 	if got := outcome(r.Report, "dependant"); got.Outcome != "warning" {
 		t.Errorf("dependant = %+v", got)
+	}
+}
+
+// An apply whose first batch committed and whose second did not (a previous fiber that
+// did not dispose) has touched the tree: it is judged and rolled back, not rejected, and
+// the composition the loader holds is committed.
+func TestApplyThatFailsAfterItsFirstBatchIsJudgedAndRolledBack(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("r", "aiops/p", nil), row("x", "aiops/p", "old"))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("x", "aiops/p", "new")}}
+	leak := fmt.Errorf(`entry "x": %w`, loader.ErrNotDisposed)
+	s.onApply = func(context.Context, int, []loader.Op) error {
+		s.set("x", kernel.Pending) // its previous fiber leaked, so it has none
+		return leak
+	}
+	r := await(t, w.svc)
+	if r.Status != def.RollbackFailed || r.Generation != 1 || !errors.Is(r.Err, def.ErrVerdict) || !errors.Is(r.Err, loader.ErrNotDisposed) ||
+		!errors.Is(r.Err, def.ErrRollback) {
+		t.Fatalf("result = %+v: the tree was touched, so the generation is judged", r)
+	}
+	if got := outcome(r.Report, "x"); got.Outcome != "fail" || got.State != kernel.Pending {
+		t.Errorf("x = %+v", got)
+	}
+	if rb := r.Rollback; rb == nil || len(rb.Applied) == 0 || !errors.Is(rb.Err, loader.ErrNotDisposed) {
+		t.Errorf("rollback = %+v", rb)
+	}
+	// The inverse plan was applied, half way too: the loader's entries are the previous
+	// composition's, and that is what is committed.
+	if !slices.Equal(w.commits, []launch.Digest{{1}}) {
+		t.Errorf("commits = %x", w.commits)
 	}
 }

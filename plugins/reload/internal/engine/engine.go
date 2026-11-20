@@ -194,10 +194,14 @@ func (e *Engine) final(j *job) {
 // process runs the stages of one operation. It touches no field of the engine that a
 // Submit reads.
 func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
+	var tree *launch.Composition // set once the loader's entries hold the candidate
 	stop := func(stage def.Stage, err error) def.Result {
 		r.Stage, r.Err = stage, err
+		if tree != nil {
+			e.commit(&r, *tree) // readiness and the next generation follow the real tree
+		}
 		if ctx.Err() != nil {
-			r.Status, r.Err = def.Abandoned, errors.Join(def.ErrAbandoned, err)
+			r.Status, r.Err = def.Abandoned, errors.Join(def.ErrAbandoned, r.Err)
 		} else {
 			r.Status = def.Rejected
 		}
@@ -225,25 +229,28 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	}
 	before := e.activeBefore(prev)
 	ops := operations(r.Plan, prev, cand)
+	var partial error
 	if len(ops) > 0 {
-		if r.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
-			return stop(def.StageApply, err)
+		// The loader refuses a plan whole and with no effect. An error that comes with
+		// results is one after its first batch committed (loader.Loader.Apply): the tree
+		// is the candidate's entries, and the judge sees the rows left with no fiber.
+		if r.Applied, partial = e.Loader.Apply(ctx, ops); len(r.Applied) == 0 && partial != nil {
+			return stop(def.StageApply, partial)
 		}
+		tree = &cand
 	}
-	// The loader refuses a plan whole and with no effect, so from here the tree is
-	// the candidate.
 	e.generation++
-	r.Generation, r.Stage = e.generation, def.StageSettle
+	r.Generation, r.Stage, r.Err = e.generation, def.StageSettle, partial
 	r.Report, err = e.judge(ctx, cand, r.Applied, before)
 	if err != nil {
-		return stop(def.StageSettle, err)
+		return stop(def.StageSettle, errors.Join(partial, err))
 	}
 	r.Stage = def.StagePublish
 	if !r.Report.Pass {
 		// The failed generation is published as failed, then rolled back; what it
 		// restored is published after it. The committed composition stays the previous
 		// one until the rollback says what the tree runs.
-		r.Err = def.ErrVerdict
+		r.Err = errors.Join(def.ErrVerdict, r.Err)
 		e.publish(ctx, &r, cand.Digest, r.Generation, r.Report)
 		return e.rollback(ctx, r, cand, prev, before)
 	}
@@ -285,6 +292,9 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 	}
 	if ops := operations(rb.Plan, cand, prev); len(ops) > 0 {
 		if rb.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
+			if len(rb.Applied) > 0 { // applied half way: the entries are the previous ones
+				tree = prev
+			}
 			return fail(err)
 		}
 	}
