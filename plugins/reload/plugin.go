@@ -51,6 +51,15 @@ var Plugin = kernel.Define(kernel.Plugin{
 				return applied.Emit(ctx, kernel.Unscoped, a)
 			},
 			Self: id,
+			Go: func(label string, run func(context.Context) error) (err error) {
+				defer func() {
+					if p := recover(); p != nil {
+						err = p.(error) // Context.Go refuses an unloading row with a panic of an error
+					}
+				}()
+				c.Go(label, run)
+				return nil
+			},
 		}, conf.Queue, conf.History)
 		c.Go("reload", e.Run)
 		return def.Key.Provide(c, e)

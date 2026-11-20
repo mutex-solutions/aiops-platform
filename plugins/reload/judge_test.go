@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -433,5 +434,40 @@ func TestApplyThatFailsAfterItsFirstBatchIsJudgedAndRolledBack(t *testing.T) {
 	// composition's, and that is what is committed.
 	if !slices.Equal(w.commits, []launch.Digest{{1}}) {
 		t.Errorf("commits = %x", w.commits)
+	}
+}
+
+// A reload row that starts unloading while its apply runs reads no row afterwards: the
+// kernel refuses the tracked goroutines of the settle, and the generation is abandoned
+// at settle with what the loader holds committed.
+func TestRowUnloadingDuringTheApplyReadsNoRow(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil)}}
+	applying := make(chan struct{})
+	s.onApply = func(ctx context.Context, _ int, _ []loader.Op) error {
+		close(applying)
+		<-ctx.Done() // the row's Std ends once its unload has begun
+		return nil
+	}
+	var read atomic.Bool
+	s.after["a"] = func(context.Context) { read.Store(true) }
+	id, err := w.svc.Submit(t.Context(), def.Op{Source: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-applying
+	if err := w.fiber.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	r, err := w.svc.Await(t.Context(), id)
+	if err != nil || r.Status != def.Abandoned || r.Stage != def.StageSettle || !errors.Is(r.Err, kernel.ErrInactive) {
+		t.Fatalf("result = %+v, %v", r, err)
+	}
+	if read.Load() {
+		t.Error("a row was read after the reload row began to unload")
+	}
+	if !slices.Equal(w.commits, []launch.Digest{{2}}) {
+		t.Errorf("commits = %x, want the candidate the loader holds", w.commits)
 	}
 }

@@ -35,6 +35,9 @@ type Deps struct {
 	Publish func(ctx context.Context, a composition.Applied) error
 	// Self is the plugin id of the row that runs the engine (see split).
 	Self string
+	// Go starts a tracked goroutine of the row (kernel.Context.Go). It returns the
+	// kernel's refusal, instead of panicking, when the row is unloading.
+	Go func(label string, run func(context.Context) error) error
 }
 
 // Engine is the queue and its worker. It serves reload.Reload.
@@ -508,14 +511,25 @@ func (e *Engine) settle(ctx context.Context, rows []launch.Row) ([]reading, erro
 	failed := make([]bool, len(rows))
 	for {
 		reads := make([]reading, len(rows))
-		var wg sync.WaitGroup
+		done := make(chan struct{}, len(rows))
+		var err error
+		started := 0
 		for i, row := range rows {
-			// Joined below, and each read ends with ctx: none outlives the engine's
-			// tracked goroutine.
-			wg.Go(func() { reads[i].state, reads[i].err = e.Loader.Await(ctx, row.ID) })
+			// A tracked goroutine of the row, joined below. Its read ends with the row's
+			// Std, so none outlives the row.
+			if err = e.Go("reload settle", func(ctx context.Context) error {
+				reads[i].state, reads[i].err = e.Loader.Await(ctx, row.ID)
+				done <- struct{}{}
+				return nil
+			}); err != nil {
+				break
+			}
+			started++
 		}
-		wg.Wait()
-		if err := ctx.Err(); err != nil {
+		for range started {
+			<-done
+		}
+		if err := errors.Join(err, ctx.Err()); err != nil {
 			return nil, err
 		}
 		for i, rd := range reads {
