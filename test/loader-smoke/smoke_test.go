@@ -213,10 +213,13 @@ func TestLoaderSmoke(t *testing.T) {
 		}
 		p.waitState(func(s teststate.State) bool { return rowState(s, "extra") == "ACTIVE" })
 
-		// flaky fails its first two applies, so the generation that enables it has a failed
-		// verdict: reload rolls it back with one inverse plan (ADR-059 decision 12), the row
-		// is disabled again and the process stays ready. The retry itself is covered at boot.
-		write("- {id: extra, enabled: true}\n- {id: flaky, enabled: true}\n")
+		// flaky with no failTimes fails every apply, so the generation that enables it has a
+		// failed verdict: reload rolls it back with one inverse plan (ADR-059 decision 12), the
+		// row is disabled again and the process stays ready. The bundle's failTimes: 2 would
+		// make the verdict a race between the judge and restart-policy's retries, which extra,
+		// restarted in the same generation with a slow apply, makes the retries win. The
+		// retry itself is covered at boot.
+		write("- {id: extra, enabled: true, config: {note: extra, applyDelay: 100ms}}\n- {id: flaky, enabled: true, config: {}}\n")
 		p.submit("2")
 		st = p.waitState(func(s teststate.State) bool {
 			return s.Reload != nil && s.Reload.ID == 2 && s.Reload.Status != "queued" && s.Reload.Status != "running"
