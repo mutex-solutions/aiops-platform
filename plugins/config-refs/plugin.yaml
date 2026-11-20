@@ -1,0 +1,17 @@
+# The hand-written half of the manifest (07-c4-plugin-sdk.md section 2). The
+# generated half (uses, registers, configSchema, requires) comes with plugingen, S2a.
+manifestVersion: "1.0"
+id: aiops/config-refs
+version: 0.1.0
+title: Config references
+description: Resolves the closed references ${env|file|secret|flag:value} in a row's config before the row sees it.
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+provides: []
+needs:
+  - {key: cmdline, major: 0}
+hooks:
+  - {hook: internal/config, stage: default}
