@@ -179,8 +179,9 @@ func (t *tree) mountItems(ctx context.Context, ids []string) []mountItem {
 	for _, id := range ids {
 		if e := t.entries[id]; e != nil && !seen[id] {
 			seen[id] = true
-			// A group that activated meanwhile has mounted the entry itself.
-			if pc := t.parentCtx(e); pc != nil && (e.fiber == nil || gone(ctx, e.fiber)) {
+			// A group that activated meanwhile has mounted the entry itself, or is
+			// mounting it (the plan's second batch does not hold excl).
+			if pc := t.parentCtx(e); pc != nil && pc != e.claim && (e.fiber == nil || gone(ctx, e.fiber)) {
 				items = append(items, mountItem{spec: e.spec, pc: pc})
 			}
 		}

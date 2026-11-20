@@ -255,6 +255,56 @@ func TestSecondBatchSkipsAnEndingGroupActivation(t *testing.T) {
 	}
 }
 
+// The second batch of a plan does not mount a child that the group's new
+// activation is mounting: the child gets one fiber.
+func TestSecondBatchSkipsAChildTheGroupIsMounting(t *testing.T) {
+	gate := kernel.NewKey[int]("gate", 0)
+	p := newProbe()
+	slow := newSlowGate() // its disposal holds the plan in its wait for the second batch
+	l := newListener("t/listener")
+	rp := row("p", "t/p")
+	rp.Config = "v1"
+	x := newFx(t, fxOpt{plugins: plugins(provider(p, "t/p", gate), p.plugin("t/k", nil), p.plugin("t/k2", nil), slow.plugin(), p.plugin("t/s2", nil)),
+		keys: map[string]kernel.AnyKey{"gate": gate}, pre: []kernel.Plugin{l.plugin},
+		rows: []def.EntrySpec{rp, gated(), child("g", "k", "t/k"), row("s", "t/slow")}})
+	x.want("g:k", kernel.Active)
+	// The group's next activation is held while it builds g:k.
+	building, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	armed.Store(true)
+	l.mu.Lock()
+	l.patch = func(a def.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+		if a.Entry.ID == "g:k" && armed.Swap(false) {
+			close(building)
+			<-release
+		}
+		return next()
+	}
+	l.mu.Unlock()
+
+	rp.Config = "v2"
+	var res []def.Result
+	var err error
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		res, err = x.ld.Apply(t.Context(), []def.Op{update(rp), update(child("g", "k", "t/k2")), update(row("s", "t/s2"))})
+	})
+	<-building
+	close(slow.release)
+	wg.Wait()
+	close(release)
+	if err != nil || len(res) != 3 {
+		t.Fatalf("Apply = %v, %v", res, err)
+	}
+	x.settle()
+	x.want("g:k", kernel.Active)
+	x.want("s", kernel.Active)
+	if n := x.fibers("t/k2"); n != 1 {
+		t.Errorf("g:k has %d live fibers", n)
+	}
+	x.consistent()
+}
+
 // A plan that the kernel refuses is undone without undoing what a group's
 // activation did meanwhile: here the provider the group injects goes while the
 // plan is in flight, and the group unloads with its children.

@@ -93,11 +93,13 @@ func New() kernel.Plugin {
 
 // entry is one row of the tree. fiber is nil while the entry has none: it is not
 // mounted, or its group is not active. kids is the context a group mounts its
-// children from, set while the group's activation lives.
+// children from, set while the group's activation lives. claim is the group
+// activation that is mounting the entry, from mountUnder until adopt.
 type entry struct {
 	spec  def.EntrySpec
 	fiber *kernel.Fiber
 	kids  *kernel.Context
+	claim *kernel.Context
 }
 
 type tree struct {
@@ -296,6 +298,7 @@ func (t *tree) mountUnder(c *kernel.Context, parent string) {
 	var specs []def.EntrySpec
 	for _, id := range t.order {
 		if e := t.entries[id]; e.spec.Parent == parent && t.mount(e) == def.Mounted {
+			e.claim = c
 			specs = append(specs, e.spec)
 		}
 	}
@@ -321,8 +324,13 @@ type mountItem struct {
 // ended: the entry is created, so it is not an error of the operation.
 func (t *tree) adopt(ctx context.Context, m mountItem, f *kernel.Fiber) {
 	t.mu.Lock()
-	if e := t.entries[m.spec.ID]; e != nil && t.parentCtx(e) == m.pc {
-		e.fiber = f
+	if e := t.entries[m.spec.ID]; e != nil {
+		if e.claim == m.pc {
+			e.claim = nil
+		}
+		if t.parentCtx(e) == m.pc {
+			e.fiber = f
+		}
 	}
 	t.mu.Unlock()
 	_ = t.init.Emit(ctx, kernel.Unscoped, def.EntryInitArgs{Entry: m.spec, Context: m.mc})
