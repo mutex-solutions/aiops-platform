@@ -231,11 +231,16 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 // :1375). A change of the plugin, inject, isolate or intercept replaces the fiber,
 // because a fiber's needs and context are fixed when it is mounted; a change of
 // config restarts it with the new config, unless only volatile paths changed
-// (volatile.go). A volatile commit is the tree's new config plus a
-// loader/volatile-update event: the kernel has no way to retain a config without a
-// restart (Fiber.Update restarts unless internal/update is vetoed), so the config
-// that the kernel keeps for the fiber stays the one of its last mount or restart,
-// and the consumer of the event is what makes the new values visible (open point).
+// (volatile.go). A volatile commit is the tree's new config, the same config
+// retained by the kernel with kernel.CommitOp in the plan's batch, and a
+// loader/volatile-update event once the batch is committed. The two records change
+// together or not at all: a plan whose batch the kernel refuses, for a config that
+// internal/config, Decode or internal/commit refuses as for any other, puts the tree
+// back and the kernel's retained config is put back with the batch, and the error is
+// returned. The running activation is not restarted and its Apply is not called
+// again: the consumer of the event makes the new values visible, and a restart that
+// the kernel starts later (a provider's epoch change, a retry) applies the committed
+// config.
 func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.EntrySpec) def.Outcome {
 	old, was := cur.spec, t.mount(cur)
 	cur.spec = e
@@ -272,6 +277,7 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	case len(paths) == 0:
 		return def.Unchanged
 	case only:
+		p.updates = append(p.updates, kernel.CommitOp(cur.fiber, e.Config))
 		p.announce = append(p.announce, def.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
 		return def.Committed
 	}

@@ -453,3 +453,73 @@ func TestOneApplyAtATime(t *testing.T) {
 		t.Errorf("Await of a child: %v", err)
 	}
 }
+
+// A volatile commit is retained by the kernel with the tree's record, so a restart
+// that the kernel starts later applies it and does not revert it.
+func TestVolatileCommitSurvivesAKernelRestart(t *testing.T) {
+	k := kernel.NewKey[int]("k", 0)
+	p := newProbe()
+	prov := p.plugin("t/prov", func(c *kernel.Context, _ any) error { return k.Provide(c, 1) })
+	prov.Provides = []kernel.AnyKey{k}
+	v := p.plugin("t/v", nil)
+	rv := row("v", "t/v")
+	rv.Inject = []string{"k"}
+	rv.Config = map[string]any{"window": int64(5), "name": "x"}
+	x := newFx(t, fxOpt{plugins: plugins(v, kernel.Define(prov)), keys: map[string]kernel.AnyKey{"k": k},
+		rows: []def.EntrySpec{row("prov", "t/prov"), rv}, modules: []launch.CatalogEntry{{ID: "t/v", Volatile: []string{"window"}}}})
+	x.want("v", kernel.Active)
+	committed := map[string]any{"window": int64(9), "name": "x"}
+	rv.Config = committed
+	if res := x.apply(update(rv)); res[0].Outcome != def.Committed {
+		t.Fatalf("outcome %v", res)
+	}
+	if p.count("t/v") != 1 {
+		t.Fatalf("the commit restarted the fiber: %d applies", p.count("t/v"))
+	}
+
+	// The provider restarts: its epoch changes and the kernel restarts the entry.
+	x.tree.mu.Lock()
+	pf, vf := x.tree.entries["prov"].fiber, x.tree.entries["v"].fiber
+	x.tree.mu.Unlock()
+	if err := pf.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	x.settle()
+	x.want("v", kernel.Active)
+	if p.count("t/v") != 2 || !deepEqual(p.lastConfig("t/v"), committed) {
+		t.Errorf("the epoch restart applied %v after %d applies, want %v", p.lastConfig("t/v"), p.count("t/v"), committed)
+	}
+	// So does a restart through an update operation, which keeps the retained config.
+	if _, err := x.root.Batch(t.Context(), kernel.UpdateOp(vf)); err != nil {
+		t.Fatal(err)
+	}
+	x.settle()
+	if p.count("t/v") != 3 || !deepEqual(p.lastConfig("t/v"), committed) {
+		t.Errorf("the update operation applied %v after %d applies", p.lastConfig("t/v"), p.count("t/v"))
+	}
+
+	// A commit that the kernel refuses changes neither record and is announced to
+	// no one.
+	var veto atomic.Bool
+	kernel.InternalCommit.On(x.root.Context(), kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[bool]) (bool, error) {
+		if veto.Load() {
+			return false, nil
+		}
+		return next()
+	})
+	veto.Store(true)
+	rv.Config = map[string]any{"window": int64(11), "name": "x"}
+	if _, err := x.ld.Apply(t.Context(), []def.Op{update(rv)}); !errors.Is(err, kernel.ErrCommitVetoed) {
+		t.Fatalf("a vetoed commit: %v", err)
+	}
+	if e, _ := x.ld.Locate("v"); !deepEqual(e.Spec.Config, committed) {
+		t.Errorf("the tree records %v after a refused commit", e.Spec.Config)
+	}
+	if _, err := x.root.Batch(t.Context(), kernel.UpdateOp(vf)); err != nil {
+		t.Fatal(err)
+	}
+	x.settle()
+	if !deepEqual(p.lastConfig("t/v"), committed) {
+		t.Errorf("a refused commit was retained: %v", p.lastConfig("t/v"))
+	}
+}
