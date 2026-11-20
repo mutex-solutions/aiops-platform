@@ -35,13 +35,21 @@ type Config struct {
 	FileRootFlag string
 }
 
+// ReadyKey is configRefsReady: the row provides it once its listener is on
+// internal/config. The launcher gives every row whose config holds a reference a
+// row-level inject of it, so such a row is applied only while its references can
+// resolve, and unloads in the same owner turn as this row (ADR-059, "configRefsReady"). It is
+// provider-bound to this row in dist.yaml.
+var ReadyKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.ProviderBound())
+
 // Plugin is the config-refs row.
 var Plugin = kernel.Define(kernel.Plugin{
-	ID:     "aiops/config-refs",
-	Inject: []kernel.Dep{kernel.Need(launch.CmdlineKey)},
-	Hooks:  []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
-	Decode: decode,
-	Apply:  apply,
+	ID:       "aiops/config-refs",
+	Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
+	Provides: []kernel.AnyKey{ReadyKey},
+	Hooks:    []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
+	Decode:   decode,
+	Apply:    apply,
 })
 
 func apply(c *kernel.Context, cfg any) error {
@@ -61,7 +69,7 @@ func apply(c *kernel.Context, cfg any) error {
 		// and the listeners inward of this one do not run. Open point for the kernel.
 		return out, nil
 	})
-	return nil
+	return ReadyKey.Provide(c, struct{}{})
 }
 
 func decode(raw any) (any, error) {

@@ -110,6 +110,38 @@ func TestNestedMapsAndListsAreResolvedWithoutChangingTheRaw(t *testing.T) {
 	}
 }
 
+// A row that needs configRefsReady is applied only once config-refs is ACTIVE, with its
+// references resolved, and unloads while config-refs is gone.
+func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
+	l, lp := fake.New()
+	l.Environ = map[string]string{"AIOPS_REF_A": "a"}
+	root := kerneltest.New(t)
+	kerneltest.Mount(root, lp)
+	g := &target{}
+	p := g.plugin()
+	p.Inject = []kernel.Dep{kernel.Need(configrefs.ReadyKey)}
+	user := root.Plugin(p, map[string]any{"v": ref("env", "AIOPS_REF_A")})
+	if st, _ := user.State(t.Context()); st != kernel.Pending || g.got.Load() != nil {
+		t.Fatalf("before config-refs: %s, applied %v", st, g.got.Load() != nil)
+	}
+	refs := root.Plugin(configrefs.Plugin, configrefs.Config{MaxFileBytes: 8})
+	if err := errors.Join(refs.Await(t.Context()), user.Await(t.Context())); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.config().(map[string]any)["v"]; got != "a" {
+		t.Errorf("v = %v, want the resolved value", got)
+	}
+	if err := refs.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := user.State(t.Context()); st != kernel.Pending {
+		t.Errorf("with config-refs gone the row is %s, want PENDING", st)
+	}
+}
+
 func TestConfigWithoutReferencesPassesThrough(t *testing.T) {
 	l, lp := fake.New()
 	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 64})
@@ -230,8 +262,6 @@ func TestUpdateWithUnresolvedReferenceIsRefused(t *testing.T) {
 
 func TestDecode(t *testing.T) {
 	_, lp := fake.New()
-	root := kerneltest.New(t)
-	kerneltest.Mount(root, lp)
 	for _, tc := range []struct {
 		name string
 		raw  any
@@ -251,6 +281,9 @@ func TestDecode(t *testing.T) {
 		{"unknown field", map[string]any{"maxFileBytes": 1, "bogus": 1}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// One root each: a second config-refs in a realm is a second provider of ReadyKey.
+			root := kerneltest.New(t)
+			kerneltest.Mount(root, lp)
 			err := root.Plugin(configrefs.Plugin, tc.raw).Await(t.Context())
 			if (err == nil) != tc.ok {
 				t.Errorf("err = %v, want ok = %v", err, tc.ok)
@@ -270,6 +303,7 @@ func boundKernel(t *testing.T, launcher kernel.Plugin, listeners ...kernel.Plugi
 		Providers: kernel.Bindings{
 			launch.ProfileContextKey: {launcher}, launch.CatalogKey: {launcher}, launch.CmdlineKey: {launcher},
 			launch.ReadyKey: {launcher}, launch.KillSwitchesKey: {launcher}, launch.AppExitKey: {launcher},
+			configrefs.ReadyKey: {configrefs.Plugin},
 		},
 		Consumers: kernel.Bindings{launch.AppExitKey: nil},
 		Listeners: map[kernel.AnyHook][]kernel.Plugin{kernel.InternalConfig: listeners},

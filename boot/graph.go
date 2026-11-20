@@ -112,9 +112,10 @@ func (b *builder) provides(id string) []string { return b.mods[b.rows[id].Plugin
 // launcher provides the six launch keys before any row mounts (03-c3-kernel.md:360)
 // and the kernel its four built-ins, so no row provides them and none waits for
 // them. A manifest lists them in needs all the same (the loader needs profileContext
-// and catalog, readiness needs logger).
+// and catalog, readiness needs logger). A row whose config holds a reference needs
+// configRefsReady, which config-refs provides (refsInject).
 func (b *builder) needs(id string) []string {
-	return withoutRoot(union(b.mods[b.rows[id].Plugin].Needs, b.rows[id].Inject))
+	return withoutRoot(union(b.mods[b.rows[id].Plugin].Needs, refsInject(b.rows[id])))
 }
 
 // realm returns the realm of a key at a row.

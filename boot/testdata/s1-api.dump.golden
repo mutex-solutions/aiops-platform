@@ -62,3 +62,4 @@ check 10 Attestation: not evaluated until S2a
 
 ## diagnostics
 warning: row "runbook" detached as disabled: gate check 7 (Key and hook classes), rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]
+warning: static graph: no-provider: 1 optional rows would be PENDING: "tools" waits for configRefsReady

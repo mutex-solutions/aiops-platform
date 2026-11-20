@@ -104,6 +104,27 @@ deviation.
     applied generation (its rows with `required: true` plus the distribution's
     set); the six launch keys do not change.
 
+## configRefsReady (recorded 2026-11-21)
+
+The launcher gated the rows whose config holds a reference on a key it provided itself
+and switched from an observer of the kernel's events. The observer runs apart from the
+tree, so the key lagged `config-refs`: a row mounted while `config-refs` restarted got
+the unresolved reference, a settled tree still had reference rows PENDING, and the static
+graph, the restart closure and the required audit did not know the key. Recorded here:
+
+- `config-refs` provides `configRefsReady` once its listener is on `internal/config`.
+  The key is provider-bound to `aiops/config-refs` in the distribution manifest; the six
+  launch keys do not change.
+- The launcher gives every row whose config holds a reference, other than `config-refs`
+  itself, a row-level `inject` of the key. Such a row is applied only while its
+  references can resolve and unloads in the owner turn in which `config-refs` quiesces.
+- The static graph sees that need. A required row with a reference needs `config-refs`
+  in the required set (gate check 7, `08` §1.6), two `config-refs` rows in one realm are
+  two providers, and the restart closure of `config-refs` holds the rows with
+  references. With no `config-refs` row such a row stays PENDING and waits for the key.
+- Open point: a row that gains its first reference or loses its last changes its
+  `inject`, which the loader treats as a replacement.
+
 ## Line budgets at the S1 exit
 
 Decision 11 is applied. The caps are the measured count at the S1 exit plus ten per

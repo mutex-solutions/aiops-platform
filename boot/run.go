@@ -207,10 +207,8 @@ type run struct {
 	leakSeen atomic.Bool
 	leakWhy  atomic.Pointer[string] // the first leak the observer saw, as a line for the log
 	unload   unloads
-	// refsActive says config-refs is ACTIVE: the availability of configRefsReady.
-	refsActive atomic.Bool
-	reader     atomic.Pointer[reader]
-	afterNew   func(*kernel.Root) // a seam of the tests: runs between kernel.New and prepare
+	reader   atomic.Pointer[reader]
+	afterNew func(*kernel.Root) // a seam of the tests: runs between kernel.New and prepare
 }
 
 // reader is the launcher's own view of the tree: the composition key reads the rows
@@ -320,12 +318,6 @@ func (r *run) run(ctx context.Context) int {
 	// 5. Settle under a bound, then the required audit over the live tree
 	// (03-c3-kernel.md:361).
 	bctx, cancel := r.bound(boot, o.Limits.settleBound())
-	_ = root.Settle(bctx) // the verdict is the second one's: a blocked fiber is still blocked then
-	// config-refs becoming ACTIVE makes configRefsReady available through the observer
-	// of watch, which runs apart from the tree: Settle may return before it has told the
-	// kernel, with a row that holds a reference still PENDING for the key, and the audit
-	// would stop a healthy boot. Wait for the observer, then settle what it set going.
-	_ = root.AwaitObservers(bctx) // an overflow only says events were lost; the audit reads the tree itself
 	serr := root.Settle(bctx)
 	cancel()
 	// Settle returns while a fiber that is blocked past its load deadline is still
@@ -481,7 +473,6 @@ func (r *run) prepare(pc *profileContext, cat *catalog) error {
 		launch.ReadyKey.Provide(c, r.ready),
 		launch.KillSwitchesKey.Provide(c, switches(ReadKillSwitches(envOf(o.Env)))),
 		launch.AppExitKey.Provide(c, appExit{reqs: r.exits}),
-		configRefsKey.Provide(c, struct{}{}, kernel.Available(func(*kernel.Context) bool { return r.refsActive.Load() })),
 	)
 }
 
@@ -497,22 +488,12 @@ func envOf(f func(string) string) func(string) string {
 // (03-c3-kernel.md:372; 07-c4-plugin-sdk.md:359): the callback keeps what the event
 // says, sets a flag and pings the run loop. The event is the record, not the tree: a
 // fiber whose goroutine returns after the deadline is archived and is no longer
-// listed as live, and it has still leaked. A change of state of config-refs makes configRefsReady
-// available or not, and the kernel tells the rows that wait for it.
+// listed as live, and it has still leaked.
 func (r *run) watch() error {
-	_, err := r.root.Observe("boot-watch", func(ctx context.Context, e kernel.LedgerEvent) error {
+	_, err := r.root.Observe("boot-watch", func(_ context.Context, e kernel.LedgerEvent) error {
 		switch {
 		case e.Kind == "state":
 			r.unload.set(e.Fiber, e.State == kernel.Unloading)
-			if e.Plugin == ConfigRefsID {
-				if active := e.State == kernel.Active; r.refsActive.Swap(active) != active {
-					err := r.root.Notify(ctx, configRefsKey)
-					if ctx.Err() != nil {
-						return nil // Close: the observer of the root sees its events with the context of the shutdown
-					}
-					return err
-				}
-			}
 		case e.Kind == "deadline" && (e.Label == "dispose" || e.Label == "drain"):
 			r.unload.set(e.Fiber, false) // the kernel gave up on it: it is not waited for
 			why := fmt.Sprintf("fiber %d %s passed its %s deadline", e.Fiber, e.Plugin, e.Label)

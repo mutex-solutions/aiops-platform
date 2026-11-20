@@ -3,20 +3,30 @@ package boot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"testing/fstest"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
+// refsReadyKey is the configRefsReady of the fake, as config-refs declares its own.
+var refsReadyKey = kernel.NewKey[struct{}](configRefsReady, 0, kernel.ProviderBound())
+
 // fakeRefs stands in for the config-refs row: it signals that it entered Apply, waits
-// for gate, and resolves a ${env:X} reference to "resolved-X" and fails a secret one.
+// for gate, resolves a ${env:X} reference to "resolved-X" and fails a secret one, and
+// provides configRefsReady.
 func fakeRefs(entered chan<- struct{}, gate <-chan struct{}) ModuleEntry {
 	p := kernel.Define(kernel.Plugin{
-		ID:    ConfigRefsID,
-		Hooks: []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
+		ID:       ConfigRefsID,
+		Provides: []kernel.AnyKey{refsReadyKey},
+		Hooks:    []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
 			entered <- struct{}{}
 			select {
@@ -27,11 +37,11 @@ func fakeRefs(entered chan<- struct{}, gate <-chan struct{}) ModuleEntry {
 			kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, raw any, _ kernel.Next[any]) (any, error) {
 				return resolveRefs(raw)
 			})
-			return nil
+			return refsReadyKey.Provide(c, struct{}{})
 		},
 	})
 	return ModuleEntry{ID: ConfigRefsID, Module: "example.test/refs", Version: "v0.1.0", Plugin: p,
-		Hooks: []HookDecl{{Hook: "internal/config", StageName: "default"}}}
+		Provides: []string{configRefsReady}, Hooks: []HookDecl{{Hook: "internal/config", StageName: "default"}}}
 }
 
 func resolveRefs(v any) (any, error) {
@@ -64,6 +74,7 @@ func refsFixture(t *testing.T, bundle string, extra ...ModuleEntry) *fixture {
 	t.Helper()
 	f := newFixture(t, bundle, extra...)
 	f.dist.SealedHooks = []HookListeners{{Hook: "internal/config", Plugins: []string{ConfigRefsID}}}
+	f.dist.Providers = []Binding{{Key: configRefsReady, Plugins: []string{ConfigRefsID}}}
 	return f
 }
 
@@ -132,6 +143,9 @@ func TestUnresolvedReference(t *testing.T) {
     - {id: refs, plugin: aiops/config-refs, roles: [api]}
     - {id: user, plugin: t/rec, roles: [api], config: {token: "${secret:x}"}`+tc.required+`}
 `, fakeRefs(entered, gate), recorder("t/rec", got))
+			// A required row that holds a reference needs config-refs in the required set
+			// (08-profiles-roadmap-adrs.md:503), here by its key.
+			f.dist.RequiredKeys = []string{configRefsReady}
 			if tc.code < 0 {
 				done := f.start(t.Context())
 				f.waitReady(t, done)
@@ -201,5 +215,233 @@ func TestRefsInject(t *testing.T) {
 		if r.ID == "ref" && !slices.Contains(r.Inject, "configRefsReady") {
 			t.Errorf("launch row %+v", r)
 		}
+	}
+}
+
+// refsRun boots config-refs, a row whose config holds a reference and a row that reads the
+// registry, with an observer of the test registered ahead of boot's own. hold makes that
+// observer stop the event stream at the first event it matches, until release is closed.
+type refsRun struct {
+	f    *fixture
+	r    *run
+	root *kernel.Root
+	reg  interface {
+		Fiber(uint64) (*kernel.Fiber, bool)
+	}
+	done    chan int
+	hold    atomic.Pointer[func(kernel.LedgerEvent) bool]
+	held    chan struct{}
+	release chan struct{}
+	gate    chan struct{}
+	once    sync.Once
+}
+
+func startRefsRun(t *testing.T, bundle string, extra ...ModuleEntry) *refsRun {
+	t.Helper()
+	// config-refs applies once per token of gate: the boot's is there, a restart's is not.
+	entered, gate := make(chan struct{}, 16), make(chan struct{}, 1)
+	gate <- struct{}{}
+	regs := make(chan interface {
+		Fiber(uint64) (*kernel.Fiber, bool)
+	}, 1)
+	reader := toy(toySpec{id: "t/registry", needs: []kernel.AnyKey{kernel.RegistryKey}, apply: func(c *kernel.Context, _ any) error {
+		regs <- kernel.RegistryKey.Of(c)
+		return nil
+	}})
+	f := refsFixture(t, bundle, append([]ModuleEntry{fakeRefs(entered, gate), reader}, extra...)...)
+	f.dist.Consumers = append(f.dist.Consumers, Binding{Key: "registry", Plugins: []string{"t/registry"}})
+	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	rr := &refsRun{f: f, r: newRun(f.opt), done: make(chan int, 1), held: make(chan struct{}), release: make(chan struct{}), gate: gate}
+	t.Cleanup(rr.unhold)
+	roots := make(chan *kernel.Root, 1)
+	rr.r.afterNew = func(root *kernel.Root) {
+		_, err := root.Observe("test-hold", func(_ context.Context, e kernel.LedgerEvent) error {
+			if h := rr.hold.Load(); h != nil && (*h)(e) {
+				rr.hold.Store(nil)
+				close(rr.held)
+				<-rr.release
+			}
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		roots <- root
+	}
+	go func() { rr.done <- rr.r.main(t.Context()) }()
+	rr.root = <-roots
+	f.waitReady(t, rr.done)
+	rr.reg = <-regs
+	return rr
+}
+
+func (rr *refsRun) unhold() { rr.once.Do(func() { close(rr.release) }) }
+
+// fiber returns the live fiber of the plugin id.
+func (rr *refsRun) fiber(t *testing.T, plugin string) *kernel.Fiber {
+	t.Helper()
+	ins, err := rr.root.Inspect(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range ins.Fibers {
+		if s.Plugin == plugin && s.Alive {
+			if f, ok := rr.reg.Fiber(s.ID); ok {
+				return f
+			}
+		}
+	}
+	t.Fatalf("no live fiber of %s", plugin)
+	return nil
+}
+
+func (rr *refsRun) stop(t *testing.T) {
+	t.Helper()
+	rr.unhold()
+	rr.f.signal <- syscall.SIGTERM
+	if code := <-rr.done; code != ExitOK {
+		t.Fatalf("exit %d, stderr:\n%s", code, rr.f.errb.String())
+	}
+}
+
+const refsBundle = `
+- insert:
+    - {id: refs, plugin: aiops/config-refs, roles: [api]}
+    - {id: reg, plugin: t/registry, roles: [api]}
+    - {id: user, plugin: t/rec, roles: [api], config: {note: "${env:AIOPS_REF_NOTE}"}}
+`
+
+// Restarting config-refs unloads the rows that hold a reference and brings them back in the
+// same settle: once the tree has settled they are ACTIVE, whatever boot's observer has seen.
+func TestConfigRefsRestartSettlesWithItsDependants(t *testing.T) {
+	rr := startRefsRun(t, refsBundle, recorder("t/rec", make(chan any, 8)))
+	refs := rr.fiber(t, ConfigRefsID)
+	h := func(e kernel.LedgerEvent) bool {
+		return e.Kind == "state" && e.Plugin == ConfigRefsID && e.State == kernel.Active
+	}
+	rr.hold.Store(&h)
+	if err := refs.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	rr.gate <- struct{}{}
+	<-rr.held // config-refs is ACTIVE again; boot's observer has not been told yet
+	if err := rr.root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := rr.fiber(t, "t/rec").State(t.Context()); st != kernel.Active {
+		t.Errorf("the row with a reference is %s once the tree settled, want ACTIVE", st)
+	}
+	rr.stop(t)
+}
+
+// A row mounted in the batch that restarts config-refs is not applied before config-refs is
+// ACTIVE again: neither Decode nor Apply ever sees an unresolved reference.
+func TestRowMountedWhileConfigRefsRestartsSeesNoReference(t *testing.T) {
+	rr := startRefsRun(t, refsBundle, recorder("t/rec", make(chan any, 8)))
+	refs := rr.fiber(t, ConfigRefsID)
+	k, ok := rr.r.cat.Key("configRefsReady")
+	if !ok {
+		t.Fatal("configRefsReady is not in the key table")
+	}
+	var mu sync.Mutex
+	var seen []any
+	keep := func(v any) {
+		mu.Lock()
+		seen = append(seen, v)
+		mu.Unlock()
+	}
+	extra := kernel.Define(kernel.Plugin{ID: "t/extra", Inject: []kernel.Dep{kernel.NeedKey(k)},
+		Decode: func(raw any) (any, error) { keep(raw); return raw, nil },
+		Apply:  func(_ *kernel.Context, cfg any) error { keep(cfg); return nil }})
+	h := func(e kernel.LedgerEvent) bool {
+		return e.Kind == "state" && e.Plugin == ConfigRefsID && e.State == kernel.Unloading
+	}
+	rr.hold.Store(&h)
+	cfg := map[string]any{"note": launch.Ref{Scheme: "env", Name: "AIOPS_REF_X"}}
+	fs, err := rr.root.Batch(t.Context(), kernel.UpdateOp(refs), kernel.MountOp(extra, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-rr.held // config-refs is quiescing; boot's observer has not been told yet
+	_ = fs[1].Await(t.Context())
+	rr.gate <- struct{}{} // config-refs may become ACTIVE again
+	rr.unhold()
+	if err := rr.root.AwaitObservers(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := rr.root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	for _, v := range seen {
+		if m, _ := v.(map[string]any); m != nil {
+			if _, raw := m["note"].(launch.Ref); raw {
+				t.Errorf("the row saw an unresolved reference: %v (all: %v)", v, seen)
+				break
+			}
+		}
+	}
+	if len(seen) == 0 {
+		t.Error("the row was never applied")
+	}
+	mu.Unlock()
+	rr.stop(t)
+}
+
+// Two config-refs rows are two providers of configRefsReady in one realm: boot stops
+// (03-c3-kernel.md:359), instead of following whichever of them changed state last.
+func TestTwoConfigRefsRowsStopBoot(t *testing.T) {
+	entered, gate := make(chan struct{}, 2), make(chan struct{})
+	close(gate)
+	f := refsFixture(t, `
+- insert:
+    - {id: refs, plugin: aiops/config-refs, roles: [api]}
+    - {id: refs2, plugin: aiops/config-refs, roles: [api]}
+`, fakeRefs(entered, gate))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	pub := f.opt.Publish
+	f.opt.Publish = func(s ProcessStatus) {
+		pub(s)
+		if s.Phase == PhaseRunning {
+			cancel()
+		}
+	}
+	if code := f.run(ctx); code != ExitRefused || !strings.Contains(f.errb.String(), "two-providers") || !strings.Contains(f.errb.String(), "configRefsReady") {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
+// The static graph knows that a row with a reference needs config-refs: a required one
+// with no config-refs row stops boot before any row mounts, and the restart closure of
+// config-refs holds it.
+func TestStaticGraphHasConfigRefsReady(t *testing.T) {
+	f := newFixture(t, "- insert:\n    - {id: user, plugin: t/rec, roles: [api], required: true, config: {note: \"${env:AIOPS_REF_X}\"}}\n", recorder("t/rec", make(chan any, 1)))
+	if code := f.run(t.Context()); code != ExitRefused || !strings.Contains(f.errb.String(), `row "user" needs key "configRefsReady"`) {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+
+	var l launched
+	entered, gate := make(chan struct{}, 2), make(chan struct{})
+	close(gate)
+	const bundle = "- insert:\n    - {id: refs, plugin: aiops/config-refs, roles: [api]%s}\n    - {id: user, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_X}\"}}\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
+	f = refsFixture(t, fmt.Sprintf(bundle, ""), fakeRefs(entered, gate), recorder("t/rec", make(chan any, 4)), probe(&l))
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(fmt.Sprintf(bundle, ", config: {x: 1}"))}
+	next, err := pc.Compose(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl, err := pc.Plan(t.Context(), pc.Committed(), next)
+	if err != nil || !slices.Contains(pl.Closure, "user") {
+		t.Errorf("plan: %v, closure %v: a restart of config-refs restarts the row with a reference", err, pl.Closure)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
 	}
 }

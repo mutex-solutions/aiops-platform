@@ -22,34 +22,37 @@ import (
 // ConfigRefsID is the plugin id of config-refs, the row that resolves references.
 const ConfigRefsID = "aiops/config-refs"
 
-// configRefsKey is the one key of the launcher that is not a launch service: it is
-// available once config-refs is ACTIVE, and every row whose config holds a reference
-// has it as a row-level inject (refsInject), so that no such row is applied before
-// its references can resolve. It is provider-bound, so only the launcher provides it.
-var configRefsKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.ProviderBound())
+// configRefsReady names the key that config-refs provides once its listener is on
+// internal/config (ADR-059, "configRefsReady"). Every row whose config holds a reference has
+// it as a row-level inject (refsInject), so no such row is applied before its
+// references can resolve, and each unloads in the owner turn in which config-refs
+// quiesces. The static graph sees the same need, so a required row with a reference
+// needs config-refs in the required set, and the restart closure of config-refs holds
+// the rows with references. With no config-refs in the module table the catalog still
+// has the key, which nothing provides, so such a row stays PENDING.
+const configRefsReady = "configRefsReady"
 
-// rootKeyNames are the keys that the root provides: the six launch keys, the four
-// built-ins of the kernel and configRefsKey. No row provides them and none waits for
-// them: the static graph leaves them out of the needs of a row (builder.needs) and
-// the run-time audit counts them provided.
+// rootKeyNames are the keys that the root provides: the six launch keys and the four
+// built-ins of the kernel. No row provides them and none waits for them: the static
+// graph leaves them out of the needs of a row (builder.needs) and the run-time audit
+// counts them provided.
 func rootKeyNames() []string {
 	return []string{
 		launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
 		launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name(),
 		kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name(),
-		configRefsKey.Name(),
 	}
 }
 
 func isRootKey(name string) bool { return slices.Contains(rootKeyNames(), name) }
 
-// refsInject returns the inject of a row for the loader: its own, and configRefsReady
-// when its config holds a reference. config-refs itself never waits for itself.
+// refsInject returns the inject of a row: its own, and configRefsReady when its config
+// holds a reference. config-refs itself never waits for itself.
 func refsInject(r ComposedRow) []string {
-	if len(r.Refs) == 0 || r.Plugin == ConfigRefsID || slices.Contains(r.Inject, configRefsKey.Name()) {
+	if len(r.Refs) == 0 || r.Plugin == ConfigRefsID || slices.Contains(r.Inject, configRefsReady) {
 		return slices.Clone(r.Inject)
 	}
-	return slices.Sorted(slices.Values(append(slices.Clone(r.Inject), configRefsKey.Name())))
+	return slices.Sorted(slices.Values(append(slices.Clone(r.Inject), configRefsReady)))
 }
 
 // profileContext is the profileContext service. Compose reads the layer files
@@ -302,7 +305,7 @@ func newCatalog(reg Registry) (*catalog, error) {
 		c.keys[k.Name()] = k
 	}
 	for _, k := range []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey, launch.ReadyKey,
-		launch.KillSwitchesKey, launch.AppExitKey, configRefsKey, loaderdef.Key, composition.Key, kernel.ReflectKey,
+		launch.KillSwitchesKey, launch.AppExitKey, loaderdef.Key, composition.Key, kernel.ReflectKey,
 		kernel.RegistryKey, kernel.HooksKey, kernel.LoggerKey} {
 		add(k)
 	}
@@ -350,6 +353,9 @@ func newCatalog(reg Registry) (*catalog, error) {
 			Needs: slices.Clone(e.Needs), Volatile: volatilePaths(e.Volatile)}
 		c.entries = append(c.entries, ce)
 		c.byID[id] = ce
+	}
+	if _, ok := c.keys[configRefsReady]; !ok { // no config-refs: a key nothing may provide
+		c.keys[configRefsReady] = kernel.NewKey[struct{}](configRefsReady, 0, kernel.ProviderBound())
 	}
 	return c, errors.Join(errs...)
 }
