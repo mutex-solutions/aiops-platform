@@ -100,6 +100,20 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	if *bundles == "" {
 		*bundles = *home
 	}
+	// A bad command line writes no status: it may not name the home of this process,
+	// and "aiops --help" must not mark a server that runs on $AIOPS_HOME stopped.
+	runDir := runfile.Dir(*home)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		fmt.Fprintf(e.Stderr, "error: %v\n", err)
+		return boot.ExitInternal
+	}
+	publish := func(s boot.ProcessStatus) {
+		if err := runfile.Write(runDir, StatusFile, statusJSON(s)); err != nil {
+			fmt.Fprintf(e.Stderr, "warning: status file: %v\n", err)
+		}
+	}
+	// The status of a process that was killed, maybe "ready", must not outlive this start.
+	publish(boot.ProcessStatus{Phase: boot.PhaseStarting, Profile: *profile})
 	lim := d.Limits
 	if *limits != "" {
 		data, err := os.ReadFile(*limits)
@@ -108,13 +122,9 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		}
 		if err != nil {
 			fmt.Fprintf(e.Stderr, "error: %v\n", err)
+			publish(boot.ProcessStatus{Phase: boot.PhaseStopped, Profile: *profile, Exit: boot.ExitRefused, Detail: err.Error()})
 			return boot.ExitRefused
 		}
-	}
-	runDir := runfile.Dir(*home)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		fmt.Fprintf(e.Stderr, "error: %v\n", err)
-		return boot.ExitInternal
 	}
 	opts := boot.RunOptions{
 		Profile: *profile, Role: *role,
@@ -123,11 +133,7 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Home:  overlay{os.DirFS(*home), d.Shipped}, Bundles: overlay{os.DirFS(*bundles), d.Shipped},
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
 		Registry: d.Registry, Dist: d.Manifest, Limits: lim, Clock: boot.SystemClock(),
-		Publish: func(s boot.ProcessStatus) {
-			if err := runfile.Write(runDir, StatusFile, statusJSON(s)); err != nil {
-				fmt.Fprintf(e.Stderr, "warning: status file: %v\n", err)
-			}
-		},
+		Publish: publish,
 	}
 	for _, p := range patches {
 		opts.Patches = append(opts.Patches, patchFile(p))

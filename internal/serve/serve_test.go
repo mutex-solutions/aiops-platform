@@ -240,6 +240,44 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 	}
 }
 
+// staleStatus leaves what a process killed while ready leaves in the home.
+func staleStatus(t *testing.T, h string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(h, "run"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(Status{Phase: "running", Ready: true, Profile: "p"})
+	if err := os.WriteFile(filepath.Join(h, "run", StatusFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunReplacesAStaleStatusBeforeBoot(t *testing.T) {
+	h := home(t, "[]")
+	staleStatus(t, h)
+	var seen Status
+	stubBoot(t, func(context.Context, boot.RunOptions) int { seen = readStatus(t, h); return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if seen != (Status{Phase: "starting", Profile: "p"}) {
+		t.Fatalf("status when boot starts %+v", seen)
+	}
+}
+
+func TestRunLimitsFailureReplacesAStaleStatus(t *testing.T) {
+	h := home(t, "[]")
+	staleStatus(t, h)
+	e, _, _ := env("--profile", "p", "--home", h, "--limits", filepath.Join(t.TempDir(), "typo.yaml"))
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitRefused {
+		t.Fatalf("exit %d", code)
+	}
+	if s := readStatus(t, h); s.Phase != "stopped" || s.Ready || s.Exit != boot.ExitRefused || !strings.Contains(s.Detail, "typo.yaml") {
+		t.Fatalf("status %+v", s)
+	}
+}
+
 func TestOverlayPrefersTheFirstFile(t *testing.T) {
 	o := overlay{fstest.MapFS{"a": {Data: []byte("first")}}, fstest.MapFS{"a": {Data: []byte("second")}, "b": {Data: []byte("second")}}}
 	for name, want := range map[string]string{"a": "first", "b": "second"} {
