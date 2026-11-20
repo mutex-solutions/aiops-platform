@@ -32,9 +32,12 @@ type Config struct {
 	History int // the results kept of final operations. At least 1.
 }
 
+// id is the plugin id of the reload row.
+const id = "aiops/reload"
+
 // Plugin is the reload row.
 var Plugin = kernel.Define(kernel.Plugin{
-	ID: "aiops/reload",
+	ID: id,
 	Inject: []kernel.Dep{kernel.Need(loader.Key), kernel.Need(launch.ProfileContextKey),
 		kernel.Need(launch.CatalogKey)},
 	Provides: []kernel.AnyKey{def.Key},
@@ -47,6 +50,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 			Publish: func(ctx context.Context, a composition.Applied) error {
 				return applied.Emit(ctx, kernel.Unscoped, a)
 			},
+			Self: id,
 		}, conf.Queue, conf.History)
 		c.Go("reload", e.Run)
 		return def.Key.Provide(c, e)

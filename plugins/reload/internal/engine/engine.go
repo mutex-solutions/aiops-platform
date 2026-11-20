@@ -33,6 +33,8 @@ type Deps struct {
 	Loader  loader.Loader
 	// Publish emits composition/applied.
 	Publish func(ctx context.Context, a composition.Applied) error
+	// Self is the plugin id of the row that runs the engine (see split).
+	Self string
 }
 
 // Engine is the queue and its worker. It serves reload.Reload.
@@ -228,7 +230,7 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 		return stop(def.StagePlan, err)
 	}
 	before := e.activeBefore(prev)
-	ops := operations(r.Plan, prev, cand)
+	ops, last := e.split(operations(r.Plan, prev, cand), prev)
 	var partial error
 	if len(ops) > 0 {
 		// The loader refuses a plan whole and with no effect. An error that comes with
@@ -259,7 +261,33 @@ func (e *Engine) process(ctx context.Context, r def.Result) def.Result {
 	r.Status = def.Passed
 	e.commit(&r, cand)
 	e.publish(ctx, &r, cand.Digest, r.Generation, r.Report)
+	if len(last) > 0 {
+		res, err := e.Loader.Apply(ctx, last)
+		r.Applied = append(r.Applied, res...)
+		if err != nil {
+			r.Err = errors.Join(r.Err, fmt.Errorf("apply the reload row: %w", err))
+		}
+	}
 	return r
+}
+
+// split takes out of ops those on a row of from that runs the plugin of the engine.
+// Applied with the others, such an operation restarts or disposes the fiber whose
+// goroutine applies the plan, and the plan's context ends with it half way: before the
+// loader's second batch and before the verdict. They are applied last, once the
+// verdict passed and is published; a rollback leaves them out, as they were not
+// applied.
+// ponytail: a reload row restarted through its group or a provider of its own is not
+// found here; that needs the loader to finish a plan on its own lifecycle.
+func (e *Engine) split(ops []loader.Op, from launch.Composition) (rest, self []loader.Op) {
+	for _, op := range ops {
+		if slices.ContainsFunc(from.Rows, func(r launch.Row) bool { return r.ID == op.Entry.ID && r.Plugin == e.Self }) {
+			self = append(self, op)
+		} else {
+			rest = append(rest, op)
+		}
+	}
+	return rest, self
 }
 
 // rollback restores prev after the verdict on cand failed (ADR-059 decision 12): one
@@ -290,7 +318,7 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 	if rb.Plan, err = e.Profile.Plan(ctx, cand, prev); err != nil {
 		return fail(err)
 	}
-	if ops := operations(rb.Plan, cand, prev); len(ops) > 0 {
+	if ops, _ := e.split(operations(rb.Plan, cand, prev), prev); len(ops) > 0 {
 		if rb.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
 			if len(rb.Applied) > 0 { // applied half way: the entries are the previous ones
 				tree = prev

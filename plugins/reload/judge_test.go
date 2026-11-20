@@ -183,6 +183,87 @@ func outcome(rep composition.Report, id string) composition.RowReport {
 	return composition.RowReport{}
 }
 
+// A generation that changes the reload row itself is applied, settled, judged, committed
+// and published like any other; reload restarts its own row last, so the restart cancels
+// nothing of the apply, and the next generation is planned from what the tree runs.
+func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T) {
+	s := newScript()
+	self := row("reload", "aiops/reload", map[string]any{"queue": int64(4), "history": int64(8)})
+	w := newScripted(t, s, nil, self, row("a", "aiops/p", nil))
+	changed := row("reload", "aiops/reload", map[string]any{"queue": int64(8), "history": int64(8)})
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{changed, row("a", "aiops/p", nil), row("x", "aiops/p", nil)}}
+	var order []string
+	s.onApply = func(_ context.Context, _ int, ops []loader.Op) error {
+		for _, op := range ops {
+			order = append(order, op.Entry.ID)
+			if op.Entry.ID == "reload" { // the loader restarts the reload fiber with its new config
+				if err := w.fiber.Update(t.Context(), reload.Config{Queue: 8, History: 8}); err != nil {
+					t.Error(err)
+				}
+			}
+		}
+		return nil
+	}
+
+	r := await(t, w.svc)
+	if r.Status != def.Passed || r.Err != nil || r.Generation != 1 || outcome(r.Report, "x").Outcome != "pass" {
+		t.Fatalf("result = %+v: the restart of the reload row cancelled the apply of its own generation", r)
+	}
+	if want := []string{"x", "reload"}; !slices.Equal(order, want) {
+		t.Errorf("applied %v, want %v: the reload row is applied last", order, want)
+	}
+	if got := ids(r.Applied); !slices.Equal(got, []string{"created x", "restarted reload"}) {
+		t.Errorf("loader results = %v", got)
+	}
+	if w.l.Committed().Digest != (launch.Digest{2}) {
+		t.Errorf("committed = %x", w.l.Committed().Digest)
+	}
+	active(t, w.fiber) // the restart is over
+	r2 := await(t, submitter(t, w.root, "aiops/submitter2"))
+	if r2.Status != def.Passed || r2.Previous.Digest != (launch.Digest{2}) || len(r2.Applied) != 0 {
+		t.Errorf("next result = %+v: it is planned from the generation the tree runs", r2)
+	}
+}
+
+// The reload row's own operation waits for the verdict: a failed generation never applies
+// it, and its rollback has nothing of it to undo; a refusal of it is on the result.
+func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
+	self := row("reload", "aiops/reload", "old")
+	for _, tc := range []struct {
+		name   string
+		start  kernel.State // of the row x that the generation creates
+		status def.Status
+		order  []string
+	}{
+		{"failed verdict", kernel.Failed, def.RolledBack, []string{"x", "x"}},
+		{"refused", kernel.Active, def.Passed, []string{"x", "reload"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, self)
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
+			s.start["x"] = tc.start
+			boom := errors.New("refused")
+			var order []string
+			s.onApply = func(_ context.Context, _ int, ops []loader.Op) error {
+				for _, op := range ops {
+					if order = append(order, op.Entry.ID); op.Entry.ID == "reload" {
+						return boom
+					}
+				}
+				return nil
+			}
+			r := await(t, w.svc)
+			if r.Status != tc.status || !slices.Equal(order, tc.order) {
+				t.Fatalf("result = %+v, applied %v", r, order)
+			}
+			if tc.status == def.Passed && (!errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "apply the reload row")) {
+				t.Errorf("err = %v", r.Err)
+			}
+		})
+	}
+}
+
 // When the reload fiber is disposed while a generation it applied settles, the operation
 // is abandoned, and the composition the loader holds, the candidate, is committed.
 func TestAbandonAfterTheApplyCommitsWhatTheLoaderHolds(t *testing.T) {
