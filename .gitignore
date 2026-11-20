@@ -3,3 +3,6 @@ tasks/**/*.png
 .DS_Store
 node_modules/
 docs/architecture/diagrams/html/
+
+# Coverage profiles of the kernel check.
+cover.out

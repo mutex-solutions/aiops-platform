@@ -63,14 +63,16 @@ jobs:
           go build ./...
           go vet ./...
           go test -race -count=1 ./...
+      - name: Kernel statement coverage profile
+        working-directory: sdk/kernel
+        run: go test -count=1 -coverprofile=cover.out ./...
       - name: Kernel structural checks
-        # The per-file 100% coverage line below is enabled when coverage reaches 100%.
         run: |
           go run ./tools/kernelcheck modfile sdk/kernel
           go run ./tools/kernelcheck vocab sdk/kernel tools/kernelcheck/vocabulary.txt
           go run ./tools/kernelcheck lines sdk/kernel 8500
           go run ./tools/kernelcheck testctor .
-          # go run ./tools/kernelcheck coverage <profile> github.com/mutex-solutions/aiops-platform/sdk/kernel
+          go run ./tools/kernelcheck coverage sdk/kernel/cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel
 
   postgres:
     name: PostgreSQL probes
