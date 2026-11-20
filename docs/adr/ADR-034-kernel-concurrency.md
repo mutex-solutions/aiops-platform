@@ -532,8 +532,12 @@ verdict and the queued message completes the transition. Not returned, or return
 at or after the deadline, is a real overrun and is failed as before. The drain
 stage is judged the same way over its own work: the last lease by the instant it
 was released (stamped on the quiesced release path only), tracked work by its
-stamp, a lease still held by a tracked worker that is waiting for the owner's
-acknowledgement is discounted.
+stamp. A tracked worker releases its own lease as its callback returns, before it
+stamps the return and reports it, so a record stamped in time holds no lease and
+its lease is judged by the same instant; the record keeps the drain open until the
+owner has the report. (Until the S1 review the worker released its lease after the
+owner acknowledged the report, and a deadline that fell due in between blamed a
+worker that had returned in time.)
 
 Interleaving argument: the owner reads its clock (now >= deadline) before it takes
 the handshake mutex, and the worker writes the stamp under the same mutex, so one

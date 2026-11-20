@@ -115,6 +115,53 @@ func TestDrainLeaseAndInTimeRelease(t *testing.T) {
 	})
 }
 
+// A tracked worker that returned before the drain deadline is not blamed when the
+// deadline falls due while the owner still handles its completion. The test holds the
+// owner inside that turn with the dispatcher's lock: the owner has deleted the
+// worker's record, appended go:done to the ledger and waits to hand it to the
+// dispatcher. Waiting for the wall clock is the point here, not a synchronisation.
+func TestTrackedWorkerThatReturnedInTimeIsNotLeaked(t *testing.T) {
+	const drain = time.Second
+	r := newReconcilerWith(func(c *coreConfig) { c.drainDeadline = drain })
+	ctx := context.Background()
+	gate := make(chan struct{})
+	id, err := r.Mount(ctx, Spec{ID: "worker", Apply: func(c *Handle) error {
+		return c.Go("in-time", func(std context.Context) error { <-std.Done(); <-gate; return nil })
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AwaitFiber(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	quiesced := time.Now() // The drain deadline is after quiesced+drain ...
+	if err := r.Dispose(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().Add(drain) // ... and before due.
+	before := r.ledger.total.Load()
+	r.observers.d.mu.Lock()
+	close(gate)
+	for r.ledger.total.Load() == before {
+		if time.Since(quiesced) >= drain {
+			r.observers.d.mu.Unlock()
+			t.Fatal("the worker's completion did not reach the owner before the drain deadline")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(time.Until(due) + 20*time.Millisecond)
+	r.observers.d.mu.Unlock()
+	if err := r.Settle(ctx); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+	if s := snapshotOf(t, r, id); s.Leaked || s.State != Disposed {
+		t.Fatalf("snapshot = %+v, want DISPOSED and not leaked", s)
+	}
+	if err := closeRuntime(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // leakLog is a slog.Handler that keeps its records.
 type leakLog struct {
 	mu      sync.Mutex

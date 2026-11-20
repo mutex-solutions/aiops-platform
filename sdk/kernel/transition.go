@@ -605,24 +605,19 @@ func (o *owner) stageOf(f *fiber) (string, *handshake) {
 
 // drainInTime reports whether all of a draining fiber's own work is already done,
 // or finished before at, so that only owner messages are pending.
-// The last lease is judged by the instant it was released (act.freed, stamped by
-// the releasing goroutine on the quiesced path only). A tracked worker keeps its
-// lease until the owner acknowledges its completion, so a worker whose callback
-// returned in time and waits for that acknowledgement is discounted from the
-// lease count instead of being blamed for the owner's delay.
+// Tracked work is judged by its stamp and the last lease by the instant it was
+// released (act.freed, stamped by the releasing goroutine on the quiesced path only).
+// A tracked worker releases its lease before it stamps its return (goTracked), so a
+// record stamped in time holds no lease, whether or not the owner has handled its
+// report yet, and a lease still open is never one of finished tracked work.
 func (o *owner) drainInTime(f *fiber, at time.Time) bool {
 	a := f.act
-	finished := int64(0)
 	for _, w := range a.tracked {
 		if !w.run.inTime(at) {
 			return false
 		}
-		finished++
 	}
-	if a.ctx.lease.Load() > finished {
-		return false
-	}
-	if !a.freed.inTime(at) && !a.freed.zero() {
+	if a.ctx.lease.Load() != 0 || !a.freed.inTime(at) && !a.freed.zero() {
 		return false
 	}
 	return f.checking == nil || f.checking.run.inTime(at)
