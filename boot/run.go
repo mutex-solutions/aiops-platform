@@ -641,8 +641,15 @@ func (r *run) stop(ctx context.Context, code int, why string) int {
 	// says it too.
 	leaked := r.leakSeen.Load() || errors.Is(err, kernel.ErrLeaked)
 	if code == ExitOK && (timedOut || leaked) {
-		code = ExitLeak
-		fmt.Fprintf(r.errw, "aiops: exit %d: shutdown did not finish cleanly: a fiber leaked or the bound of %s passed\n", code, r.o.Limits.ShutdownBound)
+		// The detail says why the process asks to be replaced, not what began the stop.
+		code, why = ExitLeak, fmt.Sprintf("shutdown did not finish cleanly: the bound of %s passed", r.o.Limits.ShutdownBound)
+		if leaked {
+			why = "shutdown did not finish cleanly: a fiber leaked"
+			if w := r.leakWhy.Load(); w != nil {
+				why += ": " + *w
+			}
+		}
+		fmt.Fprintf(r.errw, "aiops: exit %d: %s\n", code, why)
 	}
 	r.pub.update(func(s *ProcessStatus) { s.Detail = why })
 	return code

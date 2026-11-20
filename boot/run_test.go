@@ -570,6 +570,10 @@ func TestRunShutdownThatLeaksIsNotClean(t *testing.T) {
 	if !strings.Contains(f.errb.String(), "shutdown did not finish cleanly") {
 		t.Fatalf("stderr:\n%s", f.errb.String())
 	}
+	// The status says why the process asks to be replaced, not the signal that began the stop.
+	if s := f.lastStatus(); s.Exit != ExitLeak || !strings.Contains(s.Detail, "shutdown did not finish cleanly") || !strings.Contains(s.Detail, "leaked") {
+		t.Fatalf("status %+v", s)
+	}
 }
 
 // A tracked goroutine that ignores its context past the drain deadline leaks the fiber as
