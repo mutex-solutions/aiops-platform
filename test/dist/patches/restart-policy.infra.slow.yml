@@ -1,0 +1,4 @@
+# Layer 4 patch: restart-policy with toy.fault among its infrastructure keys, retrying an
+# hour after a failure, so that an infrastructure provider that failed is seen waiting for
+# its retry and restart-policy never gives up on it during a test.
+- {id: restart-policy, config: {maxFailures: 3, window: 1m, backoffMin: 1h, backoffMax: 1h, factor: 2, infrastructure: [toy.store, toy.fault]}}

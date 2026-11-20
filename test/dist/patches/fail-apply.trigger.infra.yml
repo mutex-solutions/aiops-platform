@@ -1,7 +1,0 @@
-# Layer 4 patch for the failure matrix: fail-apply as a required infrastructure provider
-# (restart-policy lists toy.fault among its infrastructure keys) that fails while running,
-# once run/fault.go exists. The retry is an hour away, so the process is seen waiting for it.
-- {id: restart-policy, config: {maxFailures: 3, window: 1m, backoffMin: 1h, backoffMax: 1h, factor: 2, infrastructure: [toy.fault]}}
-- insert:
-    - {id: fault, plugin: aiops-test/fail-apply, roles: [api], required: true, config: {trigger: fault.go}}
-    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

@@ -311,7 +311,8 @@
   column: "While running"
   outcome: "Everything unloads; readiness fails; retried in place; exit non-zero only when `restart-policy` gives up"
   fault: [fail-apply]
-  expect: {exit: running, ready: false, states: {dependant: PENDING, fault: FAILED}, diagnostic: "readiness"}
+  # The harness runs this cell a second time, until restart-policy gives up and the process exits with 5.
+  expect: {exit: running, ready: false, states: {dependant: PENDING, fault: FAILED}, diagnostic: "fiber.retry"}
   since: S1
 
 - failure: "An infrastructure provider fails (`sql`, `jobs`, `events`, `http`)"

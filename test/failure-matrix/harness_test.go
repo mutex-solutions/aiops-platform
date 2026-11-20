@@ -45,7 +45,11 @@ package failurematrix
 // leak, 5 for a give-up), the diagnostic is in its output, the states are those the
 // required-set audit printed (the process is gone, so the state file only says
 // DISPOSED), and readiness is not claimed by a final status. A launcher that
-// crashed on a Go panic leaves no final status; a dead process is not ready.
+// crashed on a Go panic leaves no final status; a dead process is not ready. An outcome
+// that one process cannot show whole is run twice, the second time with an expect of
+// the harness: an infrastructure provider that fails while running waits an hour for
+// its retry in the first run, and in the second, with the short backoff of the smoke
+// bundle, restart-policy retries it until it gives up and the process exits with 5.
 //
 // THE DIAGNOSTIC is a substring of what the process printed (stdout and stderr, which
 // hold the log) and, for a live recomposition, of the verdict of reload that test-state
@@ -143,6 +147,14 @@ type plan struct {
 	// its next retry; the fault and every row of the expect must then be ACTIVE again
 	// ("they return with the provider").
 	heal bool
+	// then is a second run of the cell with an expect of its own, for a part of the
+	// outcome that the first run cannot show in the same process.
+	then *variant
+}
+
+type variant struct {
+	plan
+	expect boot.Expect
 }
 
 // liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
@@ -188,10 +200,18 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{live: "no-provider.optional.yml"},
 			plan{base: []string{"fail-apply.trigger.optional.yml", "restart-policy.patient.yml"}, trigger: true, heal: true}), true
 	case "infra":
+		// restart-policy lists toy.fault among its infrastructure keys. The live generation
+		// has a slow row, so restart-policy gives up on the fault before reload judges it.
+		// While running, the first run sees the fault wait for its retry; the second, with
+		// the short backoff, sees restart-policy give up and the process replaced.
+		slow, fast := "restart-policy.infra.slow.yml", "restart-policy.infra.yml"
+		trig := "fail-apply.trigger.required.yml"
 		return byColumn(col, plan{},
-			plan{base: []string{"fail-apply.required.yml"}, code: boot.ExitRequired},
-			plan{live: "fail-apply.required.yml", rolledBack: true},
-			plan{base: []string{"fail-apply.trigger.infra.yml"}, trigger: true}), true
+			plan{base: []string{slow, "fail-apply.required.yml"}, code: boot.ExitRequired},
+			plan{base: []string{fast}, live: "fail-apply.required.slow-row.yml", rolledBack: true},
+			plan{base: []string{slow, trig}, trigger: true, then: &variant{
+				plan{base: []string{fast, trig}, trigger: true, code: boot.ExitGaveUp},
+				boot.Expect{Exit: "nonzero", Ready: "false", Diagnostic: "infrastructure=true"}}}), true
 	case "tracked":
 		return byColumn(col, plan{base: []string{"panic-apply-tracked.optional.yml"}},
 			plan{base: []string{"panic-apply-tracked.required.yml"}, code: boot.ExitRequired},
@@ -321,7 +341,7 @@ func rolledBackProblems(s harness.Snapshot) []string {
 		bad = append(bad, fmt.Sprintf("the rollback is %+v, want no error and generation %d", *op.Rollback, op.Generation+1))
 	}
 	for _, r := range s.State.Rows {
-		if (r.ID == "fault" || r.ID == "dependant") && r.Mount != "unknown" {
+		if (r.ID == "fault" || r.ID == "dependant" || r.ID == "slow") && r.Mount != "unknown" {
 			bad = append(bad, fmt.Sprintf("not rolled back: row %s of the failed generation is still in the tree (%s %s)", r.ID, r.Mount, r.State))
 		}
 	}
@@ -508,6 +528,12 @@ func TestFailureMatrix(t *testing.T) {
 						res = result{problems: []string{"the harness has no procedure for this cell: an S1 cell may not be skipped"}}
 					} else {
 						res = runScenario(bin, c.Expect, p)
+						if v := p.then; v != nil && len(res.problems) == 0 {
+							res = runScenario(bin, v.expect, v.plan)
+							for i := range res.problems {
+								res.problems[i] = "second run: " + res.problems[i]
+							}
+						}
 					}
 					dv, known := knownDeviations[cid]
 					if known && len(res.problems) > 0 && !strings.Contains(strings.Join(res.problems, "\n"), dv.problem) {
