@@ -343,6 +343,23 @@ func TestGenerationWithADeniedRowIsRejectedWhole(t *testing.T) {
 	}
 }
 
+// A denied required row is an error of Admit, and the launcher lists it in Denied too:
+// the refusal names the denial (ErrDenied) and keeps Admit's error.
+func TestDeniedRequiredRowIsRejectedAsDenied(t *testing.T) {
+	w := newWorld(t, 4, 8)
+	w.seed(row("a", "aiops/p", nil))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("req", "aiops/p", nil)}}
+	refused := errors.New("a required row is denied")
+	w.l.AdmitFn = func(context.Context, launch.Composition) (launch.Admission, error) {
+		return launch.Admission{Denied: []launch.Denial{{Row: "req", Check: "4 stability", Reason: "below the minimum"}}}, refused
+	}
+	r := w.submit("test")
+	if r.Status != def.Rejected || r.Stage != def.StageAdmit || !errors.Is(r.Err, def.ErrDenied) || !errors.Is(r.Err, refused) ||
+		!strings.Contains(r.Err.Error(), `row "req" (4 stability)`) {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
 func TestFailedVerdictWhoseRollbackLeavesRowsInactiveIsReportedWithBothVerdicts(t *testing.T) {
 	w := newWorld(t, 4, 8)
 	w.l.Needed = launch.RequiredSet{Rows: []string{"must", "gone", "pend"}, Keys: []string{"sql", "queue"}}

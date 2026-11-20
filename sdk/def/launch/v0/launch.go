@@ -82,8 +82,8 @@ type Denial struct {
 
 // Admission is the result of admitting a candidate: the denied rows. At boot a denied
 // optional row is detached as disabled; reload rejects a generation that has one
-// (ADR-059 decision 15). A denied required row is an error of Admit instead
-// (03-c3-kernel.md:358, :1361).
+// (ADR-059 decision 15). A denied required row is listed in Denied too, and Admit
+// also returns an error for it (03-c3-kernel.md:358, :1361).
 type Admission struct{ Denied []Denial }
 
 // Action is what a Plan does to one row.

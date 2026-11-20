@@ -230,13 +230,14 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 	}
 	r.Digest = cand.Digest
 	r.Admission, err = e.Profile.Admit(ctx, cand)
-	if err != nil {
-		return stop(def.StageAdmit, err)
-	}
 	if len(r.Admission.Denied) > 0 {
 		// At boot a denied optional row is detached as disabled; a live generation is
-		// rejected as a whole (ADR-059 decision 15).
-		return stop(def.StageAdmit, denied(r.Admission))
+		// rejected as a whole (ADR-059 decision 15). A denied required row is listed
+		// with Admit's error.
+		err = errors.Join(denied(r.Admission), err)
+	}
+	if err != nil {
+		return stop(def.StageAdmit, err)
 	}
 	r.Plan, err = e.Profile.Plan(ctx, prev, cand)
 	if err != nil {
