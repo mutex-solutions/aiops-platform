@@ -17,7 +17,6 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
-	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
 )
 
 // These tests run the launcher in this process, with the real loader, the real kernel
@@ -39,7 +38,7 @@ func (w *buf) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.b.Write(p)
-	if w.ready != nil && strings.Contains(w.b.String(), "aiops: ready") {
+	if w.ready != nil && strings.Contains(w.b.String(), "aiops: booted") {
 		w.once.Do(func() { close(w.ready) })
 	}
 	return len(p), nil
@@ -60,6 +59,13 @@ type proc struct {
 
 func start(t *testing.T, profile string, patches ...string) *proc {
 	t.Helper()
+	return startEnv(t, nil, profile, patches...)
+}
+
+// startEnv is start with an environment. A patch that is an absolute path is used as
+// it is; any other names a file of patches/.
+func startEnv(t *testing.T, environ map[string]string, profile string, patches ...string) *proc {
+	t.Helper()
 	d, err := Distribution()
 	if err != nil {
 		t.Fatal(err)
@@ -71,10 +77,13 @@ func start(t *testing.T, profile string, patches ...string) *proc {
 	}
 	args := []string{"--profile", profile, "--home", home, "--limits", limits}
 	for _, p := range patches {
-		args = append(args, "--patch", filepath.Join("patches", p+".yml"))
+		if !filepath.IsAbs(p) {
+			p = filepath.Join("patches", p+".yml")
+		}
+		args = append(args, "--patch", p)
 	}
 	p := &proc{t: t, home: home, out: &buf{ready: make(chan struct{})}, errb: &buf{}, sig: make(chan os.Signal, 1), done: make(chan int, 1)}
-	env := serve.Env{Args: args, Getenv: func(string) string { return "" }, Stdout: p.out, Stderr: p.errb, Signals: p.sig}
+	env := serve.Env{Args: args, Getenv: func(n string) string { return environ[n] }, Stdout: p.out, Stderr: p.errb, Signals: p.sig}
 	go func() { p.done <- serve.Run(context.Background(), "aiops-test", env, d) }()
 	return p
 }
@@ -128,7 +137,7 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Registry.Modules) != 14 {
+	if len(d.Registry.Modules) != 18 {
 		t.Fatalf("%d modules", len(d.Registry.Modules))
 	}
 	// The test table is the release table plus the test plugins, never the other way.
@@ -142,6 +151,7 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 func TestSmokeProfileInProcess(t *testing.T) {
 	p := start(t, "smoke")
 	p.ready()
+	waitState(t, p, func(s teststate.State) bool { return s.Ready }) // set by the readiness row
 	if s := p.readStatus(); s.Phase != "running" || !s.Ready {
 		t.Fatalf("status %+v", s)
 	}
@@ -152,7 +162,7 @@ func TestSmokeProfileInProcess(t *testing.T) {
 		t.Fatalf("final status %+v", s)
 	}
 	st := p.readState()
-	if !st.Closing || st.Ready || len(st.Rows) != 5 || st.Digest == "" || st.Generation == 0 {
+	if !st.Closing || st.Ready || len(st.Rows) != 12 || st.Digest == "" || st.Generation == 0 {
 		t.Fatalf("final state %+v", st)
 	}
 }
@@ -165,6 +175,9 @@ func TestSmokeStateShowsEveryRowActive(t *testing.T) {
 	p.ready()
 	st := waitState(t, p, func(s teststate.State) bool { return s.Ready })
 	for _, r := range st.Rows {
+		if r.Mount == "disabled" {
+			continue
+		}
 		if r.Mount != "mounted" || r.State != "ACTIVE" {
 			t.Fatalf("row %+v", r)
 		}
@@ -274,48 +287,8 @@ func TestSpineHasASlowButBoundedUnload(t *testing.T) {
 	}
 }
 
-func TestSubmitRowIsUnlinked(t *testing.T) {
-	p := start(t, "control")
-	p.ready()
-	control := filepath.Join(p.home, "run", testsubmit.Control)
-	if err := os.WriteFile(control+".tmp", []byte(`{"patches": ["a.yml"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(control+".tmp", control); err != nil {
-		t.Fatal(err)
-	}
-	waitFile(t, p, testsubmit.Result)
-	data, _ := os.ReadFile(filepath.Join(p.home, "run", testsubmit.Result))
-	var o testsubmit.Outcome
-	if err := json.Unmarshal(data, &o); err != nil {
-		t.Fatal(err)
-	}
-	if o.OK || o.Error != testsubmit.ErrNotLinked.Error() || len(o.Request) != 64 {
-		t.Fatalf("outcome %+v", o)
-	}
-	if code := p.stop(); code != boot.ExitOK {
-		t.Fatalf("exit %d", code)
-	}
-}
-
-func TestSubmitRowRefusesAMalformedControlFile(t *testing.T) {
-	p := start(t, "control")
-	p.ready()
-	if err := os.WriteFile(filepath.Join(p.home, "run", testsubmit.Control), []byte("not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	waitFile(t, p, testsubmit.Result)
-	data, _ := os.ReadFile(filepath.Join(p.home, "run", testsubmit.Result))
-	if !strings.Contains(string(data), "control file:") {
-		t.Fatalf("result %s", data)
-	}
-	if code := p.stop(); code != boot.ExitOK {
-		t.Fatalf("exit %d", code)
-	}
-}
-
-// poll calls ok every few milliseconds until it holds, with a bound. A file written by
-// another process cannot be waited for any other way without a dependency.
+// poll calls ok every few milliseconds until it holds, with a bound: a file written
+// by a plugin cannot be waited for any other way without a dependency.
 func poll(t *testing.T, what string, ok func() bool) {
 	t.Helper()
 	bound := time.NewTimer(30 * time.Second)
@@ -341,10 +314,77 @@ func waitState(t *testing.T, p *proc, ok func(teststate.State) bool) teststate.S
 	return got
 }
 
-func waitFile(t *testing.T, p *proc, name string) {
-	t.Helper()
-	poll(t, name, func() bool {
-		_, err := os.Stat(filepath.Join(p.home, "run", name))
-		return err == nil
+func TestReferenceIsResolvedByConfigRefs(t *testing.T) {
+	p := startEnv(t, map[string]string{"AIOPS_REF_NOTE": "from-env"}, "smoke", "refs")
+	p.ready()
+	waitState(t, p, func(s teststate.State) bool { return s.Ready })
+	if code := p.stop(); code != boot.ExitOK {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
+	if !strings.Contains(p.errb.String(), "note=from-env") {
+		t.Fatalf("the consumer did not see the resolved value; stderr:\n%s", p.errb.String())
+	}
+}
+
+func TestUnresolvedReferenceFollowsTheMatrix(t *testing.T) {
+	p := start(t, "smoke", "refs-unresolved.optional")
+	p.ready()
+	if code := p.stop(); code != boot.ExitOK || !strings.Contains(p.errb.String(), `"fault" is FAILED`) || !strings.Contains(p.errb.String(), "does not resolve") {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
+	p = start(t, "smoke", "refs-unresolved.required")
+	if code := p.wait(); code != boot.ExitRequired || !strings.Contains(p.errb.String(), "does not resolve") {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
+}
+
+// TestLiveRecomposition enables a disabled row through test-submit and the real reload,
+// then a row that fails twice, which restart-policy retries until it is ACTIVE.
+func TestLiveRecomposition(t *testing.T) {
+	live := filepath.Join(t.TempDir(), "live.yml")
+	write := func(body string) {
+		if err := os.WriteFile(live, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("- {id: extra, enabled: false}\n")
+	p := startEnv(t, nil, "smoke", live)
+	p.ready()
+	waitState(t, p, func(s teststate.State) bool { return s.Ready })
+	submit := func(marker string) {
+		control := filepath.Join(p.home, "run", "submit.json")
+		if err := os.WriteFile(control+".tmp", []byte(marker), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(control+".tmp", control); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rowState := func(s teststate.State, id string) string {
+		for _, r := range s.Rows {
+			if r.ID == id {
+				return r.State
+			}
+		}
+		return ""
+	}
+
+	write("- {id: extra, enabled: true}\n")
+	submit("1")
+	st := waitState(t, p, func(s teststate.State) bool {
+		return s.Reload != nil && s.Reload.ID == 1 && s.Reload.Status != "queued" && s.Reload.Status != "running"
 	})
+	if st.Reload.Status != "passed" || st.Reload.Generation != 1 || st.Reload.Error != "" {
+		t.Fatalf("operation %+v", st.Reload)
+	}
+	waitState(t, p, func(s teststate.State) bool { return rowState(s, "extra") == "ACTIVE" })
+
+	write("- {id: extra, enabled: true}\n- {id: flaky, enabled: true}\n")
+	submit("2")
+	waitState(t, p, func(s teststate.State) bool {
+		return s.Reload != nil && s.Reload.ID == 2 && rowState(s, "flaky") == "ACTIVE" && s.Ready
+	})
+	if code := p.stop(); code != boot.ExitOK || !strings.Contains(p.errb.String(), "fiber.retry") {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
 }

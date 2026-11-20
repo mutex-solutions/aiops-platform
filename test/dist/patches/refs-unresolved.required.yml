@@ -1,0 +1,3 @@
+# Layer 4 patch: a reference that does not resolve (secret: until S3) fails the row.
+- insert:
+    - {id: fault, plugin: aiops-test/toy-consumer, roles: [api], required: true, config: {note: "${secret:x}"}}

@@ -61,7 +61,7 @@ func Consumer() kernel.Plugin {
 	}
 	return kernel.Define(kernel.Plugin{
 		ID:     ConsumerID,
-		Inject: []kernel.Dep{kernel.Need(def.StoreKey), kernel.Need(def.SpineKey)},
+		Inject: []kernel.Dep{kernel.Need(def.StoreKey), kernel.Need(def.SpineKey), kernel.Need(kernel.LoggerKey)},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
 			out := cfg{note: c.String("note", ""), applyDelay: c.Duration("applyDelay", 0)}
@@ -73,6 +73,7 @@ func Consumer() kernel.Plugin {
 			if !def.Wait(raw.(cfg).applyDelay, c.Std().Done()) {
 				return c.Std().Err()
 			}
+			kernel.LoggerKey.Of(c).For(c).Info("toy-consumer applied", "note", raw.(cfg).note)
 			return nil
 		},
 	})

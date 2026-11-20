@@ -20,6 +20,11 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/loader"
+	"github.com/mutex-solutions/aiops-platform/plugins/clock"
+	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
+	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
+	"github.com/mutex-solutions/aiops-platform/plugins/reload"
+	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
 	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -31,8 +36,8 @@ var distYAML []byte
 var limitsYAML []byte
 
 // Module is the declared data of one plugin of the module table that its kernel.Plugin
-// does not carry. Provides, Needs and Wants of the entry are read from the plugin;
-// Run checks the entry against it.
+// does not carry. Provides, Needs, Wants and Hooks of the entry are read from the
+// plugin; Run checks the entry against it.
 type Module struct {
 	Plugin   kernel.Plugin
 	Volatile []string // config paths a change commits in place (ADR-059 decision 10)
@@ -44,6 +49,11 @@ func (m Module) Entry() boot.ModuleEntry {
 	e := boot.ModuleEntry{ID: m.Plugin.ID, Module: ModulePath, Version: Version, Plugin: m.Plugin, Volatile: m.Volatile}
 	for _, k := range m.Plugin.Provides {
 		e.Provides = append(e.Provides, k.Name())
+	}
+	for _, u := range m.Plugin.Hooks {
+		// The ordinal of the stage is the definition's; the plugin value carries only its
+		// name, so the dump orders by plugin id until S2a generates the table.
+		e.Hooks = append(e.Hooks, boot.HookDecl{Hook: u.Hook(), StageName: u.Stage()})
 	}
 	for _, d := range m.Plugin.Inject {
 		if d.Optional() {
@@ -83,10 +93,16 @@ func Table(mods ...Module) boot.Registry {
 
 // Modules is the compiled-in list of plugins of the release distribution. ADD A
 // PLUGIN HERE: one Module per plugin, and its bindings in dist.yaml. At S1 the list
-// holds the loader only; the core plugins arrive with their own steps.
+// holds the loader and the five core rows of S1; the others arrive with their own
+// steps. The bindings of each are in dist.yaml.
 func Modules() []Module {
 	return []Module{
 		{Plugin: loader.New()},
+		{Plugin: clock.Plugin},
+		{Plugin: configrefs.Plugin},
+		{Plugin: readiness.Plugin},
+		{Plugin: reload.Plugin},
+		{Plugin: restartpolicy.Plugin},
 	}
 }
 

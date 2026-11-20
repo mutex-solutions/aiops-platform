@@ -14,8 +14,11 @@
 // fiber state, the readiness latch and a generation. At S1 no generation number
 // exists (reload commits them and is not linked), so "generation" counts the changes
 // this row has written, from 1, and "digest" is the digest of the composition the
-// process booted; both are to be replaced by the committed generation of reload when
-// it is linked (an open point of S1).
+// process booted. The last operation of reload is in "reload": its status, stage,
+// error, the number and digest of the generation it applied and the verdict of each
+// row, so that a harness reads what a submission did. The operations are found by
+// asking reload for id 1, 2, 3 until it answers no, so any submitter is seen, not
+// only test-submit.
 package teststate
 
 import (
@@ -32,6 +35,7 @@ import (
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
 )
@@ -50,6 +54,26 @@ type Row struct {
 	State  string `json:"state"` // the fiber state in capitals; empty unless mounted
 }
 
+// Verdict is the judged result of one row of an applied generation.
+type Verdict struct {
+	ID      string `json:"id"`
+	Outcome string `json:"outcome"`
+	State   string `json:"state"`
+	Detail  string `json:"detail"`
+}
+
+// Op is the last operation of reload.
+type Op struct {
+	ID         uint64    `json:"id"`
+	Status     string    `json:"status"` // queued, running, passed, failed, rejected or abandoned
+	Stage      string    `json:"stage"`
+	Error      string    `json:"error"`
+	Generation uint64    `json:"generation"` // the number reload gave the applied generation; 0 until one is applied
+	Digest     string    `json:"digest"`
+	Denied     []string  `json:"denied"` // rows the gate detached
+	Verdict    []Verdict `json:"verdict"`
+}
+
 // State is the file.
 type State struct {
 	Generation uint64 `json:"generation"`
@@ -57,6 +81,7 @@ type State struct {
 	Closing    bool   `json:"closing"` // the last write, made as the row is disposed
 	Digest     string `json:"digest"`
 	Rows       []Row  `json:"rows"`
+	Reload     *Op    `json:"reload,omitempty"` // the last operation, absent until one was submitted
 }
 
 // New returns the plugin. Config: interval (duration, default 25ms), dir (the
@@ -69,7 +94,7 @@ func New() kernel.Plugin {
 	return kernel.Define(kernel.Plugin{
 		ID: ID,
 		Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(loaderdef.Key), kernel.Need(composition.Key),
-			kernel.Need(launch.ReadyKey), kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CmdlineKey)},
+			kernel.Need(reload.Key), kernel.Need(launch.ReadyKey), kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CmdlineKey)},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
 			out := cfg{interval: c.Duration("interval", 25*time.Millisecond), dir: c.String("dir", ""), file: c.String("file", File)}
@@ -80,7 +105,7 @@ func New() kernel.Plugin {
 		},
 		Apply: func(c *kernel.Context, raw any) error {
 			cf := raw.(cfg)
-			w := &writer{dir: cf.dir, file: cf.file, ready: launch.ReadyKey.Of(c), ld: loaderdef.Key.Of(c), rd: composition.Key.Of(c)}
+			w := &writer{dir: cf.dir, file: cf.file, ready: launch.ReadyKey.Of(c), ld: loaderdef.Key.Of(c), rd: composition.Key.Of(c), rl: reload.Key.Of(c)}
 			if w.dir == "" {
 				home, ok := launch.CmdlineKey.Of(c).Flag("home")
 				if !ok {
@@ -128,6 +153,8 @@ type writer struct {
 	ready             launch.Ready
 	ld                loaderdef.Loader
 	rd                composition.Reader
+	rl                reload.Reload
+	lastOp            reload.ID
 	last              []byte
 	gen               uint64
 	closing           bool
@@ -150,7 +177,31 @@ func (w *writer) snapshot() State {
 		}
 		s.Rows = append(s.Rows, row)
 	}
+	for {
+		if _, ok := w.rl.Result(w.lastOp + 1); !ok {
+			break
+		}
+		w.lastOp++
+	}
+	if r, ok := w.rl.Result(w.lastOp); ok {
+		s.Reload = opOf(r)
+	}
 	return s
+}
+
+func opOf(r reload.Result) *Op {
+	op := &Op{ID: uint64(r.ID), Status: string(r.Status), Stage: string(r.Stage), Generation: r.Generation,
+		Digest: fmt.Sprintf("%x", r.Digest[:])}
+	if r.Err != nil {
+		op.Error = r.Err.Error()
+	}
+	for _, d := range r.Admission.Denied {
+		op.Denied = append(op.Denied, d.Row)
+	}
+	for _, v := range r.Report.Rows {
+		op.Verdict = append(op.Verdict, Verdict{ID: v.ID, Outcome: v.Outcome, State: string(v.State), Detail: v.Detail})
+	}
+	return op
 }
 
 // write writes the state if it differs from the last one written.

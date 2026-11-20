@@ -1,14 +1,20 @@
 # The distribution manifest of the test distribution, the part the launcher reads
-# (08-profiles-roadmap-adrs.md:451). It is the release manifest (dist/dist.yaml) plus
-# the bindings of the toy keys. No shipped distribution has this file.
+# (08-profiles-roadmap-adrs.md:451): the release manifest (dist/dist.yaml) plus the
+# bindings of the toy keys and of the two control rows. No shipped distribution has it.
 providers:
   # toy.policy is provider-bound: only toy-provider may provide it. The rogue-provider
   # fault provides it too, and the gate denies that row (check 7).
   toy.policy: [aiops-test/toy-provider]
 consumers:
-  # loader is consumer-bound: test-state reads the tree through it.
-  loader: [aiops-test/test-state]
+  appExit: [aiops/restart-policy]
+  registry: [aiops/restart-policy]
+  loader: [aiops/reload, aiops-test/test-state]
+  # test-submit submits; test-state reads the results.
+  reload: [aiops-test/test-submit, aiops-test/test-state]
+sealedHooks:
+  internal/status: [aiops/restart-policy, aiops/readiness]
+  internal/config: [aiops/config-refs]
 # toy.spine is required because toy.store is: the provider of a required key must not
 # need a provider outside the required set (08-profiles-roadmap-adrs.md:503).
-requiredKeys: [toy.spine, toy.store]
-requiredRows: [loader]
+requiredKeys: [clock, toy.spine, toy.store]
+requiredRows: [loader, restart-policy, reload, readiness]

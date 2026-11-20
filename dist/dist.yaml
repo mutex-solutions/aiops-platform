@@ -1,5 +1,23 @@
 # The release distribution manifest, the part the launcher reads
-# (08-profiles-roadmap-adrs.md:451). At S1 the distribution holds the loader only;
-# the bindings and the required set of each core plugin are added with the plugin.
-# The loader is mounted by boot and is satisfied by that mount.
-requiredRows: [loader]
+# (08-profiles-roadmap-adrs.md:451, :1233). At S1 it holds the loader and the five core
+# rows of the launcher's own step; the bindings and the required set of each later
+# plugin are added with the plugin.
+#
+# Consumer-bound keys: restart-policy resolves registry (the fiber lookup) and appExit
+# (the exit request); reload resolves loader (07-c4-plugin-sdk.md:556). No row may
+# resolve reload yet: those that submit are added with their plugin.
+consumers:
+  appExit: [aiops/restart-policy]
+  registry: [aiops/restart-policy]
+  loader: [aiops/reload]
+# Sealed hooks (07-c4-plugin-sdk.md:463): internal/status for the two rows that follow
+# the state of every fiber, internal/config for the references.
+sealedHooks:
+  internal/status: [aiops/restart-policy, aiops/readiness]
+  internal/config: [aiops/config-refs]
+# The required set of every server profile that exists at S1 (08-profiles-roadmap-adrs.md:455).
+# The loader is satisfied by boot's own mount. clock is a required key because
+# restart-policy, a required row, needs it, and a required row must not need a
+# provider outside the required set (08-profiles-roadmap-adrs.md:503).
+requiredKeys: [clock]
+requiredRows: [loader, restart-policy, reload, readiness]

@@ -22,7 +22,6 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/fault"
-	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testclock"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy"
@@ -50,12 +49,8 @@ func Modules() []dist.Module {
 		dist.Module{Plugin: fault.RogueProvider()},
 		dist.Module{Plugin: fault.LeakyGoroutine()},
 		dist.Module{Plugin: fault.SlowDispose()},
-		dist.Module{Plugin: testclock.New()},
 		dist.Module{Plugin: teststate.New()},
-		// WIRE reload HERE: replace Unlinked with the link to the reload plugin
-		// (see testsubmit.Linked). Until it is linked every submission fails with
-		// "reload not linked".
-		dist.Module{Plugin: testsubmit.New(testsubmit.Unlinked())},
+		dist.Module{Plugin: testsubmit.New()},
 	)
 }
 

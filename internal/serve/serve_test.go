@@ -30,7 +30,7 @@ func (w *readyWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.buf.Write(p)
-	if strings.Contains(w.buf.String(), "aiops: ready") {
+	if strings.Contains(w.buf.String(), "aiops: booted") {
 		w.once.Do(func() { close(w.ready) })
 	}
 	return len(p), nil
@@ -44,13 +44,16 @@ type safeBuf struct {
 func (s *safeBuf) Write(p []byte) (int, error) { s.mu.Lock(); defer s.mu.Unlock(); return s.b.Write(p) }
 func (s *safeBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
 
+// distribution is the loader alone with no required row: a process that boots at once
+// and has nothing to wait for. The release distribution is run by test/loader-smoke.
 func distribution(t *testing.T) Distribution {
 	t.Helper()
-	reg, man, lim, err := dist.Load()
+	reg, _, lim, err := dist.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Distribution{Registry: reg, Manifest: man, Limits: lim}
+	reg.Modules = boot.ModuleTable{boot.LoaderID: reg.Modules[boot.LoaderID]}
+	return Distribution{Registry: reg, Limits: lim}
 }
 
 func env(args ...string) (Env, *safeBuf, chan os.Signal) {
@@ -98,7 +101,7 @@ func TestRunBootsAndStops(t *testing.T) {
 	case code := <-done:
 		t.Fatalf("exited with %d", code)
 	}
-	if s := readStatus(t, h); s.Phase != "running" || !s.Ready || s.Profile != "p" || s.Role != "all" {
+	if s := readStatus(t, h); s.Phase != "running" || s.Ready || s.Profile != "p" || s.Role != "all" {
 		t.Fatalf("status %+v", s)
 	}
 	sig <- syscall.SIGTERM
