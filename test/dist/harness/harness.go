@@ -86,10 +86,17 @@ func Cleanup() {
 	}
 }
 
-// Limits are the kernel deadlines of the tests: a fault that passes one is seen
-// within seconds. They are the limits of test/dist/limits.yaml, written out so that a
-// suite names them (the binary would use them anyway; --limits makes it explicit).
-const Limits = "loadDeadline: 1s\ndrainDeadline: 1s\ndisposeDeadline: 1s\nshutdownBound: 10s\nleakGrace: 500ms\n"
+// Limits are the kernel deadlines of the tests, a fault that passes one is seen within
+// seconds: test/dist/limits.yaml, the file that the binary embeds, read from disk so
+// that a suite and the binary cannot disagree (the binary would use them anyway;
+// --limits makes it explicit).
+var Limits = func() string {
+	b, err := os.ReadFile(filepath.Join(distDir(), "limits.yaml"))
+	if err != nil {
+		panic(err) // the suites run from a checkout, where the file is beside this one
+	}
+	return string(b)
+}()
 
 // Options is how a process is started.
 type Options struct {

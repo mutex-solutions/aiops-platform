@@ -1,8 +1,10 @@
 # The limits of the test distribution (boot.ParseLimits): short, so that a fault that
 # passes a deadline is seen within seconds. The documents give no value for any of
-# them (an open point of S1); the release defaults are in dist/limits.yaml.
-loadDeadline: 2s
-drainDeadline: 2s
-disposeDeadline: 2s
+# them (an open point of S1); the release defaults are in dist/limits.yaml. The binary
+# embeds this file, and the harness of the suites (harness.Limits) reads it, so every
+# suite runs on these values.
+loadDeadline: 1s
+drainDeadline: 1s
+disposeDeadline: 1s
 shutdownBound: 10s
 leakGrace: 500ms
