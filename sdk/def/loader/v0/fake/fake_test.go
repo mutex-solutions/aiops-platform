@@ -99,7 +99,7 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		t.Errorf("volatile-update heard %v", hear.volatiles)
 	}
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, patched)
-	if err != nil || got != patched || len(hear.patched) != 1 {
+	if err != nil || got == nil || got == patched || len(hear.patched) != 1 {
 		t.Errorf("Patch = %v, %v, heard %v", got, err, hear.patched)
 	}
 }
@@ -251,12 +251,43 @@ func TestHooksHaveNamesAndOwner(t *testing.T) {
 	}
 }
 
-func TestPatchWithNoListenerReturnsTheContext(t *testing.T) {
+// With no listener the built-in step runs alone: the context it built for the entry,
+// not the parent.
+func TestPatchWithNoListenerReturnsTheBuiltContext(t *testing.T) {
 	f, provider := fake.New()
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, provider)
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context())
-	if err != nil || got != root.Context() {
+	if err != nil || got == nil || got == root.Context() {
 		t.Fatalf("Patch = %v, %v", got, err)
+	}
+}
+
+// The built-in step of loader/patch-context is innermost (ADR-034 G8) and returns
+// the context built for the entry, never the parent itself. A listener that calls
+// next and returns the parent drops the row's isolate and intercept in the real
+// loader, and a test of it on the fake sees the parent come back.
+func TestPatchShowsAListenerThatDropsWhatNextBuilt(t *testing.T) {
+	f, provider := fake.New()
+	root := kerneltest.New(t)
+	var built *kernel.Context
+	l := kernel.Define(kernel.Plugin{ID: "aiops/dropper", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				var err error
+				if built, err = next(); a.Entry.ID == "drops" {
+					return a.Context, err
+				}
+				return built, err
+			})
+			return nil
+		}})
+	kerneltest.Mount(root, provider, l)
+	parent := root.Context()
+	if got, err := f.Patch(t.Context(), loader.EntrySpec{ID: "keeps"}, parent); err != nil || got != built || got == parent {
+		t.Errorf("a listener that returns what next built: Patch = %p, %v; next built %p, the parent is %p", got, err, built, parent)
+	}
+	if got, err := f.Patch(t.Context(), loader.EntrySpec{ID: "drops"}, parent); err != nil || got != parent || got == built {
+		t.Errorf("a listener that returns the parent: Patch = %p, %v; next built %p, the parent is %p", got, err, built, parent)
 	}
 }

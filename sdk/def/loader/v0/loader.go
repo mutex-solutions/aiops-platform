@@ -161,23 +161,28 @@ type Loader interface {
 	Locate(id string) (Entry, bool)
 }
 
-// PatchContextArgs is the payload of loader/patch-context: the entry being
-// mounted and the context built for its fiber, with the row's isolate and intercept
-// already applied. A listener returns the context to mount from: it wraps Context,
-// replaces it, or returns Context. The kernel gives an owner no innermost step, so
-// the built-in handling runs first and a nil result means "keep Context" (open
-// point: 07-c4-plugin-sdk.md:386 has the built-in behaviour innermost). The docs
-// name the hook's use, "isolate and intercept handling"
-// (plugin-system-2026-11.md:319), and no payload; this is the smallest the named
-// listeners need (open point).
+// PatchContextArgs is the payload of loader/patch-context, dispatched for each
+// fiber the loader mounts: the entry, and Context, the context it is mounted from
+// (its group's activation, or the loader's), without the row's isolate and
+// intercept. The loader's built-in step is innermost (07-c4-plugin-sdk.md:386;
+// ADR-034 G8): the next of the last listener applies the row's isolate and intercept
+// to Context and returns the result. A listener calls next and returns what next
+// returned, as it is or wrapped, and the entry is mounted from what the chain
+// returns. A listener that calls next and then returns Context drops the row's
+// isolate and intercept. A listener that does not call next, or returns a nil
+// context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
+// runs (fail closed, an open point of ADR-034 G8). The docs name the hook's use,
+// "isolate and intercept handling" (plugin-system-2026-11.md:319), and no payload;
+// this is the smallest the named listeners need (open point).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
 }
 
 // EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
-// fiber is created, with the context it was mounted from. Payload not described in
-// the docs; minimal (open point).
+// fiber is created, vetoed or not, with the context it was mounted from: the one
+// loader/patch-context returned, or the parent's for a vetoed entry. Payload not
+// described in the docs; minimal (open point).
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -195,8 +200,9 @@ type VolatileUpdateArgs struct {
 }
 
 // The three hooks of the loader, all owned by Key and sealed
-// (07-c4-plugin-sdk.md:463). PatchContext is a waterfall: a listener returns the
-// context, and a listener that does not call next vetoes what follows it
+// (07-c4-plugin-sdk.md:463). PatchContext is a waterfall whose innermost step is the
+// loader's own (PatchContextArgs): a listener returns the context, and a listener
+// that does not call next vetoes what follows it, the built-in step included
 // (07-c4-plugin-sdk.md:386). EntryInit and VolatileUpdate are events
 // (plugin-system-2026-11.md:319). None is Scoped: they carry no tenant data at S1.
 var (

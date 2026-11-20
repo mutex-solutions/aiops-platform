@@ -164,16 +164,17 @@ func (f *Loader) Entries() []loader.Entry {
 	return out
 }
 
-// Patch dispatches loader/patch-context for an entry whose group mounts from c and
-// returns the context the chain ended with. The built-in isolate and intercept
-// handling belongs to the real loader, not to this fake: its innermost step returns
-// c. A listener that does not call next, or returns no context, gives
-// loader.ErrPatchVetoed, as in the real loader.
+// Patch dispatches loader/patch-context for an entry mounted from c and returns the
+// context the chain ended with. Its innermost step stands for the real loader's,
+// which applies the row's isolate and intercept: it returns a new context derived
+// from c, never c, so that a listener that drops what next returned is seen (the
+// fake has no key table and applies neither). A listener that does not call next,
+// or returns no context, gives loader.ErrPatchVetoed, as in the real loader.
 func (f *Loader) Patch(ctx context.Context, e loader.EntrySpec, c *kernel.Context) (*kernel.Context, error) {
-	ran := false
+	var built *kernel.Context
 	out, err := f.patch.RunWith(ctx, kernel.Unscoped, loader.PatchContextArgs{Entry: e, Context: c},
-		func(context.Context, loader.PatchContextArgs) (*kernel.Context, error) { ran = true; return c, nil })
-	if err == nil && (!ran || out == nil) {
+		func(context.Context, loader.PatchContextArgs) (*kernel.Context, error) { built = c.Extend(); return built, nil })
+	if err == nil && (built == nil || out == nil) {
 		err = loader.ErrPatchVetoed
 	}
 	if err != nil {
