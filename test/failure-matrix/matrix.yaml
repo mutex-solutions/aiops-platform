@@ -184,7 +184,8 @@
   column: "Optional row at boot"
   outcome: "FAILED after partial effects unwind; `restart-policy` retries"
   fault: [fail-apply, panic-apply, slow-apply]
-  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "restart-policy"}
+  # failures=2 is what restart-policy logs when the fault fails again: its first retry ran.
+  expect: {exit: running, ready: true, states: {fault: FAILED}, diagnostic: "failures=2"}
   since: S1
 
 - failure: "`Apply` errors, panics or passes the load deadline"
