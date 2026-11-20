@@ -358,6 +358,7 @@ func TestRequiredRowOfAnotherRoleIsNotJudged(t *testing.T) {
 	worker := row("w", "aiops/p", nil)
 	worker.Required, worker.Roles = true, []string{"worker"}
 	w := newScripted(t, s, map[string]loader.Mount{"w": loader.OtherRole}, worker)
+	w.l.RoleName = "api" // the process role, so the launcher's required set leaves w out too
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{worker, row("n", "aiops/p", nil)}}
 	r := await(t, w.svc)
 	if r.Status != def.Passed || !r.Report.Pass {

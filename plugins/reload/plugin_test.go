@@ -163,7 +163,7 @@ func (w *world) listen(onInit func(loader.EntryInitArgs), onApplied func(context
 func (w *world) seed(rows ...launch.Row) {
 	w.t.Helper()
 	for _, r := range rows {
-		if err := w.ld.Create(w.t.Context(), loader.EntrySpec{ID: r.ID, Parent: r.Parent, Plugin: r.Plugin, Enabled: true}); err != nil {
+		if err := w.ld.Create(w.t.Context(), loader.EntrySpec{ID: r.ID, Parent: r.Parent, Plugin: r.Plugin, Config: r.Config, Enabled: true}); err != nil {
 			w.t.Fatal(err)
 		}
 	}
@@ -195,11 +195,11 @@ func ids(rs []loader.Result) []string {
 func TestGenerationIsComposedAdmittedPlannedAppliedJudgedAndPublished(t *testing.T) {
 	w := newWorld(t, 4, 8)
 	w.l.Needed = launch.RequiredSet{Rows: []string{"keep"}, Keys: []string{"sql"}}
-	from := []launch.Row{row("a", "aiops/p", nil), child("a", "k", "aiops/p"), row("u", "aiops/p", "old"),
+	from := []launch.Row{row("a", loader.GroupPlugin, nil), child("a", "k", "aiops/p"), row("u", "aiops/p", "old"),
 		row("keep", "aiops/p", nil), row("db", "aiops/sqlp", nil)}
 	w.seed(from...)
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("u", "aiops/p", "new"), row("keep", "aiops/p", nil),
-		row("db", "aiops/sqlp", nil), row("n", "aiops/p", nil), child("n", "k", "aiops/p")}}
+		row("db", "aiops/sqlp", nil), row("n", loader.GroupPlugin, nil), child("n", "k", "aiops/p")}}
 	var heard composition.Applied
 	w.listen(nil, func(_ context.Context, a composition.Applied) { heard = a })
 
@@ -211,7 +211,8 @@ func TestGenerationIsComposedAdmittedPlannedAppliedJudgedAndPublished(t *testing
 		t.Errorf("order = %v, want %v", got, want)
 	}
 	// Removes with the child first, then the update, then the creates, parents first.
-	want := []string{"removed a:k", "removed a", "committed u", "created n", "created n:k"}
+	// A scalar config change restarts: a root path is never volatile.
+	want := []string{"removed a:k", "removed a", "restarted u", "created n", "created n:k"}
 	if got := ids(r.Applied); !slices.Equal(got, want) {
 		t.Errorf("loader results = %v, want %v", got, want)
 	}
@@ -439,7 +440,7 @@ func TestRequiredRowThatIsNotMountedFailsTheVerdict(t *testing.T) {
 	extra := row("opt", "aiops/p", nil)
 	w.next = launch.Composition{Rows: []launch.Row{off, extra}}
 	w.l.PlanFn = func(context.Context, launch.Composition, launch.Composition) (launch.Plan, error) {
-		return launch.Plan{}, nil // the fake loader mounts what it is given, so give it nothing
+		return launch.Plan{}, nil // no entry for either row: neither is mounted
 	}
 	r := w.submit("test")
 	if r.Status != def.RollbackFailed { // the previous composition has no such row either
@@ -858,9 +859,9 @@ func (w *world) failing(ids ...string) func(loader.EntryInitArgs) {
 func TestFailedVerdictIsRolledBackWithOneInversePlan(t *testing.T) {
 	w := newWorld(t, 4, 8)
 	w.l.Needed = launch.RequiredSet{Rows: []string{"keep"}}
-	w.seed(row("gone", "aiops/p", nil), child("gone", "k", "aiops/p"), row("upd", "aiops/p", "old"), row("keep", "aiops/p", nil))
+	w.seed(row("gone", loader.GroupPlugin, nil), child("gone", "k", "aiops/p"), row("upd", "aiops/p", "old"), row("keep", "aiops/p", nil))
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("upd", "aiops/p", "new"), row("keep", "aiops/p", nil),
-		row("born", "aiops/p", nil), child("born", "k", "aiops/p")}}
+		row("born", loader.GroupPlugin, nil), child("born", "k", "aiops/p")}}
 	var heard []composition.Applied
 	var mu sync.Mutex
 	w.listen(w.failing("born"), func(_ context.Context, a composition.Applied) { mu.Lock(); heard = append(heard, a); mu.Unlock() })
@@ -878,7 +879,7 @@ func TestFailedVerdictIsRolledBackWithOneInversePlan(t *testing.T) {
 	}
 	// The rows the failed generation created are removed, children first; the updated row has
 	// its old config back; the rows it removed are created again, parents first.
-	want := []string{"removed born:k", "removed born", "committed upd", "created gone", "created gone:k"}
+	want := []string{"removed born:k", "removed born", "restarted upd", "created gone", "created gone:k"}
 	if got := ids(rb.Applied); !slices.Equal(got, want) {
 		t.Errorf("rollback loader results = %v, want %v", got, want)
 	}
@@ -1003,6 +1004,7 @@ func TestRollbackThatEndsWithTheFiberIsAbandoned(t *testing.T) {
 
 func TestVolatileCommitIsRevertedThroughTheCommitPath(t *testing.T) {
 	w := newWorld(t, 4, 8)
+	w.ld.Volatile = map[string][]string{"aiops/p": {"level"}}
 	w.seed(row("u", "aiops/p", map[string]any{"level": "info"}), row("bad", "aiops/p", nil))
 	w.ld.SetState("bad", kernel.Failed) // it was inactive before and untouched: a warning, not a failure
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("u", "aiops/p", map[string]any{"level": "debug"}),
@@ -1023,8 +1025,8 @@ func TestVolatileCommitIsRevertedThroughTheCommitPath(t *testing.T) {
 	if r.Status != def.RolledBack {
 		t.Fatalf("result = %+v", r)
 	}
-	// The fake loader says Committed for an update: the config goes forward and back as
-	// a commit, which the hook of the loader announces each time.
+	// level is volatile for aiops/p, so the loader commits the update: the config goes
+	// forward and back as a commit, which the hook of the loader announces each time.
 	if want := []string{"umap[level:debug]", "umap[level:info]"}; !slices.Equal(commits, want) {
 		t.Errorf("volatile commits = %v, want %v", commits, want)
 	}
