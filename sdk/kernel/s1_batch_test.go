@@ -574,3 +574,42 @@ func TestAnUpdateOrCommitAfterADisposeRefusesTheBatch(t *testing.T) {
 		}
 	}
 }
+
+// A child mount under a fiber that an earlier operation of the batch restarts is
+// refused, as one under a fiber that it disposes is (ADR-034 G1); a restart later in
+// the batch is allowed and the child goes with the old activation, and an operation
+// that does not restart does not end the activation.
+func TestChildMountOpUnderAFiberRestartedEarlierInTheBatch(t *testing.T) {
+	r := newKernel(t)
+	ctx := frontCtx(t)
+	ctxs := make(chan *Context, 4)
+	pf := r.Plugin(plug("s1/restarted", nil, nil, func(c *Context) error { ctxs <- c; return nil }), nil)
+	want(t, pf, Active)
+	pc := <-ctxs
+	_, err := r.Batch(ctx, UpdateOp(pf), pc.MountOp(plug("s1/never", nil, nil, nil), nil))
+	if !errors.Is(err, ErrInactive) || !errors.Is(err, ErrInactiveEffect) {
+		t.Fatalf("child under a fiber restarted earlier in the batch: %v", err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(ctxs) != 0 {
+		t.Fatal("a refused batch restarted the parent")
+	}
+	kept, err := r.Batch(ctx, CommitOp(pf, "kept"), pc.MountOp(plug("s1/kept", nil, nil, nil), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, kept[1], Active)
+	got, err := r.Batch(ctx, pc.MountOp(plug("s1/child", nil, nil, nil), nil), UpdateOp(pf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := got[0].State(ctx); s != Disposed {
+		t.Fatalf("child mounted before its parent's restart is %s", s)
+	}
+	want(t, pf, Active)
+}

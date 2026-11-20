@@ -181,8 +181,11 @@ func MountOp(p Plugin, cfg any) BatchOp { return BatchOp{kind: batchMount, plugi
 // the rest of the batch. A batch holding it is refused whole, with an error that
 // matches ErrInactive and ErrInactiveEffect and no effect, when c's activation has
 // ended or is ending when the batch is admitted, or when an earlier operation of
-// the same batch disposes c's fiber (c.Plugin would panic and fail c's fiber; a
-// batch has no fiber to fail). A c of another kernel is refused with an error. The
+// the same batch disposes or restarts c's fiber, which ends that activation (c.Plugin
+// would panic and fail c's fiber; a batch has no fiber to fail). A later one is
+// allowed: the child goes with that activation. An UpdateOpWith whose restart
+// internal/update vetoes, and a CommitOp, do not restart c's fiber. A c of another
+// kernel is refused with an error. The
 // Fiber that Batch returns at this position is the new child. A nil c gives the
 // zero BatchOp, which Batch refuses.
 func (c *Context) MountOp(p Plugin, cfg any) BatchOp {

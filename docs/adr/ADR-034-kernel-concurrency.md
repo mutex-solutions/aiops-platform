@@ -1124,8 +1124,11 @@ with the rest of the batch. `Root.Batch` returns one `*Fiber` per operation in
 operation order, so the position of a `MountOp` holds the new child. The batch
 is refused whole, with no effect and an error that matches `ErrInactive` and
 `ErrInactiveEffect`, when c's activation has ended, is ending or was replaced by
-a restart, and when an earlier operation of the same batch disposes c's fiber
-(later in the batch is allowed: the child is mounted and goes with its parent).
+a restart, and when an earlier operation of the same batch disposes or restarts
+c's fiber (later in the batch is allowed: the child is mounted and goes with that
+activation). An `UpdateOpWith` whose restart `internal/update` vetoes, and a
+`CommitOp`, restart nothing. (Until the S1 review a restart earlier in the batch
+was not checked, and the batch was admitted with a child that was disposed at once.)
 
 **G2, an update with a config in a batch.**
 

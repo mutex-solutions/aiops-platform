@@ -1457,7 +1457,8 @@ type batchOp struct {
 	Spec  pluginSpec
 	// Parent is the handle of the activation a mount is a child of. The whole batch
 	// is refused when that activation has ended or is ending, or when an earlier
-	// operation of the batch disposes its fiber, as a cmdMountChild would be.
+	// operation of the batch disposes or restarts its fiber (batchUpdate; batchKeep
+	// does not restart), as a cmdMountChild would be.
 	Parent *handle
 	// cell, when set, takes cfg in the owner turn that admits the batch, before any
 	// activation can read it (UpdateOpWith and CommitOp; see stageUpdates). The
@@ -1471,7 +1472,7 @@ type batchOp struct {
 // plugin code. False means absent or already disposing.
 func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool) ([]batchOp, error) {
 	prepared := slices.Clone(operations)
-	disposed := make(map[uint64]bool)
+	disposed, ended := make(map[uint64]bool), make(map[uint64]bool) // ended: disposed or restarted.
 	for i := range prepared {
 		op := &prepared[i]
 		switch op.Kind {
@@ -1480,7 +1481,7 @@ func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(
 				return nil, fmt.Errorf("invalid batch Mount at operation %d", i)
 			}
 			op.Spec.Needs, op.Spec.Provides = slices.Clone(op.Spec.Needs), slices.Clone(op.Spec.Provides)
-			if op.Parent != nil && (!parentLive(op.Parent) || disposed[op.Parent.fiber]) {
+			if op.Parent != nil && (!parentLive(op.Parent) || ended[op.Parent.fiber]) {
 				return nil, fmt.Errorf("batch operation %d: %w", i, inactive())
 			}
 		case batchUpdate, batchDispose, batchKeep:
@@ -1494,9 +1495,8 @@ func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(
 			if disposed[op.Fiber] && op.Kind != batchDispose {
 				return nil, fmt.Errorf("batch operation %d updates a disposed target", i)
 			}
-			if op.Kind == batchDispose {
-				disposed[op.Fiber] = true
-			}
+			disposed[op.Fiber] = disposed[op.Fiber] || op.Kind == batchDispose
+			ended[op.Fiber] = ended[op.Fiber] || op.Kind != batchKeep
 		default:
 			return nil, errors.New("unknown batch operation kind")
 		}
