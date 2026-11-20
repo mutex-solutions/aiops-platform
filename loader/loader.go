@@ -388,8 +388,10 @@ func (t *tree) resolve(ctx context.Context, pc *kernel.Context, e def.EntrySpec)
 		if err != nil {
 			return p, nil, nil, err
 		}
+		// The row's inject is a Need: it replaces a Want of the same key, which would
+		// otherwise be declared twice.
 		if !slices.ContainsFunc(p.Inject, func(d kernel.Dep) bool { return !d.Optional() && sameKey(d.Key(), k) }) {
-			p.Inject = append(p.Inject, kernel.NeedKey(k))
+			p.Inject = append(slices.DeleteFunc(p.Inject, func(d kernel.Dep) bool { return sameKey(d.Key(), k) }), kernel.NeedKey(k))
 		}
 	}
 	// The row's isolate and intercept are the built-in step of loader/patch-context,

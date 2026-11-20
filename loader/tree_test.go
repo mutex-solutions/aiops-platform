@@ -303,6 +303,24 @@ func TestRowInjectIsNotDeclaredTwice(t *testing.T) {
 	x.want("r", kernel.Active)
 }
 
+// A row's inject of a key its plugin only Wants makes the key a Need: the row
+// waits for it, PENDING, instead of failing on a key declared twice.
+func TestRowInjectOfAWantedKeyGatesTheRow(t *testing.T) {
+	k := kernel.NewKey[int]("k", 0)
+	wants := kernel.Define(kernel.Plugin{ID: "t/wants", Inject: []kernel.Dep{kernel.Want(k)}, Apply: func(*kernel.Context, any) error { return nil }})
+	prov := kernel.Define(kernel.Plugin{ID: "t/prov", Provides: []kernel.AnyKey{k}, Apply: func(c *kernel.Context, _ any) error { return k.Provide(c, 1) }})
+	r := row("r", "t/wants")
+	r.Inject = []string{"k"}
+	x := newFx(t, fxOpt{plugins: plugins(wants), keys: map[string]kernel.AnyKey{"k": k}, rows: []def.EntrySpec{r, row("w", "t/wants")}})
+	x.want("w", kernel.Active)
+	if st := x.state("r"); st != kernel.Pending {
+		t.Fatalf("r is %s (%s), want PENDING until k has a provider", st, x.failure("t/wants"))
+	}
+	x.root.Plugin(prov, nil)
+	x.settle()
+	x.want("r", kernel.Active)
+}
+
 func TestLoaderConfigAndAbsentBatch(t *testing.T) {
 	p := newProbe()
 	a := p.plugin("t/a", nil)
