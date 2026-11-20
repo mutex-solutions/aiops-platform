@@ -33,14 +33,16 @@ var configRefsKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.Provide
 // built-ins of the kernel and configRefsKey. No row provides them and none waits for
 // them: the static graph leaves them out of the needs of a row (builder.needs) and
 // the run-time audit counts them provided.
-var rootKeyNames = []string{
-	launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
-	launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name(),
-	kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name(),
-	configRefsKey.Name(),
+func rootKeyNames() []string {
+	return []string{
+		launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
+		launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name(),
+		kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name(),
+		configRefsKey.Name(),
+	}
 }
 
-func isRootKey(name string) bool { return slices.Contains(rootKeyNames, name) }
+func isRootKey(name string) bool { return slices.Contains(rootKeyNames(), name) }
 
 // refsInject returns the inject of a row for the loader: its own, and configRefsReady
 // when its config holds a reference. config-refs itself never waits for itself.

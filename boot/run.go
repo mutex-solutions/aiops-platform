@@ -87,8 +87,10 @@ type Registry struct {
 
 // kernelHooks are the sealed hooks of the kernel itself. Only the entries that
 // Config.Listeners lists may listen on them (ADR-034, "S1 additions", G5).
-var kernelHooks = []kernel.AnyHook{kernel.InternalPlugin, kernel.InternalStatus, kernel.InternalService,
-	kernel.InternalConfig, kernel.InternalUpdate, kernel.InternalCommit}
+func kernelHooks() []kernel.AnyHook {
+	return []kernel.AnyHook{kernel.InternalPlugin, kernel.InternalStatus, kernel.InternalService,
+		kernel.InternalConfig, kernel.InternalUpdate, kernel.InternalCommit}
+}
 
 // Clock is the clock of the launcher's own bounds. It is not the clock key: the
 // launcher runs before any row.
@@ -401,7 +403,7 @@ func (r *run) kernelConfig(cat *catalog, dist DistManifest) (kernel.Config, erro
 	cfg.Providers, cfg.Consumers = resolve("provider", dist.Providers), resolve("consumer", dist.Consumers)
 	cfg.Listeners = map[kernel.AnyHook][]kernel.Plugin{}
 	hooks := map[string]kernel.AnyHook{}
-	for _, h := range kernelHooks {
+	for _, h := range kernelHooks() {
 		hooks[h.Name()] = h
 	}
 	maps.Copy(hooks, r.o.Registry.Hooks)
@@ -476,7 +478,7 @@ func (r *run) watch() error {
 func (r *run) view(ctx context.Context, loader *kernel.Fiber) StateView {
 	ins, _ := r.root.Inspect(ctx) // an error leaves the view empty, which the audit reports as unmet
 	v := StateView{Rows: map[string]State{}, Providers: map[string]bool{}}
-	for _, k := range rootKeyNames {
+	for _, k := range rootKeyNames() {
 		v.Providers[k] = true
 	}
 	for _, p := range ins.Provisions {
