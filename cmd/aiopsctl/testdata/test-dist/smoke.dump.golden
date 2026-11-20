@@ -1,0 +1,75 @@
+# aiopsctl profile render --dump
+digest sha256:7ee850af64eeae35052cca79971d1f10b1ecec99449e48314aeb9d99f0e2d141
+roles all
+
+##  (layer 0)
+
+row loader plugin=aiops/loader enabled=true required=true group=false roles=-
+  config null
+
+## bundle:smoke (layer 1)
+
+row clock plugin=aiops/clock enabled=true required=false group=false roles=api
+  config {}
+
+row refs plugin=aiops/config-refs enabled=true required=false group=false roles=api
+  config {maxFileBytes: int(65536)}
+
+row readiness plugin=aiops/readiness enabled=true required=false group=false roles=api
+  config {}
+
+row restart-policy plugin=aiops/restart-policy enabled=true required=false group=false roles=api
+  config {backoffMax: "100ms", backoffMin: "20ms", factor: int(2), infrastructure: ["toy.store"], maxFailures: int(3), window: "1m"}
+
+row reload plugin=aiops/reload enabled=true required=false group=false roles=api
+  config {history: int(16), queue: int(4)}
+
+row spine plugin=aiops-test/toy-spine enabled=true required=false group=false roles=api
+  config {workers: int(2)}
+
+row store plugin=aiops-test/toy-provider enabled=true required=false group=false roles=api
+  config {}
+
+row consumer plugin=aiops-test/toy-consumer enabled=true required=false group=false roles=api
+  config {note: "hello"}
+
+row state plugin=aiops-test/test-state enabled=true required=false group=false roles=api
+  config {}
+
+row submit plugin=aiops-test/test-submit enabled=true required=false group=false roles=api
+  config {}
+
+row extra plugin=aiops-test/toy-consumer enabled=false required=false group=false roles=api
+  config {note: "extra"}
+
+row flaky plugin=aiops-test/fail-apply enabled=false required=false group=false roles=api
+  config {failTimes: int(2)}
+
+## required set
+rows loader, readiness, reload, restart-policy
+keys clock, toy.spine, toy.store
+closure clock, loader, readiness, reload, restart-policy, spine, store
+
+## providers
+key clock: clock
+key composition: loader
+key loader: loader
+key reload: reload
+key toy.policy: store
+key toy.spine: spine
+key toy.store: store
+
+## gate
+check 1 Manifest schema and author API: not evaluated until S2a
+check 2 Definition versions: not evaluated until S2a
+check 3 Remote protocol: not evaluated until S2b
+check 4 Stability: not evaluated until S2a
+check 5 Trust: not evaluated until S2a
+check 6 Licence: not evaluated until S2a
+check 7 Key and hook classes: pass (not read yet: signed keys and hooks and fakes in a server graph need trust data (S2a))
+check 8 Layer rules: pass (not read yet: the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b)
+check 9 Remote scope: not evaluated until S2b
+check 10 Attestation: not evaluated until S2a
+
+## diagnostics
+none

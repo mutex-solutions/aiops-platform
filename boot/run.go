@@ -49,10 +49,12 @@ const (
 	LoaderRowID = "loader"
 )
 
-// withLoader returns c with the row of the loader first. It is the launcher's copy
+// WithLoader returns c with the row of the loader first. It is the launcher's copy
 // for the gate and the graph only: the row is never given to the loader to mount, and
-// the digest is that of the composed tree.
-func withLoader(c Composition) Composition {
+// the digest is that of the composed tree. A caller that admits a composition as boot
+// does, as `aiopsctl profile render` does, must admit this copy, or every row that needs
+// the loader or composition key has no provider.
+func WithLoader(c Composition) Composition {
 	row := ComposedRow{Row: Row{ID: LoaderRowID, Plugin: LoaderID, Enabled: true, Required: true}}
 	return Composition{Rows: append([]ComposedRow{row}, c.Rows...), Digest: c.Digest}
 }
@@ -259,7 +261,7 @@ func (r *run) run(ctx context.Context) int {
 	// (03-c3-kernel.md:357-359). The admitted tree holds the loader as a row, so that
 	// the graph sees what it provides and the required row "loader"
 	// (08-profiles-roadmap-adrs.md:455) is satisfied by boot's own mount.
-	a := Admit(withLoader(comp), mods, dist, roles)
+	a := Admit(WithLoader(comp), mods, dist, roles)
 	for _, l := range a.Diagnostics() {
 		fmt.Fprintln(r.errw, l)
 	}

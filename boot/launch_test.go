@@ -101,7 +101,7 @@ func TestEntrySpecsAndLaunchRows(t *testing.T) {
         - {id: kid, plugin: t/store, roles: [api], inject: [store], isolate: [cache], intercept: {policy: {n: 1}}}
     - {id: s, plugin: t/store, roles: [api, worker], config: {ref: "${env:AIOPS_REF_X}"}, required: true}
 `)
-	rows := entrySpecs(withLoader(c))
+	rows := entrySpecs(WithLoader(c))
 	if len(rows) != len(c.Rows) {
 		t.Fatalf("the loader row must not be mounted: %d rows", len(rows))
 	}

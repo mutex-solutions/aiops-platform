@@ -132,7 +132,7 @@ func (p *profileContext) Committed() launch.Composition {
 // see.
 func (p *profileContext) Required() launch.RequiredSet {
 	p.mu.Lock()
-	c := withLoader(p.committed)
+	c := WithLoader(p.committed)
 	p.mu.Unlock()
 	set := RequiredFor(c, p.mods, p.dist, p.roles)
 	return launch.RequiredSet{Rows: slices.DeleteFunc(set.Rows, func(id string) bool { return id == LoaderRowID }), Keys: set.Keys}
@@ -158,7 +158,7 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	if err != nil {
 		return launch.Admission{}, err
 	}
-	a := Admit(withLoader(c), p.mods, p.dist, p.roles)
+	a := Admit(WithLoader(c), p.mods, p.dist, p.roles)
 	if a.Refused() {
 		return launch.Admission{}, errors.New(strings.Join(errorLines(a), "; "))
 	}
@@ -201,7 +201,7 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 	if err != nil {
 		return launch.Plan{}, err
 	}
-	f, t = withLoader(f), withLoader(t)
+	f, t = WithLoader(f), WithLoader(t)
 	fa, ta := Gate(f, p.mods, p.dist).Admitted(f), Gate(t, p.mods, p.dist).Admitted(t)
 	g, _, _ := BuildGraph(ta, p.mods, p.dist, p.roles)
 	return launchPlan(Diff(fa, ta, g)), nil
