@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -234,6 +235,57 @@ func TestLoaderSmoke(t *testing.T) {
 				}
 			}
 			return rowState(s, "extra") == "ACTIVE" && s.Ready
+		})
+		_ = p.cmd.Process.Signal(syscall.SIGTERM)
+		if code := p.wait(); code != boot.ExitOK {
+			t.Fatalf("exit %d; stderr:\n%s", code, p.stderr.String())
+		}
+	})
+
+	// The test distribution's bundle has no group, so this one is a patch: a core:group
+	// row with two consumers and a child that fails every apply, disabled. A generation
+	// restarts the group, which takes its children with it; the next one enables the bad
+	// child too, so its verdict fails and reload restores the group as it was.
+	t.Run("a group restarts and rolls back", func(t *testing.T) {
+		dir := t.TempDir()
+		group, live := filepath.Join(dir, "group.yml"), filepath.Join(dir, "live.yml")
+		write := func(file, body string) {
+			if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		write(group, "- insert:\n    - {id: grp, plugin: core:group, roles: [api], config: ["+
+			"{id: a, plugin: aiops-test/toy-consumer, roles: [api], config: {note: a}}, "+
+			"{id: b, plugin: aiops-test/toy-consumer, roles: [api], config: {note: b}}, "+
+			"{id: bad, plugin: aiops-test/fail-apply, roles: [api], enabled: false}]}\n")
+		write(live, "- {id: extra, enabled: false}\n")
+		p := start(t, bin, nil, group, live)
+		settled := func(s teststate.State) bool {
+			return s.Ready && rowState(s, "grp") == "ACTIVE" && rowState(s, "grp:a") == "ACTIVE" && rowState(s, "grp:b") == "ACTIVE"
+		}
+		p.waitState(settled)
+		gen := func(id uint64, body string) *teststate.Op {
+			write(live, body)
+			p.submit(string(rune('0' + id)))
+			return p.waitState(func(s teststate.State) bool {
+				return s.Reload != nil && s.Reload.ID == id && s.Reload.Status != "queued" && s.Reload.Status != "running"
+			}).Reload
+		}
+		if op := gen(1, "- {id: grp, inject: [toy.store]}\n"); op.Status != "passed" || !slices.Contains(op.Applied["restarted"], "grp") {
+			t.Fatalf("the group did not restart: %+v", op)
+		}
+		p.waitState(settled)
+		op := gen(2, "- {id: grp, inject: [toy.store]}\n- {id: \"grp:bad\", enabled: true}\n")
+		if op.Status != "rolled back" || op.Rollback == nil || op.Rollback.Error != "" {
+			t.Fatalf("operation %+v", op)
+		}
+		p.waitState(func(s teststate.State) bool {
+			for _, r := range s.Rows {
+				if r.ID == "grp:bad" && r.Mount != "disabled" {
+					return false
+				}
+			}
+			return settled(s)
 		})
 		_ = p.cmd.Process.Signal(syscall.SIGTERM)
 		if code := p.wait(); code != boot.ExitOK {
