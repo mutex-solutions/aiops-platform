@@ -352,7 +352,8 @@ a sentence above says otherwise, these decisions win.
     before any row mounted, 2 usage, 3 required set not met, 4 leak or shutdown overran,
     5 `restart-policy` gave up on an infrastructure provider, 6 launcher failure, 7
     restore failed. Code 2 is also the exit code of a Go panic. `aiopsctl` uses 0, 1 and
-    2. The tables in `boot/run.go` and `cmd/aiopsctl/run.go` document them.
+    2. They are recorded in the launcher documentation: the usage texts of `aiops` and
+    `aiopsctl`, and the tables in `boot/run.go` and `cmd/aiopsctl/run.go`.
 
 30. **The default limits are the release defaults for now** (item 8): 10 s each for
     load, drain and dispose; a shutdown bound of 30 s; a settle bound of their sum; a

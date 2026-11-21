@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,6 +165,21 @@ func TestRunUsageErrors(t *testing.T) {
 		e, stderr, _ := env(args...)
 		if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitUsage || !strings.Contains(stderr.String(), "usage: aiops") {
 			t.Errorf("%s: exit %d: %s", name, code, stderr.String())
+		}
+	}
+}
+
+// The usage text is the launcher's documentation of its exit codes (ADR-059 decision
+// 29), so it lists every code of boot.Run with what it means.
+func TestUsageListsTheExitCodes(t *testing.T) {
+	for code, what := range map[int]string{
+		boot.ExitOK: "OK", boot.ExitRefused: "refused before any row mounted", boot.ExitUsage: "usage",
+		boot.ExitRequired: "required set not met", boot.ExitLeak: "leak or shutdown overran",
+		boot.ExitGaveUp:   "restart-policy gave up on an infrastructure provider",
+		boot.ExitInternal: "launcher failure", boot.ExitRestore: "restore failed",
+	} {
+		if s := fmt.Sprintf("%d %s", code, what); !strings.Contains(usage, s) {
+			t.Errorf("the usage text does not list exit code %q", s)
 		}
 	}
 }

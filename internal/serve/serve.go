@@ -79,6 +79,11 @@ const usage = `usage: %s --profile <name> [flags]
   --patch <file>     layer 4 overlay; repeat for several
   --limits <file>    limits.yaml replacing the limits of the distribution
   --refs-dir <dir>   absolute directory that ${file:} references read (flag "refs-dir")
+
+Exit codes: 0 OK, 1 refused before any row mounted, 2 usage (also a Go panic),
+3 required set not met, 4 leak or shutdown overran,
+5 restart-policy gave up on an infrastructure provider, 6 launcher failure,
+7 restore failed.
 `
 
 // Run parses the flags and runs the launcher until it exits, and returns the exit
