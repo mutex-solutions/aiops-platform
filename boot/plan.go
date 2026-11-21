@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 )
 
 // Plan and judge: steps 3 and 5 of a reload (03-c3-kernel.md:378-380;
@@ -42,8 +44,9 @@ const (
 // the config paths that differ) or unchanged. The effect says what the loader
 // does. An update is volatile, and needs no restart, when only config
 // changed and every changed path is a volatile path of the module entry of
-// the plugin (ADR-059 decision 10); any other change to a mounted row
-// restarts it. Entries are sorted by id; Batch gives the order of apply.
+// the plugin (ADR-059 decision 10) and is not and was not a reference, by the
+// loader's own rule (effectOf); any other change to a mounted row restarts it.
+// Entries are sorted by id; Batch gives the order of apply.
 //
 // Closure is the restart closure (08-profiles-roadmap-adrs.md:190, 200): the
 // rows that restart, and their dependants, which restart through their epochs
@@ -83,7 +86,7 @@ func Diff(old, nw Composition, g Graph) Plan {
 			if len(e.Changed) > 0 {
 				e.Action = ActionUpdate
 				e.ConfigPaths = configPaths(o.Config, n.Config, "config")
-				e.Effect = effectOf(oldAct[id], newAct[id], e, n, g)
+				e.Effect = effectOf(oldAct[id], newAct[id], e, o, n, g)
 			}
 		}
 		switch e.Effect {
@@ -245,8 +248,11 @@ func fieldMap(v Value) map[string]Value {
 	return m
 }
 
-// effectOf classifies an update.
-func effectOf(wasActive, isActive bool, e PlanEntry, n ComposedRow, g Graph) Effect {
+// effectOf classifies an update. Whether a config change is volatile is the loader's
+// rule (loaderdef.VolatileOnly over the catalog's volatile paths), so the plan says what
+// the loader does: a change at a path no volatile path covers, or whose value is or
+// was a reference, restarts the row.
+func effectOf(wasActive, isActive bool, e PlanEntry, o, n ComposedRow, g Graph) Effect {
 	switch {
 	case wasActive && !isActive:
 		return EffectUnmount
@@ -266,32 +272,12 @@ func effectOf(wasActive, isActive bool, e PlanEntry, n ComposedRow, g Graph) Eff
 	switch {
 	case relevant == 0:
 		return EffectNone
-	case relevant == 1 && inSetField(FieldConfig, e.Changed) && volatileOnly(e.ConfigPaths, g.mods[n.Plugin].Volatile):
-		return EffectVolatile
+	case relevant == 1 && inSetField(FieldConfig, e.Changed):
+		if _, only := loaderdef.VolatileOnly(plain(o.Config), plain(n.Config), volatilePaths(g.mods[n.Plugin].Volatile)); only {
+			return EffectVolatile
+		}
 	}
 	return EffectRestart
-}
-
-// volatileOnly reports whether every path is, or is under, a volatile path.
-// A volatile path names a config path; the prefix "config." is implied when
-// it is missing.
-func volatileOnly(paths, volatile []string) bool {
-	if len(paths) == 0 {
-		return false
-	}
-	for _, p := range paths {
-		ok := false
-		for _, v := range volatile {
-			if v != "config" && !strings.HasPrefix(v, "config.") && !strings.HasPrefix(v, "config[") {
-				v = "config." + v
-			}
-			ok = ok || p == v || strings.HasPrefix(p, v+".") || strings.HasPrefix(p, v+"[")
-		}
-		if !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // closureOf builds the restart closure: the rows that restart or are
