@@ -20,6 +20,7 @@ import (
 type plan struct {
 	snap     snapshot
 	dispose  []held // the topmost fiber of each branch the plan retires
+	retired  []held // every fiber the plan retires
 	vets     []kernel.BatchOp
 	updates  []held
 	mounts   []string // ids of the entries to mount, in order
@@ -225,11 +226,14 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 	// A plan never disposes a running fiber to mount its entry again with a config that
 	// does not resolve (08-profiles-roadmap-adrs.md §1.6: "Rejected; the row keeps its
 	// instance"). The batch first commits the entry's new config to the fiber it then
-	// disposes, which has the entry's plugin, so the kernel resolves it through
-	// internal/config and Decode while the fiber has its target, as for an update in
-	// place, and refuses the whole batch on an error. A row that gains its first
-	// reference is one: its inject gains configRefsReady, which replaces it.
-	for _, d := range p.dispose {
+	// disposes, its own or its group's, which has the entry's plugin, so the kernel
+	// resolves it through internal/config and Decode while the fiber has its target, as
+	// for an update in place, and refuses the whole batch on an error. A row that gains
+	// its first reference is one: its inject gains configRefsReady, which replaces it.
+	// So is each child of a group the plan replaces, whatever the order of the
+	// operations. A fiber whose plugin changes cannot vet the config: the launcher's
+	// admission does (boot profileContext.Admit).
+	for _, d := range p.retired {
 		e, was := t.entries[d.id], p.snap.entries[d.id]
 		if e != nil && t.mount(e) == def.Mounted && !isGroup(e.spec.Plugin) && was.fiber == d.fiber && was.spec.Plugin == e.spec.Plugin {
 			p.vets = append(p.vets, kernel.CommitOp(d.fiber, e.spec.Config))
@@ -238,12 +242,28 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 	return p, nil
 }
 
-// retireIn retires the fibers of id and beneath it for p (tree.retire), and takes back
-// what p queued for those entries: the kernel refuses an update or a commit of a fiber
-// after the batch disposes it, and an entry with no activation left is told nothing.
+// retireIn gives up for p the fibers of id and of the entries beneath it, which stay
+// in the tree: each fiber that is not DISPOSED becomes the previous fiber of its id, so
+// that no entry of that id is created until it is. p disposes the topmost of each
+// branch, the others go with their group, and vets each (stage). It takes back what p
+// queued for those entries: the kernel refuses an update or a commit of a fiber after
+// the batch disposes it, and an entry with no activation left is told nothing.
 func (t *tree) retireIn(ctx context.Context, p *plan, id string) {
 	ids := t.subtree(id)
-	p.dispose = append(p.dispose, t.retire(ctx, id)...)
+	covered := map[string]bool{}
+	for _, x := range ids {
+		e := t.entries[x]
+		live := e.fiber != nil && !gone(ctx, e.fiber)
+		if live {
+			if !covered[e.spec.Parent] {
+				p.dispose = append(p.dispose, held{id: x, fiber: e.fiber})
+			}
+			p.retired = append(p.retired, held{id: x, fiber: e.fiber})
+			t.addPrev(x, e.fiber)
+		}
+		covered[x] = live || covered[e.spec.Parent]
+		e.fiber, e.kids = nil, nil
+	}
 	p.updates = slices.DeleteFunc(p.updates, func(u held) bool { return slices.Contains(ids, u.id) })
 	p.announce = slices.DeleteFunc(p.announce, func(a def.VolatileUpdateArgs) bool { return slices.Contains(ids, a.ID) })
 }
@@ -385,27 +405,6 @@ func (t *tree) subtree(id string) []string {
 		}
 	}
 	return out
-}
-
-// retire gives up the fibers of id and of the entries beneath it, which stay in the
-// tree: each fiber that is not DISPOSED becomes the previous fiber of its id, so that
-// no entry of that id is created until it is. It returns the fibers to dispose, the
-// topmost of each branch: the others go with their group.
-func (t *tree) retire(ctx context.Context, id string) (dispose []held) {
-	covered := map[string]bool{}
-	for _, x := range t.subtree(id) {
-		e := t.entries[x]
-		live := e.fiber != nil && !gone(ctx, e.fiber)
-		if live {
-			if !covered[e.spec.Parent] {
-				dispose = append(dispose, held{id: x, fiber: e.fiber})
-			}
-			t.addPrev(x, e.fiber)
-		}
-		covered[x] = live || covered[e.spec.Parent]
-		e.fiber, e.kids = nil, nil
-	}
-	return dispose
 }
 
 // gone reports whether f is DISPOSED, or was and its record was evicted. A failed

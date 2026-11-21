@@ -65,6 +65,59 @@ func TestReplacementRefusesAConfigTheKernelDoesNotResolve(t *testing.T) {
 	}
 }
 
+// A plan that replaces a group disposes the fibers of its children too, and the group's
+// next activation mounts them again with the configs the plan gives them. Each is
+// vetted on the fiber that goes, as the group's own replacement is: a config the kernel
+// refuses refuses the plan, whatever the order of the operations, and the children keep
+// their instances.
+func TestReplacedGroupVetsItsChildren(t *testing.T) {
+	k := kernel.NewKey[int]("k", 0)
+	prov := kernel.Define(kernel.Plugin{ID: "t/prov", Provides: []kernel.AnyKey{k}, Apply: func(c *kernel.Context, _ any) error { return k.Provide(c, 1) }})
+	g, c := group("g"), child("g", "c", "t/dec")
+	c.Config = m{"level": "info"}
+	include := g
+	include.Plugin = def.IncludePlugin
+	bad, badInject := c, c
+	bad.Config, badInject.Config, badInject.Inject = m{"level": "bad"}, m{"level": "bad"}, []string{"k"}
+	for _, tc := range []struct {
+		name string
+		ops  []def.Op
+	}{
+		{"group first", []def.Op{update(include), update(bad)}},
+		{"group first, the child replaced too", []def.Op{update(include), update(badInject)}},
+		{"child first, a volatile change", []def.Op{update(bad), update(include)}},
+		{"child first, the child replaced too", []def.Op{update(badInject), update(include)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var applies, disposed atomic.Int32
+			dec := kernel.Define(kernel.Plugin{ID: "t/dec", Decode: func(raw any) (any, error) {
+				if raw.(m)["level"] == "bad" {
+					return nil, errors.New("config refused")
+				}
+				return raw, nil
+			}, Apply: func(c *kernel.Context, _ any) error {
+				applies.Add(1)
+				c.Defer("count", func(context.Context) error { disposed.Add(1); return nil })
+				return nil
+			}})
+			x := newFx(t, fxOpt{plugins: plugins(dec), keys: map[string]kernel.AnyKey{"k": k}, pre: []kernel.Plugin{prov}, rows: []def.EntrySpec{g, c},
+				modules: []launch.CatalogEntry{{ID: "t/dec", Volatile: []string{"level"}}}})
+			x.want("g:c", kernel.Active)
+			if _, err := x.ld.Apply(t.Context(), tc.ops); err == nil || !contains(err.Error(), "config refused") {
+				t.Errorf("Apply = %v, want the refusal of the config", err)
+			}
+			x.settle()
+			x.want("g:c", kernel.Active)
+			if e, _ := x.ld.Locate("g"); e.Spec.Plugin != def.GroupPlugin {
+				t.Errorf("the refused plan changed g: %+v", e.Spec)
+			}
+			if applies.Load() != 1 || disposed.Load() != 0 {
+				t.Errorf("the refused plan replaced g:c: %d applies, %d disposals", applies.Load(), disposed.Load())
+			}
+		})
+	}
+}
+
 // The operations of a plan apply in order against the tree as the earlier ones leave it
 // (sdk/def/loader/v0 Loader.Apply). A later operation that retires an entry's fiber
 // takes back what an earlier one queued for it: the kernel refuses an update or a commit
