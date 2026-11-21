@@ -1201,15 +1201,27 @@ func (r *kernelRuntime) prune() {
 
 // value is the provided value that a service or provide event reports, by
 // provision identity. A provide event not met before is first joined to the
-// pending value whose range holds its sequence.
+// pending value whose range holds its sequence. A service event of a provision whose
+// provide event no export has met (an observer registered after the Provide, an
+// event that left the window) reads the value of the live provision.
 func (r *kernelRuntime) value(e kernel.LedgerEvent) any {
 	if e.UID == 0 || (e.Kind != "service" && e.Kind != "provide") {
 		return nil
 	}
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
-	if v, ok := r.vals[e.UID]; ok || e.Kind != "provide" {
+	if v, ok := r.vals[e.UID]; ok {
 		return v
+	}
+	if e.Kind == "service" {
+		view, _ := r.root.Inspect(context.Background())
+		for _, p := range view.Provisions {
+			if p.UID == e.UID {
+				r.vals[e.UID] = p.Value
+				return p.Value
+			}
+		}
+		return nil
 	}
 	key := serviceName(e.Key)
 	list := r.pending[key]
