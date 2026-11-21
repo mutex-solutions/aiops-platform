@@ -179,16 +179,19 @@ func writtenFiles(t *testing.T, root string, fn func(rel string, lines []string)
 // valid only while no row required by row or by key holds a reference. So a paragraph
 // that cites decision 18 for the rule by key says "pending the owner" (a row left
 // PENDING is no such mark), and a sentence beside that citation which calls disabling
-// it valid or optional says while what.
+// it valid or optional says while what. The entry of decision 18 in ADR-059 is such a
+// citation, and the rule by key is also put as a row "of" or "inside" the required
+// set, since that set holds a provider of a required key.
 func TestPendingConfigRefsRuleIsMarked(t *testing.T) {
 	cites := regexp.MustCompile(`\bdecision 18\b`)
-	byKey := regexp.MustCompile(`\bby key\b|\ba required key\b`)
+	entry := regexp.MustCompile(`^- \*\*18\.\*\* `)
+	byKey := regexp.MustCompile(`\bby key\b|\ba required key\b|\bof the required set\b|\binside the (?:required )?set\b`)
 	optional := regexp.MustCompile(`disabl[^.]*config-refs[^.]*\b(?:valid|optional)\b[^.]*`)
 	n := 0
 	writtenFiles(t, "../..", func(rel string, lines []string) {
 		for _, p := range paragraphs(rel, lines) {
 			text := strings.ToLower(p.text)
-			if !cites.MatchString(text) {
+			if !cites.MatchString(text) && (filepath.Base(rel) != "ADR-059-s1-scope.md" || !entry.MatchString(text)) {
 				continue
 			}
 			n++

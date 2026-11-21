@@ -25,10 +25,11 @@ const ConfigRefsID = "aiops/config-refs"
 // it as a row-level inject (refsInject), so no such row is applied before its
 // references can resolve, and each unloads in the owner turn in which config-refs
 // quiesces. The static graph sees the same need: the restart closure of config-refs
-// holds the rows with references, and where a row of the required set holds one the
+// holds the rows with references, and where a required row of the role holds one the
 // launcher adds config-refs and the key to the required set (RequiredFor; ADR-059
-// decision 18). With no config-refs in the module table the catalog still has the key,
-// which nothing provides, so such a row stays PENDING.
+// decision 18); pending the owner, so it does where an active provider of a required
+// key in the root realm holds one. With no config-refs in the module table the catalog
+// still has the key, which nothing provides, so such a row stays PENDING.
 const configRefsReady = "configRefsReady"
 
 // configRefsDryRun names the key of the dry run of references that config-refs
