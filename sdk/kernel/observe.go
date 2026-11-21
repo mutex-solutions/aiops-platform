@@ -50,16 +50,14 @@ type lateDelivery interface{ deliverLate() bool }
 // skipped, among them the deadline of a leaking fiber, which is what a launcher
 // watches for. This lease is the root's while the root is active, and after that it
 // delivers without one: the dispatcher drains every accepted event before it stops
-// (advanceLocked), and Close joins it. Its cleanup effect is an empty one, so the
-// observer is not removed when the root is disposed and sees the events of that too.
-// The Disposer that Observe returns still removes it.
+// (advanceLocked), and Close joins it. It registers no cleanup effect on the root:
+// the observer is not removed when the root is disposed and sees the events of that
+// too, and an observer made again after an overflow leaves nothing behind (ADR-034
+// G11). The Disposer that Observe returns still removes it.
 type rootLease struct{ *handle }
 
-func (rootLease) deliverLate() bool { return true }
-
-func (l rootLease) tryDefer(label string, _ disposer) error {
-	return l.handle.tryDefer(label, func(context.Context) error { return nil })
-}
+func (rootLease) deliverLate() bool               { return true }
+func (rootLease) tryDefer(string, disposer) error { return nil }
 
 // observerFunc runs on the dispatcher worker, never inline in append. The
 // event, including any referenced slices, pointers, or interface values, must

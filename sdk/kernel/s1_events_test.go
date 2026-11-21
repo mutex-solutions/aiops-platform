@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -366,5 +368,44 @@ func TestRelayResubscriptionLeavesNoEffectOnTheRoot(t *testing.T) {
 	}
 	if after := rootEffects(); after != before {
 		t.Fatalf("the root holds %d relay effects after three overflows, %d before", after, before)
+	}
+}
+
+// Root.Observe registers no effect on the root (ADR-034 G11): a launcher that
+// observes again after each overflow leaves nothing behind. The Disposer still
+// removes the observer, and one left registered still sees the events after it.
+func TestRootObserveLeavesNoEffectOnTheRoot(t *testing.T) {
+	r := newKernel(t)
+	ctx := frontCtx(t)
+	var seen atomic.Int64
+	for i := range 3 {
+		dispose, err := r.Observe(fmt.Sprintf("watch%d", i), func(context.Context, LedgerEvent) error { seen.Add(1); return nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i < 2 {
+			if err := dispose(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if st := r.ObserverStatus(); st.Observers != 1 {
+		t.Fatalf("%d observers after two of three were disposed", st.Observers)
+	}
+	want(t, r.Plugin(plug("s1/observed", nil, nil, nil), nil), Active)
+	if err := r.AwaitObservers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	events, err := r.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen.Load() == 0 {
+		t.Fatal("the observer left registered saw no event")
+	}
+	for _, e := range events {
+		if e.Fiber == 0 && strings.HasPrefix(e.Label, "observer ") {
+			t.Fatalf("Root.Observe left an effect on the root: %+v", e)
+		}
 	}
 }

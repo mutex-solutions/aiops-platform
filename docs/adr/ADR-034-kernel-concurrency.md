@@ -1335,8 +1335,9 @@ the observer had seen only the events before it; none of the skipped ones were
 delivered), among them the `deadline` of a leaking fiber. The observer that
 `Root.Observe` registers now delivers an event accepted before the dispatcher
 closes even when the root's lease is refused, with the context of the callback
-already cancelled by the quiescence, and its cleanup effect no longer removes it
-when the root is disposed, so the last events of the root are delivered too. The
+already cancelled by the quiescence, and it registers no cleanup effect on the root
+(see the owner decision below), so it is not removed when the root is disposed and
+the last events of the root are delivered too. The
 dispatcher already drained its queue before it stopped. When `Close` returns the
 diagnostic of a fiber that is still blocked, it now first waits, within its
 context, until the events accepted so far are delivered, so the diagnostic and
@@ -1354,6 +1355,18 @@ every detached observer, and matches `ErrObserverOverflow`, the error of every
 detachment. (Until the second S1 review it was reported as an overflow of a backlog
 bound that was never reached.) Observers registered on
 a fiber's own handle by a test keep the old rule.
+
+**Owner decision, 2026-11-21: a launcher observer registers no effect on the
+root.** Until then `Root.Observe` registered an empty cleanup effect on the root,
+with its `effect` event in the ledger, and it stayed until `Close`. A launcher
+that observes again after each overflow, as boot's watch resyncs, so grew the
+root's effects by one per overflow for the life of the process. `Root.Observe` now
+registers none: the observer leaves when its `Disposer` is called or when the
+dispatcher closes, and an observer made again after an overflow leaves nothing
+behind, as the relay already did (G5). The S0 adapter's test that compared the
+ledger and the observer with the prototype, whose observer is an effect of its
+owner, no longer expects that event: the effect of the root's observer is not part
+of the contract a plugin sees, since only the launcher observes.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
