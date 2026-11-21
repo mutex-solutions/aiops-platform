@@ -41,9 +41,9 @@ var (
 	ErrNotMounted = errors.New("loader: entry is not mounted")
 	// ErrUnsupported reports an Apply on a loader that was given no batch function.
 	ErrUnsupported = errors.New("loader: no batch function")
-	// ErrNotDisposed reports a previous fiber of an id that settled in a state other
-	// than DISPOSED, so that no entry of that id may be created
-	// (07-c4-plugin-sdk.md:341).
+	// ErrNotDisposed reports a previous fiber of an id, or of a key the entry provides,
+	// that settled in a state other than DISPOSED, so that the entry may not be created
+	// (07-c4-plugin-sdk.md:341; Loader).
 	ErrNotDisposed = errors.New("loader: previous fiber is not disposed")
 	// ErrUnknownKey and ErrUnknownPlugin are why a row's fiber is FAILED: a key name
 	// that the catalog does not hold, a plugin id that the module table does not
@@ -145,6 +145,16 @@ type Result struct {
 // is one batch and that the loader never creates an entry for an id whose previous
 // fiber is not DISPOSED (07-c4-plugin-sdk.md:341); an id that is removed and created
 // again therefore has its create in a second batch, after the wait (open point).
+//
+// The rule holds by key too (ADR-059; an open point until the owner confirms it): an
+// entry whose plugin provides a key, and that the plan creates, enables or replaces or
+// that a group the plan mounts mounts, gets its fiber only once every fiber the plan
+// removes, disables or replaces that provides the key in the same realm is DISPOSED,
+// because the kernel refuses a second provision of a key in a realm while the first
+// stands. The realm of a key at an entry is the nearest entry, the entry itself first,
+// whose Isolate names the key, or the root, as in the launcher's static graph. A fiber
+// restarted in place keeps its plugin and its realm, so it is not held: the launcher
+// admits no composition with two providers of one key in one realm.
 type Loader interface {
 	// Apply applies the operations in order against the tree as the earlier ones
 	// leave it. It validates everything first: a refused operation refuses the whole

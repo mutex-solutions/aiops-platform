@@ -77,9 +77,11 @@ func (t *tree) restore(s snapshot) {
 // (07-c4-plugin-sdk.md:341; plugin-system-2026-11.md §9, step 4: "dsh recomposeProfile
 // waits for disposal"), and a batch commits its desired state before any fiber
 // unloads, so a mount of an id that was removed or replaced, in this plan or in an
-// earlier one, goes in a second batch after the wait for that disposal. The docs do
-// not say what happens when the wait is cut short: the first batch stays committed,
-// the entry stays in the tree with no fiber, and the error is returned (open point).
+// earlier one, goes in a second batch after the wait for that disposal. So does a
+// mount of a provider of a key that the plan retires a provider of in the same realm
+// (stage). The docs do not say what happens when the wait is cut short: the first
+// batch stays committed, the entry stays in the tree with no fiber, and the error is
+// returned (open point).
 //
 // A group activation that mounts its children waits while a plan is staged and its
 // first batch runs, and the plan waits for it, so a refused plan is put back exactly
@@ -173,7 +175,7 @@ func (t *tree) commit(ctx context.Context, kops []kernel.BatchOp, at int, items 
 }
 
 // split sorts ids into the mounts that may go in the first batch and those that
-// wait for a previous fiber of the same id.
+// wait for a previous fiber: of the same id, or of a key they provide (stage).
 func (t *tree) split(ids []string) (now, later []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -244,7 +246,43 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 			p.vets = append(p.vets, kernel.CommitOp(d.fiber, e.spec.Config))
 		}
 	}
+	// The wait for a previous fiber holds by key too: an entry the plan mounts, or that
+	// the group it mounts mounts, whose plugin provides a key that a fiber the plan
+	// retires provides in the same realm, waits until that fiber is DISPOSED, because the
+	// kernel refuses a second provision of the key while the first stands.
+	now := t.snapshot().entries
+	for _, d := range p.retired {
+		gone := t.provides(p.snap.entries, d.id)
+		for _, id := range slices.Clone(p.mounts) {
+			for _, x := range t.subtree(id) {
+				e := t.entries[x]
+				if e != nil && t.mount(e) == def.Mounted && !slices.Contains(t.prev[x], d.fiber) &&
+					slices.ContainsFunc(t.provides(now, x), func(k string) bool { return slices.Contains(gone, k) }) {
+					t.addPrev(x, d.fiber)
+					p.mounts = append(p.mounts, x)
+				}
+			}
+		}
+	}
 	return p, nil
+}
+
+// provides lists the keys the plugin of the entry id provides, by the specs of entries,
+// each with its realm: the nearest entry, id first, whose isolate names the key, or the
+// root (the reading of boot's static graph).
+func (t *tree) provides(entries map[string]entry, id string) []string {
+	p, _ := t.cat.Plugin(entries[id].spec.Plugin)
+	var out []string
+	for _, k := range p.Provides {
+		realm := ""
+		for e, ok := entries[id]; ok && realm == ""; e, ok = entries[e.spec.Parent] {
+			if slices.Contains(e.spec.Isolate, k.Name()) {
+				realm = e.spec.ID
+			}
+		}
+		out = append(out, fmt.Sprintf("%s@%d/%s", k.Name(), k.Major(), realm))
+	}
+	return out
 }
 
 // retireIn gives up for p the fibers of id and of the entries beneath it, which stay
