@@ -349,19 +349,23 @@ type kernelRuntime struct {
 	// The kernel's events carry no provided value, so the adapter, which performs
 	// every Provide, keeps the value of each provision by the provision identity
 	// that the kernel gave it and joins it to the events that name that identity.
-	valMu    sync.Mutex
-	vals     map[uint64]any
-	pending  map[string][]pendingValue // Values whose provide event no export has met yet, by key.
-	npending int
-	keyLocks sync.Map // string -> *sync.Mutex: one Provide per key at a time, so no other provide event of the key falls in a pendingValue's range.
+	// The kernel numbers provisions in the order in which it admits them, and only
+	// the adapter's Provide adds one after the hidden prefix, so with one Provide at
+	// a time the n-th successful Provide is provision base.uids+n.
+	provideMu sync.Mutex
+	provided  uint64 // Successful Provide calls, under provideMu.
+	valMu     sync.Mutex
+	vals      map[uint64]providedValue
+	valsAt    int // Size of vals at which the next prune runs.
 }
 
-// pendingValue is a provided value waiting for its provide event: the event's
-// sequence lies in (lo, hi], the ledger totals read just before and just after the
-// Provide call that appended it.
-type pendingValue struct {
-	value  any
-	lo, hi uint64
+// providedValue is the value of one provision. dead is the ledger watermark of the
+// first prune that found the provision ended and its events out of the window: every
+// event that names it lies at or below dead, so the value is dropped once every
+// observer has been delivered past dead.
+type providedValue struct {
+	value any
+	dead  uint64
 }
 
 var (
@@ -399,7 +403,7 @@ func NewKernelWith(retention Retention) Runtime {
 		ObserverQueue: retention.ObserverBacklog, OwnerInbox: 256, TerminalLimit: rcTerminalLimit,
 	}
 	return &kernelRuntime{root: newKernelRoot(cfg), cfg: cfg, base: base, window: window,
-		fibers: make(map[uint64]kernelFiber), records: make(map[uint64]map[string]any), vals: make(map[uint64]any)}
+		fibers: make(map[uint64]kernelFiber), records: make(map[uint64]map[string]any), vals: make(map[uint64]providedValue)}
 }
 
 // newKernelRoot builds the kernel. Both binding maps stay empty: every key of this
@@ -1014,14 +1018,13 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 			}
 		}()
 		k := r.key(key)
-		lock, _ := r.keyLocks.LoadOrStore(key, new(sync.Mutex))
-		lock.(*sync.Mutex).Lock()
-		defer lock.(*sync.Mutex).Unlock()
-		lo := r.root.RetentionStatus().EventsTotal
+		r.provideMu.Lock()
+		defer r.provideMu.Unlock()
 		if err := k.Provide(kc, value, r.available(k)); err != nil {
 			return fromKernel(err)
 		}
-		r.keep(key, value, lo, r.root.RetentionStatus().EventsTotal)
+		r.provided++
+		r.keep(r.base.uids+r.provided, value)
 		c.publishOwned(key)
 		return nil
 	}
@@ -1135,56 +1138,29 @@ func (r *kernelRuntime) uids(list []uint64) []uint64 {
 	return out
 }
 
-// keep files value for the provide event that the Provide call just made: the
-// kernel appended that event before Provide returned, so its sequence lies in
-// (lo, hi], and the key lock keeps every other provide event of the key out of
-// that range. The value is joined to its provision identity when an export first
-// meets the provide event (value). Filing costs O(1); reading the ledger on every
-// Provide made a mount of n fibers cost O(n x window).
-//
-// ponytail: a provide event that leaves the window before any export meets it
-// leaves its value unreported (nil), as the event itself is lost then; pending
-// values that can no longer match are dropped once the pending set outgrows twice
-// the window.
-func (r *kernelRuntime) keep(key string, value any, lo, hi uint64) {
+// keep records value under the identity of the provision that Provide just made.
+func (r *kernelRuntime) keep(uid uint64, value any) {
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
-	if r.pending == nil {
-		r.pending = make(map[string][]pendingValue)
-	}
-	r.pending[key] = append(r.pending[key], pendingValue{value: value, lo: lo, hi: hi})
-	r.npending++
-	if r.npending <= 2*r.window+256 {
-		return
-	}
-	st := r.root.RetentionStatus()
-	oldest := st.EventsTotal - uint64(st.Windowed) // Sequences at or below this are gone.
-	r.npending = 0
-	for k, list := range r.pending {
-		kept := list[:0]
-		for _, p := range list {
-			if p.hi > oldest {
-				kept = append(kept, p)
-			}
-		}
-		if len(kept) == 0 {
-			delete(r.pending, k)
-			continue
-		}
-		r.pending[k] = kept
-		r.npending += len(kept)
+	r.vals[uid] = providedValue{value: value}
+	if len(r.vals) >= max(r.valsAt, 4*r.window+256) {
+		r.prune()
+		r.valsAt = 2 * len(r.vals)
 	}
 }
 
-// prune drops the values that no event of the window and no live provision can
-// name any more. The caller holds valMu. The provisions are read before the events,
-// so a provision that ends between the two reads still has its events in the window.
+// prune drops the values that no event of the window, no live provision and no event
+// an observer may still be delivered can name any more. The caller holds valMu. The
+// provisions are read before the events, so a provision that ends between the two
+// reads still has its events in the window, and every event of a provision that the
+// view does not hold lies at or below the view's watermark.
 func (r *kernelRuntime) prune() {
 	view, _ := r.root.Inspect(context.Background())
 	events, _ := r.root.Events(context.Background())
 	if len(view.Provisions) == 0 && len(events) == 0 {
 		return // The kernel is closed: nothing can be told apart.
 	}
+	delivered := r.root.ObserverStatus().Delivered
 	keep := make(map[uint64]bool, len(view.Provisions)+len(events))
 	for _, p := range view.Provisions {
 		keep[p.UID] = true
@@ -1192,56 +1168,27 @@ func (r *kernelRuntime) prune() {
 	for _, e := range events {
 		keep[e.UID] = true
 	}
-	for uid := range r.vals {
-		if !keep[uid] {
+	for uid, v := range r.vals {
+		switch {
+		case keep[uid]:
+		case v.dead == 0:
+			v.dead = view.Sequence
+			r.vals[uid] = v
+		case v.dead <= delivered:
 			delete(r.vals, uid)
 		}
 	}
 }
 
 // value is the provided value that a service or provide event reports, by
-// provision identity. A provide event not met before is first joined to the
-// pending value whose range holds its sequence. A service event of a provision whose
-// provide event no export has met (an observer registered after the Provide, an
-// event that left the window) reads the value of the live provision.
+// provision identity.
 func (r *kernelRuntime) value(e kernel.LedgerEvent) any {
 	if e.UID == 0 || (e.Kind != "service" && e.Kind != "provide") {
 		return nil
 	}
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
-	if v, ok := r.vals[e.UID]; ok {
-		return v
-	}
-	if e.Kind == "service" {
-		view, _ := r.root.Inspect(context.Background())
-		for _, p := range view.Provisions {
-			if p.UID == e.UID {
-				r.vals[e.UID] = p.Value
-				return p.Value
-			}
-		}
-		return nil
-	}
-	key := serviceName(e.Key)
-	list := r.pending[key]
-	for i, p := range list {
-		if e.Sequence <= p.lo || e.Sequence > p.hi {
-			continue
-		}
-		r.vals[e.UID] = p.value
-		if rest := append(list[:i:i], list[i+1:]...); len(rest) > 0 {
-			r.pending[key] = rest
-		} else {
-			delete(r.pending, key)
-		}
-		r.npending--
-		if len(r.vals) > 4*r.window+256 {
-			r.prune()
-		}
-		return p.value
-	}
-	return nil
+	return r.vals[e.UID].value
 }
 
 // serviceName is the key a service event or provision names: the kernel renders it
