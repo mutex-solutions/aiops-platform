@@ -10,9 +10,10 @@
 //
 // Every number comes from the row's config. Time comes from the clock key, so a test
 // moves it by hand. The rule itself is in internal/retry. While reload applies a
-// generation and until it is final (reload/operation), a give-up waits: a failure of
-// a row that is not yet judged is rolled back, not given up on
-// (08-profiles-roadmap-adrs.md:473).
+// generation and until it is final (reload/operation), a give-up waits, and so does a
+// retry of a row that the generation changes or restarts: a failure of a row that is
+// not yet judged is rolled back, not given up on (08-profiles-roadmap-adrs.md:473), and
+// the verdict sees it (ADR-059).
 //
 // The listener is sealed: the distribution lists this row for internal/status in
 // Config.Listeners, and for the registry key, which is consumer-bound, in
@@ -78,13 +79,14 @@ func apply(c *kernel.Context, conf Config, m *retry.Memory) error {
 		r.Status(ctx, e)
 		return nil, nil
 	})
-	// A give-up waits while reload applies a generation and judges it.
+	// A give-up, and a retry of a row of the generation, wait while reload applies a
+	// generation and judges it.
 	reload.Operation.On(c, kernel.DefaultStage, func(ctx context.Context, res reload.Result) (any, error) {
-		r.Operation(ctx, res.Status.Done())
+		r.Operation(ctx, res)
 		return nil, nil
 	})
 	// The retries that an earlier activation scheduled went with it.
-	r.Resume()
+	r.Resume(c.Std())
 	// Every row activates with no order, so a fiber may have failed before this
 	// one listened, and its event reached no one. Catch up as for the notice that
 	// events were lost: read the tree and count the FAILED fibers in it.

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +16,8 @@ import (
 	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
@@ -321,18 +324,51 @@ func TestResyncRetriesATrackedFiberWhoseFailureWasLost(t *testing.T) {
 	}
 }
 
-// When a reload operation ends, a held fiber that left FAILED is left to its own
-// events, and one that a live event decided on meanwhile is not decided again.
+// When a reload operation ends, a held fiber that left FAILED was restarted by someone
+// else, whose events may never have reached restart-policy, and is tracked afresh; one
+// that a live event decided on meanwhile is not decided again.
 func TestEndOfAnOperationJudgesWhatItHeld(t *testing.T) {
 	g := newRig(t, policy)
-	g.r.Operation(t.Context(), false)
+	g.r.Operation(t.Context(), reload.Result{Status: reload.Running})
 	restored := g.reg.put(g.active())
 	decided := g.reg.put(g.failing())
-	g.r.recs[restored] = &record{held: true}
+	g.r.recs[restored] = &record{held: true, fails: []time.Time{g.clk.Now()}}
 	g.r.recs[decided] = &record{held: true, pending: true}
-	g.r.Operation(t.Context(), true)
-	if g.r.op != nil || g.r.recs[restored].held || g.r.recs[decided].gaveUp || g.clk.Pending() != 0 {
+	g.r.Operation(t.Context(), reload.Result{Status: reload.RolledBack})
+	if g.r.op != nil || g.r.recs[restored] != nil || g.r.recs[decided].gaveUp || g.clk.Pending() != 0 {
 		t.Errorf("op = %v, records = %+v, %+v, timers = %d", g.r.op, g.r.recs[restored], g.r.recs[decided], g.clk.Pending())
+	}
+}
+
+// The fiber of a row that the operation restarted or created is tracked afresh at its
+// end, its events heard or not, and counts one failure when it is FAILED; the rows that
+// the composition key does not list, or that have no fiber, are skipped.
+func TestEndOfAnOperationTracksWhatItRenewedAfresh(t *testing.T) {
+	g := newRig(t, Policy{MaxFailures: 1, Window: time.Hour, BackoffMin: time.Second, BackoffMax: time.Minute, Factor: 2,
+		Infrastructure: []string{"sql"}})
+	up, down := g.reg.put(g.active()), g.reg.put(g.failing())
+	g.comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
+		{ID: "up", Plugin: "aiops/a", Fiber: up, State: kernel.Active},
+		{ID: "down", Plugin: "aiops/f", Fiber: down, State: kernel.Failed},
+		{ID: "none", Plugin: "aiops/f", State: kernel.Failed},
+	}})
+	g.r.Operation(t.Context(), reload.Result{Status: reload.Running, Plan: launch.Plan{
+		Entries: []launch.PlanEntry{{ID: "up", Action: launch.ActionUpdate}, {ID: "down", Action: launch.ActionCreate},
+			{ID: "kept", Action: launch.ActionUnchanged}}, Closure: []string{"none"}}})
+	if want := map[string]bool{"up": true, "down": true, "none": true}; !maps.Equal(g.r.rows, want) {
+		t.Errorf("rows of the operation = %v, want %v", g.r.rows, want)
+	}
+	now := g.clk.Now()
+	g.r.recs[up] = &record{fails: []time.Time{now}, activeAt: now} // the candidate's failure, its restart unheard
+	g.r.recs[down] = &record{held: true, fails: []time.Time{now, now}}
+	g.r.Operation(t.Context(), reload.Result{Status: reload.RollbackFailed,
+		Applied:  []loader.Result{{ID: "up", Outcome: loader.Restarted}, {ID: "down", Outcome: loader.Created}},
+		Rollback: &reload.Rollback{Applied: []loader.Result{{ID: "none", Outcome: loader.Restarted}, {ID: "kept", Outcome: loader.Committed}}}})
+	if g.r.recs[up] != nil {
+		t.Errorf("record of up = %+v, want none: the operation restarted it", g.r.recs[up])
+	}
+	if rec := g.r.recs[down]; rec == nil || len(rec.fails) != 1 || !rec.pending {
+		t.Errorf("record of down = %+v, want its one failure retried", rec)
 	}
 }
 

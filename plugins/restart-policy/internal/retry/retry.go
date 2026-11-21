@@ -21,6 +21,8 @@ import (
 	clock "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0"
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -65,11 +67,16 @@ type Retrier struct {
 // reload operation in flight. It outlives an activation of restart-policy, so that a
 // restart of the row (its config changed, its clock restarted) keeps every give-up and
 // count: a fiber given up on stays FAILED until someone updates it
-// (07-c4-plugin-sdk.md:360), and a hold lasts until the operation is final.
+// (07-c4-plugin-sdk.md:360), and a hold lasts until the operation is final. The events
+// of the restart itself reach no activation, so what is known of them stands in: a
+// FAILED fiber that is not any more was restarted by someone else, and the final event
+// of an operation names the rows it restarted. The records are not durable at S1
+// (ADR-059).
 type Memory struct {
 	mu   sync.Mutex
 	recs map[uint64]*record
 	op   context.Context // the reload goroutine's, while an operation is in flight; nil when none
+	rows map[string]bool // the rows the plan of that operation changes, removes or restarts; replaced, never written
 }
 
 // NewMemory returns a memory with no record.
@@ -82,7 +89,7 @@ type record struct {
 	fails    []time.Time
 	pending  bool      // a retry is scheduled and has not fired
 	retried  bool      // restart-policy updated the fiber and has not yet seen it leave FAILED
-	held     bool      // past the limit while a reload operation was in flight: judged at its end
+	held     bool      // neither retried nor given up on while a reload operation was in flight: judged at its end
 	gaveUp   bool      // the fiber stays FAILED until someone updates it
 	activeAt time.Time // when the fiber was last seen ACTIVE; zero while it is not
 }
@@ -93,8 +100,10 @@ func New(p Policy, d Deps, m *Memory) *Retrier {
 }
 
 // Resume takes over the records of an activation that has ended: each retry it had
-// scheduled, whose timer went with it, is scheduled again with its count.
-func (r *Retrier) Resume() {
+// scheduled, whose timer went with it, is scheduled again with its count, unless the
+// fiber is not FAILED any more: someone else restarted it meanwhile, and it is tracked
+// afresh.
+func (r *Retrier) Resume(ctx context.Context) {
 	type due struct {
 		id  uint64
 		rec *record
@@ -109,33 +118,68 @@ func (r *Retrier) Resume() {
 	}
 	r.mu.Unlock()
 	for _, d := range all {
-		r.schedule(d.id, d.rec, d.n)
+		if r.isFailed(ctx, d.id) {
+			r.schedule(d.id, d.rec, d.n)
+		} else {
+			r.drop(d.id, d.rec)
+		}
 	}
 }
 
-// Operation handles one reload/operation event. From the event of an operation that
-// is about to apply a generation until the event that it is final, the rows of the
-// tree are not judged, and a failure among them is rolled back when the verdict fails
-// (08-profiles-roadmap-adrs.md:470, :473): a fiber past its limit is held, not given
-// up on, and the exit that giving up on an infrastructure provider asks for would
-// abandon the operation. When the operation is final every held fiber is judged
-// again. ctx is the reload goroutine's: an operation whose final event never comes
-// is over once ctx is done (see Status).
-func (r *Retrier) Operation(ctx context.Context, final bool) {
-	if final {
-		r.end(ctx)
+// Operation handles one reload/operation event, res as reload emitted it. From the
+// event of an operation that is about to apply a generation until the event that it
+// is final, the rows of the tree are not judged, and a failure among them is rolled
+// back when the verdict fails (08-profiles-roadmap-adrs.md:470, :473): a fiber past
+// its limit is held, not given up on, as the exit that giving up on an infrastructure
+// provider asks for would abandon the operation; and a fiber of a row that the plan
+// changes, removes or restarts is held, not retried, so that the verdict sees every
+// failure of the generation (ADR-059). When the operation is final the fibers it
+// restarted or created are tracked afresh and every held fiber is judged on its state
+// then. ctx is the reload goroutine's: an operation whose final event never comes is
+// over once ctx is done (see Status).
+func (r *Retrier) Operation(ctx context.Context, res reload.Result) {
+	if res.Status.Done() {
+		r.end(ctx, renewed(res))
 		return
 	}
+	rows := map[string]bool{}
+	for _, e := range res.Plan.Entries {
+		if e.Action != launch.ActionUnchanged {
+			rows[e.ID] = true
+		}
+	}
+	for _, id := range res.Plan.Closure {
+		rows[id] = true
+	}
 	r.mu.Lock()
-	r.op = ctx
+	r.op, r.rows = ctx, rows
 	r.mu.Unlock()
 }
 
-// end ends the operation in flight and judges the fibers it held: one still FAILED
-// past its limit is given up on now; one restarted meanwhile is left to its events.
-func (r *Retrier) end(ctx context.Context) {
+// renewed lists the rows that the operation of res restarted or created, forward or in
+// its rollback: a restart by someone else, after which a fiber is tracked afresh.
+func renewed(res reload.Result) map[string]bool {
+	all := res.Applied
+	if res.Rollback != nil {
+		all = append(slices.Clone(all), res.Rollback.Applied...)
+	}
+	out := map[string]bool{}
+	for _, a := range all {
+		if a.Outcome == loader.Created || a.Outcome == loader.Restarted {
+			out[a.ID] = true
+		}
+	}
+	return out
+}
+
+// end ends the operation in flight. The fibers of the rows it renewed are tracked
+// afresh, whether or not their events reached an activation of restart-policy, and one
+// that is FAILED counts the failure of its new config. Then every fiber it held is
+// judged: one still FAILED is retried or given up on now; one that is not was
+// restarted by someone else and is tracked afresh.
+func (r *Retrier) end(ctx context.Context, renewed map[string]bool) {
 	r.mu.Lock()
-	r.op = nil
+	r.op, r.rows = nil, nil
 	held := map[uint64]*record{}
 	for id, rec := range r.recs {
 		if rec.held {
@@ -144,8 +188,19 @@ func (r *Retrier) end(ctx context.Context) {
 		}
 	}
 	r.mu.Unlock()
+	if len(renewed) > 0 {
+		g, _ := r.Rows.Committed(composition.ScopeProcess)
+		for _, row := range g.Rows {
+			if renewed[row.ID] && row.Fiber != 0 {
+				r.forget(row.Fiber)
+				delete(held, row.Fiber)
+				r.failed(ctx, row.Fiber, row.Plugin) // one that is not FAILED is left as it is
+			}
+		}
+	}
 	for id, rec := range held {
 		if !r.isFailed(ctx, id) {
+			r.drop(id, rec)
 			continue
 		}
 		r.mu.Lock()
@@ -153,7 +208,7 @@ func (r *Retrier) end(ctx context.Context) {
 			r.mu.Unlock() // a live event decided meanwhile
 			continue
 		}
-		r.decide(id, rec, r.Clock.Now())
+		r.decide(id, rec, r.Clock.Now(), false)
 	}
 }
 
@@ -165,7 +220,7 @@ func (r *Retrier) Status(ctx context.Context, e kernel.LedgerEvent) {
 	abandoned := r.op != nil && r.op.Err() != nil
 	r.mu.Unlock()
 	if abandoned {
-		r.end(ctx)
+		r.end(ctx, nil)
 	}
 	switch {
 	case e.Kind == "overflow":
@@ -173,7 +228,7 @@ func (r *Retrier) Status(ctx context.Context, e kernel.LedgerEvent) {
 	case e.State == kernel.Failed:
 		r.failed(ctx, e.Fiber, e.Plugin)
 	case e.State == kernel.Active:
-		r.active(e.Fiber)
+		r.moved(e.Fiber, e.State)
 	case e.State == kernel.Disposed:
 		r.forget(e.Fiber)
 	default:
@@ -186,6 +241,7 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 	if !r.isFailed(ctx, id) {
 		return // a stale event: the fiber has moved on, and its own events say where
 	}
+	hold := r.ofOperation(id)
 	now := r.Clock.Now()
 	r.mu.Lock()
 	rec := r.recs[id]
@@ -200,7 +256,22 @@ func (r *Retrier) failed(ctx context.Context, id uint64, plugin string) {
 	r.endActive(rec, now)
 	rec.retried = false // this failure ends the retry, whose restart a lost event may hide
 	rec.fails = append(rec.fails, now)
-	r.decide(id, rec, now)
+	r.decide(id, rec, now, hold)
+}
+
+// ofOperation reports whether fiber id is the fiber of a row that the plan of the
+// reload operation in flight changes, removes or restarts. It reads the tree only
+// while an operation is in flight.
+func (r *Retrier) ofOperation(id uint64) bool {
+	r.mu.Lock()
+	rows := r.rows
+	r.mu.Unlock()
+	if len(rows) == 0 {
+		return false
+	}
+	g, _ := r.Rows.Committed(composition.ScopeProcess)
+	i := slices.IndexFunc(g.Rows, func(row composition.Row) bool { return row.Fiber == id })
+	return i >= 0 && rows[g.Rows[i].ID]
 }
 
 // isFailed reports whether fiber id is FAILED, and forgets one that is gone.
@@ -215,20 +286,24 @@ func (r *Retrier) isFailed(ctx context.Context, id uint64) bool {
 }
 
 // decide retries fiber id, holds it while a reload operation is in flight, or gives
-// up on it, by the failures of rec in the window. r.mu is held; decide releases it.
-func (r *Retrier) decide(id uint64, rec *record, now time.Time) {
+// up on it, by the failures of rec in the window. A retry is held too when hold says
+// that the fiber is of the operation's plan. r.mu is held; decide releases it.
+func (r *Retrier) decide(id uint64, rec *record, now time.Time, hold bool) {
 	rec.fails = slices.DeleteFunc(rec.fails, func(t time.Time) bool { return now.Sub(t) > r.Window })
 	n := len(rec.fails)
 	switch {
+	case r.op != nil && (hold || n > r.MaxFailures):
+		rec.held = true
+		r.mu.Unlock()
+		msg := "fiber.give-up-held"
+		if n <= r.MaxFailures {
+			msg = "fiber.retry-held"
+		}
+		r.Log.Info(msg, "fiber", id, "plugin", rec.plugin, "failures", n, "why", "a reload operation is in flight")
 	case n <= r.MaxFailures:
 		rec.pending = true
 		r.mu.Unlock()
 		r.schedule(id, rec, n)
-	case r.op != nil:
-		rec.held = true
-		r.mu.Unlock()
-		r.Log.Info("fiber.give-up-held", "fiber", id, "plugin", rec.plugin, "failures", n,
-			"why", "a reload operation is in flight")
 	default:
 		rec.gaveUp = true
 		r.mu.Unlock()
@@ -281,10 +356,18 @@ func (r *Retrier) retry(ctx context.Context, id uint64, rec *record) {
 		r.Log.Debug("fiber.retry-skipped", "fiber", id, "why", "not failed", "state", st)
 		return
 	}
+	hold := r.ofOperation(id)
+	r.mu.Lock()
+	if r.op != nil && hold { // the timer fell due while the fiber's generation is in flight
+		rec.held = true
+		r.mu.Unlock()
+		r.Log.Info("fiber.retry-held", "fiber", id, "plugin", rec.plugin, "failures", len(rec.fails),
+			"why", "a reload operation is in flight")
+		return
+	}
 	// The update is admitted or refused at once; the restart that follows is the next
 	// event of the fiber, which updated tells from a restart by someone else. A
 	// refusal means the fiber was disposed since the check.
-	r.mu.Lock()
 	rec.retried = true
 	r.mu.Unlock()
 	err := f.Update(ctx, nil)
@@ -322,18 +405,24 @@ func (r *Retrier) infrastructure(plugin string) bool {
 	return ok && slices.ContainsFunc(e.Provides, func(k string) bool { return slices.Contains(r.Infrastructure, k) })
 }
 
-// active notes that fiber id is ACTIVE: whoever updated a fiber that was given up on
-// has fixed it, and any other record starts its stable period.
-func (r *Retrier) active(id uint64) {
+// moved notes that fiber id is in st, which is not FAILED, whatever events brought it
+// there. A fiber that was given up on, or FAILED and not retried by restart-policy, was
+// restarted by someone else and is tracked afresh, as updated does when it hears that
+// restart. An ACTIVE one starts its stable period unless it is in one already: a
+// restart of restart-policy does not start it again.
+func (r *Retrier) moved(id uint64, st kernel.State) {
 	now := r.Clock.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if rec := r.recs[id]; rec != nil {
-		if rec.gaveUp {
-			delete(r.recs, id)
-			return
+	switch rec := r.recs[id]; {
+	case rec == nil:
+	case rec.gaveUp, !rec.retried && (rec.pending || rec.held):
+		delete(r.recs, id)
+	case st == kernel.Active:
+		rec.retried = false
+		if rec.activeAt.IsZero() {
+			rec.activeAt = now
 		}
-		rec.activeAt = now
 	}
 }
 
@@ -375,9 +464,19 @@ func (r *Retrier) forget(id uint64) {
 	r.mu.Unlock()
 }
 
+// drop forgets rec if it is still the record of fiber id.
+func (r *Retrier) drop(id uint64, rec *record) {
+	r.mu.Lock()
+	if r.recs[id] == rec {
+		delete(r.recs, id)
+	}
+	r.mu.Unlock()
+}
+
 // resync answers the notice that events were lost. It drops the fibers it tracks that
-// are gone, notes the ones that are ACTIVE, counts a lost failure of the ones that are
-// FAILED, and counts the FAILED fibers of the committed tree that it has not heard of.
+// are gone, notes where the others are (moved), counts a lost failure of the ones that
+// are FAILED, and counts the FAILED fibers of the committed tree that it has not heard
+// of.
 // The plugin has no Root, so the tree is read through the composition key, whose rows
 // carry the fiber id. Events that follow the notice are all newer than it, and an
 // event for a state the fiber has left is ignored by failed.
@@ -397,10 +496,10 @@ func (r *Retrier) resync(ctx context.Context) {
 		switch st, err := f.State(ctx); {
 		case err != nil || st == kernel.Disposed:
 			r.forget(id)
-		case st == kernel.Active:
-			r.active(id)
 		case st == kernel.Failed:
-			r.failed(ctx, id, plugin) // one given up on or waiting for its retry is left as it is
+			r.failed(ctx, id, plugin) // one given up on, held or waiting for its retry is left as it is
+		default:
+			r.moved(id, st)
 		}
 	}
 	g, _ := r.Rows.Committed(composition.ScopeProcess)

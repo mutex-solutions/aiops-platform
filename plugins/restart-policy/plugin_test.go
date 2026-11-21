@@ -19,6 +19,7 @@ import (
 	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -114,6 +115,7 @@ type world struct {
 	comp   *compfake.Reader
 	reload *reloadfake.Reload
 	logs   chan entry
+	plugin kernel.Plugin // the restart-policy row: a fiber mounted from it again shares its memory
 	rp     *kernel.Fiber
 }
 
@@ -134,7 +136,8 @@ func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
 	w.comp, cp = compfake.New()
 	w.reload, rp = reloadfake.New()
 	kerneltest.Mount(w.root, lp, kp, cp, rp)
-	w.rp = w.root.Plugin(restartpolicy.New(), cfg)
+	w.plugin = restartpolicy.New()
+	w.rp = w.root.Plugin(w.plugin, cfg)
 	if err := w.rp.Await(t.Context()); err != nil {
 		t.Fatalf("restart-policy: %v", err)
 	}
@@ -691,6 +694,216 @@ func TestARestartOfRestartPolicyKeepsTheReloadOperationInFlight(t *testing.T) {
 	want := []launch.ExitRequest{{Reason: launch.ExitGaveUp, Detail: "aiops/sql"}}
 	if got := w.exits(); !slices.Equal(got, want) {
 		t.Errorf("exits = %v, want %v", got, want)
+	}
+}
+
+// next waits for what restart-policy decided next, a hold included.
+func (w *world) next() entry {
+	w.t.Helper()
+	for {
+		select {
+		case e := <-w.logs:
+			switch e.msg {
+			case "fiber.retry", "fiber.gave-up", "fiber.retry-held", "fiber.give-up-held":
+				return e
+			}
+		case <-w.t.Context().Done():
+			w.t.Fatal("no decision")
+		}
+	}
+}
+
+// up mounts a row of fl that works and waits until restart-policy heard it ACTIVE.
+func (w *world) up(fl *flaky, cfg any) *kernel.Fiber {
+	w.t.Helper()
+	f := w.root.Plugin(fl.plugin(), cfg)
+	if err := f.Await(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	w.heard()
+	return f
+}
+
+// tree commits the rows of the tree as the composition key serves them: a row id, its
+// plugin, the fiber and its state.
+func (w *world) tree(rows ...composition.Row) {
+	w.comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: rows})
+}
+
+// applying is the event of an operation about to apply a plan that changes rows.
+func applying(rows ...string) reload.Result {
+	r := reload.Result{ID: 1, Status: reload.Running, Stage: reload.StageApply}
+	for _, id := range rows {
+		r.Plan.Entries = append(r.Plan.Entries, launch.PlanEntry{ID: id, Action: launch.ActionUpdate})
+	}
+	return r
+}
+
+// A row that the generation in flight changes is not retried until the operation is
+// final, so the verdict sees its failure whatever another row takes to load (D19); a
+// row that the plan does not list is retried as ever. Once the operation is final,
+// restart-policy acts on what the rollback left: a row still FAILED is retried.
+func TestRetriesOfTheRowsOfAGenerationWaitForItsEnd(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	x, y := newFlaky("aiops/other", false), newFlaky("aiops/other", false)
+	xf, yf := w.up(x, "good"), w.up(y, "good")
+	w.tree(composition.Row{ID: "x", Plugin: "aiops/other", Fiber: xf.ID(), State: kernel.Active},
+		composition.Row{ID: "y", Plugin: "aiops/other", Fiber: yf.ID(), State: kernel.Active})
+
+	w.progress(t.Context(), applying("x"))
+	if err := xf.Update(t.Context(), "bad"); err != nil { // the generation's candidate config fails
+		t.Fatal(err)
+	}
+	if e := w.next(); e.msg != "fiber.retry-held" || e.attrs["fiber"] != xf.ID() || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the retry of x held while its generation is in flight", e.msg, e.attrs)
+	}
+	y.die <- struct{}{} // y is not of the generation
+	if e := w.next(); e.msg != "fiber.retry" || e.attrs["fiber"] != yf.ID() {
+		t.Fatalf("%s %v, want the retry of y, which the plan does not list", e.msg, e.attrs)
+	}
+	if n := w.clk.Pending(); n != 1 {
+		t.Fatalf("pending timers %d, want y's retry only", n)
+	}
+
+	// The rollback failed and left x FAILED: x is retried once the operation is final.
+	w.progress(t.Context(), reload.Result{ID: 1, Status: reload.RollbackFailed, Stage: reload.StageRollback})
+	if e := w.next(); e.msg != "fiber.retry" || e.attrs["fiber"] != xf.ID() || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the retry of x at its first failure once the operation is final", e.msg, e.attrs)
+	}
+	x.failing.Store(false)
+	w.clk.Advance(time.Second)
+	x.attempt(t, 3) // 1 good, 2 the candidate, 3 the retry
+}
+
+// A retry that falls due while a generation that lists its row is in flight waits for
+// the operation's end too, and is decided again on the state the operation left.
+func TestARetryThatFallsDueWhileItsGenerationIsInFlightWaits(t *testing.T) {
+	w := newWorld(t, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	x := newFlaky("aiops/other", true)
+	xf := w.root.Plugin(x.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.tree(composition.Row{ID: "x", Plugin: "aiops/other", Fiber: xf.ID(), State: kernel.Failed})
+	w.progress(t.Context(), applying("x"))
+	w.clk.Advance(time.Second)
+	if e := w.next(); e.msg != "fiber.retry-held" || e.attrs["fiber"] != xf.ID() {
+		t.Fatalf("%s %v, want the retry held while the generation of x is in flight", e.msg, e.attrs)
+	}
+	if n := x.attempts.Load(); n != 1 {
+		t.Fatalf("x was applied %d times, want once: the retry ran during the operation", n)
+	}
+	w.progress(t.Context(), reload.Result{ID: 1, Status: reload.RollbackFailed, Stage: reload.StageRollback})
+	w.retryLogged(1, time.Second)
+}
+
+// A retry that an earlier activation scheduled is not scheduled again for a fiber that
+// someone else restarted while restart-policy was not listening: it is tracked afresh.
+func TestAPendingRetryOfAFiberRestartedMeanwhileIsDropped(t *testing.T) {
+	cfg := conf(1, time.Hour, time.Second, time.Minute, 2, 0)
+	w := newWorld(t, cfg)
+	x := newFlaky("aiops/sql", true)
+	xf := w.root.Plugin(x.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.remount(cfg, func() { // an operator fixes x
+		x.failing.Store(false)
+		if err := xf.Update(t.Context(), nil); err != nil {
+			t.Fatal(err)
+		}
+		x.attempt(t, 2)
+		if err := xf.Await(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if n := w.clk.Pending(); n != 0 {
+		t.Fatalf("pending timers %d: the retry of a fiber that is not FAILED was scheduled again", n)
+	}
+	x.die <- struct{}{}
+	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the first failure of the fixed fiber", e.msg, e.attrs)
+	}
+}
+
+// remount ends the restart-policy fiber, runs between, and mounts the row again from
+// the same plugin value with cfg, as a restart of the row does: what happens between
+// reaches no activation.
+func (w *world) remount(cfg any, between func()) {
+	w.t.Helper()
+	if err := w.rp.Dispose(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := w.rp.Await(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	between()
+	w.rp = w.root.Plugin(w.plugin, cfg)
+	if err := w.rp.Await(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	w.heard()
+}
+
+// The failures of a candidate config do not carry over to the config that its rollback
+// restores when restart-policy did not hear the restarts: the generation changed
+// restart-policy's own config, so restart-policy restarted in the batch that gave the
+// fault row its candidate and again in the rollback's (D22).
+func TestCandidateFailuresDoNotCarryOverAcrossRestartsOfRestartPolicy(t *testing.T) {
+	cfg := conf(1, time.Hour, time.Second, time.Minute, 2, 0)
+	w := newWorld(t, cfg)
+	x := newFlaky("aiops/sql", false)
+	xf := w.up(x, "good")
+	w.progress(t.Context(), applying("x", "restart-policy"))
+	w.remount(cfg, func() { // the candidate fails
+		if err := xf.Update(t.Context(), "bad"); err != nil {
+			t.Fatal(err)
+		}
+		x.attempt(t, 2)
+		_ = xf.Await(t.Context())
+		w.tree(composition.Row{ID: "x", Plugin: "aiops/sql", Fiber: xf.ID(), State: kernel.Failed})
+	})
+	w.remount(cfg, func() { // the rollback restores the previous config
+		if err := xf.Update(t.Context(), "good"); err != nil {
+			t.Fatal(err)
+		}
+		x.attempt(t, 3)
+		if err := xf.Await(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		w.tree(composition.Row{ID: "x", Plugin: "aiops/sql", Fiber: xf.ID(), State: kernel.Active})
+	})
+	if n := w.clk.Pending(); n != 0 {
+		t.Fatalf("pending timers %d: x is retried although the rollback restarted it", n)
+	}
+	restarted := []loader.Result{{ID: "x", Outcome: loader.Restarted}}
+	w.progress(t.Context(), reload.Result{ID: 1, Status: reload.RolledBack, Stage: reload.StagePublish, Applied: restarted,
+		Rollback: &reload.Rollback{Applied: restarted}})
+	x.die <- struct{}{} // one transient failure of the restored config
+	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the first failure of the restored config", e.msg, e.attrs)
+	}
+	if len(w.exits()) != 0 {
+		t.Errorf("exits = %v", w.exits())
+	}
+}
+
+// A restart of restart-policy does not restart the stable period of a fiber that has
+// been ACTIVE all along: a failure past the stable period is a first one (D22).
+func TestARestartOfRestartPolicyKeepsTheStablePeriod(t *testing.T) {
+	w := newWorld(t, conf(1, 24*time.Hour, time.Second, time.Minute, 2, time.Hour))
+	x := newFlaky("aiops/sql", true)
+	xf := w.root.Plugin(x.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	x.failing.Store(false)
+	w.clk.Advance(time.Second)
+	x.attempt(t, 2)
+	if err := xf.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.heard() // ACTIVE from now, after one failure
+	w.clk.Advance(50 * time.Minute)
+	w.restart(conf(1, 24*time.Hour, time.Second, 2*time.Minute, 2, time.Hour))
+	w.clk.Advance(20 * time.Minute) // ACTIVE for 70 minutes
+	x.die <- struct{}{}
+	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["failures"] != int64(1) {
+		t.Fatalf("%s %v, want the first failure after a stable period", e.msg, e.attrs)
 	}
 }
 
