@@ -137,3 +137,75 @@ and enforced in CI and in the Makefile; the provisional caps are gone.
 
 Growth of either package past its cap, or a second package under `boot/` or
 `loader/`, needs an ADR.
+
+## Owner decisions of 2026-11-21
+
+The project owner decided the following on 2026-11-21. Where a sentence above, or in
+`07-c4-plugin-sdk.md` or `08-profiles-roadmap-adrs.md`, says otherwise, these decisions
+win.
+
+16. **A live reference is checked at admission.** `config-refs` provides a dry-run
+    definition key that reports whether every reference of a raw config tree resolves and
+    never returns a resolved value. `profileContext.Admit` calls it for every row a
+    live generation creates, enables or changes, and for the children of a group it
+    replaces; a reference that does not resolve, or any reference in those rows while
+    `config-refs` is not ACTIVE, rejects the whole generation before anything is touched.
+    The live cell "Rejected; the row keeps its instance" of `08` §1.6 therefore holds for
+    created, enabled and changed rows, with no kernel API added.
+
+17. **A volatile-only change that holds a reference restarts the row.** When the old or
+    the new value of a volatile field holds a reference, the loader does not commit the
+    change in place but restarts the row, as it already does. `boot.Diff` and the loader
+    read this one rule from the loader definition, so `loader/volatile-update` never
+    carries an unresolved reference.
+
+18. **A required row with a reference pulls `config-refs` into the required set.** When a
+    required row of the process's role holds a reference, the launcher adds the
+    `config-refs` row and the key `configRefsReady` to that process's required set, and
+    that need does not count against the required-closure clause of gate check 7. The
+    release `dist.yaml` keeps its required set and the test distribution no longer lists
+    `configRefsReady`, so the suites run the release behaviour. `configRefsReady` belongs to
+    the launcher's wiring of references, not to the bindings a profile chooses among, so
+    the last-provider rule never refuses a profile that disables its `config-refs` row;
+    this replaces the rule of the section "configRefsReady" above that such a row needs
+    `config-refs` in the distribution's required set.
+
+19. **A row that failed during the apply fails the verdict.** If a row that a live
+    generation created, changed or enabled is FAILED at any point between the apply and
+    the judge, the verdict fails and the generation is rolled back, even when the row is
+    ACTIVE when judged. `restart-policy` does not retry the rows of a generation in
+    flight: it holds its retries until the operation's final event and then acts on the
+    real state after any rollback, so the verdict never depends on retry timing.
+
+20. **A read-only kernel accessor reports key classes and sealed hooks.** The sixth kernel
+    addition of S1 exports read-only functions, in the style of `InterceptType`, that
+    report the provider-bound and consumer-bound classes a key declared with `NewKey` and
+    whether a hook is sealed (ADR-034, S1 addendum). Gate check 7 derives the classes of
+    keys and hooks from the module table's definitions through them, so `dist.yaml` lists
+    only who is allowed (bindings and listeners), never a class. The kernel stays inside
+    its 8,200-line cap and at 100 per cent coverage.
+
+21. **A launcher observer registers no effect on the root.** `Root.Observe` adds no
+    cleanup effect to the root, so a resync after an overflow leaves nothing behind. The
+    effect of the root observer is not part of the contract a plugin sees, and the S0
+    adapter test no longer compares it with the observer effect of the prototype
+    (ADR-034).
+
+22. **`restart-policy` keeps no records across its own restart at S1.** A restart of
+    `restart-policy`, because its config changed through `reload` or its clock provider
+    restarted, starts its records afresh; durable records come with the durable store of a
+    later step. The records of a rolled-back generation's candidate config never reach the
+    restored incarnation of a row, even when that generation also restarts
+    `restart-policy`, and a restart of `restart-policy` never moves the start of a tracked
+    fiber's stable period in a way that changes a give-up decision within one activation.
+
+23. **After a failed rollback or an abandoned applied generation the committed state is
+    unknown.** `reload` marks its state unknown after `rollback failed`, or after it
+    abandons a generation it already applied: it says so on its `reload/operation` event,
+    refuses every later `Submit` with a typed error until the process restarts, and never
+    diffs against a composition it is not sure the loader holds. `readiness` drops the
+    latch and keeps it dropped while the state is unknown, until the restore of S4a
+    replaces this rule.
+
+Also accepted on 2026-11-21: a change of the `reload` row itself is applied after its
+generation's verdict passed and is not judged.
