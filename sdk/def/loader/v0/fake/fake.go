@@ -230,8 +230,11 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 }
 
 // outcome is what a new spec e of an entry that had old does (07-c4-plugin-sdk.md:1374).
+// As in the real loader, an entry under a group that is not ACTIVE has no fiber and
+// nothing to mount it from, and only an ACTIVE fiber takes volatile values in place.
 func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loader.Outcome {
 	now := f.mount(p.entries, e)
+	g, under := p.entries[e.Parent]
 	switch {
 	case was != loader.Mounted && now != loader.Mounted:
 		return loader.Unchanged
@@ -244,14 +247,14 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 		!(len(old.Intercept) == 0 && len(e.Intercept) == 0 || reflect.DeepEqual(old.Intercept, e.Intercept)):
 		p.fresh[e.ID] = true
 		return loader.Restarted
-	case isGroup(e.Plugin): // a group has no config of its own
+	case under && g.state != kernel.Active, isGroup(e.Plugin): // a group has no config of its own
 		return loader.Unchanged
 	}
 	paths, only := loader.VolatileOnly(old.Config, e.Config, f.Volatile[e.Plugin])
 	switch {
 	case len(paths) == 0:
 		return loader.Unchanged
-	case only:
+	case only && p.entries[e.ID].state == kernel.Active:
 		p.announce = append(p.announce, loader.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
 		return loader.Committed
 	}

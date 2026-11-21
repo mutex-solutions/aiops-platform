@@ -132,6 +132,28 @@ func Run(t *testing.T, mount Mount) {
 		}
 	})
 
+	// An entry that runs no activation: a FAILED fiber has none to take values in place,
+	// so a volatile-only change restarts it and announces nothing; an entry under a
+	// group that never activated has no fiber and nothing to mount it from, so a change
+	// of its config changes nothing until the group mounts it.
+	t.Run("updates of inactive entries", func(t *testing.T) {
+		s := start(t, mount, map[string][]string{p: {"level"}})
+		failed := row("nil", p)
+		failed.Config = map[string]any{"level": "info"}
+		s.apply([]string{"created nil", "created veto", "created veto:c"},
+			create(failed), create(row("veto", group)), create(child("veto", "c", p)))
+		s.is("nil", loader.Mounted, kernel.Failed)
+		s.is("veto:c", loader.Mounted, kernel.Pending)
+		c := child("veto", "c", p)
+		failed.Config, c.Config = map[string]any{"level": "debug"}, "changed"
+		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
+		s.h.mu.Lock()
+		defer s.h.mu.Unlock()
+		if len(s.h.volatile) != 0 {
+			t.Errorf("volatile-update heard %+v for entries with no activation", s.h.volatile)
+		}
+	})
+
 	t.Run("remove takes the entries beneath", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created g", "created g:c", "created a"}, create(row("g", group)), create(child("g", "c", p)), create(row("a", p)))
