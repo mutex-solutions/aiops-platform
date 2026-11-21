@@ -12,6 +12,7 @@ import (
 	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 )
 
@@ -64,6 +65,29 @@ func modulesYAML(mods boot.ModuleTable) []byte {
 				fmt.Fprintf(&b, "    - {hook: %s, stage: %d, name: %s}\n", h.Hook, h.Stage, h.StageName)
 			}
 		}
+		// The classes, which the server reads from the Go values (ADR-059 decision 20).
+		p := e.Plugin.(kernel.Plugin)
+		keys := slices.Clone(p.Provides)
+		for _, d := range p.Inject {
+			keys = append(keys, d.Key())
+		}
+		var pb, cb, sh []string
+		for _, k := range keys {
+			bp, bc, _ := kernel.KeyClasses(k)
+			if bp && !slices.Contains(pb, k.Name()) {
+				pb = append(pb, k.Name())
+			}
+			if bc && !slices.Contains(cb, k.Name()) {
+				cb = append(cb, k.Name())
+			}
+		}
+		for _, u := range p.Hooks {
+			if u.Sealed() {
+				sh = append(sh, u.Hook())
+			}
+		}
+		fmt.Fprintf(&b, "  classes: {providerBound: [%s], consumerBound: [%s], sealedHooks: [%s]}\n",
+			strings.Join(pb, ", "), strings.Join(cb, ", "), strings.Join(sh, ", "))
 	}
 	return []byte(b.String())
 }
@@ -155,4 +179,54 @@ func firstDiff(want, got string) string {
 		}
 	}
 	return "no difference"
+}
+
+// A render reports the rows that the server's gate check 7 detaches (08 §1.4, "exactly
+// what the server would compose"), though modules.yaml holds no Go value: it carries
+// the classes of the definitions, as the server reads them from the Go values (ADR-059
+// decision 20). The dist.yaml variants drop a binding of a key that a definition binds,
+// so only the definition says that the key is bound.
+func TestRenderDetachesWhatTheServerDetaches(t *testing.T) {
+	d, err := testdist.Distribution()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, drop := range [][]string{
+		{"  reload: [aiops-test/test-submit, aiops-test/test-state]\n"},
+		{"  reload: [aiops-test/test-submit, aiops-test/test-state]\n", "  toy.policy: [aiops-test/toy-provider]\n"},
+	} {
+		w := testDistFS(t)
+		dd := string(w["dist/dist.yaml"].Data)
+		for _, line := range drop {
+			if !strings.Contains(dd, line) {
+				t.Fatalf("dist.yaml has no line %q", line)
+			}
+			dd = strings.Replace(dd, line, "", 1)
+		}
+		w["dist/dist.yaml"] = &fstest.MapFile{Data: []byte(dd)}
+		man, err := boot.ParseDist("dist.yaml", []byte(dd))
+		if err != nil {
+			t.Fatal(err)
+		}
+		home, err := fs.Sub(w, "home")
+		if err != nil {
+			t.Fatal(err)
+		}
+		comp, _, err := boot.Compose(boot.Sources{Profile: "smoke", Home: home, Bundles: home},
+			boot.Options{Server: true, Modules: d.Registry.Modules})
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv := boot.Admit(boot.WithLoader(comp), d.Registry.Modules, man, nil).Gate.Detached
+		if len(srv) == 0 {
+			t.Fatalf("dropping %q detaches no row on the server", drop)
+		}
+		r := do(t, w, map[string]string{"PWD": "/"}, "profile", "render", "--profile", "smoke",
+			"--home", "home", "--dist", "dist", "--server", "--dump")
+		for _, row := range srv {
+			if !strings.Contains(r.errOut, "row \""+row+"\" detached") {
+				t.Errorf("dropping %q: the server detaches row %q and the render does not say so; stderr:\n%s", drop, row, r.errOut)
+			}
+		}
+	}
 }

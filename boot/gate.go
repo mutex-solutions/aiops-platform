@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -279,13 +280,17 @@ type gate struct {
 }
 
 // classesOf returns, by name, the provider-bound and the consumer-bound keys and the
-// sealed hooks, from their definitions (kernel.KeyClasses, kernel.HookSealed; ADR-059
-// decision 20): the keys of the root and of the definitions boot imports, the hooks of
-// the kernel and the loader, and the keys that the plugins of the module table provide
-// and inject. dist.yaml lists only who is allowed. A key or hook whose definition is
-// not at hand (a module table read from modules.yaml has no Go values, and a plugin's
-// HookUse names its hook only) is bound or sealed when dist.yaml lists who may hold it,
-// as the kernel takes a binding of a bound key and a listener list of a sealed hook only.
+// sealed hooks, from their definitions (kernel.KeyClasses, kernel.HookSealed and
+// HookUse.Sealed; ADR-059 decision 20): the keys of the root and of the definitions boot
+// imports, the hooks of the kernel and the loader, and the keys and hooks that the
+// plugins of the module table provide, inject and listen on. An entry read from
+// modules.yaml has no Go value and carries the classes of what it names
+// (ModuleClasses). dist.yaml lists only who is allowed.
+//
+// ponytail: a key or hook that no definition names, or that only an entry of
+// modules.yaml with no classes names, is bound or sealed when dist.yaml lists who may
+// hold it, as the kernel takes a binding of a bound key and a listener list of a sealed
+// hook only; the module table that S2a generates carries every class.
 func classesOf(mods ModuleTable, dist DistManifest) (pb, cb, sh map[string]bool) {
 	pb, cb, sh = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, b := range dist.Providers {
@@ -297,26 +302,38 @@ func classesOf(mods ModuleTable, dist DistManifest) (pb, cb, sh map[string]bool)
 	for _, h := range dist.SealedHooks {
 		sh[h.Hook] = true
 	}
-	keys := knownKeys()
-	for _, e := range mods {
-		if p, ok := e.Plugin.(kernel.Plugin); ok {
-			keys = append(keys, p.Provides...)
-			for _, d := range p.Inject {
-				keys = append(keys, d.Key())
-			}
-		}
-	}
 	defined := map[string]bool{}
-	for _, k := range keys {
-		p, c, ok := kernel.KeyClasses(k)
-		if !ok {
-			continue
-		}
-		n := k.Name()
+	key := func(n string, p, c bool) {
 		if !defined[n] { // a definition replaces what dist.yaml implied
 			defined[n], pb[n], cb[n] = true, false, false
 		}
 		pb[n], cb[n] = pb[n] || p, cb[n] || c
+	}
+	keys := knownKeys()
+	for _, e := range mods {
+		p, ok := e.Plugin.(kernel.Plugin)
+		switch {
+		case ok:
+			keys = append(keys, p.Provides...)
+			for _, d := range p.Inject {
+				keys = append(keys, d.Key())
+			}
+			for _, u := range p.Hooks {
+				sh[u.Hook()] = u.Sealed()
+			}
+		case e.Classes != nil:
+			for _, n := range slices.Concat(e.Provides, e.Needs, e.Wants) {
+				key(n, slices.Contains(e.Classes.ProviderBound, n), slices.Contains(e.Classes.ConsumerBound, n))
+			}
+			for _, h := range e.Hooks {
+				sh[h.Hook] = slices.Contains(e.Classes.SealedHooks, h.Hook)
+			}
+		}
+	}
+	for _, k := range keys {
+		if p, c, ok := kernel.KeyClasses(k); ok {
+			key(k.Name(), p, c)
+		}
 	}
 	for _, h := range kernelHooks() {
 		sh[h.Name()], _ = kernel.HookSealed(h)

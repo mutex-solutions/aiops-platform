@@ -177,8 +177,22 @@ func TestGateChecksTable(t *testing.T) {
 // it does not list admits nobody, while a binding it lists for an open key binds nothing.
 func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 	cbKey := kernel.NewKey[string]("cb", 0, kernel.ConsumerBound())
+	// Hooks that plugin definitions declare: the module table holds a listener of each as
+	// a HookUse of its Plugin.Hooks, so the seal comes from the definition too.
+	sealedEv := kernel.NewEvent[int]("d20/sealed", kernel.OwnedBy(storeKey), kernel.Sealed())
+	openEv := kernel.NewEvent[int]("d20/open", kernel.OwnedBy(storeKey))
+	listener := func(id string, h kernel.HookUse) ModuleEntry {
+		return ModuleEntry{ID: id, Plugin: kernel.Define(kernel.Plugin{ID: id, Hooks: []kernel.HookUse{h}}),
+			Hooks: []HookDecl{{Hook: h.Hook(), StageName: h.Stage()}}}
+	}
 	mods := ModuleTable{}
 	for _, e := range []ModuleEntry{
+		listener("o/sealed-listener", sealedEv.Use(kernel.DefaultStage)),
+		listener("o/open-listener", openEv.Use(kernel.DefaultStage)),
+		// Entries read from modules.yaml carry the classes of the definitions instead.
+		{ID: "o/yaml-bound", Provides: []string{"ypk"}, Needs: []string{"ycb"}, Hooks: []HookDecl{{Hook: "y/sealed"}},
+			Classes: &ModuleClasses{ProviderBound: []string{"ypk"}, ConsumerBound: []string{"ycb"}, SealedHooks: []string{"y/sealed"}}},
+		{ID: "o/yaml-open", Provides: []string{"yok"}, Hooks: []HookDecl{{Hook: "y/open"}}, Classes: &ModuleClasses{}},
 		toy(toySpec{id: "o/policy", provides: []kernel.AnyKey{policyKey}}),
 		toy(toySpec{id: "o/cbprov", provides: []kernel.AnyKey{cbKey}}),
 		toy(toySpec{id: "o/cbuser", needs: []kernel.AnyKey{cbKey}}),
@@ -205,6 +219,16 @@ func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 		{"open by its definition, listed", rows("id: a, plugin: o/store"), "providers: {store: [o/plain]}", nil},
 		{"open by its definition, listed, intercepted in a patch", rows("id: a, plugin: o/plain"), "providers: {store: [o/plain]}", nil},
 		{"a plugin with a zero dependency", rows("id: a, plugin: o/zero"), "", nil},
+		// The kernel refuses the listener of a sealed hook that Config.Listeners omits, so
+		// the gate does too; an open hook stays open whoever dist.yaml lists for it.
+		{"sealed by its definition, not listed", rows("id: a, plugin: o/sealed-listener"), "",
+			[]string{"7 a sealed-hook stop=false"}},
+		{"sealed by its definition, listed", rows("id: a, plugin: o/sealed-listener"), "sealedHooks: {d20/sealed: [o/sealed-listener]}", nil},
+		{"open by its definition, listed for another plugin", rows("id: a, plugin: o/open-listener"), "sealedHooks: {d20/open: [o/plain]}", nil},
+		{"bound and sealed by the classes of modules.yaml, not listed", rows("id: a, plugin: o/yaml-bound"), "",
+			[]string{"7 a provider-binding stop=false", "7 a consumer-binding stop=false", "7 a sealed-hook stop=false"}},
+		{"open by the classes of modules.yaml, listed", rows("id: a, plugin: o/yaml-open"),
+			"providers: {yok: [o/plain]}\nsealedHooks: {y/open: [o/plain]}", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var patches []string

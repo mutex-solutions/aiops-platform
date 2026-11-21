@@ -257,6 +257,19 @@ type ModuleEntry struct {
 	// restart, until S2a derives them (ADR-059 decision 10). A path is
 	// dotted, as in RefUse.Path.
 	Volatile []string
+	// Classes are the classes that the definitions declare for the keys and hooks the
+	// entry names. An entry read from modules.yaml holds no Go value, so it carries
+	// them, and gate check 7 reads them as it reads the Go values' (ADR-059 decision
+	// 20). Nil when the entry carries none.
+	Classes *ModuleClasses
+}
+
+// ModuleClasses lists, of the keys and hooks that a module entry names, those whose
+// definitions bind or seal them: what kernel.KeyClasses and kernel.HookSealed report
+// of the Go values, written into modules.yaml. A key or hook it names and does not
+// list is open.
+type ModuleClasses struct {
+	ProviderBound, ConsumerBound, SealedHooks []string
 }
 
 // HookDecl is one hook a plugin listens on. Stage is the ordinal of the

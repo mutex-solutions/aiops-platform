@@ -44,6 +44,7 @@ o/a:
   hooks:
     - {hook: z/hook, stage: 2, name: late}
     - {hook: a.hook, stage: 0}
+  classes: {providerBound: [b], consumerBound: [n, a], sealedHooks: [z/hook]}
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +52,8 @@ o/a:
 	want := ModuleEntry{ID: "o/a", Module: "example.test/a", Version: "v1", Sum: "h1:x",
 		Provides: []string{"a", "b"}, Needs: []string{"n"}, Wants: []string{"w"},
 		Volatile: []string{"config.auth", "config.timeout", "config[0]"},
-		Hooks:    []HookDecl{{"a.hook", 0, ""}, {"z/hook", 2, "late"}}}
+		Hooks:    []HookDecl{{"a.hook", 0, ""}, {"z/hook", 2, "late"}},
+		Classes:  &ModuleClasses{ProviderBound: []string{"b"}, ConsumerBound: []string{"a", "n"}, SealedHooks: []string{"z/hook"}}}
 	if !reflect.DeepEqual(m["o/a"], want) {
 		t.Errorf("got %+v\nwant %+v", m["o/a"], want)
 	}
@@ -112,6 +114,11 @@ func TestParseDistAndModulesRefusals(t *testing.T) {
 		{"hook stage name not a string", "o/a: {hooks: [{hook: h, name: [x]}]}"},
 		{"hook unknown field", "o/a: {hooks: [{hook: h, x: 1}]}"},
 		{"hook twice", "o/a: {hooks: [{hook: h}, {hook: h}]}"},
+		{"classes not a mapping", "o/a: {classes: [x]}"},
+		{"classes unknown field", "o/a: {classes: {open: [x]}}"},
+		{"provider-bound key malformed", "o/a: {classes: {providerBound: ['a b']}}"},
+		{"consumer-bound key not a list", "o/a: {classes: {consumerBound: x}}"},
+		{"sealed hook malformed", "o/a: {classes: {sealedHooks: ['/x']}}"},
 	}
 	for _, tc := range mods {
 		t.Run("modules "+tc.name, func(t *testing.T) {

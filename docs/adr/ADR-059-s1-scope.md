@@ -238,10 +238,12 @@ generation's verdict passed and is not judged.
   every failure of the generation.
 - **20.** Gate check 7 takes classes from `kernel.KeyClasses` over the keys `boot` knows
   (launch, loader, composition and the kernel built-ins) and every key a plugin of the
-  module table provides or injects, and seals from `kernel.HookSealed` over the kernel and
-  loader hooks. Where no definition is at hand, an entry of `modules.yaml` or a hook known
-  only by its name, a listing in `dist.yaml` stands for the class, which is the only class
-  the kernel accepts one for.
+  module table provides or injects, seals from `kernel.HookSealed` over the kernel and
+  loader hooks, and from `HookUse.Sealed` over the hooks a plugin of the module table
+  lists in `Plugin.Hooks`. An entry of `modules.yaml`, which `aiopsctl` reads and which
+  holds no Go value, carries those classes (`classes: {providerBound, consumerBound,
+  sealedHooks}`), so a render and the server's gate agree. Only a key or hook that no
+  definition and no such entry names falls back to its listing in `dist.yaml`.
 - **22.** The final `reload/operation` event names the rows the operation restarted or
   created, forward and in rollback, and `restart-policy` tracks their fibers afresh. After
   a restart of `restart-policy`, a pending, held or given-up record whose fiber is not
