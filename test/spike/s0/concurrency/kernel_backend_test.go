@@ -220,6 +220,38 @@ func TestKernelRootContext(t *testing.T) {
 	}
 }
 
+// A refused Provide has filed its value under an identity the kernel did not issue;
+// the next admitted Provide gets that identity and reports its own value.
+func TestKernelRefusedProvideLeavesNoValue(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	root, err := r.(RootProvider).RootContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("a", "A"); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("a", "X"); err == nil {
+		t.Fatal("a duplicate Provide was admitted")
+	}
+	if err := root.Provide("b", "B"); err != nil {
+		t.Fatal(err)
+	}
+	events, err := r.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, e := range events {
+		if e.Kind == "provide" {
+			got[e.Key] = e.Value
+		}
+	}
+	if want := map[string]any{"a": "A", "b": "B"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("provide events report %v, want %v", got, want)
+	}
+}
+
 func TestKernelChildMountAndTracked(t *testing.T) {
 	ctx, r := kernelFixture(t)
 	childRan := make(chan struct{})

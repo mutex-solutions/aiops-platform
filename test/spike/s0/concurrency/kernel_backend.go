@@ -351,7 +351,8 @@ type kernelRuntime struct {
 	// that the kernel gave it and joins it to the events that name that identity.
 	// The kernel numbers provisions in the order in which it admits them, and only
 	// the adapter's Provide adds one after the hidden prefix, so with one Provide at
-	// a time the n-th successful Provide is provision base.uids+n.
+	// a time the n-th successful Provide is provision base.uids+n, and its value is
+	// filed under that identity before the Provide call.
 	provideMu sync.Mutex
 	provided  uint64 // Successful Provide calls, under provideMu.
 	valMu     sync.Mutex
@@ -1020,11 +1021,15 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 		k := r.key(key)
 		r.provideMu.Lock()
 		defer r.provideMu.Unlock()
+		// Filed before the Provide: the kernel hands the provide event to the
+		// observers inside the owner turn, before Provide returns. A refused Provide
+		// leaves an entry that nothing names, which the next Provide files over.
+		r.file(r.base.uids+r.provided+1, value)
 		if err := k.Provide(kc, value, r.available(k)); err != nil {
 			return fromKernel(err)
 		}
 		r.provided++
-		r.keep(r.base.uids+r.provided, value)
+		r.pruneIfDue()
 		c.publishOwned(key)
 		return nil
 	}
@@ -1138,11 +1143,21 @@ func (r *kernelRuntime) uids(list []uint64) []uint64 {
 	return out
 }
 
-// keep records value under the identity of the provision that Provide just made.
-func (r *kernelRuntime) keep(uid uint64, value any) {
+// file records value under the identity that the pending Provide gets if the kernel
+// admits it.
+func (r *kernelRuntime) file(uid uint64, value any) {
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
 	r.vals[uid] = providedValue{value: value}
+}
+
+// pruneIfDue prunes once vals has doubled. It runs after a successful Provide only,
+// so every filed value belongs to a provision the kernel has admitted: a value
+// filed ahead of its provision would be marked dead below the watermark of its
+// own events.
+func (r *kernelRuntime) pruneIfDue() {
+	r.valMu.Lock()
+	defer r.valMu.Unlock()
 	if len(r.vals) >= max(r.valsAt, 4*r.window+256) {
 		r.prune()
 		r.valsAt = 2 * len(r.vals)

@@ -54,6 +54,42 @@ func TestLateObserverSeesTheValueOfAServiceEvent(t *testing.T) {
 	}
 }
 
+// An observer registered before a Provide is delivered its provide event with the
+// provided value, the value that Events reports for that sequence. The consumers
+// waiting for the key lengthen the owner turn that appends the event, so the
+// observer is handed it well before Provide returns to the provider.
+func TestEarlyObserverSeesTheValueOfAProvideEvent(t *testing.T) {
+	for name, mk := range providedValueConstructors {
+		t.Run(name, func(t *testing.T) {
+			ctx, r, observers, root := nativeObserverTestRuntime(t, func() Runtime { return mk(Retention{}) })
+			for i := range 64 {
+				if _, err := r.Mount(ctx, Spec{ID: fmt.Sprintf("consumer%d", i), Needs: []string{"sample"}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := r.Settle(ctx); err != nil {
+				t.Fatal(err)
+			}
+			ch := make(chan Event, 1)
+			if _, err := observers.ObserveEvents(root, "early", func(_ context.Context, e Event) error {
+				if e.Kind == "provide" {
+					ch <- e
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := root.Provide("sample", "V"); err != nil {
+				t.Fatal(err)
+			}
+			if err := observers.AwaitObservers(ctx); err != nil {
+				t.Fatal(err)
+			}
+			serviceValueAgrees(t, ctx, r, []Event{nativeObserverReceive(t, ctx, ch)})
+		})
+	}
+}
+
 // An observer held while the provider is disposed is delivered the service events of
 // the ended provision with its value, the value that Events reports for their
 // sequences.
