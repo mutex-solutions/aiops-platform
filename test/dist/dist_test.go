@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -70,6 +71,12 @@ func startEnv(t *testing.T, environ map[string]string, profile string, patches .
 	if err != nil {
 		t.Fatal(err)
 	}
+	return startDist(t, d, environ, profile, patches...)
+}
+
+// startDist is startEnv with the distribution given.
+func startDist(t *testing.T, d serve.Distribution, environ map[string]string, profile string, patches ...string) *proc {
+	t.Helper()
 	home := t.TempDir()
 	limits := filepath.Join(t.TempDir(), "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
@@ -323,6 +330,27 @@ func TestReferenceIsResolvedByConfigRefs(t *testing.T) {
 	}
 	if !strings.Contains(p.errb.String(), "note=from-env") {
 		t.Fatalf("the consumer did not see the resolved value; stderr:\n%s", p.errb.String())
+	}
+}
+
+// TestRequiredReferenceBootsOnTheReleaseRequiredSet: a required row whose config holds a
+// reference boots on a required set that, like the release one, does not list
+// configRefsReady, because the launcher adds config-refs and the key to the set itself
+// (ADR-059 decision 18).
+func TestRequiredReferenceBootsOnTheReleaseRequiredSet(t *testing.T) {
+	d, err := Distribution()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Manifest.RequiredKeys = slices.DeleteFunc(slices.Clone(d.Manifest.RequiredKeys), func(k string) bool { return k == "configRefsReady" })
+	p := startDist(t, d, map[string]string{"AIOPS_REF_NOTE": "from-env"}, "smoke", "refs.required")
+	p.ready()
+	waitState(t, p, func(s teststate.State) bool { return s.Ready })
+	if code := p.stop(); code != boot.ExitOK {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
+	if !strings.Contains(p.errb.String(), "note=from-env") {
+		t.Fatalf("the required row did not see the resolved value; stderr:\n%s", p.errb.String())
 	}
 }
 
