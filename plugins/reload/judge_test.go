@@ -241,54 +241,121 @@ func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T
 }
 
 // The reload row's own operation waits for the verdict: a failed generation never applies
-// it, and its rollback has nothing of it to undo. A refusal of it (Admit decodes a literal
-// config and a reference is rejected before the apply, so a veto of internal/commit)
-// leaves the reload row its instance, and the rest of the generation is rolled back to the
-// composition the tree ran: the generation is not what the tree runs.
+// it, and its rollback has nothing of it to undo.
 func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
-	self := row("reload", "aiops/reload", "old")
-	for _, tc := range []struct {
-		name   string
-		start  kernel.State // of the row x that the generation creates
-		status def.Status
-		order  []string
-	}{
-		{"failed verdict", kernel.Failed, def.RolledBack, []string{"x", "x"}},
-		{"refused", kernel.Active, def.RolledBack, []string{"x", "x"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newScript()
-			w := newScripted(t, s, nil, self)
-			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
-			s.start["x"] = tc.start
-			boom := errors.New("refused")
-			s.refuse = func(ops []loader.Op) error {
-				if slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == "reload" }) {
-					return boom
+	s := newScript()
+	w := newScripted(t, s, nil, row("reload", "aiops/reload", "old"))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
+	s.start["x"] = kernel.Failed
+	var order []string
+	s.onApply = func(_ context.Context, _ int, ops []loader.Op) error {
+		for _, op := range ops {
+			order = append(order, op.Entry.ID)
+		}
+		return nil
+	}
+	r := await(t, w.svc)
+	if r.Status != def.RolledBack || !slices.Equal(order, []string{"x", "x"}) {
+		t.Fatalf("result = %+v, applied %v", r, order)
+	}
+	if r.Rollback == nil || r.Rollback.Err != nil || w.l.Committed().Digest != (launch.Digest{1}) {
+		t.Errorf("rollback = %+v, committed %x: the tree runs the previous composition", r.Rollback, w.l.Committed().Digest)
+	}
+	if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
+		t.Errorf("the reload row runs %v", e.Spec.Config)
+	}
+}
+
+// opLog is what a listener of reload/operation heard, in order.
+type opLog struct {
+	mu      sync.Mutex
+	results []def.Result
+	wake    chan struct{} // signalled after each event
+}
+
+// opEvents mounts a listener of reload/operation and returns its log.
+func opEvents(t *testing.T, root *kernel.Root) *opLog {
+	t.Helper()
+	o := &opLog{wake: make(chan struct{}, 1)}
+	p := kernel.Define(kernel.Plugin{ID: "aiops/op-events", Hooks: []kernel.HookUse{def.Operation.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			def.Operation.On(c, kernel.DefaultStage, func(_ context.Context, r def.Result) (any, error) {
+				o.mu.Lock()
+				o.results = append(o.results, r)
+				o.mu.Unlock()
+				select {
+				case o.wake <- struct{}{}:
+				default:
 				}
-				return nil
-			}
-			var order []string
-			s.onApply = func(_ context.Context, _ int, ops []loader.Op) error {
-				for _, op := range ops {
-					order = append(order, op.Entry.ID)
-				}
-				return nil
-			}
-			r := await(t, w.svc)
-			if r.Status != tc.status || !slices.Equal(order, tc.order) {
-				t.Fatalf("result = %+v, applied %v", r, order)
-			}
-			if r.Rollback == nil || r.Rollback.Err != nil || w.l.Committed().Digest != (launch.Digest{1}) {
-				t.Errorf("rollback = %+v, committed %x: the tree runs the previous composition", r.Rollback, w.l.Committed().Digest)
-			}
-			if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
-				t.Errorf("the reload row runs %v", e.Spec.Config)
-			}
-			if tc.name == "refused" && (!errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "apply the reload row")) {
-				t.Errorf("err = %v", r.Err)
-			}
-		})
+				return nil, nil
+			})
+			return nil
+		}})
+	active(t, root.Plugin(p, nil))
+	return o
+}
+
+// heard returns the events so far, as "status stage", and their results.
+func (o *opLog) heard() ([]string, []def.Result) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	var s []string
+	for _, r := range o.results {
+		s = append(s, fmt.Sprintf("%s %s", r.Status, r.Stage))
+	}
+	return s, slices.Clone(o.results)
+}
+
+// await waits until n events were heard and returns their results.
+func (o *opLog) await(t *testing.T, n int) []def.Result {
+	t.Helper()
+	for {
+		if _, got := o.heard(); len(got) >= n {
+			return got
+		}
+		select {
+		case <-o.wake:
+		case <-t.Context().Done():
+			t.Fatalf("fewer than %d reload/operation events", n)
+		}
+	}
+}
+
+// A refusal of the reload row's own change, which comes once the verdict passed and was
+// published, leaves the generation passed: the row keeps its instance, the refusal is on
+// the result, and reload/operation carries one running and one final event for the
+// operation. The next generation that passes applies the change.
+func TestRefusedChangeOfTheReloadRowLeavesTheGenerationPassed(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("reload", "aiops/reload", "old"))
+	events := opEvents(t, w.root)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
+	boom := errors.New("refused")
+	s.refuse = func(ops []loader.Op) error {
+		if slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == "reload" }) {
+			return boom
+		}
+		return nil
+	}
+	r := await(t, w.svc)
+	if r.Status != def.Passed || r.Rollback != nil || !errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "apply the reload row") {
+		t.Fatalf("result = %+v", r)
+	}
+	if got, _ := events.heard(); !slices.Equal(got, []string{"running apply", "passed publish"}) {
+		t.Errorf("reload/operation = %q, want one running and one final event", got)
+	}
+	if s.applies != 1 || w.l.Committed().Digest != (launch.Digest{2}) {
+		t.Errorf("applies %d, committed %x: the generation was applied and committed", s.applies, w.l.Committed().Digest)
+	}
+	if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
+		t.Errorf("the reload row runs %v, want its instance kept", e.Spec.Config)
+	}
+	s.refuse = nil
+	if r := await(t, w.svc); r.Status != def.Passed || !slices.Equal(ids(r.Applied), []string{"restarted reload"}) {
+		t.Fatalf("next result = %+v", r)
+	}
+	if e, _ := s.Locate("reload"); e.Spec.Config != "new" {
+		t.Errorf("the reload row runs %v, want the change the next generation applied", e.Spec.Config)
 	}
 }
 

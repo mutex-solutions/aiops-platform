@@ -302,16 +302,10 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 		res, err := e.Loader.Apply(ctx, last)
 		r.Applied = append(r.Applied, res...)
 		if err != nil {
+			// A refusal (Admit decoded the config and selfEnds refused a new reference, so a
+			// veto of internal/commit) leaves the row its instance and the generation passed
+			// and committed: the next generation that passes applies the change (unapplied).
 			r.Err = errors.Join(r.Err, fmt.Errorf("apply the reload row: %w", err))
-		}
-		if len(res) == 0 && err != nil {
-			// The loader refused the reload row's change whole (Admit decoded a literal
-			// config and selfEnds refused a reference, so a veto of internal/commit), so
-			// the row keeps its instance and the rest of the generation goes back with it:
-			// the tree does not run the candidate.
-			applying, r.Status = true, def.Running
-			e.progress(ctx, &r)
-			return e.rollback(ctx, r, cand, prev, before)
 		}
 	}
 	return r
@@ -416,10 +410,11 @@ func (e *Engine) split(ops []loader.Op, from launch.Composition) (rest, self []l
 }
 
 // unapplied adds to last an update of each reload row of cand whose config the loader
-// does not hold: a generation committed the row's change without applying it (an abandon
-// after the apply, or a rollback that failed whole, commits what the rest of the tree
-// runs), and no plan from the committed composition lists it. It is applied with the
-// row's own operations, after the next verdict that passes.
+// does not hold: a generation committed the row's change without applying it (the
+// loader refused it after a passed verdict; an abandon after the apply, or a rollback
+// that failed whole, commits what the rest of the tree runs), and no plan from the
+// committed composition lists it. It is applied with the row's own operations, after
+// the next verdict that passes.
 func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.Op {
 	for _, row := range cand.Rows {
 		held, ok := e.Loader.Locate(row.ID)
