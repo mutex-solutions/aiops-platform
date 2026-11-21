@@ -152,7 +152,7 @@ func (r *Root) Plugin(p Plugin, cfg any) *Fiber { return r.ctx.Plugin(p, cfg) }
 // Settle returns when no fiber is mid-transition except fibers blocked past one of
 // their own deadlines. It returns nil when nothing is blocked, otherwise one joined
 // diagnostic per blocked fiber. If ctx ends first it returns ctx's error joined
-// with the diagnostics known so far (docs/design/plugin-system-2026-11.md:57).
+// with the diagnostics known so far (docs/design/plugin-system-2026-11.md §3).
 func (r *Root) Settle(ctx context.Context) error { return r.core.settle(ctx) }
 
 // Close disposes every fiber, then the root. It waits as Settle does and always
@@ -241,7 +241,7 @@ var errForeignFiber = errors.New("fiber belongs to another kernel")
 
 // Batch commits all of ops as one desired state before any resulting work is
 // admitted, so two updates cannot start an intermediate activation
-// (docs/design/plugin-system-2026-11.md:57). It returns one Fiber per operation, in
+// (docs/design/plugin-system-2026-11.md §3). It returns one Fiber per operation, in
 // order (ADR-059 decision 2): at a MountOp, from Root or from a Context, the new
 // fiber; at an UpdateOp, UpdateOpWith or DisposeOp, the fiber that was given. It
 // returns an error and no effect otherwise, and a refused batch retains no config. The contract names Batch but not its shape; this one maps

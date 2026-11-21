@@ -8,10 +8,10 @@ import (
 // Limits are the numbers the launcher hands the kernel and the bounds it puts
 // on its own waits. The kernel holds no default (ADR-034 owner decisions 3 and
 // 4), so every number lives here. The launcher owns policy of this kind
-// (plugin-system-2026-11.md:61; 03-c3-kernel.md:63 "bounded shutdown").
+// (plugin-system-2026-11.md §3; 03-c3-kernel.md:63 "bounded shutdown").
 //
 // The three deadlines of the kernel are the only tunables the documents name
-// (plugin-system-2026-11.md:66, item 3); they are configurable here, none is
+// (plugin-system-2026-11.md §3, item 3); they are configurable here, none is
 // fixed in code. The documents give no value for any of them, so DefaultLimits
 // is this package's reading and an open point.
 //
@@ -30,7 +30,7 @@ type Limits struct {
 
 	// SettleBound bounds the wait for the tree to settle at boot. The design note
 	// says a settle deadline is at least the load plus drain plus dispose deadline
-	// (plugin-system-2026-11.md:369), which is what a zero value means.
+	// (plugin-system-2026-11.md §9, step 5), which is what a zero value means.
 	SettleBound time.Duration
 	// ShutdownBound bounds Root.Close on a signal or an exit request
 	// (03-c3-kernel.md:63 "bounded shutdown"). The tree comes down one fiber at a

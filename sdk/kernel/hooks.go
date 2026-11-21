@@ -463,7 +463,7 @@ func (r *Root) logHook(err error) {
 //
 // InternalPlugin, InternalStatus and InternalService are dispatched by the kernel
 // with the ledger event as payload (ADR-059 decision 2; 07-c4-plugin-sdk.md:208,
-// :385, :463; docs/design/plugin-system-2026-11.md:54). Each LedgerEvent reaches
+// :385, :463; docs/design/plugin-system-2026-11.md §3). Each LedgerEvent reaches
 // the hooks below by its Kind; any other Kind reaches none, and the one event that
 // maps to two hooks reaches InternalStatus first.
 //

@@ -175,7 +175,7 @@ type Loader interface {
 // isolate and intercept. A listener that does not call next, or returns a nil
 // context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
 // runs (fail closed, an open point of ADR-034 G8). The docs name the hook's use,
-// "isolate and intercept handling" (plugin-system-2026-11.md:319), and no payload;
+// "isolate and intercept handling" (plugin-system-2026-11.md §8), and no payload;
 // this is the smallest the named listeners need (open point).
 type PatchContextArgs struct {
 	Entry   EntrySpec
@@ -193,7 +193,7 @@ type EntryInitArgs struct {
 
 // VolatileUpdateArgs is the payload of loader/volatile-update, dispatched when
 // the loader commits volatile values in place (07-c4-plugin-sdk.md:1374;
-// plugin-system-2026-11.md:319 "volatile commits"). Config is the whole new config
+// plugin-system-2026-11.md §8 "volatile commits"). Config is the whole new config
 // as the tree holds it, and Paths are the sorted dotted config paths that changed.
 // Neither the old config nor Config holds a reference (VolatileOnly): a change of
 // one that does restarts the fiber, because the tree holds references unresolved and
@@ -210,7 +210,7 @@ type VolatileUpdateArgs struct {
 // loader's own (PatchContextArgs): a listener returns the context, and a listener
 // that does not call next vetoes what follows it, the built-in step included
 // (07-c4-plugin-sdk.md:386). EntryInit and VolatileUpdate are events
-// (plugin-system-2026-11.md:319). None is Scoped: they carry no tenant data at S1.
+// (plugin-system-2026-11.md §8). None is Scoped: they carry no tenant data at S1.
 var (
 	PatchContext   = kernel.NewWaterfall[PatchContextArgs, *kernel.Context]("loader/patch-context", kernel.OwnedBy(Key), kernel.Sealed())
 	EntryInit      = kernel.NewEvent[EntryInitArgs]("loader/entry-init", kernel.OwnedBy(Key), kernel.Sealed())

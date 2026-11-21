@@ -5,7 +5,7 @@ package composition
 import "github.com/mutex-solutions/aiops-platform/sdk/kernel"
 
 // Key is the composition key, class `-` (open) at major 0
-// (03-c3-kernel.md:64; plugin-system-2026-11.md:190).
+// (03-c3-kernel.md:64; plugin-system-2026-11.md §5).
 var Key = kernel.NewKey[Reader]("composition", 0)
 
 // Scope is the scope of a generation. Layer 5 and the tenant scope arrive at S4b

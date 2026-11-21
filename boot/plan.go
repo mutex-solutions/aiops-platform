@@ -9,7 +9,7 @@ import (
 )
 
 // Plan and judge: steps 3 and 5 of a reload (03-c3-kernel.md:378-380;
-// 08-profiles-roadmap-adrs.md:200-204; plugin-system-2026-11.md:367-369).
+// 08-profiles-roadmap-adrs.md:200-204; plugin-system-2026-11.md §9, steps 3 to 5).
 // Both are pure. Diff reads two compositions and a graph; Judge reads a plan
 // and two views of the observed states. Apply, settle and commit belong to
 // the loader and to reload.

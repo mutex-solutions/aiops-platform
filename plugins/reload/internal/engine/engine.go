@@ -3,7 +3,7 @@
 // Package engine is the queue and the pipeline of the reload row: one queue, one
 // goroutine, and for each submission compose, admit, plan, apply in one loader batch,
 // settle and judge, then publish composition/applied (03-c3-kernel.md:65, :374-382;
-// plugin-system-2026-11.md:363-371).
+// plugin-system-2026-11.md §9).
 //
 // At S1 there is no committer (ADR-059 decision 5; S4a), so a passed verdict is
 // committed to the launcher with Profile.Commit, and a failed one is rolled back at
@@ -602,7 +602,7 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 }
 
 // judge settles and judges the generation by the rule of 03-c3-kernel.md:380 and
-// plugin-system-2026-11.md:369: every row this generation created, changed or enabled
+// plugin-system-2026-11.md §9, step 5: every row this generation created, changed or enabled
 // (by the loader's outcomes; a row of the restart closure is none of these) must be
 // ACTIVE, and so must every required row, and a row that was ACTIVE must still be; a
 // row that was inactive and is untouched is a warning. A row that the loader did not

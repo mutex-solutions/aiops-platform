@@ -3,7 +3,7 @@
 // Package configrefs is the config-refs row: a listener of the sealed waterfall
 // internal/config that resolves the closed references ${env|file|secret|flag:value}
 // of a row's config before the plugin sees it (03-c3-kernel.md:68;
-// plugin-system-2026-11.md:348). A reference that does not resolve is an error of
+// plugin-system-2026-11.md §9). A reference that does not resolve is an error of
 // that fiber's config resolution, so the fiber is FAILED, or on a live recomposition
 // the update is refused and the row keeps its instance (08-profiles-roadmap-adrs.md:468).
 // The row also provides the dry run of the same resolution (sdk/def/configrefs/v0),

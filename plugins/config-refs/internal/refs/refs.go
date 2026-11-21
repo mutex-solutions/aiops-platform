@@ -24,7 +24,7 @@ import (
 
 // EnvPrefix is the prefix of the only environment names a reference may read:
 // "`env:` reads only names with the prefix `AIOPS_REF_`"
-// (08-profiles-roadmap-adrs.md:162; plugin-system-2026-11.md:348).
+// (08-profiles-roadmap-adrs.md:162; plugin-system-2026-11.md §9).
 const EnvPrefix = "AIOPS_REF_"
 
 // Error says which reference failed and why. The reason is fixed text: it never holds

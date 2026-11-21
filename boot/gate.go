@@ -338,7 +338,7 @@ func (g *gate) fail(check int, r Row, rule Rule, stop bool, format string, a ...
 }
 
 // resolve looks the plugin of an enabled row up in the module table. The two
-// core plugins are built into the loader (plugin-system-2026-11.md:260).
+// core plugins are built into the loader (plugin-system-2026-11.md §6).
 // Remote plugins and plugins.lock are not read before S2a, so such a row is
 // refused here with that reason (03-c3-kernel.md:357).
 func (g *gate) resolve(r Row) (RowResult, bool) {

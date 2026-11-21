@@ -164,7 +164,7 @@ func (s RequiredSet) Unmet(rows []RowState, provides func(plugin string) []strin
 }
 
 // ProfileContext is the profileContext service: the profile locations and
-// layers (plugin-system-2026-11.md:178) and, by ADR-059 decision 7, the compose,
+// layers (plugin-system-2026-11.md §5) and, by ADR-059 decision 7, the compose,
 // admit and plan steps that reload calls (03-c3-kernel.md:84, :376-378). The
 // methods other than Compose, Admit and Plan are docs-silent minimums.
 type ProfileContext interface {
@@ -235,7 +235,7 @@ type CatalogEntry struct {
 }
 
 // Catalog is the catalog service: the module table and manifests
-// (plugin-system-2026-11.md:178). The docs give no methods; this is the minimum
+// (plugin-system-2026-11.md §5). The docs give no methods; this is the minimum
 // that plugin-manager needs to list and inspect (03-c3-kernel.md:71) and the
 // loader to mount and to resolve the key names of a row.
 type Catalog interface {
@@ -256,7 +256,7 @@ type Catalog interface {
 	Key(name string) (kernel.AnyKey, bool)
 }
 
-// Cmdline is the cmdline service: argv (plugin-system-2026-11.md:178).
+// Cmdline is the cmdline service: argv (plugin-system-2026-11.md §5).
 type Cmdline interface {
 	// Args is the argument vector, program name excluded.
 	Args() []string
@@ -286,7 +286,7 @@ const (
 )
 
 // KillSwitches is the killSwitches service: named switches read from the
-// environment, read-only (plugin-system-2026-11.md:178).
+// environment, read-only (plugin-system-2026-11.md §5).
 type KillSwitches interface {
 	// On reports whether the named switch is on; an unknown name is off.
 	On(name string) bool
@@ -310,7 +310,7 @@ type ExitRequest struct {
 }
 
 // AppExit is the appExit service: request a process exit
-// (plugin-system-2026-11.md:178). The launcher owns signals and bounded shutdown
+// (plugin-system-2026-11.md §5). The launcher owns signals and bounded shutdown
 // (03-c3-kernel.md:63), so a request is not an exit: it never returns an exit code.
 type AppExit interface {
 	RequestExit(r ExitRequest)

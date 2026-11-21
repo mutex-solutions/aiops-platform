@@ -74,7 +74,7 @@ func (t *tree) restore(s snapshot) {
 // refused whole or committed whole.
 //
 // The loader never creates an entry for an id whose previous fiber is not DISPOSED
-// (07-c4-plugin-sdk.md:341; plugin-system-2026-11.md:368: "dsh recomposeProfile
+// (07-c4-plugin-sdk.md:341; plugin-system-2026-11.md §9, step 4: "dsh recomposeProfile
 // waits for disposal"), and a batch commits its desired state before any fiber
 // unloads, so a mount of an id that was removed or replaced, in this plan or in an
 // earlier one, goes in a second batch after the wait for that disposal. The docs do

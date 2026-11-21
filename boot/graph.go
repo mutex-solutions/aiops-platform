@@ -10,7 +10,7 @@ import (
 // (03-c3-kernel.md:359; 08-profiles-roadmap-adrs.md:469). It is built from
 // what the module table declares (Provides, Needs) and what the rows declare
 // (Inject, Isolate, Parent), with no plugin code run
-// (plugin-system-2026-11.md:30, 521: "Provides is mandatory so the composer
+// (plugin-system-2026-11.md §2 and §15: "Provides is mandatory so the composer
 // analyses the graph without running code").
 //
 // Rows. Only an active row is a node: enabled, its roles meet the selected
@@ -23,10 +23,10 @@ import (
 // this package's reading: the documents say a group row can carry inject and
 // stay PENDING (07-c4-plugin-sdk.md:1244), not that a child waits for it.
 // Wants are no edge (a When body is a dependant of its own,
-// plugin-system-2026-11.md:169).
+// plugin-system-2026-11.md §4).
 //
 // Realms. Isolate on a row creates a realm for that row and its descendants
-// for each key it names (plugin-system-2026-11.md:521 and 524: "one provider
+// for each key it names (plugin-system-2026-11.md §15, rows 5 and 8: "one provider
 // per name per realm", children inherit within a realm). The realm of a key
 // at a row is the nearest row, the row itself first and then its ancestors,
 // that isolates the key, or the root realm. A provider lives in the realm of

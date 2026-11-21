@@ -172,7 +172,7 @@ type Rollback struct {
 // Reload is what the reload key serves (03-c3-kernel.md:65, :87).
 type Reload interface {
 	// Submit queues op and returns its id at once. It never waits, so it is safe in a
-	// leased call (plugin-system-2026-11.md:363). It returns ErrQueueFull, ErrClosed,
+	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed,
 	// ErrStateUnknown, or ErrNested for a ctx that carries the reload goroutine's work. The docs write
 	// Submit(op); ctx is added so that a nested submission can be told from an
 	// independent one (open point).
