@@ -20,3 +20,4 @@ needs:
 hooks:
   - {hook: internal/status, stage: default}
   - {hook: composition/applied, stage: default}
+  - {hook: reload/operation, stage: default}

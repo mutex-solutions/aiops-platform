@@ -17,6 +17,7 @@ import (
 	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -192,6 +193,47 @@ func TestLatchIsDroppedOnDisposal(t *testing.T) {
 	if err := w.root.AwaitObservers(t.Context()); err != nil && !errors.Is(err, kernel.ErrObserverOverflow) {
 		t.Fatal(err)
 	}
+	w.wantReady(false)
+}
+
+// Once reload says that the state of the tree is unknown, the latch is dropped and stays
+// dropped, whatever the required set does, across a restart of the row too (ADR-059).
+func TestLatchStaysDroppedWhileTheStateIsUnknown(t *testing.T) {
+	w := newWorld(t)
+	f := w.root.Plugin(readiness.New(), nil) // its activations share what they know
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.rows(kernel.Active, kernel.Active)
+	w.settle()
+	w.wantReady(true)
+	progress := func(r reload.Result) {
+		t.Helper()
+		if err := w.reload.Progress(t.Context(), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An operation that is not final, and a final one that knows the state, change nothing.
+	progress(reload.Result{ID: 1, Status: reload.Running, Err: reload.ErrStateUnknown})
+	progress(reload.Result{ID: 1, Status: reload.RolledBack, Err: reload.ErrVerdict})
+	w.settle()
+	w.wantReady(true)
+
+	progress(reload.Result{ID: 2, Status: reload.RollbackFailed, Err: errors.Join(reload.ErrVerdict, reload.ErrStateUnknown)})
+	w.wantReady(false)
+	if err := w.reload.Publish(t.Context(), composition.Applied{Generation: 3, Report: composition.Report{Pass: true}}); err != nil {
+		t.Fatal(err)
+	}
+	w.wantReady(false)
+	w.settle()
+	w.wantReady(false)
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.settle()
 	w.wantReady(false)
 }
 

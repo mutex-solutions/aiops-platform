@@ -16,15 +16,22 @@
 // of events costs one recomputation, not one per event on the observer dispatcher,
 // which would overflow Config.ObserverQueue. It drops the latch when it is disposed.
 //
+// Once a final reload/operation event says that the state of the tree is unknown
+// (reload.ErrStateUnknown, after a failed rollback or an abandoned generation), the
+// latch stays dropped until the process restarts: the activations of the row New
+// returns share that knowledge (ADR-059).
+//
 // The listener on internal/status is sealed: the distribution lists this row for it in
 // Config.Listeners (ADR-034, "S1 additions"; 07-c4-plugin-sdk.md:463).
 package readiness
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -32,54 +39,84 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
-// Plugin is the readiness row. It has no config.
-var Plugin = kernel.Define(kernel.Plugin{
-	ID: "aiops/readiness",
-	Inject: []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CatalogKey),
-		kernel.Need(launch.ReadyKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
-	Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Applied.Use(kernel.DefaultStage)},
-	Apply: func(c *kernel.Context, _ any) error {
-		r := &latch{
-			pc: launch.ProfileContextKey.Of(c), cat: launch.CatalogKey.Of(c), ready: launch.ReadyKey.Of(c),
-			rows: composition.Key.Of(c), log: kernel.LoggerKey.Of(c).For(c),
-		}
-		// Registered first, so that it runs last: no listener can set the latch again
-		// after the drop, and the goroutine is awaited before any disposer runs.
-		c.Defer("readiness latch", func(context.Context) error { r.ready.Drop(); return nil })
-		due := make(chan struct{}, 1)
-		c.Go("readiness", func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-due:
-					r.evaluate()
-				}
+// Plugin is a readiness row whose activations share nothing: a restart of the row
+// forgets that the state of the tree is unknown. A distribution takes New.
+// ponytail: Plugin stays until the module table of dist takes New.
+var Plugin = kernel.Define(row(nil))
+
+// New returns the readiness row. Its activations share whether the state of the tree
+// is unknown, so a restart of the row keeps the latch dropped. A binary makes one
+// value, which its module table holds.
+func New() kernel.Plugin { return kernel.Define(row(new(atomic.Bool))) }
+
+// row is the readiness row, which has no config. unknown, when not nil, outlives an
+// activation.
+func row(unknown *atomic.Bool) kernel.Plugin {
+	return kernel.Plugin{
+		ID: "aiops/readiness",
+		Inject: []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CatalogKey),
+			kernel.Need(launch.ReadyKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
+		Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Applied.Use(kernel.DefaultStage),
+			reload.Operation.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			u := unknown
+			if u == nil {
+				u = new(atomic.Bool)
 			}
-		})
-		kernel.InternalStatus.On(c, kernel.DefaultStage, func(context.Context, kernel.LedgerEvent) (any, error) {
+			return apply(c, u)
+		},
+	}
+}
+
+func apply(c *kernel.Context, unknown *atomic.Bool) error {
+	r := &latch{
+		pc: launch.ProfileContextKey.Of(c), cat: launch.CatalogKey.Of(c), ready: launch.ReadyKey.Of(c),
+		rows: composition.Key.Of(c), log: kernel.LoggerKey.Of(c).For(c), unknown: unknown,
+	}
+	// Registered first, so that it runs last: no listener can set the latch again
+	// after the drop, and the goroutine is awaited before any disposer runs.
+	c.Defer("readiness latch", func(context.Context) error { r.ready.Drop(); return nil })
+	due := make(chan struct{}, 1)
+	c.Go("readiness", func(ctx context.Context) error {
+		for {
 			select {
-			case due <- struct{}{}:
-			default: // a recomputation is due already, and it reads the states after this event
+			case <-ctx.Done():
+				return nil
+			case <-due:
+				r.evaluate()
 			}
-			return nil, nil
-		})
-		reload.Applied.On(c, kernel.DefaultStage, func(context.Context, composition.Applied) (any, error) {
+		}
+	})
+	kernel.InternalStatus.On(c, kernel.DefaultStage, func(context.Context, kernel.LedgerEvent) (any, error) {
+		select {
+		case due <- struct{}{}:
+		default: // a recomputation is due already, and it reads the states after this event
+		}
+		return nil, nil
+	})
+	reload.Applied.On(c, kernel.DefaultStage, func(context.Context, composition.Applied) (any, error) {
+		r.evaluate()
+		return nil, nil
+	})
+	reload.Operation.On(c, kernel.DefaultStage, func(_ context.Context, res reload.Result) (any, error) {
+		if res.Status.Done() && errors.Is(res.Err, reload.ErrStateUnknown) {
+			unknown.Store(true)
 			r.evaluate()
-			return nil, nil
-		})
-		return nil
-	},
-})
+		}
+		return nil, nil
+	})
+	return nil
+}
 
 // latch is the one computation. It runs on two goroutines (the row's own and
 // reload's), so evaluate is serialised.
 type latch struct {
-	pc    launch.ProfileContext
-	cat   launch.Catalog
-	ready launch.Ready
-	rows  composition.Reader
-	log   *slog.Logger
+	pc      launch.ProfileContext
+	cat     launch.Catalog
+	ready   launch.Ready
+	rows    composition.Reader
+	log     *slog.Logger
+	unknown *atomic.Bool // the state of the tree is unknown: the latch stays dropped
 
 	mu    sync.Mutex
 	known bool
@@ -101,6 +138,9 @@ func (r *latch) evaluate() {
 		e, _ := r.cat.Lookup(plugin)
 		return e.Provides
 	})
+	if r.unknown.Load() {
+		unmet = append(unmet, "a known state of the tree (reload)")
+	}
 	if len(unmet) == 0 {
 		r.ready.Set()
 	} else {
