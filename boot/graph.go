@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -38,8 +39,11 @@ import (
 // names a plugin outside the module table are errors, and they stop boot for
 // optional and required rows alike (08-profiles-roadmap-adrs.md:469). A need
 // with no provider is an error when the consumer or the key is required, and
-// otherwise one grouped warning (08:471, 03-c3-kernel.md:361). Isolate on a
-// bound key is a gate failure (Stop); see Gate.
+// otherwise one grouped warning (08:471, 03-c3-kernel.md:361). A consumer is
+// required by row or by key: an active provider of a required key in the root
+// realm counts as a required row (ADR-059 decision 27), so a need of it whose
+// provider runs only in another role refuses the profile at admission. Isolate on
+// a bound key is a gate failure (Stop); see Gate.
 
 // Edge is a dependency: From needs To. Key is the key that To provides to
 // From, or "" for the edge from a child to its group.
@@ -107,6 +111,13 @@ type builder struct {
 }
 
 func (b *builder) provides(id string) []string { return b.mods[b.rows[id].Plugin].Provides }
+
+// byKey reports whether a row provides a key of keyReq in the root realm: a row required
+// by key, which counts as a required row (ADR-059 decisions 24 and 27). The caller asks
+// it of an active row only.
+func (b *builder) byKey(id string) bool {
+	return slices.ContainsFunc(b.provides(id), func(k string) bool { return b.keyReq[k] && b.realm(id, k) == "" })
+}
 
 // needs returns the keys a row waits for. The keys of the root are left out: the
 // launcher provides the six launch keys before any row mounts (03-c3-kernel.md:360)
@@ -205,7 +216,7 @@ func BuildGraph(c Composition, mods ModuleTable, dist DistManifest, roles []Role
 				continue
 			}
 			realm := b.realm(id, k)
-			if b.required[id] || b.keyReq[k] {
+			if b.required[id] || b.keyReq[k] || b.byKey(id) {
 				missing = append(missing, StaticError{Stage: "static graph", Rule: RuleNoProvider, Rows: []string{id}, Keys: []string{k},
 					Msg: fmt.Sprintf("row %q needs key %q, which has no provider in %s, and the row or the key is required", id, k, realmName(realm))})
 			} else {

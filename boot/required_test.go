@@ -13,6 +13,7 @@ o/svc: {provides: [svc], needs: [auth]}
 o/extra: {provides: [extra]}
 o/uses-extra: {needs: [extra, sql]}
 o/web: {needs: [svc]}
+o/vault: {provides: [vault]}
 aiops/config-refs: {provides: [configRefsReady]}
 `
 
@@ -141,9 +142,11 @@ func TestAuditStatic(t *testing.T) {
 	}
 }
 
+// The vault row gives auth, a provider of a required key, a provider of its need, so
+// the static graph admits the composition (ADR-059 decision 27).
 func TestAuditRequired(t *testing.T) {
 	c := comp(t, rows("id: loader, plugin: o/loader", "id: sql, plugin: o/sql", "id: auth, plugin: o/auth",
-		"id: web, plugin: o/web", "id: svc, plugin: o/svc", "id: off, plugin: o/extra, enabled: false"))
+		"id: web, plugin: o/web", "id: svc, plugin: o/svc", "id: off, plugin: o/extra, enabled: false", "id: vault, plugin: o/vault"))
 	mods := mustMods(t, reqMods)
 	dist := mustDist(t, "requiredRows: [loader, off]\nrequiredKeys: [sql, auth]")
 	g, errs, _ := BuildGraph(c, mods, dist, nil)
@@ -159,16 +162,16 @@ func TestAuditRequired(t *testing.T) {
 		stops bool
 	}{
 		{name: "all active", view: StateView{
-			Rows:      map[string]State{"loader": StateActive, "sql": StateActive, "auth": StateActive, "web": StateActive, "svc": StateActive},
+			Rows:      map[string]State{"loader": StateActive, "sql": StateActive, "auth": StateActive, "web": StateActive, "svc": StateActive, "vault": StateActive},
 			Providers: map[string]bool{"sql": true, "auth": true}}},
 		{name: "required row and key unmet, others grouped",
 			view: StateView{
-				Rows:      map[string]State{"loader": StatePending, "sql": StateActive, "auth": StateFailed, "web": StatePending},
+				Rows:      map[string]State{"loader": StatePending, "sql": StateActive, "auth": StateFailed, "web": StatePending, "vault": StateFailed},
 				Providers: map[string]bool{"sql": true, "svc": false}},
 			errs: []string{`required row "loader" is PENDING, not ACTIVE`, `required key "auth" has no ACTIVE provider`},
-			warn: `3 rows are not ACTIVE: "auth" is FAILED and waits for vault; "svc" is without a fiber and waits for auth; "web" is PENDING and waits for svc`},
+			warn: `4 rows are not ACTIVE: "auth" is FAILED and waits for vault; "svc" is without a fiber and waits for auth; "vault" is FAILED; "web" is PENDING and waits for svc`},
 		{name: "a required row without a fiber",
-			view: StateView{Rows: map[string]State{"sql": StateActive, "auth": StateActive, "svc": StateActive, "web": StateActive},
+			view: StateView{Rows: map[string]State{"sql": StateActive, "auth": StateActive, "svc": StateActive, "web": StateActive, "vault": StateActive},
 				Providers: map[string]bool{"sql": true, "auth": true, "vault": true, "svc": true}},
 			errs: []string{`required row "loader" is without a fiber, not ACTIVE`}},
 	} {

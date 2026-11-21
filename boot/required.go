@@ -62,9 +62,12 @@ type RequiredSet struct {
 // in another role.
 func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Role) RequiredSet {
 	in, active := RoleFilter(roles), ActiveRows(c, roles)
-	b := builder{rows: make(map[string]ComposedRow, len(c.Rows))}
+	b := builder{rows: make(map[string]ComposedRow, len(c.Rows)), mods: mods, keyReq: map[string]bool{}}
 	for _, r := range c.Rows {
 		b.rows[r.ID] = r
+	}
+	for _, k := range dist.RequiredKeys {
+		b.keyReq[k] = true
 	}
 	rows := map[string]bool{}
 	for _, id := range dist.RequiredRows {
@@ -81,12 +84,9 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 		}
 	}
 	want := dist.RequiredKeys
-	inside := func(r ComposedRow) bool {
-		return rows[r.ID] || active[r.ID] && slices.ContainsFunc(mods[r.Plugin].Provides, func(k string) bool {
-			return inSet(k, dist.RequiredKeys...) && b.realm(r.ID, k) == ""
-		})
-	}
-	refs := slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return len(r.Refs) > 0 && r.Plugin != ConfigRefsID && inside(r) })
+	refs := slices.ContainsFunc(c.Rows, func(r ComposedRow) bool {
+		return len(r.Refs) > 0 && r.Plugin != ConfigRefsID && (rows[r.ID] || active[r.ID] && b.byKey(r.ID))
+	})
 	if refs {
 		want = union(want, []string{configRefsReady})
 		for _, id := range refsRows(c, in, active, b) {

@@ -237,9 +237,9 @@ generation's verdict passed and is not judged.
   them, and `reload` reads `HoldsRef`.
 - **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
   required row of the role holds a reference. By decision 24, a row required by key
-  counts as a required row here, so a reference held by an active
-  provider of a required key in the root realm pulls `config-refs` in too, and a profile
-  that then disables `config-refs` is refused at admission, where boot would stop later
+  counts as a required row here, so a reference held by an active provider of a
+  required key in the root realm pulls `config-refs` in too, and a profile that then
+  disables `config-refs` is refused at admission, where boot would stop later
   on that provider left PENDING. `configRefsReady` stays in the set when every
   `config-refs` row runs in another role, since `config-refs` serves its own process
   only. The need of `configRefsReady` is exempt from the required-closure clause of gate
@@ -295,8 +295,8 @@ generation's verdict passed and is not judged.
   mounts it. The replacement vet covers every fiber a plan retires, the children of a
   replaced group included, and an earlier commit of an entry the replacement remounts is
   reported as `restarted`. By decision 25, a new provider of a key waits for the
-  previous provider of that key to be disposed. The loader mounts no
-  row that provides a key, whether the plan creates, enables or replaces it or a group
+  previous provider of that key to be disposed. The loader mounts no row that provides
+  a key, whether the plan creates, enables or replaces it or a group
   the plan mounts mounts it, while a fiber that this plan or an earlier one removed,
   disabled or replaced, or that a group activation that ended gave up, still provides
   that key in the same realm; the plan's second batch mounts it, as for an id being
@@ -419,3 +419,9 @@ a sentence above says otherwise, these decisions win.
     refuses a file root named by another launcher flag; the untracked caller in
     recomposition case (a); a seam for a kernel-side oracle in the suites; requiring
     `Handler` in an `http.Server` literal.
+
+Decision 27 is built in the no-provider rule of `boot`'s static graph (`BuildGraph`),
+which `Admit` runs at boot and for a live generation: a need with no provider in the
+realm of the row is an error when the key is required or the row is required, by row or
+by key. A row is required by key when it is active and provides a key of the process's
+required set in the root realm; `RequiredFor` reads the same predicate for decision 24.

@@ -57,6 +57,15 @@ func TestGraphFindings(t *testing.T) {
 			errs: []string{"no-provider rows=u keys=kl"}, active: []string{"u"}},
 		{name: "need with no provider, required key", bundle: rows("id: u, plugin: o/user"), dist: "requiredKeys: [kl]",
 			errs: []string{"no-provider rows=u keys=kl"}, active: []string{"u"}},
+		// A provider of a required key in the root realm is a required row (ADR-059
+		// decision 27): its need of a key whose provider runs in another role refuses the
+		// profile, where boot would stop later on that provider left PENDING.
+		{name: "need with no provider in the role, provider of a required key",
+			bundle: rows("id: a, plugin: o/a, roles: [api]", "id: b, plugin: o/b, roles: [worker]"), dist: "requiredKeys: [ka]",
+			roles: []Role{RoleAPI}, errs: []string{"no-provider rows=a keys=kb"}, active: []string{"a"}},
+		{name: "need with no provider, provider of a required key in a private realm",
+			bundle: rows("id: g, plugin: core:group, isolate: [ka], config: [{id: a, plugin: o/a}]"), dist: "requiredKeys: [ka]",
+			warn: []string{"g:a"}, active: []string{"g", "g:a"}},
 		{name: "row-level inject is a need", bundle: rows("id: l, plugin: o/leaf, inject: [kp]"),
 			warn: []string{"l"}, active: []string{"l"}},
 		{name: "group inject is a need of its children",
