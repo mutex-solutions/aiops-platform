@@ -1,0 +1,32 @@
+{
+ "classification": "PASS full frozen property workload on three backends, on the S1 branch after main was merged into it (G1-G12 kernel with the final-port kernel backend adapter of main); run in a frozen checkout",
+ "exitCode": 0,
+ "sourceSHA256": "aa5e75d08cda9c7e1b484dd26652344bc1878779bb66d424cef663fc65abcd64",
+ "commit": "7f497a6",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 4131.33,
+ "backendSeconds": {
+  "reconciler": 1468.75,
+  "graph-lock": 1106.15,
+  "kernel": 1556.14
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ },
+ "note": "every source that summary.json lists matches its file at 7f497a6; the commit that adds this file changes no kernel or test/spike source"
+}
