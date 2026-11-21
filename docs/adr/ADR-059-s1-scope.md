@@ -214,14 +214,19 @@ generation's verdict passed and is not judged.
 
 - **16.** The dry run is the definition `sdk/def/configrefs/v0`: the key
   `configRefsDryRun`, provider-bound to `aiops/config-refs`, whose `DryRun.Check(ctx,
-  config)` returns nil when every reference of the tree resolves and otherwise an error
-  matching `ErrUnresolved`, never a value. `boot` may not import it (`07` §1.1, `kernelcheck
-  imports`), so it reads the active provision of the key owned by `aiops/config-refs`
-  through `Root.Inspect` and calls it through a local interface with the same method.
-  `Admit` checks every row the generation mounts anew: created, enabled, changed in a field
-  other than `required` or `roles`, or a child of a replaced group. A row with no reference
-  is decoded as before. A generation that both changes the `config-refs` row and adds
-  references is checked by the instance that is running.
+  config, decode)` returns an error matching `ErrUnresolved` when a reference of the tree
+  does not resolve, and otherwise the error of `decode`, the row plugin's own `Decode`,
+  which it runs on the resolved tree inside `config-refs`; it never returns a value.
+  `boot` may not import it (`07` §1.1, `kernelcheck imports`), so it reads the active
+  provision of the key owned by `aiops/config-refs` through `Root.Inspect` and calls it
+  through a local interface with the same method. `Admit` checks every row the generation
+  creates, enables or changes in any field (`required` too, though raising it mounts
+  nothing again), and every child of a replaced group. A row with no reference is decoded
+  as before; one with a reference is decoded on its resolved tree, so a config that fails
+  `Decode` beside or through a reference that resolves is rejected too. A generation that
+  disables, removes or mounts again the `config-refs` row cannot be checked by the
+  instance that is running, so any reference in those rows rejects it, as when
+  `config-refs` is not ACTIVE.
 - **17.** The rule applies to the row's whole config: any change of a config whose old or
   new tree holds a reference anywhere restarts the row, because the payload of
   `loader/volatile-update` is the whole config. `loaderdef.VolatileOnly` is that rule and

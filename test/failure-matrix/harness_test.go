@@ -220,6 +220,9 @@ func planFor(row, col, fault string) (plan, bool) {
 				rejectedLive("a row given a first reference that does not resolve", "does not resolve", []string{"refs-literal.yml"}, "refs-unresolved.change.yml"),
 				rejectedLive("the child of a replaced group with a reference that does not resolve", "does not resolve", []string{"refs-group.yml"}, "refs-unresolved.group.yml"),
 				rejectedLive("a created row with a reference while config-refs is disabled", "rejected", []string{"refs-disabled.yml"}, "refs-env.optional.yml", "AIOPS_REF_NOTE=from-env"),
+				rejectedLive("a created row whose resolved reference fails Decode", "invalid config", nil, "bad-config.refs.optional.yml", "AIOPS_REF_NOTE=from-env"),
+				rejectedLive("a created row with a reference in the generation that disables config-refs", "config-refs changes in this generation",
+					nil, "refs-env.refs-disabled.yml", "AIOPS_REF_NOTE=from-env"),
 			}}, plan{}), true
 	case "static":
 		return byColumn(col, plan{base: []string{"rogue-provider.isolate.yml"}, code: boot.ExitRefused},

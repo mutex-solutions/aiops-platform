@@ -57,12 +57,16 @@ var Plugin = kernel.Define(kernel.Plugin{
 	Apply:    apply,
 })
 
-// dryRun resolves a config with the listener's resolver and drops the values.
+// dryRun resolves a config with the listener's resolver, hands the resolved tree to
+// decode, the row's own Decode, and drops it.
 type dryRun struct{ r *refs.Resolver }
 
-func (d dryRun) Check(_ context.Context, config any) error {
-	_, _, err := d.r.Resolve(config)
-	return err
+func (d dryRun) Check(_ context.Context, config any, decode func(any) error) error {
+	out, _, err := d.r.Resolve(config)
+	if err != nil || decode == nil {
+		return err
+	}
+	return decode(out)
 }
 
 func apply(c *kernel.Context, cfg any) error {

@@ -22,7 +22,7 @@ var refsReadyKey = kernel.NewKey[struct{}](configRefsReady, 0, kernel.ProviderBo
 // refsCheckKey is the dry run of the fake, declared as sdk/def/configrefs/v0 declares
 // its key: boot reads it by its name and its method, as it reads the real one.
 var refsCheckKey = kernel.NewKey[interface {
-	Check(context.Context, any) error
+	Check(context.Context, any, func(any) error) error
 }](configRefsDryRun, 0, kernel.ProviderBound())
 
 // errRefsUnresolved stands in for the definition's ErrUnresolved.
@@ -30,9 +30,12 @@ var errRefsUnresolved = errors.New("reference does not resolve")
 
 type fakeCheck struct{}
 
-func (fakeCheck) Check(_ context.Context, cfg any) error {
-	_, err := resolveRefs(cfg)
-	return err
+func (fakeCheck) Check(_ context.Context, cfg any, decode func(any) error) error {
+	v, err := resolveRefs(cfg)
+	if err != nil || decode == nil {
+		return err
+	}
+	return decode(v)
 }
 
 // fakeRefs stands in for the config-refs row: it signals that it entered Apply, waits
@@ -451,10 +454,10 @@ func TestAdmitDryRunsTheReferencesOfTheRowsItMounts(t *testing.T) {
 		// The first reference of a running row (notFixed finding 14).
 		{"first reference", "- {id: plain, config: {note: \"${secret:x}\"}}\n", `row "plain": reference secret:x`},
 		{"changed", "- {id: kept, config: {note: \"${secret:x}\"}}\n", `row "kept": reference secret:x`},
-		// Any change but required and roles mounts the row again, which resolves again;
-		// raising required mounts nothing again, and the judge holds the row to ACTIVE.
+		// Any change of a row is checked, raising required too, though it mounts nothing
+		// again: decision 16 names every row the generation changes.
 		{"inject changed", "- {id: bad, inject: [cache]}\n", `row "bad": reference secret:y`},
-		{"required raised", "- {id: bad, required: true}\n", ""},
+		{"required raised", "- {id: bad, required: true}\n", `row "bad": reference secret:y`},
 	} {
 		err := admit(base + tc.add)
 		switch {
@@ -462,6 +465,85 @@ func TestAdmitDryRunsTheReferencesOfTheRowsItMounts(t *testing.T) {
 			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
 		case strings.HasPrefix(tc.want, "row") && !errors.Is(err, errRefsUnresolved):
 			t.Errorf("%s: admit = %v, want the dry run's error wrapped", tc.name, err)
+		}
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+// A config that holds a reference is decoded too, on the tree the dry run resolves,
+// inside config-refs: a created, enabled or changed row whose reference resolves and
+// whose config the plugin's Decode refuses rejects the generation, as one with no
+// reference does (08-profiles-roadmap-adrs.md §1.6, "Config fails schema or Validate").
+func TestAdmitDecodesAConfigThatHoldsAReference(t *testing.T) {
+	var l launched
+	entered, gate := make(chan struct{}, 4), make(chan struct{})
+	close(gate)
+	dec := kernel.Define(kernel.Plugin{ID: "t/dec",
+		Decode: func(raw any) (any, error) {
+			m, _ := raw.(map[string]any)
+			if _, ok := m["level"].(string); !ok {
+				return nil, errors.New("level must be a string")
+			}
+			if n, _ := m["note"].(string); strings.HasPrefix(n, "resolved-AIOPS_REF_BAD") {
+				return nil, errors.New("note is not accepted")
+			}
+			return raw, nil
+		},
+		Apply: func(*kernel.Context, any) error { return nil }})
+	const base = `- insert:
+    - {id: refs, plugin: aiops/config-refs, roles: [api]}
+    - {id: probe, plugin: t/probe, roles: [api]}
+    - {id: run, plugin: t/dec, roles: [api], config: {level: x, note: "${env:AIOPS_REF_A}"}}
+    - {id: off, plugin: t/dec, roles: [api], enabled: false, config: {level: 5, note: "${env:AIOPS_REF_A}"}}
+`
+	f := refsFixture(t, base, fakeRefs(entered, gate), probe(&l), ModuleEntry{ID: "t/dec", Module: "example.test/dec", Version: "v0.1.0", Plugin: dec})
+	admit, done := liveAdmit(t, f, &l)
+	for _, tc := range []struct{ name, add, want string }{
+		{"created, decodes", "    - {id: a, plugin: t/dec, roles: [api], config: {level: x, note: \"${env:AIOPS_REF_A}\"}}\n", ""},
+		{"created, no reference", "    - {id: a, plugin: t/dec, roles: [api], config: {level: 5, note: hi}}\n", `row "a": config: level must be a string`},
+		{"created", "    - {id: a, plugin: t/dec, roles: [api], config: {level: 5, note: \"${env:AIOPS_REF_A}\"}}\n", `row "a": config: level must be a string`},
+		{"created, resolved value refused", "    - {id: a, plugin: t/dec, roles: [api], config: {level: x, note: \"${env:AIOPS_REF_BAD}\"}}\n", `row "a": config: note is not accepted`},
+		{"enabled", "- {id: off, enabled: true}\n", `row "off": config: level must be a string`},
+		{"changed", "- {id: run, config: {level: 7, note: \"${env:AIOPS_REF_A}\"}}\n", `row "run": config: level must be a string`},
+	} {
+		err := admit(base + tc.add)
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
+		}
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+// The running config-refs cannot check the references of a generation that also
+// disables, removes or changes config-refs: the tree would resolve them with another
+// instance, or with none. Such a generation is rejected when a row it creates, enables
+// or changes holds a reference (ADR-059 decision 16); one that holds none is admitted.
+func TestAdmitRejectsAReferenceWhenTheGenerationChangesConfigRefs(t *testing.T) {
+	var l launched
+	entered, gate := make(chan struct{}, 4), make(chan struct{})
+	close(gate)
+	const base = `- insert:
+    - {id: refs, plugin: aiops/config-refs, roles: [api]}
+    - {id: probe, plugin: t/probe, roles: [api]}
+    - {id: kept, plugin: t/rec, roles: [api], config: {note: "${env:AIOPS_REF_A}"}}
+`
+	const newRef = "- insert:\n    - {id: new, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_B}\"}}\n"
+	f := refsFixture(t, base, fakeRefs(entered, gate), recorder("t/rec", make(chan any, 16)), probe(&l))
+	admit, done := liveAdmit(t, f, &l)
+	for _, tc := range []struct{ name, add, want string }{
+		{"disabled, created row with a reference", "- {id: refs, enabled: false}\n" + newRef, `row "new": config-refs changes in this generation`},
+		{"changed, created row with a reference", "- {id: refs, config: {x: 1}}\n" + newRef, `row "new": config-refs changes in this generation`},
+		{"disabled, changed row with a reference", "- {id: refs, enabled: false}\n- {id: kept, config: {note: \"${env:AIOPS_REF_C}\"}}\n", `row "kept": config-refs changes in this generation`},
+		{"changed, created row with no reference", "- {id: refs, config: {x: 1}}\n- insert:\n    - {id: new, plugin: t/rec, roles: [api], config: {note: x}}\n", ""},
+		{"required raised, created row with a reference", "- {id: refs, required: true}\n" + newRef, ""},
+	} {
+		err := admit(base + tc.add)
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
+			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
 		}
 	}
 	if code := stopAndWait(t, f, done); code != ExitOK {
@@ -490,7 +572,8 @@ func TestAdmitRejectsAReferenceWhileConfigRefsIsNotActive(t *testing.T) {
 }
 
 // A changed group is replaced by the loader with the rows it holds, so they are mounted
-// again too; a change of required or roles alone mounts nothing again.
+// again too; a change of required or roles alone mounts nothing again, and is still a
+// change of the row (ADR-059 decision 16).
 func TestRemountedHoldsTheChildrenOfAChangedGroup(t *testing.T) {
 	const bundle = `- insert:
     - {id: g, plugin: core:group, config: [{id: c, plugin: t/store}, {id: h, plugin: core:group, config: [{id: d, plugin: t/store}]}]}
@@ -500,16 +583,22 @@ func TestRemountedHoldsTheChildrenOfAChangedGroup(t *testing.T) {
 `
 	old := comp(t, fmt.Sprintf(bundle, "api"))
 	nw := comp(t, fmt.Sprintf(bundle, "api, worker"), "- {id: g, inject: [x]}\n- {id: k, required: true}\n- {id: n, enabled: true}\n")
-	got := remounted(old, nw, nil)
-	var ids []string
-	for id, ok := range got {
-		if ok {
-			ids = append(ids, id)
+	changed, got := changedRows(old, nw, nil)
+	set := func(m map[string]bool) []string {
+		var ids []string
+		for id, ok := range m {
+			if ok {
+				ids = append(ids, id)
+			}
 		}
+		slices.Sort(ids)
+		return ids
 	}
-	slices.Sort(ids)
-	if want := []string{"g", "g:c", "g:h", "g:h:d", "n"}; !slices.Equal(ids, want) {
+	if ids, want := set(got), []string{"g", "g:c", "g:h", "g:h:d", "n"}; !slices.Equal(ids, want) {
 		t.Errorf("remounted %v, want %v", ids, want)
+	}
+	if ids, want := set(changed), []string{"g", "g:c", "g:h", "g:h:d", "k", "m", "n"}; !slices.Equal(ids, want) {
+		t.Errorf("changed %v, want %v", ids, want)
 	}
 }
 

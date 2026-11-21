@@ -161,13 +161,25 @@ func TestDryRunChecksWithoutReturningValues(t *testing.T) {
 		t.Fatalf("a consumer of the dry run is %s once settled, want ACTIVE: config-refs does not provide it", st)
 	}
 	dr := <-got
-	if err := dr.Check(t.Context(), map[string]any{"a": []any{ref("env", "AIOPS_REF_OK"), "plain"}}); err != nil {
+	cfg := map[string]any{"a": []any{ref("env", "AIOPS_REF_OK"), "plain"}}
+	if err := dr.Check(t.Context(), cfg, nil); err != nil {
 		t.Errorf("Check of a reference that resolves = %v", err)
 	}
+	// The row's Decode runs on the tree as its mount would see it, inside the row, and
+	// its error is the result (08 §1.6, "Config fails schema or Validate").
+	errDecode := errors.New("a is refused")
+	var seen any
+	if err := dr.Check(t.Context(), cfg, func(v any) error { seen = v; return errDecode }); err != errDecode {
+		t.Errorf("Check with a Decode that refuses = %v, want its error", err)
+	}
+	if m, _ := seen.(map[string]any); m == nil || m["a"].([]any)[0] != secretValue {
+		t.Errorf("Decode saw %v, want the resolved tree", seen)
+	}
 	for _, bad := range []launch.Ref{ref("secret", "x"), ref("env", "HOME_SECRET"), ref("env", "AIOPS_REF_NONE")} {
-		err := dr.Check(t.Context(), map[string]any{"a": bad})
-		if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), bad.Name) || strings.Contains(err.Error(), secretValue) {
-			t.Errorf("Check(%v) = %v, want ErrUnresolved, the reference and no value", bad, err)
+		called := false
+		err := dr.Check(t.Context(), map[string]any{"a": bad}, func(any) error { called = true; return nil })
+		if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), bad.Name) || strings.Contains(err.Error(), secretValue) || called {
+			t.Errorf("Check(%v) = %v (Decode called %v), want ErrUnresolved, the reference, no value and no Decode", bad, err, called)
 		}
 	}
 }

@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: the fault plugin bad-config as an optional row
+# whose config holds a reference that resolves, to a value its plugin refuses: the row
+# fails Decode once the reference is resolved.
+- insert:
+    - {id: fault, plugin: aiops-test/bad-config, roles: [api], config: {note: "${env:AIOPS_REF_NOTE}"}}

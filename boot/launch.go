@@ -250,47 +250,72 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 // dryRun is the dry run that config-refs provides under configRefsDryRun
 // (sdk/def/configrefs/v0 DryRun), by its method set.
 type dryRun interface {
-	Check(ctx context.Context, config any) error
+	Check(ctx context.Context, config any, decode func(any) error) error
 }
 
-// configErrors checks the config of every row that the generation c mounts with a new
-// row (remounted; 03-c3-kernel.md:377, "every changed config"). A config with no
+// configErrors checks the config of every row that the generation c creates, enables
+// or changes in any field, and of the rows held by a group it replaces (changedRows;
+// 03-c3-kernel.md:377, "every changed config"; ADR-059 decision 16). A config with no
 // reference is decoded with the plugin's own Decode. One that holds a reference is
 // checked by the dry run of the config-refs row ACTIVE in the root realm, which resolves
-// it as it would for the mount and returns no value; with no such row it is refused
-// (ADR-059 decision 16). The error of a dry run is wrapped, so it still matches the
-// definition's ErrUnresolved.
+// it as it would for the mount, decodes the resolved tree with the plugin's Decode and
+// returns no value. With no such row, or when c disables, removes or mounts config-refs
+// again, so that the tree would resolve the reference with another instance or none, it
+// is refused. The error of a dry run is wrapped, so it still matches the definition's
+// ErrUnresolved.
 func (p *profileContext) configErrors(ctx context.Context, c Composition) []error {
 	p.mu.Lock()
 	old := p.committed
 	p.mu.Unlock()
-	fresh := remounted(old, c, p.roles)
+	changed, remounted := changedRows(old, c, p.roles)
+	moves := refsMove(old, c, p.roles, remounted)
 	var dr dryRun
 	looked := false
 	var out []error
 	for _, r := range c.Rows {
-		pl, ok := p.mods[r.Plugin].Plugin.(kernel.Plugin)
-		cfg := plain(r.Config)
-		switch {
-		case !fresh[r.ID]:
-		case len(r.Refs) > 0:
+		if !changed[r.ID] {
+			continue
+		}
+		var decode func(any) error
+		if pl, _ := p.mods[r.Plugin].Plugin.(kernel.Plugin); pl.Decode != nil {
+			decode = func(v any) error {
+				if err := decodes(pl.Decode, v); err != nil {
+					return fmt.Errorf("config: %w", err)
+				}
+				return nil
+			}
+		}
+		var err error
+		switch cfg := plain(r.Config); {
+		case len(r.Refs) == 0 && decode != nil:
+			err = decode(cfg)
+		case len(r.Refs) == 0:
+		case moves:
+			err = errors.New("config-refs changes in this generation, so the references cannot be checked")
+		default:
 			if !looked {
 				dr, looked = p.configRefs(ctx), true
 			}
-			err := errors.New("config-refs is not ACTIVE, so the references cannot be checked")
+			err = errors.New("config-refs is not ACTIVE, so the references cannot be checked")
 			if dr != nil {
-				err = dr.Check(ctx, cfg)
+				err = dr.Check(ctx, cfg, decode)
 			}
-			if err != nil {
-				out = append(out, fmt.Errorf("row %q: %w", r.ID, err))
-			}
-		case ok && pl.Decode != nil:
-			if err := decodes(pl.Decode, cfg); err != nil {
-				out = append(out, fmt.Errorf("row %q: config: %w", r.ID, err))
-			}
+		}
+		if err != nil {
+			out = append(out, fmt.Errorf("row %q: %w", r.ID, err))
 		}
 	}
 	return out
+}
+
+// refsMove reports whether a generation from old to nw disables, removes or mounts again
+// a config-refs row (remounted), or makes one: the running one cannot answer for the
+// references of such a generation.
+func refsMove(old, nw Composition, roles []Role, remounted map[string]bool) bool {
+	was, act := ActiveRows(old, roles), ActiveRows(nw, roles)
+	return slices.ContainsFunc(slices.Concat(old.Rows, nw.Rows), func(r ComposedRow) bool {
+		return r.Plugin == ConfigRefsID && (was[r.ID] != act[r.ID] || remounted[r.ID])
+	})
 }
 
 // configRefs returns the dry run of the config-refs row while it is ACTIVE in the root
@@ -307,17 +332,21 @@ func (p *profileContext) configRefs(ctx context.Context) dryRun {
 	return nil
 }
 
-// remounted returns the rows of nw that a generation from old mounts with a row other
-// than the one that runs: created, enabled, changed in a field other than required and
-// roles, or held by a group that is, which the loader replaces with its rows.
-func remounted(old, nw Composition, roles []Role) map[string]bool {
+// changedRows returns the active rows of nw that a generation from old creates, enables
+// or changes in any field (changed), and of those the ones it mounts with a row other
+// than the one that runs (remounted): created, enabled, changed in a field other than
+// required and roles, or held by a group that is, which the loader replaces with its
+// rows. A row held by a remounted group is changed too.
+func changedRows(old, nw Composition, roles []Role) (changed, remounted map[string]bool) {
 	was, act, before := ActiveRows(old, roles), ActiveRows(nw, roles), indexRows(old)
-	out := map[string]bool{}
+	changed, remounted = map[string]bool{}, map[string]bool{}
 	for _, r := range nw.Rows {
-		changed := slices.ContainsFunc(changedFields(before[r.ID].Row, r.Row), func(f FieldName) bool { return f != FieldRequired && f != FieldRoles })
-		out[r.ID] = act[r.ID] && (!was[r.ID] || changed || out[r.Parent])
+		fields := changedFields(before[r.ID].Row, r.Row)
+		mounts := slices.ContainsFunc(fields, func(f FieldName) bool { return f != FieldRequired && f != FieldRoles })
+		remounted[r.ID] = act[r.ID] && (!was[r.ID] || mounts || remounted[r.Parent])
+		changed[r.ID] = remounted[r.ID] || act[r.ID] && len(fields) > 0
 	}
-	return out
+	return changed, remounted
 }
 
 // decodes runs a Decode as the kernel does: a panic is an error.

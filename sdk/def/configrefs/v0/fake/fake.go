@@ -32,24 +32,43 @@ func New(resolves func(launch.Ref) bool) (DryRun, kernel.Plugin) {
 }
 
 // Check walks maps and lists and fails at the first reference that does not resolve.
-func (f DryRun) Check(ctx context.Context, config any) error {
-	var items []any
-	switch v := config.(type) {
+// When each one resolves, it calls decode with the tree in which every reference is
+// replaced by its name, the value the fake resolves it to.
+func (f DryRun) Check(_ context.Context, config any, decode func(any) error) error {
+	resolved, err := f.resolve(config)
+	if err != nil || decode == nil {
+		return err
+	}
+	return decode(resolved)
+}
+
+func (f DryRun) resolve(v any) (any, error) {
+	switch x := v.(type) {
 	case launch.Ref:
-		if !f.resolves(v) {
-			return fmt.Errorf("invalid config: reference ${%s:%s}: %w", v.Scheme, v.Name, configrefs.ErrUnresolved)
+		if !f.resolves(x) {
+			return nil, fmt.Errorf("invalid config: reference ${%s:%s}: %w", x.Scheme, x.Name, configrefs.ErrUnresolved)
 		}
+		return x.Name, nil
 	case map[string]any:
-		for _, e := range v {
-			items = append(items, e)
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			r, err := f.resolve(e)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = r
 		}
+		return out, nil
 	case []any:
-		items = v
-	}
-	for _, e := range items {
-		if err := f.Check(ctx, e); err != nil {
-			return err
+		out := make([]any, len(x))
+		for i, e := range x {
+			r, err := f.resolve(e)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = r
 		}
+		return out, nil
 	}
-	return nil
+	return v, nil
 }

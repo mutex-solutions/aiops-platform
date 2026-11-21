@@ -22,8 +22,13 @@ var ErrUnresolved = errors.New("reference does not resolve")
 type DryRun interface {
 	// Check reports whether every reference of config resolves now, as the provider
 	// would resolve it for an activation. config is a parsed tree as launch.Row.Config
-	// holds it, each reference a launch.Ref. Check returns nil when each one resolves,
-	// and otherwise an error that matches ErrUnresolved and says which reference failed
-	// and why. It never returns or names a value it read.
-	Check(ctx context.Context, config any) error
+	// holds it, each reference a launch.Ref. When one does not resolve, Check returns an
+	// error that matches ErrUnresolved and says which reference failed and why. When
+	// each one resolves and decode is not nil, Check calls decode with the resolved
+	// tree, as the row's plugin would receive it, and returns its error: the row's own
+	// Decode, which the mount of the row runs on the same tree, so the error is the one
+	// that mount would report ("Config fails schema or Validate",
+	// 08-profiles-roadmap-adrs.md §1.6). The resolved tree never leaves the call. Check
+	// itself never returns or names a value it read.
+	Check(ctx context.Context, config any, decode func(resolved any) error) error
 }
