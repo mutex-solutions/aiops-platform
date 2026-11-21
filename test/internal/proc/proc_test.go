@@ -30,11 +30,20 @@ func TestMain(m *testing.M) {
 		f := os.Getenv("PROC_TEST_PIDFILE")
 		_ = os.WriteFile(f+".tmp", []byte(strconv.Itoa(cmd.Process.Pid)), 0o644)
 		_ = os.Rename(f+".tmp", f)
-		select {}
+		block()
 	case "sleep":
-		select {}
+		block()
 	}
 	os.Exit(m.Run())
+}
+
+// block waits until the process is killed. A bare select{} in a process with no other
+// goroutine is a deadlock, which the runtime ends at once with exit status 2: the
+// grandchild then died before the test read its pid, whenever the test was slow.
+func block() {
+	for {
+		time.Sleep(time.Hour)
+	}
 }
 
 // gone is true when the pid no longer exists or is a zombie awaiting a reaper.
