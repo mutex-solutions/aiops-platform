@@ -1129,7 +1129,10 @@ a restart, and when an earlier operation of the same batch ends that activation
 activation). An operation ends it when it disposes or restarts c's fiber, or a fiber
 whose restart reaches c's fiber through a key that it provides or as an ancestor, at
 any depth: exactly the fibers that the batch's invalidation restarts and those that
-their effect walks dispose. An `UpdateOpWith` whose restart `internal/update`
+their effect walks dispose. A caller that cannot tell which activations its other
+operations end puts its child mounts first: each child then goes with an activation
+that ends, and the parent's next activation mounts what it needs (the loader's
+groups mount their children again when they activate). An `UpdateOpWith` whose restart `internal/update`
 vetoes, and a `CommitOp`, restart nothing. (Until the S1 review a restart earlier in
 the batch was not checked, and the batch was admitted with a child that was disposed
 at once. The first fix counted only operations on c's fiber itself, so a batch that
