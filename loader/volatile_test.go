@@ -36,8 +36,23 @@ func TestVolatileChangeWithAReferenceRestarts(t *testing.T) {
 		x.want("v", kernel.Active)
 	}
 	ls.mu.Lock()
-	defer ls.mu.Unlock()
 	if p.count("t/v") != 4 || len(ls.volatile) != 0 {
 		t.Errorf("applies %d, volatile-update heard %+v", p.count("t/v"), ls.volatile)
+	}
+	ls.mu.Unlock()
+
+	// A reference at a path that did not change does not stop a commit in place. The event
+	// carries the config as the tree holds it, the reference unresolved; the values at
+	// Paths hold none (sdk/def/loader/v0 VolatileUpdateArgs).
+	rv.Config = m{"note": "plain", "rules": l{m{"url": ref}}}
+	x.apply(update(rv))
+	rv.Config = m{"note": "changed", "rules": l{m{"url": ref}}}
+	if res := x.apply(update(rv)); res[0].Outcome != def.Committed {
+		t.Fatalf("a volatile change beside an unchanged reference: %v", res)
+	}
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if len(ls.volatile) != 1 || !deepEqual(ls.volatile[0].Paths, []string{"note"}) || !deepEqual(ls.volatile[0].Config, rv.Config) {
+		t.Errorf("volatile-update heard %+v", ls.volatile)
 	}
 }
