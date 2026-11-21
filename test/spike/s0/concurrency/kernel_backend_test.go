@@ -1013,8 +1013,7 @@ func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 		firsts = append(firsts, <-ctxs)
 	}
 	// testing.AllocsPerRun warms up with one call, which would hide an allocation
-	// of the first call, so the first calls are measured here as it measures: on
-	// one P, mallocs over all runs divided by the runs.
+	// of the first call, so the first calls are measured here on one P.
 	refused := 0
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 	var before, after runtime.MemStats
@@ -1030,8 +1029,10 @@ func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 	if refused != 0 {
 		t.Fatalf("Enter refused on %d active fibers", refused)
 	}
-	if got := (after.Mallocs - before.Mallocs) / fresh; got != 0 {
-		t.Fatalf("the first Enter+Leave of an activation allocated %d objects per call, want 0", got)
+	// An absolute bound, not a mean: one allocation in some activations only must
+	// fail too. Two objects leave room for a stray runtime allocation.
+	if got := after.Mallocs - before.Mallocs; got > 2 {
+		t.Fatalf("the first Enter+Leave of %d activations allocated %d objects, want 0", fresh, got)
 	}
 	c := firsts[0]
 	if got := testing.AllocsPerRun(1000, func() {
