@@ -75,6 +75,23 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a required row with a reference and no config-refs row",
 			bundle: rows("id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			want:   []string{"required-key  configRefsReady"}, closed: "u"},
+		// Only the config-refs rows that serve the process join the set: active and in
+		// the root realm. A spare one that does not serve is not required.
+		{name: "a disabled spare config-refs row is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: spare, plugin: aiops/config-refs, enabled: false",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a config-refs row inside a disabled group is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: g, plugin: core:group, enabled: false, config: [{id: r2, plugin: aiops/config-refs}]",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a config-refs row of a private realm is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: g, plugin: core:group, isolate: [configRefsReady], config: [{id: r3, plugin: aiops/config-refs}]",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a required row with a reference and only a disabled config-refs row",
+			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			want:   []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "u"},
 		// The need of configRefsReady is exempt from the closure clause: config-refs is the
 		// launcher's to require, and an optional provider that holds a reference waits for it.
 		{name: "a provider of a required key that holds a reference",
