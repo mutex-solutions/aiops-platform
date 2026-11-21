@@ -23,7 +23,7 @@
 // verdict is the last operation of reload in the state file of test-state.
 //
 // A control file that starts with "leased" is a submission from a leased call, as an
-// admin call makes one (plugin-system-2026-11.md:363), and on a goroutine that this row
+// admin call makes one (plugin-system-2026-11.md §9), and on a goroutine that this row
 // does not track, as an admin call runs on: a lease of the row's fiber, the submission,
 // and the lease is held until reload has begun the operation ("ran"), which a Submit that
 // waited for the apply could never see, because the apply of a generation that restarts

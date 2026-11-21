@@ -15,8 +15,8 @@ import (
 
 // Document references for plugin vet.
 const (
-	docVet = "plugin-system-2026-11.md:500; 08-profiles-roadmap-adrs.md:1256"
-	docGo  = "plugin-system-2026-11.md:500 (bare go); 07-c4-plugin-sdk.md:37 (signals are boot's)"
+	docVet = "plugin-system-2026-11.md §14 (T0 Static); 08-profiles-roadmap-adrs.md:1256"
+	docGo  = "plugin-system-2026-11.md §14 (bare go); 07-c4-plugin-sdk.md:37 (signals are boot's)"
 )
 
 // vetSkip lists directories, as slash path fragments, that plugin vet does not

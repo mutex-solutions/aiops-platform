@@ -87,7 +87,7 @@ jobs:
         # server-closure part until cmd/aiops exists.
         run: go run ./tools/kernelcheck imports .
       - name: Plugin vet
-        # plugin-system-2026-11.md:500; allow-var and allow-go exemptions are counted in the output.
+        # plugin-system-2026-11.md §14 (T0 Static); allow-var and allow-go exemptions are counted in the output.
         run: go run ./tools/kernelcheck pluginvet plugins loader boot
       - name: Boot and loader statement coverage profiles
         run: |

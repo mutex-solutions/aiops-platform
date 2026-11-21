@@ -4,7 +4,10 @@
 package failurematrix
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -105,6 +108,59 @@ func TestTableHasNoCopy(t *testing.T) {
 	}
 	if strings.Contains(string(data), tableHead) {
 		t.Errorf("%s holds a copy of the failure policy table; link to 08 section 1.6 instead", record)
+	}
+}
+
+// TestDesignRecordIsCitedBySection: the design record changes by amendment, and removing
+// its copy of the table moved every line after it, so a reference into it names a section
+// ("plugin-system-2026-11.md §9"), never a line, and the section exists. It reads what
+// people write: Go, Markdown, YAML, shell and the Makefile.
+func TestDesignRecordIsCitedBySection(t *testing.T) {
+	const root = "../.."
+	data, err := os.ReadFile(root + "/docs/design/plugin-system-2026-11.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections := map[string]bool{}
+	for _, l := range strings.Split(string(data), "\n") {
+		if n, _, ok := strings.Cut(l, ". "); ok && strings.HasPrefix(n, "## ") {
+			sections[strings.TrimPrefix(n, "## ")] = true
+		}
+	}
+	byLine := regexp.MustCompile(`plugin-system-2026-11\.md:\d`)
+	bySection := regexp.MustCompile(`plugin-system-2026-11\.md §(\d+)`)
+	read := map[string]bool{".go": true, ".md": true, ".yml": true, ".yaml": true, ".sh": true}
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case d.IsDir() && (d.Name() == ".git" || d.Name() == ".claude" || d.Name() == "node_modules"):
+			return filepath.SkipDir
+		case d.IsDir() || !read[filepath.Ext(p)] && d.Name() != "Makefile":
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, p)
+		for i, l := range strings.Split(string(b), "\n") {
+			if byLine.MatchString(l) {
+				t.Errorf("%s:%d cites the design record by line; cite its section, plugin-system-2026-11.md §N", rel, i+1)
+			}
+			for _, m := range bySection.FindAllStringSubmatch(l, -1) {
+				if !sections[m[1]] {
+					t.Errorf("%s:%d cites section %s of the design record, which has no such section", rel, i+1, m[1])
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sections) == 0 {
+		t.Fatal("no section found in the design record; the parser is out of date")
 	}
 }
 

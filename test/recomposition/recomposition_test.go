@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package recomposition is the recomposition suite on the built test binary
-// (test/dist/cmd/aiops-test): the cases of plugin-system-2026-11.md:506 that S1 runs
+// (test/dist/cmd/aiops-test): the cases of plugin-system-2026-11.md §14 that S1 runs
 // (ADR-059 decision 5; 08-profiles-roadmap-adrs.md:693). The process boots the profile
 // "smoke" with a live layer file as its last --patch; a test writes the next generation
 // into that file and submits it through test-submit (the control file), and reads what
