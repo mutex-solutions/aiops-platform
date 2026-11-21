@@ -44,7 +44,7 @@ The kernel additions are built on branch `s1/integration` (decision 2). No kerne
 **Evidence on the branch kernel so far.** These runs are not the checks that decision 2 asks for after the merge.
 
 - Differential corpus. The live oracle comparison passed on `ab9b405` at `GOMAXPROCS=8` in 68.4 s of package time (run for this report; the time varies between runs). The round 3 result file records passes at `GOMAXPROCS=8` (72 s) and `GOMAXPROCS=2` (85 s).
-- Property workload. The last full pass ran on `4a8f20d`, with G1 to G11: 1,000 seeds × 1,000 operations on three backends, `-race`, exit 0, 5,750.02 s (`test/spike/s0/results/property-full-s1-kernel/invocation.json`). Since then the kernel and the S0 adapter changed: 27 files, 1,457 insertions, 231 deletions (`git diff --stat 4a8f20d ab9b405 -- sdk/kernel test/spike/s0/concurrency test/spike/s0/properties`). No evidence file for `ab9b405` exists under `test/spike/s0/results`. A full property run on `ab9b405`, in a frozen checkout, was in progress when this report was written. Its result is not recorded.
+- Property workload. The last full pass ran on `4a8f20d`, with G1 to G11: 1,000 seeds × 1,000 operations on three backends, `-race`, exit 0, 5,750.02 s (`test/spike/s0/results/property-full-s1-kernel/invocation.json`). Since then the kernel and the S0 adapter changed: 27 files, 1,457 insertions, 231 deletions (`git diff --stat 4a8f20d ab9b405 -- sdk/kernel test/spike/s0/concurrency test/spike/s0/properties`). No evidence file for `ab9b405` exists under `test/spike/s0/results`. A full property run on `ab9b405`, in a frozen checkout, was in progress when this report was written. Its result is not recorded. Recorded later: the full run on `ab9b405` passed, exit 0, 4,280.72 s in total, kernel backend 1,743.37 s (`test/spike/s0/results/property-full-s1-converged/`).
 - Call-path gate. Not recorded for the kernel with the S1 additions.
 
 **State of the S0 gates.** On `main`, `s0-report.md` (commit `3715bfe`, updated 2026-11-20) lists rows 8, 9 and 10 as open: the 10,000-fiber bench, the 500 tenant trees and the cold mount are being rerun on the final port, with the call-path gate. Every other row there is met or met with a recorded exception, except row 5, which is closed by a design change. Row 4 is met at a cap of 8,200 lines. The copy at `ab9b405` is older. It lists rows 2, 5, 6, 8, 9, 10, 12 and 13 as open, row 5 as not met and row 4 as awaiting the owner (`git diff --stat main ab9b405 -- docs/design/s0-report.md`: 7 insertions, 7 deletions).
@@ -141,7 +141,7 @@ ADR-059 also holds a section "configRefsReady (recorded 2026-11-21)". It is neit
 ### 5.3 Kernel with the S1 additions
 
 - Live oracle: pass on `ab9b405` (§2).
-- Property workload: last pass on `4a8f20d`; the result of a full run on `ab9b405` is not recorded (§2).
+- Property workload: last pass on `4a8f20d`; the result of a full run on `ab9b405` is not recorded (§2). Recorded later: full pass on `ab9b405` (§2).
 - Call-path gate: not recorded.
 - Round 3 result file, on `ab9b405`: `go test -race -count=3` passes at the default `GOMAXPROCS` and at 2; `FuzzOperationSequence` passes for 60 s.
 
