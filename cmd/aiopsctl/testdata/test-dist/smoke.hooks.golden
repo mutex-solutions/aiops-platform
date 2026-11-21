@@ -13,4 +13,5 @@ hook internal/status sealed to aiops/readiness, aiops/restart-policy
   2. stage 0 (default) plugin aiops/restart-policy row restart-policy
 
 hook reload/operation
-  1. stage 0 (default) plugin aiops/restart-policy row restart-policy
+  1. stage 0 (default) plugin aiops/readiness row readiness
+  2. stage 0 (default) plugin aiops/restart-policy row restart-policy

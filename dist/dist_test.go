@@ -220,7 +220,7 @@ func TestEntryReadsTheDeclarationsOfThePlugin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 2 || h[0].Hook != "internal/status" || h[0].StageName != "default" {
+	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[0].Hook != "internal/status" || h[0].StageName != "default" {
 		t.Fatalf("hooks %+v", h)
 	}
 }
