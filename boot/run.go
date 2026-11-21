@@ -88,11 +88,21 @@ type Registry struct {
 	LoaderConfig func(rows []loaderdef.EntrySpec, batch BatchFunc) any
 }
 
-// kernelHooks are the sealed hooks of the kernel itself. Only the entries that
-// Config.Listeners lists may listen on them (ADR-034, "S1 additions", G5).
+// kernelHooks are the hooks that boot knows to be sealed by their definition: the
+// kernel's own (ADR-034, "S1 additions", G5) and the loader definition's three. Only
+// the entries that Config.Listeners lists may listen on them.
 func kernelHooks() []kernel.AnyHook {
 	return []kernel.AnyHook{kernel.InternalPlugin, kernel.InternalStatus, kernel.InternalService,
-		kernel.InternalConfig, kernel.InternalUpdate, kernel.InternalCommit}
+		kernel.InternalConfig, kernel.InternalUpdate, kernel.InternalCommit,
+		loaderdef.PatchContext, loaderdef.EntryInit, loaderdef.VolatileUpdate}
+}
+
+// consumerBound are the keys that boot knows to be consumer-bound by their definition:
+// only the entries that Config.Consumers lists resolve them.
+// ponytail: the classes of the keys and hooks of other definitions and plugins need the
+// kernel to expose them; until then gate check 7 reads those from dist.yaml.
+func consumerBound() []kernel.AnyKey {
+	return []kernel.AnyKey{loaderdef.Key, launch.AppExitKey, kernel.RegistryKey}
 }
 
 // Clock is the clock of the launcher's own bounds. It is not the clock key: the

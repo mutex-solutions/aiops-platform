@@ -16,6 +16,9 @@ o/needpk: {needs: [pk]}
 o/wantck: {wants: [ck]}
 o/ready: {provides: [ready]}
 o/inthook: {hooks: [{hook: internal/plugin, stage: 0}]}
+o/entryinit: {hooks: [{hook: loader/entry-init, stage: 0}]}
+o/needloader: {needs: [loader]}
+o/wantregistry: {wants: [registry]}
 `
 
 const gateDist = `
@@ -94,6 +97,15 @@ func TestGateChecksTable(t *testing.T) {
 			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
 		{name: "listener on a hook of the kernel that dist.yaml lists", bundle: rows("id: a, plugin: o/inthook"),
 			dist: "sealedHooks: {internal/plugin: [o/inthook]}", pass: true},
+		// So are the keys and hooks of the definitions boot imports, and the kernel's registry.
+		{name: "listener on a hook of the loader that dist.yaml does not list", bundle: rows("id: a, plugin: o/entryinit"),
+			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the loader that dist.yaml does not list", bundle: rows("id: a, plugin: o/needloader"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the registry that dist.yaml does not list", bundle: rows("id: a, plugin: o/wantregistry"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the loader that dist.yaml lists", bundle: rows("id: a, plugin: o/needloader"),
+			dist: "consumers: {loader: [o/needloader]}", pass: true},
 		// A row in a disabled group is not mounted, and a patch on a group reaches its children.
 		{name: "last provider in a disabled group", bundle: rows("id: g, plugin: core:group, config: [{id: h, plugin: core:group, config: [{id: a, plugin: o/prov}]}]"),
 			patches: []string{"- {id: g, enabled: false}"},

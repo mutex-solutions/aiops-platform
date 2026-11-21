@@ -194,10 +194,16 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		rows:     map[string]ComposedRow{},
 		mounted:  ActiveRows(c, nil),
 	}
-	// The hooks of the kernel are sealed by their definition, whatever dist.yaml
-	// lists (07-c4-plugin-sdk.md:463): one it does not list admits no listener.
+	// The hooks of the kernel and the loader are sealed by their definition, and some
+	// keys consumer-bound, whatever dist.yaml lists (07-c4-plugin-sdk.md:463): one it
+	// does not list admits no listener or consumer.
 	for _, h := range kernelHooks() {
 		g.sealed[h.Name()] = nil
+	}
+	for _, k := range consumerBound() {
+		if _, ok := g.consumer[k.Name()]; !ok {
+			g.consumer[k.Name()] = nil
+		}
 	}
 	for _, h := range dist.SealedHooks {
 		g.sealed[h.Hook] = h.Plugins
