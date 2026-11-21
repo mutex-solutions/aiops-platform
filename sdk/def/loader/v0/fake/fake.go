@@ -250,6 +250,15 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 		cur.spec = e
 		p.entries[e.ID] = cur
 		r.Outcome = f.outcome(p, old, e, was)
+	case loader.OpRestart:
+		if !ok {
+			return r, loader.ErrNotFound
+		}
+		g, under := p.entries[cur.spec.Parent]
+		r.Outcome = loader.Unchanged
+		if f.mount(p.entries, cur.spec) == loader.Mounted && !p.fresh[e.ID] && !p.renewedAbove(cur.spec) && (!under || g.state == kernel.Active) {
+			r.Outcome = loader.Restarted // in place: the fiber and its scripted state stay
+		}
 	default:
 		return r, fmt.Errorf("unknown operation kind %q", op.Kind)
 	}
@@ -295,7 +304,7 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 	}
 	paths, only := loader.VolatileOnly(old.Config, e.Config, f.Volatile[e.Plugin])
 	switch {
-	case len(paths) == 0 && p.entries[e.ID].state != kernel.Failed: // a FAILED fiber restarts, as a retry does
+	case len(paths) == 0:
 		return loader.Unchanged
 	case only && p.entries[e.ID].state == kernel.Active:
 		p.announce = append(p.announce, loader.VolatileUpdateArgs{ID: e.ID, Config: loader.WithoutRefs(e.Config), Paths: paths})

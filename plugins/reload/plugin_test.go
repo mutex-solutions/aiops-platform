@@ -484,6 +484,55 @@ func TestRequiredFlagOfARowCountsAsRequired(t *testing.T) {
 	}
 }
 
+// A row that was FAILED before the generation (restart-policy gave up on it) and whose
+// only change is one the loader does not see, its required flag or its roles, is not
+// restarted by the plan or by its inverse: the loader leaves it as it is. A generation
+// that makes it required fails its verdict and is rolled back; one that changes its
+// roles passes with a warning. Neither leaves the state of the tree unknown.
+func TestChangeTheLoaderDoesNotSeeLeavesARowFailedBeforeAsItIs(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mut    func(*launch.Row)
+		status def.Status
+	}{
+		{"required", func(r *launch.Row) { r.Required = true }, def.RolledBack},
+		{"roles", func(r *launch.Row) { r.Roles = []string{"api", "worker"} }, def.Passed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t, 4, 8)
+			w.ld.Role = "api"
+			old := row("r", "aiops/p", nil)
+			old.Roles = []string{"api"}
+			if err := w.ld.Create(t.Context(), loader.EntrySpec{ID: "r", Plugin: "aiops/p", Enabled: true, Roles: old.Roles}); err != nil {
+				t.Fatal(err)
+			}
+			w.l.Current = launch.Composition{Rows: []launch.Row{old}, Digest: launch.Digest{1}}
+			w.ld.SetState("r", kernel.Failed)
+			nw := old
+			nw.Roles = slices.Clone(old.Roles)
+			tc.mut(&nw)
+			w.next = launch.Composition{Rows: []launch.Row{nw}, Digest: launch.Digest{2}}
+			w.l.PlanFn = func(_ context.Context, from, to launch.Composition) (launch.Plan, error) {
+				a := launch.ActionUpdate // as boot.Diff: any field of the row changed
+				if fmt.Sprint(from.Rows) == fmt.Sprint(to.Rows) {
+					a = launch.ActionUnchanged
+				}
+				return launch.Plan{From: from.Digest, To: to.Digest, Entries: []launch.PlanEntry{{ID: "r", Action: a}}}, nil
+			}
+			r := w.submit("test")
+			if r.Status != tc.status || errors.Is(r.Err, def.ErrStateUnknown) || !slices.Equal(ids(r.Applied), []string{"unchanged r"}) {
+				t.Fatalf("result = %+v (rollback %+v), want %s with r unchanged", r, r.Rollback, tc.status)
+			}
+			if r.Rollback != nil && !slices.Equal(ids(r.Rollback.Applied), []string{"unchanged r"}) {
+				t.Errorf("rollback applied %v, want r unchanged", ids(r.Rollback.Applied))
+			}
+			if _, err := w.svc.Submit(t.Context(), def.Op{Source: "later"}); err != nil {
+				t.Errorf("Submit after the generation = %v", err)
+			}
+		})
+	}
+}
+
 // gate blocks a stage of the pipeline until released and says when it was entered.
 type gate struct {
 	entered chan struct{}

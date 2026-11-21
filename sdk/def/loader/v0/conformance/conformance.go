@@ -87,6 +87,7 @@ func Run(t *testing.T, mount Mount) {
 			{loader.ErrParent, []loader.Op{update(moved)}},
 			{loader.ErrNotFound, []loader.Op{update(changed), update(row("x", p))}},
 			{loader.ErrNotFound, []loader.Op{remove("x")}},
+			{loader.ErrNotFound, []loader.Op{create(row("x", p)), restart("y")}},
 			{nil, []loader.Op{create(row("x", p)), {Kind: "rename", Entry: row("a", p)}}}, // any error
 		} {
 			if _, err := s.ld.Apply(t.Context(), tc.ops); err == nil || tc.want != nil && !errors.Is(err, tc.want) {
@@ -118,10 +119,12 @@ func Run(t *testing.T, mount Mount) {
 		a.Plugin = q // a new plugin is a new fiber
 		s.apply([]string{"restarted a"}, update(a))
 		s.is("a", loader.Mounted, kernel.Active)
+		s.apply([]string{"restarted a"}, restart("a"))
+		s.is("a", loader.Mounted, kernel.Active)
 		off.Config, g.Config = "changed", "changed"
-		s.apply([]string{"unchanged off", "unchanged g"}, update(off), update(g))
+		s.apply([]string{"unchanged off", "unchanged g", "unchanged off"}, update(off), update(g), restart("off"))
 		off.Enabled = true
-		s.apply([]string{"created off"}, update(off))
+		s.apply([]string{"created off", "unchanged off"}, update(off), restart("off"))
 		s.is("off", loader.Mounted, kernel.Active)
 		a.Enabled = false
 		s.apply([]string{"unmounted a"}, update(a))
@@ -176,10 +179,13 @@ func Run(t *testing.T, mount Mount) {
 		c := child("veto", "c", p)
 		failed.Config, c.Config = map[string]any{"level": "debug"}, "changed"
 		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
-		// The kernel keeps a fiber FAILED until something updates it: an update that
-		// changes nothing restarts a FAILED fiber, as a retry does.
+		// The kernel keeps a fiber FAILED until something updates it. An update that
+		// changes nothing leaves it as it is; a restart restarts it, as a retry does, and
+		// leaves an entry with no fiber to restart as it is.
 		s.is("nil", loader.Mounted, kernel.Failed)
-		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
+		s.apply([]string{"unchanged nil", "unchanged veto:c"}, update(failed), update(c))
+		s.apply([]string{"restarted nil", "unchanged veto:c"}, restart("nil"), restart("veto:c"))
+		s.is("nil", loader.Mounted, kernel.Failed)
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
 		if len(s.h.volatile) != 0 {
@@ -399,6 +405,10 @@ func child(parent, id, plugin string) loader.EntrySpec {
 
 func create(e loader.EntrySpec) loader.Op { return loader.Op{Kind: loader.OpCreate, Entry: e} }
 func update(e loader.EntrySpec) loader.Op { return loader.Op{Kind: loader.OpUpdate, Entry: e} }
+
+func restart(id string) loader.Op {
+	return loader.Op{Kind: loader.OpRestart, Entry: loader.EntrySpec{ID: id}}
+}
 func remove(id string) loader.Op {
 	return loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}}
 }

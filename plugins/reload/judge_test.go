@@ -64,6 +64,8 @@ func (s *script) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, e
 		case op.Kind == loader.OpRemove:
 			delete(s.rows, id)
 			res = append(res, loader.Result{ID: id, Outcome: loader.Removed})
+		case op.Kind == loader.OpRestart:
+			res = append(res, loader.Result{ID: id, Outcome: loader.Restarted})
 		default:
 			e := s.rows[id]
 			e.Spec = op.Entry
@@ -916,9 +918,10 @@ func TestReloadRowChangeOfAFailedRollbackIsNeverApplied(t *testing.T) {
 
 // A dependant that was ACTIVE fails when the generation restarts its provider (a row of
 // the closure, not of the plan). The kernel keeps it FAILED until something updates it,
-// so the rollback updates it with the restored provider, and the rollback passes: the
-// state of the tree stays known (08-profiles-roadmap-adrs.md §1.6, a live Apply error is
-// rolled back). A row that the inverse plan already updates is not updated twice.
+// so the rollback restarts it with the restored provider (loader.OpRestart), and the
+// rollback passes: the state of the tree stays known (08-profiles-roadmap-adrs.md §1.6, a
+// live Apply error is rolled back). A row that the inverse plan already updates is not
+// restarted as well.
 func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
 	s := newScript()
 	w := newScripted(t, s, nil, row("p", "aiops/p", "old"), row("c", "aiops/p", nil), row("q", "aiops/p", "old"))
@@ -947,13 +950,11 @@ func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
 	}
 	var ids []string
 	for _, op := range rollback {
-		if op.Kind == loader.OpUpdate {
-			ids = append(ids, op.Entry.ID)
-		}
+		ids = append(ids, string(op.Kind)+" "+op.Entry.ID)
 	}
 	slices.Sort(ids)
-	if !slices.Equal(ids, []string{"c", "p", "q"}) {
-		t.Errorf("the rollback updated %v, want c, p and q once each", ids)
+	if !slices.Equal(ids, []string{"restart c", "update p", "update q"}) {
+		t.Errorf("the rollback applied %v, want c restarted, p and q updated, once each", ids)
 	}
 	if _, err := w.svc.Submit(t.Context(), def.Op{Source: "next"}); err != nil {
 		t.Errorf("Submit after a rollback that passed = %v", err)

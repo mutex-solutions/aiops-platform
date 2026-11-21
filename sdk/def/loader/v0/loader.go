@@ -96,11 +96,17 @@ type Entry struct {
 // OpKind names what one operation of Apply does.
 type OpKind string
 
-// The three operations of a plan, in the order of 03-c3-kernel.md:379.
+// The three operations of a plan, in the order of 03-c3-kernel.md:379, and OpRestart.
+// OpRestart restarts the entry's fiber with the spec the tree holds, as a retry does:
+// the kernel keeps a FAILED fiber FAILED until something updates it, and an update that
+// changes nothing leaves the fiber as it is. A rollback restarts so a row that failed in
+// the generation (ADR-059 decision 19). An entry with no fiber to restart (not mounted,
+// under a group that is not ACTIVE, or given a new fiber by the plan) is Unchanged.
 const (
-	OpCreate OpKind = "create"
-	OpUpdate OpKind = "update"
-	OpRemove OpKind = "remove" // only Entry.ID is read
+	OpCreate  OpKind = "create"
+	OpUpdate  OpKind = "update"
+	OpRemove  OpKind = "remove"  // only Entry.ID is read
+	OpRestart OpKind = "restart" // only Entry.ID is read
 )
 
 // Op is one operation of Apply.
@@ -151,8 +157,8 @@ type Loader interface {
 	Create(ctx context.Context, e EntrySpec) error
 	// Update replaces the entry's spec: a change of volatile config paths only
 	// commits in place, any other restarts the fiber (07-c4-plugin-sdk.md:1374). One
-	// that changes nothing restarts a FAILED fiber, which the kernel keeps FAILED until
-	// it is updated, and leaves any other as it is. ErrNotFound for an unknown id.
+	// that changes nothing leaves the fiber as it is, FAILED or not (OpRestart
+	// restarts it). ErrNotFound for an unknown id.
 	Update(ctx context.Context, e EntrySpec) error
 	// Remove unloads and disposes the entry's fiber and its children. ErrNotFound
 	// for an unknown id.

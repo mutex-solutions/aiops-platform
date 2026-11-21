@@ -502,19 +502,18 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 	return r
 }
 
-// restartFailed adds to the inverse plan ops an update of each row of prev that was
-// ACTIVE before the generation, is FAILED now and that ops does not touch. Such a row
-// failed in the generation: a dependant that a restart of its provider restarted (a row
-// of the closure), or a row whose change restarts nothing. The kernel keeps it FAILED
-// until something updates it and restart-policy holds its retry until the operation is
-// final, so without the update the rollback could never pass. The loader restarts a
-// FAILED fiber on an update that changes nothing.
+// restartFailed adds to the inverse plan ops a restart (loader.OpRestart) of each row of
+// prev that was ACTIVE before the generation, is FAILED now and that ops does not touch.
+// Such a row failed in the generation: a dependant that a restart of its provider
+// restarted (a row of the closure), or a row whose change restarts nothing. The kernel
+// keeps it FAILED until something updates it and restart-policy holds its retry until
+// the operation is final, so without the restart the rollback could never pass.
 func (e *Engine) restartFailed(ops []loader.Op, prev launch.Composition, before map[string]bool) []loader.Op {
 	for _, row := range prev.Rows {
 		en, ok := e.Loader.Locate(row.ID)
 		if before[row.ID] && ok && en.State == kernel.Failed &&
 			!slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == row.ID }) {
-			ops = append(ops, loader.Op{Kind: loader.OpUpdate, Entry: spec(row)})
+			ops = append(ops, loader.Op{Kind: loader.OpRestart, Entry: loader.EntrySpec{ID: row.ID}})
 		}
 	}
 	return ops
