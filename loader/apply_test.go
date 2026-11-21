@@ -754,3 +754,34 @@ func TestVolatileCommitSurvivesAKernelRestart(t *testing.T) {
 		t.Errorf("a refused commit was retained: %v", p.lastConfig("t/v"))
 	}
 }
+
+// A group that the kernel restarts (a provider of a key it injects restarts) retires
+// the fibers of its children through its detach, with no Apply to sweep them. The next
+// activation forgets those that are DISPOSED when it asks whether any still disposes,
+// so the list it walks under the tree's lock holds no more than the fibers really still
+// disposing, however often the group restarts.
+func TestGroupRestartsKeepNoDisposedPreviousFibers(t *testing.T) {
+	gate := kernel.NewKey[int]("gate", 0)
+	p := newProbe()
+	x := newFx(t, fxOpt{plugins: plugins(provider(p, "t/p", gate), p.plugin("t/c", nil)),
+		keys: map[string]kernel.AnyKey{"gate": gate},
+		rows: []def.EntrySpec{row("p", "t/p"), gated(), child("g", "c", "t/c")}})
+	x.want("g:c", kernel.Active)
+	x.tree.mu.Lock()
+	pf := x.tree.entries["p"].fiber
+	x.tree.mu.Unlock()
+	const restarts = 20
+	for range restarts {
+		if _, err := x.root.Batch(t.Context(), kernel.UpdateOp(pf)); err != nil {
+			t.Fatal(err)
+		}
+		x.settle()
+		x.want("g:c", kernel.Active)
+	}
+	x.tree.mu.Lock()
+	n := len(x.tree.prev["g:c"])
+	x.tree.mu.Unlock()
+	if n > 1 || p.count("t/c") != restarts+1 {
+		t.Errorf("after %d restarts of g with no Apply: %d previous fibers of g:c kept, t/c applied %d times", restarts, n, p.count("t/c"))
+	}
+}

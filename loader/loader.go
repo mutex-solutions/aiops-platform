@@ -277,9 +277,17 @@ func (t *tree) forget(id string, c *kernel.Context) {
 
 func (t *tree) addPrev(id string, f *kernel.Fiber) { t.prev[id] = append(slices.Clone(t.prev[id]), f) }
 
-// disposing reports whether a previous fiber of id is not DISPOSED yet. Call with mu held.
+// disposing reports whether a previous fiber of id is not DISPOSED yet, and forgets
+// those that are: a group the kernel restarts adds its children's fibers here with no
+// Apply to sweep them. Call with mu held.
 func (t *tree) disposing(ctx context.Context, id string) bool {
-	return slices.ContainsFunc(t.prev[id], func(f *kernel.Fiber) bool { return !gone(ctx, f) })
+	live := slices.DeleteFunc(slices.Clone(t.prev[id]), func(f *kernel.Fiber) bool { return gone(ctx, f) })
+	if len(live) == 0 {
+		delete(t.prev, id)
+		return false
+	}
+	t.prev[id] = live
+	return true
 }
 
 // mountUnder mounts, from c, every entry that is to be mounted under parent: the
