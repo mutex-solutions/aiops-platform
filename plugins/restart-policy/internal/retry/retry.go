@@ -56,31 +56,30 @@ type Deps struct {
 	Log     *slog.Logger
 }
 
-// Retrier is the rule at work. Status and Operation are its inputs.
+// Retrier is the rule at work, one per activation of restart-policy. Status and
+// Operation are its inputs.
 type Retrier struct {
 	Policy
 	Deps
 	*Memory
+	recs map[uint64]*record // this activation's records, guarded by Memory.mu
 }
 
-// Memory is what the rule knows of the fibers of one kernel: the records and the
-// reload operation in flight. It outlives an activation of restart-policy, so that a
-// restart of the row (its config changed, its clock restarted) keeps every give-up and
-// count: a fiber given up on stays FAILED until someone updates it
-// (07-c4-plugin-sdk.md:360), and a hold lasts until the operation is final. The events
-// of the restart itself reach no activation, so what is known of them stands in: a
-// FAILED fiber that is not any more was restarted by someone else, and the final event
-// of an operation names the rows it restarted. The records are not durable at S1
-// (ADR-059).
+// Memory is what the activations of restart-policy share: the reload operation in
+// flight, so that a hold lasts until the operation is final even when the operation
+// restarts restart-policy itself (ADR-059 decision 19). The records do not outlive an
+// activation: a restart of the row (its config changed, its clock restarted) starts
+// them afresh, an accepted limit until durable records come with the durable store of
+// a later step (ADR-059 decision 22). The new activation counts the fibers that are
+// FAILED then as at their first failure.
 type Memory struct {
 	mu   sync.Mutex
-	recs map[uint64]*record
 	op   context.Context // the reload goroutine's, while an operation is in flight; nil when none
 	rows map[string]bool // the rows the plan of that operation changes, removes or restarts; replaced, never written
 }
 
-// NewMemory returns a memory with no record.
-func NewMemory() *Memory { return &Memory{recs: map[uint64]*record{}} }
+// NewMemory returns a memory with no operation in flight.
+func NewMemory() *Memory { return &Memory{} }
 
 // record is what is known of one fiber that failed, since restart-policy last saw
 // someone else restart it.
@@ -94,36 +93,9 @@ type record struct {
 	activeAt time.Time // when the fiber was last seen ACTIVE; zero while it is not
 }
 
-// New returns a retrier that keeps its records in m.
+// New returns a retrier with no record that shares the operation in flight through m.
 func New(p Policy, d Deps, m *Memory) *Retrier {
-	return &Retrier{Policy: p, Deps: d, Memory: m}
-}
-
-// Resume takes over the records of an activation that has ended: each retry it had
-// scheduled, whose timer went with it, is scheduled again with its count, unless the
-// fiber is not FAILED any more: someone else restarted it meanwhile, and it is tracked
-// afresh.
-func (r *Retrier) Resume(ctx context.Context) {
-	type due struct {
-		id  uint64
-		rec *record
-		n   int
-	}
-	var all []due
-	r.mu.Lock()
-	for id, rec := range r.recs {
-		if rec.pending {
-			all = append(all, due{id, rec, len(rec.fails)})
-		}
-	}
-	r.mu.Unlock()
-	for _, d := range all {
-		if r.isFailed(ctx, d.id) {
-			r.schedule(d.id, d.rec, d.n)
-		} else {
-			r.drop(d.id, d.rec)
-		}
-	}
+	return &Retrier{Policy: p, Deps: d, Memory: m, recs: map[uint64]*record{}}
 }
 
 // Operation handles one reload/operation event, res as reload emitted it. From the
@@ -408,8 +380,8 @@ func (r *Retrier) infrastructure(plugin string) bool {
 // moved notes that fiber id is in st, which is not FAILED, whatever events brought it
 // there. A fiber that was given up on, or FAILED and not retried by restart-policy, was
 // restarted by someone else and is tracked afresh, as updated does when it hears that
-// restart. An ACTIVE one starts its stable period unless it is in one already: a
-// restart of restart-policy does not start it again.
+// restart. An ACTIVE one starts its stable period unless it is in one already: a resync
+// that crosses a live event does not start it again.
 func (r *Retrier) moved(id uint64, st kernel.State) {
 	now := r.Clock.Now()
 	r.mu.Lock()

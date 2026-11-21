@@ -54,10 +54,11 @@ type Config struct {
 }
 
 // New returns the restart-policy row. Its activations share one retry.Memory, so a
-// restart of the row keeps every give-up and count and the reload operation in flight:
-// a fiber given up on stays FAILED until an operator updates it (07-c4-plugin-sdk.md:360).
-// The memory names fibers by id, so a binary makes one value for its one kernel, which
-// its module table holds and its binding maps list.
+// restart of the row keeps the hold of the reload operation in flight (ADR-059 decision
+// 19). Each activation starts its records afresh: a fiber given up on, or waiting for a
+// retry, before a restart of the row is counted again from its first failure (ADR-059
+// decision 22, an accepted limit until durable records). A binary makes one value for
+// its one kernel, which its module table holds and its binding maps list.
 func New() kernel.Plugin {
 	m := retry.NewMemory()
 	return kernel.Define(kernel.Plugin{
@@ -85,11 +86,10 @@ func apply(c *kernel.Context, conf Config, m *retry.Memory) error {
 		r.Operation(ctx, res)
 		return nil, nil
 	})
-	// The retries that an earlier activation scheduled went with it.
-	r.Resume(c.Std())
 	// Every row activates with no order, so a fiber may have failed before this
-	// one listened, and its event reached no one. Catch up as for the notice that
-	// events were lost: read the tree and count the FAILED fibers in it.
+	// one listened, and its event reached no one; the records and the retries of an
+	// earlier activation went with it. Catch up as for the notice that events were
+	// lost: read the tree and count the FAILED fibers in it.
 	r.Status(c.Std(), kernel.LedgerEvent{Kind: "overflow"})
 	return nil
 }

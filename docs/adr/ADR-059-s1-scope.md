@@ -257,11 +257,16 @@ generation's verdict passed and is not judged.
   holds no Go value, carries those classes (`classes: {providerBound, consumerBound,
   sealedHooks}`), so a render and the server's gate agree. Only a key or hook that no
   definition and no such entry names falls back to its listing in `dist.yaml`.
-- **22.** The final `reload/operation` event names the rows the operation restarted or
-  created, forward and in rollback, and `restart-policy` tracks their fibers afresh. After
-  a restart of `restart-policy`, a pending, held or given-up record whose fiber is not
-  FAILED is forgotten, and the start of an ACTIVE period it already knew is kept. `stable:
-  0` means no stable period.
+- **22.** Each activation of `restart-policy` starts its records afresh; its activations
+  share only the reload operation in flight (`retry.Memory`), so the hold of decision 19
+  lasts across a restart that the generation gives it. The new activation counts each
+  fiber that is FAILED then as at its first failure, so a fiber given up on before the
+  restart is retried. The final `reload/operation` event names the rows the operation
+  restarted or created, forward and in rollback, and `restart-policy` tracks their fibers
+  afresh, so the records of a rolled-back candidate never reach the restored incarnation
+  when the generation did not restart `restart-policy` either. Within one activation a
+  resync never moves the start of an ACTIVE period it already knows. `stable: 0` means no
+  stable period.
 - **23.** `reload.ErrStateUnknown` is on the result and the final event after `rollback
   failed` or an abandon after the apply. Every later `Submit`, and an operation already
   queued, is refused with it; when the unloading activation cannot emit the final event,

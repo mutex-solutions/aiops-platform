@@ -636,10 +636,11 @@ func (w *world) restart(cfg any) {
 	w.heard()
 }
 
-// A restart of restart-policy keeps what it knows: a fiber given up on stays FAILED
-// until an operator updates it (07-c4-plugin-sdk.md:360), and a fiber that waits for a
-// retry keeps its count.
-func TestARestartOfRestartPolicyKeepsItsGiveUpsAndCounts(t *testing.T) {
+// A restart of restart-policy, as reload gives it when its config changes, starts its
+// records afresh (ADR-059 decision 22, an accepted limit until the durable store of a
+// later step): a fiber given up on is retried as at its first failure, and a fiber
+// that waited for a retry starts its count again.
+func TestARestartOfRestartPolicyStartsItsRecordsAfresh(t *testing.T) {
 	w := newWorld(t, conf(2, time.Hour, time.Second, time.Minute, 2, 0))
 	x := newFlaky("aiops/other", true)
 	xf := w.root.Plugin(x.plugin(), nil)
@@ -661,20 +662,23 @@ func TestARestartOfRestartPolicyKeepsItsGiveUpsAndCounts(t *testing.T) {
 	}})
 
 	w.restart(conf(2, time.Hour, time.Second, time.Minute, 2, time.Hour))
-	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["fiber"] != yf.ID() || e.attrs["failures"] != int64(2) {
-		t.Fatalf("%s %v after the restart, want the retry of y at its second failure", e.msg, e.attrs)
+	if n := w.clk.Pending(); n != 2 {
+		t.Fatalf("pending timers %d after the restart, want the retries of x and y", n)
 	}
-	if n := w.clk.Pending(); n != 1 {
-		t.Fatalf("pending timers %d after the restart, want y's retry only", n)
+	got := map[any]any{}
+	for range 2 {
+		e := w.decision()
+		if e.msg != "fiber.retry" {
+			t.Fatalf("%s %v after the restart, want retries", e.msg, e.attrs)
+		}
+		got[e.attrs["fiber"]] = e.attrs["failures"]
 	}
-	w.clk.Advance(2 * time.Second)
-	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["fiber"] != yf.ID() || e.attrs["failures"] != int64(3) {
-		t.Fatalf("%s %v, want the give-up of y at its third failure", e.msg, e.attrs)
+	if got[xf.ID()] != int64(1) || got[yf.ID()] != int64(1) {
+		t.Fatalf("retries after the restart %v, want x and y each at a first failure", got)
 	}
-	w.clk.Advance(24 * time.Hour)
-	if n := x.attempts.Load(); n != 3 {
-		t.Errorf("x was applied %d times, want 3: a fiber given up on is not retried", n)
-	}
+	w.clk.Advance(time.Second)
+	x.attempt(t, 4) // three before the restart, then the new activation's retry
+	y.attempt(t, 3)
 }
 
 // A restart of restart-policy while reload applies a generation keeps the hold: a
