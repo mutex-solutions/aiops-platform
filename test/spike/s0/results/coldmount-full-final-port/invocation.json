@@ -1,0 +1,13 @@
+{
+ "classification": "pass",
+ "reasons": [],
+ "commit": "8ec2d8c",
+ "runs": 180,
+ "elapsedSeconds": 27060.04,
+ "backends": ["reconciler", "graph-lock", "kernel"],
+ "argv": ["scale.test", "-test.run", "^TestColdMountRun$", "-test.count=1", "-test.timeout", "16h", "-test.v"],
+ "environment": {"GOMAXPROCS": "8", "S0_COLD_RUN": "1", "S0_COLD_IDENTITY": "<out>/cold-identity.json", "S0_COLD_OUT": "<out>/cold-result"},
+ "build": "go test -c ./test/spike/s0/scale with GOFLAGS=-mod=readonly, go1.26.8",
+ "host": "dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job",
+ "note": "first cold-mount run on the final port: the sdk/kernel backend through the adapter at 8ec2d8c (evicted fibers forgotten a few per mount, the leave function kept when each Context is built). The identity's mode text is fixed in the harness (evidence.go); the final-port status comes from the baseline commit and finalParityCompleted. The per-run raw records (104 MiB) are not committed; report.json holds every cell and matched pair."
+}

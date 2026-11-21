@@ -18,7 +18,7 @@
 | 7 | Both cores on the corpus | **met with recorded exceptions**. Prototype: 64 of 68 pairs match, in 100 of 100 runs under race and under two processors. The port is in row 1. | `docs/design/s0-causal-coverage.md`; ADR-035 | not recorded |
 | 8 | Both cores on a 10,000-fiber bench | **pending**. The run completed but is classified **invalid** by the noise rule (throughput variation above 10% in 15 buckets). No bound failed. The rerun on the final port is pending. | `test/spike/s0/results/scale-full-first/invocation.json` | `225ffbe` |
 | 9 | 500 tenant trees | **pending**. Same run as row 8: invalid by the noise rule, no bound failed. Detail in ADR-036. | `test/spike/s0/results/scale-full-first/invocation.json`; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `225ffbe` |
-| 10 | Cold mount on the ack path | **pending**. The prototype run passed with no reasons. It has no `invocation.json`. The port rerun is pending. | `test/spike/s0/results/coldmount-full-first/report.json`; ADR-034 (2026-11-19 cold-mount section) | `225ffbe` |
+| 10 | Cold mount on the ack path | **met**. The final-port run passed with no reasons on all three backends, `kernel` included: 180 runs, every request answered. | `test/spike/s0/results/coldmount-full-final-port/`; §4.5 | `8ec2d8c` |
 | 11 | `sdk/testkit/kerneltest` | **met**. Built as a separate module and run in CI. | `sdk/testkit/kerneltest/`; `.github/workflows/ci.yml` lines 60 to 65 | current tree |
 | 12 | Coverage: 100% statements per production file | **met**. Every production file of `sdk/kernel` is at 100.0%; CI enforces it per file on every push. | `test/spike/s0/results/final-port-checks/coverage.txt`; CI step "Kernel structural checks" | 83b2746 |
 | 13 | Fuzzing, 60 s per selected entry point | **met**. Five targets ran 60 s each with no kernel defect. One target's own oracle was wrong under load and was corrected; its failing inputs are kept as seeds. Fuzzing is run by hand, not in CI. | `test/spike/s0/results/final-port-checks/fuzz.log` and `invocation.json` | b596374 |
@@ -140,7 +140,7 @@ Classification: **invalid by the noise rule only.** Fifteen buckets have through
 
 Caveats: the run predates the 2026-11-19 hazard fixes. The retained-heap slope fields are recorded but not interpreted here (ADR-036). The tree heap record lists `"roots": 100`, which the file does not explain.
 
-### 4.5 Cold-mount gate (prototype, pass)
+### 4.5 Cold-mount gate (prototype and final port, pass)
 
 Evidence: `test/spike/s0/results/coldmount-full-first/` (commit `225ffbe`, 120 runs, 18,039 s). Classification **pass, no reasons**, per ADR-034. The directory has no `invocation.json`.
 
@@ -149,6 +149,20 @@ Evidence: `test/spike/s0/results/coldmount-full-first/` (commit `225ffbe`, 120 r
 - Pinned p99: 1.4 ms for 100 items (bound 250 ms) and 7.2 ms for 1 MiB (bound 1 s).
 - The timeout fixture answers 503 with a retry hint, commits nothing, and never contributes from a foreign scope.
 - Harness defect: `coldEnsureCalls` reported a shared counter for arm A (fixed in `c5ce385`). Totals and latencies are unaffected.
+
+Final port: `test/spike/s0/results/coldmount-full-final-port/` (commit `8ec2d8c`, 180 runs on the reconciler, graph-lock and `kernel` backends, 27,060 s, dedicated host, `GOMAXPROCS=8`). Classification **pass, no reasons**. All 120,000 scheduled requests of every cell were answered `ok`.
+
+| Measure | Reconciler | Graph lock | `kernel` | Bound |
+|---|---|---|---|---|
+| Cold mount added at p99 (arm A minus arm B0), 100 items | 0.70 ms | 0.62 ms | 0.93 ms | recorded |
+| Cold mount added at p99, 1 MiB | 2.33 ms | 2.26 ms | 2.66 ms | recorded |
+| Pinned p99 (arm B0), 100 items | 1.35 ms | 1.34 ms | 1.40 ms | 250 ms |
+| Pinned p99 (arm B0), 1 MiB | 6.99 ms | 6.99 ms | 7.82 ms | 1 s |
+| Churn beside pinned traffic, matched-pair p99 delta, median and max, 100 items | 0.014, 0.061 ms | 0.019, 0.068 ms | 0.018, 0.093 ms | 5 ms |
+| The same, 1 MiB | 0.057, 0.098 ms | 0.045, 0.090 ms | 0.099, 0.235 ms | 5 ms |
+| Arm A max, 100 items and 1 MiB | 9.2, 29.4 ms | 8.4, 30.8 ms | 14.0, 36.4 ms | recorded |
+
+The first final-port run, on `dcc5f10`, failed on the `kernel` backend only: arm A p99 61.5 ms and max 467 ms, two overflow outcomes and two "disposed handle not archived" teardown failures. The cause was the S0 adapter, not the kernel. It swept every held fiber, one owner round trip each, inline on the mount path, and the sweep threshold rose only when a sweep finished, so mounts that arrived meanwhile each started another sweep. The stalls filled the request cap (overflow) and let stale requests finish after current ones, which pushed a current handle out of the one-record slack of the harness archive. `3bf2ea7` replaces the sweep with a check of at most two held fibers per mount, made only while the kernel has evicted more records than the adapter forgot. The identity's mode text ("candidate evidence, never final-port evidence") is fixed in the harness; the baseline commit and `finalParityCompleted` make this the final-port run.
 
 ### 4.6 Restart gate (library probe, frozen scale with leak accounting)
 

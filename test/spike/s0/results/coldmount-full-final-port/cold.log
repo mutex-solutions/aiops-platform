@@ -1,0 +1,4 @@
+=== RUN   TestColdMountRun
+    coldmount_run_test.go:21: classification=pass dry=false acceptanceEligible=true runs=180 reasons=0
+--- PASS: TestColdMountRun (27060.04s)
+PASS
