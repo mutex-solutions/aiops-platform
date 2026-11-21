@@ -1119,6 +1119,17 @@ func TestRunActsOnALeakAfterItsObserverOverflowed(t *testing.T) {
 			t.Fatalf("the leak was not acted on; exit %d, stderr:\n%s", stopAndWait(t, f, done), f.errb.String())
 		}
 	}
+	// Only the resync found the leak, so boot-watch has been made again by now: neither
+	// observer left an effect on the root (ADR-059 decision 21).
+	events, err := root.Events(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.Fiber == 0 && e.Kind == "effect" && e.Label == "observer boot-watch" {
+			t.Errorf("boot-watch left an effect on the root: %+v", e)
+		}
+	}
 	f.clock.fire(7 * time.Millisecond)
 	close(release)
 	if code := <-done; code != ExitLeak {

@@ -115,7 +115,10 @@ type Clock interface {
 
 type systemClock struct{}
 
-func (systemClock) AfterFunc(d time.Duration, f func()) func() bool { return time.AfterFunc(d, f).Stop }
+func (systemClock) AfterFunc(d time.Duration, f func()) func() bool {
+	//kernelcheck:allow-go the launcher's bounds (settle, unload wait, leak grace, shutdown) belong to no fiber; each is stopped by the step that made it
+	return time.AfterFunc(d, f).Stop
+}
 
 // SystemClock returns the clock of the operating system.
 func SystemClock() Clock { return systemClock{} }
@@ -524,12 +527,8 @@ func (r *run) watch() error {
 }
 
 // resync subscribes boot's observer again after an overflow, then reads the tree: a
-// fiber marked Leaked may be a leak whose event was lost.
-// ponytail: each Root.Observe registers an empty cleanup effect on the root, which
-// stays until Close, so the root's effects grow by one per overflow of boot-watch.
-// The kernel's relay registers none; the root observer keeps it because the S0
-// reference ledger records an observer by its effect. Upgrade: an overflowed root
-// observer that re-arms in place, a kernel change for the owner.
+// fiber marked Leaked may be a leak whose event was lost. Root.Observe registers no
+// effect on the root (ADR-059 decision 21), so a resync leaves nothing behind.
 func (r *run) resync(ctx context.Context) error {
 	werr := r.watch() // first, so that no event falls between the two
 	ins, err := r.root.Inspect(ctx)
