@@ -44,8 +44,12 @@ var forbiddenCalls = map[string][]string{
 }
 
 // goFuncs start an untracked goroutine like a bare go statement does. Plugin
-// code may not call them; boot keeps its own clock on time.AfterFunc.
+// code may not call them; boot may, with an allow-go comment.
 var goFuncs = map[string]string{"time": "AfterFunc", "context": "AfterFunc"}
+
+// muxImports register handlers on http.DefaultServeMux in their init, so even a
+// blank import serves them on any listener of the default mux.
+var muxImports = map[string]bool{"net/http/pprof": true, "expvar": true}
 
 // goMethods start an untracked goroutine too. Matching one needs the type of
 // the receiver, so plugin code is type-checked per directory (vetMethods).
@@ -237,6 +241,9 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 		if name == "." {
 			bad(im.Pos(), "dot import of "+path+"; plugin vet reads a call through its package name", docVet)
 		}
+		if muxImports[path] {
+			bad(im.Pos(), "import of "+path+" registers handlers on http.DefaultServeMux", docVet)
+		}
 		imports[name] = path
 	}
 	// pkgOf returns the import path of the package that e names, if any.
@@ -306,7 +313,7 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 					break
 				}
 			}
-			if goFuncs[path] == x.Sel.Name && !(boot && path == "time") { // boot keeps its clock on time.AfterFunc
+			if goFuncs[path] == x.Sel.Name {
 				r.untracked(fset, f, rel, x.Pos(), fmt.Sprintf("%s.%s starts an untracked goroutine", id.Name, x.Sel.Name), boot)
 			}
 		case *ast.CallExpr:
@@ -366,8 +373,7 @@ func vetSkipped(p string) bool {
 }
 
 // checkPluginVet reads the non-test Go files under each dir. A dir whose base
-// name is boot gets the allow-go relaxation for every goroutine starter, and may
-// call time.AfterFunc.
+// name is boot gets the allow-go relaxation for every goroutine starter.
 func checkPluginVet(dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
