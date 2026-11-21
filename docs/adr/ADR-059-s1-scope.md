@@ -191,10 +191,10 @@ win.
     adapter test no longer compares it with the observer effect of the prototype
     (ADR-034).
 
-22. **`restart-policy` keeps no records across its own restart at S1.** A restart of
+22. **`restart-policy` may lose its records across its own restart at S1.** A restart of
     `restart-policy`, because its config changed through `reload` or its clock provider
-    restarted, starts its records afresh; durable records come with the durable store of a
-    later step. The records of a rolled-back generation's candidate config never reach the
+    restarted, may start its records afresh; durable records come with the durable store
+    of a later step. The records of a rolled-back generation's candidate config never reach the
     restored incarnation of a row, even when that generation also restarts
     `restart-policy`, and a restart of `restart-policy` never moves the start of a tracked
     fiber's stable period in a way that changes a give-up decision within one activation.
@@ -236,9 +236,10 @@ generation's verdict passed and is not judged.
   rule and `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and the fake read
   them, and `reload` reads `HoldsRef`.
 - **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
-  required row of the role holds a reference; the need of `configRefsReady` is exempt from
-  the required-closure clause of gate check 7, and `configRefsReady` and `configRefsDryRun`
-  are exempt from the last-provider rule of gate check 8.
+  row required by row or by key holds a reference: a required row of the role, or an
+  active provider of a required key in the root realm. The need of `configRefsReady` is
+  exempt from the required-closure clause of gate check 7, and `configRefsReady` and
+  `configRefsDryRun` are exempt from the last-provider rule of gate check 8.
 - **19.** `restart-policy` holds the retries of the rows the in-flight plan lists (its
   entries other than unchanged, plus the closure) and maps a failed fiber to its row
   through the composition key. At the final event a fiber still FAILED is retried or given
@@ -287,7 +288,11 @@ generation's verdict passed and is not judged.
   never creates an entry whose previous fiber is not DISPOSED; the plan's second batch
   mounts it. The replacement vet covers every fiber a plan retires, the children of a
   replaced group included, and an earlier commit of an entry the replacement remounts is
-  reported as `restarted`.
+  reported as `restarted`. Proposed by the lead, pending the owner: a new provider of a
+  key waits for the previous provider of that key to be disposed, so the loader creates,
+  or restarts into providing, no row that provides a key while a row the same plan
+  removes or replaces still provides it in the same realm, and the plan's second batch
+  mounts it.
 - **Launcher and vet.** `--refs-dir` must name an absolute existing directory, or the
   command line is refused. Plugin vet refuses any import of `net/http/pprof` and `expvar`,
   and `time.AfterFunc` in `boot` needs a `//kernelcheck:allow-go` reason.
