@@ -236,10 +236,16 @@ generation's verdict passed and is not judged.
   rule and `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and the fake read
   them, and `reload` reads `HoldsRef`.
 - **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
-  row required by row or by key holds a reference: a required row of the role, or an
-  active provider of a required key in the root realm. The need of `configRefsReady` is
-  exempt from the required-closure clause of gate check 7, and `configRefsReady` and
-  `configRefsDryRun` are exempt from the last-provider rule of gate check 8.
+  required row of the role holds a reference. Proposed by the lead, pending the owner: a
+  row required by key counts as a required row here, so a reference held by an active
+  provider of a required key in the root realm pulls `config-refs` in too, and a profile
+  that then disables `config-refs` is refused at admission, where boot would stop later
+  on that provider left PENDING. `configRefsReady` stays in the set when every
+  `config-refs` row runs in another role, since `config-refs` serves its own process
+  only. The need of `configRefsReady` is exempt from the required-closure clause of gate
+  check 7, and `configRefsReady` and `configRefsDryRun` are exempt from the
+  last-provider rule of gate check 8, so disabling `config-refs` is an optional choice
+  while no row required by row or by key holds a reference.
 - **19.** `restart-policy` holds the retries of the rows the in-flight plan lists (its
   entries other than unchanged, plus the closure) and maps a failed fiber to its row
   through the composition key. At the final event a fiber still FAILED is retried or given
@@ -291,9 +297,10 @@ generation's verdict passed and is not judged.
   reported as `restarted`. Proposed by the lead, pending the owner: a new provider of a
   key waits for the previous provider of that key to be disposed. The loader mounts no
   row that provides a key, whether the plan creates, enables or replaces it or a group
-  the plan mounts mounts it, while a fiber that the same plan removes, disables or
-  replaces still provides that key in the same realm; the plan's second batch mounts it,
-  as for an id being replaced. The realm is the nearest row, the row itself first, whose
+  the plan mounts mounts it, while a fiber that this plan or an earlier one removed,
+  disabled or replaced, or that a group activation that ended gave up, still provides
+  that key in the same realm; the plan's second batch mounts it, as for an id being
+  replaced. The realm is the nearest row, the row itself first, whose
   `isolate` names the key, or the root. A row restarted in place is not held: it keeps
   its plugin and realm, and admission refuses two providers of one key in one realm.
   `loader.OpRestart` restarts the fiber even after an update of the same entry in the

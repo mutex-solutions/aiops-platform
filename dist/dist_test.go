@@ -205,9 +205,11 @@ type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
-// Disabling the one config-refs row is an optional choice: the rows that hold a
-// reference stay PENDING. Its keys are the launcher's to require (ADR-059 decision
-// 18), so the last-provider rule of gate check 8 does not refuse the profile.
+// Disabling the one config-refs row is an optional choice while no row required by row
+// or by key holds a reference: the rows that hold one stay PENDING. Its keys are the
+// launcher's to require (ADR-059 decision 18), so the last-provider rule of gate check 8
+// does not refuse the profile; the required set does where such a row holds one (the
+// next test).
 func TestReleaseProfileWithConfigRefsDisabledIsAdmitted(t *testing.T) {
 	if a := admitRelease(t, releaseHome(", enabled: false", "1m")); a.Refused() {
 		t.Fatalf("refused:\n%s", strings.Join(a.Diagnostics(), "\n"))

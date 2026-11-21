@@ -475,9 +475,9 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 // disabled: the last enabled provider was disabled (08-profiles-roadmap-adrs.md:145).
 // A provider in a disabled group is not mounted, so it counts as disabled. A key
 // with no candidate row is not composed by this profile and is fine. The keys of
-// config-refs are the launcher's to require (ADR-059 decision 18): with no config-refs
-// mounted a row that holds a reference stays PENDING and a live generation that holds
-// one is rejected, so disabling it is an optional choice.
+// config-refs are the launcher's to require (ADR-059 decision 18, RequiredFor): with no
+// config-refs mounted a row that holds a reference stays PENDING and a live generation
+// that holds one is rejected, so this rule never refuses disabling it.
 func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 	var out []RowResult
 	for _, b := range dist.Providers {
