@@ -1126,8 +1126,11 @@ is refused whole, with no effect and an error that matches `ErrInactive` and
 `ErrInactiveEffect`, when c's activation has ended, is ending or was replaced by
 a restart, and when an earlier operation of the same batch disposes or restarts
 c's fiber (later in the batch is allowed: the child is mounted and goes with that
-activation). An `UpdateOpWith` whose restart `internal/update` vetoes, and a
-`CommitOp`, restart nothing. (Until the S1 review a restart earlier in the batch
+activation). Only an operation on c's fiber itself counts: a restart that an earlier
+operation causes through a provider that c's fiber needs, or through an ancestor of
+it, admits the child, which goes with that activation as well (the loader remounts a
+group's children when the group activates again). An `UpdateOpWith` whose restart
+`internal/update` vetoes, and a `CommitOp`, restart nothing. (Until the S1 review a restart earlier in the batch
 was not checked, and the batch was admitted with a child that was disposed at once.)
 
 **G2, an update with a config in a batch.**
@@ -1344,4 +1347,5 @@ a fiber's own handle by a test keep the old rule.
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
 27 for G7, 24 for G8 and 75 for G9 to G11. The fixes of the S1 review recorded in
-G1, G2, G5, G6, G7, G9 (R2 above), G10 and G11 bring it to 7,981.
+G1, G2, G5, G6, G7, G9 (R2 above), G10 and G11 bring it to 7,981, and the G1 comment
+that says which restarts refuse a child mount to 7,985.

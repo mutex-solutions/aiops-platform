@@ -613,3 +613,49 @@ func TestChildMountOpUnderAFiberRestartedEarlierInTheBatch(t *testing.T) {
 	}
 	want(t, pf, Active)
 }
+
+// The refusal reads the operations on the child's own parent fiber only. A restart
+// that reaches the parent through a provider it needs, or through an ancestor that
+// an earlier operation restarts, admits the batch: the child is mounted and goes
+// with that activation, as under a restart later in the batch (ADR-034 G1).
+func TestChildMountOpUnderAFiberRestartedThroughAnotherOperation(t *testing.T) {
+	r := newKernel(t)
+	ctx := frontCtx(t)
+	k := NewKey[int]("s1.k", 0)
+	pf := r.Plugin(plug("s1/provider", nil, []AnyKey{k}, func(c *Context) error { return k.Provide(c, 1) }), nil)
+	want(t, pf, Active)
+	ctxs := make(chan *Context, 4)
+	cf := r.Plugin(plug("s1/consumer", []Dep{Need(k)}, nil, func(c *Context) error { ctxs <- c; return nil }), nil)
+	want(t, cf, Active)
+	cc := <-ctxs
+	got, err := r.Batch(ctx, UpdateOp(pf), cc.MountOp(plug("s1/through-provider", nil, nil, nil), nil))
+	if err != nil {
+		t.Fatalf("child under a consumer of a provider updated earlier in the batch: %v", err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := got[1].State(ctx); s != Disposed {
+		t.Fatalf("child under the consumer's old activation is %s", s)
+	}
+	want(t, cf, Active)
+
+	dctxs := make(chan *Context, 4)
+	af := r.Plugin(plug("s1/ancestor", nil, nil, func(c *Context) error {
+		c.Plugin(plug("s1/descendant", nil, nil, func(c *Context) error { dctxs <- c; return nil }), nil)
+		return nil
+	}), nil)
+	want(t, af, Active)
+	dc := <-dctxs
+	got, err = r.Batch(ctx, UpdateOp(af), dc.MountOp(plug("s1/through-ancestor", nil, nil, nil), nil))
+	if err != nil {
+		t.Fatalf("child under a descendant of a fiber updated earlier in the batch: %v", err)
+	}
+	if err := r.Settle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := got[1].State(ctx); s != Disposed {
+		t.Fatalf("child under the descendant's old activation is %s", s)
+	}
+	want(t, af, Active)
+}

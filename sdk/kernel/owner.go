@@ -1458,7 +1458,8 @@ type batchOp struct {
 	// Parent is the handle of the activation a mount is a child of. The whole batch
 	// is refused when that activation has ended or is ending, or when an earlier
 	// operation of the batch disposes or restarts its fiber (batchUpdate; batchKeep
-	// does not restart), as a cmdMountChild would be.
+	// does not restart), as a cmdMountChild would be. Only operations on that fiber
+	// count: a restart through a provider or an ancestor admits the mount.
 	Parent *handle
 	// cell, when set, takes cfg in the owner turn that admits the batch, before any
 	// activation can read it (UpdateOpWith and CommitOp; see stageUpdates). The
