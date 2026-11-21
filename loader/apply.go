@@ -113,7 +113,7 @@ func (t *tree) Apply(ctx context.Context, ops []def.Op) ([]def.Result, error) {
 	for _, m := range items {
 		kops = append(kops, m.op)
 	}
-	return p.results, t.commit(ctx, kops, items)
+	return p.results, t.commit(ctx, kops, 0, items)
 }
 
 // first stages ops and commits the plan's first batch, holding excl, and puts the
@@ -132,17 +132,22 @@ func (t *tree) first(ctx context.Context, ops []def.Op) (*plan, []string, error)
 	}
 	now, later := t.split(p.mounts)
 	items := t.mountItems(ctx, now)
+	// The mounts go before the disposes and the updates: the kernel refuses a child
+	// mount after an operation of the batch that ends its group's activation (a
+	// restart or a dispose of the group, of a provider of a key it needs or of an
+	// ancestor) and admits it before one, the child going with that activation and
+	// the group's next one mounting the entry from the tree.
 	kops := p.vets
+	for _, m := range items {
+		kops = append(kops, m.op)
+	}
 	for _, d := range p.dispose {
 		kops = append(kops, kernel.DisposeOp(d.fiber))
 	}
 	for _, u := range p.updates {
 		kops = append(kops, u.op)
 	}
-	for _, m := range items {
-		kops = append(kops, m.op)
-	}
-	if err := t.commit(ctx, kops, items); err != nil {
+	if err := t.commit(ctx, kops, len(p.vets), items); err != nil {
 		t.mu.Lock()
 		t.restore(p.snap)
 		t.mu.Unlock()
@@ -152,8 +157,8 @@ func (t *tree) first(ctx context.Context, ops []def.Op) (*plan, []string, error)
 }
 
 // commit runs the kernel batch and adopts the fibers of its mounts, which are its
-// last operations.
-func (t *tree) commit(ctx context.Context, kops []kernel.BatchOp, items []mountItem) error {
+// operations from at on.
+func (t *tree) commit(ctx context.Context, kops []kernel.BatchOp, at int, items []mountItem) error {
 	if len(kops) == 0 {
 		return nil
 	}
@@ -162,7 +167,7 @@ func (t *tree) commit(ctx context.Context, kops []kernel.BatchOp, items []mountI
 		return err
 	}
 	for i, m := range items {
-		t.adopt(ctx, m, fibers[len(kops)-len(items)+i])
+		t.adopt(ctx, m, fibers[at+i])
 	}
 	return nil
 }

@@ -785,3 +785,54 @@ func TestGroupRestartsKeepNoDisposedPreviousFibers(t *testing.T) {
 		t.Errorf("after %d restarts of g with no Apply: %d previous fibers of g:c kept, t/c applied %d times", restarts, n, p.count("t/c"))
 	}
 }
+
+// A plan that restarts or removes the provider of a key a group injects, and creates
+// a row under that group, is one batch the kernel admits: the mount goes before the
+// operation that ends the group's activation, so the child goes with that activation
+// and the group's next one mounts it again. The kernel refuses a child mount after
+// an operation of the batch that ends its parent.
+func TestPlanThatEndsAGroupThroughItsProviderCreatesAChildUnderIt(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		ops   func(def.EntrySpec) []def.Op
+		state kernel.State // of g:y once settled; "" when it turns on a race of two providers
+	}{
+		{"restart", func(rp def.EntrySpec) []def.Op {
+			rp.Config = map[string]any{"v": int64(2)}
+			return []def.Op{update(rp), create(child("g", "y", "t/y"))}
+		}, kernel.Active},
+		{"remove", func(def.EntrySpec) []def.Op {
+			return []def.Op{remove("p"), create(child("g", "y", "t/y"))}
+		}, kernel.Pending},
+		// p2 may provide k before p has withdrawn it, and the kernel then refuses p2's
+		// provision, whatever the order of the batch.
+		{"replace", func(def.EntrySpec) []def.Op {
+			return []def.Op{remove("p"), create(row("p2", "t/prov2")), create(child("g", "y", "t/y"))}
+		}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			k := kernel.NewKey[int]("k", 0)
+			p := newProbe()
+			provider := func(id string) kernel.Plugin {
+				prov := p.plugin(id, func(c *kernel.Context, _ any) error { return k.Provide(c, 1) })
+				prov.Provides = []kernel.AnyKey{k}
+				return kernel.Define(prov)
+			}
+			rp := row("p", "t/prov")
+			rp.Config = map[string]any{"v": int64(1)}
+			g := group("g")
+			g.Inject = []string{"k"}
+			x := newFx(t, fxOpt{plugins: plugins(provider("t/prov"), provider("t/prov2"), p.plugin("t/y", nil)),
+				keys: map[string]kernel.AnyKey{"k": k}, rows: []def.EntrySpec{rp, g}})
+			x.want("g", kernel.Active)
+			res := x.apply(tc.ops(rp)...)
+			if last := res[len(res)-1]; last.ID != "g:y" || last.Outcome != def.Created {
+				t.Errorf("results %v, want g:y created last", res)
+			}
+			if st := x.state("g:y"); tc.state != "" && st != tc.state {
+				t.Errorf("g:y is %s, want %s", st, tc.state)
+			}
+			x.consistent()
+		})
+	}
+}
