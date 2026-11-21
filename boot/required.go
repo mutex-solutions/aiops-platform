@@ -54,12 +54,17 @@ type RequiredSet struct {
 // set applies to the rows that role runs (08-profiles-roadmap-adrs.md:459): a
 // required row of another role drops out, and so does a required key whose
 // providers in the composition all run in another role. A key with no provider
-// row at all stays, and the audit reports it. When a required row of the role holds a
-// reference, the launcher adds the config-refs rows that serve the process (refsRows)
+// row at all stays, and the audit reports it. When a row inside the set holds a
+// reference, a required row of the role or an active provider of a required key in the
+// root realm, the launcher adds the config-refs rows that serve the process (refsRows)
 // and configRefsReady to the set (ADR-059 decision 18): the row is applied only while
 // config-refs is.
 func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Role) RequiredSet {
-	in := RoleFilter(roles)
+	in, active := RoleFilter(roles), ActiveRows(c, roles)
+	b := builder{rows: make(map[string]ComposedRow, len(c.Rows))}
+	for _, r := range c.Rows {
+		b.rows[r.ID] = r
+	}
 	rows := map[string]bool{}
 	for _, id := range dist.RequiredRows {
 		rows[id] = true
@@ -75,9 +80,14 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 		}
 	}
 	want := dist.RequiredKeys
-	if slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return rows[r.ID] && len(r.Refs) > 0 && r.Plugin != ConfigRefsID }) {
+	inside := func(r ComposedRow) bool {
+		return rows[r.ID] || active[r.ID] && slices.ContainsFunc(mods[r.Plugin].Provides, func(k string) bool {
+			return inSet(k, dist.RequiredKeys...) && b.realm(r.ID, k) == ""
+		})
+	}
+	if slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return len(r.Refs) > 0 && r.Plugin != ConfigRefsID && inside(r) }) {
 		want = union(want, []string{configRefsReady})
-		for _, id := range refsRows(c, roles) {
+		for _, id := range refsRows(c, in, active, b) {
 			rows[id] = true
 		}
 	}
@@ -103,12 +113,7 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 // and providing configRefsReady in the root realm. A disabled one, one inside a
 // disabled group and one of a private realm do not. With none, it returns every
 // config-refs row of the roles, so that the audit names the row that does not serve.
-func refsRows(c Composition, roles []Role) []string {
-	in, active := RoleFilter(roles), ActiveRows(c, roles)
-	b := builder{rows: make(map[string]ComposedRow, len(c.Rows))}
-	for _, r := range c.Rows {
-		b.rows[r.ID] = r
-	}
+func refsRows(c Composition, in func(Row) bool, active map[string]bool, b builder) []string {
 	var serving, all []string
 	for _, r := range c.Rows {
 		if r.Plugin != ConfigRefsID || !in(r.Row) {
@@ -172,8 +177,8 @@ func RequiredClosure(g Graph, set RequiredSet) []string {
 // it, which is the last clause of gate check 7 (08-profiles-roadmap-adrs.md:503).
 // A provider is inside the required set when its row is required or it provides
 // a required key; the edge from a child to its group is not a need, and neither is
-// the need of configRefsReady, which RequiredFor adds where a required row holds a
-// reference (ADR-059 decision 18).
+// the need of configRefsReady, which RequiredFor adds with config-refs where such a
+// provider holds a reference (ADR-059 decision 18).
 func AuditStatic(c Composition, mods ModuleTable, dist DistManifest, g Graph, roles []Role) []StaticError {
 	set := RequiredFor(c, mods, dist, roles)
 	var errs []StaticError

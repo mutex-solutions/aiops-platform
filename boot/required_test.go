@@ -92,11 +92,24 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a required row with a reference and only a disabled config-refs row",
 			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			want:   []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "u"},
-		// The need of configRefsReady is exempt from the closure clause: config-refs is the
-		// launcher's to require, and an optional provider that holds a reference waits for it.
+		// A provider of a required key is inside the set as a required row is, so its
+		// reference pulls config-refs in too (ADR-059 decision 18); the closure clause
+		// never hides that config-refs is outside the set.
 		{name: "a provider of a required key that holds a reference",
 			bundle: rows("id: refs, plugin: aiops/config-refs", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			dist:   "requiredKeys: [sql]", closed: "refs,sql"},
+		{name: "a provider of a required key with a reference and no config-refs row",
+			bundle: rows("id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", want: []string{"required-key  configRefsReady"}, closed: "sql"},
+		{name: "a provider of a required key with a reference and only a disabled config-refs row",
+			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", want: []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "sql"},
+		// A provider that does not serve the process, disabled or in a private realm, is
+		// not inside the set, so its reference pulls nothing in.
+		{name: "a provider that does not serve the process pulls nothing in",
+			bundle: rows("id: sql, plugin: o/sql", "id: off, plugin: o/sql, enabled: false, config: {x: \"${env:AIOPS_REF_X}\"}",
+				"id: g, plugin: core:group, isolate: [sql], config: [{id: s2, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}}]"),
+			dist: "requiredKeys: [sql]", closed: "sql"},
 		{name: "role drops a row and a key that run elsewhere",
 			bundle: rows("id: loader, plugin: o/loader, roles: [worker], required: true", "id: sql, plugin: o/sql, roles: [worker]"),
 			dist:   "requiredKeys: [sql]", roles: []Role{RoleAPI}},

@@ -214,6 +214,20 @@ func TestReleaseProfileWithConfigRefsDisabledIsAdmitted(t *testing.T) {
 	}
 }
 
+// The clock row provides clock, a required key of the release set, so it is inside the
+// required set as a required row is: when it holds a reference and config-refs is
+// disabled, the static admission refuses the profile, where boot would stop later on a
+// clock left PENDING (ADR-059 decision 18).
+func TestReleaseProfileWithAReferenceInAProviderOfARequiredKeyNeedsConfigRefs(t *testing.T) {
+	home := releaseHome(", enabled: false", "1m")
+	f := home["bundles/b/bundle.yaml"]
+	f.Data = []byte(strings.Replace(string(f.Data), "plugin: aiops/clock, roles: [api]", `plugin: aiops/clock, roles: [api], config: {x: "${env:AIOPS_REF_X}"}`, 1))
+	a := admitRelease(t, home)
+	if !a.Refused() || !slices.Contains(a.Required.Keys, "configRefsReady") || !slices.Contains(a.Required.Rows, "refs") {
+		t.Fatalf("refused %v, required set %+v:\n%s", a.Refused(), a.Required, strings.Join(a.Diagnostics(), "\n"))
+	}
+}
+
 func TestEntryReadsTheDeclarationsOfThePlugin(t *testing.T) {
 	m := Modules()[0]
 	m.Volatile = []string{"config.x"}
