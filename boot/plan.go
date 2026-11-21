@@ -43,9 +43,9 @@ const (
 // field differs; Changed lists the fields in canonical order and ConfigPaths
 // the config paths that differ) or unchanged. The effect says what the loader
 // does. An update is volatile, and needs no restart, when only config
-// changed and every changed path is a volatile path of the module entry of
-// the plugin (ADR-059 decision 10) and is not and was not a reference, by the
-// loader's own rule (effectOf); any other change to a mounted row restarts it.
+// changed, every changed path is a volatile path of the module entry of the
+// plugin (ADR-059 decision 10) and neither config holds a reference (decision
+// 17), by the loader's own rule (effectOf); any other change restarts the row.
 // Entries are sorted by id; Batch gives the order of apply.
 //
 // Closure is the restart closure (08-profiles-roadmap-adrs.md:190, 200): the
@@ -250,8 +250,8 @@ func fieldMap(v Value) map[string]Value {
 
 // effectOf classifies an update. Whether a config change is volatile is the loader's
 // rule (loaderdef.VolatileOnly over the catalog's volatile paths), so the plan says what
-// the loader does: a change at a path no volatile path covers, or whose value is or
-// was a reference, restarts the row.
+// the loader does: a change at a path no volatile path covers, or of a config whose old
+// or new tree holds a reference (loaderdef.VolatileOnly), restarts the row.
 func effectOf(wasActive, isActive bool, e PlanEntry, o, n ComposedRow, g Graph) Effect {
 	switch {
 	case wasActive && !isActive:
