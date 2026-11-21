@@ -437,6 +437,9 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			if len(last) == 0 && p.rolledBack {
 				last = rolledBackProblems(s)
 			}
+			if len(last) == 0 && p.live != "" { // the loader's rows are the kernel's fibers
+				last = s.TreeProblems()
+			}
 			return len(last) == 0
 		})
 		if p.heal && len(last) == 0 {

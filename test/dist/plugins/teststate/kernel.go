@@ -56,27 +56,23 @@ func RecordKernel(root *kernel.Root, runDir string) {
 }
 
 // TreeProblems compares the rows the loader says are mounted with the kernel's fibers:
-// for the plugin of every row the loader knows, and for the group plugins, the states
-// of the kernel's fibers must be those of the mounted rows, one fiber per row. The
-// launcher's own fibers run no row's plugin and are left out.
+// for every plugin, the states of the kernel's fibers must be those of the mounted rows,
+// one fiber per row, so a fiber with no mounted row, of a row the loader removed or
+// forgot, is a problem too. The launcher's own fibers, the loader and boot's audit,
+// run no row and are left out.
 func TreeProblems(s State, fibers []Fiber) []string {
 	rows, live := map[string][]string{}, map[string][]string{}
-	for _, p := range []string{loaderdef.GroupPlugin, loaderdef.IncludePlugin} {
-		rows[p] = nil
-	}
 	for _, r := range s.Rows {
-		switch {
-		case r.Mount == string(loaderdef.Mounted):
+		if r.Mount == string(loaderdef.Mounted) {
 			rows[r.Plugin] = append(rows[r.Plugin], r.State)
-		case r.Plugin != "":
-			if _, ok := rows[r.Plugin]; !ok {
-				rows[r.Plugin] = nil // a row's plugin with no row mounted: it has no fiber
-			}
 		}
 	}
 	for _, f := range fibers {
-		if _, ok := rows[f.Plugin]; ok {
+		if f.Plugin != "aiops/loader" && f.Plugin != "aiops/boot-audit" {
 			live[f.Plugin] = append(live[f.Plugin], f.State)
+			if _, ok := rows[f.Plugin]; !ok {
+				rows[f.Plugin] = nil // a plugin with no row mounted has no fiber
+			}
 		}
 	}
 	var bad []string

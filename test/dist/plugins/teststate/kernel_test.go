@@ -29,6 +29,10 @@ func TestTreeProblems(t *testing.T) {
 		"another state":             {[]Fiber{{2, "t/p", "FAILED"}, {3, "t/p", "ACTIVE"}, {4, "core:group", "ACTIVE"}}, "plugin t/p"},
 		"a group fiber, no row":     {append(agree, Fiber{6, "core:include", "PENDING"}), "plugin core:include"},
 		"a fiber of a disabled row": {append(agree, Fiber{7, "t/q", "ACTIVE"}), "plugin t/q"},
+		// A fiber left running for a row the loader removed or forgot, whose plugin no
+		// listed row runs.
+		"a fiber of a forgotten row": {append(agree, Fiber{8, "t/c", "ACTIVE"}), "plugin t/c"},
+		"a fiber of a removed row":   {append(agree, Fiber{9, "aiops-test/panic-apply", "FAILED"}), "plugin aiops-test/panic-apply"},
 	} {
 		bad := TreeProblems(s, tc.fibers)
 		if got := strings.Join(bad, "; "); tc.want == "" && got != "" || tc.want != "" && !strings.Contains(got, tc.want) {
