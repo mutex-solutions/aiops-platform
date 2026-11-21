@@ -354,10 +354,10 @@ func TestNewlyEnabledRowThatNeverActivates(t *testing.T) {
 }
 
 // A live generation gives a running row its first reference, one that does not resolve
-// (secret: until S3). The row's inject gains configRefsReady, so the loader replaces it:
-// the new config is resolved on the running fiber in the batch that would dispose it,
-// the plan is refused whole, and the generation is rejected with the row keeping its
-// instance (08-profiles-roadmap-adrs.md §1.6, "a reference does not resolve", live).
+// (secret: until S3). Admission asks config-refs whether every reference of the changed
+// config resolves, so the generation is rejected at admit with nothing applied and the
+// row keeps its instance (ADR-059 decision 16; 08-profiles-roadmap-adrs.md §1.6, "a
+// reference does not resolve", live).
 func TestFirstReferenceThatDoesNotResolveIsRejected(t *testing.T) {
 	w := boot(t)
 	fiber := func(s harness.Snapshot) uint64 {
@@ -375,8 +375,8 @@ func TestFirstReferenceThatDoesNotResolveIsRejected(t *testing.T) {
 	id := w.submitBody("- {id: consumer, config: {note: \"${secret:x}\"}}\n", "")
 	s := w.verdictOf(id)
 	op := s.State.Reload
-	if op.Status != "rejected" || op.Stage != "apply" || len(op.Applied) != 0 || !strings.Contains(op.Error, "secret") {
-		t.Fatalf("the generation should be rejected at apply with nothing applied: %+v", op)
+	if op.Status != "rejected" || op.Stage != "admit" || len(op.Applied) != 0 || !strings.Contains(op.Error, "secret") {
+		t.Fatalf("the generation should be rejected at admit with nothing applied: %+v", op)
 	}
 	s, ok = w.p.Until(budget, func(s harness.Snapshot) bool { return s.RowState("consumer") == "ACTIVE" && fiber(s) != 0 })
 	if !ok || fiber(s) != fiber(s0) {

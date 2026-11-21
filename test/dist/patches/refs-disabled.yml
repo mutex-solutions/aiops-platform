@@ -1,0 +1,2 @@
+# Layer 4 patch: the config-refs row is disabled, so no reference can resolve.
+- {id: refs, enabled: false}

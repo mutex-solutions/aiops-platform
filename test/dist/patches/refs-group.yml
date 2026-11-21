@@ -1,0 +1,3 @@
+# Layer 4 patch: a group with one child, "grp:fault", whose config holds no reference.
+- insert:
+    - {id: grp, plugin: core:group, roles: [api], config: [{id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: literal}}]}

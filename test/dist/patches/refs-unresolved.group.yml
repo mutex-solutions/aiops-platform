@@ -1,0 +1,4 @@
+# Layer 4 patch, written by a live recomposition: the group "grp" is replaced (its inject
+# changes) and its child gets a reference that does not resolve (secret: until S3).
+- {id: grp, inject: [toy.store]}
+- {id: "grp:fault", config: {note: "${secret:x}"}}

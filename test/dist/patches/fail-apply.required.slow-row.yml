@@ -1,7 +1,7 @@
 # Layer 4 patch, written by a live recomposition: fail-apply as a required row, with a row
 # that depends on what it provides and a row that takes 500ms to apply, so that reload
-# judges the generation only after restart-policy has had the time to retry the fault
-# and give up on it.
+# judges the generation only after restart-policy could have retried the fault and
+# given up on it.
 - insert:
     - {id: fault, plugin: aiops-test/fail-apply, roles: [api], required: true}
     - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

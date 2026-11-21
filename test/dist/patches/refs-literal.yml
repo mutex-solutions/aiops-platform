@@ -1,0 +1,4 @@
+# Layer 4 patch: a row whose config holds no reference yet; refs-unresolved.change.yml
+# gives it its first one, which does not resolve.
+- insert:
+    - {id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: literal}}

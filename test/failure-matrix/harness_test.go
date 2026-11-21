@@ -59,6 +59,7 @@ package failurematrix
 // "fault", "dependant" and "required" are row ids of the patch files of test/dist.
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,6 +74,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/test/dist/harness"
+	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 )
 
 func TestMain(m *testing.M) {
@@ -140,9 +142,14 @@ type plan struct {
 	live    string   // a live generation: the patch file whose content is written to the live layer
 	trigger bool     // once running (and, with live, once the generation passed), create run/fault.go
 	code    int      // the exit code that boot/run.go fixes for this exit; 0: any non-zero
+	env     []string // extra environment variables of the process, NAME=value
 	// rolledBack: the live generation's failed verdict must leave the tree as it was,
 	// "the composer rolls the scope back" ("Rolled back").
 	rolledBack bool
+	// rejected: the live generation must be rejected at admission with nothing touched,
+	// "Rejected; the row keeps its instance" (ADR-059 decision 16): the process boots to a
+	// settled tree first, and every row and every kernel fiber is then as it was.
+	rejected bool
 	// heal: once the cell's expect holds, remove run/fault.go, so the fault recovers at
 	// its next retry; the fault and every row of the expect must then be ACTIVE again
 	// ("they return with the provider").
@@ -151,17 +158,25 @@ type plan struct {
 	// label"): the effect or tracked goroutine of the fault that is still open, which
 	// boot's log handler prints as label=<label>.
 	label string
-	// then is a second run of the cell with an expect of its own, for a part of the
+	// then are more runs of the cell, each with an expect of its own, for the parts of the
 	// outcome that the first run cannot show in the same process.
-	then *variant
+	then []variant
 }
 
 // leakLabel is the label of the open work of each leak fault (test/dist/plugins/fault).
 var leakLabel = map[string]string{"leaky-goroutine": "leaky", "slow-dispose": "slow-dispose"}
 
 type variant struct {
+	name string
 	plan
 	expect boot.Expect
+}
+
+// rejectedLive is a run of the live column whose generation is rejected with nothing
+// touched, with the diagnostic that says why.
+func rejectedLive(name, diagnostic string, base []string, live string, env ...string) variant {
+	return variant{name, plan{base: base, live: live, env: env, rejected: true},
+		boot.Expect{Exit: "running", Ready: "true", Diagnostic: diagnostic}}
 }
 
 // liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
@@ -190,9 +205,22 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{base: []string{"rogue-provider.required.yml"}, code: boot.ExitRefused},
 			plan{live: "rogue-provider.optional.yml"}, plan{}), true
 	case "config":
+		// Live: the generation is rejected with nothing touched whether it changes, creates
+		// or enables the row, whether the config fails Decode or holds a reference that does
+		// not resolve, for the child of a group it replaces, and for any reference while
+		// config-refs is not ACTIVE (ADR-059 decision 16). Disabling config-refs is a valid
+		// profile (decision 18).
 		return byColumn(col, plan{base: []string{"bad-config.optional.yml"}},
 			plan{base: []string{"bad-config.required.yml"}, code: boot.ExitRequired},
-			plan{base: []string{"bad-config.ok.yml"}, live: "bad-config.change.yml"}, plan{}), true
+			plan{base: []string{"bad-config.ok.yml"}, live: "bad-config.change.yml", rejected: true, then: []variant{
+				rejectedLive("a created row whose config fails Decode", "invalid config", nil, "bad-config.optional.yml"),
+				rejectedLive("an enabled row whose config fails Decode", "invalid config", []string{"bad-config.disabled.yml"}, "fault-enabled.yml"),
+				rejectedLive("a created row with a reference that does not resolve", "does not resolve", nil, "refs-unresolved.optional.yml"),
+				rejectedLive("an enabled row with a reference that does not resolve", "does not resolve", []string{"refs-unresolved.disabled.yml"}, "fault-enabled.yml"),
+				rejectedLive("a row given a first reference that does not resolve", "does not resolve", []string{"refs-literal.yml"}, "refs-unresolved.change.yml"),
+				rejectedLive("the child of a replaced group with a reference that does not resolve", "does not resolve", []string{"refs-group.yml"}, "refs-unresolved.group.yml"),
+				rejectedLive("a created row with a reference while config-refs is disabled", "rejected", []string{"refs-disabled.yml"}, "refs-env.optional.yml", "AIOPS_REF_NOTE=from-env"),
+			}}, plan{}), true
 	case "static":
 		return byColumn(col, plan{base: []string{"rogue-provider.isolate.yml"}, code: boot.ExitRefused},
 			plan{base: []string{"rogue-provider.isolate.required.yml"}, code: boot.ExitRefused},
@@ -208,7 +236,9 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{base: []string{"fail-apply.trigger.optional.yml", "restart-policy.patient.yml"}, trigger: true, heal: true}), true
 	case "infra":
 		// restart-policy lists toy.fault among its infrastructure keys. The live generation
-		// has a slow row, so restart-policy gives up on the fault before reload judges it.
+		// has a slow row, so reload judges it after restart-policy could have retried the
+		// fault to its limit; restart-policy holds its retries and its give-up while the
+		// operation is in flight (ADR-059 decision 19), so the process is not replaced.
 		// While running, the first run sees the fault wait for its retry; the second, with
 		// the short backoff, sees restart-policy give up and the process replaced.
 		slow, fast := "restart-policy.infra.slow.yml", "restart-policy.infra.yml"
@@ -216,9 +246,9 @@ func planFor(row, col, fault string) (plan, bool) {
 		return byColumn(col, plan{},
 			plan{base: []string{slow, "fail-apply.required.yml"}, code: boot.ExitRequired},
 			plan{base: []string{fast}, live: "fail-apply.required.slow-row.yml", rolledBack: true},
-			plan{base: []string{slow, trig}, trigger: true, then: &variant{
+			plan{base: []string{slow, trig}, trigger: true, then: []variant{{"the give-up",
 				plan{base: []string{fast, trig}, trigger: true, code: boot.ExitGaveUp},
-				boot.Expect{Exit: "nonzero", Ready: "false", Diagnostic: "infrastructure=true"}}}), true
+				boot.Expect{Exit: "nonzero", Ready: "false", Diagnostic: "infrastructure=true"}}}}), true
 	case "tracked":
 		return byColumn(col, plan{base: []string{"panic-apply-tracked.optional.yml"}},
 			plan{base: []string{"panic-apply-tracked.required.yml"}, code: boot.ExitRequired},
@@ -360,8 +390,43 @@ func rolledBackProblems(s harness.Snapshot) []string {
 	return bad
 }
 
+// settled says whether every mounted row is ACTIVE and the loader's rows are the kernel's
+// fibers: a tree that changes no more by itself.
+func settled(s harness.Snapshot) bool {
+	for _, r := range s.State.Rows {
+		if r.Mount == "mounted" && r.State != "ACTIVE" {
+			return false
+		}
+	}
+	return len(s.TreeProblems()) == 0
+}
+
+// rejectedProblems says whether the live generation was rejected with nothing touched:
+// reload rejected it at admit, applied nothing and rolled nothing back, and every row and
+// every kernel fiber is what it was in before, the settled tree it was submitted to.
+func rejectedProblems(before, s harness.Snapshot) []string {
+	op := s.State.Reload
+	if op == nil || op.Status != "rejected" || op.Stage != "admit" || len(op.Applied) > 0 || op.Rollback != nil {
+		var applied map[string][]string
+		if op != nil {
+			applied = op.Applied
+		}
+		return []string{fmt.Sprintf("expected a rejection at admit with nothing applied (ADR-059 decision 16): %s applied=%v", reloadText(s), applied)}
+	}
+	var bad []string
+	if !slices.Equal(before.State.Rows, s.State.Rows) {
+		bad = append(bad, fmt.Sprintf("the rows changed: %+v, then %+v", before.State.Rows, s.State.Rows))
+	}
+	byID := func(a, b teststate.Fiber) int { return cmp.Compare(a.ID, b.ID) }
+	was, now := slices.SortedFunc(slices.Values(before.Kernel), byID), slices.SortedFunc(slices.Values(s.Kernel), byID)
+	if !slices.Equal(was, now) {
+		bad = append(bad, fmt.Sprintf("the kernel's fibers changed: %v, then %v", was, now))
+	}
+	return bad
+}
+
 func runScenario(bin string, e boot.Expect, p plan) result {
-	opts := harness.Options{Profile: p.profile}
+	opts := harness.Options{Profile: p.profile, Env: p.env}
 	var livePath string
 	for _, f := range p.base {
 		opts.Patches = append(opts.Patches, harness.PatchFile(f))
@@ -395,13 +460,17 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 	left := func() time.Duration { return max(time.Until(deadline), time.Millisecond) }
 
 	needsBoot := p.live != "" || p.trigger
+	var before harness.Snapshot
 	if needsBoot {
 		// The process must be running healthy before the live generation or the
 		// trigger. A boot that fails here is a failed cell, not a pass.
-		s, ok := proc.Until(left(), func(s harness.Snapshot) bool { return s.Running() && s.State.Ready })
+		s, ok := proc.Until(left(), func(s harness.Snapshot) bool {
+			return s.Running() && s.State.Ready && (!p.rejected || settled(s))
+		})
 		if !ok {
 			return result{problems: []string{"the process did not boot healthy before the fault: " + status(s)}, output: s.Output}
 		}
+		before = s
 	}
 	if p.live != "" {
 		body, err := os.ReadFile(harness.PatchFile(p.live))
@@ -436,6 +505,9 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			last = checkRunning(e, p, s)
 			if len(last) == 0 && p.rolledBack {
 				last = rolledBackProblems(s)
+			}
+			if p.rejected { // also when the diagnostic is missing: what reload did says why
+				last = append(last, rejectedProblems(before, s)...)
 			}
 			if len(last) == 0 && p.live != "" { // the loader's rows are the kernel's fibers
 				last = s.TreeProblems()
@@ -543,10 +615,13 @@ func TestFailureMatrix(t *testing.T) {
 						res = result{problems: []string{"the harness has no procedure for this cell: an S1 cell may not be skipped"}}
 					} else {
 						res = runScenario(bin, c.Expect, p)
-						if v := p.then; v != nil && len(res.problems) == 0 {
-							res = runScenario(bin, v.expect, v.plan)
-							for i := range res.problems {
-								res.problems[i] = "second run: " + res.problems[i]
+						for _, v := range p.then {
+							r := runScenario(bin, v.expect, v.plan)
+							for _, pr := range r.problems {
+								res.problems = append(res.problems, v.name+": "+pr)
+							}
+							if len(r.problems) > 0 {
+								res.output += "\n--- output of the run " + v.name + ":\n" + r.output
 							}
 						}
 					}

@@ -1,0 +1,4 @@
+# Layer 4 patch for the failure matrix: the bad-config fault with a config its plugin
+# refuses, disabled, so that a live generation that enables it is rejected.
+- insert:
+    - {id: fault, plugin: aiops-test/bad-config, roles: [api], enabled: false, config: {broken: true}}
