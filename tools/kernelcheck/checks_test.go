@@ -244,6 +244,19 @@ func TestPluginVetWaitGroupTypeInOtherFile(t *testing.T) {
 	}
 }
 
+// A WaitGroup reached through a type or a function of another package of the plugin is
+// found too: the packages of the vetted tree are type-checked from their source.
+func TestPluginVetWaitGroupTypeInOtherPackage(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "plugins/a/internal/x/x.go", "package x\n\nimport \"sync\"\n\ntype Pool struct{ sync.WaitGroup }\n\nfunc New() *sync.WaitGroup { return new(sync.WaitGroup) }\n")
+	write(t, d, "plugins/a/plugin.go", "package a\n\nimport \"github.com/mutex-solutions/aiops-platform/plugins/a/internal/x\"\n\nfunc f() { var p x.Pool; p.Go(f); x.New().Go(f) }\n")
+	write(t, d, "plugins/a/other.go", "package a\n\nimport \"github.com/mutex-solutions/aiops-platform/plugins/b\"\n\nfunc g() { b.Run(g) }\n")
+	err := checkPluginVet([]string{filepath.Join(d, "plugins")})
+	if err == nil || strings.Count(err.Error(), "plugins/a/plugin.go:5: (*sync.WaitGroup).Go starts an untracked goroutine") != 2 {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestPluginVetErrors(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "plugins/a/plugin.go", "package")

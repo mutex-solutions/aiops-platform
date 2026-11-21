@@ -73,10 +73,47 @@ func (s stdOnly) Import(p string) (*types.Package, error) {
 
 var stdImporter = stdOnly{importer.Default()}
 
+// treeImporter imports the standard library and the packages of the vetted tree, type-
+// checked from their source, so that a WaitGroup reached through a type or a function
+// of another package of the plugin has its type. An import path names a package of the
+// tree when it holds "/<base of root>/"; what follows is its directory under root. Any
+// other import fails, as with stdOnly.
+type treeImporter struct {
+	root string
+	pkgs map[string]*types.Package
+}
+
+func (t *treeImporter) Import(p string) (*types.Package, error) {
+	_, rest, ok := strings.Cut(p, "/"+filepath.Base(t.root)+"/")
+	if isStd(p) || !ok {
+		return stdImporter.Import(p)
+	}
+	if pkg, ok := t.pkgs[p]; ok {
+		return pkg, nil
+	}
+	dir := filepath.Join(t.root, filepath.FromSlash(rest))
+	fset := token.NewFileSet()
+	var files []*ast.File
+	names, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+	for _, n := range names {
+		if f, err := parser.ParseFile(fset, n, nil, parser.SkipObjectResolution); err == nil && !strings.HasSuffix(n, "_test.go") {
+			files = append(files, f)
+		}
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("%s: no Go files in %s", p, dir)
+	}
+	conf := types.Config{Importer: t, Error: func(error) {}}
+	pkg, _ := conf.Check(p, fset, files, nil)
+	t.pkgs[p] = pkg
+	return pkg, nil
+}
+
 // vetMethods type-checks the files of one directory, given as path to report
 // name, and reports each use of a goMethods method. Type errors are expected,
-// as imports outside the standard library stay unresolved; they are ignored.
-func vetMethods(files map[string]string) ([]string, error) {
+// as imports outside the standard library and the tree stay unresolved; they are
+// ignored.
+func vetMethods(files map[string]string, imp types.Importer) ([]string, error) {
 	fset := token.NewFileSet()
 	var parsed []*ast.File
 	for p := range files {
@@ -87,7 +124,7 @@ func vetMethods(files map[string]string) ([]string, error) {
 		parsed = append(parsed, f)
 	}
 	info := &types.Info{Selections: map[*ast.SelectorExpr]*types.Selection{}}
-	conf := types.Config{Importer: stdImporter, Error: func(error) {}}
+	conf := types.Config{Importer: imp, Error: func(error) {}}
 	_, _ = conf.Check("p", fset, parsed, info)
 	var out []string
 	for sel, s := range info.Selections {
@@ -335,8 +372,9 @@ func checkPluginVet(dirs []string) error {
 		if err != nil {
 			return err
 		}
+		imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}}
 		for _, files := range pkgs {
-			v, err := vetMethods(files)
+			v, err := vetMethods(files, imp)
 			if err != nil {
 				return err
 			}
