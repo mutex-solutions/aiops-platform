@@ -9,9 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
-	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -415,9 +413,7 @@ func newCatalog(reg Registry) (*catalog, error) {
 		}
 		c.keys[k.Name()] = k
 	}
-	for _, k := range []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey, launch.ReadyKey,
-		launch.KillSwitchesKey, launch.AppExitKey, loaderdef.Key, composition.Key, kernel.ReflectKey,
-		kernel.RegistryKey, kernel.HooksKey, kernel.LoggerKey} {
+	for _, k := range knownKeys() {
 		add(k)
 	}
 	for _, k := range reg.Keys {

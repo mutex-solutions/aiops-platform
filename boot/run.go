@@ -97,12 +97,12 @@ func kernelHooks() []kernel.AnyHook {
 		loaderdef.PatchContext, loaderdef.EntryInit, loaderdef.VolatileUpdate}
 }
 
-// consumerBound are the keys that boot knows to be consumer-bound by their definition:
-// only the entries that Config.Consumers lists resolve them.
-// ponytail: the classes of the keys and hooks of other definitions and plugins need the
-// kernel to expose them; until then gate check 7 reads those from dist.yaml.
-func consumerBound() []kernel.AnyKey {
-	return []kernel.AnyKey{loaderdef.Key, launch.AppExitKey, kernel.RegistryKey}
+// knownKeys are the keys whose definitions boot holds: the six launch keys, the keys of
+// the loader and composition definitions and the built-in keys of the kernel.
+func knownKeys() []kernel.AnyKey {
+	return []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey, launch.ReadyKey,
+		launch.KillSwitchesKey, launch.AppExitKey, loaderdef.Key, composition.Key, kernel.ReflectKey,
+		kernel.RegistryKey, kernel.HooksKey, kernel.LoggerKey}
 }
 
 // Clock is the clock of the launcher's own bounds. It is not the clock key: the

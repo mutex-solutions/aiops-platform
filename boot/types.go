@@ -233,9 +233,10 @@ type Composition struct {
 }
 
 // ModuleEntry is what the launcher knows of one plugin of the module table.
-// Plugin holds the kernel.Plugin value that kernel.Define returned, which only
-// the run half reads (Run checks its declarations against this entry); it takes
-// no part in the digest and the pure half never looks inside it.
+// Plugin holds the kernel.Plugin value that kernel.Define returned. Run checks its
+// declarations against this entry, and gate check 7 reads the classes of the keys it
+// provides and injects (classesOf); it takes no part in the digest, and an entry read
+// from modules.yaml has none.
 type ModuleEntry struct {
 	ID       string // manifest id "<owner>/<name>"
 	Module   string // Go module path

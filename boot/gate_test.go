@@ -3,6 +3,8 @@ package boot
 import (
 	"strings"
 	"testing"
+
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 const gateMods = `
@@ -165,6 +167,53 @@ func TestGateChecksTable(t *testing.T) {
 				if denied && r.Enabled || !denied && r.Enabled != c.Rows[i].Enabled {
 					t.Errorf("row %s: denied=%v enabled=%v", r.ID, denied, r.Enabled)
 				}
+			}
+		})
+	}
+}
+
+// Gate check 7 takes the classes of keys from their definitions, through the plugins of
+// the module table (ADR-059 decision 20): dist.yaml lists who is allowed, and a bound key
+// it does not list admits nobody, while a binding it lists for an open key binds nothing.
+func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
+	cbKey := kernel.NewKey[string]("cb", 0, kernel.ConsumerBound())
+	mods := ModuleTable{}
+	for _, e := range []ModuleEntry{
+		toy(toySpec{id: "o/policy", provides: []kernel.AnyKey{policyKey}}),
+		toy(toySpec{id: "o/cbprov", provides: []kernel.AnyKey{cbKey}}),
+		toy(toySpec{id: "o/cbuser", needs: []kernel.AnyKey{cbKey}}),
+		toy(toySpec{id: "o/store", provides: []kernel.AnyKey{storeKey}}),
+		{ID: "o/plain"}, // no Go value: what dist.yaml lists stands for the class
+		// A zero Dep has no key and no class; the kernel refuses it at mount.
+		{ID: "o/zero", Plugin: kernel.Define(kernel.Plugin{ID: "o/zero", Inject: []kernel.Dep{{}}})},
+	} {
+		mods[e.ID] = e
+	}
+	for _, tc := range []struct {
+		name, bundle, dist string
+		want               []string
+	}{
+		{"provider-bound by its definition, not listed", rows("id: a, plugin: o/policy"), "",
+			[]string{"7 a provider-binding stop=false"}},
+		{"provider-bound by its definition, listed", rows("id: a, plugin: o/policy"), "providers: {policy: [o/policy]}", nil},
+		{"consumer-bound by its definition, not listed", rows("id: p, plugin: o/cbprov", "id: a, plugin: o/cbuser"), "",
+			[]string{"7 a consumer-binding stop=false"}},
+		{"consumer-bound by its definition, listed", rows("id: p, plugin: o/cbprov", "id: a, plugin: o/cbuser"), "consumers: {cb: [o/cbuser]}", nil},
+		{"isolate of a key bound by its definition", rows("id: a, plugin: o/plain, isolate: [policy]"), "",
+			[]string{"7 a isolate-bound stop=true"}},
+		// The kernel refuses a binding of an open key; the gate holds no row to it.
+		{"open by its definition, listed", rows("id: a, plugin: o/store"), "providers: {store: [o/plain]}", nil},
+		{"open by its definition, listed, intercepted in a patch", rows("id: a, plugin: o/plain"), "providers: {store: [o/plain]}", nil},
+		{"a plugin with a zero dependency", rows("id: a, plugin: o/zero"), "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var patches []string
+			if strings.Contains(tc.name, "patch") {
+				patches = []string{"- {id: a, intercept: {store: {x: 1}}}"}
+			}
+			g := Gate(comp(t, tc.bundle, patches...), mods, mustDist(t, tc.dist))
+			if got := gateLines(g); !equalLines(got, tc.want) {
+				t.Errorf("failures %q, want %q", got, tc.want)
 			}
 		})
 	}

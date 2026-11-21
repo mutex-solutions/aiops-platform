@@ -11,14 +11,12 @@ providers:
   configRefsReady: [aiops/config-refs]
 # Consumer-bound keys: restart-policy resolves registry (the fiber lookup) and appExit
 # (the exit request); reload resolves loader (07-c4-plugin-sdk.md:556). No row may
-# resolve reload yet: those that submit are added with their plugin. reload is listed
-# with no consumer so that gate check 7, which reads the classes of plugin keys from
-# here, detaches a row that needs it instead of letting the kernel refuse it.
+# resolve reload yet: those that submit are added with their plugin. This file lists who
+# is allowed; gate check 7 reads the classes from the definitions (ADR-059 decision 20).
 consumers:
   appExit: [aiops/restart-policy]
   registry: [aiops/restart-policy]
   loader: [aiops/reload]
-  reload: []
 # Sealed hooks (07-c4-plugin-sdk.md:463): internal/status for the two rows that follow
 # the state of every fiber, internal/config for the references.
 sealedHooks:
