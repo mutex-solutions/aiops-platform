@@ -1124,14 +1124,18 @@ with the rest of the batch. `Root.Batch` returns one `*Fiber` per operation in
 operation order, so the position of a `MountOp` holds the new child. The batch
 is refused whole, with no effect and an error that matches `ErrInactive` and
 `ErrInactiveEffect`, when c's activation has ended, is ending or was replaced by
-a restart, and when an earlier operation of the same batch disposes or restarts
-c's fiber (later in the batch is allowed: the child is mounted and goes with that
-activation). Only an operation on c's fiber itself counts: a restart that an earlier
-operation causes through a provider that c's fiber needs, or through an ancestor of
-it, admits the child, which goes with that activation as well (the loader remounts a
-group's children when the group activates again). An `UpdateOpWith` whose restart
-`internal/update` vetoes, and a `CommitOp`, restart nothing. (Until the S1 review a restart earlier in the batch
-was not checked, and the batch was admitted with a child that was disposed at once.)
+a restart, and when an earlier operation of the same batch ends that activation
+(later in the batch is allowed: the child is mounted and goes with that
+activation). An operation ends it when it disposes or restarts c's fiber, or a fiber
+whose restart reaches c's fiber through a key that it provides or as an ancestor, at
+any depth: exactly the fibers that the batch's invalidation restarts and those that
+their effect walks dispose. An `UpdateOpWith` whose restart `internal/update`
+vetoes, and a `CommitOp`, restart nothing. (Until the S1 review a restart earlier in
+the batch was not checked, and the batch was admitted with a child that was disposed
+at once. The first fix counted only operations on c's fiber itself, so a batch that
+restarted c's fiber through a provider or an ancestor still admitted such a child;
+the second review found it, and the refusal now follows every path of the
+invalidation.)
 
 **G2, an update with a config in a batch.**
 

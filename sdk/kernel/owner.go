@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"reflect"
 	"slices"
 	"sync"
@@ -789,6 +790,17 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 		}
 		_, err := o.current(h.act)
 		return err == nil && !h.act.selfDispose.Load()
+	}, func(id uint64) (next []uint64) {
+		// The fibers whose activation ends with id's: the consumers that
+		// invalidateBatch restarts and the children that its effect walk disposes.
+		f := o.fibers[id]
+		for _, p := range f.provisions {
+			next = slices.AppendSeq(next, maps.Keys(o.byKey[p.key]))
+		}
+		if f.act != nil {
+			next = slices.AppendSeq(next, maps.Keys(f.act.children))
+		}
+		return next
 	})
 	if err != nil {
 		return nil, err
@@ -1457,9 +1469,9 @@ type batchOp struct {
 	Spec  pluginSpec
 	// Parent is the handle of the activation a mount is a child of. The whole batch
 	// is refused when that activation has ended or is ending, or when an earlier
-	// operation of the batch disposes or restarts its fiber (batchUpdate; batchKeep
-	// does not restart), as a cmdMountChild would be. Only operations on that fiber
-	// count: a restart through a provider or an ancestor admits the mount.
+	// operation of the batch ends it, as a cmdMountChild would be: it disposes or
+	// restarts (batchKeep does not) that fiber, a provider of a key it needs, or an
+	// ancestor, at any depth.
 	Parent *handle
 	// cell, when set, takes cfg in the owner turn that admits the batch, before any
 	// activation can read it (UpdateOpWith and CommitOp; see stageUpdates). The
@@ -1470,10 +1482,12 @@ type batchOp struct {
 
 // prepareBatch copies declarations and checks every operation before any writer
 // mutates state. live is native state data read by the owner; it must not invoke
-// plugin code. False means absent or already disposing.
-func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool) ([]batchOp, error) {
+// plugin code. False means absent or already disposing. ends lists the fibers whose
+// activation ends with that of a fiber; it is read only for a batch with a child mount.
+func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool, ends func(uint64) []uint64) ([]batchOp, error) {
 	prepared := slices.Clone(operations)
-	disposed, ended := make(map[uint64]bool), make(map[uint64]bool) // ended: disposed or restarted.
+	disposed, ended := make(map[uint64]bool), make(map[uint64]bool) // ended: its activation ends.
+	child := slices.ContainsFunc(operations, func(op batchOp) bool { return op.Parent != nil })
 	for i := range prepared {
 		op := &prepared[i]
 		switch op.Kind {
@@ -1497,7 +1511,14 @@ func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(
 				return nil, fmt.Errorf("batch operation %d updates a disposed target", i)
 			}
 			disposed[op.Fiber] = disposed[op.Fiber] || op.Kind == batchDispose
-			ended[op.Fiber] = ended[op.Fiber] || op.Kind != batchKeep
+			for q := []uint64{op.Fiber}; op.Kind != batchKeep && len(q) != 0; q = q[1:] {
+				if !ended[q[0]] {
+					ended[q[0]] = true
+					if child {
+						q = append(q, ends(q[0])...)
+					}
+				}
+			}
 		default:
 			return nil, errors.New("unknown batch operation kind")
 		}
