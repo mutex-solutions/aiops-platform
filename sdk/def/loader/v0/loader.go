@@ -144,8 +144,8 @@ type Result struct {
 // Update and Remove are Apply with one operation. The docs say both that the plan
 // is one batch and that the loader never creates an entry for an id whose previous
 // fiber is not DISPOSED (07-c4-plugin-sdk.md:341); an id that is removed and created
-// again therefore has its create in a second batch, after the wait (ADR-059
-// decision 37).
+// again therefore has its create in a second batch, after the wait (open point,
+// settled before S2a: ADR-059 decision 37).
 //
 // The rule holds by key too (ADR-059 decision 25): an entry whose plugin provides a
 // key, and that the plan creates, enables or replaces or that a group the plan mounts
@@ -194,7 +194,8 @@ type Loader interface {
 // context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
 // runs (fail closed, ADR-059 decision 34). The docs name the hook's use,
 // "isolate and intercept handling" (plugin-system-2026-11.md §8), and no payload;
-// this is the smallest the named listeners need (ADR-059 decision 37).
+// this is the smallest the named listeners need (open point, settled before S2a:
+// ADR-059 decision 37).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -203,7 +204,7 @@ type PatchContextArgs struct {
 // EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
 // fiber is created, vetoed or not, with the context it was mounted from: the one
 // loader/patch-context returned, or the parent's for a vetoed entry. Payload not
-// described in the docs; minimal (ADR-059 decision 37).
+// described in the docs; minimal (open point, settled before S2a: ADR-059 decision 37).
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -217,7 +218,8 @@ type EntryInitArgs struct {
 // reference, old or new (VolatileOnly): such a change restarts the fiber, because the
 // tree holds references unresolved and only config-refs resolves one, at an
 // activation. A consumer reads the values at Paths; a field that holds a reference
-// did not change. Payload not described in the docs; minimal (ADR-059 decision 37).
+// did not change. Payload not described in the docs; minimal (open point, settled
+// before S2a: ADR-059 decision 37).
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any

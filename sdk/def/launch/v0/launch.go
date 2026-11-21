@@ -198,26 +198,28 @@ type ProfileContext interface {
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
 	// Committed is the composition the process runs: the one boot composed until
 	// Commit says another. reload plans from it. Added in S1 for reload, which has no
-	// other way to know what it diffs against (docs silent; ADR-059 decision 37).
+	// other way to know what it diffs against (docs silent; open point, settled
+	// before S2a: ADR-059 decision 37).
 	Committed() Composition
 	// Commit records c as the composition the tree runs: Committed returns it and
 	// Required is its required set from then on. c is one that Compose returned.
 	// reload calls it after a generation passed its verdict, and after a rollback
 	// with the composition it restored (ADR-059 decision 15). It returns an error for
 	// a composition that this launcher did not compose, or has forgotten, and then
-	// changes nothing. Added in S1; the committer of S4a replaces the caller (ADR-059
-	// decision 37).
+	// changes nothing. Added in S1; the committer of S4a replaces the caller (open
+	// point, settled before S2a: ADR-059 decision 37).
 	Commit(c Composition) error
 	// Required is the required set of the committed composition for the process role:
 	// the distribution's rows and keys plus the rows that a layer marked required
 	// (00-decisions.md:492). readiness and reload judge by it. Added in S1: the docs
-	// say readiness reads it from the launch definition and name no method (ADR-059
-	// decision 37).
+	// say readiness reads it from the launch definition and name no method (open
+	// point, settled before S2a: ADR-059 decision 37).
 	Required() RequiredSet
 	// RequiredOf is the required set of c for the process role, by the rule of
 	// Required, which is RequiredOf(Committed()). reload judges a candidate by it
 	// before it commits the candidate. c is one that Commit would take; for another it
-	// returns an error. Added in S1 (ADR-059 decision 37, as Required).
+	// returns an error. Added in S1 (open point, settled before S2a: ADR-059 decision
+	// 37, as Required).
 	RequiredOf(c Composition) (RequiredSet, error)
 }
 
@@ -255,7 +257,8 @@ type Catalog interface {
 	// Plugin returns the kernel.Plugin value of a plugin id, the one the module
 	// table holds (07-c4-plugin-sdk.md:1339, :1355). The loader needs it to mount a
 	// row (03-c3-kernel.md:82). Docs silent: it hands the value to every consumer of
-	// the open-class consumer side (ADR-059 decision 37).
+	// the open-class consumer side (open point, settled before S2a: ADR-059
+	// decision 37).
 	Plugin(id string) (kernel.Plugin, bool)
 	// Key returns the key that a row names by string in inject, isolate and
 	// intercept (07-c4-plugin-sdk.md:1244, :1347): the kernel addresses keys by
@@ -275,8 +278,8 @@ type Cmdline interface {
 	// Env returns the value of an environment variable of the process, which is what
 	// the ${env:name} reference reads (03-c3-kernel.md:68). It filters nothing: the
 	// AIOPS_REF_ prefix rule (08-profiles-roadmap-adrs.md:162) is config-refs's.
-	// Added in S1: the launch definition had no environment reader (ADR-059
-	// decision 37).
+	// Added in S1: the launch definition had no environment reader (open point,
+	// settled before S2a: ADR-059 decision 37).
 	Env(name string) (string, bool)
 }
 

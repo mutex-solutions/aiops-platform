@@ -24,8 +24,8 @@ type Digest [32]byte
 
 // Row is one row of a committed generation, read-only. Docs list what it holds
 // (03-c3-kernel.md:64): the row, the hooks it declares, its registrations and its
-// state. The field names are the definition's own, a minimal reading (ADR-059
-// decision 37).
+// state. The field names are the definition's own, a minimal reading (open point,
+// settled before S2a: ADR-059 decision 37).
 type Row struct {
 	ID            string
 	Fiber         uint64       // the id of the row's fiber, as kernel.Fiber.ID gives it; 0 when it has none

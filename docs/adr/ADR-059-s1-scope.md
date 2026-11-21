@@ -387,17 +387,18 @@ a sentence above says otherwise, these decisions win.
     after the S0 gates on the final port are recorded (decision 1), and are verified
     with them (decision 2).
 
-37. **The open points that S1 recorded in its own code are accepted as built** (item 15).
-    The definition points are settled before S2a: `Committed`, `Commit`, `Required` and
-    `RequiredOf` on `profileContext`; `Catalog.Plugin`, which hands the plugin value to
-    every consumer of the open class; `Cmdline.Env`; the second batch of an id removed
-    and created again; the payloads of `loader/patch-context`, `loader/entry-init` and
-    `loader/volatile-update`; `reload.Op.Source` and the `ctx` that `Submit` takes; the
-    field names of `composition.Row`. The behaviour stands at S1: a loader wait that is
-    cut short leaves the first batch committed and an entry with no fiber; `reload`
-    abandons its queued operations when its row unloads; a waterfall listener cannot
-    pass a changed value to `next`. From S2a, whoever changes a `v0` definition fixes
-    every plugin under `plugins/` and `contrib/` in the same pull request (`08` §2).
+37. **The definition points that S1 recorded in its own code are settled before S2a**
+    (item 15): `Committed`, `Commit`, `Required` and `RequiredOf` on `profileContext`;
+    `Catalog.Plugin`, which hands the plugin value to every consumer of the open class;
+    `Cmdline.Env`; the second batch of an id removed and created again; the payloads of
+    `loader/patch-context`, `loader/entry-init` and `loader/volatile-update`;
+    `reload.Op.Source` and the `ctx` that `Submit` takes; the field names of
+    `composition.Row`. They stay open points until then. From S2a, whoever changes a
+    `v0` definition fixes every plugin under `plugins/` and `contrib/` in the same pull
+    request (`08` §2). This decision settles nothing about the three behaviour points
+    that item 15 also lists, on which the report recommends nothing: a loader wait that
+    is cut short, `reload` abandoning its queued operations when its row unloads, and a
+    waterfall listener that cannot pass a changed value to `next`. They stay open points.
 
 38. **The section "configRefsReady (recorded 2026-11-21)" is accepted as recorded**
     (item 16), with the rule that decision 18 replaced.

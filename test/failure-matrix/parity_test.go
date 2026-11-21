@@ -212,6 +212,37 @@ func TestConfigRefsRuleByKeyCitesItsDecision(t *testing.T) {
 	}
 }
 
+// TestDecision37LeavesItsPointsOpen: decision 37 has the definition points that S1
+// recorded in its own code settled before S2a, and settles none of them itself. So a
+// comment that cites it still calls its point an open point, and the decision accepts
+// nothing as built.
+func TestDecision37LeavesItsPointsOpen(t *testing.T) {
+	cites := regexp.MustCompile(`\bdecision 37\b`)
+	accepted := regexp.MustCompile(`\baccepted as built\b|\bstands at s1\b`)
+	n := 0
+	writtenFiles(t, "../..", func(rel string, lines []string) {
+		adr := filepath.Base(rel) == "ADR-059-s1-scope.md"
+		for _, p := range paragraphs(rel, lines) {
+			text := strings.ToLower(p.text)
+			switch {
+			case adr && strings.HasPrefix(text, "37. "):
+				n++
+				if s := accepted.FindString(text); s != "" {
+					t.Errorf("%s:%d decision 37 says %q, which the owner did not decide", rel, p.line, s)
+				}
+			case filepath.Ext(rel) != ".md" && cites.MatchString(text):
+				n++
+				if !strings.Contains(text, "open point") {
+					t.Errorf("%s:%d cites decision 37 and no longer calls its point open", rel, p.line)
+				}
+			}
+		}
+	})
+	if n == 0 {
+		t.Fatal("found neither decision 37 nor a citation of it; the parser is out of date")
+	}
+}
+
 type paragraph struct {
 	line int
 	text string
