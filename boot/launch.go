@@ -243,24 +243,25 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 }
 
 // configErrors decodes, with the plugin's own Decode, the config of every row of c that
-// the process mounts and the committed composition does not mount with that config: a
-// created, enabled or changed row (03-c3-kernel.md:377, "every changed config"). A row
-// whose config holds a reference is left to its activation: only config-refs resolves a
-// reference, on internal/config, which the kernel runs for a mount alone.
+// the process mounts and the committed composition does not mount with that plugin and
+// config: a created, enabled or changed row (03-c3-kernel.md:377, "every changed
+// config"). A row whose config holds a reference is left to its activation: only
+// config-refs resolves a reference, on internal/config, which the kernel runs for a mount alone.
 func (p *profileContext) configErrors(c Composition) []string {
 	p.mu.Lock()
 	old := p.committed
 	p.mu.Unlock()
 	act, was := ActiveRows(c, p.roles), ActiveRows(old, p.roles)
-	before := map[string]any{}
+	before := map[string]ComposedRow{}
 	for _, r := range old.Rows {
-		before[r.ID] = plain(r.Config)
+		before[r.ID] = r
 	}
 	var out []string
 	for _, r := range c.Rows {
 		pl, ok := p.mods[r.Plugin].Plugin.(kernel.Plugin)
 		cfg := plain(r.Config)
-		if !act[r.ID] || len(r.Refs) > 0 || !ok || pl.Decode == nil || was[r.ID] && reflect.DeepEqual(before[r.ID], cfg) {
+		same := before[r.ID].Plugin == r.Plugin && reflect.DeepEqual(plain(before[r.ID].Config), cfg)
+		if !act[r.ID] || len(r.Refs) > 0 || !ok || pl.Decode == nil || was[r.ID] && same {
 			continue
 		}
 		if err := decodes(pl.Decode, cfg); err != nil {

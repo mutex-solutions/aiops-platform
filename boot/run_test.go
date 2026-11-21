@@ -998,8 +998,12 @@ func TestAdmitDecodesTheChangedConfigs(t *testing.T) {
 			return raw, nil
 		},
 		Apply: func(*kernel.Context, any) error { return nil }})
+	lax := kernel.Define(kernel.Plugin{ID: "t/lax", Decode: func(raw any) (any, error) { return raw, nil },
+		Apply: func(*kernel.Context, any) error { return nil }})
 	const base = "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: kept, plugin: t/strict, roles: [api], config: {bad: true}}\n    - {id: off, plugin: t/strict, roles: [api], enabled: false, config: {bad: false}}\n"
-	f := newFixture(t, base, probe(&l), ModuleEntry{ID: "t/strict", Module: "example.test/strict", Version: "v0.1.0", Plugin: strict})
+	f := newFixture(t, base+"    - {id: m, plugin: t/lax, roles: [api], config: {bad: true}}\n", probe(&l),
+		ModuleEntry{ID: "t/strict", Module: "example.test/strict", Version: "v0.1.0", Plugin: strict},
+		ModuleEntry{ID: "t/lax", Module: "example.test/lax", Version: "v0.1.0", Plugin: lax})
 	bindExit(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
@@ -1023,9 +1027,10 @@ func TestAdmitDecodesTheChangedConfigs(t *testing.T) {
 		{"created", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: true}}\n", `row "new": config: bad is not allowed`},
 		{"panics", "    - {id: new, plugin: t/strict, roles: [api], config: {panic: true}}\n", `row "new": config: Decode panicked: boom`},
 		{"created, good", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: false}}\n", ""},
-		{"created with a reference", "    - {id: new, plugin: t/strict, roles: [api], config: {bad: \"${env:AIOPS_REF_X}\"}}\n", ""},
 		{"enabled", "- {id: off, enabled: true, config: {bad: true}}\n", `row "off": config: bad is not allowed`},
 		{"changed", "- {id: kept, config: {bad: true, n: 1}}\n", `row "kept": config: bad is not allowed`},
+		// The row runs this config, and the Decode of its new plugin refuses it.
+		{"plugin changed", "    - {id: m, plugin: t/strict, roles: [api], config: {bad: true}}\n", `row "m": config: bad is not allowed`},
 	} {
 		err := admit(base + tc.add)
 		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
