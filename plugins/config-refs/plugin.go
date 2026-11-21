@@ -83,7 +83,7 @@ func apply(c *kernel.Context, cfg any) error {
 		}
 		// A waterfall listener cannot pass a changed value to next (next takes no
 		// argument and hands the original on), so the resolved config is the result
-		// and the listeners inward of this one do not run. Open point for the kernel.
+		// and the listeners inward of this one do not run (ADR-059 decision 37).
 		return out, nil
 	})
 	return errors.Join(refsdef.Key.Provide(c, dryRun{r}), ReadyKey.Provide(c, struct{}{}))

@@ -15,7 +15,7 @@
 // profile locations and layers a candidate is composed from
 // (plugin-system-2026-11.md §5); a seventh key would contradict "six launch
 // keys". Admission reads the module table, which boot holds, so Admit needs no
-// second key. This is an open point for the project owner.
+// second key. The project owner confirmed this choice (ADR-059 decision 35).
 //
 // The types here are plain, read-only data. The package does not import boot:
 // boot imports this package and converts its own types to these.

@@ -172,31 +172,33 @@ func writtenFiles(t *testing.T, root string, fn func(rel string, lines []string)
 	}
 }
 
-// TestPendingConfigRefsRuleIsMarked: decision 18 pulls config-refs into the required set
-// where a required row of the role holds a reference. That an active provider of a
-// required key in the root realm counts as such a row is the lead's proposal, pending
-// the owner (ADR-059, how decision 18 is built), and under it disabling config-refs is
-// valid only while no row required by row or by key holds a reference. So a paragraph
-// that cites decision 18 for the rule by key says "pending the owner" (a row left
-// PENDING is no such mark), and a sentence beside that citation which calls disabling
-// it valid or optional says while what. The entry of decision 18 in ADR-059 is such a
-// citation, and the rule by key is also put as a row "of" or "inside" the required
-// set, since that set holds a provider of a required key.
-func TestPendingConfigRefsRuleIsMarked(t *testing.T) {
+// TestConfigRefsRuleByKeyCitesItsDecision: decision 18 pulls config-refs into the
+// required set where a required row of the role holds a reference, and decision 24 has
+// an active provider of a required key in the root realm, a row required by key, count
+// as such a row; under both, disabling config-refs is valid only while no row required
+// by row or by key holds a reference. So a paragraph that cites decision 18 for the
+// rule by key cites decision 24 too, and a sentence beside that citation which calls
+// disabling it valid or optional says while what. The entry of decision 18 in
+// the build notes of ADR-059 is such a citation, and the entry of decision 24 there is
+// the decision itself. The rule by key is also put as a row "of" or "inside" the
+// required set, since that set holds a provider of a required key.
+func TestConfigRefsRuleByKeyCitesItsDecision(t *testing.T) {
 	cites := regexp.MustCompile(`\bdecision 18\b`)
 	entry := regexp.MustCompile(`^- \*\*18\.\*\* `)
+	decided := regexp.MustCompile(`\bdecision 24\b`)
 	byKey := regexp.MustCompile(`\bby key\b|\ba required key\b|\bof the required set\b|\binside the (?:required )?set\b`)
 	optional := regexp.MustCompile(`disabl[^.]*config-refs[^.]*\b(?:valid|optional)\b[^.]*`)
 	n := 0
 	writtenFiles(t, "../..", func(rel string, lines []string) {
+		adr := filepath.Base(rel) == "ADR-059-s1-scope.md"
 		for _, p := range paragraphs(rel, lines) {
 			text := strings.ToLower(p.text)
-			if !cites.MatchString(text) && (filepath.Base(rel) != "ADR-059-s1-scope.md" || !entry.MatchString(text)) {
+			if !cites.MatchString(text) && (!adr || !entry.MatchString(text)) {
 				continue
 			}
 			n++
-			if byKey.MatchString(text) && !strings.Contains(text, "pending the owner") {
-				t.Errorf("%s:%d cites decision 18 for the rule by key and does not say it is pending the owner", rel, p.line)
+			if byKey.MatchString(text) && !decided.MatchString(text) && (!adr || !strings.HasPrefix(text, "24. ")) {
+				t.Errorf("%s:%d cites decision 18 for the rule by key and not decision 24, which decided it", rel, p.line)
 			}
 			for _, s := range optional.FindAllString(text, -1) {
 				if !strings.Contains(s, "while no") {

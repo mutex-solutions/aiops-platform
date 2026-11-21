@@ -12,7 +12,7 @@ import (
 )
 
 // Exit codes. The documents give none for aiopsctl, so these are the
-// conventional ones (an open point of S1).
+// conventional ones (ADR-059 decision 29).
 const (
 	exitOK      = 0
 	exitRefused = 1 // the composition is refused: a read, compose, gate, graph or required-set error

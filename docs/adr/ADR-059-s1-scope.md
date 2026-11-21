@@ -236,8 +236,8 @@ generation's verdict passed and is not judged.
   rule and `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and the fake read
   them, and `reload` reads `HoldsRef`.
 - **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
-  required row of the role holds a reference. Proposed by the lead, pending the owner: a
-  row required by key counts as a required row here, so a reference held by an active
+  required row of the role holds a reference. By decision 24, a row required by key
+  counts as a required row here, so a reference held by an active
   provider of a required key in the root realm pulls `config-refs` in too, and a profile
   that then disables `config-refs` is refused at admission, where boot would stop later
   on that provider left PENDING. `configRefsReady` stays in the set when every
@@ -294,8 +294,8 @@ generation's verdict passed and is not judged.
   never creates an entry whose previous fiber is not DISPOSED; the plan's second batch
   mounts it. The replacement vet covers every fiber a plan retires, the children of a
   replaced group included, and an earlier commit of an entry the replacement remounts is
-  reported as `restarted`. Proposed by the lead, pending the owner: a new provider of a
-  key waits for the previous provider of that key to be disposed. The loader mounts no
+  reported as `restarted`. By decision 25, a new provider of a key waits for the
+  previous provider of that key to be disposed. The loader mounts no
   row that provides a key, whether the plan creates, enables or replaces it or a group
   the plan mounts mounts it, while a fiber that this plan or an earlier one removed,
   disabled or replaced, or that a group activation that ended gave up, still provides
@@ -309,3 +309,113 @@ generation's verdict passed and is not judged.
 - **Launcher and vet.** `--refs-dir` must name an absolute existing directory, or the
   command line is refused. Plugin vet refuses any import of `net/http/pprof` and `expvar`,
   and `time.AfterFunc` in `boot` needs a `//kernelcheck:allow-go` reason.
+
+## Owner decisions of 2026-11-21, S1 report
+
+The project owner decided the following on 2026-11-21, on the questions of the S1 exit
+report (`docs/design/s1-report.md`, §4 and §7(a)); each names the item it answers. Where
+a sentence above says otherwise, these decisions win.
+
+24. **Decision 18 holds by key** (item 1). A row required by key, an active provider of
+    a required key in the root realm, counts as a required row: a reference it holds
+    pulls the `config-refs` rows that serve the process and `configRefsReady` into the
+    required set, and a profile that then disables `config-refs` is refused at
+    admission. `configRefsReady` stays in the set when every `config-refs` row runs in
+    another role. Disabling `config-refs` stays an optional choice while no row required
+    by row or by key holds a reference.
+
+25. **A new provider of a key waits for the previous provider of that key** (item 2).
+    The loader mounts no row that provides a key while a fiber that this plan or an
+    earlier one removed, disabled or replaced, or that a group activation that ended
+    gave up, still provides that key in the same realm; the plan's second batch mounts
+    it. A row restarted in place is not held, because admission refuses two providers of
+    one key in one realm.
+
+26. **Decision 22 reads "may lose"** (item 3). `restart-policy` may lose its records
+    across its own restart at S1 and may start them afresh, so a later step may keep
+    them. The text of decision 22 above is the decided text; it replaces the first
+    wording, "keeps no records" and "starts its records afresh".
+
+27. **Admission refuses a provider of a required key whose own need has no provider**
+    (item 4). The no-provider rule of the static graph treats an active provider of a
+    required key in the root realm as it treats a required row: a need of that row with
+    no provider in its realm, including one whose provider runs only in another role, is
+    an error and refuses the profile at admission. Until now it was a warning, and boot
+    then stopped at the required audit.
+
+28. **The line budgets of `boot/` and `loader/` are measured again at the commit that
+    closes S1** (item 5). That commit, after the merge of the kernel additions, applies
+    the rule of decision 11 to the counts it measures, and ADR-059, `ci.yml` and the
+    Makefile change together. Until then the caps of "Line budgets at the S1 exit" hold.
+
+29. **The exit codes of the launcher are adopted as written** (item 7): 0 OK, 1 refused
+    before any row mounted, 2 usage, 3 required set not met, 4 leak or shutdown overran,
+    5 `restart-policy` gave up on an infrastructure provider, 6 launcher failure, 7
+    restore failed. Code 2 is also the exit code of a Go panic. `aiopsctl` uses 0, 1 and
+    2. The tables in `boot/run.go` and `cmd/aiopsctl/run.go` document them.
+
+30. **The default limits are the release defaults for now** (item 8): 10 s each for
+    load, drain and dispose; a shutdown bound of 30 s; a settle bound of their sum; a
+    leak grace of the drain deadline; archive 256, event window 1,024, observer queue
+    65,536, owner inbox 256, terminal limit 256. They are revisited with the
+    restart-under-load measurements of S3.
+
+31. **`<home>/run/status.json` is the readiness channel of one process at S1** (item 9).
+    It is written atomically and carries phase, ready, profile, role, digest, exit and
+    detail. The probe that an orchestrator reads is decided when the `http` definition
+    exists.
+
+32. **`conformance.Run(t, Mount)` is the pattern of every definition suite from S2a**
+    (item 10). `Mount` returns the implementation under test and the `*kernel.Root` it
+    runs on, as the loader suite's returns `(loader.Loader, *kernel.Root)`.
+
+33. **`RegistryKey` is consumer-bound** (item 11). Only the entries that
+    `Config.Consumers` lists resolve it, since whoever holds the registry can dispose and
+    restart any fiber.
+
+34. **A veto of `loader/patch-context` fails closed** (item 12). A listener that does not
+    call `next`, or returns a nil context, fails the entry with `ErrPatchVetoed`, and its
+    plugin never runs.
+
+35. **`profileContext` carries `Compose`, `Admit` and `Plan`** (item 13). The launch
+    service of decision 7 is the key `profileContext`, and the launch keys stay six.
+
+36. **The kernel additions G6, G7, G8, G10 and G11 are approved** (item 14): `Commit` and
+    `CommitOp`, the per-fiber config change lock, `RunWith`, the ERROR records of the
+    kernel, and the delivery of the events of `Close` with the field
+    `ObserverOverflow.Stall`. They merge to the main branch with G1 to G5, G9 and G12
+    after the S0 gates on the final port are recorded (decision 1), and are verified
+    with them (decision 2).
+
+37. **The open points that S1 recorded in its own code are accepted as built** (item 15).
+    The definition points are settled before S2a: `Committed`, `Commit`, `Required` and
+    `RequiredOf` on `profileContext`; `Catalog.Plugin`, which hands the plugin value to
+    every consumer of the open class; `Cmdline.Env`; the second batch of an id removed
+    and created again; the payloads of `loader/patch-context`, `loader/entry-init` and
+    `loader/volatile-update`; `reload.Op.Source` and the `ctx` that `Submit` takes; the
+    field names of `composition.Row`. The behaviour stands at S1: a loader wait that is
+    cut short leaves the first batch committed and an entry with no fiber; `reload`
+    abandons its queued operations when its row unloads; a waterfall listener cannot
+    pass a changed value to `next`. From S2a, whoever changes a `v0` definition fixes
+    every plugin under `plugins/` and `contrib/` in the same pull request (`08` §2).
+
+38. **The section "configRefsReady (recorded 2026-11-21)" is accepted as recorded**
+    (item 16), with the rule that decision 18 replaced.
+
+39. **The default answers of round 1 are confirmed** (item 17). They are the change of
+    the `reload` row itself, accepted above; `--refs-dir` checked at the command line;
+    plugin vet refusing `net/http/pprof` and `expvar`; `time.AfterFunc` in `boot` with an
+    allow-go reason; an empty entry id refused; `stable: 0` meaning no stable period;
+    overlapping teardown of a loader's children; the hook limit of the loader's exclusion
+    token; `WaitGroup.Go` in the settle of `reload`; the `reload/operation` event; one
+    retry hold while any operation is in flight; three kernel rules (a child mount after
+    a restart earlier in the batch is refused, a `CommitOp` after a `DisposeOp` of the
+    same fiber is refused, `Close` bounds its observer wait by one drain deadline); the
+    unexported registry config error; the observer queue of 65,536; and test limits of
+    1 s. The round 1 questions with no recorded answer are decided in the record of the
+    S1 exit: the stricter reading of check 8 for a patch on a group; the field that holds
+    per-key intercept provenance; `restart-policy` treating a fiber that goes UNLOADING
+    then LOADING as restarted by someone else; the clock edge case; whether `config-refs`
+    refuses a file root named by another launcher flag; the untracked caller in
+    recomposition case (a); a seam for a kernel-side oracle in the suites; requiring
+    `Handler` in an `http.Server` literal.

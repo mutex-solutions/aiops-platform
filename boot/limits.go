@@ -13,7 +13,8 @@ import (
 // The three deadlines of the kernel are the only tunables the documents name
 // (plugin-system-2026-11.md §3, item 3); they are configurable here, none is
 // fixed in code. The documents give no value for any of them, so DefaultLimits
-// is this package's reading and an open point.
+// is this package's reading, adopted as the release defaults for now (ADR-059
+// decision 30).
 //
 // A distribution carries its own numbers in limits.yaml, next to dist.yaml
 // (ParseLimits). The file may set any subset; a field it leaves out keeps the

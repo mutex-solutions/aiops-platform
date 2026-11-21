@@ -1108,8 +1108,9 @@ this ADR besides the performance gates on the port.
 ## S1 additions to the kernel API (ADR-059)
 
 ADR-059 decision 2 approves five additions for the loader, and decision 20 a sixth
-for the launcher's gate (G12). Each is built on what the kernel already does and
-changes no existing call. A batch with none of the new operations behaves as before.
+for the launcher's gate (G12). Decision 36 approves G6, G7, G8, G10 and G11, which no
+earlier decision named (see the owner decision at the end of this section). Each is
+built on what the kernel already does and changes no existing call. A batch with none of the new operations behaves as before.
 
 **G1, a child mount in a batch.**
 
@@ -1231,8 +1232,8 @@ with a config, `UpdateOpWith` and `CommitOp` of it return an error (until the S1
 review they reported success and retained nothing). The documents
 do not say who may hold it, so `RegistryKey` is now consumer-bound: only the
 entries that `Config.Consumers` lists resolve it, and `NewForTest` keeps every
-entry admitted. This is an open point for the project owner. `reflect`, `hooks`
-and `logger` stay open.
+entry admitted. The project owner accepted this on 2026-11-21 (ADR-059 decision 33).
+`reflect`, `hooks` and `logger` stay open.
 
 **G6, a config committed without a restart.**
 
@@ -1296,8 +1297,8 @@ the zero result past the last listener. The loader uses it for
 `loader/patch-context`: the row's isolate and intercept are the innermost step,
 a listener wraps what `next` returns, and a veto (no `next`, or a nil context)
 fails that entry with `ErrPatchVetoed` and never runs its plugin. The docs do
-not say what a veto of this hook means; fail closed is a choice and an open
-point for the project owner.
+not say what a veto of this hook means; the project owner chose fail closed on
+2026-11-21 (ADR-059 decision 34).
 
 **G9, a drain past its deadline is a leak (ADR-059 decision 13).** When the drain
 deadline of a fiber falls due and the fiber's own work is not over (a tracked
@@ -1394,6 +1395,19 @@ the kernel. Gate check 7 derives the classes of keys and hooks this way, the hoo
 plugin of the module table listens on included, and `dist.yaml` lists only who is
 allowed (bindings and listeners), never a class. They take no lock, run no plugin
 code and return values.
+
+**Owner decision, 2026-11-21: G6, G7, G8, G10 and G11 are approved** (ADR-059 decision
+36). No earlier decision named them: G6 adds `Commit` and `CommitOp`, G8 adds `RunWith`,
+G7 adds the per-fiber config change lock, G10 adds ERROR records to `Config.LogHandler`,
+and G11 delivers the events of `Close` and adds the exported field
+`ObserverOverflow.Stall`; decision 21 covered only the root observer's effect in G11.
+They merge to the main branch with G1 to G5 (decision 2), G9 (decision 13) and G12
+(decision 20) after the S0 gates on the final port are recorded (ADR-059 decision 1),
+their exact shapes are recorded here then, and the differential corpus, the property
+workload and the call-path gate run again on the merged kernel (decision 2). The full
+property workload passed on the branch kernel with G1 to G12 at `ab9b405`
+(`test/spike/s0/results/property-full-s1-converged/`); that run is evidence on the
+branch, not the run after the merge.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,

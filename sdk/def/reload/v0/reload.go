@@ -80,7 +80,7 @@ type ID uint64
 
 // Op is one submission: a request to compose the layers again and apply the result.
 // Source says who submitted, for the audit trail ("aiopsctl", "reload-watch-files");
-// the docs give an operation no field (open point).
+// the docs give an operation no field (ADR-059 decision 37).
 type Op struct{ Source string }
 
 // Stage is a step of the pipeline of 03-c3-kernel.md:376-382.
@@ -175,7 +175,7 @@ type Reload interface {
 	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed,
 	// ErrStateUnknown, or ErrNested for a ctx that carries the reload goroutine's work. The docs write
 	// Submit(op); ctx is added so that a nested submission can be told from an
-	// independent one (open point).
+	// independent one (ADR-059 decision 37).
 	Submit(ctx context.Context, op Op) (ID, error)
 	// Result returns the result of id as it stands, false for an unknown id.
 	Result(id ID) (Result, bool)

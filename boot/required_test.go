@@ -92,9 +92,9 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a required row with a reference and only a disabled config-refs row",
 			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			want:   []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "u"},
-		// Pending the owner, a provider of a required key is inside the set as a required
-		// row is, so its reference pulls config-refs in too (ADR-059, how decision 18 is
-		// built); the closure clause never hides that config-refs is outside the set.
+		// A provider of a required key is inside the set as a required row is, so its
+		// reference pulls config-refs in too (ADR-059 decision 24); the closure clause
+		// never hides that config-refs is outside the set.
 		{name: "a provider of a required key that holds a reference",
 			bundle: rows("id: refs, plugin: aiops/config-refs", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			dist:   "requiredKeys: [sql]", closed: "refs,sql"},

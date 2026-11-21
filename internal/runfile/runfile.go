@@ -10,7 +10,7 @@ import (
 )
 
 // Dir is the runtime directory of a home, "<home>/run" (ADR-059 decision 9; the
-// documents name no such directory for S1 and this is an open point).
+// documents name no such directory for S1, and ADR-059 decision 31 adopts it).
 func Dir(home string) string { return filepath.Join(home, "run") }
 
 // Write puts data in dir/name atomically: it writes a temporary file in dir and

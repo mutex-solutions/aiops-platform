@@ -27,8 +27,8 @@ const ConfigRefsID = "aiops/config-refs"
 // quiesces. The static graph sees the same need: the restart closure of config-refs
 // holds the rows with references, and where a required row of the role holds one the
 // launcher adds config-refs and the key to the required set (RequiredFor; ADR-059
-// decision 18); pending the owner, so it does where an active provider of a required
-// key in the root realm holds one. With no config-refs in the module table the catalog
+// decision 18), and so it does where an active provider of a required key in the root
+// realm holds one (decision 24). With no config-refs in the module table the catalog
 // still has the key, which nothing provides, so such a row stays PENDING.
 const configRefsReady = "configRefsReady"
 

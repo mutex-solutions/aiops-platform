@@ -144,15 +144,15 @@ type Result struct {
 // Update and Remove are Apply with one operation. The docs say both that the plan
 // is one batch and that the loader never creates an entry for an id whose previous
 // fiber is not DISPOSED (07-c4-plugin-sdk.md:341); an id that is removed and created
-// again therefore has its create in a second batch, after the wait (open point).
+// again therefore has its create in a second batch, after the wait (ADR-059
+// decision 37).
 //
-// The rule holds by key too (ADR-059; an open point until the owner confirms it): an
-// entry whose plugin provides a key, and that the plan creates, enables or replaces or
-// that a group the plan mounts mounts, gets its fiber only once every fiber that
-// provides the key in the same realm and that this plan or an earlier one removed,
-// disabled or replaced, or that a group activation that ended gave up, is DISPOSED, as
-// for an id, because the kernel refuses a second provision of a key in a realm while
-// the first stands. The realm of a key at an entry is the nearest entry, the entry
+// The rule holds by key too (ADR-059 decision 25): an entry whose plugin provides a
+// key, and that the plan creates, enables or replaces or that a group the plan mounts
+// mounts, gets its fiber only once every fiber that provides the key in the same realm
+// and that this plan or an earlier one removed, disabled or replaced, or that a group
+// activation that ended gave up, is DISPOSED, as for an id, because the kernel refuses
+// a second provision of a key in a realm while the first stands. The realm of a key at an entry is the nearest entry, the entry
 // itself first, whose Isolate names the key, or the root, as in the launcher's static
 // graph. A fiber restarted in place keeps its plugin and its realm, so it is not held:
 // the launcher admits no composition with two providers of one key in one realm.
@@ -192,9 +192,9 @@ type Loader interface {
 // returns. A listener that calls next and then returns Context drops the row's
 // isolate and intercept. A listener that does not call next, or returns a nil
 // context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
-// runs (fail closed, an open point of ADR-034 G8). The docs name the hook's use,
+// runs (fail closed, ADR-059 decision 34). The docs name the hook's use,
 // "isolate and intercept handling" (plugin-system-2026-11.md §8), and no payload;
-// this is the smallest the named listeners need (open point).
+// this is the smallest the named listeners need (ADR-059 decision 37).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -203,7 +203,7 @@ type PatchContextArgs struct {
 // EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
 // fiber is created, vetoed or not, with the context it was mounted from: the one
 // loader/patch-context returned, or the parent's for a vetoed entry. Payload not
-// described in the docs; minimal (open point).
+// described in the docs; minimal (ADR-059 decision 37).
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -217,7 +217,7 @@ type EntryInitArgs struct {
 // reference, old or new (VolatileOnly): such a change restarts the fiber, because the
 // tree holds references unresolved and only config-refs resolves one, at an
 // activation. A consumer reads the values at Paths; a field that holds a reference
-// did not change. Payload not described in the docs; minimal (open point).
+// did not change. Payload not described in the docs; minimal (ADR-059 decision 37).
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any

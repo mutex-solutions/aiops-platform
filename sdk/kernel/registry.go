@@ -30,8 +30,8 @@ var (
 // Await and restart that fiber with Update(ctx, nil), which keeps the config the
 // fiber retains, so whoever holds the registry holds those powers over every fiber
 // of the kernel: the documents are silent on who may, so RegistryKey is
-// consumer-bound and only the entries that Config.Consumers lists resolve it (an
-// open point). It cannot change the config: Commit, Update with a config,
+// consumer-bound and only the entries that Config.Consumers lists resolve it (ADR-059
+// decision 33). It cannot change the config: Commit, Update with a config,
 // UpdateOpWith and CommitOp of it return an error. It asks the owner, so call it
 // off the owner and off any callback of the fiber it asks about.
 func (r *registry) Fiber(id uint64) (*Fiber, bool) {

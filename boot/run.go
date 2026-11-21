@@ -30,7 +30,7 @@ import (
 // Exit codes of Run. The documents say only that boot "exits non-zero when the
 // required set is not met" (08-profiles-roadmap-adrs.md:520, :538) and that a
 // process is replaced in three cases (03-c3-kernel.md:372); the numbers are this
-// package's and an open point.
+// package's, adopted as written (ADR-059 decision 29).
 const (
 	ExitOK       = 0 // stopped by a signal or by the caller's context, tree disposed in time
 	ExitRefused  = 1 // boot stopped before any row mounted: a layer, the gate, the static graph, the distribution
@@ -139,8 +139,8 @@ const (
 // latch and the phase. The documents name no mechanism for S1 (readiness is a
 // latch that a row sets, 03-c3-kernel.md:67, and the "reports ready" of 07 section
 // 7.2 has no channel), so Run hands every change to RunOptions.Publish and
-// cmd/aiops writes it to a file in the runtime directory of the home. It is an
-// open point.
+// cmd/aiops writes it to a file in the runtime directory of the home, the readiness
+// channel of one process at S1 (ADR-059 decision 31).
 type ProcessStatus struct {
 	Phase   Phase
 	Ready   bool

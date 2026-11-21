@@ -209,18 +209,17 @@ func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 // or by key holds a reference: the rows that hold one stay PENDING. Its keys are the
 // launcher's to require (ADR-059 decision 18), so the last-provider rule of gate check 8
 // does not refuse the profile; the required set does where such a row holds one (the
-// next test). That a row required by key counts is pending the owner (ADR-059, how
-// decision 18 is built).
+// next test). A row required by key counts as a required row (ADR-059 decision 24).
 func TestReleaseProfileWithConfigRefsDisabledIsAdmitted(t *testing.T) {
 	if a := admitRelease(t, releaseHome(", enabled: false", "1m")); a.Refused() {
 		t.Fatalf("refused:\n%s", strings.Join(a.Diagnostics(), "\n"))
 	}
 }
 
-// The clock row provides clock, a required key of the release set, so, pending the
-// owner, it is inside the required set as a required row is: when it holds a reference
-// and config-refs is disabled, the static admission refuses the profile, where boot
-// would stop later on a clock left PENDING (ADR-059, how decision 18 is built).
+// The clock row provides clock, a required key of the release set, so it is inside the
+// required set as a required row is: when it holds a reference and config-refs is
+// disabled, the static admission refuses the profile, where boot would stop later on a
+// clock left PENDING (ADR-059 decision 24).
 func TestReleaseProfileWithAReferenceInAProviderOfARequiredKeyNeedsConfigRefs(t *testing.T) {
 	home := releaseHome(", enabled: false", "1m")
 	f := home["bundles/b/bundle.yaml"]

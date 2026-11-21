@@ -81,7 +81,7 @@ func (t *tree) restore(s snapshot) {
 // mount of a provider of a key that such a fiber, or one a group activation that ended
 // gave up, provides in the same realm (stage). The docs do not say what happens when
 // the wait is cut short: the first batch stays committed, the entry stays in the tree
-// with no fiber, and the error is returned (open point).
+// with no fiber, and the error is returned (ADR-059 decision 37).
 //
 // A group activation that mounts its children waits while a plan is staged and its
 // first batch runs, and the plan waits for it, so a refused plan is put back exactly
