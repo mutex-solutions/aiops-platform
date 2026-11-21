@@ -340,8 +340,10 @@ type kernelRuntime struct {
 	keys     sync.Map    // string -> kernel.Key[any], one per name for this instance.
 	mu       sync.RWMutex
 	fibers   map[uint64]kernelFiber
-	evicted  evictedSet // Ids forgot after the kernel evicted their record.
-	pruneAt  int        // Size of fibers at which the next prune runs.
+	queue    []uint64      // The ids of fibers, longest unprobed first (forgetEvicted).
+	evicted  evictedSet    // Ids forgot after the kernel evicted their record.
+	forgot   uint64        // Ids in evicted: never more than the kernel evicted.
+	probes   atomic.Uint64 // Owner round trips of forgetEvicted, which the tests bound per mount.
 
 	recMu   sync.Mutex
 	records map[uint64]map[string]any // Record payloads by the kernel sequence of their marker.
@@ -735,45 +737,63 @@ func (r *kernelRuntime) register(f *kernel.Fiber, spec Spec) uint64 {
 	id := f.ID()
 	r.mu.Lock()
 	r.fibers[id] = kernelFiber{f: f, cell: spec.Config}
-	due := len(r.fibers) >= max(r.pruneAt, 2*r.cfg.ArchiveLimit+1024)
+	r.queue = append(r.queue, id)
 	r.mu.Unlock()
-	if due {
-		r.pruneFibers()
-	}
+	r.forgetEvicted()
 	return id
 }
 
-// pruneFibers forgets the fibers whose kernel record was evicted: the kernel
+// kernelProbes is the number of held fibers that one mount probes for eviction.
+const kernelProbes = 2
+
+// forgetEvicted forgets the fibers whose kernel record was evicted: the kernel
 // answers ErrExpired for them, so holding their handles (and through them their
 // plugins and configs) would only grow the adapter's heap with every fiber ever
-// mounted, which the reconciler, whose archive is bounded, does not. The next
-// prune runs when the map has doubled, so the cost is amortised O(1) per mount.
-func (r *kernelRuntime) pruneFibers() {
-	r.mu.RLock()
-	ids := make([]uint64, 0, len(r.fibers))
-	for id := range r.fibers {
-		ids = append(ids, id)
+// mounted, which the reconciler, whose archive is bounded, does not.
+//
+// A mount probes at most kernelProbes held fibers (one owner round trip each),
+// the longest unprobed first, and only while the kernel has evicted more records
+// than the adapter forgot, a count read without entering the owner. So a mount
+// does O(1) work, never waits for a sweep of every fiber, and no mount probes for
+// another. A probed fiber that the kernel still keeps goes to the back of the
+// queue. A pass over the queue takes len/kernelProbes mounts and forgets every
+// fiber evicted before it, so while mounts and evictions keep pace, as in churn,
+// at most half of the map is fibers evicted and not yet forgotten: the map holds
+// at most twice what the kernel keeps (its live fibers and its archive).
+func (r *kernelRuntime) forgetEvicted() {
+	evicted := r.root.RetentionStatus().ArchiveEvicted
+	var probe [kernelProbes]kernelFiber
+	r.mu.Lock()
+	if evicted <= r.forgot || len(r.queue) == 0 {
+		r.mu.Unlock()
+		return
 	}
-	r.mu.RUnlock()
+	n := min(kernelProbes, len(r.queue))
+	for i, id := range r.queue[:n] {
+		probe[i] = r.fibers[id]
+	}
+	r.queue = r.queue[n:]
+	r.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), rcLoadBudget)
 	defer cancel()
-	var gone []uint64
-	for _, id := range ids {
-		f, ok := r.lookup(id)
-		if !ok {
-			continue
-		}
-		if _, err := f.f.State(ctx); errors.Is(err, kernel.ErrExpired) {
-			gone = append(gone, id)
-		}
+	var gone [kernelProbes]bool
+	for i, f := range probe[:n] {
+		r.probes.Add(1)
+		_, err := f.f.State(ctx)
+		gone[i] = errors.Is(err, kernel.ErrExpired)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, id := range gone {
+	for i, f := range probe[:n] {
+		id := f.f.ID()
+		if !gone[i] {
+			r.queue = append(r.queue, id)
+			continue
+		}
 		delete(r.fibers, id)
 		r.evicted.add(id)
+		r.forgot++
 	}
-	r.pruneAt = 2 * len(r.fibers)
 }
 
 // mount mounts spec under parent (the root context for Mount).
@@ -966,18 +986,22 @@ func (r *kernelRuntime) Batch(ctx context.Context, operations []BatchOperation) 
 func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 	c := &Context{host: r, std: kc.Std(), config: cfg}
 	c.live.Store(true) // The kernel refuses what an inactive activation may not do.
-	var leave atomic.Pointer[func()]
+	// The kernel returns one leave function per activation, allocated with it (see
+	// handle.enter), and an activation is live before Apply runs, as the root is
+	// until Close. One lease taken here keeps that function, so no Enter or Leave
+	// allocates, the first of an activation included. A handle that is not live
+	// here never is again: its Enter refuses and its Leave is never called.
+	var leave func()
+	if l, ok := kc.Enter(); ok {
+		leave = l
+		l()
+	}
 	c.fwd = &forward{
-		// The kernel returns one leave function per activation (see handle.enter),
-		// so the first one seen serves every Leave.
 		enter: func() bool {
-			l, ok := kc.Enter()
-			if ok && leave.Load() == nil {
-				keepLeave(&leave, l) // out of line: taking &l here would heap-allocate l on every call
-			}
+			_, ok := kc.Enter()
 			return ok
 		},
-		leave: func() { (*leave.Load())() },
+		leave: leave,
 		// The kernel owns the worker: it holds the lease, reports the result to the
 		// owner and clears the tracked label itself, so a label is gone from the
 		// snapshot as soon as the worker has returned, as in the prototypes.
@@ -1442,12 +1466,4 @@ func (r *kernelRuntime) RetentionStatus() RetentionStatus {
 		EventWindow: r.window, Windowed: int(min(s.EventsTotal-min(s.EventsTotal, r.base.events), uint64(r.window))),
 		EventsTotal:     s.EventsTotal - min(s.EventsTotal, r.base.events),
 		ObserverBacklog: s.ObserverBacklog, TerminalDropped: s.TerminalDropped}
-}
-
-// keepLeave stores the activation's leave function once. It is a separate
-// function so the lease path of the adapter allocates nothing after the first call.
-//
-//go:noinline
-func keepLeave(slot *atomic.Pointer[func()], l func()) {
-	slot.CompareAndSwap(nil, &l)
 }

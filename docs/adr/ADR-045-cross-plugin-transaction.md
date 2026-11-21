@@ -533,3 +533,28 @@ teardown back to the harness baseline, no file-descriptor growth, disposed
 generations owning nothing, connections accounted per owner generation, and no
 open transaction or stuck statement. This supersedes the earlier frozen-scale
 run, which predates the accounting.
+
+## Restart gate on kernel-owned resources, 2026-11-20
+
+The criteria require the restart probe to be rerun "with resources owned by
+[the final kernel's] real effects and actual lease/quiesce behavior". Evidence:
+`test/spike/s0/results/restart-full-kernel-owned/` (commit `d683ebe`, 15,170 s,
+dedicated host). The pool, the job clients and the listener are three kernel
+fibers; each resource is created in an effect; a restart is a kernel batch
+update of the fiber; dependants return by availability alone; handlers and
+jobs hold leases for their whole duration.
+
+**Pass at frozen scale: 100 of 100 cycles.** No acknowledged id was lost and
+none was durable without an acknowledgement. Recovery took 252 to 454 ms
+(median 404 ms) against the 5 s bound. In every cycle the kernel's own record
+showed leases open at the restart request, the unload waiting for them inside
+the drain deadline, the order quiesce, drain, dispose, no fiber leaked, blocked
+or failed, and a nil `Settle`. The section 10 accounting, extended with the
+kernel's goroutines as declared owners, had no finding in any arm, and no
+kernel goroutine remained after `Close`.
+
+One behaviour differs from the library-owned variant and is by design of the
+kernel: while a listener restarts as a dependant of the pool or the clients,
+its accept loop is closed, so clients see refused connections (3 to 18 retried
+attempts per cycle, all inside the operation timeout) where the library
+variant answered 503.

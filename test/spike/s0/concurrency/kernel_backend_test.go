@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -1028,23 +1029,50 @@ func TestKernelNoSaveSkipsAFailingCommit(t *testing.T) {
 	}
 }
 
-// The callpath gate budgets zero allocations for the owner's Enter and Leave. The
-// kernel's own path allocates nothing; this holds the adapter to the same budget.
+// The callpath gate budgets zero allocations for the owner's Enter and Leave in
+// every measured run, and a run may hold the first Enter of a fresh activation.
+// The kernel's own path allocates nothing; this holds the adapter to the same
+// budget, first call included.
 func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 	ctx, r := kernelFixture(t)
-	ctxs := make(chan *Context, 1)
-	id := kernelMount(t, ctx, r, Spec{ID: "leased", Apply: func(c *Context) error {
-		ctxs <- c
-		return nil
-	}})
-	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
-		t.Fatal(err)
+	const fresh = 100
+	ctxs := make(chan *Context, fresh)
+	for range fresh {
+		id := kernelMount(t, ctx, r, Spec{ID: "leased", Apply: func(c *Context) error {
+			ctxs <- c
+			return nil
+		}})
+		if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+			t.Fatal(err)
+		}
 	}
-	c := <-ctxs
-	if !c.Enter() { // The first call keeps the activation's leave function.
-		t.Fatal("Enter refused on an active fiber")
+	firsts := make([]*Context, 0, fresh)
+	for range fresh {
+		firsts = append(firsts, <-ctxs)
 	}
-	c.Leave()
+	// testing.AllocsPerRun warms up with one call, which would hide an allocation
+	// of the first call, so the first calls are measured here on one P.
+	refused := 0
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for _, c := range firsts {
+		if !c.Enter() {
+			refused++
+			continue
+		}
+		c.Leave()
+	}
+	runtime.ReadMemStats(&after)
+	if refused != 0 {
+		t.Fatalf("Enter refused on %d active fibers", refused)
+	}
+	// An absolute bound, not a mean: one allocation in some activations only must
+	// fail too. Two objects leave room for a stray runtime allocation.
+	if got := after.Mallocs - before.Mallocs; got > 2 {
+		t.Fatalf("the first Enter+Leave of %d activations allocated %d objects, want 0", fresh, got)
+	}
+	c := firsts[0]
 	if got := testing.AllocsPerRun(1000, func() {
 		if !c.Enter() {
 			panic("Enter refused on an active fiber")
@@ -1056,12 +1084,20 @@ func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 }
 
 // The adapter forgets the fibers whose kernel record was evicted, so its own heap
-// stays bounded by the archive, and still answers for them as the kernel does.
+// stays bounded by the archive, and still answers for them as the kernel does. It
+// forgets them as they are evicted, a few per mount, never by holding every fiber
+// until a sweep: the map stays within twice what the kernel keeps (the archive and
+// the one live fiber) after every mount.
 func TestKernelForgetsEvictedFibers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	r := NewKernelWith(Retention{ArchiveLimit: 4}).(*kernelRuntime)
 	defer func() { _ = r.Close(ctx) }()
+	held := func() int {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		return len(r.fibers)
+	}
 	var first uint64
 	for i := range 2*r.cfg.ArchiveLimit + 1100 {
 		id, err := r.Mount(ctx, Spec{ID: "churn", Apply: func(*Context) error { return nil }})
@@ -1071,18 +1107,15 @@ func TestKernelForgetsEvictedFibers(t *testing.T) {
 		if i == 0 {
 			first = id
 		}
+		if n := held(); n > 2*(r.cfg.ArchiveLimit+1) {
+			t.Fatalf("adapter holds %d fibers after mount %d; the kernel keeps %d archived and 1 live", n, i, r.cfg.ArchiveLimit)
+		}
 		if err := r.Dispose(ctx, id); err != nil {
 			t.Fatal(err)
 		}
 		if err := r.AwaitFiber(ctx, id); err != nil && !errors.Is(err, ErrExpired) {
 			t.Fatal(err)
 		}
-	}
-	r.mu.RLock()
-	held := len(r.fibers)
-	r.mu.RUnlock()
-	if held > 2*r.cfg.ArchiveLimit+1024 {
-		t.Fatalf("adapter holds %d fibers after churn; the kernel archive holds %d", held, r.cfg.ArchiveLimit)
 	}
 	if _, ok := r.lookup(first); ok {
 		t.Fatal("the first fiber is still held although its record was evicted")
@@ -1098,5 +1131,85 @@ func TestKernelForgetsEvictedFibers(t *testing.T) {
 	}
 	if err := r.Dispose(ctx, 1<<40); !errors.Is(err, ErrUnknown) {
 		t.Fatalf("Dispose of a never issued fiber = %v, want ErrUnknown", err)
+	}
+}
+
+// A fiber evicted by the kernel and not yet forgotten by the adapter (no mount has
+// probed it) gets the same answers as a forgotten one: the kernel's.
+func TestKernelAnswersForAnEvictedFiberItStillHolds(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r := NewKernelWith(Retention{ArchiveLimit: 4}).(*kernelRuntime)
+	defer func() { _ = r.Close(ctx) }()
+	ids := make([]uint64, r.cfg.ArchiveLimit+1)
+	for i := range ids {
+		ids[i] = kernelMount(t, ctx, r, Spec{ID: "held", Apply: func(*Context) error { return nil }})
+	}
+	for _, id := range ids { // No mount follows: nothing is probed.
+		if err := r.Dispose(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.AwaitFiber(ctx, id); err != nil && !errors.Is(err, ErrExpired) {
+			t.Fatal(err)
+		}
+	}
+	first := ids[0]
+	if _, ok := r.lookup(first); !ok {
+		t.Fatal("the first fiber was forgotten although no mount followed its eviction")
+	}
+	if err := r.AwaitFiber(ctx, first); !errors.Is(err, ErrExpired) {
+		t.Fatalf("AwaitFiber of an evicted fiber = %v, want ErrExpired", err)
+	}
+	if err := r.Dispose(ctx, first); err != nil {
+		t.Fatalf("Dispose of an evicted fiber = %v, want nil (a no-op, as in the kernel)", err)
+	}
+	if err := r.Update(ctx, first); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("Update of an evicted fiber = %v, want ErrUnknown, as the kernel answers", err)
+	}
+}
+
+// A mount probes at most kernelProbes held fibers, however many mounts run at once
+// and however many fibers the adapter holds: no mount waits for a sweep of the
+// map or for the bookkeeping of another mount.
+func TestKernelMountProbesAFewFibers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r := NewKernelWith(Retention{ArchiveLimit: 4}).(*kernelRuntime)
+	defer func() { _ = r.Close(ctx) }()
+	const workers, rounds = 8, 400
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for range workers {
+		wg.Go(func() {
+			for range rounds {
+				id, err := r.Mount(ctx, Spec{ID: "churn", Apply: func(*Context) error { return nil }})
+				if err == nil {
+					err = r.Dispose(ctx, id)
+				}
+				if err == nil {
+					if err = r.AwaitFiber(ctx, id); errors.Is(err, ErrExpired) {
+						err = nil
+					}
+				}
+				if err != nil {
+					errs <- err
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if probes, mounts := r.probes.Load(), uint64(workers*rounds); probes > kernelProbes*mounts {
+		t.Fatalf("%d mounts made %d probes, want at most %d per mount", mounts, probes, kernelProbes)
+	}
+	r.mu.RLock()
+	held := len(r.fibers)
+	r.mu.RUnlock()
+	if held > 2*(r.cfg.ArchiveLimit+workers) {
+		t.Fatalf("adapter holds %d fibers after concurrent churn; the kernel kept at most %d archived and %d live", held, r.cfg.ArchiveLimit, workers)
 	}
 }
