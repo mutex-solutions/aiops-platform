@@ -148,13 +148,14 @@ type Result struct {
 //
 // The rule holds by key too (ADR-059; an open point until the owner confirms it): an
 // entry whose plugin provides a key, and that the plan creates, enables or replaces or
-// that a group the plan mounts mounts, gets its fiber only once every fiber the plan
-// removes, disables or replaces that provides the key in the same realm is DISPOSED,
-// because the kernel refuses a second provision of a key in a realm while the first
-// stands. The realm of a key at an entry is the nearest entry, the entry itself first,
-// whose Isolate names the key, or the root, as in the launcher's static graph. A fiber
-// restarted in place keeps its plugin and its realm, so it is not held: the launcher
-// admits no composition with two providers of one key in one realm.
+// that a group the plan mounts mounts, gets its fiber only once every fiber that
+// provides the key in the same realm and that this plan or an earlier one removed,
+// disabled or replaced, or that a group activation that ended gave up, is DISPOSED, as
+// for an id, because the kernel refuses a second provision of a key in a realm while
+// the first stands. The realm of a key at an entry is the nearest entry, the entry
+// itself first, whose Isolate names the key, or the root, as in the launcher's static
+// graph. A fiber restarted in place keeps its plugin and its realm, so it is not held:
+// the launcher admits no composition with two providers of one key in one realm.
 type Loader interface {
 	// Apply applies the operations in order against the tree as the earlier ones
 	// leave it. It validates everything first: a refused operation refuses the whole

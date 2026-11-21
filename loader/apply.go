@@ -40,7 +40,7 @@ type held struct {
 type snapshot struct {
 	entries map[string]entry
 	order   []string
-	prev    map[string][]*kernel.Fiber
+	prev    map[string][]previous
 }
 
 func (t *tree) snapshot() snapshot {
@@ -78,10 +78,10 @@ func (t *tree) restore(s snapshot) {
 // waits for disposal"), and a batch commits its desired state before any fiber
 // unloads, so a mount of an id that was removed or replaced, in this plan or in an
 // earlier one, goes in a second batch after the wait for that disposal. So does a
-// mount of a provider of a key that the plan retires a provider of in the same realm
-// (stage). The docs do not say what happens when the wait is cut short: the first
-// batch stays committed, the entry stays in the tree with no fiber, and the error is
-// returned (open point).
+// mount of a provider of a key that such a fiber, or one a group activation that ended
+// gave up, provides in the same realm (stage). The docs do not say what happens when
+// the wait is cut short: the first batch stays committed, the entry stays in the tree
+// with no fiber, and the error is returned (open point).
 //
 // A group activation that mounts its children waits while a plan is staged and its
 // first batch runs, and the plan waits for it, so a refused plan is put back exactly
@@ -247,18 +247,23 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 		}
 	}
 	// The wait for a previous fiber holds by key too: an entry the plan mounts, or that
-	// the group it mounts mounts, whose plugin provides a key that a fiber the plan
-	// retires provides in the same realm, waits until that fiber is DISPOSED, because the
-	// kernel refuses a second provision of the key while the first stands.
+	// the group it mounts mounts, whose plugin provides a key that a previous fiber
+	// provides in the same realm, waits until that fiber is DISPOSED, because the kernel
+	// refuses a second provision of the key while the first stands. As for an id, that
+	// fiber may be one this plan or an earlier one retired, or one a group activation
+	// that ended gave up.
 	now := t.snapshot().entries
-	for _, d := range p.retired {
-		gone := t.provides(p.snap.entries, d.id)
+	var olds []previous
+	for _, id := range slices.Sorted(maps.Keys(t.prev)) {
+		olds = append(olds, t.prev[id]...)
+	}
+	for _, d := range olds {
 		for _, id := range slices.Clone(p.mounts) {
 			for _, x := range t.subtree(id) {
 				e := t.entries[x]
-				if e != nil && t.mount(e) == def.Mounted && !slices.Contains(t.prev[x], d.fiber) &&
-					slices.ContainsFunc(t.provides(now, x), func(k string) bool { return slices.Contains(gone, k) }) {
-					t.addPrev(x, d.fiber)
+				if e != nil && t.mount(e) == def.Mounted && !slices.ContainsFunc(t.prev[x], func(o previous) bool { return o.fiber == d.fiber }) &&
+					slices.ContainsFunc(t.provides(now, x), func(k string) bool { return slices.Contains(d.keys, k) }) {
+					t.addPrev(x, d)
 					p.mounts = append(p.mounts, x)
 				}
 			}
@@ -302,7 +307,7 @@ func (t *tree) retireIn(ctx context.Context, p *plan, id string) {
 				p.dispose = append(p.dispose, held{id: x, fiber: e.fiber})
 			}
 			p.retired = append(p.retired, held{id: x, fiber: e.fiber})
-			t.addPrev(x, e.fiber)
+			t.addPrev(x, previous{e.fiber, t.provides(p.snap.entries, x)})
 		}
 		covered[x] = live || covered[e.spec.Parent]
 		e.fiber, e.kids = nil, nil
@@ -492,11 +497,11 @@ func (t *tree) settle(ctx context.Context, ids []string) error {
 		fibers := t.prev[id]
 		t.mu.Unlock()
 		for _, f := range fibers {
-			_ = f.Await(ctx) // the startup error of a fiber that failed is not the question
+			_ = f.fiber.Await(ctx) // the startup error of a fiber that failed is not the question
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if !gone(ctx, f) {
+			if !gone(ctx, f.fiber) {
 				return fmt.Errorf("entry %q: %w", id, def.ErrNotDisposed)
 			}
 		}
@@ -515,15 +520,15 @@ func (t *tree) sweep(ctx context.Context) {
 	var dead []*kernel.Fiber
 	for _, fibers := range prev {
 		for _, f := range fibers {
-			if gone(ctx, f) {
-				dead = append(dead, f)
+			if gone(ctx, f.fiber) {
+				dead = append(dead, f.fiber)
 			}
 		}
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for id := range t.prev {
-		t.prev[id] = slices.DeleteFunc(slices.Clone(t.prev[id]), func(f *kernel.Fiber) bool { return slices.Contains(dead, f) })
+		t.prev[id] = slices.DeleteFunc(slices.Clone(t.prev[id]), func(f previous) bool { return slices.Contains(dead, f.fiber) })
 		if len(t.prev[id]) == 0 {
 			delete(t.prev, id)
 		}

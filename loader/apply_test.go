@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
@@ -544,7 +545,7 @@ func TestNeverCreatesWhileThePreviousFiberIsNotDisposed(t *testing.T) {
 		p := newProbe()
 		x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/a", nil)), rows: []def.EntrySpec{row("a", "t/a")}})
 		f, _, _ := x.tree.fiberOf("a")
-		x.tree.prev["b"] = []*kernel.Fiber{f}
+		x.tree.prev["b"] = []previous{{fiber: f}}
 		if err := x.tree.settle(t.Context(), []string{"b"}); !errors.Is(err, def.ErrNotDisposed) {
 			t.Errorf("settle = %v", err)
 		}
@@ -564,35 +565,46 @@ func TestNeverCreatesWhileThePreviousFiberIsNotDisposed(t *testing.T) {
 	})
 }
 
-// The rule above holds by key too: a plan that retires the provider of a key and mounts
-// another provider of it in the same realm mounts the new one only once the old one is
-// DISPOSED. The kernel refuses a second provision of a key while the first stands, so
-// the new row would be FAILED, and under ADR-059 decision 19 its generation rolled back.
-// The old provider holds the key until its disposer returns. A provider in another realm
-// does not wait.
+// The rule above holds by key too: a plan that mounts a provider of a key while a
+// previous fiber provides it in the same realm mounts the new one only once the old one
+// is DISPOSED, whether this plan or an earlier one retired the old one or a restart of
+// its group gave it up. The kernel refuses a second provision of a key while the first
+// stands, so the new row would be FAILED, and under ADR-059 decision 19 its generation
+// rolled back. The old provider holds the key until its disposer returns. A provider in
+// another realm does not wait.
 func TestNeverCreatesAProviderWhileTheOldProviderOfItsKeyIsNotDisposed(t *testing.T) {
 	k := kernel.NewKey[int]("k", 0)
 	iso := func(e def.EntrySpec) def.EntrySpec { e.Isolate = []string{"k"}; return e }
 	off := func(e def.EntrySpec) def.EntrySpec { e.Enabled = false; return e }
 	on := func(e def.EntrySpec) def.EntrySpec { e.Enabled = true; return e }
+	until := func(cond func() bool) {
+		for !cond() {
+			time.Sleep(time.Millisecond)
+		}
+	}
 	for _, tc := range []struct {
-		name  string
-		rows  []def.EntrySpec
-		ops   []def.Op
-		group string // a group the plan mounts, whose activation mounts the new provider
-		id    string // the entry of the new provider
-		waits bool
+		name   string
+		rows   []def.EntrySpec
+		before []def.Op // an earlier plan, which returns while the old provider disposes
+		ops    []def.Op
+		group  string // a group the plan mounts, whose activation mounts the new provider
+		id     string // the entry of the new provider
+		waits  bool
 	}{
-		{"remove, then create", []def.EntrySpec{row("old", "t/old")},
+		{"remove, then create", []def.EntrySpec{row("old", "t/old")}, nil,
 			[]def.Op{remove("old"), create(row("new", "t/new"))}, "", "new", true},
-		{"replace, then create", []def.EntrySpec{row("old", "t/old")},
+		{"replace, then create", []def.EntrySpec{row("old", "t/old")}, nil,
 			[]def.Op{update(row("old", "t/other")), create(row("new", "t/new"))}, "", "new", true},
-		{"disable, then enable the group of the new one", []def.EntrySpec{row("old", "t/old"), off(group("h")), child("h", "c", "t/new")},
+		{"disable, then enable the group of the new one", []def.EntrySpec{row("old", "t/old"), off(group("h")), child("h", "c", "t/new")}, nil,
 			[]def.Op{update(off(row("old", "t/old"))), update(on(group("h")))}, "h", "h:c", true},
-		{"in the realm of a group", []def.EntrySpec{iso(group("g")), child("g", "old", "t/old")},
+		{"in the realm of a group", []def.EntrySpec{iso(group("g")), child("g", "old", "t/old")}, nil,
 			[]def.Op{remove("g:old"), create(child("g", "new", "t/new"))}, "", "g:new", true},
-		{"in another realm", []def.EntrySpec{row("old", "t/old")},
+		{"in another realm", []def.EntrySpec{row("old", "t/old")}, nil,
 			[]def.Op{remove("old"), create(iso(row("new", "t/new")))}, "", "new", false},
+		{"removed by an earlier plan", []def.EntrySpec{row("old", "t/old")}, []def.Op{remove("old")},
+			[]def.Op{create(row("new", "t/new"))}, "", "new", true},
+		{"given up by a restart of its group", []def.EntrySpec{group("g"), child("g", "old", "t/old")}, []def.Op{restart("g")},
+			[]def.Op{remove("g:old"), create(row("new", "t/new"))}, "", "new", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			entered, release, activated := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -614,15 +626,39 @@ func TestNeverCreatesAProviderWhileTheOldProviderOfItsKeyIsNotDisposed(t *testin
 			free := sync.OnceFunc(func() { close(release) })
 			defer free()
 			x := newFx(t, fxOpt{plugins: plugins(old, nw, other), keys: map[string]kernel.AnyKey{"k": k}, pre: []kernel.Plugin{l.plugin}, rows: tc.rows})
+			var oldID string
 			for _, r := range tc.rows {
 				if r.Plugin == "t/old" {
+					oldID = r.ID
 					x.want(r.ID, kernel.Active)
 				}
 			}
+			if tc.before != nil {
+				if _, err := x.ld.Apply(t.Context(), tc.before); err != nil {
+					t.Fatalf("Apply(before): %v", err)
+				}
+				<-entered
+				// A group activation that ends gives the fiber up beside the fiber's disposer.
+				until(func() bool { e, ok := x.ld.Locate(oldID); return !ok || e.State == kernel.Pending })
+			}
 			var wg sync.WaitGroup
 			var err error
-			wg.Go(func() { _, err = x.ld.Apply(t.Context(), tc.ops) })
+			applied := make(chan struct{})
+			wg.Go(func() { defer close(applied); _, err = x.ld.Apply(t.Context(), tc.ops) })
 			<-entered // the old provider is disposing and still provides k
+			if tc.before != nil {
+				// The plan disposes nothing: it has returned, or it holds the new provider.
+				until(func() bool {
+					select {
+					case <-applied:
+						return true
+					default:
+					}
+					x.tree.mu.Lock()
+					defer x.tree.mu.Unlock()
+					return len(x.tree.prev[tc.id]) != 0
+				})
+			}
 			if tc.group != "" {
 				<-activated
 				x.want(tc.group, kernel.Active) // its activation has mounted what it mounts

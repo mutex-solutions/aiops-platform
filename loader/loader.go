@@ -69,7 +69,7 @@ func New() kernel.Plugin {
 				role: launch.ProfileContextKey.Of(c).Role(), cat: launch.CatalogKey.Of(c), batch: cfg.Batch,
 				sem: make(chan struct{}, 1), excl: make(chan struct{}, 1), lc: c,
 				patch: def.PatchContext.Bind(c), init: def.EntryInit.Bind(c), volatile: def.VolatileUpdate.Bind(c),
-				entries: map[string]*entry{}, prev: map[string][]*kernel.Fiber{},
+				entries: map[string]*entry{}, prev: map[string][]previous{},
 			}
 			c.Defer("loader-tree", func(context.Context) error { t.close(); return nil })
 			ops := make([]def.Op, len(cfg.Rows))
@@ -119,8 +119,15 @@ type tree struct {
 	mu      sync.Mutex // guards what follows; never held across a kernel call that runs a hook
 	lc      *kernel.Context
 	entries map[string]*entry
-	order   []string                   // ids in creation order: parents before children
-	prev    map[string][]*kernel.Fiber // removed fibers that may not be DISPOSED yet, by entry id
+	order   []string              // ids in creation order: parents before children
+	prev    map[string][]previous // removed fibers that may not be DISPOSED yet, by entry id
+}
+
+// previous is a fiber an entry gave up, with the keys it provides by the specs it was
+// mounted from (provides): an entry that provides one of them waits for it too (stage).
+type previous struct {
+	fiber *kernel.Fiber
+	keys  []string
 }
 
 var _ def.Loader = (*tree)(nil)
@@ -266,22 +273,23 @@ func (t *tree) detach(id string, c *kernel.Context) {
 func (t *tree) forget(id string, c *kernel.Context) {
 	if g := t.entries[id]; g != nil && g.kids == c {
 		g.kids = nil
+		now := t.snapshot().entries
 		for _, k := range t.order {
 			if e := t.entries[k]; e.spec.Parent == id && e.fiber != nil {
-				t.addPrev(k, e.fiber)
+				t.addPrev(k, previous{e.fiber, t.provides(now, k)})
 				e.fiber = nil
 			}
 		}
 	}
 }
 
-func (t *tree) addPrev(id string, f *kernel.Fiber) { t.prev[id] = append(slices.Clone(t.prev[id]), f) }
+func (t *tree) addPrev(id string, f previous) { t.prev[id] = append(slices.Clone(t.prev[id]), f) }
 
 // disposing reports whether a previous fiber of id is not DISPOSED yet, and forgets
 // those that are: a group the kernel restarts adds its children's fibers here with no
 // Apply to sweep them. Call with mu held.
 func (t *tree) disposing(ctx context.Context, id string) bool {
-	live := slices.DeleteFunc(slices.Clone(t.prev[id]), func(f *kernel.Fiber) bool { return gone(ctx, f) })
+	live := slices.DeleteFunc(slices.Clone(t.prev[id]), func(f previous) bool { return gone(ctx, f.fiber) })
 	if len(live) == 0 {
 		delete(t.prev, id)
 		return false
