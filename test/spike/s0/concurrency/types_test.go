@@ -24,7 +24,7 @@ func TestDesiredAndCommittedEpochAreDistinctData(t *testing.T) {
 }
 
 func TestLeaseRefusesQuiescentActivation(t *testing.T) {
-	var c Context
+	c := Context{lease: new(leaseCount)}
 	if c.Enter() {
 		t.Fatal("zero activation accepted a lease")
 	}
@@ -43,7 +43,7 @@ func TestLeaseRefusesQuiescentActivation(t *testing.T) {
 }
 
 func TestCallPathLeaseParallel(t *testing.T) {
-	var c Context
+	c := Context{lease: new(leaseCount)}
 	c.live.Store(true)
 	var group sync.WaitGroup
 	for range 32 {
@@ -72,7 +72,7 @@ func TestCallPathLeaseParallel(t *testing.T) {
 }
 
 func TestLeaseReleaseNotifiesOptionalScheduler(t *testing.T) {
-	var c Context
+	c := Context{lease: new(leaseCount)}
 	var notified int
 	c.leaseChanged = func() { notified++ }
 	c.live.Store(true)
@@ -103,6 +103,7 @@ func TestActivationOperationsAndRefusal(t *testing.T) {
 	var provided, deferred, requested bool
 	c := &Context{
 		std:      ctx,
+		lease:    new(leaseCount),
 		bindings: map[string]provision{"sample": {uid: 7, owner: 3, value: "value"}},
 		provide: func(key string, value any) error {
 			provided = key == "sample" && value == "new"

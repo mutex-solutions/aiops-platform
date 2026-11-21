@@ -496,7 +496,7 @@ func TestNativeScopeHeldCleanupRetainsTreeAndProvider(t *testing.T) {
 }
 
 func TestScopeRequestValidationWithoutNativeBridge(t *testing.T) {
-	c := &Context{}
+	c := &Context{lease: new(leaseCount)}
 	var setup atomic.Bool
 	callback := func(*EffectScope) error { setup.Store(true); return nil }
 	if _, err := c.RequestEffectScope("", callback); err == nil || errors.Is(err, ErrScopeUnavailable) {

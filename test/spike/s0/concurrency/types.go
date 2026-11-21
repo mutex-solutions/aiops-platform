@@ -185,7 +185,7 @@ type Context struct {
 	fiber         uint64
 	live          atomic.Bool // New effects and leases are accepted only while live.
 	released      atomic.Bool // Committed reads remain valid during orderly teardown.
-	lease         leaseCount  // Own cache lines: Enter/Leave writes never invalidate live/std/host readers.
+	lease         *leaseCount // Own cache lines: Enter/Leave writes never invalidate live/std/host readers. Nil when fwd serves leases (the kernel backend), so such a context carries no unused shards.
 	bindings      map[string]provision
 	provide       func(string, any) error
 	effect        func(string, Disposer) error
