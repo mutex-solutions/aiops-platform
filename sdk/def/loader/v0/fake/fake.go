@@ -100,7 +100,35 @@ type plan struct {
 	entries  map[string]entry
 	order    []string
 	fresh    map[string]bool // ids that get a new fiber: created, or replaced
+	renewed  map[string]bool // ids whose fiber is replaced
 	announce []loader.VolatileUpdateArgs
+}
+
+// subtree lists id and the ids beneath it in p.
+func (p *plan) subtree(id string) []string {
+	out := []string{id}
+	for _, k := range p.order {
+		if slices.Contains(out, p.entries[k].spec.Parent) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// retire takes back the announces of the entries whose activation a later operation
+// ends, as the real loader does: none is left to tell.
+func (p *plan) retire(ids []string) {
+	p.announce = slices.DeleteFunc(p.announce, func(a loader.VolatileUpdateArgs) bool { return slices.Contains(ids, a.ID) })
+}
+
+// renewedAbove reports whether p replaces a group above e.
+func (p *plan) renewedAbove(e loader.EntrySpec) bool {
+	for g, ok := p.entries[e.Parent]; ok; g, ok = p.entries[g.spec.Parent] {
+		if p.renewed[g.spec.ID] {
+			return true
+		}
+	}
+	return false
 }
 
 // Apply checks the operations in order against the tree as the earlier ones leave
@@ -115,7 +143,7 @@ func (f *Loader) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, e
 		f.mu.Unlock()
 		return nil, kernel.ErrInactive
 	}
-	p := &plan{entries: maps.Clone(f.entries), order: slices.Clone(f.order), fresh: map[string]bool{}}
+	p := &plan{entries: maps.Clone(f.entries), order: slices.Clone(f.order), fresh: map[string]bool{}, renewed: map[string]bool{}}
 	var res []loader.Result
 	for i, op := range ops {
 		r, err := f.stage(p, op)
@@ -200,12 +228,8 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 		if !ok {
 			return r, loader.ErrNotFound
 		}
-		gone := []string{e.ID}
-		for _, id := range p.order {
-			if slices.Contains(gone, p.entries[id].spec.Parent) {
-				gone = append(gone, id)
-			}
-		}
+		gone := p.subtree(e.ID)
+		p.retire(gone)
 		p.order = slices.DeleteFunc(p.order, func(id string) bool { return slices.Contains(gone, id) })
 		for _, id := range gone {
 			delete(p.entries, id)
@@ -230,8 +254,10 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 }
 
 // outcome is what a new spec e of an entry that had old does (07-c4-plugin-sdk.md:1374).
-// As in the real loader, an entry under a group that is not ACTIVE has no fiber and
-// nothing to mount it from, and only an ACTIVE fiber takes volatile values in place.
+// As in the real loader, an entry under a group that the plan replaces is mounted by the
+// group's next activation, with its new config; one under a group that is not ACTIVE has
+// no fiber and nothing to mount it from; only an ACTIVE fiber takes volatile values in
+// place; and an operation that ends an entry's activation takes back its announces.
 func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loader.Outcome {
 	now := f.mount(p.entries, e)
 	g, under := p.entries[e.Parent]
@@ -242,10 +268,17 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 		p.fresh[e.ID] = true
 		return loader.Created
 	case now != loader.Mounted:
+		p.retire(p.subtree(e.ID))
 		return loader.Unmounted
 	case old.Plugin != e.Plugin || !sameSet(old.Inject, e.Inject) || !sameSet(old.Isolate, e.Isolate) ||
 		!(len(old.Intercept) == 0 && len(e.Intercept) == 0 || reflect.DeepEqual(old.Intercept, e.Intercept)):
-		p.fresh[e.ID] = true
+		p.fresh[e.ID], p.renewed[e.ID] = true, true
+		p.retire(p.subtree(e.ID))
+		return loader.Restarted
+	case p.renewedAbove(e) && !isGroup(e.Plugin):
+		if reflect.DeepEqual(old.Config, e.Config) {
+			return loader.Unchanged
+		}
 		return loader.Restarted
 	case under && g.state != kernel.Active, isGroup(e.Plugin): // a group has no config of its own
 		return loader.Unchanged

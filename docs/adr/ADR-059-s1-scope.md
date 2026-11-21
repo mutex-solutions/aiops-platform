@@ -122,8 +122,6 @@ graph, the restart closure and the required audit did not know the key. Recorded
   in the required set (gate check 7, `08` §1.6), two `config-refs` rows in one realm are
   two providers, and the restart closure of `config-refs` holds the rows with
   references. With no `config-refs` row such a row stays PENDING and waits for the key.
-- Open point: a row that gains its first reference or loses its last changes its
-  `inject`, which the loader treats as a replacement.
 
 ## Line budgets at the S1 exit
 

@@ -154,6 +154,58 @@ func Run(t *testing.T, mount Mount) {
 		}
 	})
 
+	// The operations apply in order against the tree as the earlier ones leave it. A
+	// later operation that retires an entry takes back what an earlier one did to its
+	// activation: none is left to tell on loader/volatile-update.
+	t.Run("an update then the remove of the entry", func(t *testing.T) {
+		s := start(t, mount, map[string][]string{p: {"level"}})
+		a := row("a", p)
+		for _, tc := range []struct {
+			to   map[string]any
+			want string
+		}{{map[string]any{"level": "debug"}, "committed a"}, {map[string]any{"level": "info", "port": int64(2)}, "restarted a"}} {
+			a.Config = map[string]any{"level": "info"}
+			s.apply([]string{"created a"}, create(a))
+			s.is("a", loader.Mounted, kernel.Active)
+			a.Config = tc.to
+			s.apply([]string{tc.want, "removed a"}, update(a), remove("a"))
+			if _, ok := s.ld.Locate("a"); ok {
+				t.Fatalf("a survived its remove after %s", tc.want)
+			}
+		}
+		s.h.mu.Lock()
+		defer s.h.mu.Unlock()
+		if len(s.h.volatile) != 0 {
+			t.Errorf("volatile-update heard %+v for a removed entry", s.h.volatile)
+		}
+	})
+
+	// A child under a group that the plan replaces is mounted by the group's next
+	// activation with the spec the plan gives it: a change of its config restarts it
+	// when the group's operation comes first. When the child's comes first, its outcome
+	// stands, and the replacement of the group takes back the announce.
+	t.Run("a child of a group the plan replaces", func(t *testing.T) {
+		s := start(t, mount, map[string][]string{p: {"level"}})
+		g, c := row("g", group), child("g", "c", p)
+		c.Config = map[string]any{"level": "info"}
+		s.apply([]string{"created g", "created g:c"}, create(g), create(c))
+		s.is("g:c", loader.Mounted, kernel.Active)
+		g.Plugin, c.Config = loader.IncludePlugin, map[string]any{"level": "debug"}
+		s.apply([]string{"restarted g", "restarted g:c"}, update(g), update(c))
+		s.is("g:c", loader.Mounted, kernel.Active)
+		g.Plugin, c.Config = group, map[string]any{"level": "warn"}
+		s.apply([]string{"committed g:c", "restarted g"}, update(c), update(g))
+		s.is("g:c", loader.Mounted, kernel.Active)
+		if e, _ := s.ld.Locate("g:c"); !reflect.DeepEqual(e.Spec.Config, c.Config) {
+			t.Errorf("g:c holds %v, want %v", e.Spec.Config, c.Config)
+		}
+		s.h.mu.Lock()
+		defer s.h.mu.Unlock()
+		if len(s.h.volatile) != 0 {
+			t.Errorf("volatile-update heard %+v for a child its group's replacement disposes", s.h.volatile)
+		}
+	})
+
 	t.Run("remove takes the entries beneath", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created g", "created g:c", "created a"}, create(row("g", group)), create(child("g", "c", p)), create(row("a", p)))

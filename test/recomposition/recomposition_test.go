@@ -104,7 +104,13 @@ func (w *world) submit(patch, prefix string) uint64 {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	if err := os.WriteFile(w.live, body, 0o644); err != nil {
+	return w.submitBody(string(body), prefix)
+}
+
+// submitBody is submit with the live layer given as its content.
+func (w *world) submitBody(body, prefix string) uint64 {
+	w.t.Helper()
+	if err := os.WriteFile(w.live, []byte(body), 0o644); err != nil {
 		w.t.Fatal(err)
 	}
 	w.ops++
@@ -343,6 +349,38 @@ func TestNewlyEnabledRowThatNeverActivates(t *testing.T) {
 	}
 	if !s.Status.Ready || !s.Running() {
 		t.Errorf("the process is not serving after a rolled back generation: %+v", s.Status)
+	}
+	w.stop()
+}
+
+// A live generation gives a running row its first reference, one that does not resolve
+// (secret: until S3). The row's inject gains configRefsReady, so the loader replaces it:
+// the new config is resolved on the running fiber in the batch that would dispose it,
+// the plan is refused whole, and the generation is rejected with the row keeping its
+// instance (08-profiles-roadmap-adrs.md §1.6, "a reference does not resolve", live).
+func TestFirstReferenceThatDoesNotResolveIsRejected(t *testing.T) {
+	w := boot(t)
+	fiber := func(s harness.Snapshot) uint64 {
+		for _, f := range s.Kernel {
+			if f.Plugin == "aiops-test/toy-consumer" {
+				return f.ID
+			}
+		}
+		return 0
+	}
+	s0, ok := w.p.Until(budget, func(s harness.Snapshot) bool { return fiber(s) != 0 })
+	if !ok {
+		t.Fatalf("no fiber of the consumer: %+v", s0.Kernel)
+	}
+	id := w.submitBody("- {id: consumer, config: {note: \"${secret:x}\"}}\n", "")
+	s := w.verdictOf(id)
+	op := s.State.Reload
+	if op.Status != "rejected" || op.Stage != "apply" || len(op.Applied) != 0 || !strings.Contains(op.Error, "secret") {
+		t.Fatalf("the generation should be rejected at apply with nothing applied: %+v", op)
+	}
+	s, ok = w.p.Until(budget, func(s harness.Snapshot) bool { return s.RowState("consumer") == "ACTIVE" && fiber(s) != 0 })
+	if !ok || fiber(s) != fiber(s0) {
+		t.Fatalf("the consumer did not keep its instance: fiber %d, then %d (state %q)", fiber(s0), fiber(s), s.RowState("consumer"))
 	}
 	w.stop()
 }

@@ -19,11 +19,20 @@ import (
 // children meanwhile sees the whole plan or none of it.
 type plan struct {
 	snap     snapshot
-	dispose  []*kernel.Fiber
-	updates  []kernel.BatchOp
+	dispose  []held // the topmost fiber of each branch the plan retires
+	vets     []kernel.BatchOp
+	updates  []held
 	mounts   []string // ids of the entries to mount, in order
 	announce []def.VolatileUpdateArgs
+	renewed  map[string]bool // entries whose fiber the plan replaces
 	results  []def.Result
+}
+
+// held is a fiber of an entry, or an operation on it.
+type held struct {
+	id    string
+	fiber *kernel.Fiber
+	op    kernel.BatchOp
 }
 
 // snapshot is the tree before a plan, for a plan that the kernel refuses.
@@ -122,11 +131,13 @@ func (t *tree) first(ctx context.Context, ops []def.Op) (*plan, []string, error)
 	}
 	now, later := t.split(p.mounts)
 	items := t.mountItems(ctx, now)
-	var kops []kernel.BatchOp
-	for _, f := range p.dispose {
-		kops = append(kops, kernel.DisposeOp(f))
+	kops := p.vets
+	for _, d := range p.dispose {
+		kops = append(kops, kernel.DisposeOp(d.fiber))
 	}
-	kops = append(kops, p.updates...)
+	for _, u := range p.updates {
+		kops = append(kops, u.op)
+	}
 	for _, m := range items {
 		kops = append(kops, m.op)
 	}
@@ -202,7 +213,7 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 	if t.lc == nil {
 		return nil, kernel.ErrInactive
 	}
-	p := &plan{snap: t.snapshot()}
+	p := &plan{snap: t.snapshot(), renewed: map[string]bool{}}
 	for i, op := range ops {
 		r, err := t.stageOne(ctx, p, op)
 		if err != nil {
@@ -211,7 +222,30 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 		}
 		p.results = append(p.results, r)
 	}
+	// A plan never disposes a running fiber to mount its entry again with a config that
+	// does not resolve (08-profiles-roadmap-adrs.md §1.6: "Rejected; the row keeps its
+	// instance"). The batch first commits the entry's new config to the fiber it then
+	// disposes, which has the entry's plugin, so the kernel resolves it through
+	// internal/config and Decode while the fiber has its target, as for an update in
+	// place, and refuses the whole batch on an error. A row that gains its first
+	// reference is one: its inject gains configRefsReady, which replaces it.
+	for _, d := range p.dispose {
+		e, was := t.entries[d.id], p.snap.entries[d.id]
+		if e != nil && t.mount(e) == def.Mounted && !isGroup(e.spec.Plugin) && was.fiber == d.fiber && was.spec.Plugin == e.spec.Plugin {
+			p.vets = append(p.vets, kernel.CommitOp(d.fiber, e.spec.Config))
+		}
+	}
 	return p, nil
+}
+
+// retireIn retires the fibers of id and beneath it for p (tree.retire), and takes back
+// what p queued for those entries: the kernel refuses an update or a commit of a fiber
+// after the batch disposes it, and an entry with no activation left is told nothing.
+func (t *tree) retireIn(ctx context.Context, p *plan, id string) {
+	ids := t.subtree(id)
+	p.dispose = append(p.dispose, t.retire(ctx, id)...)
+	p.updates = slices.DeleteFunc(p.updates, func(u held) bool { return slices.Contains(ids, u.id) })
+	p.announce = slices.DeleteFunc(p.announce, func(a def.VolatileUpdateArgs) bool { return slices.Contains(ids, a.ID) })
 }
 
 func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, error) {
@@ -237,7 +271,7 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 		if cur == nil {
 			return r, def.ErrNotFound
 		}
-		p.dispose = append(p.dispose, t.retire(ctx, e.ID)...)
+		t.retireIn(ctx, p, e.ID)
 		for _, id := range t.subtree(e.ID) {
 			delete(t.entries, id)
 		}
@@ -259,7 +293,9 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 
 // stageUpdate decides what a new spec of an existing entry does (07-c4-plugin-sdk.md:1374,
 // :1375). A change of the plugin, inject, isolate or intercept replaces the fiber,
-// because a fiber's needs and context are fixed when it is mounted; a change of
+// because a fiber's needs and context are fixed when it is mounted (stage vets the new
+// config on the fiber it disposes); an entry under a group that the plan replaces is
+// mounted by the group's next activation, so a change of its config restarts it; a change of
 // config restarts it with the new config, unless only volatile paths changed
 // (def.VolatileOnly) and the fiber is ACTIVE, as in the oracle: a FAILED or PENDING
 // fiber has no activation to take values in place. A volatile commit is the tree's
@@ -287,14 +323,19 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	case was != def.Mounted:
 		return mount(def.Created)
 	case now != def.Mounted:
-		p.dispose = append(p.dispose, t.retire(ctx, e.ID)...)
+		t.retireIn(ctx, p, e.ID)
 		return def.Unmounted
 	case old.Plugin != e.Plugin || !sameSet(old.Inject, e.Inject) || !sameSet(old.Isolate, e.Isolate) || !sameIntercept(old.Intercept, e.Intercept):
-		p.dispose = append(p.dispose, t.retire(ctx, e.ID)...)
+		t.retireIn(ctx, p, e.ID)
+		p.renewed[e.ID] = true
 		return mount(def.Restarted)
 	case cur.fiber == nil:
-		if t.parentCtx(cur) != nil {
+		switch {
+		case t.parentCtx(cur) != nil:
 			return mount(def.Created)
+		case t.renewedAbove(p, cur) && !isGroup(e.Plugin) && !reflect.DeepEqual(old.Config, e.Config):
+			// The group's next activation mounts the entry with its new config.
+			return def.Restarted
 		}
 		return def.Unchanged
 	case isGroup(e.Plugin): // a group has no config of its own
@@ -309,12 +350,22 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	case len(paths) == 0:
 		return def.Unchanged
 	case only && active(ctx, cur.fiber): // a fiber that is not ACTIVE runs no activation to tell
-		p.updates = append(p.updates, kernel.CommitOp(cur.fiber, e.Config))
+		p.updates = append(p.updates, held{id: e.ID, op: kernel.CommitOp(cur.fiber, e.Config)})
 		p.announce = append(p.announce, def.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
 		return def.Committed
 	}
-	p.updates = append(p.updates, kernel.UpdateOpWith(cur.fiber, e.Config))
+	p.updates = append(p.updates, held{id: e.ID, op: kernel.UpdateOpWith(cur.fiber, e.Config)})
 	return def.Restarted
+}
+
+// renewedAbove reports whether p replaces the fiber of a group above e.
+func (t *tree) renewedAbove(p *plan, e *entry) bool {
+	for g := t.entries[e.spec.Parent]; g != nil; g = t.entries[g.spec.Parent] {
+		if p.renewed[g.spec.ID] {
+			return true
+		}
+	}
+	return false
 }
 
 func sameSet(a, b []string) bool {
@@ -340,14 +391,14 @@ func (t *tree) subtree(id string) []string {
 // tree: each fiber that is not DISPOSED becomes the previous fiber of its id, so that
 // no entry of that id is created until it is. It returns the fibers to dispose, the
 // topmost of each branch: the others go with their group.
-func (t *tree) retire(ctx context.Context, id string) (dispose []*kernel.Fiber) {
+func (t *tree) retire(ctx context.Context, id string) (dispose []held) {
 	covered := map[string]bool{}
 	for _, x := range t.subtree(id) {
 		e := t.entries[x]
 		live := e.fiber != nil && !gone(ctx, e.fiber)
 		if live {
 			if !covered[e.spec.Parent] {
-				dispose = append(dispose, e.fiber)
+				dispose = append(dispose, held{id: x, fiber: e.fiber})
 			}
 			t.addPrev(x, e.fiber)
 		}
