@@ -93,6 +93,16 @@ func Scoped() HookOption { return func(d *hookDef) { d.scoped = true } }
 // it (07-c4-plugin-sdk.md:439, :463; ADR-034 owner decision 11).
 func Sealed() HookOption { return func(d *hookDef) { d.sealed = true } }
 
+// HookSealed reports whether h is sealed: declared with Sealed, or a hook of the
+// kernel, the hooks that Config.Listeners may list (ADR-059 decision 20;
+// 07-c4-plugin-sdk.md:439, :463). ok is false for a nil or zero hook.
+func HookSealed(h AnyHook) (sealed, ok bool) {
+	if h == nil || h.anyHook() == nil {
+		return false, false
+	}
+	return h.anyHook().sealed, true
+}
+
 // hookDef is the definition shared by Event and Waterfall.
 type hookDef struct {
 	name   string

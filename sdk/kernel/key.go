@@ -170,6 +170,20 @@ func InterceptType(k AnyKey) (t reflect.Type, ok bool) {
 	return d.config, true
 }
 
+// KeyClasses returns the classes that NewKey declared for k, so a caller that holds
+// only an AnyKey can derive them from the key's definition (ADR-059 decision 20;
+// 07-c4-plugin-sdk.md:553-559). providerBound is ProviderBound; consumerBound is
+// ConsumerBound or Signed, the keys that only the entries Config.Consumers lists
+// resolve. They are the classes New holds a binding map to. ok is false for a nil or
+// zero key.
+func KeyClasses(k AnyKey) (providerBound, consumerBound, ok bool) {
+	d, err := dataOf(k)
+	if err != nil {
+		return false, false, false
+	}
+	return d.provider == classBound, d.consumer != classOpen, true
+}
+
 // NewKey declares a key (07-c4-plugin-sdk.md:179). It is called in a definition
 // package. An empty name or a negative major is a programming error and panics.
 func NewKey[T any](name string, major int, opts ...KeyOption) Key[T] {

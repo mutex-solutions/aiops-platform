@@ -1107,9 +1107,9 @@ this ADR besides the performance gates on the port.
 
 ## S1 additions to the kernel API (ADR-059)
 
-ADR-059 decision 2 approves five additions for the loader. Each is built on
-what the kernel already does and changes no existing call. A batch with none of
-the new operations behaves as before.
+ADR-059 decision 2 approves five additions for the loader, and decision 20 a sixth
+for the launcher's gate (G12). Each is built on what the kernel already does and
+changes no existing call. A batch with none of the new operations behaves as before.
 
 **G1, a child mount in a batch.**
 
@@ -1368,8 +1368,31 @@ ledger and the observer with the prototype, whose observer is an effect of its
 owner, no longer expects that event: the effect of the root's observer is not part
 of the contract a plugin sees, since only the launcher observes.
 
+**G12, the classes of a key and the seal of a hook (ADR-059 decision 20).**
+
+```go
+func KeyClasses(k AnyKey) (providerBound, consumerBound, ok bool)
+func HookSealed(h AnyHook) (sealed, ok bool)
+```
+
+This is the sixth kernel addition of S1, which the project owner approved after the
+five of ADR-059 decision 2. Like `InterceptType`, each reads what a definition
+declared and nothing else. `providerBound` is `ProviderBound()`. `consumerBound` is
+`ConsumerBound()` or `Signed()`: both are keys that only the entries
+`Config.Consumers` lists resolve, and they differ only in who the distribution may
+list, which the kernel does not check. `sealed` is `Sealed()` or a hook of the
+kernel. `ok` is false for a nil or zero key or hook. They are the predicates that
+`New` holds the binding maps and `Config.Listeners` to, so a launcher that derives
+the classes from the module table's definitions through them cannot disagree with
+the kernel. Gate check 7 derives the classes of keys and hooks this way, and
+`dist.yaml` lists only who is allowed (bindings and listeners), never a class. They
+take no lock, run no plugin code and return values.
+
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
 27 for G7, 24 for G8 and 75 for G9 to G11. The fixes of the S1 review recorded in
 G1, G2, G5, G6, G7, G9 (R2 above), G10 and G11 bring it to 7,981, and the G1 comment
-that says which restarts refuse a child mount to 7,985.
+that says which restarts refuse a child mount to 7,985. The fixes of the second
+review (18 lines for G1's refusal along every path of the invalidation, 13 for the
+stall detach of G11, 2 fewer for the root observer's effect) bring it to 8,014, and
+G12 (24) to 8,038.
