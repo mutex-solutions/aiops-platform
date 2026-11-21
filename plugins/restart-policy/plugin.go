@@ -52,35 +52,45 @@ type Config struct {
 	Infrastructure []string
 }
 
-// Plugin is the restart-policy row.
-var Plugin = kernel.Define(kernel.Plugin{
-	ID: "aiops/restart-policy",
-	Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(launch.CatalogKey), kernel.Need(launch.AppExitKey),
-		kernel.Need(kernel.RegistryKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
-	Hooks:  []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
-	Decode: decode,
-	Apply: func(c *kernel.Context, cfg any) error {
-		conf := cfg.(Config)
-		r := retry.New(retry.Policy{MaxFailures: conf.MaxFailures, Window: conf.Window, BackoffMin: conf.BackoffMin,
-			BackoffMax: conf.BackoffMax, Factor: conf.Factor, Stable: conf.Stable, Infrastructure: conf.Infrastructure},
-			retry.Deps{Context: c, Clock: clock.Key.Of(c), Fibers: kernel.RegistryKey.Of(c), Catalog: launch.CatalogKey.Of(c),
-				Exit: launch.AppExitKey.Of(c), Rows: composition.Key.Of(c), Log: kernel.LoggerKey.Of(c).For(c)})
-		kernel.InternalStatus.On(c, kernel.DefaultStage, func(ctx context.Context, e kernel.LedgerEvent) (any, error) {
-			r.Status(ctx, e)
-			return nil, nil
-		})
-		// A give-up waits while reload applies a generation and judges it.
-		reload.Operation.On(c, kernel.DefaultStage, func(ctx context.Context, res reload.Result) (any, error) {
-			r.Operation(ctx, res.Status.Done())
-			return nil, nil
-		})
-		// Every row activates with no order, so a fiber may have failed before this
-		// one listened, and its event reached no one. Catch up as for the notice that
-		// events were lost: read the tree and count the FAILED fibers in it.
-		r.Status(c.Std(), kernel.LedgerEvent{Kind: "overflow"})
-		return nil
-	},
-})
+// New returns the restart-policy row. Its activations share one retry.Memory, so a
+// restart of the row keeps every give-up and count and the reload operation in flight:
+// a fiber given up on stays FAILED until an operator updates it (07-c4-plugin-sdk.md:360).
+// The memory names fibers by id, so a binary makes one value for its one kernel, which
+// its module table holds and its binding maps list.
+func New() kernel.Plugin {
+	m := retry.NewMemory()
+	return kernel.Define(kernel.Plugin{
+		ID: "aiops/restart-policy",
+		Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(launch.CatalogKey), kernel.Need(launch.AppExitKey),
+			kernel.Need(kernel.RegistryKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
+		Hooks:  []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
+		Decode: decode,
+		Apply:  func(c *kernel.Context, cfg any) error { return apply(c, cfg.(Config), m) },
+	})
+}
+
+func apply(c *kernel.Context, conf Config, m *retry.Memory) error {
+	r := retry.New(retry.Policy{MaxFailures: conf.MaxFailures, Window: conf.Window, BackoffMin: conf.BackoffMin,
+		BackoffMax: conf.BackoffMax, Factor: conf.Factor, Stable: conf.Stable, Infrastructure: conf.Infrastructure},
+		retry.Deps{Context: c, Clock: clock.Key.Of(c), Fibers: kernel.RegistryKey.Of(c), Catalog: launch.CatalogKey.Of(c),
+			Exit: launch.AppExitKey.Of(c), Rows: composition.Key.Of(c), Log: kernel.LoggerKey.Of(c).For(c)}, m)
+	kernel.InternalStatus.On(c, kernel.DefaultStage, func(ctx context.Context, e kernel.LedgerEvent) (any, error) {
+		r.Status(ctx, e)
+		return nil, nil
+	})
+	// A give-up waits while reload applies a generation and judges it.
+	reload.Operation.On(c, kernel.DefaultStage, func(ctx context.Context, res reload.Result) (any, error) {
+		r.Operation(ctx, res.Status.Done())
+		return nil, nil
+	})
+	// The retries that an earlier activation scheduled went with it.
+	r.Resume()
+	// Every row activates with no order, so a fiber may have failed before this
+	// one listened, and its event reached no one. Catch up as for the notice that
+	// events were lost: read the tree and count the FAILED fibers in it.
+	r.Status(c.Std(), kernel.LedgerEvent{Kind: "overflow"})
+	return nil
+}
 
 func decode(raw any) (any, error) {
 	var conf Config

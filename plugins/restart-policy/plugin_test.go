@@ -134,7 +134,7 @@ func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
 	w.comp, cp = compfake.New()
 	w.reload, rp = reloadfake.New()
 	kerneltest.Mount(w.root, lp, kp, cp, rp)
-	w.rp = w.root.Plugin(restartpolicy.Plugin, cfg)
+	w.rp = w.root.Plugin(restartpolicy.New(), cfg)
 	if err := w.rp.Await(t.Context()); err != nil {
 		t.Fatalf("restart-policy: %v", err)
 	}
@@ -621,6 +621,79 @@ func TestHoldEndsWithTheReloadGoroutine(t *testing.T) {
 	}
 }
 
+// restart restarts restart-policy with cfg, as a reload that changes its config does.
+func (w *world) restart(cfg any) {
+	w.t.Helper()
+	if err := w.rp.Update(w.t.Context(), cfg); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := w.rp.Await(w.t.Context()); err != nil {
+		w.t.Fatal(err)
+	}
+	w.heard()
+}
+
+// A restart of restart-policy keeps what it knows: a fiber given up on stays FAILED
+// until an operator updates it (07-c4-plugin-sdk.md:360), and a fiber that waits for a
+// retry keeps its count.
+func TestARestartOfRestartPolicyKeepsItsGiveUpsAndCounts(t *testing.T) {
+	w := newWorld(t, conf(2, time.Hour, time.Second, time.Minute, 2, 0))
+	x := newFlaky("aiops/other", true)
+	xf := w.root.Plugin(x.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	w.retryLogged(2, 2*time.Second)
+	w.clk.Advance(2 * time.Second)
+	if e := w.logged("fiber.gave-up"); e.attrs["fiber"] != xf.ID() {
+		t.Fatalf("gave-up = %v", e.attrs)
+	}
+	y := newFlaky("aiops/other", true)
+	yf := w.root.Plugin(y.plugin(), nil)
+	w.retryLogged(1, time.Second)
+	w.clk.Advance(time.Second)
+	w.retryLogged(2, 2*time.Second)
+	w.comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
+		{ID: "x", Plugin: "aiops/other", Fiber: xf.ID(), State: kernel.Failed},
+		{ID: "y", Plugin: "aiops/other", Fiber: yf.ID(), State: kernel.Failed},
+	}})
+
+	w.restart(conf(2, time.Hour, time.Second, time.Minute, 2, time.Hour))
+	if e := w.decision(); e.msg != "fiber.retry" || e.attrs["fiber"] != yf.ID() || e.attrs["failures"] != int64(2) {
+		t.Fatalf("%s %v after the restart, want the retry of y at its second failure", e.msg, e.attrs)
+	}
+	if n := w.clk.Pending(); n != 1 {
+		t.Fatalf("pending timers %d after the restart, want y's retry only", n)
+	}
+	w.clk.Advance(2 * time.Second)
+	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["fiber"] != yf.ID() || e.attrs["failures"] != int64(3) {
+		t.Fatalf("%s %v, want the give-up of y at its third failure", e.msg, e.attrs)
+	}
+	w.clk.Advance(24 * time.Hour)
+	if n := x.attempts.Load(); n != 3 {
+		t.Errorf("x was applied %d times, want 3: a fiber given up on is not retried", n)
+	}
+}
+
+// A restart of restart-policy while reload applies a generation keeps the hold: a
+// failure of the generation's rows is not given up on until the operation is final.
+func TestARestartOfRestartPolicyKeepsTheReloadOperationInFlight(t *testing.T) {
+	w := newWorld(t, conf(1, time.Hour, time.Second, time.Minute, 2, 0))
+	w.progress(t.Context(), running)
+	w.restart(conf(1, time.Hour, time.Second, time.Minute, 2, time.Hour))
+	_, f := w.failPastTheLimit()
+	if w.gaveUp() || len(w.exits()) != 0 {
+		t.Fatalf("gave up while the operation was in flight: exits = %v", w.exits())
+	}
+	w.progress(t.Context(), passed)
+	if e := w.decision(); e.msg != "fiber.gave-up" || e.attrs["fiber"] != f.ID() {
+		t.Fatalf("%s %v, want the give-up once the operation is final", e.msg, e.attrs)
+	}
+	want := []launch.ExitRequest{{Reason: launch.ExitGaveUp, Detail: "aiops/sql"}}
+	if got := w.exits(); !slices.Equal(got, want) {
+		t.Errorf("exits = %v, want %v", got, want)
+	}
+}
+
 // A reference in a numeric or duration field resolves to text that may be a secret:
 // a refusal names the field and the type, never the value.
 func TestDecodeErrorsDoNotEchoTheValue(t *testing.T) {
@@ -629,7 +702,7 @@ func TestDecodeErrorsDoNotEchoTheValue(t *testing.T) {
 	for _, k := range []string{"maxFailures", "factor", "window", "backoffMin", "backoffMax", "stable"} {
 		raw := map[string]any{"maxFailures": int64(3), "window": "10m", "backoffMin": "1s", "backoffMax": "1m",
 			"factor": int64(2), "infrastructure": []any{"sql"}, k: secret}
-		err := w.root.Plugin(restartpolicy.Plugin, raw).Await(t.Context())
+		err := w.root.Plugin(restartpolicy.New(), raw).Await(t.Context())
 		if err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), k) {
 			t.Errorf("%s: err = %v, want a refusal that names the field and not the value", k, err)
 		}
@@ -772,7 +845,7 @@ func TestDecode(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t, conf(1, time.Second, time.Second, time.Second, 1, 0))
-			err := w.root.Plugin(restartpolicy.Plugin, tc.raw).Await(t.Context())
+			err := w.root.Plugin(restartpolicy.New(), tc.raw).Await(t.Context())
 			if (err == nil) != tc.ok {
 				t.Errorf("err = %v, want ok = %v", err, tc.ok)
 			}
@@ -816,12 +889,13 @@ func TestBindingMapsMustListTheRow(t *testing.T) {
 			_, lp := launchfake.New()
 			_, kp := clockfake.New(time.Time{})
 			_, cp := compfake.New()
+			rp := restartpolicy.New()
 			var consumers, listeners []kernel.Plugin
 			if tc.consumers {
-				consumers = []kernel.Plugin{restartpolicy.Plugin}
+				consumers = []kernel.Plugin{rp}
 			}
 			if tc.listens {
-				listeners = []kernel.Plugin{restartpolicy.Plugin}
+				listeners = []kernel.Plugin{rp}
 			}
 			root := bound(t, lp, consumers, listeners)
 			for _, p := range []kernel.Plugin{lp, kp, cp} {
@@ -829,7 +903,7 @@ func TestBindingMapsMustListTheRow(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			err := root.Plugin(restartpolicy.Plugin, conf(1, time.Second, time.Second, time.Second, 1, 0)).Await(t.Context())
+			err := root.Plugin(rp, conf(1, time.Second, time.Second, time.Second, 1, 0)).Await(t.Context())
 			if tc.want == nil && err != nil || tc.want != nil && !errors.Is(err, tc.want) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
@@ -855,7 +929,7 @@ func TestRetriesAFiberThatFailedBeforeRestartPolicyWasActive(t *testing.T) {
 	comp.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
 		{ID: "late", Plugin: "aiops/other", Fiber: f.ID(), State: kernel.Failed}}})
 
-	rp := root.Plugin(restartpolicy.Plugin, conf(3, time.Hour, time.Second, time.Minute, 2, 0))
+	rp := root.Plugin(restartpolicy.New(), conf(3, time.Hour, time.Second, time.Minute, 2, 0))
 	if err := rp.Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}

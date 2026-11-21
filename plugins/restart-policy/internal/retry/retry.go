@@ -58,11 +58,22 @@ type Deps struct {
 type Retrier struct {
 	Policy
 	Deps
+	*Memory
+}
 
+// Memory is what the rule knows of the fibers of one kernel: the records and the
+// reload operation in flight. It outlives an activation of restart-policy, so that a
+// restart of the row (its config changed, its clock restarted) keeps every give-up and
+// count: a fiber given up on stays FAILED until someone updates it
+// (07-c4-plugin-sdk.md:360), and a hold lasts until the operation is final.
+type Memory struct {
 	mu   sync.Mutex
 	recs map[uint64]*record
 	op   context.Context // the reload goroutine's, while an operation is in flight; nil when none
 }
+
+// NewMemory returns a memory with no record.
+func NewMemory() *Memory { return &Memory{recs: map[uint64]*record{}} }
 
 // record is what is known of one fiber that failed, since restart-policy last saw
 // someone else restart it.
@@ -76,9 +87,30 @@ type record struct {
 	activeAt time.Time // when the fiber was last seen ACTIVE; zero while it is not
 }
 
-// New returns a retrier with no record.
-func New(p Policy, d Deps) *Retrier {
-	return &Retrier{Policy: p, Deps: d, recs: map[uint64]*record{}}
+// New returns a retrier that keeps its records in m.
+func New(p Policy, d Deps, m *Memory) *Retrier {
+	return &Retrier{Policy: p, Deps: d, Memory: m}
+}
+
+// Resume takes over the records of an activation that has ended: each retry it had
+// scheduled, whose timer went with it, is scheduled again with its count.
+func (r *Retrier) Resume() {
+	type due struct {
+		id  uint64
+		rec *record
+		n   int
+	}
+	var all []due
+	r.mu.Lock()
+	for id, rec := range r.recs {
+		if rec.pending {
+			all = append(all, due{id, rec, len(rec.fails)})
+		}
+	}
+	r.mu.Unlock()
+	for _, d := range all {
+		r.schedule(d.id, d.rec, d.n)
+	}
 }
 
 // Operation handles one reload/operation event. From the event of an operation that

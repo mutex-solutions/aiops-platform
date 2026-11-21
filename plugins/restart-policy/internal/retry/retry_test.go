@@ -84,7 +84,7 @@ func newRig(t *testing.T, p Policy) *rig {
 		t.Fatal("not a reader")
 	}
 	g.r = New(p, Deps{Context: c, Clock: g.clk, Fibers: g.reg, Catalog: l, Exit: l, Rows: rows,
-		Log: slog.New(tap{g.logs})})
+		Log: slog.New(tap{g.logs})}, NewMemory())
 	return g
 }
 
@@ -337,7 +337,7 @@ func TestEndOfAnOperationJudgesWhatItHeld(t *testing.T) {
 }
 
 func TestBackoffNeverPassesTheBound(t *testing.T) {
-	r := New(Policy{BackoffMin: time.Second, BackoffMax: 5 * time.Second, Factor: 3}, Deps{})
+	r := New(Policy{BackoffMin: time.Second, BackoffMax: 5 * time.Second, Factor: 3}, Deps{}, NewMemory())
 	for n, want := range []time.Duration{time.Second, 3 * time.Second, 5 * time.Second, 5 * time.Second} {
 		if got := r.backoff(n + 1); got != want {
 			t.Errorf("backoff(%d) = %v, want %v", n+1, got, want)
