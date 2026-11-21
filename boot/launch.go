@@ -38,11 +38,14 @@ const configRefsReady = "configRefsReady"
 // graph leaves them out of the needs of a row (builder.needs) and the run-time audit
 // counts them provided.
 func rootKeyNames() []string {
-	return []string{
-		launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
-		launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name(),
-		kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name(),
-	}
+	return append(launchKeyNames(), kernel.ReflectKey.Name(), kernel.RegistryKey.Name(), kernel.HooksKey.Name(), kernel.LoggerKey.Name())
+}
+
+// launchKeyNames are the six launch keys, which the definition makes provider-bound
+// (to the launcher, which is no row), whatever dist.yaml lists.
+func launchKeyNames() []string {
+	return []string{launch.ProfileContextKey.Name(), launch.CatalogKey.Name(), launch.CmdlineKey.Name(),
+		launch.ReadyKey.Name(), launch.KillSwitchesKey.Name(), launch.AppExitKey.Name()}
 }
 
 func isRootKey(name string) bool { return slices.Contains(rootKeyNames(), name) }

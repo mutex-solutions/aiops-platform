@@ -19,6 +19,7 @@ o/inthook: {hooks: [{hook: internal/plugin, stage: 0}]}
 o/entryinit: {hooks: [{hook: loader/entry-init, stage: 0}]}
 o/needloader: {needs: [loader]}
 o/wantregistry: {wants: [registry]}
+o/wantready: {wants: [ready]}
 `
 
 const gateDist = `
@@ -93,6 +94,12 @@ func TestGateChecksTable(t *testing.T) {
 		// The root provides its keys and the kernel seals its hooks whatever dist.yaml lists.
 		{name: "provider of a key of the root", bundle: rows("id: a, plugin: o/ready"),
 			want: []string{"7 a provider-binding stop=false"}, detach: []string{"a"}},
+		// The launch keys are provider-bound to the launcher, which is no row: a Want of one
+		// and an isolate of one are refused as for any provider-bound key.
+		{name: "want of a key of the root", bundle: rows("id: a, plugin: o/wantready"),
+			want: []string{"7 a want-bound stop=false"}, detach: []string{"a"}},
+		{name: "isolate of a key of the root", bundle: rows("id: a, plugin: o/open, isolate: [ready]"),
+			want: []string{"7 a isolate-bound stop=true"}, refused: true},
 		{name: "listener on a hook of the kernel that dist.yaml does not list", bundle: rows("id: a, plugin: o/inthook"),
 			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
 		{name: "listener on a hook of the kernel that dist.yaml lists", bundle: rows("id: a, plugin: o/inthook"),

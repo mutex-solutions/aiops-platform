@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -338,13 +339,13 @@ func (g *gate) classes(r Row) []RowResult {
 		}
 	}
 	for _, k := range e.Wants {
-		if _, ok := g.provider[k]; ok {
+		if _, ok := g.bound(k); ok {
 			out = append(out, g.fail(c, r, RuleWantBound, false,
 				"row %q wants provider-bound key %q: Want is refused on a provider-bound key", r.ID, k))
 		}
 	}
 	for _, k := range r.Isolate {
-		b, ok := g.provider[k]
+		b, ok := g.bound(k)
 		switch {
 		case !ok:
 		case !inSet(r.Plugin, b...):
@@ -362,6 +363,13 @@ func (g *gate) classes(r Row) []RowResult {
 		}
 	}
 	return out
+}
+
+// bound returns the providers a provider-bound key is bound to. A launch key is
+// provider-bound to the launcher, which is no row, whether dist.yaml lists it or not.
+func (g *gate) bound(k string) ([]string, bool) {
+	b, ok := g.provider[k]
+	return b, ok || slices.Contains(launchKeyNames(), k)
 }
 
 // patched reports whether a field of a row was last set by a layer item other
