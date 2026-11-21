@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -78,6 +77,7 @@ type profileContext struct {
 	mods          ModuleTable
 	dist          DistManifest
 	roles         []Role
+	root          *kernel.Root // read for config-refs's dry run; set before the services are provided
 
 	mu        sync.Mutex
 	committed Composition
@@ -242,37 +242,82 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
 		}
 	}
-	if errs := append(errorLines(a), p.configErrors(c)...); len(errs) > 0 {
-		return out, errors.New(strings.Join(errs, "; "))
+	errs := p.configErrors(ctx, c)
+	if lines := errorLines(a); len(lines) > 0 {
+		errs = append([]error{errors.New(strings.Join(lines, "; "))}, errs...)
 	}
-	return out, nil
+	return out, errors.Join(errs...)
 }
 
-// configErrors decodes, with the plugin's own Decode, the config of every row of c that
-// the process mounts and the committed composition does not mount with that plugin and
-// config: a created, enabled or changed row (03-c3-kernel.md:377, "every changed
-// config"). A row whose config holds a reference is left to its activation: only
-// config-refs resolves a reference, on internal/config, which the kernel runs for a mount alone.
-func (p *profileContext) configErrors(c Composition) []string {
+// dryRun is the dry run that config-refs provides under configRefsDryRun
+// (sdk/def/configrefs/v0 DryRun), by its method set.
+type dryRun interface {
+	Check(ctx context.Context, config any) error
+}
+
+// configErrors checks the config of every row that the generation c mounts with a new
+// row (remounted; 03-c3-kernel.md:377, "every changed config"). A config with no
+// reference is decoded with the plugin's own Decode. One that holds a reference is
+// checked by the dry run of the config-refs row ACTIVE in the root realm, which resolves
+// it as it would for the mount and returns no value; with no such row it is refused
+// (ADR-059 decision 16). The error of a dry run is wrapped, so it still matches the
+// definition's ErrUnresolved.
+func (p *profileContext) configErrors(ctx context.Context, c Composition) []error {
 	p.mu.Lock()
 	old := p.committed
 	p.mu.Unlock()
-	act, was := ActiveRows(c, p.roles), ActiveRows(old, p.roles)
-	before := map[string]ComposedRow{}
-	for _, r := range old.Rows {
-		before[r.ID] = r
-	}
-	var out []string
+	fresh := remounted(old, c, p.roles)
+	var dr dryRun
+	looked := false
+	var out []error
 	for _, r := range c.Rows {
 		pl, ok := p.mods[r.Plugin].Plugin.(kernel.Plugin)
 		cfg := plain(r.Config)
-		same := before[r.ID].Plugin == r.Plugin && reflect.DeepEqual(plain(before[r.ID].Config), cfg)
-		if !act[r.ID] || len(r.Refs) > 0 || !ok || pl.Decode == nil || was[r.ID] && same {
-			continue
+		switch {
+		case !fresh[r.ID]:
+		case len(r.Refs) > 0:
+			if !looked {
+				dr, looked = p.configRefs(ctx), true
+			}
+			err := errors.New("config-refs is not ACTIVE, so the references cannot be checked")
+			if dr != nil {
+				err = dr.Check(ctx, cfg)
+			}
+			if err != nil {
+				out = append(out, fmt.Errorf("row %q: %w", r.ID, err))
+			}
+		case ok && pl.Decode != nil:
+			if err := decodes(pl.Decode, cfg); err != nil {
+				out = append(out, fmt.Errorf("row %q: config: %w", r.ID, err))
+			}
 		}
-		if err := decodes(pl.Decode, cfg); err != nil {
-			out = append(out, fmt.Sprintf("row %q: config: %v", r.ID, err))
+	}
+	return out
+}
+
+// configRefs returns the dry run of the config-refs row while it is ACTIVE in the root
+// realm, or nil. The launcher holds the root, which resolves no key, so it reads the
+// provision: Root.Inspect copies out the value of a plain Provide.
+func (p *profileContext) configRefs(ctx context.Context) dryRun {
+	ins, _ := p.root.Inspect(ctx) // an error lists nothing: no dry run, so a reference is refused
+	for _, pv := range ins.Provisions {
+		name, realm, _ := strings.Cut(pv.Key, "@")
+		if d, ok := pv.Value.(dryRun); ok && pv.Active && pv.Plugin == ConfigRefsID && name == configRefsDryRun && !strings.Contains(realm, "/") {
+			return d
 		}
+	}
+	return nil
+}
+
+// remounted returns the rows of nw that a generation from old mounts with a row other
+// than the one that runs: created, enabled, changed in a field other than required and
+// roles, or held by a group that is, which the loader replaces with its rows.
+func remounted(old, nw Composition, roles []Role) map[string]bool {
+	was, act, before := ActiveRows(old, roles), ActiveRows(nw, roles), indexRows(old)
+	out := map[string]bool{}
+	for _, r := range nw.Rows {
+		changed := slices.ContainsFunc(changedFields(before[r.ID].Row, r.Row), func(f FieldName) bool { return f != FieldRequired && f != FieldRoles })
+		out[r.ID] = act[r.ID] && (!was[r.ID] || changed || out[r.Parent])
 	}
 	return out
 }

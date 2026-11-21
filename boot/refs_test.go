@@ -403,6 +403,116 @@ func TestRowMountedWhileConfigRefsRestartsSeesNoReference(t *testing.T) {
 	rr.stop(t)
 }
 
+// liveAdmit boots f and returns a function that admits the generation of a bundle.
+func liveAdmit(t *testing.T, f *fixture, l *launched) (func(bundle string) error, <-chan int) {
+	t.Helper()
+	bindExit(f, "t/probe")
+	done := f.start(t.Context())
+	f.waitReady(t, done)
+	l.mu.Lock()
+	pc := l.profile
+	l.mu.Unlock()
+	return func(bundle string) error {
+		t.Helper()
+		f.files["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(bundle)}
+		c, err := pc.Compose(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = pc.Admit(t.Context(), c)
+		return err
+	}, done
+}
+
+// Admit dry-runs on config-refs the references of every row the generation mounts with
+// a new row: a created, enabled or changed row whose reference does not resolve rejects
+// the generation before anything is applied, so the running rows keep their instances
+// (ADR-059 decision 16; 08-profiles-roadmap-adrs.md §1.6). A row the generation leaves
+// alone is not judged again, though its reference does not resolve.
+func TestAdmitDryRunsTheReferencesOfTheRowsItMounts(t *testing.T) {
+	var l launched
+	entered, gate := make(chan struct{}, 4), make(chan struct{})
+	close(gate)
+	const base = `- insert:
+    - {id: refs, plugin: aiops/config-refs, roles: [api]}
+    - {id: probe, plugin: t/probe, roles: [api]}
+    - {id: kept, plugin: t/rec, roles: [api], config: {note: "${env:AIOPS_REF_A}"}}
+    - {id: plain, plugin: t/rec, roles: [api], config: {note: hello}}
+    - {id: bad, plugin: t/rec, roles: [api], config: {note: "${secret:y}"}}
+    - {id: off, plugin: t/rec, roles: [api], enabled: false, config: {note: "${secret:x}"}}
+`
+	f := refsFixture(t, base, fakeRefs(entered, gate), recorder("t/rec", make(chan any, 16)), probe(&l))
+	admit, done := liveAdmit(t, f, &l)
+	for _, tc := range []struct{ name, add, want string }{
+		{"unchanged", "", ""},
+		{"created, resolves", "- insert:\n    - {id: new, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_B}\"}}\n", ""},
+		{"created", "- insert:\n    - {id: new, plugin: t/rec, roles: [api], config: {note: \"${secret:x}\"}}\n", `row "new": reference secret:x`},
+		{"enabled", "- {id: off, enabled: true}\n", `row "off": reference secret:x`},
+		// The first reference of a running row (notFixed finding 14).
+		{"first reference", "- {id: plain, config: {note: \"${secret:x}\"}}\n", `row "plain": reference secret:x`},
+		{"changed", "- {id: kept, config: {note: \"${secret:x}\"}}\n", `row "kept": reference secret:x`},
+		// Any change but required and roles mounts the row again, which resolves again;
+		// raising required mounts nothing again, and the judge holds the row to ACTIVE.
+		{"inject changed", "- {id: bad, inject: [cache]}\n", `row "bad": reference secret:y`},
+		{"required raised", "- {id: bad, required: true}\n", ""},
+	} {
+		err := admit(base + tc.add)
+		switch {
+		case tc.want == "" && err != nil, tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
+		case strings.HasPrefix(tc.want, "row") && !errors.Is(err, errRefsUnresolved):
+			t.Errorf("%s: admit = %v, want the dry run's error wrapped", tc.name, err)
+		}
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+// With no config-refs ACTIVE, a generation that mounts a row holding a reference is
+// rejected: nothing can check the reference (ADR-059 decision 16). One with no
+// reference is admitted.
+func TestAdmitRejectsAReferenceWhileConfigRefsIsNotActive(t *testing.T) {
+	var l launched
+	const base = "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
+	f := newFixture(t, base, probe(&l), recorder("t/rec", make(chan any, 4)))
+	admit, done := liveAdmit(t, f, &l)
+	err := admit(base + "    - {id: new, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_X}\"}}\n")
+	if err == nil || !strings.Contains(err.Error(), `row "new": config-refs is not ACTIVE`) {
+		t.Errorf("admit = %v", err)
+	}
+	if err := admit(base + "    - {id: new, plugin: t/rec, roles: [api], config: {note: x}}\n"); err != nil {
+		t.Errorf("admit without a reference = %v", err)
+	}
+	if code := stopAndWait(t, f, done); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+}
+
+// A changed group is replaced by the loader with the rows it holds, so they are mounted
+// again too; a change of required or roles alone mounts nothing again.
+func TestRemountedHoldsTheChildrenOfAChangedGroup(t *testing.T) {
+	const bundle = `- insert:
+    - {id: g, plugin: core:group, config: [{id: c, plugin: t/store}, {id: h, plugin: core:group, config: [{id: d, plugin: t/store}]}]}
+    - {id: k, plugin: core:group, config: [{id: e, plugin: t/store}]}
+    - {id: m, plugin: t/store, roles: [%s]}
+    - {id: n, plugin: t/store, enabled: false}
+`
+	old := comp(t, fmt.Sprintf(bundle, "api"))
+	nw := comp(t, fmt.Sprintf(bundle, "api, worker"), "- {id: g, inject: [x]}\n- {id: k, required: true}\n- {id: n, enabled: true}\n")
+	got := remounted(old, nw, nil)
+	var ids []string
+	for id, ok := range got {
+		if ok {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	if want := []string{"g", "g:c", "g:h", "g:h:d", "n"}; !slices.Equal(ids, want) {
+		t.Errorf("remounted %v, want %v", ids, want)
+	}
+}
+
 // Two config-refs rows are two providers of configRefsReady in one realm: boot stops
 // (03-c3-kernel.md:359), instead of following whichever of them changed state last.
 func TestTwoConfigRefsRowsStopBoot(t *testing.T) {

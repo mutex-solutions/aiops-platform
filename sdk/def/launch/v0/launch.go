@@ -178,8 +178,13 @@ type ProfileContext interface {
 	// Compose composes layers 0 to 4 into a candidate, pure
 	// (03-c3-kernel.md:376). It touches no running fiber.
 	Compose(ctx context.Context) (Composition, error)
-	// Admit runs the gate, the bindings and the static graph over a candidate,
-	// pure (03-c3-kernel.md:377). An error rejects the generation.
+	// Admit runs the gate, the bindings and the static graph over a candidate
+	// (03-c3-kernel.md:377), and checks the config of every row that the candidate
+	// mounts with a new row (created, enabled, changed, or held by a changed group):
+	// with the plugin's Decode, or, for a config that holds a reference, with the dry
+	// run of config-refs, which returns no value (ADR-059 decision 16). It touches no
+	// running fiber. An error rejects the generation; a reference that does not
+	// resolve, or any reference while config-refs is not ACTIVE, is one.
 	Admit(ctx context.Context, c Composition) (Admission, error)
 	// Plan diffs two compositions by row id and computes the restart closure,
 	// pure (03-c3-kernel.md:378).

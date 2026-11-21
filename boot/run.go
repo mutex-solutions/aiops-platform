@@ -303,7 +303,7 @@ func (r *run) run(ctx context.Context) int {
 	if err != nil {
 		return r.fail(ExitInternal, "kernel: %v", err)
 	}
-	r.root = root
+	r.root, pc.root = root, root
 	if r.o.Kernel != nil {
 		r.o.Kernel(root)
 	}
