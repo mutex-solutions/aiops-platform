@@ -635,6 +635,31 @@ func TestReloadRowConfigWithAReferenceIsRejected(t *testing.T) {
 	}
 }
 
+// A change of the reload row that keeps its config, a reference in it included, has
+// nothing to resolve: it is applied after the verdict as any change of the row is.
+func TestChangeOfTheReloadRowThatKeepsAReferenceIsApplied(t *testing.T) {
+	cfg := map[string]any{"queue": launch.Ref{Scheme: "env", Name: "AIOPS_REF_Q"}}
+	s := newScript()
+	self := row("reload", "aiops/reload", cfg)
+	w := newScripted(t, s, nil, self)
+	moved := self
+	moved.Roles = []string{"api"}
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{moved, row("x", "aiops/p", nil)}}
+	w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+		p := diff(f, to)
+		for i := range p.Entries {
+			if p.Entries[i].ID == "reload" {
+				p.Entries[i].Action = launch.ActionUpdate // its roles change
+			}
+		}
+		return p, nil
+	}
+	r := await(t, w.svc)
+	if r.Status != def.Passed || r.Err != nil || !slices.Contains(ids(r.Applied), "restarted reload") {
+		t.Fatalf("result = %+v", r)
+	}
+}
+
 // A generation that changes the reload row's config and restarts a row it is gated on (a
 // provider of a key its row injects, or a group above it) ends the activation applying it
 // half way, as when its config does not change: it is rejected before anything is applied.

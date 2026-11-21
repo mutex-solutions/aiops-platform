@@ -330,9 +330,10 @@ var errSelfRef = errors.New("reload: the reload row's new config holds a referen
 // old fiber is DISPOSED, which the disposed activation cannot wait for, and a restart
 // of the row through its group or a provider of a key its row injects (rows of the
 // plan's restart closure) cancels the apply of the rest. It also refuses a change of
-// the row's config whose candidate holds a reference: Admit decodes only a literal
-// config, and the deferred change is applied after the generation was committed and
-// published, too late to reject it when the kernel does not resolve it (08 §1.6).
+// the row's config to one that holds a reference: the deferred change is applied after
+// the generation was committed and published, too late to reject it when the kernel
+// does not resolve it (08 §1.6). A change of anything else leaves a reference in the
+// unchanged config as it is, with nothing to resolve.
 func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 	next := map[string]launch.Row{}
 	for _, r := range cand.Rows {
@@ -351,7 +352,7 @@ func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 			return fmt.Errorf("%w: row %q is replaced, as its plugin, inject, isolate or intercept changes", errSelf, o.ID)
 		case slices.Contains(p.Closure, o.ID) && (!changed[o.ID] || e.gatedOn(n, p.Closure, next)):
 			return fmt.Errorf("%w: row %q restarts through its group or a provider it needs", errSelf, o.ID)
-		case changed[o.ID] && holdsRef(n.Config):
+		case changed[o.ID] && holdsRef(n.Config) && !reflect.DeepEqual(n.Config, o.Config):
 			return fmt.Errorf("%w: row %q", errSelfRef, o.ID)
 		}
 	}
