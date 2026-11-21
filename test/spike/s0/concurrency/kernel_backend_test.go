@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -990,23 +991,49 @@ func TestKernelNoSaveSkipsAFailingCommit(t *testing.T) {
 	}
 }
 
-// The callpath gate budgets zero allocations for the owner's Enter and Leave. The
-// kernel's own path allocates nothing; this holds the adapter to the same budget.
+// The callpath gate budgets zero allocations for the owner's Enter and Leave in
+// every measured run, and a run may hold the first Enter of a fresh activation.
+// The kernel's own path allocates nothing; this holds the adapter to the same
+// budget, first call included.
 func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 	ctx, r := kernelFixture(t)
-	ctxs := make(chan *Context, 1)
-	id := kernelMount(t, ctx, r, Spec{ID: "leased", Apply: func(c *Context) error {
-		ctxs <- c
-		return nil
-	}})
-	if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
-		t.Fatal(err)
+	const fresh = 100
+	ctxs := make(chan *Context, fresh)
+	for range fresh {
+		id := kernelMount(t, ctx, r, Spec{ID: "leased", Apply: func(c *Context) error {
+			ctxs <- c
+			return nil
+		}})
+		if err := r.(Waiter).AwaitFiber(ctx, id); err != nil {
+			t.Fatal(err)
+		}
 	}
-	c := <-ctxs
-	if !c.Enter() { // The first call keeps the activation's leave function.
-		t.Fatal("Enter refused on an active fiber")
+	firsts := make([]*Context, 0, fresh)
+	for range fresh {
+		firsts = append(firsts, <-ctxs)
 	}
-	c.Leave()
+	// testing.AllocsPerRun warms up with one call, which would hide an allocation
+	// of the first call, so the first calls are measured here as it measures: on
+	// one P, mallocs over all runs divided by the runs.
+	refused := 0
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for _, c := range firsts {
+		if !c.Enter() {
+			refused++
+			continue
+		}
+		c.Leave()
+	}
+	runtime.ReadMemStats(&after)
+	if refused != 0 {
+		t.Fatalf("Enter refused on %d active fibers", refused)
+	}
+	if got := (after.Mallocs - before.Mallocs) / fresh; got != 0 {
+		t.Fatalf("the first Enter+Leave of an activation allocated %d objects per call, want 0", got)
+	}
+	c := firsts[0]
 	if got := testing.AllocsPerRun(1000, func() {
 		if !c.Enter() {
 			panic("Enter refused on an active fiber")

@@ -961,18 +961,22 @@ func (r *kernelRuntime) Batch(ctx context.Context, operations []BatchOperation) 
 func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 	c := &Context{host: r, std: kc.Std(), config: cfg}
 	c.live.Store(true) // The kernel refuses what an inactive activation may not do.
-	var leave atomic.Pointer[func()]
+	// The kernel returns one leave function per activation, allocated with it (see
+	// handle.enter), and an activation is live before Apply runs, as the root is
+	// until Close. One lease taken here keeps that function, so no Enter or Leave
+	// allocates, the first of an activation included. A handle that is not live
+	// here never is again: its Enter refuses and its Leave is never called.
+	var leave func()
+	if l, ok := kc.Enter(); ok {
+		leave = l
+		l()
+	}
 	c.fwd = &forward{
-		// The kernel returns one leave function per activation (see handle.enter),
-		// so the first one seen serves every Leave.
 		enter: func() bool {
-			l, ok := kc.Enter()
-			if ok && leave.Load() == nil {
-				keepLeave(&leave, l) // out of line: taking &l here would heap-allocate l on every call
-			}
+			_, ok := kc.Enter()
 			return ok
 		},
-		leave: func() { (*leave.Load())() },
+		leave: leave,
 		// The kernel owns the worker: it holds the lease, reports the result to the
 		// owner and clears the tracked label itself, so a label is gone from the
 		// snapshot as soon as the worker has returned, as in the prototypes.
@@ -1468,12 +1472,4 @@ func (r *kernelRuntime) RetentionStatus() RetentionStatus {
 		EventWindow: r.window, Windowed: int(min(s.EventsTotal-min(s.EventsTotal, r.base.events), uint64(r.window))),
 		EventsTotal:     s.EventsTotal - min(s.EventsTotal, r.base.events),
 		ObserverBacklog: s.ObserverBacklog, TerminalDropped: s.TerminalDropped}
-}
-
-// keepLeave stores the activation's leave function once. It is a separate
-// function so the lease path of the adapter allocates nothing after the first call.
-//
-//go:noinline
-func keepLeave(slot *atomic.Pointer[func()], l func()) {
-	slot.CompareAndSwap(nil, &l)
 }
