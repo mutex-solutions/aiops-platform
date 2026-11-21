@@ -356,6 +356,7 @@ func TestInitialTreeThatCannotBeStagedFailsTheLoader(t *testing.T) {
 		"duplicate": {row("a", "t/a"), row("a", "t/a")},
 		"no parent": {child("g", "a", "t/a")},
 		"not group": {row("a", "t/a"), child("a", "b", "t/a")},
+		"empty id":  {row("", "t/a")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root, _ := bareKernel(t)
@@ -388,6 +389,7 @@ func TestRefusedPlanHasNoEffect(t *testing.T) {
 		"update":       {[]def.Op{remove("a"), update(row("nope", "t/a"))}, def.ErrNotFound},
 		"remove":       {[]def.Op{remove("nope")}, def.ErrNotFound},
 		"parent moved": {[]def.Op{update(row("g:k", "t/a"))}, def.ErrParent},
+		"empty id":     {[]def.Op{create(row("n", "t/a")), create(row("", "t/a"))}, def.ErrEmptyID},
 	} {
 		before := calls
 		if _, err := x.ld.Apply(t.Context(), tc.ops); !errors.Is(err, tc.want) {

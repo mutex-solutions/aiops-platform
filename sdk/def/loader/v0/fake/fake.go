@@ -208,6 +208,9 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 	e := cloneSpec(op.Entry)
 	cur, ok := p.entries[e.ID]
 	r := loader.Result{ID: e.ID}
+	if e.ID == "" {
+		return r, loader.ErrEmptyID
+	}
 	switch op.Kind {
 	case loader.OpCreate:
 		g, under := p.entries[e.Parent]

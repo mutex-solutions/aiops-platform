@@ -79,6 +79,8 @@ func Run(t *testing.T, mount Mount) {
 			ops  []loader.Op
 		}{
 			{loader.ErrExists, []loader.Op{create(row("x", p)), create(row("a", p))}},
+			{loader.ErrEmptyID, []loader.Op{create(row("x", p)), create(row("", p))}},
+			{loader.ErrEmptyID, []loader.Op{update(row("", p))}},
 			{loader.ErrParent, []loader.Op{create(orphan)}},
 			{loader.ErrNotGroup, []loader.Op{create(under)}},
 			{loader.ErrParent, []loader.Op{update(moved)}},

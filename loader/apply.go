@@ -271,6 +271,9 @@ func (t *tree) retireIn(ctx context.Context, p *plan, id string) {
 func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, error) {
 	e := cloneSpec(op.Entry)
 	cur, r := t.entries[e.ID], def.Result{ID: e.ID}
+	if e.ID == "" { // "" names the root: an entry of that id would be its own parent
+		return r, def.ErrEmptyID
+	}
 	switch op.Kind {
 	case def.OpCreate:
 		if cur != nil {

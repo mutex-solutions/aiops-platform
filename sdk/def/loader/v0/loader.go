@@ -26,6 +26,9 @@ const (
 var (
 	// ErrExists reports a Create of an id that has an entry.
 	ErrExists = errors.New("loader: entry exists")
+	// ErrEmptyID reports an operation whose entry has an empty ID: "" is the Parent
+	// of a top-level entry, the root of the tree, and no entry's id.
+	ErrEmptyID = errors.New("loader: empty entry id")
 	// ErrNotFound reports an Update, Remove or Await of an id with no entry.
 	ErrNotFound = errors.New("loader: no such entry")
 	// ErrParent reports an entry whose Parent has no entry, or an Update that
