@@ -1,4 +1,4 @@
 # Layer 4 patch, written by a live recomposition: the group "grp" is replaced (its inject
-# changes) and its child gets a reference that does not resolve (secret: until S3).
+# changes) and nothing else. Its child keeps its config, whose reference no longer
+# resolves: the harness removed the file it names (refs-group.yml).
 - {id: grp, inject: [toy.store]}
-- {id: "grp:fault", config: {note: "${secret:x}"}}

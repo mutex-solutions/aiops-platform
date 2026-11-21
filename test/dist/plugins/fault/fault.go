@@ -198,10 +198,12 @@ func SlowApply() kernel.Plugin {
 	})
 }
 
-// BadConfig accepts the config {} and {ok: true} and refuses every other: its Decode
-// fails with "invalid config", which is "Config fails schema or Validate". A row
-// that starts with a bad config is FAILED; an update to a bad config is rejected and
-// the row keeps its instance (matrix, "Live recomposition").
+// BadConfig accepts the config {}, {ok: true} and a field note whose value is not the
+// string "refused", and refuses every other: its Decode fails with "invalid config",
+// which is "Config fails schema or Validate". A row that starts with a bad config is
+// FAILED; an update to a bad config is rejected and the row keeps its instance (matrix,
+// "Live recomposition"). A note that holds a reference decodes as it is, unresolved: only
+// the value it resolves to can be refused, which a check of the raw config does not see.
 func BadConfig() kernel.Plugin {
 	return kernel.Define(kernel.Plugin{
 		ID:       BadConfigID,
@@ -212,9 +214,10 @@ func BadConfig() kernel.Plugin {
 				return nil, fmt.Errorf("invalid config: config is %T, want a map", raw)
 			}
 			for k, v := range m {
-				if k != "ok" || v != true {
-					return nil, fmt.Errorf("invalid config: field %q is not accepted; the only value is {ok: true}", k)
+				if k == "note" && v != "refused" || k == "ok" && v == true {
+					continue
 				}
+				return nil, fmt.Errorf("invalid config: field %q is not accepted; the values are {ok: true} and a note other than \"refused\"", k)
 			}
 			return nil, nil
 		},

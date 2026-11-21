@@ -105,6 +105,7 @@ type Options struct {
 	Patches []string        // --patch files, in order
 	Env     []string        // extra environment variables, NAME=value
 	Limits  string          // content of the --limits file; default Limits
+	RefsDir string          // --refs-dir, the directory of ${file:} references; default: not passed
 	Context context.Context // ends the process when done (a test timeout); default Background
 }
 
@@ -149,6 +150,9 @@ func Start(bin string, o Options) (*Proc, error) {
 	args := []string{"--profile", profile, "--home", home, "--limits", limFile}
 	if o.Role != "" {
 		args = append(args, "--role", o.Role)
+	}
+	if o.RefsDir != "" {
+		args = append(args, "--refs-dir", o.RefsDir)
 	}
 	for _, p := range o.Patches {
 		args = append(args, "--patch", p)

@@ -143,6 +143,10 @@ type plan struct {
 	trigger bool     // once running (and, with live, once the generation passed), create run/fault.go
 	code    int      // the exit code that boot/run.go fixes for this exit; 0: any non-zero
 	env     []string // extra environment variables of the process, NAME=value
+	// refsFile: a file of that name in a fresh --refs-dir, written before boot and removed
+	// before the live generation is submitted, so a ${file:} reference to it resolves at
+	// boot and no longer in the generation.
+	refsFile string
 	// rolledBack: the live generation's failed verdict must leave the tree as it was,
 	// "the composer rolls the scope back" ("Rolled back").
 	rolledBack bool
@@ -177,6 +181,12 @@ type variant struct {
 func rejectedLive(name, diagnostic string, base []string, live string, env ...string) variant {
 	return variant{name, plan{base: base, live: live, env: env, rejected: true},
 		boot.Expect{Exit: "running", Ready: "true", Diagnostic: diagnostic}}
+}
+
+// withRefsFile is v with the --refs-dir file name of plan.refsFile.
+func withRefsFile(name string, v variant) variant {
+	v.refsFile = name
+	return v
 }
 
 // liveBase is what the live layer file holds at boot: a valid layer that changes nothing.
@@ -218,9 +228,14 @@ func planFor(row, col, fault string) (plan, bool) {
 				rejectedLive("a created row with a reference that does not resolve", "does not resolve", nil, "refs-unresolved.optional.yml"),
 				rejectedLive("an enabled row with a reference that does not resolve", "does not resolve", []string{"refs-unresolved.disabled.yml"}, "fault-enabled.yml"),
 				rejectedLive("a row given a first reference that does not resolve", "does not resolve", []string{"refs-literal.yml"}, "refs-unresolved.change.yml"),
-				rejectedLive("the child of a replaced group with a reference that does not resolve", "does not resolve", []string{"refs-group.yml"}, "refs-unresolved.group.yml"),
+				// The child's config does not change: only the replacement of its group
+				// makes the generation check its reference, which no longer resolves.
+				withRefsFile("note", rejectedLive("the child of a replaced group with a reference that does not resolve", "does not resolve",
+					[]string{"refs-group.yml"}, "refs-unresolved.group.yml")),
 				rejectedLive("a created row with a reference while config-refs is disabled", "rejected", []string{"refs-disabled.yml"}, "refs-env.optional.yml", "AIOPS_REF_NOTE=from-env"),
-				rejectedLive("a created row whose resolved reference fails Decode", "invalid config", nil, "bad-config.refs.optional.yml", "AIOPS_REF_NOTE=from-env"),
+				// The raw reference decodes and its resolved value does not: only a check of
+				// the resolved config refuses it.
+				rejectedLive("a created row whose resolved reference fails Decode", "invalid config", nil, "bad-config.refs.optional.yml", "AIOPS_REF_NOTE=refused"),
 				rejectedLive("a created row with a reference in the generation that disables config-refs", "config-refs changes in this generation",
 					nil, "refs-env.refs-disabled.yml", "AIOPS_REF_NOTE=from-env"),
 			}}, plan{}), true
@@ -451,6 +466,18 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 		}
 		opts.Patches = append(opts.Patches, livePath)
 	}
+	var refsFile string
+	if p.refsFile != "" {
+		d, err := os.MkdirTemp("", "aiops-matrix-refs-")
+		if err != nil {
+			return result{problems: []string{err.Error()}}
+		}
+		defer os.RemoveAll(d)
+		opts.RefsDir, refsFile = d, filepath.Join(d, p.refsFile)
+		if err := os.WriteFile(refsFile, []byte("from-file"), 0o600); err != nil {
+			return result{problems: []string{err.Error()}}
+		}
+	}
 	proc, err := harness.Start(bin, opts)
 	if err != nil {
 		return result{problems: []string{err.Error()}}
@@ -476,6 +503,11 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 		before = s
 	}
 	if p.live != "" {
+		if refsFile != "" {
+			if err := os.Remove(refsFile); err != nil {
+				return fail("%v", err)
+			}
+		}
 		body, err := os.ReadFile(harness.PatchFile(p.live))
 		if err != nil {
 			return fail("%v", err)

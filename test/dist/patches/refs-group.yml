@@ -1,3 +1,7 @@
-# Layer 4 patch: a group with one child, "grp:fault", whose config holds no reference.
+# Layer 4 patch: a group with one child, "grp:fault", whose config holds a reference to
+# the file "note" under --refs-dir, which the harness writes before boot and removes before
+# the live generation: it resolves at boot and no longer at the generation that replaces
+# the group (refs-unresolved.group.yml). config-refs reads ${file:} from that flag.
+- {id: refs, config: {maxFileBytes: 65536, fileRootFlag: refs-dir}}
 - insert:
-    - {id: grp, plugin: core:group, roles: [api], config: [{id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: literal}}]}
+    - {id: grp, plugin: core:group, roles: [api], config: [{id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: "${file:note}"}}]}
