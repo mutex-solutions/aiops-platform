@@ -148,7 +148,7 @@ func newScripted(t *testing.T, s *script, mounts map[string]loader.Mount, prev .
 	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
 		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
 	kerneltest.Mount(w.root, lp, sp)
-	w.fiber = w.root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 8})
+	w.fiber = w.root.Plugin(reload.New(), reload.Config{Queue: 4, History: 8})
 	active(t, w.fiber)
 	w.svc = submitter(t, w.root, "aiops/submitter")
 	return w
@@ -226,9 +226,17 @@ func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T
 		t.Errorf("committed = %x", w.l.Committed().Digest)
 	}
 	active(t, w.fiber) // the restart is over
-	r2 := await(t, submitter(t, w.root, "aiops/submitter2"))
+	svc2 := submitter(t, w.root, "aiops/submitter2")
+	r2 := await(t, svc2)
 	if r2.Status != def.Passed || r2.Previous.Digest != (launch.Digest{2}) || len(r2.Applied) != 0 {
 		t.Errorf("next result = %+v: it is planned from the generation the tree runs", r2)
+	}
+	// The restarted row goes on numbering, and still knows the operation that restarted it.
+	if r2.ID != 2 || r2.Generation != 2 {
+		t.Errorf("next operation %d, generation %d: want 2 and 2 after operation 1 and generation 1", r2.ID, r2.Generation)
+	}
+	if r1, ok := svc2.Result(1); !ok || r1.Status != def.Passed || r1.Generation != 1 {
+		t.Errorf("the result of the operation that restarted the row is %+v, %v", r1, ok)
 	}
 }
 
@@ -343,7 +351,7 @@ func TestAbandonAfterTheApplyCommitsWhatTheLoaderHolds(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
 	active(t, rf)
 	svc := submitter(t, root, "aiops/caller")
 	id, err := svc.Submit(t.Context(), def.Op{})
@@ -468,7 +476,7 @@ func TestGenerationWithNoRequiredSetFailsItsVerdict(t *testing.T) {
 	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
 		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
 	kerneltest.Mount(root, lp, sp)
-	active(t, root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4}))
+	active(t, root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4}))
 	r := await(t, submitter(t, root, "aiops/caller"))
 	if got := outcome(r.Report, "required set"); r.Status != def.RollbackFailed || got.Outcome != "fail" || !strings.Contains(got.Detail, errForgotten.Error()) {
 		t.Fatalf("result = %+v", r)

@@ -93,7 +93,7 @@ type world struct {
 func newWorld(t *testing.T, queue, history int) *world {
 	t.Helper()
 	w := base(t)
-	w.fiber = w.root.Plugin(reload.Plugin, reload.Config{Queue: queue, History: history})
+	w.fiber = w.root.Plugin(reload.New(), reload.Config{Queue: queue, History: history})
 	active(t, w.fiber)
 	w.svc = w.consumer("aiops/submitter")
 	return w
@@ -619,7 +619,7 @@ func TestSubmitFromALeasedCallDoesNotWait(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	active(t, root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4}))
+	active(t, root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4}))
 
 	var svc def.Reload
 	var cc *kernel.Context
@@ -694,7 +694,7 @@ func TestDisposalWhileSettlingAbandonsTheOperation(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
 	active(t, rf)
 	var svc def.Reload
 	caller := kernel.Define(kernel.Plugin{ID: "aiops/caller", Inject: []kernel.Dep{kernel.Need(def.Key)},
@@ -782,7 +782,7 @@ func TestDecode(t *testing.T) {
 		{"unknown field", map[string]any{"queue": 1, "history": 1, "timeout": 1}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := base(t).root.Plugin(reload.Plugin, tc.raw).Await(t.Context())
+			err := base(t).root.Plugin(reload.New(), tc.raw).Await(t.Context())
 			if (err == nil) != tc.ok {
 				t.Errorf("err = %v, want ok = %v", err, tc.ok)
 			}
@@ -791,7 +791,7 @@ func TestDecode(t *testing.T) {
 }
 
 func TestDecodeErrorDoesNotEchoTheValue(t *testing.T) {
-	err := base(t).root.Plugin(reload.Plugin, map[string]any{"queue": "hunter2-secret", "history": 1}).Await(t.Context())
+	err := base(t).root.Plugin(reload.New(), map[string]any{"queue": "hunter2-secret", "history": 1}).Await(t.Context())
 	if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "queue") {
 		t.Errorf("err = %v: a resolved reference may be in the value, so only the field and the type are named", err)
 	}
@@ -804,7 +804,7 @@ func TestBindingMaps(t *testing.T) {
 		Apply: func(c *kernel.Context, _ any) error { _ = def.Key.Of(c); return nil }})
 	stranger := kernel.Define(kernel.Plugin{ID: "aiops/stranger", Inject: []kernel.Dep{kernel.Need(def.Key)},
 		Apply: func(c *kernel.Context, _ any) error { _ = def.Key.Of(c); return nil }})
-	rl := kernel.Define(reload.Plugin)
+	rl := reload.New()
 	providers := kernel.Bindings{launch.ProfileContextKey: {lp}, launch.CatalogKey: {lp}, launch.CmdlineKey: {lp},
 		launch.ReadyKey: {lp}, launch.KillSwitchesKey: {lp}, launch.AppExitKey: {lp}}
 	consumers := kernel.Bindings{loader.Key: {rl}, def.Key: {submitter}, launch.AppExitKey: nil}
@@ -1113,7 +1113,7 @@ func TestRollbackThatEndsWhileSettlingIsAbandoned(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.Plugin, reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
 	active(t, rf)
 	var svc def.Reload
 	caller := kernel.Define(kernel.Plugin{ID: "aiops/caller", Inject: []kernel.Dep{kernel.Need(def.Key)},

@@ -46,19 +46,32 @@ type Deps struct {
 // Engine is the queue and its worker. It serves reload.Reload.
 type Engine struct {
 	Deps
+	*Memory
 	queueMax, historyMax int
 
+	closed bool
+	queue  []*job
+	wake   chan struct{}
+}
+
+// Memory is what the engines of one reload row keep across its activations: the last
+// operation id, the number of the last generation and the results of the final
+// operations. A restart of the row (a generation that changes its config) then numbers
+// no operation or generation again from 1 and keeps the result of the operation that
+// restarted it. Its mu guards the engine's queue as well.
+type Memory struct {
 	mu       sync.Mutex
-	closed   bool
 	last     def.ID
-	queue    []*job
 	jobs     map[def.ID]*job
 	finished []def.ID // ids of final jobs, oldest first, for the bound on history
-	wake     chan struct{}
 
-	// The worker's own: the number of the last generation applied or restored.
+	// The worker's own: the number of the last generation applied or restored. Only one
+	// worker runs at a time: an activation starts once the last one has unloaded.
 	generation uint64
 }
+
+// NewMemory returns a memory with no operation.
+func NewMemory() *Memory { return &Memory{jobs: map[def.ID]*job{}} }
 
 var _ def.Reload = (*Engine)(nil)
 
@@ -70,12 +83,11 @@ type job struct {
 // nested marks the context of the worker's own work.
 type nested struct{}
 
-// New returns an engine whose queue holds at most queueMax waiting operations and
+// New returns an engine over m whose queue holds at most queueMax waiting operations and
 // whose history keeps the results of the last historyMax final ones. The tree runs
 // Profile.Committed as it is at each operation.
-func New(d Deps, queueMax, historyMax int) *Engine {
-	return &Engine{Deps: d, queueMax: queueMax, historyMax: historyMax, jobs: map[def.ID]*job{},
-		wake: make(chan struct{}, 1)}
+func New(d Deps, m *Memory, queueMax, historyMax int) *Engine {
+	return &Engine{Deps: d, Memory: m, queueMax: queueMax, historyMax: historyMax, wake: make(chan struct{}, 1)}
 }
 
 // Submit queues op. It takes a lock for a few instructions and never waits for the

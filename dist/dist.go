@@ -101,7 +101,7 @@ func Modules() []Module {
 		{Plugin: clock.Plugin},
 		{Plugin: configrefs.Plugin},
 		{Plugin: readiness.Plugin},
-		{Plugin: reload.Plugin},
+		{Plugin: reload.New()},
 		{Plugin: restartpolicy.New()},
 	}
 }

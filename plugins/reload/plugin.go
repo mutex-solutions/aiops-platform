@@ -35,39 +35,46 @@ type Config struct {
 // id is the plugin id of the reload row.
 const id = "aiops/reload"
 
-// Plugin is the reload row.
-var Plugin = kernel.Define(kernel.Plugin{
-	ID: id,
-	Inject: []kernel.Dep{kernel.Need(loader.Key), kernel.Need(launch.ProfileContextKey),
-		kernel.Need(launch.CatalogKey)},
-	Provides: []kernel.AnyKey{def.Key},
-	Decode:   decode,
-	Apply: func(c *kernel.Context, cfg any) error {
-		conf := cfg.(Config)
-		applied, operation := def.Applied.Bind(c), def.Operation.Bind(c)
-		e := engine.New(engine.Deps{
-			Profile: launch.ProfileContextKey.Of(c), Catalog: launch.CatalogKey.Of(c), Loader: loader.Key.Of(c),
-			Publish: func(ctx context.Context, a composition.Applied) error {
-				return applied.Emit(ctx, kernel.Unscoped, a)
-			},
-			Progress: func(ctx context.Context, r def.Result) error {
-				return operation.Emit(ctx, kernel.Unscoped, r)
-			},
-			Self: id,
-			Go: func(label string, run func(context.Context) error) (err error) {
-				defer func() {
-					if p := recover(); p != nil {
-						err = p.(error) // Context.Go refuses an unloading row with a panic of an error
-					}
-				}()
-				c.Go(label, run)
-				return nil
-			},
-		}, conf.Queue, conf.History)
-		c.Go("reload", e.Run)
-		return def.Key.Provide(c, e)
-	},
-})
+// New returns the reload row. Its activations share one engine.Memory, so a restart of
+// the row (a generation that changes its config) goes on numbering operations and
+// generations and keeps the results of the final ones. A binary makes one value, which
+// its module table holds and its binding maps list.
+func New() kernel.Plugin {
+	m := engine.NewMemory()
+	return kernel.Define(kernel.Plugin{
+		ID: id,
+		Inject: []kernel.Dep{kernel.Need(loader.Key), kernel.Need(launch.ProfileContextKey),
+			kernel.Need(launch.CatalogKey)},
+		Provides: []kernel.AnyKey{def.Key},
+		Decode:   decode,
+		Apply:    func(c *kernel.Context, cfg any) error { return apply(c, cfg.(Config), m) },
+	})
+}
+
+func apply(c *kernel.Context, conf Config, m *engine.Memory) error {
+	applied, operation := def.Applied.Bind(c), def.Operation.Bind(c)
+	e := engine.New(engine.Deps{
+		Profile: launch.ProfileContextKey.Of(c), Catalog: launch.CatalogKey.Of(c), Loader: loader.Key.Of(c),
+		Publish: func(ctx context.Context, a composition.Applied) error {
+			return applied.Emit(ctx, kernel.Unscoped, a)
+		},
+		Progress: func(ctx context.Context, r def.Result) error {
+			return operation.Emit(ctx, kernel.Unscoped, r)
+		},
+		Self: id,
+		Go: func(label string, run func(context.Context) error) (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = p.(error) // Context.Go refuses an unloading row with a panic of an error
+				}
+			}()
+			c.Go(label, run)
+			return nil
+		},
+	}, m, conf.Queue, conf.History)
+	c.Go("reload", e.Run)
+	return def.Key.Provide(c, e)
+}
 
 func decode(raw any) (any, error) {
 	var conf Config
