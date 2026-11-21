@@ -333,7 +333,17 @@ type kernelRuntime struct {
 	// that the kernel gave it and joins it to the events that name that identity.
 	valMu    sync.Mutex
 	vals     map[uint64]any
-	keyLocks sync.Map // string -> *sync.Mutex: one Provide per key at a time, so the newest provide event is its own.
+	pending  map[string][]pendingValue // Values whose provide event no export has met yet, by key.
+	npending int
+	keyLocks sync.Map // string -> *sync.Mutex: one Provide per key at a time, so no other provide event of the key falls in a pendingValue's range.
+}
+
+// pendingValue is a provided value waiting for its provide event: the event's
+// sequence lies in (lo, hi], the ledger totals read just before and just after the
+// Provide call that appended it.
+type pendingValue struct {
+	value  any
+	lo, hi uint64
 }
 
 var (
@@ -938,10 +948,11 @@ func (r *kernelRuntime) context(kc *kernel.Context, cfg any) *Context {
 		lock, _ := r.keyLocks.LoadOrStore(key, new(sync.Mutex))
 		lock.(*sync.Mutex).Lock()
 		defer lock.(*sync.Mutex).Unlock()
+		lo := r.root.RetentionStatus().EventsTotal
 		if err := k.Provide(kc, value, r.available(k)); err != nil {
 			return fromKernel(err)
 		}
-		r.keep(key, value)
+		r.keep(key, value, lo, r.root.RetentionStatus().EventsTotal)
 		c.publishOwned(key)
 		return nil
 	}
@@ -1055,26 +1066,44 @@ func (r *kernelRuntime) uids(list []uint64) []uint64 {
 	return out
 }
 
-// keep records value under the identity of the provision that key was just given:
-// the kernel appended its provide event before Provide returned, and the key lock
-// holds every later provision of the key back, so the newest provide event of the
-// key is this one.
+// keep files value for the provide event that the Provide call just made: the
+// kernel appended that event before Provide returned, so its sequence lies in
+// (lo, hi], and the key lock keeps every other provide event of the key out of
+// that range. The value is joined to its provision identity when an export first
+// meets the provide event (value). Filing costs O(1); reading the ledger on every
+// Provide made a mount of n fibers cost O(n x window).
 //
-// ponytail: found in the kernel's event window; an event flood wider than the window
-// between Provide and this read leaves the value unreported (nil). Widen the window
-// or ask the kernel for the identity if that ever shows.
-func (r *kernelRuntime) keep(key string, value any) {
-	events, _ := r.root.Events(context.Background())
+// ponytail: a provide event that leaves the window before any export meets it
+// leaves its value unreported (nil), as the event itself is lost then; pending
+// values that can no longer match are dropped once the pending set outgrows twice
+// the window.
+func (r *kernelRuntime) keep(key string, value any, lo, hi uint64) {
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
-	for i := len(events) - 1; i >= 0; i-- {
-		if e := events[i]; e.Kind == "provide" && serviceName(e.Key) == key {
-			r.vals[e.UID] = value
-			break
-		}
+	if r.pending == nil {
+		r.pending = make(map[string][]pendingValue)
 	}
-	if len(r.vals) > 4*r.window+256 {
-		r.prune()
+	r.pending[key] = append(r.pending[key], pendingValue{value: value, lo: lo, hi: hi})
+	r.npending++
+	if r.npending <= 2*r.window+256 {
+		return
+	}
+	st := r.root.RetentionStatus()
+	oldest := st.EventsTotal - uint64(st.Windowed) // Sequences at or below this are gone.
+	r.npending = 0
+	for k, list := range r.pending {
+		kept := list[:0]
+		for _, p := range list {
+			if p.hi > oldest {
+				kept = append(kept, p)
+			}
+		}
+		if len(kept) == 0 {
+			delete(r.pending, k)
+			continue
+		}
+		r.pending[k] = kept
+		r.npending += len(kept)
 	}
 }
 
@@ -1101,14 +1130,37 @@ func (r *kernelRuntime) prune() {
 	}
 }
 
-// value is the provided value that a service event reports, by provision identity.
+// value is the provided value that a service or provide event reports, by
+// provision identity. A provide event not met before is first joined to the
+// pending value whose range holds its sequence.
 func (r *kernelRuntime) value(e kernel.LedgerEvent) any {
 	if e.UID == 0 || (e.Kind != "service" && e.Kind != "provide") {
 		return nil
 	}
 	r.valMu.Lock()
 	defer r.valMu.Unlock()
-	return r.vals[e.UID]
+	if v, ok := r.vals[e.UID]; ok || e.Kind != "provide" {
+		return v
+	}
+	key := serviceName(e.Key)
+	list := r.pending[key]
+	for i, p := range list {
+		if e.Sequence <= p.lo || e.Sequence > p.hi {
+			continue
+		}
+		r.vals[e.UID] = p.value
+		if rest := append(list[:i:i], list[i+1:]...); len(rest) > 0 {
+			r.pending[key] = rest
+		} else {
+			delete(r.pending, key)
+		}
+		r.npending--
+		if len(r.vals) > 4*r.window+256 {
+			r.prune()
+		}
+		return p.value
+	}
+	return nil
 }
 
 // serviceName is the key a service event or provision names: the kernel renders it
