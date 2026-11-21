@@ -219,7 +219,8 @@ func planFor(row, col, fault string) (plan, bool) {
 		// or enables the row, whether the config fails Decode or holds a reference that does
 		// not resolve, for the child of a group it replaces, and for any reference while
 		// config-refs is not ACTIVE (ADR-059 decision 16). Disabling config-refs is a valid
-		// profile (decision 18).
+		// profile while no required row holds a reference (decision 18) and, pending the
+		// owner, while no active provider of a required key in the root realm holds one.
 		return byColumn(col, plan{base: []string{"bad-config.optional.yml"}},
 			plan{base: []string{"bad-config.required.yml"}, code: boot.ExitRequired},
 			plan{base: []string{"bad-config.ok.yml"}, live: "bad-config.change.yml", rejected: true, then: []variant{

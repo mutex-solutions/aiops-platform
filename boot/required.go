@@ -54,11 +54,12 @@ type RequiredSet struct {
 // set applies to the rows that role runs (08-profiles-roadmap-adrs.md:459): a
 // required row of another role drops out, and so does a required key whose
 // providers in the composition all run in another role. A key with no provider
-// row at all stays, and the audit reports it. When a row inside the set holds a
-// reference, a required row of the role or an active provider of a required key in the
-// root realm, the launcher adds the config-refs rows that serve the process (refsRows)
+// row at all stays, and the audit reports it. When a required row of the role holds a
+// reference, the launcher adds the config-refs rows that serve the process (refsRows)
 // and configRefsReady to the set (ADR-059 decision 18): the row is applied only while
-// config-refs is. That key stays even when every config-refs row runs in another role.
+// config-refs is. Pending the owner, an active provider of a required key in the root
+// realm counts as a required row here. That key stays even when every config-refs row
+// runs in another role.
 func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Role) RequiredSet {
 	in, active := RoleFilter(roles), ActiveRows(c, roles)
 	b := builder{rows: make(map[string]ComposedRow, len(c.Rows))}
@@ -181,7 +182,8 @@ func RequiredClosure(g Graph, set RequiredSet) []string {
 // A provider is inside the required set when its row is required or it provides
 // a required key; the edge from a child to its group is not a need, and neither is
 // the need of configRefsReady, which RequiredFor adds with config-refs where such a
-// provider holds a reference (ADR-059 decision 18).
+// provider holds a reference (ADR-059 decision 18; for a provider of a required key,
+// pending the owner).
 func AuditStatic(c Composition, mods ModuleTable, dist DistManifest, g Graph, roles []Role) []StaticError {
 	set := RequiredFor(c, mods, dist, roles)
 	var errs []StaticError

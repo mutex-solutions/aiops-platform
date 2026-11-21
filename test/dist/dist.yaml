@@ -19,6 +19,7 @@ sealedHooks:
 # toy.spine is required because toy.store is: the provider of a required key must not
 # need a provider outside the required set (08-profiles-roadmap-adrs.md:503).
 # configRefsReady is not listed, as in the release manifest: the launcher adds it where a
-# row required by row or by key holds a reference (ADR-059 decision 18).
+# required row holds a reference (ADR-059 decision 18) and, pending the owner, where an
+# active provider of a required key in the root realm holds one.
 requiredKeys: [clock, toy.spine, toy.store]
 requiredRows: [loader, restart-policy, reload, readiness]

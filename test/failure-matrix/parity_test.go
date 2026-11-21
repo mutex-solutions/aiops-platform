@@ -129,8 +129,28 @@ func TestDesignRecordIsCitedBySection(t *testing.T) {
 	}
 	byLine := regexp.MustCompile(`plugin-system-2026-11\.md:\d`)
 	bySection := regexp.MustCompile(`plugin-system-2026-11\.md §(\d+)`)
+	writtenFiles(t, root, func(rel string, lines []string) {
+		for i, l := range lines {
+			if byLine.MatchString(l) {
+				t.Errorf("%s:%d cites the design record by line; cite its section, plugin-system-2026-11.md §N", rel, i+1)
+			}
+			for _, m := range bySection.FindAllStringSubmatch(l, -1) {
+				if !sections[m[1]] {
+					t.Errorf("%s:%d cites section %s of the design record, which has no such section", rel, i+1, m[1])
+				}
+			}
+		}
+	})
+	if len(sections) == 0 {
+		t.Fatal("no section found in the design record; the parser is out of date")
+	}
+}
+
+// writtenFiles calls fn with the lines of each file people write under root: Go,
+// Markdown, YAML, shell and the Makefile.
+func writtenFiles(t *testing.T, root string, fn func(rel string, lines []string)) {
 	read := map[string]bool{".go": true, ".md": true, ".yml": true, ".yaml": true, ".sh": true}
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		switch {
 		case err != nil:
 			return err
@@ -144,24 +164,81 @@ func TestDesignRecordIsCitedBySection(t *testing.T) {
 			return err
 		}
 		rel, _ := filepath.Rel(root, p)
-		for i, l := range strings.Split(string(b), "\n") {
-			if byLine.MatchString(l) {
-				t.Errorf("%s:%d cites the design record by line; cite its section, plugin-system-2026-11.md §N", rel, i+1)
-			}
-			for _, m := range bySection.FindAllStringSubmatch(l, -1) {
-				if !sections[m[1]] {
-					t.Errorf("%s:%d cites section %s of the design record, which has no such section", rel, i+1, m[1])
-				}
-			}
-		}
+		fn(rel, strings.Split(string(b), "\n"))
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sections) == 0 {
-		t.Fatal("no section found in the design record; the parser is out of date")
+}
+
+// TestPendingConfigRefsRuleIsMarked: decision 18 pulls config-refs into the required set
+// where a required row of the role holds a reference. That an active provider of a
+// required key in the root realm counts as such a row is the lead's proposal, pending
+// the owner (ADR-059, how decision 18 is built), and under it disabling config-refs is
+// valid only while no row required by row or by key holds a reference. So a paragraph
+// that cites decision 18 for the rule by key says "pending the owner" (a row left
+// PENDING is no such mark), and a sentence beside that citation which calls disabling
+// it valid or optional says while what.
+func TestPendingConfigRefsRuleIsMarked(t *testing.T) {
+	cites := regexp.MustCompile(`\bdecision 18\b`)
+	byKey := regexp.MustCompile(`\bby key\b|\ba required key\b`)
+	optional := regexp.MustCompile(`disabl[^.]*config-refs[^.]*\b(?:valid|optional)\b[^.]*`)
+	n := 0
+	writtenFiles(t, "../..", func(rel string, lines []string) {
+		for _, p := range paragraphs(rel, lines) {
+			text := strings.ToLower(p.text)
+			if !cites.MatchString(text) {
+				continue
+			}
+			n++
+			if byKey.MatchString(text) && !strings.Contains(text, "pending the owner") {
+				t.Errorf("%s:%d cites decision 18 for the rule by key and does not say it is pending the owner", rel, p.line)
+			}
+			for _, s := range optional.FindAllString(text, -1) {
+				if !strings.Contains(s, "while no") {
+					t.Errorf("%s:%d calls disabling config-refs valid with no condition: %q", rel, p.line, s)
+				}
+			}
+		}
+	})
+	if n == 0 {
+		t.Fatal("no paragraph cites decision 18; the parser is out of date")
 	}
+}
+
+type paragraph struct {
+	line int
+	text string
+}
+
+// paragraphs splits a file into the units a reader takes as one statement: a paragraph
+// or list item in Markdown, a run of comment lines ("//" or "#") elsewhere.
+func paragraphs(rel string, lines []string) []paragraph {
+	md := filepath.Ext(rel) == ".md"
+	item := regexp.MustCompile(`^([-*]|\d+\.) `)
+	var out []paragraph
+	open := false
+	for i, l := range lines {
+		s := strings.TrimSpace(l)
+		text, ok := s, s != "" && !strings.HasPrefix(s, "#")
+		if !md {
+			if text, ok = strings.CutPrefix(s, "//"); !ok {
+				text, ok = strings.CutPrefix(s, "#")
+			}
+			text = strings.TrimSpace(text)
+			ok = ok && text != ""
+		}
+		switch {
+		case !ok:
+			open = false
+		case !open || md && item.MatchString(s):
+			out, open = append(out, paragraph{i + 1, text}), true
+		default:
+			out[len(out)-1].text += " " + text
+		}
+	}
+	return out
 }
 
 // TestS1CellsAreRunnable keeps the S1 cells honest: each states an exit, a
