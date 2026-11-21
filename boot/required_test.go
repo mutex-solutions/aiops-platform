@@ -104,6 +104,11 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a provider of a required key with a reference and only a disabled config-refs row",
 			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
 			dist:   "requiredKeys: [sql]", want: []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "sql"},
+		// config-refs serves only its own process, so a config-refs row of another role never
+		// meets the need: the key stays in the set whatever the role filter says.
+		{name: "a provider of a required key with a reference and config-refs in another role",
+			bundle: rows("id: refs, plugin: aiops/config-refs, roles: [worker]", "id: sql, plugin: o/sql, roles: [api], config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", roles: []Role{RoleAPI}, want: []string{"required-key  configRefsReady"}, closed: "sql"},
 		// A provider that does not serve the process, disabled or in a private realm, is
 		// not inside the set, so its reference pulls nothing in.
 		{name: "a provider that does not serve the process pulls nothing in",

@@ -58,7 +58,7 @@ type RequiredSet struct {
 // reference, a required row of the role or an active provider of a required key in the
 // root realm, the launcher adds the config-refs rows that serve the process (refsRows)
 // and configRefsReady to the set (ADR-059 decision 18): the row is applied only while
-// config-refs is.
+// config-refs is. That key stays even when every config-refs row runs in another role.
 func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Role) RequiredSet {
 	in, active := RoleFilter(roles), ActiveRows(c, roles)
 	b := builder{rows: make(map[string]ComposedRow, len(c.Rows))}
@@ -85,7 +85,8 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 			return inSet(k, dist.RequiredKeys...) && b.realm(r.ID, k) == ""
 		})
 	}
-	if slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return len(r.Refs) > 0 && r.Plugin != ConfigRefsID && inside(r) }) {
+	refs := slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return len(r.Refs) > 0 && r.Plugin != ConfigRefsID && inside(r) })
+	if refs {
 		want = union(want, []string{configRefsReady})
 		for _, id := range refsRows(c, in, active, b) {
 			rows[id] = true
@@ -102,7 +103,9 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 				}
 			}
 		}
-		if providers == 0 || local > 0 {
+		// config-refs serves its own process only, so one of another role never meets
+		// the need decision 18 adds.
+		if providers == 0 || local > 0 || refs && k == configRefsReady {
 			keys = append(keys, k)
 		}
 	}
