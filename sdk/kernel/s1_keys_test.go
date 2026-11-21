@@ -123,3 +123,25 @@ func TestHookSealedReportsTheDeclaredSeal(t *testing.T) {
 		}
 	}
 }
+
+// HookUse.Sealed reports the seal of the hook a plugin declares it listens on, so a
+// launcher that holds only a Plugin.Hooks list reads the seal from the definition
+// (ADR-059 decision 20). A zero HookUse names no hook and is not sealed.
+func TestHookUseSealedReportsTheSealOfItsHook(t *testing.T) {
+	owner := NewKey[int]("s1.use-owner", 0)
+	open := NewEvent[int]("s1/use-open", OwnedBy(owner))
+	sealed := NewWaterfall[int, int]("s1/use-sealed", OwnedBy(owner), Sealed())
+	for name, c := range map[string]struct {
+		u    HookUse
+		want bool
+	}{
+		"open":   {open.Use(DefaultStage), false},
+		"sealed": {sealed.Use(DefaultStage), true},
+		"kernel": {InternalStatus.Use(DefaultStage), true},
+		"zero":   {HookUse{}, false},
+	} {
+		if got := c.u.Sealed(); got != c.want {
+			t.Errorf("%s: Sealed() = %v, want %v", name, got, c.want)
+		}
+	}
+}

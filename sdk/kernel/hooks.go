@@ -159,6 +159,11 @@ func (u HookUse) Hook() string {
 	return u.def.name
 }
 
+// Sealed reports whether the hook is sealed, as HookSealed does, so a launcher that
+// holds a Plugin.Hooks list reads the seal from the definition (ADR-059 decision 20).
+// It is false for a zero HookUse.
+func (u HookUse) Sealed() bool { return u.def != nil && u.def.sealed }
+
 // Stage returns the stage's name, empty for a zero or invalid HookUse.
 func (u HookUse) Stage() string {
 	if u.def == nil || u.stage < 0 {

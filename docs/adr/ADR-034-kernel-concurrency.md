@@ -1376,6 +1376,7 @@ of the contract a plugin sees, since only the launcher observes.
 ```go
 func KeyClasses(k AnyKey) (providerBound, consumerBound, ok bool)
 func HookSealed(h AnyHook) (sealed, ok bool)
+func (u HookUse) Sealed() bool
 ```
 
 This is the sixth kernel addition of S1, which the project owner approved after the
@@ -1384,12 +1385,15 @@ declared and nothing else. `providerBound` is `ProviderBound()`. `consumerBound`
 `ConsumerBound()` or `Signed()`: both are keys that only the entries
 `Config.Consumers` lists resolve, and they differ only in who the distribution may
 list, which the kernel does not check. `sealed` is `Sealed()` or a hook of the
-kernel. `ok` is false for a nil or zero key or hook. They are the predicates that
+kernel. `ok` is false for a nil or zero key or hook. `HookUse.Sealed` is the same
+seal for a hook as a plugin lists it in `Plugin.Hooks`, which holds a `HookUse`
+and no `AnyHook`; it is false for a zero `HookUse`. They are the predicates that
 `New` holds the binding maps and `Config.Listeners` to, so a launcher that derives
 the classes from the module table's definitions through them cannot disagree with
-the kernel. Gate check 7 derives the classes of keys and hooks this way, and
-`dist.yaml` lists only who is allowed (bindings and listeners), never a class. They
-take no lock, run no plugin code and return values.
+the kernel. Gate check 7 derives the classes of keys and hooks this way, the hooks a
+plugin of the module table listens on included, and `dist.yaml` lists only who is
+allowed (bindings and listeners), never a class. They take no lock, run no plugin
+code and return values.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
@@ -1398,4 +1402,4 @@ G1, G2, G5, G6, G7, G9 (R2 above), G10 and G11 bring it to 7,981, and the G1 com
 that says which restarts refuse a child mount to 7,985. The fixes of the second
 review (18 lines for G1's refusal along every path of the invalidation, 13 for the
 stall detach of G11, 2 fewer for the root observer's effect) bring it to 8,014, and
-G12 (24) to 8,038.
+G12 (24, and 5 for `HookUse.Sealed`) to 8,043.
