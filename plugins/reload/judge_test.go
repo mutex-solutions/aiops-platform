@@ -36,6 +36,7 @@ type script struct {
 	start   map[string]kernel.State
 	after   map[string]func(ctx context.Context)
 	onApply func(ctx context.Context, n int, ops []loader.Op) error
+	refuse  func(ops []loader.Op) error // an error refuses the plan whole, with no effect
 	applies int
 }
 
@@ -44,6 +45,11 @@ func newScript() *script {
 }
 
 func (s *script) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, error) {
+	if s.refuse != nil {
+		if err := s.refuse(ops); err != nil {
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	var res []loader.Result
 	for _, op := range ops {
@@ -227,7 +233,10 @@ func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T
 }
 
 // The reload row's own operation waits for the verdict: a failed generation never applies
-// it, and its rollback has nothing of it to undo; a refusal of it is on the result.
+// it, and its rollback has nothing of it to undo. A refusal of it, for a config that the
+// kernel does not resolve or decode, leaves the reload row its instance, and the rest of
+// the generation is rolled back to the composition the tree ran: the generation is not
+// what the tree runs ("Rejected; the row keeps its instance", 08 §1.6).
 func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
 	self := row("reload", "aiops/reload", "old")
 	for _, tc := range []struct {
@@ -237,7 +246,7 @@ func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
 		order  []string
 	}{
 		{"failed verdict", kernel.Failed, def.RolledBack, []string{"x", "x"}},
-		{"refused", kernel.Active, def.Passed, []string{"x", "reload"}},
+		{"refused", kernel.Active, def.RolledBack, []string{"x", "x"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newScript()
@@ -245,12 +254,16 @@ func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
 			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
 			s.start["x"] = tc.start
 			boom := errors.New("refused")
+			s.refuse = func(ops []loader.Op) error {
+				if slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == "reload" }) {
+					return boom
+				}
+				return nil
+			}
 			var order []string
 			s.onApply = func(_ context.Context, _ int, ops []loader.Op) error {
 				for _, op := range ops {
-					if order = append(order, op.Entry.ID); op.Entry.ID == "reload" {
-						return boom
-					}
+					order = append(order, op.Entry.ID)
 				}
 				return nil
 			}
@@ -258,8 +271,58 @@ func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
 			if r.Status != tc.status || !slices.Equal(order, tc.order) {
 				t.Fatalf("result = %+v, applied %v", r, order)
 			}
-			if tc.status == def.Passed && (!errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "apply the reload row")) {
+			if r.Rollback == nil || r.Rollback.Err != nil || w.l.Committed().Digest != (launch.Digest{1}) {
+				t.Errorf("rollback = %+v, committed %x: the tree runs the previous composition", r.Rollback, w.l.Committed().Digest)
+			}
+			if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
+				t.Errorf("the reload row runs %v", e.Spec.Config)
+			}
+			if tc.name == "refused" && (!errors.Is(r.Err, boom) || !strings.Contains(r.Err.Error(), "apply the reload row")) {
 				t.Errorf("err = %v", r.Err)
+			}
+		})
+	}
+}
+
+// A generation that would end the activation applying it half way is rejected before
+// anything is applied: a replacement of the reload row (its plugin, inject, isolate or
+// intercept changes) is a dispose and then a mount that the disposed activation cannot
+// finish, and a restart of the row through its group or a provider it needs cancels the
+// apply of the rest. Before this, such a generation left reload with no fiber and
+// reported it as passed.
+func TestGenerationThatEndsTheReloadRowsActivationIsRejected(t *testing.T) {
+	self := row("reload", "aiops/reload", "old")
+	replaced := func(f func(*launch.Row)) launch.Row {
+		r := row("reload", "aiops/reload", "new")
+		f(&r)
+		return r
+	}
+	for _, tc := range []struct {
+		name    string
+		reload  launch.Row
+		closure []string
+	}{
+		{"inject", replaced(func(r *launch.Row) { r.Inject = []string{"configRefsReady"} }), nil},
+		{"isolate", replaced(func(r *launch.Row) { r.Isolate = []string{"store"} }), nil},
+		{"intercept", replaced(func(r *launch.Row) { r.Intercept = map[string]any{"store": map[string]any{"mark": int64(1)}} }), nil},
+		{"plugin", replaced(func(r *launch.Row) { r.Plugin = "aiops/other" }), nil},
+		{"restart through a provider", self, []string{"reload", "refs"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, self, row("refs", "aiops/config-refs", "a"))
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{tc.reload, row("refs", "aiops/config-refs", "b"), row("x", "aiops/p", nil)}}
+			w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+				p := diff(f, to)
+				p.Closure = tc.closure
+				return p, nil
+			}
+			r := await(t, w.svc)
+			if r.Status != def.Rejected || r.Stage != def.StagePlan || r.Err == nil || !strings.Contains(r.Err.Error(), "ends the activation that applies it") {
+				t.Fatalf("result = %+v", r)
+			}
+			if s.applies != 0 || len(w.commits) != 0 {
+				t.Errorf("applies %d, commits %v: a rejected generation touches nothing", s.applies, w.commits)
 			}
 		})
 	}

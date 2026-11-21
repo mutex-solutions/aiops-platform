@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -240,6 +241,9 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 		return stop(def.StageAdmit, err)
 	}
 	r.Plan, err = e.Profile.Plan(ctx, prev, cand)
+	if err == nil {
+		err = e.selfEnds(r.Plan, prev, cand)
+	}
 	if err != nil {
 		return stop(def.StagePlan, err)
 	}
@@ -287,8 +291,55 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 		if err != nil {
 			r.Err = errors.Join(r.Err, fmt.Errorf("apply the reload row: %w", err))
 		}
+		if len(res) == 0 && err != nil {
+			// The loader refused the reload row's change whole (a config that the kernel
+			// does not resolve or decode), so the row keeps its instance and the rest of
+			// the generation goes back with it: the tree does not run the candidate.
+			applying, r.Status = true, def.Running
+			e.progress(ctx, &r)
+			return e.rollback(ctx, r, cand, prev, before)
+		}
 	}
 	return r
+}
+
+// errSelf is why a generation that would end the activation applying it is rejected.
+var errSelf = errors.New("reload: the generation ends the activation that applies it; restart the process to apply it")
+
+// selfEnds refuses, before anything is applied, a plan that would end the activation
+// that applies it half way. split defers the reload row's own config change to the end,
+// where it restarts the row in one loader batch; but a replacement of the row (its
+// plugin, inject, isolate or intercept changes) is a dispose and then a mount once the
+// old fiber is DISPOSED, which the disposed activation cannot wait for, and a restart
+// of the row through its group or a provider it needs (the plan's restart closure)
+// cancels the apply of the rest.
+// ponytail: a row whose own config changes and that a provider restarts as well is
+// not found; that needs the closure without the row's own change.
+func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
+	next := map[string]launch.Row{}
+	for _, r := range cand.Rows {
+		next[r.ID] = r
+	}
+	changed := map[string]bool{}
+	for _, pe := range p.Entries {
+		changed[pe.ID] = pe.Action != launch.ActionUnchanged
+	}
+	for _, o := range prev.Rows {
+		n, ok := next[o.ID]
+		switch {
+		case o.Plugin != e.Self:
+		case ok && (n.Plugin != o.Plugin || !sameSet(n.Inject, o.Inject) || !sameSet(n.Isolate, o.Isolate) ||
+			!(len(n.Intercept) == 0 && len(o.Intercept) == 0 || reflect.DeepEqual(n.Intercept, o.Intercept))):
+			return fmt.Errorf("%w: row %q is replaced, as its plugin, inject, isolate or intercept changes", errSelf, o.ID)
+		case !changed[o.ID] && slices.Contains(p.Closure, o.ID):
+			return fmt.Errorf("%w: row %q restarts through its group or a provider it needs", errSelf, o.ID)
+		}
+	}
+	return nil
+}
+
+func sameSet(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
 }
 
 // split takes out of ops those on a row of from that runs the plugin of the engine.
@@ -296,9 +347,7 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 // goroutine applies the plan, and the plan's context ends with it half way: before the
 // loader's second batch and before the verdict. They are applied last, once the
 // verdict passed and is published; a rollback leaves them out, as they were not
-// applied.
-// ponytail: a reload row restarted through its group or a provider of its own is not
-// found here; that needs the loader to finish a plan on its own lifecycle.
+// applied. selfEnds has refused the plans whose change of the row is not one batch.
 func (e *Engine) split(ops []loader.Op, from launch.Composition) (rest, self []loader.Op) {
 	for _, op := range ops {
 		if slices.ContainsFunc(from.Rows, func(r launch.Row) bool { return r.ID == op.Entry.ID && r.Plugin == e.Self }) {
