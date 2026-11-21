@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,6 +244,26 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 
 // The distribution's Kernel seam reaches boot with the runtime directory of the home;
 // with none, boot gets none.
+// --refs-dir names an absolute directory that exists; anything else is a usage error,
+// given before boot runs and before the status file is written.
+func TestRunRefusesABadRefsDir(t *testing.T) {
+	h, dir := home(t, "[]"), t.TempDir()
+	file := filepath.Join(dir, "f")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { t.Error("boot ran"); return boot.ExitOK })
+	for name, refs := range map[string]string{"relative": "refs", "missing": filepath.Join(dir, "absent"), "a file": file} {
+		e, stderr, _ := env("--profile", "p", "--home", h, "--refs-dir", refs)
+		if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitUsage || !strings.Contains(stderr.String(), "--refs-dir") || !strings.Contains(stderr.String(), "usage: aiops") {
+			t.Errorf("%s: exit %d: %s", name, code, stderr.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(h, "run", StatusFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a usage error wrote the status file: %v", err)
+	}
+}
+
 func TestRunPassesTheKernelSeamWithTheRunDir(t *testing.T) {
 	h := home(t, "[]")
 	var seam func(*kernel.Root)

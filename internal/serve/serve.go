@@ -14,7 +14,8 @@
 // replaces the limits of the distribution (boot.ParseLimits). A third, --refs-dir,
 // is the one directory that ${file:} reads when config-refs names the flag
 // "refs-dir" (08-profiles-roadmap-adrs.md:162: "one directory named by flag"), so
-// that a file reference need not read the home or the bundles.
+// that a file reference need not read the home or the bundles. It must name an
+// absolute directory that exists; anything else is a usage error.
 package serve
 
 import (
@@ -99,6 +100,10 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	}
 	if *profile == "" || *home == "" || fl.NArg() > 0 {
 		fmt.Fprintf(e.Stderr, "%s: --profile and a home (--home or $AIOPS_HOME) are required, and there are no arguments\n"+usage, name, name)
+		return boot.ExitUsage
+	}
+	if fi, err := os.Stat(*refsDir); *refsDir != "" && (!filepath.IsAbs(*refsDir) || err != nil || !fi.IsDir()) {
+		fmt.Fprintf(e.Stderr, "%s: --refs-dir %q is not an absolute path to a directory that exists\n"+usage, name, *refsDir, name)
 		return boot.ExitUsage
 	}
 	if *bundles == "" {
