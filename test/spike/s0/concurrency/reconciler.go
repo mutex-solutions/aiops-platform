@@ -1394,7 +1394,7 @@ func (o *rcOwner) availability(f *rcFiber, epoch []uint64, bindings map[string]*
 		return false
 	}
 	std, cancel := context.WithCancel(context.Background())
-	c := &Context{std: std, host: o.r, fiber: f.id, bindings: make(map[string]provision, len(bindings)), dispose: func() error { return ErrInactive }}
+	c := &Context{std: std, host: o.r, fiber: f.id, lease: new(leaseCount), bindings: make(map[string]provision, len(bindings)), dispose: func() error { return ErrInactive }}
 	q := &rcCheck{ctx: c, cancel: cancel, epoch: slices.Clone(epoch), bindings: bindings, generation: f.checkVersion, deadline: time.Now().Add(rcLoadBudget), run: new(rcRun)}
 	for key, p := range bindings {
 		c.bindings[key] = p.binding
@@ -1462,7 +1462,7 @@ func (o *rcOwner) checkedResult(m rcMessage) {
 
 func (o *rcOwner) activation(f *rcFiber, epoch []uint64, bindings map[string]*rcProvision) *rcActivation {
 	std, cancel := context.WithCancel(context.Background())
-	c := &Context{std: std, host: o.r, fiber: f.id, bindings: make(map[string]provision, len(bindings))}
+	c := &Context{std: std, host: o.r, fiber: f.id, lease: new(leaseCount), bindings: make(map[string]provision, len(bindings))}
 	a := &rcActivation{ctx: c, cancel: cancel, epoch: epoch}
 	a.notice.act = a
 	for key, p := range bindings {

@@ -1455,7 +1455,7 @@ func (g *GraphLock) activationLocked(f *graphFiber, bindings map[string]provisio
 		provided:  make(map[string]provision),
 		leaseWake: make(chan struct{}, 1),
 	}
-	c := &Context{host: g, std: std, fiber: f.id, bindings: bindings}
+	c := &Context{host: g, std: std, fiber: f.id, bindings: bindings, lease: new(leaseCount)}
 	c.leaseChanged = func() {
 		select {
 		case a.leaseWake <- struct{}{}:
@@ -2051,7 +2051,7 @@ func graphCallDispose(dispose Disposer, ctx context.Context) (err error) {
 // read its captured providers, but cannot register effects, publish, self-
 // dispose, or hold a lease that would obstruct its own availability change.
 func graphCallCheck(check func(*Context) bool, std context.Context, fiber uint64, bindings map[string]provision) (available bool, err error) {
-	c := &Context{std: std, fiber: fiber, bindings: bindings, dispose: func() error { return ErrInactive }}
+	c := &Context{std: std, fiber: fiber, bindings: bindings, lease: new(leaseCount), dispose: func() error { return ErrInactive }}
 	defer c.released.Store(true)
 	defer func() {
 		if recovered := recover(); recovered != nil {

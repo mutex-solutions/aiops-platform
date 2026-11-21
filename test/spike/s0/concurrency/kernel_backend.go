@@ -312,6 +312,22 @@ type kernelFiber struct {
 	cell *Configuration // The spike configuration cell of the spec, nil for none.
 }
 
+// evictedSet records, one bit per fiber id, the fibers the adapter forgot after
+// the kernel evicted their archive record, so a later lookup reports ErrExpired as
+// the kernel does, not ErrUnknown.
+type evictedSet []uint64
+
+func (e *evictedSet) add(id uint64) {
+	for uint64(len(*e))*64 <= id {
+		*e = append(*e, 0)
+	}
+	(*e)[id/64] |= 1 << (id % 64)
+}
+
+func (e evictedSet) has(id uint64) bool {
+	return id/64 < uint64(len(e)) && e[id/64]&(1<<(id%64)) != 0
+}
+
 type kernelRuntime struct {
 	root     *kernel.Root
 	cfg      kernel.Config
@@ -324,6 +340,8 @@ type kernelRuntime struct {
 	keys     sync.Map    // string -> kernel.Key[any], one per name for this instance.
 	mu       sync.RWMutex
 	fibers   map[uint64]kernelFiber
+	evicted  evictedSet // Ids forgot after the kernel evicted their record.
+	pruneAt  int        // Size of fibers at which the next prune runs.
 
 	recMu   sync.Mutex
 	records map[uint64]map[string]any // Record payloads by the kernel sequence of their marker.
@@ -415,6 +433,17 @@ func (r *kernelRuntime) lookup(id uint64) (kernelFiber, bool) {
 	defer r.mu.RUnlock()
 	f, ok := r.fibers[id]
 	return f, ok
+}
+
+// missing is the error for an id the adapter does not hold: ErrExpired for a fiber
+// whose kernel record was evicted, ErrUnknown for one never issued.
+func (r *kernelRuntime) missing(id uint64) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.evicted.has(id) {
+		return ErrExpired
+	}
+	return ErrUnknown
 }
 
 func kernelDuplicates(keys []string) bool {
@@ -701,8 +730,45 @@ func (r *kernelRuntime) register(f *kernel.Fiber, spec Spec) uint64 {
 	id := f.ID()
 	r.mu.Lock()
 	r.fibers[id] = kernelFiber{f: f, cell: spec.Config}
+	due := len(r.fibers) >= max(r.pruneAt, 2*r.cfg.ArchiveLimit+1024)
 	r.mu.Unlock()
+	if due {
+		r.pruneFibers()
+	}
 	return id
+}
+
+// pruneFibers forgets the fibers whose kernel record was evicted: the kernel
+// answers ErrExpired for them, so holding their handles (and through them their
+// plugins and configs) would only grow the adapter's heap with every fiber ever
+// mounted, which the reconciler, whose archive is bounded, does not. The next
+// prune runs when the map has doubled, so the cost is amortised O(1) per mount.
+func (r *kernelRuntime) pruneFibers() {
+	r.mu.RLock()
+	ids := make([]uint64, 0, len(r.fibers))
+	for id := range r.fibers {
+		ids = append(ids, id)
+	}
+	r.mu.RUnlock()
+	ctx, cancel := context.WithTimeout(context.Background(), rcLoadBudget)
+	defer cancel()
+	var gone []uint64
+	for _, id := range ids {
+		f, ok := r.lookup(id)
+		if !ok {
+			continue
+		}
+		if _, err := f.f.State(ctx); errors.Is(err, kernel.ErrExpired) {
+			gone = append(gone, id)
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, id := range gone {
+		delete(r.fibers, id)
+		r.evicted.add(id)
+	}
+	r.pruneAt = 2 * len(r.fibers)
 }
 
 // mount mounts spec under parent (the root context for Mount).
@@ -732,7 +798,7 @@ func (r *kernelRuntime) Mount(ctx context.Context, spec Spec) (uint64, error) {
 func (r *kernelRuntime) Update(ctx context.Context, id uint64) error {
 	f, ok := r.lookup(id)
 	if !ok {
-		return ErrUnknown
+		return ErrUnknown // The kernel answers an update of an evicted fiber as unknown too.
 	}
 	if r.closed.Load() {
 		return ErrClosed
@@ -744,7 +810,10 @@ func (r *kernelRuntime) Update(ctx context.Context, id uint64) error {
 func (r *kernelRuntime) Dispose(ctx context.Context, id uint64) error {
 	f, ok := r.lookup(id)
 	if !ok {
-		return ErrUnknown // Never issued by this runtime; an evicted record is a no-op in the kernel.
+		if errors.Is(r.missing(id), ErrExpired) {
+			return nil // Disposing an evicted fiber is a no-op in the kernel.
+		}
+		return ErrUnknown // Never issued by this runtime.
 	}
 	return fromKernel(f.f.Dispose(ctx))
 }
@@ -752,7 +821,7 @@ func (r *kernelRuntime) Dispose(ctx context.Context, id uint64) error {
 func (r *kernelRuntime) AwaitFiber(ctx context.Context, id uint64) error {
 	f, ok := r.lookup(id)
 	if !ok {
-		return ErrUnknown
+		return r.missing(id)
 	}
 	return fromKernel(f.f.Await(ctx))
 }
@@ -793,7 +862,7 @@ func (r *kernelRuntime) RequestUpdateConfig(ctx context.Context, id uint64, raw 
 	f, ok := r.lookup(id)
 	switch {
 	case !ok:
-		return none, ErrUnknown
+		return none, r.missing(id)
 	case f.cell == nil:
 		return none, errors.New("fiber has no configuration")
 	case r.closed.Load():
@@ -860,7 +929,7 @@ func (r *kernelRuntime) Batch(ctx context.Context, operations []BatchOperation) 
 		case BatchUpdate, BatchDispose:
 			f, ok := r.lookup(op.Fiber)
 			if op.Fiber == 0 || !ok {
-				return nil, fmt.Errorf("batch operation %d: %w", i, ErrUnknown)
+				return nil, fmt.Errorf("batch operation %d: %w", i, ErrUnknown) // As the kernel answers for an evicted fiber.
 			}
 			if op.Spec.ID != "" || op.Spec.Apply != nil || op.Spec.ApplyEffect != nil || op.Spec.Check != nil ||
 				op.Spec.Config != nil || len(op.Spec.Needs) != 0 || len(op.Spec.Provides) != 0 {

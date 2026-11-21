@@ -1016,3 +1016,49 @@ func TestKernelEnterLeaveAllocatesNothing(t *testing.T) {
 		t.Fatalf("Enter+Leave allocated %v objects per call, want 0", got)
 	}
 }
+
+// The adapter forgets the fibers whose kernel record was evicted, so its own heap
+// stays bounded by the archive, and still answers for them as the kernel does.
+func TestKernelForgetsEvictedFibers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r := NewKernelWith(Retention{ArchiveLimit: 4}).(*kernelRuntime)
+	defer func() { _ = r.Close(ctx) }()
+	var first uint64
+	for i := range 2*r.cfg.ArchiveLimit + 1100 {
+		id, err := r.Mount(ctx, Spec{ID: "churn", Apply: func(*Context) error { return nil }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = id
+		}
+		if err := r.Dispose(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.AwaitFiber(ctx, id); err != nil && !errors.Is(err, ErrExpired) {
+			t.Fatal(err)
+		}
+	}
+	r.mu.RLock()
+	held := len(r.fibers)
+	r.mu.RUnlock()
+	if held > 2*r.cfg.ArchiveLimit+1024 {
+		t.Fatalf("adapter holds %d fibers after churn; the kernel archive holds %d", held, r.cfg.ArchiveLimit)
+	}
+	if _, ok := r.lookup(first); ok {
+		t.Fatal("the first fiber is still held although its record was evicted")
+	}
+	if err := r.AwaitFiber(ctx, first); !errors.Is(err, ErrExpired) {
+		t.Fatalf("AwaitFiber of an evicted fiber = %v, want ErrExpired", err)
+	}
+	if err := r.Dispose(ctx, first); err != nil {
+		t.Fatalf("Dispose of an evicted fiber = %v, want nil (a no-op, as in the kernel)", err)
+	}
+	if err := r.Update(ctx, first); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("Update of an evicted fiber = %v, want ErrUnknown, as the kernel answers", err)
+	}
+	if err := r.Dispose(ctx, 1<<40); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("Dispose of a never issued fiber = %v, want ErrUnknown", err)
+	}
+}
