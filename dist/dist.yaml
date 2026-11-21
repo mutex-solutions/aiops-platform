@@ -4,8 +4,10 @@
 # plugin are added with the plugin.
 #
 # Provider-bound keys: only config-refs provides configRefsReady, the key that every row
-# whose config holds a reference injects (ADR-059, "configRefsReady").
+# whose config holds a reference injects (ADR-059, "configRefsReady"), and the dry run of
+# references that the launcher calls at admission (ADR-059 decision 16).
 providers:
+  configRefsDryRun: [aiops/config-refs]
   configRefsReady: [aiops/config-refs]
 # Consumer-bound keys: restart-policy resolves registry (the fiber lookup) and appExit
 # (the exit request); reload resolves loader (07-c4-plugin-sdk.md:556). No row may

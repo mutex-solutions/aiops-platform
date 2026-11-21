@@ -53,6 +53,7 @@ closure clock, loader, readiness, reload, restart-policy, spine, store
 ## providers
 key clock: clock
 key composition: loader
+key configRefsDryRun: refs
 key configRefsReady: refs
 key loader: loader
 key reload: reload

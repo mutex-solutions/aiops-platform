@@ -6,6 +6,8 @@
 // plugin-system-2026-11.md:348). A reference that does not resolve is an error of
 // that fiber's config resolution, so the fiber is FAILED, or on a live recomposition
 // the update is refused and the row keeps its instance (08-profiles-roadmap-adrs.md:468).
+// The row also provides the dry run of the same resolution (sdk/def/configrefs/v0),
+// which the launcher calls to reject such a generation at admission.
 //
 // The launcher puts a reference in the tree as a launch.Ref
 // (sdk/def/launch/v0): it must convert boot.Ref to it when it hands the tree to the
@@ -20,6 +22,7 @@ import (
 	"math"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
+	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -43,15 +46,24 @@ type Config struct {
 // provider-bound to this row in dist.yaml.
 var ReadyKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.ProviderBound())
 
-// Plugin is the config-refs row.
+// Plugin is the config-refs row. It also provides the dry run of the configrefs
+// definition, provider-bound to it in dist.yaml (ADR-059 decision 16).
 var Plugin = kernel.Define(kernel.Plugin{
 	ID:       "aiops/config-refs",
 	Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
-	Provides: []kernel.AnyKey{ReadyKey},
+	Provides: []kernel.AnyKey{ReadyKey, refsdef.Key},
 	Hooks:    []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
 	Decode:   decode,
 	Apply:    apply,
 })
+
+// dryRun resolves a config with the listener's resolver and drops the values.
+type dryRun struct{ r *refs.Resolver }
+
+func (d dryRun) Check(_ context.Context, config any) error {
+	_, _, err := d.r.Resolve(config)
+	return err
+}
 
 func apply(c *kernel.Context, cfg any) error {
 	conf := cfg.(Config)
@@ -70,7 +82,7 @@ func apply(c *kernel.Context, cfg any) error {
 		// and the listeners inward of this one do not run. Open point for the kernel.
 		return out, nil
 	})
-	return ReadyKey.Provide(c, struct{}{})
+	return errors.Join(refsdef.Key.Provide(c, dryRun{r}), ReadyKey.Provide(c, struct{}{}))
 }
 
 func decode(raw any) (any, error) {

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
+	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
@@ -48,7 +49,7 @@ func TestFileRootMustBeAbsolute(t *testing.T) {
 	if err := os.WriteFile(filepath.Join("d", "x"), []byte("v"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolveFile(resolver("d", 8), "x"); !errors.Is(err, refs.ErrUnresolved) || !strings.Contains(err.Error(), "not an absolute path") {
+	if _, err := resolveFile(resolver("d", 8), "x"); !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), "not an absolute path") {
 		t.Fatalf("err = %v", err)
 	}
 }

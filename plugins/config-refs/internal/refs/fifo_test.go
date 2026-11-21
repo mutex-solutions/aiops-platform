@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
+	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 )
 
 func TestFileRefusesAFIFOWithoutBlocking(t *testing.T) {
@@ -26,7 +26,7 @@ func TestFileRefusesAFIFOWithoutBlocking(t *testing.T) {
 	go func() { _, err := resolveFile(resolver(dir, 64), "pipe"); done <- err }()
 	select {
 	case err := <-done:
-		if !errors.Is(err, refs.ErrUnresolved) || !strings.Contains(err.Error(), "not a regular file") {
+		if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), "not a regular file") {
 			t.Fatalf("err = %v", err)
 		}
 	case <-time.After(10 * time.Second): // a bound on a hang, not a wait for a result

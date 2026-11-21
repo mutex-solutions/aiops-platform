@@ -19,13 +19,29 @@ import (
 // refsReadyKey is the configRefsReady of the fake, as config-refs declares its own.
 var refsReadyKey = kernel.NewKey[struct{}](configRefsReady, 0, kernel.ProviderBound())
 
+// refsCheckKey is the dry run of the fake, declared as sdk/def/configrefs/v0 declares
+// its key: boot reads it by its name and its method, as it reads the real one.
+var refsCheckKey = kernel.NewKey[interface {
+	Check(context.Context, any) error
+}](configRefsDryRun, 0, kernel.ProviderBound())
+
+// errRefsUnresolved stands in for the definition's ErrUnresolved.
+var errRefsUnresolved = errors.New("reference does not resolve")
+
+type fakeCheck struct{}
+
+func (fakeCheck) Check(_ context.Context, cfg any) error {
+	_, err := resolveRefs(cfg)
+	return err
+}
+
 // fakeRefs stands in for the config-refs row: it signals that it entered Apply, waits
 // for gate, resolves a ${env:X} reference to "resolved-X" and fails a secret one, and
-// provides configRefsReady.
+// provides configRefsReady and the dry run of the same resolution.
 func fakeRefs(entered chan<- struct{}, gate <-chan struct{}) ModuleEntry {
 	p := kernel.Define(kernel.Plugin{
 		ID:       ConfigRefsID,
-		Provides: []kernel.AnyKey{refsReadyKey},
+		Provides: []kernel.AnyKey{refsReadyKey, refsCheckKey},
 		Hooks:    []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
 			entered <- struct{}{}
@@ -37,18 +53,18 @@ func fakeRefs(entered chan<- struct{}, gate <-chan struct{}) ModuleEntry {
 			kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, raw any, _ kernel.Next[any]) (any, error) {
 				return resolveRefs(raw)
 			})
-			return refsReadyKey.Provide(c, struct{}{})
+			return errors.Join(refsCheckKey.Provide(c, fakeCheck{}), refsReadyKey.Provide(c, struct{}{}))
 		},
 	})
 	return ModuleEntry{ID: ConfigRefsID, Module: "example.test/refs", Version: "v0.1.0", Plugin: p,
-		Provides: []string{configRefsReady}, Hooks: []HookDecl{{Hook: "internal/config", StageName: "default"}}}
+		Provides: []string{configRefsReady, configRefsDryRun}, Hooks: []HookDecl{{Hook: "internal/config", StageName: "default"}}}
 }
 
 func resolveRefs(v any) (any, error) {
 	switch x := v.(type) {
 	case launch.Ref:
 		if x.Scheme != "env" {
-			return nil, errors.New("reference " + x.Scheme + ":" + x.Name + " does not resolve")
+			return nil, fmt.Errorf("reference %s:%s: %w", x.Scheme, x.Name, errRefsUnresolved)
 		}
 		return "resolved-" + x.Name, nil
 	case map[string]any:
@@ -74,7 +90,7 @@ func refsFixture(t *testing.T, bundle string, extra ...ModuleEntry) *fixture {
 	t.Helper()
 	f := newFixture(t, bundle, extra...)
 	f.dist.SealedHooks = []HookListeners{{Hook: "internal/config", Plugins: []string{ConfigRefsID}}}
-	f.dist.Providers = []Binding{{Key: configRefsReady, Plugins: []string{ConfigRefsID}}}
+	f.dist.Providers = []Binding{{Key: configRefsDryRun, Plugins: []string{ConfigRefsID}}, {Key: configRefsReady, Plugins: []string{ConfigRefsID}}}
 	return f
 }
 

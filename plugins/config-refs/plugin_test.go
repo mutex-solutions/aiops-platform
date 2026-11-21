@@ -14,6 +14,7 @@ import (
 
 	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
 	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
+	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -142,6 +143,35 @@ func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
 	}
 }
 
+// The row's dry run resolves as its listener does and returns no value: an error names
+// the reference, matches the definition's ErrUnresolved and never holds what was read
+// (ADR-059 decision 16).
+func TestDryRunChecksWithoutReturningValues(t *testing.T) {
+	l, lp := fake.New()
+	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
+	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	got := make(chan refsdef.DryRun, 1)
+	user := kernel.Define(kernel.Plugin{ID: "t/launcher", Inject: []kernel.Dep{kernel.Need(refsdef.Key)},
+		Apply: func(c *kernel.Context, _ any) error { got <- refsdef.Key.Of(c); return nil }})
+	f := root.Plugin(user, nil)
+	if err := root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := f.State(t.Context()); st != kernel.Active {
+		t.Fatalf("a consumer of the dry run is %s once settled, want ACTIVE: config-refs does not provide it", st)
+	}
+	dr := <-got
+	if err := dr.Check(t.Context(), map[string]any{"a": []any{ref("env", "AIOPS_REF_OK"), "plain"}}); err != nil {
+		t.Errorf("Check of a reference that resolves = %v", err)
+	}
+	for _, bad := range []launch.Ref{ref("secret", "x"), ref("env", "HOME_SECRET"), ref("env", "AIOPS_REF_NONE")} {
+		err := dr.Check(t.Context(), map[string]any{"a": bad})
+		if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), bad.Name) || strings.Contains(err.Error(), secretValue) {
+			t.Errorf("Check(%v) = %v, want ErrUnresolved, the reference and no value", bad, err)
+		}
+	}
+}
+
 func TestConfigWithoutReferencesPassesThrough(t *testing.T) {
 	l, lp := fake.New()
 	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 64})
@@ -212,7 +242,7 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := &target{}
 			err := tc.root.Plugin(g.plugin(), map[string]any{"a": []any{tc.ref}}).Await(t.Context())
-			if !errors.Is(err, refs.ErrUnresolved) {
+			if !errors.Is(err, refsdef.ErrUnresolved) {
 				t.Fatalf("err = %v, want ErrUnresolved", err)
 			}
 			var re *refs.Error
@@ -234,7 +264,7 @@ func TestUnreadableFileRootFails(t *testing.T) {
 	l.Flags = map[string]string{"refs-dir": filepath.Join(t.TempDir(), "absent")}
 	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8, FileRootFlag: "refs-dir"})
 	_, err := mountTarget(t, root, map[string]any{"a": ref("file", "x")})
-	if !errors.Is(err, refs.ErrUnresolved) || !strings.Contains(err.Error(), "file root cannot be opened") {
+	if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), "file root cannot be opened") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -249,7 +279,7 @@ func TestUpdateWithUnresolvedReferenceIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := f.Update(t.Context(), map[string]any{"a": ref("env", "AIOPS_REF_GONE")})
-	if !errors.Is(err, refs.ErrUnresolved) {
+	if !errors.Is(err, refsdef.ErrUnresolved) {
 		t.Fatalf("Update err = %v", err)
 	}
 	if st, _ := f.State(t.Context()); st != kernel.Active {
@@ -315,7 +345,7 @@ func boundKernel(t *testing.T, launcher kernel.Plugin, listeners ...kernel.Plugi
 		Providers: kernel.Bindings{
 			launch.ProfileContextKey: {launcher}, launch.CatalogKey: {launcher}, launch.CmdlineKey: {launcher},
 			launch.ReadyKey: {launcher}, launch.KillSwitchesKey: {launcher}, launch.AppExitKey: {launcher},
-			configrefs.ReadyKey: {configrefs.Plugin},
+			configrefs.ReadyKey: {configrefs.Plugin}, refsdef.Key: {configrefs.Plugin},
 		},
 		Consumers: kernel.Bindings{launch.AppExitKey: nil},
 		Listeners: map[kernel.AnyHook][]kernel.Plugin{kernel.InternalConfig: listeners},

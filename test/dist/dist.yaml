@@ -2,6 +2,7 @@
 # (08-profiles-roadmap-adrs.md:451): the release manifest (dist/dist.yaml) plus the
 # bindings of the toy keys and of the two control rows. No shipped distribution has it.
 providers:
+  configRefsDryRun: [aiops/config-refs]
   configRefsReady: [aiops/config-refs]
   # toy.policy is provider-bound: only toy-provider may provide it. The rogue-provider
   # fault provides it too, and the gate denies that row (check 7).

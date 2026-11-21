@@ -34,6 +34,11 @@ const ConfigRefsID = "aiops/config-refs"
 // provides, so such a row stays PENDING.
 const configRefsReady = "configRefsReady"
 
+// configRefsDryRun names the key of the dry run of references that config-refs
+// provides (sdk/def/configrefs/v0; ADR-059 decision 16). boot imports no definition but
+// launch, loader and composition (07-c4-plugin-sdk.md:37), so it names the key.
+const configRefsDryRun = "configRefsDryRun"
+
 // rootKeyNames are the keys that the root provides: the six launch keys and the four
 // built-ins of the kernel. No row provides them and none waits for them: the static
 // graph leaves them out of the needs of a row (builder.needs) and the run-time audit

@@ -12,6 +12,7 @@ scope: [process]
 runtimes: [inproc]
 provides:
   - {key: configRefsReady, major: 0}
+  - {key: configRefsDryRun, major: 0}
 needs:
   - {key: cmdline, major: 0}
 hooks:

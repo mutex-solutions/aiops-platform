@@ -18,6 +18,7 @@ import (
 	"strings"
 	"syscall"
 
+	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
@@ -25,11 +26,6 @@ import (
 // "`env:` reads only names with the prefix `AIOPS_REF_`"
 // (08-profiles-roadmap-adrs.md:162; plugin-system-2026-11.md:348).
 const EnvPrefix = "AIOPS_REF_"
-
-// ErrUnresolved matches every *Error: the failure "a reference does not resolve" of
-// the failure matrix (08-profiles-roadmap-adrs.md:468, the row "Config fails schema
-// or Validate; a reference does not resolve"), whose diagnostic is "invalid config".
-var ErrUnresolved = errors.New("reference does not resolve")
 
 // Error says which reference failed and why. The reason is fixed text: it never holds
 // a value that was read, so an error can be logged whatever the reference names.
@@ -39,8 +35,11 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("invalid config: reference ${%s:%s} does not resolve: %s", e.Scheme, e.Name, e.Reason)
 }
 
-// Is makes errors.Is(err, ErrUnresolved) true.
-func (e *Error) Is(target error) bool { return target == ErrUnresolved }
+// Is makes errors.Is(err, configrefs.ErrUnresolved) of the definition true: the
+// failure "a reference does not resolve" of the failure matrix
+// (08-profiles-roadmap-adrs.md:468), whose diagnostic is "invalid config", for the
+// listener and the dry run alike.
+func (e *Error) Is(target error) bool { return target == refsdef.ErrUnresolved }
 
 // Resolver turns references into values through what the launcher serves.
 type Resolver struct {
