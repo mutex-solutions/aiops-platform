@@ -209,3 +209,58 @@ win.
 
 Also accepted on 2026-11-21: a change of the `reload` row itself is applied after its
 generation's verdict passed and is not judged.
+
+## How decisions 16 to 23 are built (recorded 2026-11-21)
+
+- **16.** The dry run is the definition `sdk/def/configrefs/v0`: the key
+  `configRefsDryRun`, provider-bound to `aiops/config-refs`, whose `DryRun.Check(ctx,
+  config)` returns nil when every reference of the tree resolves and otherwise an error
+  matching `ErrUnresolved`, never a value. `boot` may not import it (`07` §1.1, `kernelcheck
+  imports`), so it reads the active provision of the key owned by `aiops/config-refs`
+  through `Root.Inspect` and calls it through a local interface with the same method.
+  `Admit` checks every row the generation mounts anew: created, enabled, changed in a field
+  other than `required` or `roles`, or a child of a replaced group. A row with no reference
+  is decoded as before. A generation that both changes the `config-refs` row and adds
+  references is checked by the instance that is running.
+- **17.** The rule applies to the row's whole config: any change of a config whose old or
+  new tree holds a reference anywhere restarts the row, because the payload of
+  `loader/volatile-update` is the whole config. `loaderdef.VolatileOnly` is that rule and
+  `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and `reload` read them.
+- **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
+  required row of the role holds a reference; the need of `configRefsReady` is exempt from
+  the required-closure clause of gate check 7, and `configRefsReady` and `configRefsDryRun`
+  are exempt from the last-provider rule of gate check 8.
+- **19.** `restart-policy` holds the retries of the rows the in-flight plan lists (its
+  entries other than unchanged, plus the closure) and maps a failed fiber to its row
+  through the composition key. At the final event a fiber still FAILED is retried or given
+  up on, and one restarted meanwhile is tracked afresh. Rows outside the plan are retried
+  as before. A FAILED read stays FAILED in the kernel until an update, so the verdict sees
+  every failure of the generation.
+- **20.** Gate check 7 takes classes from `kernel.KeyClasses` over the keys `boot` knows
+  (launch, loader, composition and the kernel built-ins) and every key a plugin of the
+  module table provides or injects, and seals from `kernel.HookSealed` over the kernel and
+  loader hooks. Where no definition is at hand, an entry of `modules.yaml` or a hook known
+  only by its name, a listing in `dist.yaml` stands for the class, which is the only class
+  the kernel accepts one for.
+- **22.** The final `reload/operation` event names the rows the operation restarted or
+  created, forward and in rollback, and `restart-policy` tracks their fibers afresh. After
+  a restart of `restart-policy`, a pending, held or given-up record whose fiber is not
+  FAILED is forgotten, and the start of an ACTIVE period it already knew is kept. `stable:
+  0` means no stable period.
+- **23.** `reload.ErrStateUnknown` is on the result and the final event after `rollback
+  failed` or an abandon after the apply. Every later `Submit`, and an operation already
+  queued, is refused with it; when the unloading activation cannot emit the final event,
+  the row's next activation does. `readiness.New()` shares the knowledge across the
+  activations of its row, so a restart of `readiness` keeps the latch dropped.
+- **The `reload` row's own change.** When the loader refuses it after a passed verdict, the
+  operation stays `passed` with the refusal on its result, and the next passing generation
+  applies it. Operations queued behind a restart of the `reload` row run in its next
+  activation.
+- **Loader.** An entry with an empty id is refused with `ErrEmptyID`. A group activation
+  never creates an entry whose previous fiber is not DISPOSED; the plan's second batch
+  mounts it. The replacement vet covers every fiber a plan retires, the children of a
+  replaced group included, and an earlier commit of an entry the replacement remounts is
+  reported as `restarted`.
+- **Launcher and vet.** `--refs-dir` must name an absolute existing directory, or the
+  command line is refused. Plugin vet refuses any import of `net/http/pprof` and `expvar`,
+  and `time.AfterFunc` in `boot` needs a `//kernelcheck:allow-go` reason.
