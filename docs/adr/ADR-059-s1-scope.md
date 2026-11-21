@@ -289,10 +289,16 @@ generation's verdict passed and is not judged.
   mounts it. The replacement vet covers every fiber a plan retires, the children of a
   replaced group included, and an earlier commit of an entry the replacement remounts is
   reported as `restarted`. Proposed by the lead, pending the owner: a new provider of a
-  key waits for the previous provider of that key to be disposed, so the loader creates,
-  or restarts into providing, no row that provides a key while a row the same plan
-  removes or replaces still provides it in the same realm, and the plan's second batch
-  mounts it.
+  key waits for the previous provider of that key to be disposed. The loader mounts no
+  row that provides a key, whether the plan creates, enables or replaces it or a group
+  the plan mounts mounts it, while a fiber that the same plan removes, disables or
+  replaces still provides that key in the same realm; the plan's second batch mounts it,
+  as for an id being replaced. The realm is the nearest row, the row itself first, whose
+  `isolate` names the key, or the root. A row restarted in place is not held: it keeps
+  its plugin and realm, and admission refuses two providers of one key in one realm.
+  `loader.OpRestart` restarts the fiber even after an update of the same entry in the
+  same plan that changed nothing, which is how a rollback restores a FAILED row whose
+  inverse update restarts nothing (item 19).
 - **Launcher and vet.** `--refs-dir` must name an absolute existing directory, or the
   command line is refused. Plugin vet refuses any import of `net/http/pprof` and `expvar`,
   and `time.AfterFunc` in `boot` needs a `//kernelcheck:allow-go` reason.

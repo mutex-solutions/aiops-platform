@@ -205,10 +205,13 @@ func TestVolatileOnlyUpdateOfAFailedFiberRestartsIt(t *testing.T) {
 // (def.OpRestart, ADR-059 decision 19): the plugin is applied again, so a fiber that
 // failed for a transient reason is ACTIVE after it. An update that changes nothing
 // restarts nothing, FAILED or not, and an entry with no fiber to restart is unchanged.
+// A restart after such an update in the same plan, as a rollback of reload sends for a
+// row whose inverse update restarts nothing, restarts the FAILED fiber.
 func TestRestartRestartsTheFiber(t *testing.T) {
 	var applies atomic.Int32
+	failing := map[int32]bool{1: true, 4: true} // the applies that fail
 	f := kernel.Define(kernel.Plugin{ID: "t/f", Apply: func(*kernel.Context, any) error {
-		if applies.Add(1) == 1 {
+		if failing[applies.Add(1)] {
 			return errors.New("transient")
 		}
 		return nil
@@ -227,6 +230,8 @@ func TestRestartRestartsTheFiber(t *testing.T) {
 		{[]def.Op{restart("f"), restart("off")}, []def.Result{{ID: "f", Outcome: def.Restarted}, {ID: "off", Outcome: def.Unchanged}}, kernel.Active, 2},
 		{[]def.Op{update(row("f", "t/f"))}, []def.Result{{ID: "f", Outcome: def.Unchanged}}, kernel.Active, 2},
 		{[]def.Op{restart("f")}, []def.Result{{ID: "f", Outcome: def.Restarted}}, kernel.Active, 3},
+		{[]def.Op{restart("f")}, []def.Result{{ID: "f", Outcome: def.Restarted}}, kernel.Failed, 4},
+		{[]def.Op{update(row("f", "t/f")), restart("f")}, []def.Result{{ID: "f", Outcome: def.Unchanged}, {ID: "f", Outcome: def.Restarted}}, kernel.Active, 5},
 	} {
 		if res := x.apply(tc.ops...); !slices.Equal(res, tc.want) {
 			t.Fatalf("Apply = %v, want %v", res, tc.want)

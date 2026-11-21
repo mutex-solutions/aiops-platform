@@ -185,6 +185,8 @@ func Run(t *testing.T, mount Mount) {
 		s.is("nil", loader.Mounted, kernel.Failed)
 		s.restarts("nil", 0, []string{"unchanged nil", "unchanged veto:c"}, update(failed), update(c))
 		s.restarts("nil", 1, []string{"restarted nil", "unchanged veto:c"}, restart("nil"), restart("veto:c"))
+		// So does a restart after such an update in the same plan, as a rollback sends.
+		s.restarts("nil", 1, []string{"unchanged nil", "restarted nil"}, update(failed), restart("nil"))
 		s.is("nil", loader.Mounted, kernel.Failed)
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
