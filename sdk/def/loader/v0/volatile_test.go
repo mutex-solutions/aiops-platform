@@ -62,8 +62,9 @@ func TestVolatileOnly(t *testing.T) {
 	}
 }
 
-// A change whose old or new value is or holds a reference is not volatile: the tree
-// holds it unresolved, and loader/volatile-update would announce the reference.
+// A change of a config whose old or new tree holds a reference is not volatile: the
+// tree holds it unresolved, and loader/volatile-update, which carries the whole
+// config, would announce the reference.
 func TestVolatileOnlyRefusesAReference(t *testing.T) {
 	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
 	vol := []string{"note", "rules"}
@@ -72,12 +73,28 @@ func TestVolatileOnlyRefusesAReference(t *testing.T) {
 		{m{"note": ref}, m{"note": "plain"}},                                        // was one
 		{m{"rules": l{m{"url": "a"}}}, m{"rules": l{m{"url": "a"}, m{"url": ref}}}}, // holds one beneath
 		{m{"rules": l{}}, m{"rules": l{}, "note": m{"k": l{ref}}}},                  // a new key holds one
+		{m{"note": "a", "rules": l{ref}}, m{"note": "b", "rules": l{ref}}},          // one that did not change
+		{m{"note": "a", "x": ref}, m{"note": "b"}},                                  // the old config held one
 	} {
 		if paths, only := loader.VolatileOnly(tc.old, tc.new, vol); only || len(paths) == 0 {
 			t.Errorf("case %d: VolatileOnly = %q, %v; want not volatile", i, paths, only)
 		}
 	}
-	if _, only := loader.VolatileOnly(m{"note": ref}, m{"note": ref}, vol); !only {
+	if paths, only := loader.VolatileOnly(m{"note": ref}, m{"note": ref}, vol); !only || len(paths) != 0 {
 		t.Error("an unchanged reference is no change")
+	}
+}
+
+func TestHoldsRef(t *testing.T) {
+	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
+	for _, v := range []any{ref, m{"a": ref}, l{1, m{"b": l{ref}}}} {
+		if !loader.HoldsRef(v) {
+			t.Errorf("HoldsRef(%v) = false", v)
+		}
+	}
+	for _, v := range []any{nil, "${env:X}", m{"a": l{1, "x"}}} {
+		if loader.HoldsRef(v) {
+			t.Errorf("HoldsRef(%v) = true", v)
+		}
 	}
 }
