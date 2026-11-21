@@ -226,7 +226,8 @@ generation's verdict passed and is not judged.
   `Decode` beside or through a reference that resolves is rejected too. A generation that
   disables, removes or mounts again the `config-refs` row cannot be checked by the
   instance that is running, so any reference in those rows rejects it, as when
-  `config-refs` is not ACTIVE.
+  `config-refs` is not ACTIVE; both errors match `launch.ErrRefsUnchecked`, which the
+  launch definition, the one `boot` may import, exports for them.
 - **17.** The rule applies to each changed path: a change whose old or new value holds a
   reference restarts the row, and a literal changed beside a reference that did not
   change is committed in place. `loader/volatile-update` carries the whole new config,

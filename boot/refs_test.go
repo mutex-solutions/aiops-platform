@@ -542,8 +542,8 @@ func TestAdmitRejectsAReferenceWhenTheGenerationChangesConfigRefs(t *testing.T) 
 		{"required raised, created row with a reference", "- {id: refs, required: true}\n" + newRef, ""},
 	} {
 		err := admit(base + tc.add)
-		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
-			t.Errorf("%s: admit = %v, want %q", tc.name, err, tc.want)
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want) || !errors.Is(err, launch.ErrRefsUnchecked)) {
+			t.Errorf("%s: admit = %v, want %q (launch.ErrRefsUnchecked)", tc.name, err, tc.want)
 		}
 	}
 	if code := stopAndWait(t, f, done); code != ExitOK {
@@ -552,16 +552,16 @@ func TestAdmitRejectsAReferenceWhenTheGenerationChangesConfigRefs(t *testing.T) 
 }
 
 // With no config-refs ACTIVE, a generation that mounts a row holding a reference is
-// rejected: nothing can check the reference (ADR-059 decision 16). One with no
-// reference is admitted.
+// rejected with launch.ErrRefsUnchecked: nothing can check the reference (ADR-059
+// decision 16). One with no reference is admitted.
 func TestAdmitRejectsAReferenceWhileConfigRefsIsNotActive(t *testing.T) {
 	var l launched
 	const base = "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
 	f := newFixture(t, base, probe(&l), recorder("t/rec", make(chan any, 4)))
 	admit, done := liveAdmit(t, f, &l)
 	err := admit(base + "    - {id: new, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_X}\"}}\n")
-	if err == nil || !strings.Contains(err.Error(), `row "new": config-refs is not ACTIVE`) {
-		t.Errorf("admit = %v", err)
+	if err == nil || !strings.Contains(err.Error(), `row "new": config-refs is not ACTIVE`) || !errors.Is(err, launch.ErrRefsUnchecked) {
+		t.Errorf("admit = %v, want launch.ErrRefsUnchecked", err)
 	}
 	if err := admit(base + "    - {id: new, plugin: t/rec, roles: [api], config: {note: x}}\n"); err != nil {
 		t.Errorf("admit without a reference = %v", err)

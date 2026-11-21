@@ -4,10 +4,16 @@ package launch
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
+
+// ErrRefsUnchecked is why Admit rejects a candidate that mounts a row whose config holds
+// a reference while no config-refs row can check it: none is ACTIVE in the root realm,
+// or the candidate disables, removes or mounts config-refs again (ADR-059 decision 16).
+var ErrRefsUnchecked = errors.New("launch: the references of the candidate cannot be checked")
 
 // The six launch keys. Each is provider-bound, so only the module-table entry
 // that the distribution manifest lists, the launcher, may provide it
@@ -184,7 +190,8 @@ type ProfileContext interface {
 	// with the plugin's Decode, or, for a config that holds a reference, with the dry
 	// run of config-refs, which returns no value (ADR-059 decision 16). It touches no
 	// running fiber. An error rejects the generation; a reference that does not
-	// resolve, or any reference while config-refs is not ACTIVE, is one.
+	// resolve, or any reference while config-refs is not ACTIVE (ErrRefsUnchecked), is
+	// one.
 	Admit(ctx context.Context, c Composition) (Admission, error)
 	// Plan diffs two compositions by row id and computes the restart closure,
 	// pure (03-c3-kernel.md:378).

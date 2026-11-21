@@ -261,8 +261,8 @@ type dryRun interface {
 // it as it would for the mount, decodes the resolved tree with the plugin's Decode and
 // returns no value. With no such row, or when c disables, removes or mounts config-refs
 // again, so that the tree would resolve the reference with another instance or none, it
-// is refused. The error of a dry run is wrapped, so it still matches the definition's
-// ErrUnresolved.
+// is refused with launch.ErrRefsUnchecked. The error of a dry run is wrapped, so it still
+// matches the definition's ErrUnresolved.
 func (p *profileContext) configErrors(ctx context.Context, c Composition) []error {
 	p.mu.Lock()
 	old := p.committed
@@ -291,12 +291,12 @@ func (p *profileContext) configErrors(ctx context.Context, c Composition) []erro
 			err = decode(cfg)
 		case len(r.Refs) == 0:
 		case moves:
-			err = errors.New("config-refs changes in this generation, so the references cannot be checked")
+			err = fmt.Errorf("config-refs changes in this generation: %w", launch.ErrRefsUnchecked)
 		default:
 			if !looked {
 				dr, looked = p.configRefs(ctx), true
 			}
-			err = errors.New("config-refs is not ACTIVE, so the references cannot be checked")
+			err = fmt.Errorf("config-refs is not ACTIVE: %w", launch.ErrRefsUnchecked)
 			if dr != nil {
 				err = dr.Check(ctx, cfg, decode)
 			}
