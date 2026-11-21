@@ -199,6 +199,9 @@ func Run(t *testing.T, mount Mount) {
 		g.Plugin, c.Config = group, map[string]any{"level": "warn"}
 		s.apply([]string{"restarted g:c", "restarted g"}, update(c), update(g))
 		s.is("g:c", loader.Mounted, kernel.Active)
+		g.Plugin = loader.IncludePlugin // an unchanged child is mounted again as it was
+		s.apply([]string{"restarted g", "unchanged g:c"}, update(g), update(c))
+		s.is("g:c", loader.Mounted, kernel.Active)
 		if e, _ := s.ld.Locate("g:c"); !reflect.DeepEqual(e.Spec.Config, c.Config) {
 			t.Errorf("g:c holds %v, want %v", e.Spec.Config, c.Config)
 		}
