@@ -342,9 +342,12 @@ func TestUnresolvedReferenceFollowsTheMatrix(t *testing.T) {
 // then a row that fails its first two applies: the generation that enables it has a failed
 // verdict, so reload rolls it back (ADR-059 decision 12) instead of waiting for
 // restart-policy to retry the row until it is ACTIVE, which the row does at boot.
-// restart-policy waits an hour before a retry here: with the smoke backoff the row
-// could be ACTIVE again before reload judges it, and the verdict would hang on how
-// long the judge takes.
+// restart-policy keeps the short backoff of the smoke bundle, and the same generation
+// replaces extra, which is slow to drain (it holds a lease of the spine for 150ms at a
+// time), so the judge comes after the row could have been retried to ACTIVE: a row
+// FAILED during the apply fails the verdict whatever its state when judged, and
+// restart-policy holds its retries while the operation is in flight (ADR-059 decision
+// 19).
 func TestLiveRecomposition(t *testing.T) {
 	live := filepath.Join(t.TempDir(), "live.yml")
 	write := func(body string) {
@@ -353,7 +356,7 @@ func TestLiveRecomposition(t *testing.T) {
 		}
 	}
 	write("- {id: extra, enabled: false}\n")
-	p := startEnv(t, nil, "smoke", "restart-policy.slow", live)
+	p := startEnv(t, nil, "smoke", live)
 	p.ready()
 	waitState(t, p, func(s teststate.State) bool { return s.Ready })
 	submit := func(marker string) {
@@ -374,7 +377,8 @@ func TestLiveRecomposition(t *testing.T) {
 		return ""
 	}
 
-	write("- {id: extra, enabled: true}\n")
+	const extra = "- {id: extra, enabled: true, config: {note: extra, callEvery: 1ms, callHold: 150ms}"
+	write(extra + "}\n")
 	submit("1")
 	st := waitState(t, p, func(s teststate.State) bool {
 		return s.Reload != nil && s.Reload.ID == 1 && s.Reload.Status != "queued" && s.Reload.Status != "running"
@@ -384,7 +388,7 @@ func TestLiveRecomposition(t *testing.T) {
 	}
 	waitState(t, p, func(s teststate.State) bool { return rowState(s, "extra") == "ACTIVE" })
 
-	write("- {id: extra, enabled: true}\n- {id: flaky, enabled: true}\n")
+	write(extra + ", inject: [toy.store]}\n- {id: flaky, enabled: true}\n")
 	submit("2")
 	st = waitState(t, p, func(s teststate.State) bool {
 		return s.Reload != nil && s.Reload.ID == 2 && s.Reload.Status != "queued" && s.Reload.Status != "running"

@@ -225,7 +225,10 @@ func TestLoaderSmoke(t *testing.T) {
 		p := start(t, bin, nil, live)
 		p.waitState(func(s teststate.State) bool { return s.Ready })
 
-		write("- {id: extra, enabled: true}\n")
+		// extra calls the spine all the time and holds each call's lease for 300ms, so its
+		// fiber takes up to that long to drain when it unloads.
+		const extra = "- {id: extra, enabled: true, config: {note: extra, callEvery: 1ms, callHold: 300ms}"
+		write(extra + "}\n")
 		p.submit("1")
 		st := p.waitState(func(s teststate.State) bool {
 			return s.Reload != nil && s.Reload.ID == 1 && s.Reload.Status != "queued" && s.Reload.Status != "running"
@@ -235,13 +238,16 @@ func TestLoaderSmoke(t *testing.T) {
 		}
 		p.waitState(func(s teststate.State) bool { return rowState(s, "extra") == "ACTIVE" })
 
-		// flaky with no failTimes fails every apply, so the generation that enables it has a
-		// failed verdict: reload rolls it back with one inverse plan (ADR-059 decision 12), the
-		// row is disabled again and the process stays ready. The bundle's failTimes: 2 would
-		// make the verdict a race between the judge and restart-policy's retries, which extra,
-		// restarted in the same generation with a slow apply, makes the retries win. The
-		// retry itself is covered at boot.
-		write("- {id: extra, enabled: true, config: {note: extra, applyDelay: 100ms}}\n- {id: flaky, enabled: true, config: {}}\n")
+		// flaky fails its first two applies (the bundle's failTimes: 2), so the generation that
+		// enables it has a failed verdict: reload rolls it back with one inverse plan (ADR-059
+		// decision 12), the row is disabled again and the process stays ready. The same
+		// generation replaces extra (its inject changes), and the loader mounts the new extra
+		// only once the old one, slow to drain, is disposed, so reload judges long after
+		// restart-policy's 20ms backoff could have retried flaky to ACTIVE. The verdict fails
+		// all the same: a row FAILED during the apply fails it, and restart-policy holds its
+		// retries while the operation is in flight (ADR-059 decision 19). The retry itself is
+		// covered at boot.
+		write(extra + ", inject: [toy.store]}\n- {id: flaky, enabled: true}\n")
 		p.submit("2")
 		st = p.waitState(func(s teststate.State) bool {
 			return s.Reload != nil && s.Reload.ID == 2 && s.Reload.Status != "queued" && s.Reload.Status != "running"
