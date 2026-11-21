@@ -756,6 +756,93 @@ func TestOperationQueuedBehindARestartOfTheReloadRowRunsAfterIt(t *testing.T) {
 	}
 }
 
+// After a rollback that failed, reload does not know what the tree runs: the final event
+// says so, an operation queued behind is refused, and so is every later Submit, without
+// planning from a composition the loader may not hold (ADR-059).
+func TestRollbackThatFailedLeavesTheStateUnknown(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("a", "aiops/p", nil))
+	events := opEvents(t, w.root)
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil), row("born", "aiops/p", nil)}}
+	s.start["born"] = kernel.Failed
+	plans := 0
+	w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+		plans++
+		return diff(f, to), nil
+	}
+	var behind def.ID
+	s.refuse = func(ops []loader.Op) error {
+		if slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Kind == loader.OpRemove }) {
+			return errors.New("refused") // the inverse plan
+		}
+		var err error
+		if behind, err = w.svc.Submit(t.Context(), def.Op{Source: "behind"}); err != nil {
+			t.Error(err)
+		}
+		return nil
+	}
+	r := await(t, w.svc)
+	if r.Status != def.RollbackFailed || !errors.Is(r.Err, def.ErrStateUnknown) {
+		t.Fatalf("result = %+v", r)
+	}
+	if _, got := events.heard(); len(got) != 2 || !got[1].Status.Done() || !errors.Is(got[1].Err, def.ErrStateUnknown) {
+		t.Errorf("reload/operation = %+v, want the final event to say that the state is unknown", got)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if rb, err := w.svc.Await(ctx, behind); err != nil || rb.Status != def.Rejected || !errors.Is(rb.Err, def.ErrStateUnknown) || rb.Generation != 0 {
+		t.Errorf("queued result = %+v, %v", rb, err)
+	}
+	if _, err := w.svc.Submit(t.Context(), def.Op{}); !errors.Is(err, def.ErrStateUnknown) {
+		t.Errorf("Submit = %v, want ErrStateUnknown", err)
+	}
+	if plans != 2 || s.applies != 1 {
+		t.Errorf("plans %d, applies %d: nothing is planned or applied after the state is unknown", plans, s.applies)
+	}
+}
+
+// A generation abandoned after it was applied leaves the state unknown, and the reload
+// row's next activation keeps it so: it refuses every Submit, and it emits the final
+// event that the unloading activation could not.
+func TestAbandonAfterTheApplyLeavesTheStateUnknownAcrossARestart(t *testing.T) {
+	root := kerneltest.New(t)
+	l, lp := launchfake.New()
+	bl := &blockingLoader{entered: make(chan struct{}, 4), release: make(chan struct{}), awaiting: make(chan struct{}, 4)}
+	close(bl.release)
+	lpl := kernel.Define(kernel.Plugin{ID: "aiops/blocking-loader", Provides: []kernel.AnyKey{loader.Key},
+		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, bl) }})
+	l.Current = launch.Composition{Digest: launch.Digest{1}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("a", "aiops/p", nil)}}, nil
+	}
+	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
+	kerneltest.Mount(root, lp, lpl)
+	events := opEvents(t, root)
+	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
+	active(t, rf)
+	svc := submitter(t, root, "aiops/caller")
+	id, err := svc.Submit(t.Context(), def.Op{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-bl.awaiting
+	if err := rf.Update(t.Context(), reload.Config{Queue: 4, History: 4}); err != nil { // the row restarts
+		t.Fatal(err)
+	}
+	r, err := svc.Await(t.Context(), id)
+	if err != nil || r.Status != def.Abandoned || !errors.Is(r.Err, def.ErrStateUnknown) {
+		t.Fatalf("result = %+v, %v", r, err)
+	}
+	active(t, rf)
+	if _, err := submitter(t, root, "aiops/caller2").Submit(t.Context(), def.Op{}); !errors.Is(err, def.ErrStateUnknown) {
+		t.Errorf("Submit to the next activation = %v, want ErrStateUnknown", err)
+	}
+	got := events.await(t, 2) // running, then the final event from the next activation
+	if f := got[1]; f.ID != id || f.Status != def.Abandoned || !errors.Is(f.Err, def.ErrStateUnknown) {
+		t.Errorf("final event = %+v", f)
+	}
+}
+
 // A generation that changes the reload row's config and restarts a row it is gated on (a
 // provider of a key its row injects, or a group above it) ends the activation applying it
 // half way, as when its config does not change: it is rejected before anything is applied.
@@ -799,11 +886,11 @@ func TestReloadRowThatChangesAndRestartsThroughAnotherRowIsRejected(t *testing.T
 	}
 }
 
-// The reload row's own change is applied only after a passed verdict. When a generation
-// that holds one is committed without it (its rollback refused whole, or an abandon
-// after the apply), the loader still runs the row's previous config: the next generation
-// that passes applies it, although no plan from the committed composition lists it.
-func TestReloadRowChangeThatWasCommittedButNotAppliedIsAppliedNext(t *testing.T) {
+// The reload row's own change is applied only after a passed verdict. A generation that
+// holds one and whose rollback is refused whole leaves the row's previous config in the
+// loader and the state of the tree unknown: the change is never applied against it, as
+// every later Submit is refused (ADR-059).
+func TestReloadRowChangeOfAFailedRollbackIsNeverApplied(t *testing.T) {
 	s := newScript()
 	w := newScripted(t, s, nil, row("reload", "aiops/reload", "old"))
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
@@ -814,19 +901,15 @@ func TestReloadRowChangeThatWasCommittedButNotAppliedIsAppliedNext(t *testing.T)
 		}
 		return nil
 	}
-	if r := await(t, w.svc); r.Status != def.RollbackFailed {
+	if r := await(t, w.svc); r.Status != def.RollbackFailed || !errors.Is(r.Err, def.ErrStateUnknown) {
 		t.Fatalf("result = %+v", r)
-	}
-	if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
-		t.Fatalf("the reload row runs %v before the next generation", e.Spec.Config)
 	}
 	s.refuse = nil
 	s.set("x", kernel.Active)
-	r := await(t, w.svc)
-	if r.Status != def.Passed || !slices.Equal(ids(r.Applied), []string{"restarted reload"}) {
-		t.Fatalf("result = %+v", r)
+	if _, err := w.svc.Submit(t.Context(), def.Op{}); !errors.Is(err, def.ErrStateUnknown) {
+		t.Errorf("Submit = %v, want ErrStateUnknown", err)
 	}
-	if e, _ := s.Locate("reload"); e.Spec.Config != "new" {
-		t.Errorf("the reload row runs %v, want the committed change", e.Spec.Config)
+	if e, _ := s.Locate("reload"); e.Spec.Config != "old" || s.applies != 1 {
+		t.Errorf("the reload row runs %v after %d applies, want its previous config and no apply after the failure", e.Spec.Config, s.applies)
 	}
 }

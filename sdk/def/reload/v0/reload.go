@@ -25,16 +25,20 @@ var Applied = composition.NewApplied(Key)
 
 // Operation is the reload/operation event, owned by Key, access open. reload emits it
 // with the Result as it stands when an operation is about to apply a generation
-// (Status Running, Stage apply), and again once that operation is final, whatever its
-// status. A passed generation that changes the reload row itself is final before that
-// change is applied, as the change may end the activation that would emit the event.
-// Between the two the rows of the tree are not judged: a failure there is
-// rolled back when the verdict fails (08-profiles-roadmap-adrs.md:470, :473), so
-// restart-policy holds its give-ups, and the exit an infrastructure provider's
-// give-up asks for, until the final event. Both dispatches carry the context of the
-// reload goroutine, which ends when the reload fiber unloads: an operation whose
-// final event never came is over once that context is done. The hooks table lists it
-// as an S1 addition (07-c4-plugin-sdk.md:462).
+// (Status Running, Stage apply, with its Plan), and once more when that operation is
+// final, whatever its status: one event of each per operation. A passed generation
+// that changes the reload row itself is final before that change is applied, as the
+// change may end the activation that would emit the event; a refusal of that change
+// is reported on the Result only, and the operation stays passed. Between the two the
+// rows of the tree are not judged: a failure there is rolled back when the verdict
+// fails (08-profiles-roadmap-adrs.md:470, :473), so restart-policy holds its give-ups,
+// and the retries of the rows the plan changes or restarts, until the final event.
+// Both dispatches carry the context of the reload goroutine, which ends when the
+// reload fiber unloads: an operation whose final event never came is over once that
+// context is done. A final event whose Err holds ErrStateUnknown says that the state
+// of the tree is unknown; when the activation that ran the operation was unloading,
+// the next activation of the row emits it. The hooks table lists it as an S1 addition
+// (07-c4-plugin-sdk.md:462).
 var Operation = kernel.NewEvent[Result]("reload/operation", kernel.OwnedBy(Key))
 
 // The refusals of Submit and Await.
@@ -63,6 +67,12 @@ var (
 	// ErrRollback is part of the cause of a result whose failed generation could not
 	// be rolled back.
 	ErrRollback = errors.New("reload: rollback failed")
+	// ErrStateUnknown is part of the cause of a result after which reload does not know
+	// what the tree runs: RollbackFailed, or Abandoned after its generation was applied.
+	// It refuses every later Submit, and every operation still queued, until the
+	// process restarts: reload never plans from a composition it is not sure the loader
+	// holds (ADR-059).
+	ErrStateUnknown = errors.New("reload: the state of the tree is unknown after a failed rollback or an abandoned generation; restart the process")
 )
 
 // ID names one submitted operation. The first is 1.
@@ -112,7 +122,8 @@ const (
 	// admit stage with ErrDenied (ADR-059 decision 15).
 	Rejected Status = "rejected"
 	// Abandoned: the reload fiber was disposed first. An operation that was running
-	// may have touched the tree, and Stage says how far it got.
+	// may have touched the tree, and Stage says how far it got; one whose generation
+	// was applied has ErrStateUnknown in its Err.
 	Abandoned Status = "abandoned"
 )
 
@@ -130,7 +141,8 @@ type Result struct {
 	Stage Stage
 	// Err is the cause of Rejected, of Abandoned (ErrAbandoned), of RolledBack
 	// (ErrVerdict) and of RollbackFailed (ErrVerdict and ErrRollback, and why the
-	// rollback failed).
+	// rollback failed). It holds ErrStateUnknown when the tree's state is unknown
+	// after the operation.
 	Err error
 
 	Generation uint64             // the number of the applied generation; 0 until one is applied
@@ -161,7 +173,7 @@ type Rollback struct {
 type Reload interface {
 	// Submit queues op and returns its id at once. It never waits, so it is safe in a
 	// leased call (plugin-system-2026-11.md:363). It returns ErrQueueFull, ErrClosed,
-	// or ErrNested for a ctx that carries the reload goroutine's work. The docs write
+	// ErrStateUnknown, or ErrNested for a ctx that carries the reload goroutine's work. The docs write
 	// Submit(op); ctx is added so that a nested submission can be told from an
 	// independent one (open point).
 	Submit(ctx context.Context, op Op) (ID, error)

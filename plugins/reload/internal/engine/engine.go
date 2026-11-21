@@ -58,20 +58,23 @@ type Engine struct {
 }
 
 // Memory is what the engines of one reload row keep across its activations: the last
-// operation id, the waiting operations, the number of the last generation and the
-// results of the final operations. A restart of the row (a generation that changes its
-// config) then numbers no operation or generation again from 1, keeps the result of the
-// operation that restarted it and runs what waited behind it.
+// operation id, the waiting operations, the number of the last generation, the results
+// of the final operations and whether the state of the tree is known. A restart of the
+// row (a generation that changes its config) then numbers no operation or generation
+// again from 1, keeps the result of the operation that restarted it and runs what
+// waited behind it.
 type Memory struct {
 	mu       sync.Mutex
 	last     def.ID
 	jobs     map[def.ID]*job
 	finished []def.ID // ids of final jobs, oldest first, for the bound on history
 	queue    []*job
+	unknown  bool // after RollbackFailed, or an abandon after the apply: every later operation is refused (ADR-059)
 
-	// The worker's own: the number of the last generation applied or restored. Only one
-	// worker runs at a time: an activation starts once the last one has unloaded.
-	generation uint64
+	// The worker's own. Only one worker runs at a time: an activation starts once the
+	// last one has unloaded.
+	generation uint64      // the number of the last generation applied or restored
+	announce   *def.Result // a final result that left the state unknown and whose event was not emitted
 }
 
 // NewMemory returns a memory with no operation.
@@ -106,6 +109,8 @@ func (e *Engine) Submit(ctx context.Context, op def.Op) (def.ID, error) {
 	switch {
 	case e.closed:
 		return 0, def.ErrClosed
+	case e.unknown:
+		return 0, def.ErrStateUnknown
 	case len(e.queue) >= e.queueMax:
 		return 0, def.ErrQueueFull
 	}
@@ -154,9 +159,13 @@ func (e *Engine) Await(ctx context.Context, id def.ID) (def.Result, error) {
 // while the process is disposing the plugin that applies it would leave the tree
 // half way with no one to judge it (open point, the docs are silent). Once the worker
 // has applied a restart of its own row, it takes no more operations and leaves them
-// queued for the next activation.
+// queued for the next activation. Run first emits the final event of an operation
+// that left the state unknown when the activation that ran it could not.
 func (e *Engine) Run(ctx context.Context) error {
 	wctx := context.WithValue(ctx, nested{}, struct{}{})
+	if a := e.announce; a != nil && e.Progress(wctx, *a) == nil {
+		e.announce = nil
+	}
 	for {
 		if ctx.Err() != nil || e.handover {
 			e.close()
@@ -222,28 +231,36 @@ func (e *Engine) final(j *job) {
 }
 
 // process runs the stages of one operation. It touches no field of the engine that a
-// Submit reads. An operation that gets as far as applying emits reload/operation as it
-// begins to apply and again with its final result, after any rollback was judged and
-// committed: in between, restart-policy holds its give-ups.
+// Submit reads but unknown, under the lock. An operation that gets as far as applying
+// emits reload/operation as it begins to apply and again with its final result, after
+// any rollback was judged and committed: in between, restart-policy holds its give-ups
+// and the retries of the plan's rows. Once the state of the tree is unknown, every
+// operation is rejected before it composes.
 func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 	applying := false
 	defer func() {
-		if applying {
-			e.progress(ctx, &final)
+		if applying && e.progress(ctx, &final) != nil && errors.Is(final.Err, def.ErrStateUnknown) {
+			a := final // the activation is unloading: the next one emits it
+			e.announce = &a
 		}
 	}()
 	var tree *launch.Composition // set once the loader's entries hold the candidate
 	stop := func(stage def.Stage, err error) def.Result {
-		r.Stage, r.Err = stage, err
-		if tree != nil {
-			e.commit(&r, *tree) // readiness and the next generation follow the real tree
+		r.Stage, r.Err, r.Status = stage, err, def.Rejected
+		if tree != nil { // applied and never judged
+			e.commit(&r, *tree) // readiness follows the real tree
+			e.lose(&r)
 		}
-		if ctx.Err() != nil {
+		if tree != nil || ctx.Err() != nil {
 			r.Status, r.Err = def.Abandoned, errors.Join(def.ErrAbandoned, r.Err)
-		} else {
-			r.Status = def.Rejected
 		}
 		return r
+	}
+	e.mu.Lock()
+	unknown := e.unknown
+	e.mu.Unlock()
+	if unknown {
+		return stop(def.StageCompose, def.ErrStateUnknown)
 	}
 	prev := e.Profile.Committed()
 	r.Previous = prev
@@ -323,6 +340,16 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 		e.handover = slices.ContainsFunc(res, func(x loader.Result) bool { return x.Outcome == loader.Restarted })
 	}
 	return r
+}
+
+// lose marks the state of the tree unknown (ADR-059): the operation of r applied a
+// generation that it could neither judge nor roll back. Every later operation is
+// refused, so none plans from a composition the loader may not hold.
+func (e *Engine) lose(r *def.Result) {
+	e.mu.Lock()
+	e.unknown = true
+	e.mu.Unlock()
+	r.Err = errors.Join(r.Err, def.ErrStateUnknown)
 }
 
 // errSelf is why a generation that would end the activation applying it is rejected.
@@ -424,11 +451,11 @@ func (e *Engine) split(ops []loader.Op, from launch.Composition) (rest, self []l
 }
 
 // unapplied adds to last an update of each reload row of cand whose config the loader
-// does not hold: a generation committed the row's change without applying it (the
-// loader refused it after a passed verdict; an abandon after the apply, or a rollback
-// that failed whole, commits what the rest of the tree runs), and no plan from the
-// committed composition lists it. It is applied with the row's own operations, after
-// the next verdict that passes.
+// does not hold: a passed generation committed the row's change, which the loader then
+// refused, and no plan from the committed composition lists it. It is applied with the
+// row's own operations, after the next verdict that passes. (An abandon after the apply
+// and a failed rollback commit such a change too, but leave the state unknown, after
+// which nothing is planned.)
 func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.Op {
 	for _, row := range cand.Rows {
 		held, ok := e.Loader.Locate(row.ID)
@@ -446,10 +473,9 @@ func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.O
 // created, gives the rows that cand changed their previous config and reverts its
 // volatile commits through the commit path. The restored rows are settled and judged by
 // the rule that judges a generation, against what was ACTIVE before cand. It is tried
-// once: a failure is reported with both verdicts and is not retried, and the committed
-// composition is the one the loader's entries hold afterwards, so that readiness and
-// the next generation follow the real tree. (There is no committer, no lock and no
-// audit: those are S4a.)
+// once: a failure is reported with both verdicts and is not retried, the committed
+// composition is the one the loader's entries hold afterwards, and the state of the
+// tree is unknown (lose). (There is no committer, no lock and no audit: those are S4a.)
 func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.Composition, before map[string]bool) def.Result {
 	rb := &def.Rollback{}
 	r.Rollback, r.Stage = rb, def.StageRollback
@@ -462,6 +488,7 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 		} else {
 			r.Status, r.Err = def.RollbackFailed, errors.Join(r.Err, def.ErrRollback, err)
 		}
+		e.lose(&r)
 		return r
 	}
 	var err error
@@ -511,12 +538,14 @@ func (e *Engine) publish(ctx context.Context, r *def.Result, d launch.Digest, ge
 	}
 }
 
-// progress emits reload/operation with r. A failure is reported on the result and
-// changes no status.
-func (e *Engine) progress(ctx context.Context, r *def.Result) {
-	if err := e.Progress(ctx, *r); err != nil {
+// progress emits reload/operation with r. A failure is reported on the result, changes
+// no status, and is returned.
+func (e *Engine) progress(ctx context.Context, r *def.Result) error {
+	err := e.Progress(ctx, *r)
+	if err != nil {
 		r.Err = errors.Join(r.Err, fmt.Errorf("emit reload/operation: %w", err))
 	}
+	return err
 }
 
 // denied is the cause of a rejected generation: the gate denied these rows.
