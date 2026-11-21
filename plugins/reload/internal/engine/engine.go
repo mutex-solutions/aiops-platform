@@ -50,20 +50,24 @@ type Engine struct {
 	queueMax, historyMax int
 
 	closed bool
-	queue  []*job
 	wake   chan struct{}
+
+	// The worker's own: it applied a restart of its own row, so the next activation
+	// takes the queue over.
+	handover bool
 }
 
 // Memory is what the engines of one reload row keep across its activations: the last
-// operation id, the number of the last generation and the results of the final
-// operations. A restart of the row (a generation that changes its config) then numbers
-// no operation or generation again from 1 and keeps the result of the operation that
-// restarted it. Its mu guards the engine's queue as well.
+// operation id, the waiting operations, the number of the last generation and the
+// results of the final operations. A restart of the row (a generation that changes its
+// config) then numbers no operation or generation again from 1, keeps the result of the
+// operation that restarted it and runs what waited behind it.
 type Memory struct {
 	mu       sync.Mutex
 	last     def.ID
 	jobs     map[def.ID]*job
 	finished []def.ID // ids of final jobs, oldest first, for the bound on history
+	queue    []*job
 
 	// The worker's own: the number of the last generation applied or restored. Only one
 	// worker runs at a time: an activation starts once the last one has unloaded.
@@ -148,11 +152,13 @@ func (e *Engine) Await(ctx context.Context, id def.ID) (def.Result, error) {
 // Run is the one goroutine. It returns when ctx ends, which is when the reload fiber
 // unloads. A queued operation is then abandoned, not applied: applying a generation
 // while the process is disposing the plugin that applies it would leave the tree
-// half way with no one to judge it (open point, the docs are silent).
+// half way with no one to judge it (open point, the docs are silent). Once the worker
+// has applied a restart of its own row, it takes no more operations and leaves them
+// queued for the next activation.
 func (e *Engine) Run(ctx context.Context) error {
 	wctx := context.WithValue(ctx, nested{}, struct{}{})
 	for {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || e.handover {
 			e.close()
 			return nil
 		}
@@ -181,11 +187,15 @@ func (e *Engine) pop() *job {
 	return j
 }
 
-// close refuses every later Submit and abandons what is queued.
+// close refuses every later Submit to this engine and abandons what is queued, unless
+// the next activation takes it over.
 func (e *Engine) close() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.closed = true
+	if e.handover {
+		return
+	}
 	for _, j := range e.queue {
 		j.res.Status, j.res.Err = def.Abandoned, def.ErrAbandoned
 		e.final(j)
@@ -307,6 +317,10 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 			// and committed: the next generation that passes applies the change (unapplied).
 			r.Err = errors.Join(r.Err, fmt.Errorf("apply the reload row: %w", err))
 		}
+		// The restart of the row ends this activation; the next one runs what waits.
+		// ponytail: a restart that a listener of internal/update vetoes leaves the queue
+		// to the row's next activation; no S1 row listens there.
+		e.handover = slices.ContainsFunc(res, func(x loader.Result) bool { return x.Outcome == loader.Restarted })
 	}
 	return r
 }

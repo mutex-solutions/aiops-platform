@@ -727,6 +727,35 @@ func TestChangeOfTheReloadRowThatKeepsAReferenceIsApplied(t *testing.T) {
 	}
 }
 
+// An operation queued behind a generation that changes the reload row is run by the
+// row's next activation: the planned restart of the row abandons nothing.
+func TestOperationQueuedBehindARestartOfTheReloadRowRunsAfterIt(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("reload", "aiops/reload", map[string]any{"queue": int64(4), "history": int64(8)}))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload",
+		map[string]any{"queue": int64(8), "history": int64(8)})}}
+	var queued def.ID
+	s.onApply = func(context.Context, int, []loader.Op) error { // the reload row's change, applied last
+		var err error
+		if queued, err = w.svc.Submit(t.Context(), def.Op{Source: "behind"}); err != nil {
+			t.Error(err)
+		}
+		if err := w.fiber.Update(t.Context(), reload.Config{Queue: 8, History: 8}); err != nil {
+			t.Error(err)
+		}
+		return nil
+	}
+	if r := await(t, w.svc); r.Status != def.Passed {
+		t.Fatalf("result = %+v", r)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	r, err := w.svc.Await(ctx, queued)
+	if err != nil || r.Status != def.Passed || r.Generation != 2 || r.Previous.Digest != (launch.Digest{2}) {
+		t.Fatalf("queued result = %+v, %v: the next activation runs it", r, err)
+	}
+}
+
 // A generation that changes the reload row's config and restarts a row it is gated on (a
 // provider of a key its row injects, or a group above it) ends the activation applying it
 // half way, as when its config does not change: it is rejected before anything is applied.
