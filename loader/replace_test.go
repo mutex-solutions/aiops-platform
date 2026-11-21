@@ -5,6 +5,7 @@ package loader
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -115,6 +116,34 @@ func TestReplacedGroupVetsItsChildren(t *testing.T) {
 				t.Errorf("the refused plan replaced g:c: %d applies, %d disposals", applies.Load(), disposed.Load())
 			}
 		})
+	}
+}
+
+// A volatile change of a child, then the replacement of its group: the child's fiber
+// goes with the group and the group's next activation applies the new config, so the
+// child's outcome is a restart, as when the group's operation comes first, and nothing
+// is announced on loader/volatile-update.
+func TestChildCommitThenGroupReplacementIsARestart(t *testing.T) {
+	p := newProbe()
+	ls := newListener("t/listener")
+	g, c := group("g"), child("g", "c", "t/v")
+	c.Config = m{"level": "info"}
+	x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/v", nil)), pre: []kernel.Plugin{ls.plugin}, rows: []def.EntrySpec{g, c},
+		modules: []launch.CatalogEntry{{ID: "t/v", Volatile: []string{"level"}}}})
+	x.want("g:c", kernel.Active)
+	g.Plugin, c.Config = def.IncludePlugin, m{"level": "debug"}
+	want := []def.Result{{ID: "g:c", Outcome: def.Restarted}, {ID: "g", Outcome: def.Restarted}}
+	if res := x.apply(update(c), update(g)); !slices.Equal(res, want) {
+		t.Errorf("Apply = %v, want %v", res, want)
+	}
+	x.want("g:c", kernel.Active)
+	if p.count("t/v") != 2 || !deepEqual(p.lastConfig("t/v"), c.Config) {
+		t.Errorf("g:c applied %d times, last with %v", p.count("t/v"), p.lastConfig("t/v"))
+	}
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if len(ls.volatile) != 0 {
+		t.Errorf("volatile-update heard %+v", ls.volatile)
 	}
 }
 

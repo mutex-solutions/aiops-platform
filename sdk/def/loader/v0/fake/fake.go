@@ -102,6 +102,7 @@ type plan struct {
 	fresh    map[string]bool // ids that get a new fiber: created, or replaced
 	renewed  map[string]bool // ids whose fiber is replaced
 	announce []loader.VolatileUpdateArgs
+	res      []loader.Result // the outcomes of the operations staged so far
 }
 
 // subtree lists id and the ids beneath it in p.
@@ -144,14 +145,13 @@ func (f *Loader) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, e
 		return nil, kernel.ErrInactive
 	}
 	p := &plan{entries: maps.Clone(f.entries), order: slices.Clone(f.order), fresh: map[string]bool{}, renewed: map[string]bool{}}
-	var res []loader.Result
 	for i, op := range ops {
 		r, err := f.stage(p, op)
 		if err != nil {
 			f.mu.Unlock()
 			return nil, fmt.Errorf("operation %d (%s %q): %w", i, op.Kind, op.Entry.ID, err)
 		}
-		res = append(res, r)
+		p.res = append(p.res, r)
 	}
 	// A new fiber for an entry mounted now that was not before, was created or
 	// replaced, or whose group has a new fiber.
@@ -200,7 +200,7 @@ func (f *Loader) Apply(ctx context.Context, ops []loader.Op) ([]loader.Result, e
 	for _, a := range p.announce {
 		_ = f.volatile.Emit(ctx, kernel.Unscoped, a)
 	}
-	return res, nil
+	return p.res, nil
 }
 
 // stage applies one operation to p, or refuses it, as the real loader does.
@@ -257,7 +257,8 @@ func (f *Loader) stage(p *plan, op loader.Op) (loader.Result, error) {
 // As in the real loader, an entry under a group that the plan replaces is mounted by the
 // group's next activation, with its new config; one under a group that is not ACTIVE has
 // no fiber and nothing to mount it from; only an ACTIVE fiber takes volatile values in
-// place; and an operation that ends an entry's activation takes back its announces.
+// place; an operation that ends an entry's activation takes back its announces; and a
+// replacement makes an earlier commit in place of an entry it remounts a restart.
 func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loader.Outcome {
 	now := f.mount(p.entries, e)
 	g, under := p.entries[e.Parent]
@@ -273,7 +274,13 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 	case old.Plugin != e.Plugin || !sameSet(old.Inject, e.Inject) || !sameSet(old.Isolate, e.Isolate) ||
 		!(len(old.Intercept) == 0 && len(e.Intercept) == 0 || reflect.DeepEqual(old.Intercept, e.Intercept)):
 		p.fresh[e.ID], p.renewed[e.ID] = true, true
-		p.retire(p.subtree(e.ID))
+		ids := p.subtree(e.ID)
+		for i, r := range p.res { // the entries beneath are mounted again: a commit is a restart
+			if r.Outcome == loader.Committed && slices.Contains(ids, r.ID) {
+				p.res[i].Outcome = loader.Restarted
+			}
+		}
+		p.retire(ids)
 		return loader.Restarted
 	case p.renewedAbove(e) && !isGroup(e.Plugin):
 		if reflect.DeepEqual(old.Config, e.Config) {

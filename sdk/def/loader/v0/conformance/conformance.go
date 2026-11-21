@@ -181,9 +181,10 @@ func Run(t *testing.T, mount Mount) {
 	})
 
 	// A child under a group that the plan replaces is mounted by the group's next
-	// activation with the spec the plan gives it: a change of its config restarts it
-	// when the group's operation comes first. When the child's comes first, its outcome
-	// stands, and the replacement of the group takes back the announce.
+	// activation with the spec the plan gives it: a change of its config restarts it,
+	// whatever the order of the operations. When the child's comes first, the
+	// replacement of the group makes its commit in place a restart and takes back the
+	// announce.
 	t.Run("a child of a group the plan replaces", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		g, c := row("g", group), child("g", "c", p)
@@ -194,7 +195,7 @@ func Run(t *testing.T, mount Mount) {
 		s.apply([]string{"restarted g", "restarted g:c"}, update(g), update(c))
 		s.is("g:c", loader.Mounted, kernel.Active)
 		g.Plugin, c.Config = group, map[string]any{"level": "warn"}
-		s.apply([]string{"committed g:c", "restarted g"}, update(c), update(g))
+		s.apply([]string{"restarted g:c", "restarted g"}, update(c), update(g))
 		s.is("g:c", loader.Mounted, kernel.Active)
 		if e, _ := s.ld.Locate("g:c"); !reflect.DeepEqual(e.Spec.Config, c.Config) {
 			t.Errorf("g:c holds %v, want %v", e.Spec.Config, c.Config)

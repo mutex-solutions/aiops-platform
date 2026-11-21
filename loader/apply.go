@@ -346,6 +346,14 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 		t.retireIn(ctx, p, e.ID)
 		return def.Unmounted
 	case old.Plugin != e.Plugin || !sameSet(old.Inject, e.Inject) || !sameSet(old.Isolate, e.Isolate) || !sameIntercept(old.Intercept, e.Intercept):
+		// The entries beneath are mounted again too: an earlier commit in place of one
+		// is a restart, whose config stage vets.
+		ids := t.subtree(e.ID)
+		for i, r := range p.results {
+			if r.Outcome == def.Committed && slices.Contains(ids, r.ID) {
+				p.results[i].Outcome = def.Restarted
+			}
+		}
 		t.retireIn(ctx, p, e.ID)
 		p.renewed[e.ID] = true
 		return mount(def.Restarted)
