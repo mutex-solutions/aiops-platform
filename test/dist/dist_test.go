@@ -176,19 +176,17 @@ func TestSmokeProfileInProcess(t *testing.T) {
 
 // TestSmokeStateShowsEveryRowActive reads the state file while the process runs. The
 // file is written within one poll interval of a change, so a test waits for the file
-// to hold the state it wants: here, ready with every row ACTIVE.
+// to hold the state it wants: here, ready with every row ACTIVE. The latch follows the
+// required set only, so a file can say ready while an optional row, test-state itself
+// among them, is still LOADING: the wait is for both.
 func TestSmokeStateShowsEveryRowActive(t *testing.T) {
 	p := start(t, "smoke")
 	p.ready()
-	st := waitState(t, p, func(s teststate.State) bool { return s.Ready })
-	for _, r := range st.Rows {
-		if r.Mount == "disabled" {
-			continue
-		}
-		if r.Mount != "mounted" || r.State != "ACTIVE" {
-			t.Fatalf("row %+v", r)
-		}
-	}
+	waitState(t, p, func(s teststate.State) bool {
+		return s.Ready && !slices.ContainsFunc(s.Rows, func(r teststate.Row) bool {
+			return r.Mount != "disabled" && (r.Mount != "mounted" || r.State != "ACTIVE")
+		})
+	})
 	if code := p.stop(); code != boot.ExitOK {
 		t.Fatalf("exit %d", code)
 	}
