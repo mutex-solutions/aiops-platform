@@ -261,6 +261,7 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 	}
 	before := e.activeBefore(prev)
 	ops, last := e.split(operations(r.Plan, prev, cand), prev)
+	last = e.unapplied(last, cand)
 	r.Stage, applying = def.StageApply, true
 	e.progress(ctx, &r)
 	var partial error
@@ -304,9 +305,10 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 			r.Err = errors.Join(r.Err, fmt.Errorf("apply the reload row: %w", err))
 		}
 		if len(res) == 0 && err != nil {
-			// The loader refused the reload row's change whole (a config that the kernel
-			// does not resolve or decode), so the row keeps its instance and the rest of
-			// the generation goes back with it: the tree does not run the candidate.
+			// The loader refused the reload row's change whole (Admit decoded a literal
+			// config and selfEnds refused a reference, so a veto of internal/commit), so
+			// the row keeps its instance and the rest of the generation goes back with it:
+			// the tree does not run the candidate.
 			applying, r.Status = true, def.Running
 			e.progress(ctx, &r)
 			return e.rollback(ctx, r, cand, prev, before)
@@ -318,15 +320,19 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 // errSelf is why a generation that would end the activation applying it is rejected.
 var errSelf = errors.New("reload: the generation ends the activation that applies it; restart the process to apply it")
 
+// errSelfRef is why a change of the reload row's config that holds a reference is rejected.
+var errSelfRef = errors.New("reload: the reload row's new config holds a reference, which cannot be resolved before the rest of the generation is committed; restart the process to apply it")
+
 // selfEnds refuses, before anything is applied, a plan that would end the activation
 // that applies it half way. split defers the reload row's own config change to the end,
 // where it restarts the row in one loader batch; but a replacement of the row (its
 // plugin, inject, isolate or intercept changes) is a dispose and then a mount once the
 // old fiber is DISPOSED, which the disposed activation cannot wait for, and a restart
-// of the row through its group or a provider it needs (the plan's restart closure)
-// cancels the apply of the rest.
-// ponytail: a row whose own config changes and that a provider restarts as well is
-// not found; that needs the closure without the row's own change.
+// of the row through its group or a provider of a key its row injects (rows of the
+// plan's restart closure) cancels the apply of the rest. It also refuses a change of
+// the row's config whose candidate holds a reference: Admit decodes only a literal
+// config, and the deferred change is applied after the generation was committed and
+// published, too late to reject it when the kernel does not resolve it (08 §1.6).
 func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 	next := map[string]launch.Row{}
 	for _, r := range cand.Rows {
@@ -343,11 +349,48 @@ func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 		case ok && (n.Plugin != o.Plugin || !sameSet(n.Inject, o.Inject) || !sameSet(n.Isolate, o.Isolate) ||
 			!(len(n.Intercept) == 0 && len(o.Intercept) == 0 || reflect.DeepEqual(n.Intercept, o.Intercept))):
 			return fmt.Errorf("%w: row %q is replaced, as its plugin, inject, isolate or intercept changes", errSelf, o.ID)
-		case !changed[o.ID] && slices.Contains(p.Closure, o.ID):
+		case slices.Contains(p.Closure, o.ID) && (!changed[o.ID] || e.gatedOn(n, p.Closure, next)):
 			return fmt.Errorf("%w: row %q restarts through its group or a provider it needs", errSelf, o.ID)
+		case changed[o.ID] && holdsRef(n.Config):
+			return fmt.Errorf("%w: row %q", errSelfRef, o.ID)
 		}
 	}
 	return nil
+}
+
+// gatedOn reports whether a row of the closure other than r is a group above r or
+// provides a key that r's row injects: r restarts through it (the closure holds every
+// row that restarts, its dependants included).
+func (e *Engine) gatedOn(r launch.Row, closure []string, rows map[string]launch.Row) bool {
+	for _, id := range closure {
+		en, _ := e.Catalog.Lookup(rows[id].Plugin)
+		if id != r.ID && slices.ContainsFunc(en.Provides, func(k string) bool { return slices.Contains(r.Inject, k) }) {
+			return true
+		}
+	}
+	for g, ok := rows[r.Parent]; ok; g, ok = rows[g.Parent] {
+		if slices.Contains(closure, g.ID) {
+			return true
+		}
+	}
+	return false
+}
+
+// holdsRef reports whether a config value is a reference or holds one.
+func holdsRef(v any) bool {
+	switch x := v.(type) {
+	case launch.Ref:
+		return true
+	case map[string]any:
+		for _, y := range x {
+			if holdsRef(y) {
+				return true
+			}
+		}
+	case []any:
+		return slices.ContainsFunc(x, holdsRef)
+	}
+	return false
 }
 
 func sameSet(a, b []string) bool {
@@ -369,6 +412,22 @@ func (e *Engine) split(ops []loader.Op, from launch.Composition) (rest, self []l
 		}
 	}
 	return rest, self
+}
+
+// unapplied adds to last an update of each reload row of cand whose config the loader
+// does not hold: a generation committed the row's change without applying it (an abandon
+// after the apply, or a rollback that failed whole, commits what the rest of the tree
+// runs), and no plan from the committed composition lists it. It is applied with the
+// row's own operations, after the next verdict that passes.
+func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.Op {
+	for _, row := range cand.Rows {
+		held, ok := e.Loader.Locate(row.ID)
+		if row.Plugin == e.Self && ok && !reflect.DeepEqual(held.Spec.Config, row.Config) &&
+			!slices.ContainsFunc(last, func(op loader.Op) bool { return op.Entry.ID == row.ID }) {
+			last = append(last, loader.Op{Kind: loader.OpUpdate, Entry: spec(row)})
+		}
+	}
+	return last
 }
 
 // rollback restores prev after the verdict on cand failed (ADR-059 decision 12): one

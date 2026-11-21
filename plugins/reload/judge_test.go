@@ -241,10 +241,10 @@ func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T
 }
 
 // The reload row's own operation waits for the verdict: a failed generation never applies
-// it, and its rollback has nothing of it to undo. A refusal of it, for a config that the
-// kernel does not resolve or decode, leaves the reload row its instance, and the rest of
-// the generation is rolled back to the composition the tree ran: the generation is not
-// what the tree runs ("Rejected; the row keeps its instance", 08 §1.6).
+// it, and its rollback has nothing of it to undo. A refusal of it (Admit decodes a literal
+// config and a reference is rejected before the apply, so a veto of internal/commit)
+// leaves the reload row its instance, and the rest of the generation is rolled back to the
+// composition the tree ran: the generation is not what the tree runs.
 func TestReloadRowIsAppliedOnlyAfterAPassedVerdict(t *testing.T) {
 	self := row("reload", "aiops/reload", "old")
 	for _, tc := range []struct {
@@ -602,5 +602,110 @@ func TestRowUnloadingDuringTheApplyReadsNoRow(t *testing.T) {
 	}
 	if !slices.Equal(w.commits, []launch.Digest{{2}}) {
 		t.Errorf("commits = %x, want the candidate the loader holds", w.commits)
+	}
+}
+
+// A change of the reload row's config whose candidate holds a reference is rejected before
+// anything is applied. Admit decodes a literal config only, and the row's own change is
+// applied after the rest of the generation was committed and published, too late to
+// reject the generation when the reference does not resolve (08 §1.6, "a reference does
+// not resolve": live, "Rejected; the row keeps its instance").
+func TestReloadRowConfigWithAReferenceIsRejected(t *testing.T) {
+	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_Q"}
+	for _, tc := range []struct {
+		name     string
+		from, to any
+	}{
+		{"gains one", map[string]any{"queue": int64(4)}, map[string]any{"queue": ref}},
+		{"keeps one", map[string]any{"queue": ref, "history": int64(8)}, map[string]any{"queue": ref, "history": int64(16)}},
+		{"in a list", map[string]any{"queue": int64(4)}, map[string]any{"queue": int64(4), "tags": []any{"a", ref}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, row("reload", "aiops/reload", tc.from))
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", tc.to), row("x", "aiops/p", nil)}}
+			r := await(t, w.svc)
+			if r.Status != def.Rejected || r.Stage != def.StagePlan || r.Err == nil || !strings.Contains(r.Err.Error(), "reference") {
+				t.Fatalf("result = %+v", r)
+			}
+			if s.applies != 0 || len(w.commits) != 0 {
+				t.Errorf("applies %d, commits %v: a rejected generation touches nothing", s.applies, w.commits)
+			}
+		})
+	}
+}
+
+// A generation that changes the reload row's config and restarts a row it is gated on (a
+// provider of a key its row injects, or a group above it) ends the activation applying it
+// half way, as when its config does not change: it is rejected before anything is applied.
+func TestReloadRowThatChangesAndRestartsThroughAnotherRowIsRejected(t *testing.T) {
+	gated := func(cfg string) launch.Row {
+		r := row("reload", "aiops/reload", cfg)
+		r.Inject = []string{"k"}
+		return r
+	}
+	under := func(cfg string) launch.Row {
+		r := row("g:reload", "aiops/reload", cfg)
+		r.Parent = "g"
+		return r
+	}
+	for _, tc := range []struct {
+		name     string
+		from, to []launch.Row
+		closure  []string
+		rejected bool
+	}{
+		{"provider", []launch.Row{gated("old"), row("p", "aiops/kp", "a")}, []launch.Row{gated("new"), row("p", "aiops/kp", "b")}, []string{"p", "reload"}, true},
+		{"group", []launch.Row{row("g", loader.GroupPlugin, nil), under("old")}, []launch.Row{row("g", loader.GroupPlugin, "b"), under("new")}, []string{"g", "g:reload"}, true},
+		{"unrelated", []launch.Row{gated("old"), row("q", "aiops/p", "a")}, []launch.Row{gated("new"), row("q", "aiops/p", "b")}, []string{"q", "reload"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, tc.from...)
+			w.l.Modules = []launch.CatalogEntry{{ID: "aiops/kp", Provides: []string{"k"}}, {ID: "aiops/p"}}
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: tc.to}
+			w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+				p := diff(f, to)
+				p.Closure = tc.closure
+				return p, nil
+			}
+			r := await(t, w.svc)
+			rejected := r.Status == def.Rejected && r.Stage == def.StagePlan && r.Err != nil && strings.Contains(r.Err.Error(), "ends the activation that applies it")
+			if rejected != tc.rejected || tc.rejected && (s.applies != 0 || len(w.commits) != 0) {
+				t.Fatalf("result = %+v, applies %d, commits %v", r, s.applies, w.commits)
+			}
+		})
+	}
+}
+
+// The reload row's own change is applied only after a passed verdict. When a generation
+// that holds one is committed without it (its rollback refused whole, or an abandon
+// after the apply), the loader still runs the row's previous config: the next generation
+// that passes applies it, although no plan from the committed composition lists it.
+func TestReloadRowChangeThatWasCommittedButNotAppliedIsAppliedNext(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("reload", "aiops/reload", "old"))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("reload", "aiops/reload", "new"), row("x", "aiops/p", nil)}}
+	s.start["x"] = kernel.Failed
+	s.refuse = func(ops []loader.Op) error {
+		if slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Kind == loader.OpRemove }) {
+			return errors.New("refused")
+		}
+		return nil
+	}
+	if r := await(t, w.svc); r.Status != def.RollbackFailed {
+		t.Fatalf("result = %+v", r)
+	}
+	if e, _ := s.Locate("reload"); e.Spec.Config != "old" {
+		t.Fatalf("the reload row runs %v before the next generation", e.Spec.Config)
+	}
+	s.refuse = nil
+	s.set("x", kernel.Active)
+	r := await(t, w.svc)
+	if r.Status != def.Passed || !slices.Equal(ids(r.Applied), []string{"restarted reload"}) {
+		t.Fatalf("result = %+v", r)
+	}
+	if e, _ := s.Locate("reload"); e.Spec.Config != "new" {
+		t.Errorf("the reload row runs %v, want the committed change", e.Spec.Config)
 	}
 }
