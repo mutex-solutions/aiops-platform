@@ -382,7 +382,7 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 		return def.Unchanged
 	case only && active(ctx, cur.fiber): // a fiber that is not ACTIVE runs no activation to tell
 		p.updates = append(p.updates, held{id: e.ID, op: kernel.CommitOp(cur.fiber, e.Config)})
-		p.announce = append(p.announce, def.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
+		p.announce = append(p.announce, def.VolatileUpdateArgs{ID: e.ID, Config: def.WithoutRefs(e.Config), Paths: paths})
 		return def.Committed
 	}
 	p.updates = append(p.updates, held{id: e.ID, op: kernel.UpdateOpWith(cur.fiber, e.Config)})

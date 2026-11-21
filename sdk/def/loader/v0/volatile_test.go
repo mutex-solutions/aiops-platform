@@ -3,6 +3,7 @@
 package loader_test
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
@@ -62,9 +63,9 @@ func TestVolatileOnly(t *testing.T) {
 	}
 }
 
-// A change of a config whose old or new tree holds a reference is not volatile: the
-// tree holds it unresolved, and loader/volatile-update, which carries the whole
-// config, would announce the reference.
+// A change whose old or new value holds a reference is not volatile (ADR-059 decision
+// 17): the tree holds it unresolved, and only config-refs resolves it, at an
+// activation. A change of a literal beside a reference that did not change is.
 func TestVolatileOnlyRefusesAReference(t *testing.T) {
 	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
 	vol := []string{"note", "rules"}
@@ -73,8 +74,7 @@ func TestVolatileOnlyRefusesAReference(t *testing.T) {
 		{m{"note": ref}, m{"note": "plain"}},                                        // was one
 		{m{"rules": l{m{"url": "a"}}}, m{"rules": l{m{"url": "a"}, m{"url": ref}}}}, // holds one beneath
 		{m{"rules": l{}}, m{"rules": l{}, "note": m{"k": l{ref}}}},                  // a new key holds one
-		{m{"note": "a", "rules": l{ref}}, m{"note": "b", "rules": l{ref}}},          // one that did not change
-		{m{"note": "a", "x": ref}, m{"note": "b"}},                                  // the old config held one
+		{m{"note": "a", "x": ref}, m{"note": "b"}},                                  // a removed value held one
 	} {
 		if paths, only := loader.VolatileOnly(tc.old, tc.new, vol); only || len(paths) == 0 {
 			t.Errorf("case %d: VolatileOnly = %q, %v; want not volatile", i, paths, only)
@@ -82,6 +82,33 @@ func TestVolatileOnlyRefusesAReference(t *testing.T) {
 	}
 	if paths, only := loader.VolatileOnly(m{"note": ref}, m{"note": ref}, vol); !only || len(paths) != 0 {
 		t.Error("an unchanged reference is no change")
+	}
+	beside := []struct{ old, new m }{
+		{m{"note": "a", "rules": l{ref}}, m{"note": "b", "rules": l{ref}}},               // a volatile field beside it
+		{m{"note": "a", "x": m{"y": ref}}, m{"note": "b", "x": m{"y": ref}}},             // a field no volatile path covers
+		{m{"rules": l{m{"url": "a", "k": ref}}}, m{"rules": l{m{"url": "b", "k": ref}}}}, // a sibling beneath
+	}
+	for i, tc := range beside {
+		if paths, only := loader.VolatileOnly(tc.old, tc.new, vol); !only || len(paths) != 1 {
+			t.Errorf("beside %d: VolatileOnly = %q, %v; want one volatile path", i, paths, only)
+		}
+	}
+}
+
+// WithoutRefs is the Config of loader/volatile-update: the tree with every reference
+// replaced by nil, so the event never carries one, and nothing else changed.
+func TestWithoutRefs(t *testing.T) {
+	ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_A"}
+	in := m{"note": "b", "k": ref, "l": l{1, ref, m{"r": ref, "s": "x"}}}
+	got := loader.WithoutRefs(in)
+	want := m{"note": "b", "k": nil, "l": l{1, nil, m{"r": nil, "s": "x"}}}
+	if !reflect.DeepEqual(got, want) || loader.HoldsRef(got) || !loader.HoldsRef(in) {
+		t.Errorf("WithoutRefs(%v) = %v, want %v and the input as it was", in, got, want)
+	}
+	for _, v := range []any{nil, "x", m{"a": l{1}}} {
+		if g := loader.WithoutRefs(v); !reflect.DeepEqual(g, v) {
+			t.Errorf("WithoutRefs(%v) = %v", v, g)
+		}
 	}
 }
 

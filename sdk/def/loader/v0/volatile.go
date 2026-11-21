@@ -33,12 +33,12 @@ import (
 // covered, because the replaced node holds other fields too. A key that contains a
 // dot or is "*" cannot be named by a path: only an ancestor covers it.
 //
-// A change of a config whose old or new tree holds a launch.Ref anywhere is not
-// volatile either (ADR-059, owner decision D17): the tree holds references
-// unresolved, config-refs resolves them only when a fiber activates, and
-// loader/volatile-update, which carries the whole config, would announce a
-// reference, not its value. Such a change restarts the fiber, so the event never
-// carries a reference. The launcher's plan (boot Diff) calls VolatileOnly too.
+// A change whose old or new value holds a launch.Ref is not volatile either (ADR-059,
+// owner decision 17): the tree holds references unresolved and config-refs resolves
+// them only when a fiber activates, so such a change restarts the fiber. A literal
+// changed beside a reference that did not change is volatile; loader/volatile-update
+// carries the new config through WithoutRefs, so the event never carries a reference.
+// The launcher's plan (boot Diff) calls VolatileOnly too.
 
 // changedPaths appends to out each path at which a and b differ.
 func changedPaths(path []string, a, b any, out [][]string) [][]string {
@@ -92,6 +92,45 @@ func HoldsRef(v any) bool {
 	return false
 }
 
+// WithoutRefs returns a copy of v, a parsed config tree of plain values, in which every
+// launch.Ref is replaced by nil: the Config of VolatileUpdateArgs. v is not changed.
+func WithoutRefs(v any) any {
+	switch x := v.(type) {
+	case launch.Ref:
+		return nil
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = WithoutRefs(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = WithoutRefs(e)
+		}
+		return out
+	}
+	return v
+}
+
+// at returns the node of the tree v at path, a path that changedPaths found: a map
+// that lacks its key gives nil, and a list gives the element at an index that both
+// lists have. A leaf above the end of path is returned as it is.
+func at(v any, path []string) any {
+	for _, seg := range path {
+		switch x := v.(type) {
+		case map[string]any:
+			v = x[seg]
+		case []any:
+			if i, err := strconv.Atoi(seg); err == nil && i >= 0 && i < len(x) {
+				v = x[i]
+			}
+		}
+	}
+	return v
+}
+
 // covers reports whether the volatile path pattern covers path.
 func covers(pattern, path []string) bool {
 	return len(pattern) <= len(path) && slices.EqualFunc(pattern, path[:len(pattern)], func(p, s string) bool { return p == "*" || p == s })
@@ -99,18 +138,17 @@ func covers(pattern, path []string) bool {
 
 // VolatileOnly returns the sorted dotted paths at which the trees differ, the Paths
 // of VolatileUpdateArgs, and whether every one of them is covered by one of the
-// volatile paths while neither tree holds a reference. No difference gives no path
-// and true.
+// volatile paths while neither its old nor its new value holds a reference. No
+// difference gives no path and true.
 func VolatileOnly(old, updated any, volatile []string) (paths []string, only bool) {
 	patterns := make([][]string, len(volatile))
 	for i, v := range volatile {
 		patterns[i] = strings.Split(v, ".")
 	}
-	changed := changedPaths(nil, old, updated, nil)
-	only = len(changed) == 0 || !HoldsRef(old) && !HoldsRef(updated)
-	for _, d := range changed {
+	only = true
+	for _, d := range changedPaths(nil, old, updated, nil) {
 		paths = append(paths, strings.Join(d, "."))
-		if !slices.ContainsFunc(patterns, func(p []string) bool { return covers(p, d) }) {
+		if HoldsRef(at(old, d)) || HoldsRef(at(updated, d)) || !slices.ContainsFunc(patterns, func(p []string) bool { return covers(p, d) }) {
 			only = false
 		}
 	}

@@ -78,9 +78,11 @@ func TestDiff(t *testing.T) {
 		{name: "volatile change from a reference restarts", old: rows("id: a, plugin: o/a, config: {timeout: \"${env:AIOPS_REF_LEVEL}\"}"),
 			new:  rows("id: a, plugin: o/a, config: {timeout: info}"),
 			want: "a:update:restart[config]{config.timeout}", closure: "a", batch: "update:a"},
-		{name: "volatile change beside an unchanged reference restarts", old: rows("id: a, plugin: o/a, config: {timeout: 1, note: \"${env:AIOPS_REF_LEVEL}\"}"),
+		// Decision 17 names the old or new value of the volatile field: a literal beside an
+		// unchanged reference is committed in place.
+		{name: "volatile change beside an unchanged reference is volatile", old: rows("id: a, plugin: o/a, config: {timeout: 1, note: \"${env:AIOPS_REF_LEVEL}\"}"),
 			new:  rows("id: a, plugin: o/a, config: {timeout: 2, note: \"${env:AIOPS_REF_LEVEL}\"}"),
-			want: "a:update:restart[config]{config.timeout}", closure: "a", batch: "update:a"},
+			want: "a:update:volatile[config]{config.timeout}", batch: "update:a"},
 		{name: "volatile and not volatile together", old: rows("id: a, plugin: o/a, config: {timeout: 1}"), new: rows("id: a, plugin: o/a, config: {timeout: 2, mode: 1}"),
 			want: "a:update:restart[config]{config.mode,config.timeout}", closure: "a", batch: "update:a"},
 		{name: "config key removed and kind changed", old: rows("id: a, plugin: o/a, config: {timeout: 1, k: {x: 1}}"), new: rows("id: a, plugin: o/a, config: {k: 5}"),

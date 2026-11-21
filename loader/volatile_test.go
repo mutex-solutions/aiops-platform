@@ -13,10 +13,12 @@ import (
 type m = map[string]any
 type l = []any
 
-// A volatile change of a config that holds or held a reference is not committed in
+// A volatile change whose old or new value holds a reference is not committed in
 // place: the tree holds the reference unresolved, so the fiber restarts and
-// config-refs resolves it at its activation, and loader/volatile-update never
-// carries a reference (sdk/def/loader/v0 VolatileOnly).
+// config-refs resolves it at its activation (sdk/def/loader/v0 VolatileOnly; ADR-059
+// decision 17). A literal changed beside a reference is committed in place, and
+// loader/volatile-update carries the config with the reference left out, so it never
+// carries one.
 func TestVolatileChangeWithAReferenceRestarts(t *testing.T) {
 	p := newProbe()
 	ls := newListener("t/listener")
@@ -42,16 +44,16 @@ func TestVolatileChangeWithAReferenceRestarts(t *testing.T) {
 	}
 	ls.mu.Unlock()
 
-	// A reference at a path that did not change restarts the fiber too: the event would
-	// carry it in Config.
+	// A literal changed beside a reference that did not change is committed in place,
+	// and the event's Config leaves the reference out.
 	rv.Config = m{"note": "plain", "rules": l{m{"url": ref}}}
 	x.apply(update(rv))
 	rv.Config = m{"note": "changed", "rules": l{m{"url": ref}}}
-	if res := x.apply(update(rv)); res[0].Outcome != def.Restarted {
+	if res := x.apply(update(rv)); res[0].Outcome != def.Committed {
 		t.Fatalf("a volatile change beside an unchanged reference: %v", res)
 	}
-	x.want("v", kernel.Active)
-	// With no reference left on either side the change is committed in place.
+	beside := m{"note": "changed", "rules": l{m{"url": nil}}}
+	// With no reference on either side the change is committed in place as it is.
 	rv.Config = m{"note": "changed", "rules": l{m{"url": "b"}}}
 	x.apply(update(rv))
 	rv.Config = m{"note": "again", "rules": l{m{"url": "b"}}}
@@ -60,7 +62,7 @@ func TestVolatileChangeWithAReferenceRestarts(t *testing.T) {
 	}
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if p.count("t/v") != 7 || len(ls.volatile) != 1 || !deepEqual(ls.volatile[0].Config, rv.Config) {
+	if p.count("t/v") != 6 || len(ls.volatile) != 2 || !deepEqual(ls.volatile[0].Config, beside) || !deepEqual(ls.volatile[1].Config, rv.Config) {
 		t.Errorf("applies %d, volatile-update heard %+v", p.count("t/v"), ls.volatile)
 	}
 }

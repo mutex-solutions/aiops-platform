@@ -298,7 +298,7 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 	case len(paths) == 0:
 		return loader.Unchanged
 	case only && p.entries[e.ID].state == kernel.Active:
-		p.announce = append(p.announce, loader.VolatileUpdateArgs{ID: e.ID, Config: e.Config, Paths: paths})
+		p.announce = append(p.announce, loader.VolatileUpdateArgs{ID: e.ID, Config: loader.WithoutRefs(e.Config), Paths: paths})
 		return loader.Committed
 	}
 	return loader.Restarted // in place: the fiber and its scripted state stay

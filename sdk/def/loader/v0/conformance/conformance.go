@@ -5,7 +5,7 @@
 // behave the same"). It drives a loader through its interface and its three hooks
 // and checks the outcomes, the refusals, the mount state and fiber state of each
 // entry, and the payloads the hooks carry. It imports the standard library,
-// sdk/kernel and the definition only.
+// sdk/kernel and definitions only.
 package conformance
 
 import (
@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -129,6 +130,32 @@ func Run(t *testing.T, mount Mount) {
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
 		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": int64(1)}, Paths: []string{"level"}}}
+		if !reflect.DeepEqual(s.h.volatile, want) {
+			t.Errorf("volatile-update heard %+v, want %+v", s.h.volatile, want)
+		}
+	})
+
+	// A volatile value that is or becomes a reference restarts the entry, as the tree
+	// holds it unresolved; a literal changed beside an unchanged reference is committed
+	// in place, and loader/volatile-update leaves the reference out (ADR-059 decision 17).
+	t.Run("volatile changes and references", func(t *testing.T) {
+		s := start(t, mount, map[string][]string{p: {"level"}})
+		ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_PORT"}
+		a := row("a", p)
+		a.Config = map[string]any{"level": "info", "port": ref}
+		s.apply([]string{"created a"}, create(a))
+		s.is("a", loader.Mounted, kernel.Active)
+		a.Config = map[string]any{"level": "debug", "port": ref}
+		s.apply([]string{"committed a"}, update(a))
+		a.Config = map[string]any{"level": ref, "port": ref}
+		s.apply([]string{"restarted a"}, update(a))
+		s.is("a", loader.Mounted, kernel.Active)
+		a.Config = map[string]any{"level": "warn", "port": ref}
+		s.apply([]string{"restarted a"}, update(a))
+		s.is("a", loader.Mounted, kernel.Active)
+		s.h.mu.Lock()
+		defer s.h.mu.Unlock()
+		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": nil}, Paths: []string{"level"}}}
 		if !reflect.DeepEqual(s.h.volatile, want) {
 			t.Errorf("volatile-update heard %+v, want %+v", s.h.volatile, want)
 		}

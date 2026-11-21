@@ -194,11 +194,12 @@ type EntryInitArgs struct {
 // VolatileUpdateArgs is the payload of loader/volatile-update, dispatched when
 // the loader commits volatile values in place (07-c4-plugin-sdk.md:1374;
 // plugin-system-2026-11.md §8 "volatile commits"). Config is the whole new config
-// as the tree holds it, and Paths are the sorted dotted config paths that changed.
-// Neither the old config nor Config holds a reference (VolatileOnly): a change of
-// one that does restarts the fiber, because the tree holds references unresolved and
-// only config-refs resolves one, at an activation. Payload not described in the docs;
-// minimal (open point).
+// as the tree holds it with every reference replaced by nil (WithoutRefs), and Paths
+// are the sorted dotted config paths that changed. No value at Paths holds a
+// reference, old or new (VolatileOnly): such a change restarts the fiber, because the
+// tree holds references unresolved and only config-refs resolves one, at an
+// activation. A consumer reads the values at Paths; a field that holds a reference
+// did not change. Payload not described in the docs; minimal (open point).
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any

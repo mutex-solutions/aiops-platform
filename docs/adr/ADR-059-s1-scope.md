@@ -227,10 +227,13 @@ generation's verdict passed and is not judged.
   disables, removes or mounts again the `config-refs` row cannot be checked by the
   instance that is running, so any reference in those rows rejects it, as when
   `config-refs` is not ACTIVE.
-- **17.** The rule applies to the row's whole config: any change of a config whose old or
-  new tree holds a reference anywhere restarts the row, because the payload of
-  `loader/volatile-update` is the whole config. `loaderdef.VolatileOnly` is that rule and
-  `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and `reload` read them.
+- **17.** The rule applies to each changed path: a change whose old or new value holds a
+  reference restarts the row, and a literal changed beside a reference that did not
+  change is committed in place. `loader/volatile-update` carries the whole new config,
+  so its `Config` is the tree with every reference replaced by nil
+  (`loaderdef.WithoutRefs`); the event never carries one. `loaderdef.VolatileOnly` is the
+  rule and `loaderdef.HoldsRef` its predicate; `boot.Diff`, the loader and the fake read
+  them, and `reload` reads `HoldsRef`.
 - **18.** `RequiredFor` adds the role's `config-refs` rows and `configRefsReady` when a
   required row of the role holds a reference; the need of `configRefsReady` is exempt from
   the required-closure clause of gate check 7, and `configRefsReady` and `configRefsDryRun`
