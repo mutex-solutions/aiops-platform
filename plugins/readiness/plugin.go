@@ -39,33 +39,19 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
-// Plugin is a readiness row whose activations share nothing: a restart of the row
-// forgets that the state of the tree is unknown. A distribution takes New.
-// ponytail: Plugin stays until the module table of dist takes New.
-var Plugin = kernel.Define(row(nil))
-
-// New returns the readiness row. Its activations share whether the state of the tree
-// is unknown, so a restart of the row keeps the latch dropped. A binary makes one
-// value, which its module table holds.
-func New() kernel.Plugin { return kernel.Define(row(new(atomic.Bool))) }
-
-// row is the readiness row, which has no config. unknown, when not nil, outlives an
-// activation.
-func row(unknown *atomic.Bool) kernel.Plugin {
-	return kernel.Plugin{
+// New returns the readiness row, which has no config. Its activations share whether
+// the state of the tree is unknown, so a restart of the row keeps the latch dropped. A
+// binary makes one value, which its module table holds.
+func New() kernel.Plugin {
+	unknown := new(atomic.Bool)
+	return kernel.Define(kernel.Plugin{
 		ID: "aiops/readiness",
 		Inject: []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CatalogKey),
 			kernel.Need(launch.ReadyKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
 		Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Applied.Use(kernel.DefaultStage),
 			reload.Operation.Use(kernel.DefaultStage)},
-		Apply: func(c *kernel.Context, _ any) error {
-			u := unknown
-			if u == nil {
-				u = new(atomic.Bool)
-			}
-			return apply(c, u)
-		},
-	}
+		Apply: func(c *kernel.Context, _ any) error { return apply(c, unknown) },
+	})
 }
 
 func apply(c *kernel.Context, unknown *atomic.Bool) error {

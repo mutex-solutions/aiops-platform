@@ -123,7 +123,7 @@ func (w *world) wantReady(want bool) {
 
 func TestLatchFollowsTheRequiredSetOnStatusEvents(t *testing.T) {
 	w := newWorld(t)
-	f := w.root.Plugin(readiness.Plugin, nil)
+	f := w.root.Plugin(readiness.New(), nil)
 	if err := f.Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestLatchFollowsTheRequiredSetOnStatusEvents(t *testing.T) {
 
 func TestLatchFollowsCompositionApplied(t *testing.T) {
 	w := newWorld(t)
-	if err := w.root.Plugin(readiness.Plugin, nil).Await(t.Context()); err != nil {
+	if err := w.root.Plugin(readiness.New(), nil).Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	w.settle()
@@ -174,7 +174,7 @@ func TestLatchFollowsCompositionApplied(t *testing.T) {
 
 func TestLatchIsDroppedOnDisposal(t *testing.T) {
 	w := newWorld(t)
-	f := w.root.Plugin(readiness.Plugin, nil)
+	f := w.root.Plugin(readiness.New(), nil)
 	if err := f.Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestOverflowNoticeResyncs(t *testing.T) {
 	w := newWorld(t, kerneltest.WithConfig(func(c *kernel.Config) { c.ObserverQueue = queue }))
 	s := &stall{entered: make(chan struct{}), release: make(chan struct{})}
 	kerneltest.Mount(w.root, s.plugin())
-	if err := w.root.Plugin(readiness.Plugin, nil).Await(t.Context()); err != nil {
+	if err := w.root.Plugin(readiness.New(), nil).Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	for held := false; !held; { // make events until the dispatcher is held inside one
@@ -320,7 +320,7 @@ func TestSlowTreeReadDoesNotHoldTheDispatcher(t *testing.T) {
 	w.tree.held = make(chan struct{})
 	release := sync.OnceFunc(func() { close(w.tree.held) })
 	defer release()
-	if err := w.root.Plugin(readiness.Plugin, nil).Await(t.Context()); err != nil {
+	if err := w.root.Plugin(readiness.New(), nil).Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	w.tick()
@@ -372,9 +372,10 @@ func TestSealedHookNeedsAListenerEntry(t *testing.T) {
 			_, lp := launchfake.New()
 			_, cp := compfake.New()
 			_, rp := reloadfake.New()
+			p := readiness.New()
 			var l []kernel.Plugin
 			if listed {
-				l = append(l, readiness.Plugin)
+				l = append(l, p)
 			}
 			root := bound(t, lp, l...)
 			for _, p := range []kernel.Plugin{lp, cp, rp} {
@@ -382,7 +383,7 @@ func TestSealedHookNeedsAListenerEntry(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			err := root.Plugin(readiness.Plugin, nil).Await(t.Context())
+			err := root.Plugin(p, nil).Await(t.Context())
 			if listed && err != nil {
 				t.Errorf("listed: %v", err)
 			}

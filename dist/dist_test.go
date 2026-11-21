@@ -14,6 +14,14 @@ import (
 	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
+	compfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
+	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
 func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
@@ -222,5 +230,50 @@ func TestEntryReadsTheDeclarationsOfThePlugin(t *testing.T) {
 	}
 	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[0].Hook != "internal/status" || h[0].StageName != "default" {
 		t.Fatalf("hooks %+v", h)
+	}
+}
+
+// The readiness row of the module table keeps the latch dropped across a restart of the
+// row once reload said that the state of the tree is unknown (ADR-059 decision 23): its
+// activations share that knowledge.
+func TestReadinessRowKeepsAnUnknownStateAcrossARestart(t *testing.T) {
+	var p kernel.Plugin
+	for _, m := range Modules() {
+		if m.Plugin.ID == "aiops/readiness" {
+			p = m.Plugin
+		}
+	}
+	root := kerneltest.New(t)
+	l, lp := launchfake.New()
+	tree, cp := compfake.New()
+	r, rp := reloadfake.New()
+	l.Needed = launch.RequiredSet{Rows: []string{"db"}}
+	kerneltest.Mount(root, lp, cp, rp)
+	tree.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{{ID: "db", State: kernel.Active}}})
+	f := root.Plugin(p, nil)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	applied := func(g uint64) bool {
+		t.Helper()
+		if err := r.Publish(t.Context(), composition.Applied{Generation: g, Report: composition.Report{Pass: true}}); err != nil {
+			t.Fatal(err)
+		}
+		return l.IsReady()
+	}
+	if !applied(1) {
+		t.Fatal("not ready with the required set ACTIVE")
+	}
+	if err := r.Progress(t.Context(), reload.Result{ID: 1, Status: reload.RollbackFailed, Err: reload.ErrStateUnknown}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Update(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if applied(2) {
+		t.Fatal("ready after a restart of the row, with the state of the tree unknown")
 	}
 }
