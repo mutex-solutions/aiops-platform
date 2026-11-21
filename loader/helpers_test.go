@@ -359,6 +359,7 @@ type listener struct {
 	volatile []def.VolatileUpdateArgs
 	patches  []string
 	patch    func(a def.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error)
+	onInit   func(def.EntryInitArgs) // set before the listener mounts
 	plugin   kernel.Plugin
 }
 
@@ -371,6 +372,9 @@ func newListener(id string) *listener {
 				l.mu.Lock()
 				defer l.mu.Unlock()
 				l.inits = append(l.inits, a)
+				if l.onInit != nil {
+					l.onInit(a)
+				}
 				return nil, nil
 			})
 			def.VolatileUpdate.On(c, kernel.DefaultStage, func(_ context.Context, a def.VolatileUpdateArgs) (any, error) {

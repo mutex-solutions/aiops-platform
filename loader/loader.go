@@ -277,6 +277,11 @@ func (t *tree) forget(id string, c *kernel.Context) {
 
 func (t *tree) addPrev(id string, f *kernel.Fiber) { t.prev[id] = append(slices.Clone(t.prev[id]), f) }
 
+// disposing reports whether a previous fiber of id is not DISPOSED yet. Call with mu held.
+func (t *tree) disposing(ctx context.Context, id string) bool {
+	return slices.ContainsFunc(t.prev[id], func(f *kernel.Fiber) bool { return !gone(ctx, f) })
+}
+
 // mountUnder mounts, from c, every entry that is to be mounted under parent: the
 // loader's own activation for "" and a group's for its id. It runs in the Apply of
 // that fiber, so it uses Context.Plugin. Each child is an effect of c, so the
@@ -297,7 +302,9 @@ func (t *tree) mountUnder(c *kernel.Context, parent string) {
 	}
 	var specs []def.EntrySpec
 	for _, id := range t.order {
-		if e := t.entries[id]; e.spec.Parent == parent && t.mount(e) == def.Mounted {
+		// An entry whose previous fiber is not DISPOSED is not created: the plan that
+		// retired that fiber mounts it after its wait (07-c4-plugin-sdk.md:341; Apply).
+		if e := t.entries[id]; e.spec.Parent == parent && t.mount(e) == def.Mounted && !t.disposing(c.Std(), id) {
 			e.claim = c
 			specs = append(specs, e.spec)
 		}

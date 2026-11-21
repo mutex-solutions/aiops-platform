@@ -460,6 +460,45 @@ func TestNeverCreatesWhileThePreviousFiberIsNotDisposed(t *testing.T) {
 		}
 	})
 
+	// A group that activates while the previous fiber of an entry beneath it disposes
+	// does not mount the entry: the plan does, after its wait. Here the id moves from
+	// the top level into a group that the plan creates.
+	t.Run("a group that activates meanwhile", func(t *testing.T) {
+		g := newSlowGate()
+		l := newListener("t/listener")
+		activated := make(chan struct{})
+		l.onInit = func(a def.EntryInitArgs) {
+			if a.Entry.ID == "g" {
+				close(activated)
+			}
+		}
+		x := newFx(t, fxOpt{plugins: plugins(g.plugin()), pre: []kernel.Plugin{l.plugin}, rows: []def.EntrySpec{row("s", "t/slow")}})
+		under := row("s", "t/slow")
+		under.Parent = "g"
+		var wg sync.WaitGroup
+		var res []def.Result
+		var err error
+		wg.Go(func() { res, err = x.ld.Apply(t.Context(), []def.Op{remove("s"), create(group("g")), create(under)}) })
+		<-g.entered
+		<-activated
+		x.want("g", kernel.Active) // its activation has mounted what it mounts
+		st := x.state("s")
+		close(g.release)
+		wg.Wait()
+		if st != kernel.Pending || g.overlap.Load() {
+			t.Errorf("while the old fiber disposes: s is %s, overlap %v", st, g.overlap.Load())
+		}
+		want := []def.Result{{ID: "s", Outcome: def.Removed}, {ID: "g", Outcome: def.Created}, {ID: "s", Outcome: def.Created}}
+		if err != nil || !slices.Equal(res, want) {
+			t.Fatalf("Apply = %v, %v", res, err)
+		}
+		x.settle()
+		x.want("s", kernel.Active)
+		if g.overlap.Load() || g.applies.Load() != 2 || x.fibers("t/slow") != 1 {
+			t.Errorf("overlap %v, applies %d, live %d", g.overlap.Load(), g.applies.Load(), x.fibers("t/slow"))
+		}
+	})
+
 	t.Run("a previous fiber that does not dispose is refused", func(t *testing.T) {
 		p := newProbe()
 		x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/a", nil)), rows: []def.EntrySpec{row("a", "t/a")}})
