@@ -731,6 +731,39 @@ func TestRunSettleBound(t *testing.T) {
 	}
 }
 
+// A row whose Apply overruns its load deadline is UNLOADING when Settle returns; its
+// disposer then hangs past the dispose deadline and the fiber leaks, which the kernel
+// reports with a deadline event and no change of state. The leak ends boot's wait for
+// the unloads at once: on the launcher's clock, which never fires here, the bound of
+// that wait never ends, so boot would never leave starting.
+func TestRunLeakEndsTheUnloadWaitOfBoot(t *testing.T) {
+	release := make(chan struct{})
+	hang := toy(toySpec{id: "t/hang", apply: func(c *kernel.Context, _ any) error {
+		c.Defer("hang", func(context.Context) error { <-release; return nil })
+		<-c.Std().Done() // the kernel cancels it at the load deadline
+		return c.Std().Err()
+	}})
+	f := newFixture(t, happyBundle+"    - {id: hang, plugin: t/hang, roles: [api]}\n", hang)
+	f.opt.Limits.LoadDeadline, f.opt.Limits.DisposeDeadline = 30*time.Millisecond, 300*time.Millisecond
+	f.opt.Limits.LeakGrace = 7 * time.Millisecond
+	f.opt.Clock = f.clock
+	done := f.start(t.Context())
+	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Phase != PhaseStarting })
+	if s := f.lastStatus(); s.Ready {
+		t.Errorf("ready after a leak that boot saw: %+v", s)
+	}
+	for d := range f.clock.armed { // the grace timer is armed
+		if d == 7*time.Millisecond {
+			break
+		}
+	}
+	f.clock.fire(7 * time.Millisecond)
+	close(release)
+	if code := <-done; code != ExitLeak {
+		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())
+	}
+}
+
 // Once a fiber leaked, readiness stays down until the process is replaced: the readiness
 // row sets the latch on its next event, and the latch does not come back (ADR-059 decision 13).
 func TestRunReadinessStaysDownAfterALeak(t *testing.T) {

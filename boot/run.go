@@ -527,11 +527,13 @@ func (r *run) resync(ctx context.Context) error {
 	return errors.Join(werr, err)
 }
 
-// leak records the first leak for the log and pings the run loop.
+// leak records the first leak for the log and pings the run loop. A leak changes no
+// state, so it also wakes boot's wait for the unloads, which a leaked fiber ends.
 func (r *run) leak(why string) {
 	r.leakWhy.CompareAndSwap(nil, &why)
 	r.leakSeen.Store(true)
 	ping(r.leakPing)
+	ping(r.moved)
 }
 
 func ping(c chan struct{}) {
