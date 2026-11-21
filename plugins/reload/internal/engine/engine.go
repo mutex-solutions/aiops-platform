@@ -387,7 +387,7 @@ func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 			return fmt.Errorf("%w: row %q is replaced, as its plugin, inject, isolate or intercept changes", errSelf, o.ID)
 		case slices.Contains(p.Closure, o.ID) && (!changed[o.ID] || e.gatedOn(n, p.Closure, next)):
 			return fmt.Errorf("%w: row %q restarts through its group or a provider it needs", errSelf, o.ID)
-		case changed[o.ID] && holdsRef(n.Config) && !reflect.DeepEqual(n.Config, o.Config):
+		case changed[o.ID] && loader.HoldsRef(n.Config) && !reflect.DeepEqual(n.Config, o.Config):
 			return fmt.Errorf("%w: row %q", errSelfRef, o.ID)
 		}
 	}
@@ -408,23 +408,6 @@ func (e *Engine) gatedOn(r launch.Row, closure []string, rows map[string]launch.
 		if slices.Contains(closure, g.ID) {
 			return true
 		}
-	}
-	return false
-}
-
-// holdsRef reports whether a config value is a reference or holds one.
-func holdsRef(v any) bool {
-	switch x := v.(type) {
-	case launch.Ref:
-		return true
-	case map[string]any:
-		for _, y := range x {
-			if holdsRef(y) {
-				return true
-			}
-		}
-	case []any:
-		return slices.ContainsFunc(x, holdsRef)
 	}
 	return false
 }
