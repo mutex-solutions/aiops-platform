@@ -243,6 +243,25 @@ func TestDecision37LeavesItsPointsOpen(t *testing.T) {
 	}
 }
 
+// TestLimitsFilesCiteTheirDecisions: decision 30 makes the release limits the defaults
+// for now and decision 39 confirms the test limits, so the comment of each limits file
+// cites its decision and calls its values an open point no longer.
+func TestLimitsFilesCiteTheirDecisions(t *testing.T) {
+	for file, d := range map[string]string{"dist/limits.yaml": "ADR-059 decision 30", "test/dist/limits.yaml": "ADR-059 decision 39"} {
+		data, err := os.ReadFile(filepath.Join("../..", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var text string
+		for _, p := range paragraphs(file, strings.Split(string(data), "\n")) {
+			text += " " + p.text
+		}
+		if !strings.Contains(text, d) || strings.Contains(text, "open point") {
+			t.Errorf("%s: its comment must cite %s and call nothing an open point: %q", file, d, text)
+		}
+	}
+}
+
 type paragraph struct {
 	line int
 	text string
