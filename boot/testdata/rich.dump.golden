@@ -46,7 +46,7 @@ row iso plugin=o/open enabled=true required=false group=false roles=-
 
 ## required set
 rows prov
-keys pk
+keys configRefsReady, pk
 closure prov
 
 ## providers
@@ -71,5 +71,6 @@ warning: row "missing" is inactive: plugin "x/none" is not in the module table (
 error: static graph: gate check 7 (Key and hook classes), rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
 warning: row "rogue" detached as disabled: gate check 7 (Key and hook classes), rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
 error: static graph: two-providers: rows "grp:c1", "grp:c2" all provide key "ok" in the realm of row "grp"; one provider per key per realm
+error: static graph: no-provider: row "kinds" needs key "configRefsReady", which has no provider in the root realm, and the row or the key is required
 error: static graph: no-provider: row "prov" needs key "configRefsReady", which has no provider in the root realm, and the row or the key is required
-warning: static graph: no-provider: 1 optional rows would be PENDING: "kinds" waits for configRefsReady
+error: required set: required-key: required key "configRefsReady" has no provider among the active rows

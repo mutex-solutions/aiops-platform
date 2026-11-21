@@ -143,9 +143,8 @@ func TestUnresolvedReference(t *testing.T) {
     - {id: refs, plugin: aiops/config-refs, roles: [api]}
     - {id: user, plugin: t/rec, roles: [api], config: {token: "${secret:x}"}`+tc.required+`}
 `, fakeRefs(entered, gate), recorder("t/rec", got))
-			// A required row that holds a reference needs config-refs in the required set
-			// (08-profiles-roadmap-adrs.md:503), here by its key.
-			f.dist.RequiredKeys = []string{configRefsReady}
+			// A required row that holds a reference pulls config-refs into the required set
+			// (ADR-059 decision 18): the distribution does not list it.
 			if tc.code < 0 {
 				done := f.start(t.Context())
 				f.waitReady(t, done)

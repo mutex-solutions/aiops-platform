@@ -17,7 +17,7 @@ sealedHooks:
   internal/config: [aiops/config-refs]
 # toy.spine is required because toy.store is: the provider of a required key must not
 # need a provider outside the required set (08-profiles-roadmap-adrs.md:503).
-# configRefsReady is required because the matrix marks a row that holds a reference
-# required, and that row needs config-refs (ADR-059, "configRefsReady").
-requiredKeys: [clock, configRefsReady, toy.spine, toy.store]
+# configRefsReady is not listed, as in the release manifest: the launcher adds it where a
+# required row holds a reference (ADR-059 decision 18).
+requiredKeys: [clock, toy.spine, toy.store]
 requiredRows: [loader, restart-policy, reload, readiness]

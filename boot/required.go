@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -53,7 +54,9 @@ type RequiredSet struct {
 // set applies to the rows that role runs (08-profiles-roadmap-adrs.md:459): a
 // required row of another role drops out, and so does a required key whose
 // providers in the composition all run in another role. A key with no provider
-// row at all stays, and the audit reports it.
+// row at all stays, and the audit reports it. When a required row of the role holds a
+// reference, the launcher adds the config-refs rows of the role and configRefsReady
+// to the set (ADR-059 decision 18): the row is applied only while config-refs is.
 func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Role) RequiredSet {
 	in := RoleFilter(roles)
 	rows := map[string]bool{}
@@ -70,8 +73,17 @@ func RequiredFor(c Composition, mods ModuleTable, dist DistManifest, roles []Rol
 			delete(rows, r.ID)
 		}
 	}
+	want := dist.RequiredKeys
+	if slices.ContainsFunc(c.Rows, func(r ComposedRow) bool { return rows[r.ID] && len(r.Refs) > 0 && r.Plugin != ConfigRefsID }) {
+		want = union(want, []string{configRefsReady})
+		for _, r := range c.Rows {
+			if r.Plugin == ConfigRefsID && in(r.Row) {
+				rows[r.ID] = true
+			}
+		}
+	}
 	keys := []string{}
-	for _, k := range dist.RequiredKeys {
+	for _, k := range want {
 		providers, local := 0, 0
 		for _, r := range c.Rows {
 			if inSet(k, mods[r.Plugin].Provides...) {
@@ -134,7 +146,9 @@ func RequiredClosure(g Graph, set RequiredSet) []string {
 // the static need closure of the required set must hold no provider outside
 // it, which is the last clause of gate check 7 (08-profiles-roadmap-adrs.md:503).
 // A provider is inside the required set when its row is required or it provides
-// a required key; the edge from a child to its group is not a need.
+// a required key; the edge from a child to its group is not a need, and neither is
+// the need of configRefsReady, which RequiredFor adds where a required row holds a
+// reference (ADR-059 decision 18).
 func AuditStatic(c Composition, mods ModuleTable, dist DistManifest, g Graph, roles []Role) []StaticError {
 	set := RequiredFor(c, mods, dist, roles)
 	var errs []StaticError
@@ -172,7 +186,7 @@ func AuditStatic(c Composition, mods ModuleTable, dist DistManifest, g Graph, ro
 	}
 	closure := RequiredClosure(g, set)
 	for _, e := range g.Edges {
-		if e.Key == "" || inside[e.To] || !inSet(e.From, closure...) || inSet(e.Key, observability()...) {
+		if e.Key == "" || e.Key == configRefsReady || inside[e.To] || !inSet(e.From, closure...) || inSet(e.Key, observability()...) {
 			continue
 		}
 		errs = append(errs, StaticError{Stage: "required set", Rule: RuleRequiredClosure, Rows: []string{e.From, e.To}, Keys: []string{e.Key},

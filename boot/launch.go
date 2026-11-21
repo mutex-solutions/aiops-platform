@@ -27,10 +27,11 @@ const ConfigRefsID = "aiops/config-refs"
 // internal/config (ADR-059, "configRefsReady"). Every row whose config holds a reference has
 // it as a row-level inject (refsInject), so no such row is applied before its
 // references can resolve, and each unloads in the owner turn in which config-refs
-// quiesces. The static graph sees the same need, so a required row with a reference
-// needs config-refs in the required set, and the restart closure of config-refs holds
-// the rows with references. With no config-refs in the module table the catalog still
-// has the key, which nothing provides, so such a row stays PENDING.
+// quiesces. The static graph sees the same need: the restart closure of config-refs
+// holds the rows with references, and where a required row holds one the launcher adds
+// config-refs and the key to the required set (RequiredFor; ADR-059 decision 18). With
+// no config-refs in the module table the catalog still has the key, which nothing
+// provides, so such a row stays PENDING.
 const configRefsReady = "configRefsReady"
 
 // rootKeyNames are the keys that the root provides: the six launch keys and the four

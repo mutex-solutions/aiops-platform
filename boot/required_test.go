@@ -13,6 +13,7 @@ o/svc: {provides: [svc], needs: [auth]}
 o/extra: {provides: [extra]}
 o/uses-extra: {needs: [extra, sql]}
 o/web: {needs: [svc]}
+aiops/config-refs: {provides: [configRefsReady]}
 `
 
 func TestRequiredFor(t *testing.T) {
@@ -66,6 +67,19 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a key of a private realm does not serve the process",
 			bundle: rows("id: g, plugin: core:group, isolate: [sql], config: [{id: sql, plugin: o/sql}]"),
 			dist:   "requiredKeys: [sql]", want: []string{"required-key  sql"}},
+		// A required row that holds a reference pulls config-refs into the set, by its key
+		// and its rows (ADR-059 decision 18); with no config-refs row the key is unmet.
+		{name: "a required row with a reference pulls config-refs in",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a required row with a reference and no config-refs row",
+			bundle: rows("id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			want:   []string{"required-key  configRefsReady"}, closed: "u"},
+		// The need of configRefsReady is exempt from the closure clause: config-refs is the
+		// launcher's to require, and an optional provider that holds a reference waits for it.
+		{name: "a provider of a required key that holds a reference",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", closed: "refs,sql"},
 		{name: "role drops a row and a key that run elsewhere",
 			bundle: rows("id: loader, plugin: o/loader, roles: [worker], required: true", "id: sql, plugin: o/sql, roles: [worker]"),
 			dist:   "requiredKeys: [sql]", roles: []Role{RoleAPI}},
