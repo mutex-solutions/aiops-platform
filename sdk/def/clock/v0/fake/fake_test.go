@@ -155,6 +155,39 @@ func TestTimerLeavesWithItsFiber(t *testing.T) {
 	}
 }
 
+// The stop of a timer is recorded by the scope's setup, which the kernel never runs for
+// an activation that quiesced first: an Apply that starts a timer and then fails. Such
+// a timer is not pending and never fires.
+func TestTimerOfAFailedApplyNeverFires(t *testing.T) {
+	f, provider := fake.New(t0)
+	var timer clock.Timer
+	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
+		var err error
+		if timer, err = clock.Key.Of(c).After(c, time.Minute); err != nil {
+			return err
+		}
+		return errors.New("boom")
+	}})
+	root := kerneltest.New(t)
+	kerneltest.Mount(root, provider)
+	fib := root.Plugin(consumer, nil)
+	if err := fib.Await(t.Context()); err == nil {
+		t.Fatal("the Apply did not fail")
+	}
+	if err := fib.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	_ = fib.Await(t.Context())   // Dispose does not wait; Await reports the failure
+	_ = root.Settle(t.Context()) // it reports the failure
+	if f.Pending() != 0 {
+		t.Fatalf("Pending = %d after the fiber that started the timer failed and was disposed", f.Pending())
+	}
+	f.Advance(time.Hour)
+	if _, ok := fired(timer); ok {
+		t.Fatal("the timer of a failed and disposed fiber fired")
+	}
+}
+
 // A timer that fires or is stopped leaves its fiber's effect ledger, so a fiber that
 // starts one timer after another holds only those still pending.
 func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {

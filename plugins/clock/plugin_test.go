@@ -76,8 +76,8 @@ func TestTimersStopWithTheirFiber(t *testing.T) {
 	if len(labels) != 1 || labels[0] != "clock timer" {
 		t.Errorf("effects of the caller = %v, want the one timer", labels)
 	}
-	// The stop is recorded by the scope's setup on the fiber's lane; a fiber that
-	// quiesced before it ran would leave its timer to run out (see After).
+	// The stop is recorded by the scope's setup on the fiber's lane; the timer of a
+	// fiber that quiesced before it ran is dropped (see After).
 	if err := root.Settle(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +96,41 @@ func TestTimersStopWithTheirFiber(t *testing.T) {
 	}
 	if _, err := gone.clk.After(gone.c, time.Hour); !errors.Is(err, kernel.ErrInactiveEffect) {
 		t.Errorf("After on a disposed fiber = %v, want ErrInactiveEffect", err)
+	}
+}
+
+// The stop of a timer is recorded by the scope's setup, which the kernel never runs for
+// an activation that quiesced first: an Apply that starts a timer and then fails. The
+// row drops such a timer at its next pass, so it never fires.
+func TestTimerOfAFailedApplyIsDropped(t *testing.T) {
+	root := kerneltest.New(t)
+	var live holder
+	kerneltest.Mount(root, clock.Plugin, live.plugin("aiops/live"))
+	var dead def.Timer
+	f := root.Plugin(kernel.Define(kernel.Plugin{ID: "aiops/dead", Inject: []kernel.Dep{kernel.Need(def.Key)},
+		Apply: func(c *kernel.Context, _ any) error {
+			var err error
+			if dead, err = def.Key.Of(c).After(c, time.Hour); err != nil {
+				return err
+			}
+			return errors.New("boom")
+		}}), nil)
+	if err := f.Await(t.Context()); err == nil {
+		t.Fatal("the Apply did not fail")
+	}
+	_ = root.Settle(t.Context()) // it reports the failure
+	// A pass of the row that begins after the scope was sealed.
+	tm, err := live.clk.After(live.c, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-tm.C():
+	case <-t.Context().Done():
+		t.Fatal("a zero timer did not fire")
+	}
+	if dead.Stop() {
+		t.Error("the timer of a failed Apply is still pending")
 	}
 }
 

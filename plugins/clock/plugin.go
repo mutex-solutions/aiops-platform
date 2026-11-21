@@ -9,6 +9,7 @@ package clock
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -45,7 +46,7 @@ func (*system) Now() time.Time { return time.Now() }
 // its timer stopped, then starts the timer. The scope is withdrawn when the timer
 // fires or is stopped, so the ledger holds the pending timers only. The kernel runs
 // the scope's setup on the fiber's lane after After returns; a fiber that quiesces
-// before that never records the stop, and its timer runs out unread.
+// before that never records the stop, and the row drops its timer at its next pass.
 func (s *system) After(c *kernel.Context, d time.Duration) (def.Timer, error) {
 	t := &timer{s: s, at: time.Now().Add(d), ch: make(chan time.Time, 1)}
 	h, err := c.RequestEffectScope("clock timer", func(es *kernel.EffectScope) error {
@@ -96,6 +97,9 @@ func (s *system) fire(now time.Time) (next time.Time, ok bool) {
 	s.mu.Lock()
 	var due []*timer
 	s.pending = slices.DeleteFunc(s.pending, func(t *timer) bool {
+		if sealed(t.h) {
+			return true // dropped: no one waits for it
+		}
 		if t.at.After(now) {
 			if !ok || t.at.Before(next) {
 				next, ok = t.at, true
@@ -111,6 +115,14 @@ func (s *system) fire(now time.Time) (next time.Time, ok bool) {
 		t.ch <- now
 	}
 	return next, ok
+}
+
+// sealed reports whether the kernel sealed the scope h without running its setup: the
+// fiber that asked for the timer quiesced first, so its stop was never recorded.
+func sealed(h *kernel.EffectHandle) bool {
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	return errors.Is(h.AwaitSetup(ended), kernel.ErrInactiveEffect)
 }
 
 type timer struct {

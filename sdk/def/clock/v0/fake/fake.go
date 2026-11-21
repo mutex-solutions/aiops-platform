@@ -8,6 +8,7 @@ package fake
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -45,7 +46,9 @@ func (f *Clock) Now() time.Time {
 }
 
 // After starts a timer and records its stop as an effect scope of c's fiber, which
-// is withdrawn when the timer fires or is stopped, as the clock row does.
+// is withdrawn when the timer fires or is stopped, as the clock row does. The kernel
+// runs the scope's setup on the fiber's lane, and never for an activation that
+// quiesced first: such a timer is dropped, as the clock row drops it.
 func (f *Clock) After(c *kernel.Context, d time.Duration) (clock.Timer, error) {
 	t := f.start(d)
 	h, err := c.RequestEffectScope("clock timer", func(s *kernel.EffectScope) error {
@@ -92,6 +95,7 @@ func (f *Clock) Advance(d time.Duration) {
 func (f *Clock) advance(d time.Duration) (fired []*kernel.EffectHandle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.prune()
 	target := f.now.Add(d)
 	for {
 		next := -1
@@ -124,7 +128,21 @@ func (f *Clock) advance(d time.Duration) (fired []*kernel.EffectHandle) {
 func (f *Clock) Pending() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.prune()
 	return len(f.pending)
+}
+
+// prune drops the timers whose stop was never recorded. f.mu is held.
+func (f *Clock) prune() {
+	f.pending = slices.DeleteFunc(f.pending, func(t *timer) bool { return sealed(t.h) })
+}
+
+// sealed reports whether the kernel sealed the scope h without running its setup: the
+// fiber that asked for the timer quiesced first, so no one waits for it.
+func sealed(h *kernel.EffectHandle) bool {
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	return errors.Is(h.AwaitSetup(ended), kernel.ErrInactiveEffect)
 }
 
 type timer struct {
