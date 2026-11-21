@@ -31,7 +31,8 @@ var (
 	ErrEventsTruncated = errEventsTruncated
 	// ErrObserverOverflow matches the error of an observer that was detached because
 	// it stalled the dispatcher past Config.ObserverQueue (ADR-034, "2026-11-19
-	// bounded observer queue and overflow rule").
+	// bounded observer queue and overflow rule"), or because it delivered nothing for
+	// Config.DrainDeadline while Close waited for delivery (ObserverOverflow.Stall).
 	ErrObserverOverflow = errObserverOverflow
 	// ErrReentrant is returned by AwaitObservers when it is called with the context
 	// of an observer callback: a callback must not join its own dispatcher.
@@ -39,8 +40,8 @@ var (
 )
 
 // ObserverOverflow describes one observer detached for overflow: its label, the
-// events it lost, the last sequence addressed to it and the bound that was reached.
-// It matches ErrObserverOverflow.
+// events it lost, the last sequence addressed to it and the bound that was reached,
+// or the stall of Close that detached it. It matches ErrObserverOverflow.
 type ObserverOverflow = overflowError
 
 // ObserverStatus is a synchronized diagnostic snapshot of the observer dispatcher.

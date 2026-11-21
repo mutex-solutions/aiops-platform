@@ -450,8 +450,8 @@ func TestCloseIsBoundedBehindAStuckKernelEventListener(t *testing.T) {
 	if strings.Contains(cerr.Error(), "fiber 0 drain deadline") {
 		t.Fatalf("Close marked the root leaked for a plugin's listener: %v", cerr)
 	}
-	if st := r.ObserverStatus(); st.Overflowed != 1 {
-		t.Fatalf("the stuck relay was not detached: %+v", st)
+	if st := r.ObserverStatus(); st.Overflowed != 1 || !strings.Contains(st.LastOverflow, "delivered nothing for 50ms while Close waited") {
+		t.Fatalf("the stuck relay was not detached by the stall rule: %+v", st)
 	}
 	unstall.Do(func() { close(release) })
 	select {

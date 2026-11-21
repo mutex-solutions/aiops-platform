@@ -84,17 +84,22 @@ type observerFunc func(context.Context, ledgerEvent) error
 type overflowHandler func(context.Context, *overflowError) error
 
 // overflowError describes one observer detached because the backlog reached its
-// bound while the worker was inside that observer.
+// bound while the worker was inside that observer, or, when Stall is set, because
+// it delivered nothing for Stall while Close waited for delivery (stallBarrier).
 type overflowError struct {
 	Label   string
-	Lost    uint64 // Events captured for the observer that it will never receive.
-	Through uint64 // Last sequence addressed to the observer; nothing after it is.
-	Limit   int    // The backlog bound that was reached.
+	Lost    uint64        // Events captured for the observer that it will never receive.
+	Through uint64        // Last sequence addressed to the observer; nothing after it is.
+	Limit   int           // The backlog bound that was reached; 0 for a stall.
+	Stall   time.Duration // The stall of Close that detached it; 0 for an overflow.
 }
 
 func (e *overflowError) Error() string {
-	return fmt.Sprintf("observer %q overflowed the backlog bound of %d events: %d events lost through sequence %d, observer detached",
-		e.Label, e.Limit, e.Lost, e.Through)
+	cause := fmt.Sprintf("overflowed the backlog bound of %d events", e.Limit)
+	if e.Stall != 0 {
+		cause = fmt.Sprintf("delivered nothing for %v while Close waited", e.Stall)
+	}
+	return fmt.Sprintf("observer %q %s: %d events lost through sequence %d, observer detached", e.Label, cause, e.Lost, e.Through)
 }
 
 func (e *overflowError) Unwrap() error { return errObserverOverflow }
@@ -120,6 +125,7 @@ type registration struct {
 	lost       uint64
 	overflowed bool
 	notified   bool
+	failure    *overflowError // Its detachment, once overflowed.
 }
 
 type envelope struct {
@@ -140,7 +146,8 @@ type envelope struct {
 // is detached. PeakBacklog is the most undelivered events ever seen, for sizing
 // and verifying the bound. Overflowed counts detached observers, EventsLost the
 // events they were denied, Orphaned the detached observers' goroutines still
-// inside a callback, and LastOverflow the text of the latest overflow.
+// inside a callback, and LastOverflow the text of the latest detachment, which
+// names its cause: the backlog bound or the stall of Close.
 type observerStatus struct {
 	Accepted          uint64
 	Delivered         uint64
@@ -359,7 +366,7 @@ func (d *dispatcher) append(sequence uint64, event ledgerEvent) error {
 		return errSequenceGap
 	}
 	if d.limit > 0 && d.backlogLocked() >= uint64(d.limit) {
-		d.overflowLocked()
+		d.overflowLocked(0)
 	}
 	d.queue = append(d.queue, envelope{sequence: sequence, event: event, listeners: d.listeners})
 	d.status.Accepted = sequence
@@ -380,8 +387,9 @@ func (d *dispatcher) backlogLocked() uint64 {
 // overflowLocked detaches the observer the worker is inside and hands the worker
 // role to a new goroutine, which resumes the same event at the next listener. If
 // the worker is not inside any listener nothing can be blamed and nothing
-// changes; the next append asks again.
-func (d *dispatcher) overflowLocked() {
+// changes; the next append asks again. A nonzero stall is the stall rule of Close
+// detaching it, not the backlog bound.
+func (d *dispatcher) overflowLocked(stall time.Duration) {
 	l := d.running
 	if l == nil || l.overflowed {
 		return
@@ -393,7 +401,11 @@ func (d *dispatcher) overflowLocked() {
 			l.lost = captured - l.handled
 		}
 	}
-	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit}
+	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit, Stall: stall}
+	if stall != 0 {
+		failure.Limit = 0
+	}
+	l.failure = failure
 	d.status.Overflowed++
 	d.status.EventsLost += l.lost
 	d.status.LastOverflow = failure.Error()
@@ -451,7 +463,7 @@ func (d *dispatcher) stallBarrier(ctx context.Context, stall time.Duration) erro
 		}
 		d.mu.Lock()
 		if d.status.Delivered == delivered {
-			d.overflowLocked()
+			d.overflowLocked(stall)
 		}
 		d.mu.Unlock()
 	}
@@ -690,9 +702,9 @@ func (d *dispatcher) terminal(l *registration) {
 		return
 	}
 	l.notified = true
-	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit}
+	failure := *l.failure
 	d.mu.Unlock()
-	if err := invokeTerminal(d.callback, l, handler, failure); err != nil {
+	if err := invokeTerminal(d.callback, l, handler, &failure); err != nil {
 		d.report(failure.Through, l.label, err)
 	}
 }

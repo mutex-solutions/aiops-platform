@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -169,6 +170,52 @@ func TestOverflowDetachesOnlyTheStalledObserver(t *testing.T) {
 	if retained {
 		t.Fatal("queue storage retained after drain")
 	}
+}
+
+// A detach by the stall rule of Close is no overflow: the backlog is far below its
+// bound. The error, the terminal signal, the status and the log say that the
+// observer delivered nothing for the stall, and name no bound (ADR-034 G11).
+func TestStallDetachIsReportedAsAStall(t *testing.T) {
+	ctx := testCtx(t)
+	var mu sync.Mutex
+	var logged []string
+	d := newDispatcher(func(err error) { mu.Lock(); logged = append(logged, err.Error()); mu.Unlock() }, dispatcherOptions{Backlog: 1 << 16})
+	s := addStalled(t, d, &stubOwner{}, "stuck")
+	appendRange(t, d, 1, 1)
+	receive(t, ctx, s.started, "stalled start")
+	if err := d.stallBarrier(ctx, 10*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	stalled := func(what, text string) {
+		t.Helper()
+		if !strings.Contains(text, `observer "stuck" delivered nothing for 10ms`) || strings.Contains(text, "backlog bound") {
+			t.Fatalf("%s reports the stall as %q", what, text)
+		}
+	}
+	var o *overflowError
+	if err := d.overflowErr(); !errors.As(err, &o) || o.Limit != 0 || o.Stall != 10*time.Millisecond || !errors.Is(err, ErrObserverOverflow) {
+		t.Fatalf("overflowErr = %v (%+v)", err, o)
+	}
+	stalled("the error", o.Error())
+	if st := d.snapshot(); st.Overflowed != 1 {
+		t.Fatalf("status %+v, want one detachment", st)
+	}
+	stalled("the status", d.snapshot().LastOverflow)
+	s.release()
+	note := receive(t, ctx, s.notes, "terminal signal")
+	stalled("the terminal signal", note.Error())
+	if *note != *o || note == o {
+		t.Fatalf("terminal signal %+v, want a copy of %+v", note, o)
+	}
+	if err := d.close(ctx); !errors.Is(err, ErrObserverOverflow) {
+		t.Fatalf("close = %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(logged) != 1 {
+		t.Fatalf("logged %q", logged)
+	}
+	stalled("the log", logged[0])
 }
 
 func TestSlowProgressingObserverBelowTheBoundLosesNothing(t *testing.T) {

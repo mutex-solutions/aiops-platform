@@ -1345,7 +1345,14 @@ nothing for one drain deadline (a listener of a kernel event stuck in the relay,
 is detached by the overflow rule, so the wait is bounded even when the context of
 `Close` never ends. An event for an observer that was detached is counted in
 `ObserverStatus.EventsLost`, and one still waiting when the context of `Close` ends
-is in `Remaining`. Observers registered on
+is in `Remaining`. Such a detachment says that the stall caused it, not the backlog
+bound: its `ObserverOverflow` (in `Close`'s error, the terminal signal and
+`Config.ObserverLog`) has `Stall` set to the drain deadline and `Limit` 0, its text
+says that the observer delivered nothing for that long while `Close` waited, and so
+does `ObserverStatus.LastOverflow`. It is still counted in `Overflowed`, which counts
+every detached observer, and matches `ErrObserverOverflow`, the error of every
+detachment. (Until the second S1 review it was reported as an overflow of a backlog
+bound that was never reached.) Observers registered on
 a fiber's own handle by a test keep the old rule.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
