@@ -920,8 +920,8 @@ func TestReloadRowChangeOfAFailedRollbackIsNeverApplied(t *testing.T) {
 // the closure, not of the plan). The kernel keeps it FAILED until something updates it,
 // so the rollback restarts it with the restored provider (loader.OpRestart), and the
 // rollback passes: the state of the tree stays known (08-profiles-roadmap-adrs.md §1.6, a
-// live Apply error is rolled back). A row that the inverse plan already updates is not
-// restarted as well.
+// live Apply error is rolled back). A row whose update in the inverse plan restarts it
+// is not restarted as well.
 func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
 	s := newScript()
 	w := newScripted(t, s, nil, row("p", "aiops/p", "old"), row("c", "aiops/p", nil), row("q", "aiops/p", "old"))
@@ -958,6 +958,81 @@ func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
 	}
 	if _, err := w.svc.Submit(t.Context(), def.Op{Source: "next"}); err != nil {
 		t.Errorf("Submit after a rollback that passed = %v", err)
+	}
+}
+
+// A row that was ACTIVE before the generation and FAILED in it is restarted by the
+// rollback even when the inverse plan updates it, if that update restarts nothing: its
+// only change is one the loader does not see (required, roles, a group's config), so the
+// loader leaves the FAILED fiber FAILED (loader.Loader.Update). The rollback restarts it
+// with loader.OpRestart and passes, and the state of the tree stays known (ADR-059
+// decisions 12 and 19; 08-profiles-roadmap-adrs.md §1.6). The case "dependant" is such a
+// row that failed when the generation restarted its provider. A row whose update the
+// loader replaces ("plugin") gets a new fiber from it and is not restarted as well.
+func TestRollbackRestartsARowWhoseInverseUpdateRestartsNothing(t *testing.T) {
+	x := row("x", "aiops/p", nil)
+	x.Roles = []string{"api"}
+	for _, tc := range []struct {
+		name     string
+		from     []launch.Row
+		to       func(rows []launch.Row) // changes the candidate's copy of from
+		closure  []string
+		restarts []string // the updates of the rollback that the real loader restarts
+		want     []string // the rollback's operations, sorted
+	}{
+		{"required", []launch.Row{x}, func(r []launch.Row) { r[0].Required = true }, nil, nil,
+			[]string{"restart x", "update x"}},
+		{"roles", []launch.Row{x}, func(r []launch.Row) { r[0].Roles = []string{"api", "worker"} }, nil, nil,
+			[]string{"restart x", "update x"}},
+		{"group config", []launch.Row{row("x", loader.GroupPlugin, nil)}, func(r []launch.Row) { r[0].Config = "b" }, nil, nil,
+			[]string{"restart x", "update x"}},
+		{"dependant", []launch.Row{row("p", "aiops/p", "old"), x}, func(r []launch.Row) { r[0].Config, r[1].Required = "new", true },
+			[]string{"p", "x"}, []string{"p"}, []string{"restart x", "update p", "update x"}},
+		{"plugin", []launch.Row{x}, func(r []launch.Row) { r[0].Plugin = "aiops/q" }, nil, []string{"x"},
+			[]string{"update x"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, tc.from...)
+			to := slices.Clone(tc.from)
+			tc.to(to)
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: to}
+			w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+				p := launch.Plan{From: f.Digest, To: to.Digest, Closure: tc.closure}
+				for i, r := range to.Rows { // as boot.Diff: any field of the row changed
+					a := launch.ActionUnchanged
+					if fmt.Sprint(r) != fmt.Sprint(f.Rows[i]) {
+						a = launch.ActionUpdate
+					}
+					p.Entries = append(p.Entries, launch.PlanEntry{ID: r.ID, Action: a})
+				}
+				return p, nil
+			}
+			var rollback []string
+			s.onApply = func(_ context.Context, n int, ops []loader.Op) error {
+				if n == 1 {
+					s.set("x", kernel.Failed) // x failed in the generation
+					return nil
+				}
+				for _, op := range ops {
+					rollback = append(rollback, string(op.Kind)+" "+op.Entry.ID)
+					if op.Kind == loader.OpRestart || slices.Contains(tc.restarts, op.Entry.ID) {
+						s.set(op.Entry.ID, kernel.Active) // restarted with the previous config
+					}
+				}
+				return nil
+			}
+			r := await(t, w.svc)
+			if r.Status != def.RolledBack || r.Rollback == nil || r.Rollback.Err != nil || errors.Is(r.Err, def.ErrStateUnknown) {
+				t.Fatalf("status %s, err %v, rollback applied %v: want rolled back with x restarted", r.Status, r.Err, rollback)
+			}
+			if slices.Sort(rollback); !slices.Equal(rollback, tc.want) {
+				t.Errorf("the rollback applied %v, want %v", rollback, tc.want)
+			}
+			if _, err := w.svc.Submit(t.Context(), def.Op{Source: "next"}); err != nil {
+				t.Errorf("Submit after a rollback that passed = %v", err)
+			}
+		})
 	}
 }
 

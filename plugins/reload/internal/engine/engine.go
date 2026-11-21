@@ -382,8 +382,7 @@ func (e *Engine) selfEnds(p launch.Plan, prev, cand launch.Composition) error {
 		n, ok := next[o.ID]
 		switch {
 		case o.Plugin != e.Self:
-		case ok && (n.Plugin != o.Plugin || !sameSet(n.Inject, o.Inject) || !sameSet(n.Isolate, o.Isolate) ||
-			!(len(n.Intercept) == 0 && len(o.Intercept) == 0 || reflect.DeepEqual(n.Intercept, o.Intercept))):
+		case ok && replaced(spec(o), spec(n)):
 			return fmt.Errorf("%w: row %q is replaced, as its plugin, inject, isolate or intercept changes", errSelf, o.ID)
 		case slices.Contains(p.Closure, o.ID) && (!changed[o.ID] || e.gatedOn(n, p.Closure, next)):
 			return fmt.Errorf("%w: row %q restarts through its group or a provider it needs", errSelf, o.ID)
@@ -504,20 +503,40 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 }
 
 // restartFailed adds to the inverse plan ops a restart (loader.OpRestart) of each row of
-// prev that was ACTIVE before the generation, is FAILED now and that ops does not touch.
-// Such a row failed in the generation: a dependant that a restart of its provider
-// restarted (a row of the closure), or a row whose change restarts nothing. The kernel
-// keeps it FAILED until something updates it and restart-policy holds its retry until
-// the operation is final, so without the restart the rollback could never pass.
+// prev that was ACTIVE before the generation, is FAILED now and that no operation of ops
+// restarts. Such a row failed in the generation: a dependant that a restart of its
+// provider restarted (a row of the closure), or a row whose change restarts nothing. The
+// kernel keeps it FAILED until something updates it, an update that changes nothing the
+// loader sees leaves it so, and restart-policy holds its retry until the operation is
+// final, so without the restart the rollback could never pass.
 func (e *Engine) restartFailed(ops []loader.Op, prev launch.Composition, before map[string]bool) []loader.Op {
 	for _, row := range prev.Rows {
 		en, ok := e.Loader.Locate(row.ID)
 		if before[row.ID] && ok && en.State == kernel.Failed &&
-			!slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == row.ID }) {
+			!slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == row.ID && restarts(op, en.Spec) }) {
 			ops = append(ops, loader.Op{Kind: loader.OpRestart, Entry: loader.EntrySpec{ID: row.ID}})
 		}
 	}
 	return ops
+}
+
+// restarts reports whether op restarts or replaces the FAILED fiber of the entry that
+// holds held, by the loader's rule (loader.Loader.Update): an update does only when it
+// changes the plugin, inject, isolate or intercept, or a config path of a row that is not
+// a group. One of only what the loader does not see (required, roles that keep it
+// mounted, a group's config) leaves the fiber FAILED.
+func restarts(op loader.Op, held loader.EntrySpec) bool {
+	n := op.Entry
+	paths, _ := loader.VolatileOnly(held.Config, n.Config, nil)
+	return op.Kind != loader.OpUpdate || replaced(held, n) ||
+		len(paths) > 0 && n.Plugin != loader.GroupPlugin && n.Plugin != loader.IncludePlugin
+}
+
+// replaced reports whether the loader replaces the fiber of an entry whose spec goes from
+// o to n: a fiber's plugin, needs and context are fixed when it is mounted.
+func replaced(o, n loader.EntrySpec) bool {
+	return n.Plugin != o.Plugin || !sameSet(n.Inject, o.Inject) || !sameSet(n.Isolate, o.Isolate) ||
+		!(len(n.Intercept) == 0 && len(o.Intercept) == 0 || reflect.DeepEqual(n.Intercept, o.Intercept))
 }
 
 // errNotRestored is why a rollback fails when its loader plan was applied and the
