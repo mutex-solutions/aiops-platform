@@ -250,6 +250,11 @@ generation's verdict passed and is not judged.
   retry); otherwise one transient failure of such a row would end in `rollback failed`
   and an unknown state. An update that changes nothing leaves a fiber as it is, FAILED or
   not, so a change the loader does not see (`required`, `roles`) never restarts a row.
+  A rollback is judged against the state before the generation: every row that was
+  ACTIVE before and every required row must be ACTIVE again, and a row that was not
+  ACTIVE before (FAILED, given up on; PENDING, its provider absent) is a warning
+  whatever the inverse plan did to it, so a failed attempt to change such a row is
+  `rolled back`, not `rollback failed`.
 - **20.** Gate check 7 takes classes from `kernel.KeyClasses` over the keys `boot` knows
   (launch, loader, composition and the kernel built-ins) and every key a plugin of the
   module table provides or injects, seals from `kernel.HookSealed` over the kernel and

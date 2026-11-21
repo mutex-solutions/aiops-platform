@@ -960,3 +960,36 @@ func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
 		t.Errorf("Submit after a rollback that passed = %v", err)
 	}
 }
+
+// A row that was not ACTIVE before the generation, FAILED (restart-policy gave up on it)
+// or PENDING (its provider is absent), and that the generation changes, fails the
+// verdict (08-profiles-roadmap-adrs.md §1.6). The rollback gives it its previous config
+// and it is back in its state from before the generation: the rollback is judged
+// against that state, so it passes with a warning for the row, and the state of the
+// tree stays known.
+func TestRollbackThatPutsBackARowThatWasNotActiveBeforePasses(t *testing.T) {
+	for _, st := range []kernel.State{kernel.Failed, kernel.Pending} {
+		t.Run(string(st), func(t *testing.T) {
+			s := newScript()
+			w := newScripted(t, s, nil, row("x", "aiops/p", "old"), row("y", "aiops/p", nil))
+			s.set("x", st)
+			w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("x", "aiops/p", "new"), row("y", "aiops/p", nil)}}
+			r := await(t, w.svc)
+			if r.Status != def.RolledBack || r.Rollback == nil || r.Rollback.Err != nil || errors.Is(r.Err, def.ErrStateUnknown) {
+				t.Fatalf("result = %+v (rollback %+v)", r, r.Rollback)
+			}
+			if o := outcome(r.Report, "x"); o.Outcome != "fail" {
+				t.Errorf("forward verdict on x = %+v, want fail", o)
+			}
+			if o := outcome(r.Rollback.Report, "x"); o.Outcome != "warning" || o.State != st {
+				t.Errorf("rollback verdict on x = %+v, want a warning with x %s", o, st)
+			}
+			if e, _ := s.Locate("x"); e.Spec.Config != "old" {
+				t.Errorf("x runs %v after the rollback, want old", e.Spec.Config)
+			}
+			if _, err := w.svc.Submit(t.Context(), def.Op{Source: "next"}); err != nil {
+				t.Errorf("Submit after a rollback that passed = %v", err)
+			}
+		})
+	}
+}

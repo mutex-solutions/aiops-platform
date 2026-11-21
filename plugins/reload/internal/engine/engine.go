@@ -303,7 +303,7 @@ func (e *Engine) process(ctx context.Context, r def.Result) (final def.Result) {
 	}
 	e.generation++
 	r.Generation, r.Stage, r.Err = e.generation, def.StageSettle, partial
-	r.Report, err = e.judge(ctx, cand, r.Applied, before)
+	r.Report, err = e.judge(ctx, cand, r.Applied, before, false)
 	if err != nil {
 		return stop(def.StageSettle, errors.Join(partial, err))
 	}
@@ -455,9 +455,10 @@ func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.O
 // their previous fibers are DISPOSED (the loader's rule), removes the rows that cand
 // created, gives the rows that cand changed their previous config, reverts its
 // volatile commits through the commit path and restarts every row that was ACTIVE
-// before and failed in the generation (restartFailed). The restored rows are settled and judged by
-// the rule that judges a generation, against what was ACTIVE before cand. It is tried
-// once: a failure is reported with both verdicts and is not retried, the committed
+// before and failed in the generation (restartFailed). The restored rows are settled and
+// judged against the state before cand (judge, restore): every row that was ACTIVE before
+// and every required row must be ACTIVE, and a row that was not ACTIVE before is a
+// warning, whatever the inverse plan did to it. It is tried once: a failure is reported with both verdicts and is not retried, the committed
 // composition is the one the loader's entries hold afterwards, and the state of the
 // tree is unknown (lose). (There is no committer, no lock and no audit: those are S4a.)
 func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.Composition, before map[string]bool) def.Result {
@@ -488,7 +489,7 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 		}
 	}
 	tree = prev
-	if rb.Report, err = e.judge(ctx, prev, rb.Applied, before); err != nil {
+	if rb.Report, err = e.judge(ctx, prev, rb.Applied, before, true); err != nil {
 		return fail(err)
 	}
 	if !rb.Report.Pass {
@@ -609,14 +610,21 @@ func (e *Engine) activeBefore(c launch.Composition) map[string]bool {
 // row that was inactive and is untouched is a warning. A row that the loader did not
 // mount (disabled, of another role) is not judged unless it is required, and then it
 // fails. The required set is cand's own for the process role (Profile.RequiredOf): the
-// candidate forward, the composition restored for a rollback.
-func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool) (composition.Report, error) {
+// candidate forward, the composition restored for a rollback. A rollback (restore) is
+// judged against the state before the generation, not by what its inverse plan touched:
+// a row it puts back that was not ACTIVE before (FAILED, given up on; PENDING, its
+// provider absent) is a warning, as it was before the generation; every row that was
+// ACTIVE before and every required row must be ACTIVE.
+func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []loader.Result, before map[string]bool, restore bool) (composition.Report, error) {
 	need, needErr := e.Profile.RequiredOf(cand)
 	required := map[string]bool{}
 	for _, id := range need.Rows {
 		required[id] = true
 	}
-	touched := map[string]bool{}
+	touched, untouched := map[string]bool{}, "was not ACTIVE and this generation did not touch it"
+	if restore {
+		applied, untouched = nil, "was not ACTIVE before the generation either"
+	}
 	for _, r := range applied {
 		if r.Outcome == loader.Created || r.Outcome == loader.Restarted || r.Outcome == loader.Committed {
 			touched[r.ID] = true
@@ -647,7 +655,7 @@ func (e *Engine) judge(ctx context.Context, cand launch.Composition, applied []l
 		case touched[row.ID] || required[row.ID] || before[row.ID]:
 			rep.Rows = append(rep.Rows, composition.RowReport{ID: row.ID, Outcome: "fail", State: st, Detail: why(row.ID, touched, required)})
 		case st != kernel.Active:
-			rep.Rows = append(rep.Rows, composition.RowReport{ID: row.ID, Outcome: "warning", State: st, Detail: "was not ACTIVE and this generation did not touch it"})
+			rep.Rows = append(rep.Rows, composition.RowReport{ID: row.ID, Outcome: "warning", State: st, Detail: untouched})
 		}
 	}
 	// The required keys: each needs an ACTIVE provider. A required row that is absent
