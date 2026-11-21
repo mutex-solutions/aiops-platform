@@ -201,6 +201,42 @@ func TestVolatileOnlyUpdateOfAFailedFiberRestartsIt(t *testing.T) {
 	}
 }
 
+// A restart restarts the entry's fiber with the spec the tree holds, as a retry does
+// (def.OpRestart, ADR-059 decision 19): the plugin is applied again, so a fiber that
+// failed for a transient reason is ACTIVE after it. An update that changes nothing
+// restarts nothing, FAILED or not, and an entry with no fiber to restart is unchanged.
+func TestRestartRestartsTheFiber(t *testing.T) {
+	var applies atomic.Int32
+	f := kernel.Define(kernel.Plugin{ID: "t/f", Apply: func(*kernel.Context, any) error {
+		if applies.Add(1) == 1 {
+			return errors.New("transient")
+		}
+		return nil
+	}})
+	off := row("off", "t/f")
+	off.Enabled = false
+	x := newFx(t, fxOpt{plugins: plugins(f), rows: []def.EntrySpec{row("f", "t/f"), off}})
+	x.want("f", kernel.Failed)
+	for _, tc := range []struct {
+		ops     []def.Op
+		want    []def.Result
+		st      kernel.State
+		applies int32
+	}{
+		{[]def.Op{update(row("f", "t/f"))}, []def.Result{{ID: "f", Outcome: def.Unchanged}}, kernel.Failed, 1},
+		{[]def.Op{restart("f"), restart("off")}, []def.Result{{ID: "f", Outcome: def.Restarted}, {ID: "off", Outcome: def.Unchanged}}, kernel.Active, 2},
+		{[]def.Op{update(row("f", "t/f"))}, []def.Result{{ID: "f", Outcome: def.Unchanged}}, kernel.Active, 2},
+		{[]def.Op{restart("f")}, []def.Result{{ID: "f", Outcome: def.Restarted}}, kernel.Active, 3},
+	} {
+		if res := x.apply(tc.ops...); !slices.Equal(res, tc.want) {
+			t.Fatalf("Apply = %v, want %v", res, tc.want)
+		}
+		if st := x.state("f"); st != tc.st || applies.Load() != tc.applies {
+			t.Errorf("after %v: f is %s, applied %d times; want %s, %d", tc.want, st, applies.Load(), tc.st, tc.applies)
+		}
+	}
+}
+
 // gated is a group g that injects the key named gate.
 func gated() def.EntrySpec {
 	g := group("g")

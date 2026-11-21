@@ -109,7 +109,7 @@ func Run(t *testing.T, mount Mount) {
 		a.Config, off.Enabled = map[string]any{"level": "info", "port": int64(1)}, false
 		s.apply([]string{"created a", "recorded off", "created g"}, create(a), create(off), create(g))
 		s.is("a", loader.Mounted, kernel.Active)
-		s.apply([]string{"unchanged a"}, update(a))
+		s.restarts(p, 0, []string{"unchanged a"}, update(a))
 		a.Config = map[string]any{"level": "debug", "port": int64(1)}
 		s.apply([]string{"committed a"}, update(a))
 		s.is("a", loader.Mounted, kernel.Active)
@@ -119,7 +119,7 @@ func Run(t *testing.T, mount Mount) {
 		a.Plugin = q // a new plugin is a new fiber
 		s.apply([]string{"restarted a"}, update(a))
 		s.is("a", loader.Mounted, kernel.Active)
-		s.apply([]string{"restarted a"}, restart("a"))
+		s.restarts(q, 1, []string{"restarted a"}, restart("a"))
 		s.is("a", loader.Mounted, kernel.Active)
 		off.Config, g.Config = "changed", "changed"
 		s.apply([]string{"unchanged off", "unchanged g", "unchanged off"}, update(off), update(g), restart("off"))
@@ -178,13 +178,13 @@ func Run(t *testing.T, mount Mount) {
 		s.is("veto:c", loader.Mounted, kernel.Pending)
 		c := child("veto", "c", p)
 		failed.Config, c.Config = map[string]any{"level": "debug"}, "changed"
-		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
+		s.restarts("nil", 1, []string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
 		// The kernel keeps a fiber FAILED until something updates it. An update that
 		// changes nothing leaves it as it is; a restart restarts it, as a retry does, and
 		// leaves an entry with no fiber to restart as it is.
 		s.is("nil", loader.Mounted, kernel.Failed)
-		s.apply([]string{"unchanged nil", "unchanged veto:c"}, update(failed), update(c))
-		s.apply([]string{"restarted nil", "unchanged veto:c"}, restart("nil"), restart("veto:c"))
+		s.restarts("nil", 0, []string{"unchanged nil", "unchanged veto:c"}, update(failed), update(c))
+		s.restarts("nil", 1, []string{"restarted nil", "unchanged veto:c"}, restart("nil"), restart("veto:c"))
 		s.is("nil", loader.Mounted, kernel.Failed)
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
@@ -288,9 +288,10 @@ func Run(t *testing.T, mount Mount) {
 }
 
 type suite struct {
-	t  *testing.T
-	ld loader.Loader
-	h  *heard
+	t    *testing.T
+	ld   loader.Loader
+	h    *heard
+	root *kernel.Root
 }
 
 func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
@@ -300,7 +301,7 @@ func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
 		plugins[id] = kernel.Define(kernel.Plugin{ID: id, Apply: func(*kernel.Context, any) error { return nil }})
 	}
 	ld, root := mount(t, Setup{Role: role, Plugins: plugins, Volatile: volatile})
-	return &suite{t: t, ld: ld, h: listen(t, root)}
+	return &suite{t: t, ld: ld, h: listen(t, root), root: root}
 }
 
 // apply applies ops and wants the outcomes, as "<outcome> <id>".
@@ -314,6 +315,36 @@ func (s *suite) apply(want []string, ops ...loader.Op) {
 	if err != nil || !slices.Equal(got, want) {
 		s.t.Fatalf("Apply = %q, %v; want %q", got, err, want)
 	}
+}
+
+// restarts is apply that also wants the fiber of plugin restarted n times, by its
+// restart counter (kernel.FiberSnapshot.Revision): a loader that reports a restart
+// restarts the fiber, and one that reports none restarts nothing. A vetoed entry's
+// fiber is named for the entry. A loader that runs no fiber of plugin in the root, as
+// the fake runs none, has no counter to show.
+func (s *suite) restarts(plugin string, n uint64, want []string, ops ...loader.Op) {
+	s.t.Helper()
+	before, ok := s.revision(plugin)
+	s.apply(want, ops...)
+	if after, _ := s.revision(plugin); ok && after != before+n {
+		s.t.Errorf("%q: the fiber of %s restarted %d times, want %d", want, plugin, after-before, n)
+	}
+}
+
+// revision is the restart counter of the fiber of plugin that is not DISPOSED, and
+// whether the root holds one.
+func (s *suite) revision(plugin string) (uint64, bool) {
+	s.t.Helper()
+	in, err := s.root.Inspect(s.t.Context())
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	for _, f := range in.Fibers {
+		if f.Plugin == plugin && f.State != kernel.Disposed {
+			return f.Revision, true
+		}
+	}
+	return 0, false
 }
 
 // is awaits the entry and wants its mount and state; an entry that is not mounted

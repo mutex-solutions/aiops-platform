@@ -342,6 +342,9 @@ func update(e def.EntrySpec) def.Op { return def.Op{Kind: def.OpUpdate, Entry: e
 func remove(id string) def.Op {
 	return def.Op{Kind: def.OpRemove, Entry: def.EntrySpec{ID: id}}
 }
+func restart(id string) def.Op {
+	return def.Op{Kind: def.OpRestart, Entry: def.EntrySpec{ID: id}}
+}
 
 func plugins(ps ...kernel.Plugin) map[string]kernel.Plugin {
 	m := map[string]kernel.Plugin{}
