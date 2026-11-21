@@ -525,6 +525,11 @@ func (r *run) watch() error {
 
 // resync subscribes boot's observer again after an overflow, then reads the tree: a
 // fiber marked Leaked may be a leak whose event was lost.
+// ponytail: each Root.Observe registers an empty cleanup effect on the root, which
+// stays until Close, so the root's effects grow by one per overflow of boot-watch.
+// The kernel's relay registers none; the root observer keeps it because the S0
+// reference ledger records an observer by its effect. Upgrade: an overflowed root
+// observer that re-arms in place, a kernel change for the owner.
 func (r *run) resync(ctx context.Context) error {
 	werr := r.watch() // first, so that no event falls between the two
 	ins, err := r.root.Inspect(ctx)
