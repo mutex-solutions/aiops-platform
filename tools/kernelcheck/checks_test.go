@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -208,6 +209,12 @@ func TestPluginVet(t *testing.T) {
 		{"Server without handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\"} }\n"), "http.Server without a Handler serves http.DefaultServeMux"},
 		{"Server nil handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = http.Server{Handler: nil} }\n"), "http.Server without a Handler"},
 		{"Server with handler fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\", Handler: http.NewServeMux()} }\n"), ""},
+		{"new Server", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() error { srv := new(http.Server); srv.Addr = \":0\"; return srv.ListenAndServe() }\n"), "plugin.go:3: new(http.Server) has no Handler"},
+		{"zero Server var", "plugins/a/plugin.go", pk("import h \"net/http\"\n", "func f() error { var srv h.Server; return srv.ListenAndServe() }\n"), "plugin.go:3: a h.Server declared without a value has no Handler"},
+		{"Server var with a literal fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { var srv = http.Server{Handler: http.NewServeMux()}; _ = &srv }\n"), ""},
+		{"boot WaitGroup.Go", "boot/a.go", pk("import \"sync\"\n", "func f(wg *sync.WaitGroup) { wg.Go(func() {}) }\n"), "boot/a.go:3: (*sync.WaitGroup).Go starts an untracked goroutine; boot needs a //kernelcheck:allow-go"},
+		{"boot context.AfterFunc", "boot/a.go", pk("import \"context\"\n", "func f(ctx context.Context) { context.AfterFunc(ctx, func() {}) }\n"), "boot/a.go:3: context.AfterFunc starts an untracked goroutine; boot needs a //kernelcheck:allow-go"},
+		{"boot starters with allow-go", "boot/a.go", pk("import (\"context\"; \"sync\")\n", "func f(ctx context.Context, wg *sync.WaitGroup) {\n\t//kernelcheck:allow-go joined by Close\n\twg.Go(func() {})\n\tcontext.AfterFunc(ctx, func() {}) //kernelcheck:allow-go stops with ctx\n}\n"), ""},
 		{"dot import exit", "plugins/a/plugin.go", pk("import . \"os\"\n", "func f() { Exit(1) }\n"), "plugin.go:2: dot import of os"},
 		{"dot import signal in boot", "boot/a.go", pk("import . \"os/signal\"\n", "func f() { Notify(nil) }\n"), "dot import of os/signal"},
 	} {
@@ -231,6 +238,21 @@ func TestPluginVetCountsExemptions(t *testing.T) {
 	r, err := vetFile(filepath.Join(d, "plugins/a/plugin.go"), "plugins/a/plugin.go", false)
 	if err != nil || len(r.violations) != 0 || len(r.exemptions) != 2 || r.exemptions[0] != "plugins/a/plugin.go:4: allow-var: one" {
 		t.Fatalf("%+v %v", r, err)
+	}
+}
+
+// Every goroutine starter that boot exempts with allow-go is counted, as a bare go is.
+func TestPluginVetCountsBootStarters(t *testing.T) {
+	d := t.TempDir()
+	p := filepath.Join(d, "boot/a.go")
+	write(t, d, "boot/a.go", "package boot\n\nimport (\"context\"; \"sync\")\n\nfunc f(ctx context.Context, wg *sync.WaitGroup) {\n\twg.Go(func() {}) //kernelcheck:allow-go joined by Close\n\tcontext.AfterFunc(ctx, func() {}) //kernelcheck:allow-go stops with ctx\n}\n")
+	r, err := vetFile(p, "boot/a.go", true)
+	if err != nil || len(r.violations) != 0 || !slices.Equal(r.exemptions, []string{"boot/a.go:7: allow-go: stops with ctx"}) {
+		t.Fatalf("file: %+v %v", r, err)
+	}
+	r, err = vetMethods(map[string]string{p: "boot/a.go"}, stdImporter, true)
+	if err != nil || len(r.violations) != 0 || !slices.Equal(r.exemptions, []string{"boot/a.go:6: allow-go: joined by Close"}) {
+		t.Fatalf("methods: %+v %v", r, err)
 	}
 }
 

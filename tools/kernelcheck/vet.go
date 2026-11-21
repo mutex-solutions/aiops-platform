@@ -110,35 +110,60 @@ func (t *treeImporter) Import(p string) (*types.Package, error) {
 }
 
 // vetMethods type-checks the files of one directory, given as path to report
-// name, and reports each use of a goMethods method. Type errors are expected,
-// as imports outside the standard library and the tree stay unresolved; they are
-// ignored.
-func vetMethods(files map[string]string, imp types.Importer) ([]string, error) {
+// name, and reports each use of a goMethods method (untracked). Type errors are
+// expected, as imports outside the standard library and the tree stay unresolved;
+// they are ignored.
+func vetMethods(files map[string]string, imp types.Importer, boot bool) (vetResult, error) {
+	var r vetResult
 	fset := token.NewFileSet()
 	var parsed []*ast.File
+	byPath := map[string]*ast.File{}
 	for p := range files {
-		f, err := parser.ParseFile(fset, p, nil, parser.SkipObjectResolution)
+		f, err := parser.ParseFile(fset, p, nil, parser.ParseComments|parser.SkipObjectResolution)
 		if err != nil {
-			return nil, err
+			return r, err
 		}
-		parsed = append(parsed, f)
+		parsed, byPath[p] = append(parsed, f), f
 	}
 	info := &types.Info{Selections: map[*ast.SelectorExpr]*types.Selection{}}
 	conf := types.Config{Importer: imp, Error: func(error) {}}
 	_, _ = conf.Check("p", fset, parsed, info)
-	var out []string
 	for sel, s := range info.Selections {
 		if fn, ok := s.Obj().(*types.Func); ok && goMethods[fn.FullName()] {
-			pos := fset.PositionFor(sel.Sel.Pos(), false)
-			out = append(out, fmt.Sprintf("%s:%d: %s starts an untracked goroutine; use the kernel's tracked goroutines (%s)", files[pos.Filename], pos.Line, fn.FullName(), docVet))
+			name := fset.PositionFor(sel.Sel.Pos(), false).Filename
+			r.untracked(fset, byPath[name], files[name], sel.Sel.Pos(), fn.FullName()+" starts an untracked goroutine", boot)
 		}
 	}
-	return out, nil
+	return r, nil
 }
 
 type vetResult struct {
 	violations []string
 	exemptions []string
+}
+
+// untracked records what starts a goroutine no fiber tracks, at pos of f (reported as
+// rel). Plugin code may not; boot may with a //kernelcheck:allow-go <reason> comment on
+// the line or the line above, which is counted as an exemption.
+func (r *vetResult) untracked(fset *token.FileSet, f *ast.File, rel string, pos token.Pos, what string, boot bool) {
+	line := fset.Position(pos).Line
+	var reason string
+	ok := false
+	for _, at := range []int{line, line - 1} { // a comment on the line itself first
+		for _, g := range f.Comments {
+			if !ok && fset.Position(g.End()).Line == at {
+				reason, ok = hasMarker(g, "kernelcheck:allow-go")
+			}
+		}
+	}
+	switch {
+	case boot && ok && reason != "":
+		r.exemptions = append(r.exemptions, fmt.Sprintf("%s:%d: allow-go: %s", rel, line, reason))
+	case boot:
+		r.violations = append(r.violations, fmt.Sprintf("%s:%d: %s; boot needs a //kernelcheck:allow-go <reason> comment (%s)", rel, line, what, docGo))
+	default:
+		r.violations = append(r.violations, fmt.Sprintf("%s:%d: %s; use the kernel's tracked goroutines (%s)", rel, line, what, docVet))
+	}
 }
 
 func hasMarker(g *ast.CommentGroup, marker string) (string, bool) {
@@ -221,10 +246,10 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 		}
 		return ""
 	}
-	// Comment groups by the line they end on, for allow-go.
-	ends := map[int]*ast.CommentGroup{}
-	for _, g := range f.Comments {
-		ends[fset.Position(g.End()).Line] = g
+	// isServer reports whether e names net/http's Server.
+	isServer := func(e ast.Expr) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		return ok && pkgOf(sel.X) == "net/http" && sel.Sel.Name == "Server"
 	}
 	for _, d := range f.Decls {
 		switch x := d.(type) {
@@ -262,19 +287,11 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.GoStmt:
-			line := fset.Position(x.Pos()).Line
-			g := ends[line-1]
-			if g == nil {
-				g = ends[line]
-			}
-			reason, ok := hasMarker(g, "kernelcheck:allow-go")
-			switch {
-			case boot && ok && reason != "":
-				r.exemptions = append(r.exemptions, fmt.Sprintf("%s:%d: allow-go: %s", rel, line, reason))
-			case boot:
-				bad(x.Pos(), "bare go statement; boot needs a //kernelcheck:allow-go <reason> comment", docGo)
-			default:
-				bad(x.Pos(), "bare go statement; use the kernel's tracked goroutines", docVet)
+			r.untracked(fset, f, rel, x.Pos(), "bare go statement", boot)
+		case *ast.ValueSpec:
+			// A zero http.Server has a nil Handler, so it serves http.DefaultServeMux.
+			if len(x.Values) == 0 && isServer(x.Type) {
+				bad(x.Pos(), fmt.Sprintf("a %s.Server declared without a value has no Handler and serves http.DefaultServeMux; build it with a literal that sets Handler", x.Type.(*ast.SelectorExpr).X.(*ast.Ident).Name), docVet)
 			}
 		case *ast.SelectorExpr:
 			id, ok := x.X.(*ast.Ident)
@@ -289,10 +306,13 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 					break
 				}
 			}
-			if !boot && goFuncs[path] == x.Sel.Name {
-				bad(x.Pos(), fmt.Sprintf("%s.%s starts an untracked goroutine; use the kernel's tracked goroutines", id.Name, x.Sel.Name), docVet)
+			if goFuncs[path] == x.Sel.Name && !(boot && path == "time") { // boot keeps its clock on time.AfterFunc
+				r.untracked(fset, f, rel, x.Pos(), fmt.Sprintf("%s.%s starts an untracked goroutine", id.Name, x.Sel.Name), boot)
 			}
 		case *ast.CallExpr:
+			if id, ok := x.Fun.(*ast.Ident); ok && id.Name == "new" && len(x.Args) == 1 && isServer(x.Args[0]) {
+				bad(x.Pos(), "new(http.Server) has no Handler and serves http.DefaultServeMux; build it with a literal that sets Handler", docVet)
+			}
 			sel, ok := x.Fun.(*ast.SelectorExpr)
 			if !ok {
 				return true
@@ -346,7 +366,8 @@ func vetSkipped(p string) bool {
 }
 
 // checkPluginVet reads the non-test Go files under each dir. A dir whose base
-// name is boot gets the allow-go relaxation and no goroutine-starter checks.
+// name is boot gets the allow-go relaxation for every goroutine starter, and may
+// call time.AfterFunc.
 func checkPluginVet(dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
@@ -361,12 +382,11 @@ func checkPluginVet(dirs []string) error {
 			r, err := vetFile(p, name, boot)
 			res.violations = append(res.violations, r.violations...)
 			res.exemptions = append(res.exemptions, r.exemptions...)
-			if d := filepath.Dir(p); !boot {
-				if pkgs[d] == nil {
-					pkgs[d] = map[string]string{}
-				}
-				pkgs[d][p] = name
+			d := filepath.Dir(p)
+			if pkgs[d] == nil {
+				pkgs[d] = map[string]string{}
 			}
+			pkgs[d][p] = name
 			return err
 		})
 		if err != nil {
@@ -374,11 +394,12 @@ func checkPluginVet(dirs []string) error {
 		}
 		imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}}
 		for _, files := range pkgs {
-			v, err := vetMethods(files, imp)
+			r, err := vetMethods(files, imp, boot)
 			if err != nil {
 				return err
 			}
-			res.violations = append(res.violations, v...)
+			res.violations = append(res.violations, r.violations...)
+			res.exemptions = append(res.exemptions, r.exemptions...)
 		}
 	}
 	sort.Strings(res.exemptions)
