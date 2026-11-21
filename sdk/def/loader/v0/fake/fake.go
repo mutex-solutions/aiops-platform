@@ -295,7 +295,7 @@ func (f *Loader) outcome(p *plan, old, e loader.EntrySpec, was loader.Mount) loa
 	}
 	paths, only := loader.VolatileOnly(old.Config, e.Config, f.Volatile[e.Plugin])
 	switch {
-	case len(paths) == 0:
+	case len(paths) == 0 && p.entries[e.ID].state != kernel.Failed: // a FAILED fiber restarts, as a retry does
 		return loader.Unchanged
 	case only && p.entries[e.ID].state == kernel.Active:
 		p.announce = append(p.announce, loader.VolatileUpdateArgs{ID: e.ID, Config: loader.WithoutRefs(e.Config), Paths: paths})

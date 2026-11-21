@@ -321,7 +321,10 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 // mounted by the group's next activation, so a change of its config restarts it; a change of
 // config restarts it with the new config, unless only volatile paths changed
 // (def.VolatileOnly) and the fiber is ACTIVE, as in the oracle: a FAILED or PENDING
-// fiber has no activation to take values in place. A volatile commit is the tree's
+// fiber has no activation to take values in place. An update that changes nothing
+// restarts a FAILED fiber, which the kernel keeps FAILED until it is updated, as a
+// retry does (a rollback restores a row that failed in the generation so). A volatile
+// commit is the tree's
 // new config, the same config retained by the kernel with kernel.CommitOp in the
 // plan's batch, and a loader/volatile-update event once the batch is committed. The
 // two records change
@@ -378,7 +381,7 @@ func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.Entry
 	}
 	paths, only := def.VolatileOnly(old.Config, e.Config, volatile)
 	switch {
-	case len(paths) == 0:
+	case len(paths) == 0 && !failed(ctx, cur.fiber):
 		return def.Unchanged
 	case only && active(ctx, cur.fiber): // a fiber that is not ACTIVE runs no activation to tell
 		p.updates = append(p.updates, held{id: e.ID, op: kernel.CommitOp(cur.fiber, e.Config)})
@@ -428,6 +431,11 @@ func gone(ctx context.Context, f *kernel.Fiber) bool {
 func active(ctx context.Context, f *kernel.Fiber) bool {
 	st, _ := f.State(ctx)
 	return st == kernel.Active
+}
+
+func failed(ctx context.Context, f *kernel.Fiber) bool {
+	st, _ := f.State(ctx)
+	return st == kernel.Failed
 }
 
 // settle waits until every previous fiber of the ids is DISPOSED, the rule of

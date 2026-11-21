@@ -176,6 +176,10 @@ func Run(t *testing.T, mount Mount) {
 		c := child("veto", "c", p)
 		failed.Config, c.Config = map[string]any{"level": "debug"}, "changed"
 		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
+		// The kernel keeps a fiber FAILED until something updates it: an update that
+		// changes nothing restarts a FAILED fiber, as a retry does.
+		s.is("nil", loader.Mounted, kernel.Failed)
+		s.apply([]string{"restarted nil", "unchanged veto:c"}, update(failed), update(c))
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
 		if len(s.h.volatile) != 0 {

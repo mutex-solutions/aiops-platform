@@ -453,8 +453,9 @@ func (e *Engine) unapplied(last []loader.Op, cand launch.Composition) []loader.O
 // rollback restores prev after the verdict on cand failed (ADR-059 decision 12): one
 // inverse plan through the loader, which creates the rows that cand removed once
 // their previous fibers are DISPOSED (the loader's rule), removes the rows that cand
-// created, gives the rows that cand changed their previous config and reverts its
-// volatile commits through the commit path. The restored rows are settled and judged by
+// created, gives the rows that cand changed their previous config, reverts its
+// volatile commits through the commit path and restarts every row that was ACTIVE
+// before and failed in the generation (restartFailed). The restored rows are settled and judged by
 // the rule that judges a generation, against what was ACTIVE before cand. It is tried
 // once: a failure is reported with both verdicts and is not retried, the committed
 // composition is the one the loader's entries hold afterwards, and the state of the
@@ -478,7 +479,7 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 	if rb.Plan, err = e.Profile.Plan(ctx, cand, prev); err != nil {
 		return fail(err)
 	}
-	if ops, _ := e.split(operations(rb.Plan, cand, prev), prev); len(ops) > 0 {
+	if ops, _ := e.split(e.restartFailed(operations(rb.Plan, cand, prev), prev, before), prev); len(ops) > 0 {
 		if rb.Applied, err = e.Loader.Apply(ctx, ops); err != nil {
 			if len(rb.Applied) > 0 { // applied half way: the entries are the previous ones
 				tree = prev
@@ -499,6 +500,24 @@ func (e *Engine) rollback(ctx context.Context, r def.Result, cand, prev launch.C
 	r.Stage = def.StagePublish
 	e.publish(ctx, &r, prev.Digest, rb.Generation, rb.Report)
 	return r
+}
+
+// restartFailed adds to the inverse plan ops an update of each row of prev that was
+// ACTIVE before the generation, is FAILED now and that ops does not touch. Such a row
+// failed in the generation: a dependant that a restart of its provider restarted (a row
+// of the closure), or a row whose change restarts nothing. The kernel keeps it FAILED
+// until something updates it and restart-policy holds its retry until the operation is
+// final, so without the update the rollback could never pass. The loader restarts a
+// FAILED fiber on an update that changes nothing.
+func (e *Engine) restartFailed(ops []loader.Op, prev launch.Composition, before map[string]bool) []loader.Op {
+	for _, row := range prev.Rows {
+		en, ok := e.Loader.Locate(row.ID)
+		if before[row.ID] && ok && en.State == kernel.Failed &&
+			!slices.ContainsFunc(ops, func(op loader.Op) bool { return op.Entry.ID == row.ID }) {
+			ops = append(ops, loader.Op{Kind: loader.OpUpdate, Entry: spec(row)})
+		}
+	}
+	return ops
 }
 
 // errNotRestored is why a rollback fails when its loader plan was applied and the

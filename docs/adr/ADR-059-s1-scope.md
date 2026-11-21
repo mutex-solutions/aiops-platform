@@ -243,7 +243,12 @@ generation's verdict passed and is not judged.
   through the composition key. At the final event a fiber still FAILED is retried or given
   up on, and one restarted meanwhile is tracked afresh. Rows outside the plan are retried
   as before. A FAILED read stays FAILED in the kernel until an update, so the verdict sees
-  every failure of the generation.
+  every failure of the generation. For the same reason a rollback updates every row that
+  was ACTIVE before the generation and is FAILED when it starts, besides the inverse plan
+  (a dependant that failed when the generation restarted its provider, a row whose change
+  restarted nothing), and the loader restarts a FAILED fiber on an update that changes
+  nothing; otherwise one transient failure of such a row would end in `rollback failed`
+  and an unknown state.
 - **20.** Gate check 7 takes classes from `kernel.KeyClasses` over the keys `boot` knows
   (launch, loader, composition and the kernel built-ins) and every key a plugin of the
   module table provides or injects, seals from `kernel.HookSealed` over the kernel and

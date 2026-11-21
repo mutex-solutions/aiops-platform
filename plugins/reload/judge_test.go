@@ -913,3 +913,49 @@ func TestReloadRowChangeOfAFailedRollbackIsNeverApplied(t *testing.T) {
 		t.Errorf("the reload row runs %v after %d applies, want its previous config and no apply after the failure", e.Spec.Config, s.applies)
 	}
 }
+
+// A dependant that was ACTIVE fails when the generation restarts its provider (a row of
+// the closure, not of the plan). The kernel keeps it FAILED until something updates it,
+// so the rollback updates it with the restored provider, and the rollback passes: the
+// state of the tree stays known (08-profiles-roadmap-adrs.md §1.6, a live Apply error is
+// rolled back). A row that the inverse plan already updates is not updated twice.
+func TestRollbackRestartsARowThatFailedInTheGeneration(t *testing.T) {
+	s := newScript()
+	w := newScripted(t, s, nil, row("p", "aiops/p", "old"), row("c", "aiops/p", nil), row("q", "aiops/p", "old"))
+	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("p", "aiops/p", "new"), row("c", "aiops/p", nil), row("q", "aiops/p", "new")}}
+	w.l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) {
+		p := diff(f, to)
+		p.Closure = []string{"c", "p", "q"} // c needs what p provides
+		return p, nil
+	}
+	var rollback []loader.Op
+	s.onApply = func(_ context.Context, n int, ops []loader.Op) error {
+		if n == 1 {
+			s.set("c", kernel.Failed) // its activation under the new provider failed
+			s.set("q", kernel.Failed)
+			return nil
+		}
+		rollback = ops
+		for _, op := range ops {
+			s.set(op.Entry.ID, kernel.Active) // restarted with the restored config
+		}
+		return nil
+	}
+	r := await(t, w.svc)
+	if r.Status != def.RolledBack || r.Rollback == nil || r.Rollback.Err != nil || errors.Is(r.Err, def.ErrStateUnknown) {
+		t.Fatalf("result = %+v (rollback %+v)", r, r.Rollback)
+	}
+	var ids []string
+	for _, op := range rollback {
+		if op.Kind == loader.OpUpdate {
+			ids = append(ids, op.Entry.ID)
+		}
+	}
+	slices.Sort(ids)
+	if !slices.Equal(ids, []string{"c", "p", "q"}) {
+		t.Errorf("the rollback updated %v, want c, p and q once each", ids)
+	}
+	if _, err := w.svc.Submit(t.Context(), def.Op{Source: "next"}); err != nil {
+		t.Errorf("Submit after a rollback that passed = %v", err)
+	}
+}

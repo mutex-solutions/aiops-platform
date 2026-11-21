@@ -150,8 +150,9 @@ type Loader interface {
 	// Create mounts a fiber for the entry. It returns ErrExists for a known id.
 	Create(ctx context.Context, e EntrySpec) error
 	// Update replaces the entry's spec: a change of volatile config paths only
-	// commits in place, any other restarts the fiber (07-c4-plugin-sdk.md:1374).
-	// ErrNotFound for an unknown id.
+	// commits in place, any other restarts the fiber (07-c4-plugin-sdk.md:1374). One
+	// that changes nothing restarts a FAILED fiber, which the kernel keeps FAILED until
+	// it is updated, and leaves any other as it is. ErrNotFound for an unknown id.
 	Update(ctx context.Context, e EntrySpec) error
 	// Remove unloads and disposes the entry's fiber and its children. ErrNotFound
 	// for an unknown id.
