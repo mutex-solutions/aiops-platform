@@ -146,6 +146,53 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 	}
 }
 
+// The test distribution runs the release manifest plus the bindings of its own plugins:
+// every binding, listener list and required key or row of the release is in it as it
+// is, so no suite runs with a release entry changed or dropped (ADR-059 decision 18).
+func TestTestManifestHoldsTheReleaseManifest(t *testing.T) {
+	_, rel, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("../test/dist/dist.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tst, err := boot.ParseDist("dist.yaml", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listeners := func(hs []boot.HookListeners) []boot.Binding {
+		var out []boot.Binding
+		for _, h := range hs {
+			out = append(out, boot.Binding{Key: h.Hook, Plugins: h.Plugins})
+		}
+		return out
+	}
+	for _, side := range []struct {
+		name     string
+		rel, tst []boot.Binding
+	}{{"providers", rel.Providers, tst.Providers}, {"consumers", rel.Consumers, tst.Consumers},
+		{"sealedHooks", listeners(rel.SealedHooks), listeners(tst.SealedHooks)}} {
+		for _, b := range side.rel {
+			i := slices.IndexFunc(side.tst, func(x boot.Binding) bool { return x.Key == b.Key })
+			if i < 0 || !includes(side.tst[i].Plugins, b.Plugins) {
+				t.Errorf("%s %s: release %v, test %v", side.name, b.Key, b.Plugins, side.tst)
+			}
+		}
+	}
+	if !includes(tst.RequiredKeys, rel.RequiredKeys) || !slices.Equal(tst.RequiredRows, rel.RequiredRows) {
+		t.Errorf("required set: release %v %v, test %v %v", rel.RequiredKeys, rel.RequiredRows, tst.RequiredKeys, tst.RequiredRows)
+	}
+	if slices.Contains(tst.RequiredKeys, "configRefsReady") {
+		t.Error("the test manifest requires configRefsReady, which hides what the release requires")
+	}
+}
+
+func includes(set, sub []string) bool {
+	return !slices.ContainsFunc(sub, func(s string) bool { return !slices.Contains(set, s) })
+}
+
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }

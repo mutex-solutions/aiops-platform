@@ -27,9 +27,13 @@ func TestParseLimits(t *testing.T) {
 	if l.settleBound() != 3*time.Second || l.leakGrace() != 5*time.Second {
 		t.Fatal("bounds")
 	}
-	// A subset keeps the defaults; the derived bounds follow the deadlines.
+	// A subset keeps the defaults; the derived bounds follow the deadlines. The observer
+	// queue defaults to ADR-034's sizing of 65,536 events.
 	l, err = ParseLimits("limits.yaml", []byte("loadDeadline: 1s\n"))
 	d := DefaultLimits()
+	if d.ObserverQueue != 65536 || l.ObserverQueue != d.ObserverQueue {
+		t.Fatalf("observer queue %d, default %d", l.ObserverQueue, d.ObserverQueue)
+	}
 	if err != nil || l.LoadDeadline != time.Second || l.DrainDeadline != d.DrainDeadline || l.ShutdownBound != d.ShutdownBound {
 		t.Fatalf("subset: %v %+v", err, l)
 	}
