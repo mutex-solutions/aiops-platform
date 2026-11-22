@@ -1,6 +1,6 @@
 # S0 exit report
 
-- Date: 2026-11-20.
+- Date: 2026-11-20; final-port gates recorded 2026-11-22.
 - For: the project owner, who decides whether S0 is closed and whether S1 may start.
 - Sources: the roadmap S0 row and ADR table in [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md), the frozen criteria in [`s0-spike-criteria.md`](s0-spike-criteria.md), ADR-034, ADR-035, ADR-036 (draft) and ADR-045, and `test/spike/s0/results/`.
 - Status vocabulary: **met**, **met with recorded exception**, **pending** (a run or decision is still needed), **not met** (a recorded failure stands).
@@ -16,15 +16,15 @@
 | 5 | Transaction spike (ADR-045) | **closed by design change**. The raw-SQL authority gate failed and stays recorded as failed. Under the rule "a missed threshold is a design change by ADR", the owner adopted typed operations as the plugin transaction surface on 2026-11-19. The §5 numeric thresholds of the raw surface are not recorded and no longer apply to it. | [`ADR-045`](../adr/ADR-045-cross-plugin-transaction.md); `test/spike/s0/results/typedops-pg-arbitration.json` | f2ea89f |
 | 6 | Restart spike | **met**. 100 of 100 cycles at frozen scale with the resources owned by fibers of the final kernel, section 10 accounting without findings, recovery 252 to 454 ms. The library-owned run passed earlier. The unowned-handler snooze and the two-client case pass in the worker probe. | `test/spike/s0/results/restart-full-kernel-owned/`; `restart-full-section10/`; `worker-functional-corrected.json` | d683ebe |
 | 7 | Both cores on the corpus | **met with recorded exceptions**. Prototype: 64 of 68 pairs match, in 100 of 100 runs under race and under two processors. The port is in row 1. | `docs/design/s0-causal-coverage.md`; ADR-035 | not recorded |
-| 8 | Both cores on a 10,000-fiber bench | **pending**. The run completed but is classified **invalid** by the noise rule (throughput variation above 10% in 15 buckets). No bound failed. The rerun on the final port is pending. | `test/spike/s0/results/scale-full-first/invocation.json` | `225ffbe` |
-| 9 | 500 tenant trees | **pending**. Same run as row 8: invalid by the noise rule, no bound failed. Detail in ADR-036. | `test/spike/s0/results/scale-full-first/invocation.json`; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `225ffbe` |
+| 8 | Both cores on a 10,000-fiber bench | **met**. The final-port run passed with no reasons on the reconciler, graph-lock and `kernel` backends: every bound met and no bucket above the noise limit. The prototype run before it was invalid by the noise rule. | `test/spike/s0/results/scale-full-final-port/invocation.json`; §4.4 | `8ec2d8c` |
+| 9 | 500 tenant trees | **met**. Same run as row 8. Cold tree mount at most 13.8 ms on `kernel` (bound 50 ms); retained heap for 500 trees of width 4 at most 29.2 MiB (bound 32 MiB). The tenancy figures of ADR-036 still await the owner (§6(b)). | `test/spike/s0/results/scale-full-final-port/invocation.json`; §4.4; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `8ec2d8c` |
 | 10 | Cold mount on the ack path | **met**. The final-port run passed with no reasons on all three backends, `kernel` included: 180 runs, every request answered. | `test/spike/s0/results/coldmount-full-final-port/`; §4.5 | `8ec2d8c` |
 | 11 | `sdk/testkit/kerneltest` | **met**. Built as a separate module and run in CI. | `sdk/testkit/kerneltest/`; `.github/workflows/ci.yml` lines 60 to 65 | current tree |
 | 12 | Coverage: 100% statements per production file | **met**. Every production file of `sdk/kernel` is at 100.0%; CI enforces it per file on every push. | `test/spike/s0/results/final-port-checks/coverage.txt`; CI step "Kernel structural checks" | 83b2746 |
 | 13 | Fuzzing, 60 s per selected entry point | **met**. Five targets ran 60 s each with no kernel defect. One target's own oracle was wrong under load and was corrected; its failing inputs are kept as seeds. Fuzzing is run by hand, not in CI. | `test/spike/s0/results/final-port-checks/fuzz.log` and `invocation.json` | b596374 |
 | 14 | Notices | **met** for `sdk/kernel`. The NOTICE names the reference and keeps both copyright notices. Oracle package notices are in `s0-reference-pins.md` and were not re-checked here. | `sdk/kernel/LICENSE`; `sdk/kernel/NOTICE`; `docs/design/s0-reference-pins.md` | current tree |
 
-**Overall.** S0 is not closed. Rows 8 and 9 are open: the scale gate (the 10,000-fiber bench and the 500 trees) is being rerun on the final port. The cold-mount gate (row 10) and the call-path gate (§4.3) passed on the final port on 2026-11-22. Every other row is met, met with a recorded exception, or closed by a recorded design change (row 5). Updated 2026-11-22.
+**Overall.** Every row is met, met with a recorded exception, or closed by a recorded design change (row 5). The scale, cold-mount and call-path gates passed on the final port on 2026-11-22 (§4.3 to §4.5). S0 closes on the owner's approval of this report; the items of §6(b) are the owner's. Updated 2026-11-22.
 
 ## 2. What was built
 
@@ -135,7 +135,7 @@ Final port: `test/spike/s0/results/callpath-full-final-port/` (commit `8ec2d8c`,
 - Ten aggregates show candidate variation of 11.3% to 16.3% with a clean control, as in the fourth run: observations, not an invalid run.
 - The first final-port run, on `dcc5f10`, failed: some `kernel` runs at one caller allocated one object. The adapter kept each activation's leave function on its first `Enter`, which allocated. `a4e3d82` keeps it when the Context is built.
 
-### 4.4 Scale gate (prototype, invalid by the noise rule)
+### 4.4 Scale gate (prototype, invalid by the noise rule; final port, pass)
 
 Evidence: `test/spike/s0/results/scale-full-first/invocation.json` (commit `225ffbe`, 10,800 runs, 22,372 s, dedicated 24-vCPU guest, `GOMAXPROCS=8`).
 
@@ -153,6 +153,22 @@ Evidence: `test/spike/s0/results/scale-full-first/invocation.json` (commit `225f
 Classification: **invalid by the noise rule only.** Fifteen buckets have throughput variation between 10.0% and 15.1%, against the frozen 10% limit. No bound failed on either backend. The gate is repeated unchanged on the final port.
 
 Caveats: the run predates the 2026-11-19 hazard fixes. The retained-heap slope fields are recorded but not interpreted here (ADR-036). The tree heap record lists `"roots": 100`, which the file does not explain.
+
+Final port: `test/spike/s0/results/scale-full-final-port/invocation.json` (16,200 runs on the reconciler, graph-lock and `kernel` backends, 32,434 s, dedicated host, `GOMAXPROCS=8`). The host's working copy was at `583e1bd`, which adds only documents and result files to `8ec2d8c`. Classification **pass, no reasons**: every bound met and no bucket above the 10% noise limit.
+
+| Bound (criteria §8.1 to §8.2) | Reconciler | Graph lock | `kernel` | Result |
+|---|---|---|---|---|
+| 10,000-fiber mount and settle, p99 ≤ 2 s | 396 to 681 ms (worst: diamonds) | 277 to 611 ms (realms) | 389 to 881 ms (diamonds) | within bound |
+| 10,000-fiber leaf update, p99 ≤ 10 ms | 0.21 to 0.33 ms | 0.16 to 0.25 ms | 0.33 to 0.45 ms | within bound |
+| 10,000-fiber root restart, ≤ 5 s | max p99 1,052 ms (diamonds) | max p99 1,012 ms (diamonds) | max p99 1,188 ms (diamonds) | within bound |
+| Retained heap, 1,000 roots, ≤ 128 MiB | 73.4 MiB (chain) | 73.5 MiB (chain) | 92.1 MiB (chain) | within bound |
+| Cold tree mount, 500 and 300 trees, < 50 ms | max 9.83 ms | max 7.66 ms | max 13.79 ms | within bound |
+| Retained heap, 500 trees of width 4, ≤ 32 MiB | 21.5 MiB | 20.5 MiB | 29.2 MiB | within bound |
+| Shared provider restart, trees, ≤ 5 s | max p99 151.4 ms | max p99 118.9 ms | max p99 106.3 ms | within bound |
+| Goroutines at last checkpoint | 4 | 3 | 4 | recorded |
+| Timer overhead p99 | 56 ns | not applicable | not applicable | recorded |
+
+The `kernel` backend holds more heap than the prototypes in every workload (92.1 against 73.4 MiB for the chain; 29.2 against 21.5 MiB for 500 trees of width 4), and its 500-tree figure leaves 2.8 MiB under the bound. Part of it is the S0 adapter, which keeps a handle and a config cell for every fiber the kernel still holds. An earlier run of this gate on `dcc5f10` was stopped after 2 h 12 min, unclassified, because the adapter it measured had been replaced (§4.5).
 
 ### 4.5 Cold-mount gate (prototype and final port, pass)
 
@@ -183,7 +199,7 @@ The first final-port run, on `dcc5f10`, failed on the `kernel` backend only: arm
 - Evidence: `test/spike/s0/results/restart-full-section10/invocation.json` (commit `e34047e`, 15,169 s, dedicated host). **100 of 100 cycles**: pool 30, client 30, listener 30, combined 10.
 - Every acknowledged ID completed. The section 10 accounting passed in all four arms.
 - The earlier frozen-scale rerun (`restart-full-frozen-scale`) recorded the longest acknowledgement-to-completion at about one second and the longest recovery at about 0.4 s (ADR-045).
-- This gate runs on the standalone library, not on kernel-owned resources. The criteria require that rerun once the kernel exists.
+- This gate runs on the standalone library. The rerun with the resources owned by fibers of the final kernel passed 100 of 100 cycles, recovery 252 to 454 ms (`restart-full-kernel-owned/`; row 6).
 
 ### 4.7 Transaction authority (ADR-045)
 
@@ -207,22 +223,15 @@ Found by the restart harness, not by the port: River's fetch on a forced-RLS tab
 
 ### (a) Pending runs
 
-- Call-path gate on the port. The prototype passed; the port has not run.
-- Scale gate on the port, unchanged protocol (10,000-fiber bench and 500-tree workloads). The prototype run is invalid by the noise rule.
-- Cold-mount gate on the port.
-- Property workload on the final commit. It ran on `e34047e`.
-- Restart gate with kernel-owned resources (criteria §6), and the unowned-handler snooze and two-client cases. The test code exists (`worker_test.go`); no pass is recorded.
-- `go test -race -count=3 ./...` for each module, as the criteria require.
-- Fuzzing, 60 s per selected entry point. Five targets; none run.
-- Per-file statement coverage result.
-- Criteria §5 transaction thresholds and cost-control arm.
+None. Every run that the earlier versions of this section listed is recorded: the call-path, scale and cold-mount gates on the final port (§4.3 to §4.5), the property workload on the final port (row 2), the restart gate with kernel-owned resources and the worker cases (row 6), `go test -race -count=3 ./...` per module (row 2), fuzzing (row 13) and per-file coverage (row 12). The criteria §5 transaction thresholds no longer apply to the raw-SQL surface (row 5).
 
 ### (b) Proposals awaiting the owner
 
-- **Line budget.** Proposed cap: the measured count plus about 10%, rounded. 7,448 × 1.10 = 8,193, rounded to **8,200**. CI currently enforces **8,500** (`.github/workflows/ci.yml` line 73). Re-measure on the final port before the cap is written into ADR-034.
+- **Line budget.** Decided: the owner fixed the cap at 8,200 lines on 2026-11-20 (row 4).
 - **ADR-036** (draft, `docs/adr/ADR-036-tenancy-cost.md`). The owner must decide the fiber total (1,297 against "about 1,200"), the tenant count (500 against 300) and the numeric leak budget.
 - **ADR-058** (change impact reasoning). Draft, proposed 2026-11-19, awaiting the owner. Not required for S0 exit.
-- **Scale protocol noise rule.** If the final-port rerun is invalid again for the same reason, the owner receives a written amendment proposal before any further run (ADR-034).
+- **Scale protocol noise rule.** No amendment is needed: the final-port run is within the noise limit.
+- **`kernel` lease cost under contention.** At 8 and 32 callers the `kernel` Enter and Leave cost about 2.5 times the prototypes' at p50, inside the 2 µs bound (§4.3). Changing the lease counter's shard choice is a kernel change; the owner decides whether and when.
 
 ### (c) Obligations to later steps
 
@@ -238,4 +247,4 @@ Found by the restart harness, not by the port: River's fetch on a forced-RLS tab
 
 ## 7. Stop point
 
-S0 stops here. This report, ADR-034, ADR-035, ADR-036 (draft) and ADR-045 form the S0 exit record. The items in section 6 must be decided or run before the owner can close S0. S1 starts only on the owner's word.
+S0 stops here. This report, ADR-034, ADR-035, ADR-036 (draft) and ADR-045 form the S0 exit record. Every run is recorded; S0 closes on the owner's approval of this report, and the proposals of section 6(b) are the owner's to decide. S1 started in parallel on the owner's word of 2026-11-20 (ADR-059).

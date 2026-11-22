@@ -1,0 +1,4 @@
+=== RUN   TestDefaultMeasure
+    measure_test.go:24: classification=pass dry=false acceptanceEligible=true runs=16200 reasons=0
+--- PASS: TestDefaultMeasure (32433.55s)
+PASS

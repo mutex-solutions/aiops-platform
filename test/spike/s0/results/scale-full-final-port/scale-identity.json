@@ -1,0 +1,4 @@
+{"baselineCommit":"583e1bdf9ef449c8c0c72122b9d4ca198c505532",
+ "commands":["GOMAXPROCS=8 S0_SCALE_RUN=1 scale.test -test.run ^TestDefaultMeasure$ -test.count=1 -test.timeout 24h -test.v"],
+ "finalParityCompleted":true,
+ "hostEvidence":"dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job; semantic parity declared complete by the project owner on 2026-11-19 (ADR-035)"}
