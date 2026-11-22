@@ -1362,7 +1362,7 @@ A `rules` plugin and `rule-pack-<name>` rows wait for their §7.3 trigger; until
 | `loader` | `Row` | `c.Plugin(p, cfg)` per row, in no particular order. The config is validated against the derived schema and by `Validate` before `Apply` runs. |
 | `Row` | `Root` | `Key.Of(c)`, `Provide`, registrations and `c.Go`, all as effects. A row whose `Need` has no ACTIVE provider stays PENDING. |
 | `Row` | `loader` | An `Apply` that errors, panics or passes the load deadline leaves the row FAILED after its partial effects unwind; `restart-policy` retries it. |
-| `loader` | `readiness` | `readiness` injects `loader` and waits for the tree to settle. |
+| `loader` | `readiness` | `readiness` reads the rows the loader serves as `composition` and waits for the tree to settle. |
 | `readiness` | `boot` | Ready when every required key has an ACTIVE provider and every required row is ACTIVE. A required key or row that is absent, disabled or not ACTIVE once settled stops boot. |
 | `boot` | `Operator` | Reports ready, with one grouped diagnostic for the optional rows that are not active: state, error and what each waits for. Boot also prints every departure from the release bindings, the departures a composed harness declares, and every enabled `tool-mcp` row. |
 
