@@ -4,7 +4,7 @@
 // create, update, remove, await and locate (03-c3-kernel.md:64;
 // plugin-system-2026-11.md §5). The key is consumer-bound, class C
 // (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:557): it resolves only for the
-// entries the distribution manifest lists (reload, readiness, tenant-trees).
+// entries the distribution manifest lists (reload, tenant-trees).
 //
 // The package also declares the loader's three hooks, all sealed to the
 // distribution (07-c4-plugin-sdk.md:463; plugin-system-2026-11.md §8):
