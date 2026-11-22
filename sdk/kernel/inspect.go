@@ -39,7 +39,8 @@ type fiberSnap struct {
 	Tracked    []string     // Labels of tracked work that has not actually returned.
 	Error      string
 	Alive      bool // False once disposal is requested, before cleanup.
-	// Leaked is set once a disposer ran past the dispose deadline: a goroutine
+	// Leaked is set once a disposer ran past the dispose deadline, or a drain past its
+	// deadline with tracked goroutines or leases still open: a goroutine
 	// cannot be killed, so the launcher replaces the process (07-c4-plugin-sdk.md:359).
 	// It stays set for the incarnation, including its archived snapshot.
 	Leaked bool

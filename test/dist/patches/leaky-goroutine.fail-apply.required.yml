@@ -1,0 +1,4 @@
+# Layer 4 patch for the failure matrix: leaky-goroutine as an required row whose Apply fails after it
+# took what it holds, so the unwind at boot passes a deadline.
+- insert:
+    - {id: fault, plugin: aiops-test/leaky-goroutine, roles: [api], required: true, config: {hold: 5s, failApply: true}}

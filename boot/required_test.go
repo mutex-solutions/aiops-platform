@@ -8,11 +8,13 @@ import (
 const reqMods = `
 o/loader: {provides: [loader]}
 o/sql: {provides: [sql]}
-o/auth: {provides: [auth], needs: [sql, logger]}
+o/auth: {provides: [auth], needs: [sql, vault]}
 o/svc: {provides: [svc], needs: [auth]}
 o/extra: {provides: [extra]}
 o/uses-extra: {needs: [extra, sql]}
 o/web: {needs: [svc]}
+o/vault: {provides: [vault]}
+aiops/config-refs: {provides: [configRefsReady]}
 `
 
 func TestRequiredFor(t *testing.T) {
@@ -66,6 +68,54 @@ func TestAuditStatic(t *testing.T) {
 		{name: "a key of a private realm does not serve the process",
 			bundle: rows("id: g, plugin: core:group, isolate: [sql], config: [{id: sql, plugin: o/sql}]"),
 			dist:   "requiredKeys: [sql]", want: []string{"required-key  sql"}},
+		// A required row that holds a reference pulls config-refs into the set, by its key
+		// and its rows (ADR-059 decision 18); with no config-refs row the key is unmet.
+		{name: "a required row with a reference pulls config-refs in",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a required row with a reference and no config-refs row",
+			bundle: rows("id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			want:   []string{"required-key  configRefsReady"}, closed: "u"},
+		// Only the config-refs rows that serve the process join the set: active and in
+		// the root realm. A spare one that does not serve is not required.
+		{name: "a disabled spare config-refs row is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: spare, plugin: aiops/config-refs, enabled: false",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a config-refs row inside a disabled group is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: g, plugin: core:group, enabled: false, config: [{id: r2, plugin: aiops/config-refs}]",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a config-refs row of a private realm is not required",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: g, plugin: core:group, isolate: [configRefsReady], config: [{id: r3, plugin: aiops/config-refs}]",
+				"id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			closed: "refs,u"},
+		{name: "a required row with a reference and only a disabled config-refs row",
+			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: u, plugin: o/sql, required: true, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			want:   []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "u"},
+		// A provider of a required key is inside the set as a required row is, so its
+		// reference pulls config-refs in too (ADR-059 decision 24); the closure clause
+		// never hides that config-refs is outside the set.
+		{name: "a provider of a required key that holds a reference",
+			bundle: rows("id: refs, plugin: aiops/config-refs", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", closed: "refs,sql"},
+		{name: "a provider of a required key with a reference and no config-refs row",
+			bundle: rows("id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", want: []string{"required-key  configRefsReady"}, closed: "sql"},
+		{name: "a provider of a required key with a reference and only a disabled config-refs row",
+			bundle: rows("id: spare, plugin: aiops/config-refs, enabled: false", "id: sql, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", want: []string{"required-missing spare ", "required-key  configRefsReady"}, closed: "sql"},
+		// config-refs serves only its own process, so a config-refs row of another role never
+		// meets the need: the key stays in the set whatever the role filter says.
+		{name: "a provider of a required key with a reference and config-refs in another role",
+			bundle: rows("id: refs, plugin: aiops/config-refs, roles: [worker]", "id: sql, plugin: o/sql, roles: [api], config: {x: \"${env:AIOPS_REF_X}\"}"),
+			dist:   "requiredKeys: [sql]", roles: []Role{RoleAPI}, want: []string{"required-key  configRefsReady"}, closed: "sql"},
+		// A provider that does not serve the process, disabled or in a private realm, is
+		// not inside the set, so its reference pulls nothing in.
+		{name: "a provider that does not serve the process pulls nothing in",
+			bundle: rows("id: sql, plugin: o/sql", "id: off, plugin: o/sql, enabled: false, config: {x: \"${env:AIOPS_REF_X}\"}",
+				"id: g, plugin: core:group, isolate: [sql], config: [{id: s2, plugin: o/sql, config: {x: \"${env:AIOPS_REF_X}\"}}]"),
+			dist: "requiredKeys: [sql]", closed: "sql"},
 		{name: "role drops a row and a key that run elsewhere",
 			bundle: rows("id: loader, plugin: o/loader, roles: [worker], required: true", "id: sql, plugin: o/sql, roles: [worker]"),
 			dist:   "requiredKeys: [sql]", roles: []Role{RoleAPI}},
@@ -92,9 +142,11 @@ func TestAuditStatic(t *testing.T) {
 	}
 }
 
+// The vault row gives auth, a provider of a required key, a provider of its need, so
+// the static graph admits the composition (ADR-059 decision 27).
 func TestAuditRequired(t *testing.T) {
 	c := comp(t, rows("id: loader, plugin: o/loader", "id: sql, plugin: o/sql", "id: auth, plugin: o/auth",
-		"id: web, plugin: o/web", "id: svc, plugin: o/svc", "id: off, plugin: o/extra, enabled: false"))
+		"id: web, plugin: o/web", "id: svc, plugin: o/svc", "id: off, plugin: o/extra, enabled: false", "id: vault, plugin: o/vault"))
 	mods := mustMods(t, reqMods)
 	dist := mustDist(t, "requiredRows: [loader, off]\nrequiredKeys: [sql, auth]")
 	g, errs, _ := BuildGraph(c, mods, dist, nil)
@@ -110,17 +162,17 @@ func TestAuditRequired(t *testing.T) {
 		stops bool
 	}{
 		{name: "all active", view: StateView{
-			Rows:      map[string]State{"loader": StateActive, "sql": StateActive, "auth": StateActive, "web": StateActive, "svc": StateActive},
+			Rows:      map[string]State{"loader": StateActive, "sql": StateActive, "auth": StateActive, "web": StateActive, "svc": StateActive, "vault": StateActive},
 			Providers: map[string]bool{"sql": true, "auth": true}}},
 		{name: "required row and key unmet, others grouped",
 			view: StateView{
-				Rows:      map[string]State{"loader": StatePending, "sql": StateActive, "auth": StateFailed, "web": StatePending},
+				Rows:      map[string]State{"loader": StatePending, "sql": StateActive, "auth": StateFailed, "web": StatePending, "vault": StateFailed},
 				Providers: map[string]bool{"sql": true, "svc": false}},
 			errs: []string{`required row "loader" is PENDING, not ACTIVE`, `required key "auth" has no ACTIVE provider`},
-			warn: `3 rows are not ACTIVE: "auth" is FAILED and waits for logger; "svc" is without a fiber and waits for auth; "web" is PENDING and waits for svc`},
+			warn: `4 rows are not ACTIVE: "auth" is FAILED and waits for vault; "svc" is without a fiber and waits for auth; "vault" is FAILED; "web" is PENDING and waits for svc`},
 		{name: "a required row without a fiber",
-			view: StateView{Rows: map[string]State{"sql": StateActive, "auth": StateActive, "svc": StateActive, "web": StateActive},
-				Providers: map[string]bool{"sql": true, "auth": true, "logger": true, "svc": true}},
+			view: StateView{Rows: map[string]State{"sql": StateActive, "auth": StateActive, "svc": StateActive, "web": StateActive, "vault": StateActive},
+				Providers: map[string]bool{"sql": true, "auth": true, "vault": true, "svc": true}},
 			errs: []string{`required row "loader" is without a fiber, not ACTIVE`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -8,6 +8,8 @@ package fake
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -43,15 +45,25 @@ func (f *Clock) Now() time.Time {
 	return f.now
 }
 
-// After starts a timer, as an effect of c's fiber.
+// After starts a timer and records its stop as an effect scope of c's fiber, which
+// is withdrawn when the timer fires or is stopped, as the clock row does. The kernel
+// runs the scope's setup on the fiber's lane, and never for an activation that
+// quiesced first: such a timer is dropped, as the clock row drops it.
 func (f *Clock) After(c *kernel.Context, d time.Duration) (clock.Timer, error) {
-	var t *timer
-	err := c.Effect("clock timer", func() (kernel.Disposer, error) {
-		t = f.start(d)
-		return func(context.Context) error { t.Stop(); return nil }, nil
+	t := f.start(d)
+	h, err := c.RequestEffectScope("clock timer", func(s *kernel.EffectScope) error {
+		return s.Defer("clock timer", func(context.Context) error { t.stop(); return nil })
 	})
 	if err != nil {
+		t.stop()
 		return nil, err
+	}
+	f.mu.Lock()
+	t.h = h
+	fired := !slices.Contains(f.pending, t)
+	f.mu.Unlock()
+	if fired {
+		_ = h.RequestWithdraw()
 	}
 	return t, nil
 }
@@ -71,10 +83,19 @@ func (f *Clock) start(d time.Duration) *timer {
 
 // Advance moves the clock forward by d and fires, in order of time and then of
 // start, every timer that falls due on the way. Each timer fires with the clock
-// standing at its own time. A d of zero or less does nothing.
+// standing at its own time. A d of zero or less does nothing. The effects of the
+// timers that fired are withdrawn before it returns.
 func (f *Clock) Advance(d time.Duration) {
+	for _, h := range f.advance(d) {
+		_ = h.RequestWithdraw()
+	}
+}
+
+// advance is Advance under the lock: it returns the effects of the timers that fired.
+func (f *Clock) advance(d time.Duration) (fired []*kernel.EffectHandle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.prune()
 	target := f.now.Add(d)
 	for {
 		next := -1
@@ -93,17 +114,35 @@ func (f *Clock) Advance(d time.Duration) {
 		f.pending = append(f.pending[:next], f.pending[next+1:]...)
 		f.now = t.at
 		t.ch <- t.at
+		if t.h != nil { // nil while After has not returned: it withdraws then
+			fired = append(fired, t.h)
+		}
 	}
 	if target.After(f.now) {
 		f.now = target
 	}
+	return fired
 }
 
 // Pending is the number of timers that have not fired and not been stopped.
 func (f *Clock) Pending() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.prune()
 	return len(f.pending)
+}
+
+// prune drops the timers whose stop was never recorded. f.mu is held.
+func (f *Clock) prune() {
+	f.pending = slices.DeleteFunc(f.pending, func(t *timer) bool { return sealed(t.h) })
+}
+
+// sealed reports whether the kernel sealed the scope h without running its setup: the
+// fiber that asked for the timer quiesced first, so no one waits for it.
+func sealed(h *kernel.EffectHandle) bool {
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	return errors.Is(h.AwaitSetup(ended), kernel.ErrInactiveEffect)
 }
 
 type timer struct {
@@ -111,11 +150,21 @@ type timer struct {
 	at  time.Time
 	seq int
 	ch  chan time.Time
+	h   *kernel.EffectHandle // set by After under f.mu
 }
 
 func (t *timer) C() <-chan time.Time { return t.ch }
 
 func (t *timer) Stop() bool {
+	if !t.stop() {
+		return false
+	}
+	_ = t.h.RequestWithdraw()
+	return true
+}
+
+// stop takes t off the pending timers and reports whether it was there.
+func (t *timer) stop() bool {
 	t.f.mu.Lock()
 	defer t.f.mu.Unlock()
 	for i, p := range t.f.pending {

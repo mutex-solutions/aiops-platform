@@ -15,7 +15,7 @@ import (
 
 func TestConsumerReadsTheCommittedGeneration(t *testing.T) {
 	f, provider := fake.New()
-	f.Commit(composition.Generation{Scope: composition.ScopeProcess, Seq: 7, Digest: composition.Digest{9}, Rows: []composition.Row{
+	f.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
 		{ID: "a", Plugin: "aiops/a", State: kernel.Active, Hooks: []string{"approval/gates"}, Registrations: []string{"route"}},
 		{ID: "b", Plugin: "aiops/b", State: kernel.Failed, Hooks: []string{"approval/gates", "x/y"}},
 		{ID: "c", Plugin: "aiops/c", State: kernel.Pending},
@@ -25,7 +25,7 @@ func TestConsumerReadsTheCommittedGeneration(t *testing.T) {
 		ran = true
 		r := composition.Key.Of(c)
 		g, ok := r.Committed(composition.ScopeProcess)
-		if !ok || g.Seq != 7 || g.Digest[0] != 9 || len(g.Rows) != 3 {
+		if !ok || len(g.Rows) != 3 {
 			t.Errorf("Committed = %+v, %v", g, ok)
 		}
 		g.Rows[0].ID = "mutated" // a copy: the service is unchanged

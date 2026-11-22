@@ -83,7 +83,7 @@ func TestLines(t *testing.T) {
 			if tc.sub {
 				write(t, d, "sub/b.go", "package sub\n")
 			}
-			if err := checkLines(d, tc.limit); (err != nil) != tc.fail {
+			if err := checkLines(d, tc.limit, false); (err != nil) != tc.fail {
 				t.Fatalf("fail=%v, err=%v", tc.fail, err)
 			}
 		})

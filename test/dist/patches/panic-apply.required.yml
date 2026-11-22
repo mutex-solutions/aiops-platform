@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: the fault plugin panic-apply as an required row,
+# with a row that depends on what it provides.
+- insert:
+    - {id: fault, plugin: aiops-test/panic-apply, roles: [api], required: true, config: {mode: apply}}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

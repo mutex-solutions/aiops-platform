@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -10,7 +11,7 @@ import (
 // (03-c3-kernel.md:359; 08-profiles-roadmap-adrs.md:469). It is built from
 // what the module table declares (Provides, Needs) and what the rows declare
 // (Inject, Isolate, Parent), with no plugin code run
-// (plugin-system-2026-11.md:30, 521: "Provides is mandatory so the composer
+// (plugin-system-2026-11.md §2 and §15: "Provides is mandatory so the composer
 // analyses the graph without running code").
 //
 // Rows. Only an active row is a node: enabled, its roles meet the selected
@@ -23,10 +24,10 @@ import (
 // this package's reading: the documents say a group row can carry inject and
 // stay PENDING (07-c4-plugin-sdk.md:1244), not that a child waits for it.
 // Wants are no edge (a When body is a dependant of its own,
-// plugin-system-2026-11.md:169).
+// plugin-system-2026-11.md §4).
 //
 // Realms. Isolate on a row creates a realm for that row and its descendants
-// for each key it names (plugin-system-2026-11.md:521 and 524: "one provider
+// for each key it names (plugin-system-2026-11.md §15, rows 5 and 8: "one provider
 // per name per realm", children inherit within a realm). The realm of a key
 // at a row is the nearest row, the row itself first and then its ancestors,
 // that isolates the key, or the root realm. A provider lives in the realm of
@@ -38,8 +39,11 @@ import (
 // names a plugin outside the module table are errors, and they stop boot for
 // optional and required rows alike (08-profiles-roadmap-adrs.md:469). A need
 // with no provider is an error when the consumer or the key is required, and
-// otherwise one grouped warning (08:471, 03-c3-kernel.md:361). Isolate on a
-// bound key is a gate failure (Stop); see Gate.
+// otherwise one grouped warning (08:471, 03-c3-kernel.md:361). A consumer is
+// required by row or by key: an active provider of a required key in the root
+// realm counts as a required row (ADR-059 decision 27), so a need of it whose
+// provider runs only in another role refuses the profile at admission. Isolate on
+// a bound key is a gate failure (Stop); see Gate.
 
 // Edge is a dependency: From needs To. Key is the key that To provides to
 // From, or "" for the edge from a child to its group.
@@ -108,8 +112,21 @@ type builder struct {
 
 func (b *builder) provides(id string) []string { return b.mods[b.rows[id].Plugin].Provides }
 
+// byKey reports whether a row provides a key of keyReq in the root realm: a row required
+// by key, which counts as a required row (ADR-059 decisions 24 and 27). The caller asks
+// it of an active row only.
+func (b *builder) byKey(id string) bool {
+	return slices.ContainsFunc(b.provides(id), func(k string) bool { return b.keyReq[k] && b.realm(id, k) == "" })
+}
+
+// needs returns the keys a row waits for. The keys of the root are left out: the
+// launcher provides the six launch keys before any row mounts (03-c3-kernel.md:360)
+// and the kernel its four built-ins, so no row provides them and none waits for
+// them. A manifest lists them in needs all the same (the loader needs profileContext
+// and catalog, readiness needs logger). A row whose config holds a reference needs
+// configRefsReady, which config-refs provides (refsInject).
 func (b *builder) needs(id string) []string {
-	return union(b.mods[b.rows[id].Plugin].Needs, b.rows[id].Inject)
+	return withoutRoot(union(b.mods[b.rows[id].Plugin].Needs, refsInject(b.rows[id])))
 }
 
 // realm returns the realm of a key at a row.
@@ -199,7 +216,7 @@ func BuildGraph(c Composition, mods ModuleTable, dist DistManifest, roles []Role
 				continue
 			}
 			realm := b.realm(id, k)
-			if b.required[id] || b.keyReq[k] {
+			if b.required[id] || b.keyReq[k] || b.byKey(id) {
 				missing = append(missing, StaticError{Stage: "static graph", Rule: RuleNoProvider, Rows: []string{id}, Keys: []string{k},
 					Msg: fmt.Sprintf("row %q needs key %q, which has no provider in %s, and the row or the key is required", id, k, realmName(realm))})
 			} else {

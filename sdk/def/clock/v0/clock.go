@@ -18,8 +18,11 @@ type Clock interface {
 	// Now is the current time.
 	Now() time.Time
 	// After starts a timer that fires once, d from now, and records its stop as an
-	// effect of c's fiber. A d of zero or less fires at once. It returns an error
-	// that matches kernel.ErrInactiveEffect on a fiber that is unloading.
+	// effect of c's fiber, which leaves the fiber's ledger when the timer fires or
+	// is stopped. A d of zero or less fires at once. It returns an error that
+	// matches kernel.ErrInactiveEffect on a fiber that is unloading. The effect is
+	// recorded on the fiber's lane after After returns; a timer whose activation
+	// quiesces before that (an Apply that fails after After) never fires.
 	After(c *kernel.Context, d time.Duration) (Timer, error)
 }
 

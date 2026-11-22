@@ -26,7 +26,7 @@ var (
 	ReflectKey = NewKey[*reflectService]("reflect", 0)
 	// RegistryKey names the built-in plugin registry (03-c3-kernel.md:62;
 	// plugin record :59). Its value has no methods.
-	RegistryKey = NewKey[*registry]("registry", 0)
+	RegistryKey = NewKey[*registry]("registry", 0, ConsumerBound())
 	// HooksKey names the built-in hook service, Cordis "events" renamed because
 	// "events" is the outbox (03-c3-kernel.md:62; plugin record :59). Its
 	// value has no methods.
@@ -53,7 +53,7 @@ func (r *Root) installBuiltins(h slog.Handler) error {
 	}
 	for _, provide := range []func() error{
 		func() error { return ReflectKey.Provide(r.ctx, &reflectService{}) },
-		func() error { return RegistryKey.Provide(r.ctx, &registry{}) },
+		func() error { return RegistryKey.Provide(r.ctx, &registry{core: r.core}) },
 		func() error { return HooksKey.Provide(r.ctx, &hooksService{}) },
 		func() error { return LoggerKey.Provide(r.ctx, newLogger(h)) },
 	} {

@@ -31,6 +31,7 @@ type handle struct {
 	core     *core // The core this activation belongs to, set once.
 	std      context.Context
 	fiber    uint64
+	act      *activation // The activation this handle belongs to; nil on an availability-check handle.
 	live     atomic.Bool // New effects and leases are accepted only while live.
 	released atomic.Bool // Committed reads remain valid during orderly teardown.
 	lease    leaseCount  // Own cache lines: enter/leave writes never invalidate live/std/core readers.
@@ -297,7 +298,9 @@ func (c *handle) release() {
 func (o *owner) activation(f *fiber, epoch []uint64, bindings map[svcKey]*liveProvision) *activation {
 	std, cancel := context.WithCancel(context.Background())
 	c := newHandle(o.r, std, f.id, make(map[svcKey]provision, len(bindings)))
+	plugin := f.spec.ID
 	a := &activation{ctx: c, cancel: cancel, epoch: epoch}
+	c.act = a
 	a.notice.act = a
 	for key, p := range bindings {
 		c.bindings[key] = p.binding
@@ -353,7 +356,12 @@ func (o *owner) activation(f *fiber, epoch []uint64, bindings map[svcKey]*livePr
 			// run and even Error() belong to the worker. Completion uses a
 			// non-canceled transport context so quiescence cannot lose its record.
 			at := run.finish()
-			o.r.exchange(context.Background(), message{kind: cmdTrackedDone, act: a, id: id, err: err, errText: errorText(err), at: at})
+			text := errorText(err)
+			if err != nil {
+				// The cause reaches the log before the fiber is FAILED, from the worker.
+				o.r.logError("tracked goroutine failed", a.ctx.fiber, plugin, label, text)
+			}
+			o.r.exchange(context.Background(), message{kind: cmdTrackedDone, act: a, id: id, err: err, errText: text, at: at})
 		}, nil
 	}
 	c.childFn = func(spec pluginSpec) (uint64, error) {
@@ -451,10 +459,12 @@ var errEffectUnavailable = errors.New("native effect cleanup unsupported")
 // bindings while an existing worker is blocked. run must cooperate with Std's
 // cancellation; there is no timeout that makes a stuck worker cease to exist.
 //
-// A returned error or recovered panic is reported through the native completion
-// hook before releasing the lease. It fails the activation, including one that
-// already became ACTIVE. A wrapped context.Canceled is normal completion only
-// when Std is itself canceled. Other errors, including DeadlineExceeded, fail;
+// The lease is released as run returns, before its return is stamped and reported
+// through the native completion hook, so a drain judges the lease and the record by
+// the same instant (drainInTime). The record keeps the drain open until the owner has
+// the report. A returned error or recovered panic fails the activation, including
+// one that already became ACTIVE. A wrapped context.Canceled is normal completion
+// only when Std is itself canceled. Other errors, including DeadlineExceeded, fail;
 // workers may instead return nil after handling shutdown themselves.
 func (c *handle) goTracked(label string, run func(context.Context) error) {
 	if label == "" {
@@ -480,10 +490,11 @@ func (c *handle) goTracked(label string, run func(context.Context) error) {
 		refuse(err)
 	}
 	go func() {
-		// Completion is synchronous with the owner. Reporting before leave
-		// prevents the final drain wake from outrunning a worker failure.
-		defer leave()
-		done(runTracked(c.std, label, run))
+		// A worker failure cannot be outrun by the drain wake of this leave: the
+		// tracked record keeps the activation busy (ownBusy) until done's report.
+		err := runTracked(c.std, label, run)
+		leave()
+		done(err)
 	}()
 }
 

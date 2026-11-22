@@ -1,0 +1,3 @@
+# Layer 4 patch, written by a live recomposition: one more worker, which is a config the
+# spine cannot take in place, so the row restarts and so does everything that needs it.
+- {id: spine, config: {workers: 3, report: spine.json}}

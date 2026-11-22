@@ -50,7 +50,10 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - run: go build ./...
       - run: go vet ./...
-      - run: go test -race -count=1 ./...
+      # -short: the three suites that build and run the test binary (test/failure-matrix,
+      # test/recomposition, test/loader-smoke) skip themselves, loudly; the s1-suites job
+      # runs them without it. Nothing else in the repository reads -short.
+      - run: go test -race -short -count=1 ./...
       - name: Kernel module build, vet, race tests
         working-directory: sdk/kernel
         run: |
@@ -79,6 +82,46 @@ jobs:
           go run ./tools/kernelcheck lines sdk/kernel 8200
           go run ./tools/kernelcheck testctor .
           go run ./tools/kernelcheck coverage sdk/kernel/cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel
+      - name: Import boundaries
+        # docs/architecture/07-c4-plugin-sdk.md:27-48, ADR-059 decision 6; skips the
+        # server-closure part until cmd/aiops exists.
+        run: go run ./tools/kernelcheck imports .
+      - name: Plugin vet
+        # plugin-system-2026-11.md §14 (T0 Static); allow-var and allow-go exemptions are counted in the output.
+        run: go run ./tools/kernelcheck pluginvet plugins loader boot
+      - name: Boot and loader statement coverage profiles
+        run: |
+          go test -count=1 -coverprofile=cover-boot.out ./boot
+          go test -count=1 -coverprofile=cover-loader.out ./loader
+      - name: Boot structural checks
+        # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 5707 lines + 10%, rounded up to the next 100.
+        # No vocabulary list: boot legitimately handles tenant (a scope class of its closed vocabulary).
+        run: |
+          go run ./tools/kernelcheck lines boot 6300
+          go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
+      - name: Loader structural checks
+        # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 1000 lines + 10%, rounded up to the next 100.
+        run: |
+          go run ./tools/kernelcheck lines loader 1100
+          go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
+          go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
+
+  s1-suites:
+    name: S1 exit suites on the built binary
+    # ADR-059 decisions 3 and 5, 08-profiles-roadmap-adrs.md:693: the failure matrix
+    # (process-scope columns), the recomposition suite and the loader smoke test build
+    # test/dist/cmd/aiops-test and run it. A cell that does not do what the table says fails
+    # this job; there is no list of known deviations (ADR-059 decisions 12 to 15).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      # Race-built, binary included; any race report of any process fails the job (see the
+      # s1-suites target of the Makefile).
+      - run: make s1-suites
 
   postgres:
     name: PostgreSQL probes

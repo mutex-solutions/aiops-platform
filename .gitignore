@@ -4,5 +4,6 @@ tasks/**/*.png
 node_modules/
 docs/architecture/diagrams/html/
 
-# Coverage profiles of the kernel check.
+# Coverage profiles of the structural checks.
 cover.out
+cover-*.out

@@ -2,15 +2,20 @@ package boot
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
+
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 // The gate: admission of a composition (03-c3-kernel.md:357, "Admit"). It has
 // ten named slots in the order of the table at
 // 08-profiles-roadmap-adrs.md:495-506 (ADR-059 decision 4). It reads the
-// composition, the module table and the distribution manifest only and runs
-// no plugin code. Before the ten checks it resolves each enabled row's plugin
-// (03-c3-kernel.md:357).
+// composition, the module table and the distribution manifest, plus the keys
+// the root provides and the classes of keys and hooks that their definitions
+// declare (classesOf), which no distribution changes, and runs no plugin code. Before the ten checks it resolves each
+// enabled row's plugin (03-c3-kernel.md:357).
 //
 // A result is data. Per check and per row it is pass, fail with a reason, or
 // not evaluated until the step that builds the check. What a failure means
@@ -189,7 +194,10 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		consumer: bindingSet(dist.Consumers),
 		sealed:   map[string][]string{},
 		required: map[string]bool{},
+		rows:     map[string]ComposedRow{},
+		mounted:  ActiveRows(c, nil),
 	}
+	g.pb, g.cb, g.sh = classesOf(mods, dist)
 	for _, h := range dist.SealedHooks {
 		g.sealed[h.Hook] = h.Plugins
 	}
@@ -197,6 +205,7 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		g.required[id] = true
 	}
 	for _, r := range c.Rows {
+		g.rows[r.ID] = r
 		if r.Required {
 			g.required[r.ID] = true
 		}
@@ -260,10 +269,76 @@ func sortedKeys(m map[string]bool) []string {
 
 type gate struct {
 	mods     ModuleTable
-	provider map[string][]string
+	provider map[string][]string // who dist.yaml allows, by key or hook
 	consumer map[string][]string
 	sealed   map[string][]string
+	pb, cb   map[string]bool // provider-bound and consumer-bound keys (classesOf)
+	sh       map[string]bool // sealed hooks
 	required map[string]bool
+	rows     map[string]ComposedRow
+	mounted  map[string]bool // enabled with every group above it, in any role (ActiveRows)
+}
+
+// classesOf returns, by name, the provider-bound and the consumer-bound keys and the
+// sealed hooks, from their definitions (kernel.KeyClasses, kernel.HookSealed and
+// HookUse.Sealed; ADR-059 decision 20): the keys of the root and of the definitions boot
+// imports, the hooks of the kernel and the loader, and the keys and hooks that the
+// plugins of the module table provide, inject and listen on. An entry read from
+// modules.yaml has no Go value and carries the classes of what it names
+// (ModuleClasses). dist.yaml lists only who is allowed.
+//
+// ponytail: a key or hook that no definition names, or that only an entry of
+// modules.yaml with no classes names, is bound or sealed when dist.yaml lists who may
+// hold it, as the kernel takes a binding of a bound key and a listener list of a sealed
+// hook only; the module table that S2a generates carries every class.
+func classesOf(mods ModuleTable, dist DistManifest) (pb, cb, sh map[string]bool) {
+	pb, cb, sh = map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, b := range dist.Providers {
+		pb[b.Key] = true
+	}
+	for _, b := range dist.Consumers {
+		cb[b.Key] = true
+	}
+	for _, h := range dist.SealedHooks {
+		sh[h.Hook] = true
+	}
+	defined := map[string]bool{}
+	key := func(n string, p, c bool) {
+		if !defined[n] { // a definition replaces what dist.yaml implied
+			defined[n], pb[n], cb[n] = true, false, false
+		}
+		pb[n], cb[n] = pb[n] || p, cb[n] || c
+	}
+	keys := knownKeys()
+	for _, e := range mods {
+		p, ok := e.Plugin.(kernel.Plugin)
+		switch {
+		case ok:
+			keys = append(keys, p.Provides...)
+			for _, d := range p.Inject {
+				keys = append(keys, d.Key())
+			}
+			for _, u := range p.Hooks {
+				sh[u.Hook()] = u.Sealed()
+			}
+		case e.Classes != nil:
+			for _, n := range slices.Concat(e.Provides, e.Needs, e.Wants) {
+				key(n, slices.Contains(e.Classes.ProviderBound, n), slices.Contains(e.Classes.ConsumerBound, n))
+			}
+			for _, h := range e.Hooks {
+				sh[h.Hook] = slices.Contains(e.Classes.SealedHooks, h.Hook)
+			}
+		}
+	}
+	for _, k := range keys {
+		if p, c, ok := kernel.KeyClasses(k); ok {
+			key(k.Name(), p, c)
+		}
+	}
+	for _, h := range kernelHooks() {
+		sh[h.Name()], _ = kernel.HookSealed(h)
+	}
+	return pb, cb, sh
 }
 
 func bindingSet(bs []Binding) map[string][]string {
@@ -280,7 +355,7 @@ func (g *gate) fail(check int, r Row, rule Rule, stop bool, format string, a ...
 }
 
 // resolve looks the plugin of an enabled row up in the module table. The two
-// core plugins are built into the loader (plugin-system-2026-11.md:260).
+// core plugins are built into the loader (plugin-system-2026-11.md §6).
 // Remote plugins and plugins.lock are not read before S2a, so such a row is
 // refused here with that reason (03-c3-kernel.md:357).
 func (g *gate) resolve(r Row) (RowResult, bool) {
@@ -296,33 +371,40 @@ func (g *gate) resolve(r Row) (RowResult, bool) {
 }
 
 // classes is gate check 7 for one enabled row whose plugin resolved: the
-// provider and consumer bindings, Want, isolate and sealed hooks.
+// provider and consumer bindings, Want, isolate and sealed hooks. A launch key is
+// provider-bound to the launcher, which is no row, so dist.yaml lists no provider.
 func (g *gate) classes(r Row) []RowResult {
 	var out []RowResult
 	const c = CheckKeyHookClass
 	e := g.mods[r.Plugin]
 	for _, k := range e.Provides {
-		if b, ok := g.provider[k]; ok && !inSet(r.Plugin, b...) {
+		b := g.provider[k]
+		switch {
+		case isRootKey(k):
+			out = append(out, g.fail(c, r, RuleProviderBinding, false,
+				"row %q provides key %q, which the root provides before any row mounts (03-c3-kernel.md:62-63)", r.ID, k))
+		case g.pb[k] && !inSet(r.Plugin, b...):
 			out = append(out, g.fail(c, r, RuleProviderBinding, false,
 				"row %q provides provider-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
 		}
 	}
-	for _, k := range union(e.Needs, r.Inject) {
-		if b, ok := g.consumer[k]; ok && !inSet(r.Plugin, b...) {
+	// A Want resolves through the consumer binding as a Need does.
+	for _, k := range union(e.Needs, e.Wants, r.Inject) {
+		if b := g.consumer[k]; g.cb[k] && !inSet(r.Plugin, b...) {
 			out = append(out, g.fail(c, r, RuleConsumerBinding, false,
-				"row %q needs consumer-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
+				"row %q injects consumer-bound key %q and plugin %q is not in its binding [%s]", r.ID, k, r.Plugin, quoted(b)))
 		}
 	}
 	for _, k := range e.Wants {
-		if _, ok := g.provider[k]; ok {
+		if g.pb[k] {
 			out = append(out, g.fail(c, r, RuleWantBound, false,
 				"row %q wants provider-bound key %q: Want is refused on a provider-bound key", r.ID, k))
 		}
 	}
 	for _, k := range r.Isolate {
-		b, ok := g.provider[k]
+		b := g.provider[k]
 		switch {
-		case !ok:
+		case !g.pb[k]:
 		case !inSet(r.Plugin, b...):
 			out = append(out, g.fail(c, r, RuleIsolateBound, true,
 				"row %q isolates provider-bound key %q and plugin %q is not its bound provider", r.ID, k, r.Plugin))
@@ -332,7 +414,7 @@ func (g *gate) classes(r Row) []RowResult {
 		}
 	}
 	for _, h := range e.Hooks {
-		if l, ok := g.sealed[h.Hook]; ok && !inSet(r.Plugin, l...) {
+		if l := g.sealed[h.Hook]; g.sh[h.Hook] && !inSet(r.Plugin, l...) {
 			out = append(out, g.fail(c, r, RuleSealedHook, false,
 				"row %q listens on sealed hook %q and plugin %q is not in its listener list [%s]", r.ID, h.Hook, r.Plugin, quoted(l)))
 		}
@@ -356,7 +438,7 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 	e := g.mods[r.Plugin]
 	boundProvider := false
 	for _, k := range e.Provides {
-		if b, ok := g.provider[k]; ok && inSet(r.Plugin, b...) {
+		if g.pb[k] && inSet(r.Plugin, g.provider[k]...) {
 			boundProvider = true
 		}
 	}
@@ -365,19 +447,25 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 		if !g.required[r.ID] {
 			rule, what = RuleBoundProvider, "a provider of a bound key"
 		}
+		// The inject, isolate and group of a group reach the rows it holds, so a
+		// patch of a group above the row counts as a patch of the row.
 		for _, f := range []FieldName{FieldInject, FieldIsolate, FieldGroup} {
-			if o, p := patched(r, f); p {
-				out = append(out, g.fail(c, r.Row, rule, boundProvider,
-					"row %q: %s is never patched on %s, and layer %d (%s, %s:%d) patched it", r.ID, f, what, o.Layer, o.Source, o.File, o.Line))
+			for a, ok := r, true; ok; a, ok = g.rows[a.Parent] {
+				if o, p := patched(a, f); p {
+					out = append(out, g.fail(c, r.Row, rule, boundProvider,
+						"row %q: %s is never patched on %s or a group that holds it, and layer %d (%s, %s:%d) patched it on row %q", r.ID, f, what, o.Layer, o.Source, o.File, o.Line, a.ID))
+					break
+				}
 			}
 		}
 	}
-	if o, _ := r.Provenance.Of(FieldIntercept); o.Layer != 1 {
-		for _, f := range r.Intercept {
-			if _, ok := g.provider[f.Key]; ok {
-				out = append(out, g.fail(c, r.Row, RuleInterceptBound, false,
-					"row %q: intercept of provider-bound key %q is set by layer %d (%s), and only bundle layers may", r.ID, f.Key, o.Layer, o.Source))
-			}
+	// Compose keeps the origin of each intercept key apart (interceptField): only
+	// bundle layers add, change or remove the intercept of a provider-bound key.
+	for _, fo := range r.Provenance.Fields {
+		k, ok := strings.CutPrefix(string(fo.Field), string(interceptField("")))
+		if ok && g.pb[k] && fo.Origin.Layer != 1 {
+			out = append(out, g.fail(c, r.Row, RuleInterceptBound, false,
+				"row %q: the intercept of provider-bound key %q is set by layer %d (%s), and only bundle layers may", r.ID, k, fo.Origin.Layer, fo.Origin.Source))
 		}
 	}
 	return out
@@ -385,16 +473,23 @@ func (g *gate) layers(r ComposedRow) []RowResult {
 
 // lastProvider finds a provider-bound key whose candidate providers are all
 // disabled: the last enabled provider was disabled (08-profiles-roadmap-adrs.md:145).
-// A key with no candidate row is not composed by this profile and is fine.
+// A provider in a disabled group is not mounted, so it counts as disabled. A key
+// with no candidate row is not composed by this profile and is fine. The keys of
+// config-refs are the launcher's to require (ADR-059 decision 18, RequiredFor): with no
+// config-refs mounted a row that holds a reference stays PENDING and a live generation
+// that holds one is rejected, so this rule never refuses disabling it.
 func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 	var out []RowResult
 	for _, b := range dist.Providers {
+		if !g.pb[b.Key] || b.Key == configRefsReady || b.Key == configRefsDryRun {
+			continue
+		}
 		var cands []ComposedRow
 		enabled := false
 		for _, r := range c.Rows {
 			if inSet(b.Key, g.mods[r.Plugin].Provides...) && inSet(r.Plugin, b.Plugins...) {
 				cands = append(cands, r)
-				enabled = enabled || r.Enabled
+				enabled = enabled || g.mounted[r.ID]
 			}
 		}
 		if enabled {
@@ -408,14 +503,13 @@ func (g *gate) lastProvider(c Composition, dist DistManifest) []RowResult {
 	return out
 }
 
-// union returns the sorted union of two string sets.
-func union(a, b []string) []string {
+// union returns the sorted union of string sets.
+func union(sets ...[]string) []string {
 	m := map[string]bool{}
-	for _, s := range a {
-		m[s] = true
-	}
-	for _, s := range b {
-		m[s] = true
+	for _, set := range sets {
+		for _, s := range set {
+			m[s] = true
+		}
 	}
 	return sortedKeys(m)
 }

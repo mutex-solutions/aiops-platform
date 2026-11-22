@@ -1,0 +1,7 @@
+# Layout: 07-c4-plugin-sdk.md:529-537 (R13).
+# Contract: ADR-059 decision 16 (`configRefsDryRun` is `P`, bound to config-refs).
+key: configRefsDryRun
+version: "0.1"
+stability: preview
+class: {provider: bound, consumer: open}
+remote: "no"

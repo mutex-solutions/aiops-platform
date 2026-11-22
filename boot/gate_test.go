@@ -3,6 +3,8 @@ package boot
 import (
 	"strings"
 	"testing"
+
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 const gateMods = `
@@ -13,6 +15,13 @@ o/want: {wants: [pk]}
 o/hook: {hooks: [{hook: sh, stage: 1}]}
 o/open: {provides: [ok]}
 o/needpk: {needs: [pk]}
+o/wantck: {wants: [ck]}
+o/ready: {provides: [ready]}
+o/inthook: {hooks: [{hook: internal/plugin, stage: 0}]}
+o/entryinit: {hooks: [{hook: loader/entry-init, stage: 0}]}
+o/needloader: {needs: [loader]}
+o/wantregistry: {wants: [registry]}
+o/wantready: {wants: [ready]}
 `
 
 const gateDist = `
@@ -81,6 +90,55 @@ func TestGateChecksTable(t *testing.T) {
 		{name: "one provider left", bundle: rows("id: a, plugin: o/prov", "id: b, plugin: o/prov"),
 			patches: []string{"- {id: a, enabled: false}"}, pass: true},
 		{name: "key not composed", bundle: rows("id: b, plugin: o/open"), pass: true},
+		// A Want resolves through the consumer binding as a Need does.
+		{name: "consumer outside binding by want", bundle: rows("id: a, plugin: o/wantck"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		// The root provides its keys and the kernel seals its hooks whatever dist.yaml lists.
+		{name: "provider of a key of the root", bundle: rows("id: a, plugin: o/ready"),
+			want: []string{"7 a provider-binding stop=false"}, detach: []string{"a"}},
+		// The launch keys are provider-bound to the launcher, which is no row: a Want of one
+		// and an isolate of one are refused as for any provider-bound key.
+		{name: "want of a key of the root", bundle: rows("id: a, plugin: o/wantready"),
+			want: []string{"7 a want-bound stop=false"}, detach: []string{"a"}},
+		{name: "isolate of a key of the root", bundle: rows("id: a, plugin: o/open, isolate: [ready]"),
+			want: []string{"7 a isolate-bound stop=true"}, refused: true},
+		{name: "listener on a hook of the kernel that dist.yaml does not list", bundle: rows("id: a, plugin: o/inthook"),
+			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
+		{name: "listener on a hook of the kernel that dist.yaml lists", bundle: rows("id: a, plugin: o/inthook"),
+			dist: "sealedHooks: {internal/plugin: [o/inthook]}", pass: true},
+		// So are the keys and hooks of the definitions boot imports, and the kernel's registry.
+		{name: "listener on a hook of the loader that dist.yaml does not list", bundle: rows("id: a, plugin: o/entryinit"),
+			want: []string{"7 a sealed-hook stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the loader that dist.yaml does not list", bundle: rows("id: a, plugin: o/needloader"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the registry that dist.yaml does not list", bundle: rows("id: a, plugin: o/wantregistry"),
+			want: []string{"7 a consumer-binding stop=false"}, detach: []string{"a"}},
+		{name: "consumer of the loader that dist.yaml lists", bundle: rows("id: a, plugin: o/needloader"),
+			dist: "consumers: {loader: [o/needloader]}", pass: true},
+		// A row in a disabled group is not mounted, and a patch on a group reaches its children.
+		{name: "last provider in a disabled group", bundle: rows("id: g, plugin: core:group, config: [{id: h, plugin: core:group, config: [{id: a, plugin: o/prov}]}]"),
+			patches: []string{"- {id: g, enabled: false}"},
+			want:    []string{"8 g:h:a last-provider stop=true"}, refused: true},
+		{name: "inject patched on the group of a provider of a bound key", bundle: rows("id: g, plugin: core:group, config: [{id: a, plugin: o/prov}]"),
+			patches: []string{"- {id: g, inject: [nothere]}"},
+			want:    []string{"8 g:a bound-provider-field stop=true"}, refused: true},
+		// The intercept of a bound key is the bundle's: a later patch may not add, change or drop it.
+		{name: "a patch drops the bundle intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}, ok: {y: 1}}"),
+			patches: []string{"- {id: a, intercept: {ok: {y: 2}}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch empties the intercept", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}"),
+			patches: []string{"- {id: a, intercept: {}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch changes the intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}"),
+			patches: []string{"- {id: a, intercept: {pk: {x: 2}}}"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
+		{name: "a patch keeps the bound intercept and changes an open one", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}, ok: {y: 1}}"),
+			patches: []string{"- {id: a, intercept: {pk: {x: 1}, ok: {y: 2}}}", "- {id: a, intercept: {pk: {x: 1}}}"}, pass: true},
+		{name: "a bundle patch drops the intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}}") + "- {id: a, intercept: {}}\n",
+			pass: true},
+		{name: "a row inserted by a patch intercepts a bound key", bundle: rows("id: b, plugin: o/open"),
+			patches: []string{"- insert: [{id: a, plugin: o/open, intercept: {pk: {x: 1}}}]"},
+			want:    []string{"8 a intercept-bound stop=false"}, detach: []string{"a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,6 +167,77 @@ func TestGateChecksTable(t *testing.T) {
 				if denied && r.Enabled || !denied && r.Enabled != c.Rows[i].Enabled {
 					t.Errorf("row %s: denied=%v enabled=%v", r.ID, denied, r.Enabled)
 				}
+			}
+		})
+	}
+}
+
+// Gate check 7 takes the classes of keys from their definitions, through the plugins of
+// the module table (ADR-059 decision 20): dist.yaml lists who is allowed, and a bound key
+// it does not list admits nobody, while a binding it lists for an open key binds nothing.
+func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
+	cbKey := kernel.NewKey[string]("cb", 0, kernel.ConsumerBound())
+	// Hooks that plugin definitions declare: the module table holds a listener of each as
+	// a HookUse of its Plugin.Hooks, so the seal comes from the definition too.
+	sealedEv := kernel.NewEvent[int]("d20/sealed", kernel.OwnedBy(storeKey), kernel.Sealed())
+	openEv := kernel.NewEvent[int]("d20/open", kernel.OwnedBy(storeKey))
+	listener := func(id string, h kernel.HookUse) ModuleEntry {
+		return ModuleEntry{ID: id, Plugin: kernel.Define(kernel.Plugin{ID: id, Hooks: []kernel.HookUse{h}}),
+			Hooks: []HookDecl{{Hook: h.Hook(), StageName: h.Stage()}}}
+	}
+	mods := ModuleTable{}
+	for _, e := range []ModuleEntry{
+		listener("o/sealed-listener", sealedEv.Use(kernel.DefaultStage)),
+		listener("o/open-listener", openEv.Use(kernel.DefaultStage)),
+		// Entries read from modules.yaml carry the classes of the definitions instead.
+		{ID: "o/yaml-bound", Provides: []string{"ypk"}, Needs: []string{"ycb"}, Hooks: []HookDecl{{Hook: "y/sealed"}},
+			Classes: &ModuleClasses{ProviderBound: []string{"ypk"}, ConsumerBound: []string{"ycb"}, SealedHooks: []string{"y/sealed"}}},
+		{ID: "o/yaml-open", Provides: []string{"yok"}, Hooks: []HookDecl{{Hook: "y/open"}}, Classes: &ModuleClasses{}},
+		toy(toySpec{id: "o/policy", provides: []kernel.AnyKey{policyKey}}),
+		toy(toySpec{id: "o/cbprov", provides: []kernel.AnyKey{cbKey}}),
+		toy(toySpec{id: "o/cbuser", needs: []kernel.AnyKey{cbKey}}),
+		toy(toySpec{id: "o/store", provides: []kernel.AnyKey{storeKey}}),
+		{ID: "o/plain"}, // no Go value: what dist.yaml lists stands for the class
+		// A zero Dep has no key and no class; the kernel refuses it at mount.
+		{ID: "o/zero", Plugin: kernel.Define(kernel.Plugin{ID: "o/zero", Inject: []kernel.Dep{{}}})},
+	} {
+		mods[e.ID] = e
+	}
+	for _, tc := range []struct {
+		name, bundle, dist string
+		want               []string
+	}{
+		{"provider-bound by its definition, not listed", rows("id: a, plugin: o/policy"), "",
+			[]string{"7 a provider-binding stop=false"}},
+		{"provider-bound by its definition, listed", rows("id: a, plugin: o/policy"), "providers: {policy: [o/policy]}", nil},
+		{"consumer-bound by its definition, not listed", rows("id: p, plugin: o/cbprov", "id: a, plugin: o/cbuser"), "",
+			[]string{"7 a consumer-binding stop=false"}},
+		{"consumer-bound by its definition, listed", rows("id: p, plugin: o/cbprov", "id: a, plugin: o/cbuser"), "consumers: {cb: [o/cbuser]}", nil},
+		{"isolate of a key bound by its definition", rows("id: a, plugin: o/plain, isolate: [policy]"), "",
+			[]string{"7 a isolate-bound stop=true"}},
+		// The kernel refuses a binding of an open key; the gate holds no row to it.
+		{"open by its definition, listed", rows("id: a, plugin: o/store"), "providers: {store: [o/plain]}", nil},
+		{"open by its definition, listed, intercepted in a patch", rows("id: a, plugin: o/plain"), "providers: {store: [o/plain]}", nil},
+		{"a plugin with a zero dependency", rows("id: a, plugin: o/zero"), "", nil},
+		// The kernel refuses the listener of a sealed hook that Config.Listeners omits, so
+		// the gate does too; an open hook stays open whoever dist.yaml lists for it.
+		{"sealed by its definition, not listed", rows("id: a, plugin: o/sealed-listener"), "",
+			[]string{"7 a sealed-hook stop=false"}},
+		{"sealed by its definition, listed", rows("id: a, plugin: o/sealed-listener"), "sealedHooks: {d20/sealed: [o/sealed-listener]}", nil},
+		{"open by its definition, listed for another plugin", rows("id: a, plugin: o/open-listener"), "sealedHooks: {d20/open: [o/plain]}", nil},
+		{"bound and sealed by the classes of modules.yaml, not listed", rows("id: a, plugin: o/yaml-bound"), "",
+			[]string{"7 a provider-binding stop=false", "7 a consumer-binding stop=false", "7 a sealed-hook stop=false"}},
+		{"open by the classes of modules.yaml, listed", rows("id: a, plugin: o/yaml-open"),
+			"providers: {yok: [o/plain]}\nsealedHooks: {y/open: [o/plain]}", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var patches []string
+			if strings.Contains(tc.name, "patch") {
+				patches = []string{"- {id: a, intercept: {store: {x: 1}}}"}
+			}
+			g := Gate(comp(t, tc.bundle, patches...), mods, mustDist(t, tc.dist))
+			if got := gateLines(g); !equalLines(got, tc.want) {
+				t.Errorf("failures %q, want %q", got, tc.want)
 			}
 		})
 	}

@@ -1,0 +1,2 @@
+# Layer 4 patch: a row whose config holds a reference to the environment.
+- {id: consumer, config: {note: "${env:AIOPS_REF_NOTE}"}}

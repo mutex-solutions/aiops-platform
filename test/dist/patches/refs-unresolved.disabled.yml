@@ -1,0 +1,4 @@
+# Layer 4 patch: a disabled row whose config holds a reference that does not resolve
+# (secret: until S3), so that a live generation that enables it is rejected.
+- insert:
+    - {id: fault, plugin: aiops-test/toy-consumer, roles: [api], enabled: false, config: {note: "${secret:x}"}}

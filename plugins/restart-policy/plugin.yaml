@@ -1,0 +1,23 @@
+# The hand-written half of the manifest (07-c4-plugin-sdk.md section 2). The
+# generated half (uses, registers, configSchema, requires) comes with plugingen, S2a.
+manifestVersion: "1.0"
+id: aiops/restart-policy
+version: 0.1.0
+title: Restart policy
+description: Retries a FAILED fiber in place with backoff, gives up after N failures in a window and, for an infrastructure provider, asks the launcher to replace the process.
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+provides: []
+needs:
+  - {key: clock, major: 0}
+  - {key: catalog, major: 0}
+  - {key: appExit, major: 0}
+  - {key: registry, major: 0}
+  - {key: composition, major: 0}
+  - {key: logger, major: 0}
+hooks:
+  - {hook: internal/status, stage: default}
+  - {hook: reload/operation, stage: default}

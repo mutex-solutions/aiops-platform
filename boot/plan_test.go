@@ -70,6 +70,19 @@ func TestDiff(t *testing.T) {
 		{name: "non volatile config restarts and its dependants follow", old: rows("id: a, plugin: o/a, config: {mode: m1}", "id: b, plugin: o/b"),
 			new:  rows("id: a, plugin: o/a, config: {mode: m2}", "id: b, plugin: o/b"),
 			want: "a:update:restart[config]{config.mode} b:unchanged:none", closure: "a,b", batch: "update:a"},
+		// The loader's rule (sdk/def/loader/v0 VolatileOnly): a volatile value that is or was
+		// a reference restarts the row, and its dependants follow.
+		{name: "volatile change to a reference restarts", old: rows("id: a, plugin: o/a, config: {timeout: info}", "id: b, plugin: o/b"),
+			new:  rows("id: a, plugin: o/a, config: {timeout: \"${env:AIOPS_REF_LEVEL}\"}", "id: b, plugin: o/b"),
+			want: "a:update:restart[config]{config.timeout} b:unchanged:none", closure: "a,b", batch: "update:a"},
+		{name: "volatile change from a reference restarts", old: rows("id: a, plugin: o/a, config: {timeout: \"${env:AIOPS_REF_LEVEL}\"}"),
+			new:  rows("id: a, plugin: o/a, config: {timeout: info}"),
+			want: "a:update:restart[config]{config.timeout}", closure: "a", batch: "update:a"},
+		// Decision 17 names the old or new value of the volatile field: a literal beside an
+		// unchanged reference is committed in place.
+		{name: "volatile change beside an unchanged reference is volatile", old: rows("id: a, plugin: o/a, config: {timeout: 1, note: \"${env:AIOPS_REF_LEVEL}\"}"),
+			new:  rows("id: a, plugin: o/a, config: {timeout: 2, note: \"${env:AIOPS_REF_LEVEL}\"}"),
+			want: "a:update:volatile[config]{config.timeout}", batch: "update:a"},
 		{name: "volatile and not volatile together", old: rows("id: a, plugin: o/a, config: {timeout: 1}"), new: rows("id: a, plugin: o/a, config: {timeout: 2, mode: 1}"),
 			want: "a:update:restart[config]{config.mode,config.timeout}", closure: "a", batch: "update:a"},
 		{name: "config key removed and kind changed", old: rows("id: a, plugin: o/a, config: {timeout: 1, k: {x: 1}}"), new: rows("id: a, plugin: o/a, config: {k: 5}"),
@@ -194,18 +207,6 @@ func TestChangedFieldsAndValues(t *testing.T) {
 		if got := strings.Join(configPaths(tc.a, tc.b, "p"), ","); got != tc.paths {
 			t.Errorf("configPaths(%s, %s) = %q, want %q", ShowValue(tc.a), ShowValue(tc.b), got, tc.paths)
 		}
-	}
-	if volatileOnly(nil, []string{"x"}) {
-		t.Error("no path is not volatile")
-	}
-	if !volatileOnly([]string{"config.x"}, []string{"config.x"}) || !volatileOnly([]string{"config"}, []string{"config"}) {
-		t.Error("prefixed volatile paths")
-	}
-	if volatileOnly([]string{"config.xy"}, []string{"x"}) || volatileOnly([]string{"config"}, []string{"x"}) {
-		t.Error("a sibling or parent of a volatile path is not volatile")
-	}
-	if !volatileOnly([]string{"config.x[0]", "config.x.y"}, []string{"config[0]", "x"}) {
-		t.Error("children of a volatile path are volatile")
 	}
 }
 

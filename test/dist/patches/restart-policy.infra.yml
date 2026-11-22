@@ -1,0 +1,4 @@
+# Layer 4 patch: restart-policy with the backoff of the smoke bundle, and toy.fault among
+# its infrastructure keys, so that the fault plugins are infrastructure providers: giving
+# up on one asks the launcher to replace the process (exit 5).
+- {id: restart-policy, config: {maxFailures: 3, window: 1m, backoffMin: 20ms, backoffMax: 100ms, factor: 2, infrastructure: [toy.store, toy.fault]}}

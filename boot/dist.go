@@ -30,6 +30,7 @@ import (
 //	  provides: [<key>]  needs: [<key>]  wants: [<key>]
 //	  volatile: [<config path>]    a path under config, "config." is implied
 //	  hooks: [{hook: <name>, stage: <ordinal>, name: <stage name>}]
+//	  classes: {providerBound: [<key>], consumerBound: [<key>], sealedHooks: [<hook>]}
 
 // ParseDist reads dist.yaml.
 func ParseDist(file string, data []byte) (DistManifest, error) {
@@ -124,6 +125,8 @@ func (p *parser) module(pr pair) (ModuleEntry, error) {
 			sort.Strings(e.Volatile)
 		case "hooks":
 			e.Hooks, err = p.hooks(f.v, pr.key)
+		case "classes":
+			e.Classes, err = p.classes(f.v, pr.key)
 		default:
 			err = p.err(f.k, RuleUnknownField, pr.key, "unknown field %q in a module entry", f.key)
 		}
@@ -132,6 +135,32 @@ func (p *parser) module(pr pair) (ModuleEntry, error) {
 		}
 	}
 	return e, nil
+}
+
+// classes reads the classes of a module entry: the keys and hooks of it whose
+// definitions bind or seal them.
+func (p *parser) classes(n *yaml.Node, row string) (*ModuleClasses, error) {
+	fields, err := p.pairs(n, row, "classes")
+	if err != nil {
+		return nil, err
+	}
+	c := &ModuleClasses{}
+	for _, f := range fields {
+		switch f.key {
+		case "providerBound":
+			c.ProviderBound, err = p.set(f.v, row, "providerBound", okIdent)
+		case "consumerBound":
+			c.ConsumerBound, err = p.set(f.v, row, "consumerBound", okIdent)
+		case "sealedHooks":
+			c.SealedHooks, err = p.set(f.v, row, "sealedHooks", okHook)
+		default:
+			err = p.err(f.k, RuleUnknownField, row, "unknown field %q in classes", f.key)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
 }
 
 func (p *parser) hooks(n *yaml.Node, row string) ([]HookDecl, error) {

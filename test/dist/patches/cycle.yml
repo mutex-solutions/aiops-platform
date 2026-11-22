@@ -1,0 +1,3 @@
+# Layer 4 patch: the spine needs toy.store, which the store provides, and the store
+# needs the spine: a dependency cycle, a static graph error.
+- {id: spine, inject: [toy.store]}

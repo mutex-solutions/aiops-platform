@@ -221,6 +221,38 @@ func TestKernelRootContext(t *testing.T) {
 	}
 }
 
+// A refused Provide has filed its value under an identity the kernel did not issue;
+// the next admitted Provide gets that identity and reports its own value.
+func TestKernelRefusedProvideLeavesNoValue(t *testing.T) {
+	ctx, r := kernelFixture(t)
+	root, err := r.(RootProvider).RootContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("a", "A"); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Provide("a", "X"); err == nil {
+		t.Fatal("a duplicate Provide was admitted")
+	}
+	if err := root.Provide("b", "B"); err != nil {
+		t.Fatal(err)
+	}
+	events, err := r.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, e := range events {
+		if e.Kind == "provide" {
+			got[e.Key] = e.Value
+		}
+	}
+	if want := map[string]any{"a": "A", "b": "B"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("provide events report %v, want %v", got, want)
+	}
+}
+
 func TestKernelChildMountAndTracked(t *testing.T) {
 	ctx, r := kernelFixture(t)
 	childRan := make(chan struct{})
@@ -565,8 +597,14 @@ func TestKernelRecordOrdersAgainstEventsAndObservers(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	// An observer is registered by an effect, and that event precedes its first.
-	if len(seen) != len(events)-1 || seen[0].Sequence != 2 || events[0].Kind != "effect" {
+	// The prototype registers an observer by an effect on its owner, whose event
+	// precedes the observer's first. The kernel's observer of the root registers none
+	// (ADR-034 G11): that effect is not part of the contract a plugin sees, since only
+	// the launcher observes, and the launcher observes again after each overflow, so
+	// an effect per registration would grow the root's effects without bound. The
+	// observer therefore sees the whole ledger from its first event, and no event of
+	// the ledger is an effect of the root.
+	if len(seen) != len(events) || seen[0].Sequence != 1 {
 		t.Fatalf("observer saw %d events from %d, ledger has %d", len(seen), seen[0].Sequence, len(events))
 	}
 	next := 0
@@ -574,15 +612,15 @@ func TestKernelRecordOrdersAgainstEventsAndObservers(t *testing.T) {
 		if e.Sequence != uint64(i)+1 {
 			t.Fatalf("event %d has sequence %d", i, e.Sequence)
 		}
-		if i == 0 {
-			continue
+		if e.Kind == "effect" && e.Fiber == 0 {
+			t.Fatalf("event %d is an effect of the root: %+v", i, e)
 		}
-		if seen[i-1].Sequence != e.Sequence || seen[i-1].Kind != e.Kind {
-			t.Fatalf("event %d: ledger %+v, observer %+v", i, e, seen[i-1])
+		if seen[i].Sequence != e.Sequence || seen[i].Kind != e.Kind {
+			t.Fatalf("event %d: ledger %+v, observer %+v", i, e, seen[i])
 		}
 		if e.Kind == "fixture" {
-			if e.Key != "step" || e.Data["i"] != json.Number(strconv.Itoa(next)) || seen[i-1].Data["i"] != e.Data["i"] {
-				t.Fatalf("fixture %d: %+v, observer %+v", next, e, seen[i-1])
+			if e.Key != "step" || e.Data["i"] != json.Number(strconv.Itoa(next)) || seen[i].Data["i"] != e.Data["i"] {
+				t.Fatalf("fixture %d: %+v, observer %+v", next, e, seen[i])
 			}
 			if events[i+1].Kind != "mount" {
 				t.Fatalf("the mount after record %d is not next: %+v", next, events[i+1])

@@ -93,6 +93,16 @@ func Scoped() HookOption { return func(d *hookDef) { d.scoped = true } }
 // it (07-c4-plugin-sdk.md:439, :463; ADR-034 owner decision 11).
 func Sealed() HookOption { return func(d *hookDef) { d.sealed = true } }
 
+// HookSealed reports whether h is sealed: declared with Sealed, or a hook of the
+// kernel, the hooks that Config.Listeners may list (ADR-059 decision 20;
+// 07-c4-plugin-sdk.md:439, :463). ok is false for a nil or zero hook.
+func HookSealed(h AnyHook) (sealed, ok bool) {
+	if h == nil || h.anyHook() == nil {
+		return false, false
+	}
+	return h.anyHook().sealed, true
+}
+
 // hookDef is the definition shared by Event and Waterfall.
 type hookDef struct {
 	name   string
@@ -100,6 +110,7 @@ type hookDef struct {
 	stages []string
 	scoped bool
 	sealed bool
+	kernel bool // A hook of the kernel (internal/...): its first listener starts the relay.
 }
 
 const kernelPrefix = "internal/"
@@ -108,7 +119,7 @@ const kernelPrefix = "internal/"
 // error and panics, as NewKey does. The prefix internal/ belongs to the kernel,
 // and only a kernel hook may have no owner: the kernel root dispatches it.
 func newHookDef(name string, kernel bool, opts []HookOption) *hookDef {
-	d := &hookDef{name: name}
+	d := &hookDef{name: name, kernel: kernel}
 	for _, o := range opts {
 		o(d)
 	}
@@ -147,6 +158,11 @@ func (u HookUse) Hook() string {
 	}
 	return u.def.name
 }
+
+// Sealed reports whether the hook is sealed, as HookSealed does, so a launcher that
+// holds a Plugin.Hooks list reads the seal from the definition (ADR-059 decision 20).
+// It is false for a zero HookUse.
+func (u HookUse) Sealed() bool { return u.def != nil && u.def.sealed }
 
 // Stage returns the stage's name, empty for a zero or invalid HookUse.
 func (u HookUse) Stage() string {
@@ -257,6 +273,7 @@ type listener[F any] struct {
 	stage  int    // Index in the hook's declared stages, the first ordering key.
 	ctx    *Context
 	scoped bool // The listener's context carries a scope value.
+	own    bool // The owner's own innermost step (Waterfall RunWith): its dispatch holds the lease.
 	fn     F
 }
 
@@ -284,7 +301,12 @@ func (r *listener[F]) admits(a Audience) (ok bool, err error) {
 
 // lease takes the in-flight lease of the listener's fiber; ok is false once it
 // is quiescing, and the listener is then not called (07-c4-plugin-sdk.md:203, :373).
-func (r *listener[F]) lease() (leave func(), ok bool) { return r.ctx.h.enter() }
+func (r *listener[F]) lease() (leave func(), ok bool) {
+	if r.own {
+		return func() {}, true
+	}
+	return r.ctx.h.enter()
+}
 
 // fail contains a listener failure of an event: it is skipped and logged
 // (07-c4-plugin-sdk.md:385).
@@ -442,13 +464,42 @@ func (r *Root) logHook(err error) {
 // InternalConfig, InternalUpdate and InternalCommit are dispatched by the config
 // pipeline (config.go). InternalCommit is a waterfall of bool: true means the chain
 // reached the kernel's own step, so a listener that returns without calling next
-// is a veto, and one that fails aborts the update (ADR-034 owner decision 15). InternalPlugin, InternalStatus and InternalService are
-// declared and not dispatched: neither the contract nor the plugin record describes
-// their payload (ADR-034 owner decision 13).
+// is a veto, and one that fails aborts the update (ADR-034 owner decision 15).
+//
+// InternalPlugin, InternalStatus and InternalService are dispatched by the kernel
+// with the ledger event as payload (ADR-059 decision 2; 07-c4-plugin-sdk.md:208,
+// :385, :463; docs/design/plugin-system-2026-11.md §3). Each LedgerEvent reaches
+// the hooks below by its Kind; any other Kind reaches none, and the one event that
+// maps to two hooks reaches InternalStatus first.
+//
+//	ledger Kind              hook             meaning
+//	"mount"                  InternalPlugin   a fiber was created
+//	"state"                  InternalStatus   the fiber changed state (From to State)
+//	"state", State DISPOSED  InternalPlugin   the fiber was removed
+//	"provide"                InternalService  a provision appeared (Key, UID)
+//	"service"                InternalService  a provision changed availability (State is its provider's)
+//	"remove"                 InternalService  a provision ended
+//	"overflow"               all three        events were lost, see below
+//
+// The listeners run in the one order of Sequence, one event at a time, on the
+// goroutine of the observer dispatcher and never on the owner. A slow, failing or
+// panicking listener is skipped and logged to Config.ObserverLog and cannot block
+// or fail the kernel. A listener sees the events accepted after the first listener
+// of any of the three hooks was registered. The stream is the one of Root.Observe
+// and bounded by Config.ObserverQueue: when a listener stalls the dispatcher while
+// that many events wait, the kernel's subscription is detached by the overflow rule,
+// the events of that time are lost for every listener of the three hooks, and none
+// of them is removed. When the stalled listener returns the kernel subscribes
+// again. Just before the first event that subscription delivers it dispatches to
+// all three hooks one LedgerEvent of Kind "overflow", whose Sequence is the one
+// just before that event: an event up to it that a listener did not get will not
+// come. A listener resyncs on it by calling Root.Inspect and ignoring every later
+// event whose Sequence is not above Inspection.Sequence. With no listener the
+// kernel subscribes to nothing and the owner does no work for these hooks.
 var (
-	InternalPlugin  = newEvent[any](kernelPrefix+"plugin", true)
-	InternalStatus  = newEvent[any](kernelPrefix+"status", true)
-	InternalService = newEvent[any](kernelPrefix+"service", true)
+	InternalPlugin  = newEvent[LedgerEvent](kernelPrefix+"plugin", true)
+	InternalStatus  = newEvent[LedgerEvent](kernelPrefix+"status", true)
+	InternalService = newEvent[LedgerEvent](kernelPrefix+"service", true)
 	InternalConfig  = newWaterfall[any, any](kernelPrefix+"config", true)
 	InternalUpdate  = newWaterfall[any, any](kernelPrefix+"update", true)
 	InternalCommit  = newWaterfall[any, bool](kernelPrefix+"commit", true)

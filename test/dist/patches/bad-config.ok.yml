@@ -1,0 +1,5 @@
+# Layer 4 patch for the failure matrix: the bad-config fault with the one config it accepts,
+# so that it is ACTIVE; a later generation changes the config to one it refuses.
+- insert:
+    - {id: fault, plugin: aiops-test/bad-config, roles: [api], config: {ok: true}}
+    - {id: dependant, plugin: aiops-test/toy-consumer, roles: [api], inject: [toy.fault]}

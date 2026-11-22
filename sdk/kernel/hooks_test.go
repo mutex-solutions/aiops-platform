@@ -368,13 +368,13 @@ func TestHookSealedKernelHooksListenOnlyFromTheLauncher(t *testing.T) {
 	r := newBound(t, nil, nil) // New with empty maps: the sealed rule is enforced.
 	ctx := frontCtx(t)
 	var seen atomic.Int64
-	InternalStatus.On(r.Context(), DefaultStage, func(context.Context, any) (any, error) { seen.Add(1); return nil, nil })
-	if err := InternalStatus.emit(ctx, Unscoped, nil); err != nil || seen.Load() != 1 {
+	InternalStatus.On(r.Context(), DefaultStage, func(context.Context, LedgerEvent) (any, error) { seen.Add(1); return nil, nil })
+	if err := InternalStatus.emit(ctx, Unscoped, LedgerEvent{}); err != nil || seen.Load() != 1 {
 		t.Fatalf("launcher listener: %v, %d", err, seen.Load())
 	}
 	// A plugin may declare it, and is still refused.
 	p := hookPlug("sneak", []HookUse{InternalStatus.Use(DefaultStage)}, func(c *Context) error {
-		InternalStatus.On(c, DefaultStage, func(context.Context, any) (any, error) { return nil, nil })
+		InternalStatus.On(c, DefaultStage, func(context.Context, LedgerEvent) (any, error) { return nil, nil })
 		return nil
 	})
 	if err := failure(t, r.Plugin(p, nil)); !errors.Is(err, ErrSealed) {

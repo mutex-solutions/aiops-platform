@@ -1,0 +1,3 @@
+# Layer 4 patch: restart-policy retries an hour after a failure, so a row that failed stays
+# FAILED for as long as a test looks at it (the retry itself is covered elsewhere).
+- {id: restart-policy, config: {maxFailures: 3, window: 1m, backoffMin: 1h, backoffMax: 1h, factor: 2, infrastructure: [toy.store]}}

@@ -1,0 +1,3 @@
+# Layer 4 patch: the row "consumer" becomes required, and its config holds a reference to
+# the environment.
+- {id: consumer, required: true, config: {note: "${env:AIOPS_REF_NOTE}"}}

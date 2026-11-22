@@ -25,12 +25,22 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> | coverage <profile> <import-path> | testctor <repo-root>")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
-	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2}
-	if n, ok := need[args[0]]; !ok || len(args) != n {
+	if args[0] == "pluginvet" {
+		if len(args) < 2 {
+			return usage
+		}
+		return checkPluginVet(args[1:])
+	}
+	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 2}
+	n, ok := need[args[0]]
+	if args[0] == "lines" && len(args) == 4 && args[3] == "provisional" {
+		n = 4
+	}
+	if !ok || len(args) != n {
 		return usage
 	}
 	switch args[0] {
@@ -43,9 +53,11 @@ func run(args []string) error {
 		if err != nil || c < 0 {
 			return fmt.Errorf("invalid cap %q", args[2])
 		}
-		return checkLines(args[1], c)
+		return checkLines(args[1], c, len(args) == 4)
 	case "testctor":
 		return checkTestCtor(args[1])
+	case "imports":
+		return checkImports(args[1], goListDeps)
 	default:
 		return checkCoverage(args[1], args[2])
 	}
@@ -224,11 +236,16 @@ func checkVocab(dir, wordlist string) error {
 	return nil
 }
 
-func checkLines(dir string, limit int) error {
+// checkLines holds dir to one package and a line cap. A provisional cap is
+// printed as such: it stands until the budget is fixed by ADR-059 decision 11.
+func checkLines(dir string, limit int, provisional bool) error {
 	clean := filepath.Clean(dir)
 	err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && d.Name() == "testdata" {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
 			return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
@@ -255,7 +272,11 @@ func checkLines(dir string, limit int) error {
 		fmt.Printf("%6d %s\n", n, p)
 		total += n
 	}
-	fmt.Printf("%6d total (cap %d)\n", total, limit)
+	kind := "cap"
+	if provisional {
+		kind = "provisional cap"
+	}
+	fmt.Printf("%6d total (%s %d)\n", total, kind, limit)
 	if total > limit {
 		return fmt.Errorf("total %d lines exceeds cap %d", total, limit)
 	}

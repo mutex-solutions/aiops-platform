@@ -1,0 +1,19 @@
+# The hand-written half of the manifest (07-c4-plugin-sdk.md section 2). The
+# generated half (uses, registers, configSchema, requires) comes with plugingen, S2a.
+manifestVersion: "1.0"
+id: aiops/reload
+version: 0.1.0
+title: Reload
+description: The one queue that changes the tree. Composes, admits, plans, applies in one batch, judges and publishes composition/applied for each submission.
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+provides:
+  - {key: reload, major: 0}
+needs:
+  - {key: loader, major: 0}
+  - {key: profileContext, major: 0}
+  - {key: catalog, major: 0}
+hooks: []

@@ -5,6 +5,8 @@ package fake_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
@@ -39,7 +41,7 @@ func newListener(id string) *listener {
 			})
 			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
 				l.patched = append(l.patched, a.Entry.ID)
-				return a.Context, nil
+				return next()
 			})
 			return nil
 		},
@@ -49,13 +51,14 @@ func newListener(id string) *listener {
 
 func TestConsumerCallsEveryMethod(t *testing.T) {
 	f, provider := fake.New()
+	f.Volatile = map[string][]string{"aiops/mod": {"level"}}
 	hear := newListener("aiops/listener")
 	var patched *kernel.Context
 	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(loader.Key)}, Apply: func(c *kernel.Context, _ any) error {
 		ctx := context.Background()
 		l := loader.Key.Of(c)
-		spec := loader.EntrySpec{ID: "g:a", Parent: "g", Plugin: "aiops/mod", Config: 1}
-		if _, ok := l.Locate("g:a"); ok {
+		spec := loader.EntrySpec{ID: "a", Plugin: "aiops/mod", Config: map[string]any{"level": 1}, Enabled: true}
+		if _, ok := l.Locate("a"); ok {
 			t.Error("Locate found an entry before Create")
 		}
 		if err := l.Create(ctx, spec); err != nil {
@@ -64,26 +67,26 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if err := l.Create(ctx, spec); !errors.Is(err, loader.ErrExists) {
 			t.Errorf("second Create: %v", err)
 		}
-		if st, err := l.Await(ctx, "g:a"); err != nil || st != kernel.Active {
+		if st, err := l.Await(ctx, "a"); err != nil || st != kernel.Active {
 			t.Errorf("Await = %v, %v", st, err)
 		}
-		spec.Config = 2
+		spec.Config = map[string]any{"level": 2}
 		if err := l.Update(ctx, spec); err != nil {
 			t.Errorf("Update: %v", err)
 		}
-		if e, ok := l.Locate("g:a"); !ok || e.Spec.Config != 2 || e.State != kernel.Active {
+		if e, ok := l.Locate("a"); !ok || fmt.Sprint(e.Spec.Config) != "map[level:2]" || e.State != kernel.Active || e.Mount != loader.Mounted {
 			t.Errorf("Locate = %v, %v", e, ok)
 		}
-		if err := l.Remove(ctx, "g:a"); err != nil {
+		if err := l.Remove(ctx, "a"); err != nil {
 			t.Errorf("Remove: %v", err)
 		}
-		if err := l.Remove(ctx, "g:a"); !errors.Is(err, loader.ErrNotFound) {
+		if err := l.Remove(ctx, "a"); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("second Remove: %v", err)
 		}
 		if err := l.Update(ctx, spec); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("Update of a removed entry: %v", err)
 		}
-		if _, err := l.Await(ctx, "g:a"); !errors.Is(err, loader.ErrNotFound) {
+		if _, err := l.Await(ctx, "a"); !errors.Is(err, loader.ErrNotFound) {
 			t.Errorf("Await of a removed entry: %v", err)
 		}
 		patched = c
@@ -92,14 +95,14 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, provider, hear.plugin, consumer)
-	if len(hear.inits) != 1 || hear.inits[0].Entry.ID != "g:a" {
+	if len(hear.inits) != 1 || hear.inits[0].Entry.ID != "a" || hear.inits[0].Context == nil {
 		t.Errorf("entry-init heard %v", hear.inits)
 	}
-	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "g:a" || hear.volatiles[0].Config != 2 {
+	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "a" || !slices.Equal(hear.volatiles[0].Paths, []string{"level"}) {
 		t.Errorf("volatile-update heard %v", hear.volatiles)
 	}
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, patched)
-	if err != nil || got != patched || len(hear.patched) != 1 {
+	if err != nil || got == nil || got == patched || !slices.Equal(hear.patched, []string{"a", "p"}) {
 		t.Errorf("Patch = %v, %v, heard %v", got, err, hear.patched)
 	}
 }
@@ -110,7 +113,7 @@ func TestScriptedStatesAndEntries(t *testing.T) {
 	kerneltest.Mount(root, provider)
 	ctx := context.Background()
 	for _, id := range []string{"b", "a"} {
-		if err := f.Create(ctx, loader.EntrySpec{ID: id}); err != nil {
+		if err := f.Create(ctx, loader.EntrySpec{ID: id, Enabled: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -135,10 +138,20 @@ func TestPatchWaterfallResultAndFailure(t *testing.T) {
 	f, provider := fake.New()
 	root := kerneltest.New(t)
 	other := root.Context().Extend()
+	replace := kernel.Define(kernel.Plugin{ID: "aiops/replace", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, _ loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				if _, err := next(); err != nil {
+					return nil, err
+				}
+				return other, nil
+			})
+			return nil
+		}})
 	veto := kernel.Define(kernel.Plugin{ID: "aiops/veto", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
-			loader.PatchContext.On(c, kernel.DefaultStage, func(context.Context, loader.PatchContextArgs, kernel.Next[*kernel.Context]) (*kernel.Context, error) {
-				return other, nil
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, _ kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				return a.Context, nil
 			})
 			return nil
 		}})
@@ -149,10 +162,15 @@ func TestPatchWaterfallResultAndFailure(t *testing.T) {
 			})
 			return nil
 		}})
-	kerneltest.Mount(root, provider, veto)
+	kerneltest.Mount(root, provider, replace)
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context())
 	if err != nil || got != other {
 		t.Fatalf("Patch = %v, %v, want the listener's context", got, err)
+	}
+	// A listener that does not call next vetoes the entry.
+	kerneltest.Mount(root, veto)
+	if _, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context()); !errors.Is(err, loader.ErrPatchVetoed) {
+		t.Fatalf("a listener that skips next: %v, want ErrPatchVetoed", err)
 	}
 	kerneltest.Mount(root, boom)
 	if _, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context()); err == nil {
@@ -236,12 +254,43 @@ func TestHooksHaveNamesAndOwner(t *testing.T) {
 	}
 }
 
-func TestPatchWithNoListenerReturnsTheContext(t *testing.T) {
+// With no listener the built-in step runs alone: the context it built for the entry,
+// not the parent.
+func TestPatchWithNoListenerReturnsTheBuiltContext(t *testing.T) {
 	f, provider := fake.New()
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, provider)
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, root.Context())
-	if err != nil || got != root.Context() {
+	if err != nil || got == nil || got == root.Context() {
 		t.Fatalf("Patch = %v, %v", got, err)
+	}
+}
+
+// The built-in step of loader/patch-context is innermost (ADR-034 G8) and returns
+// the context built for the entry, never the parent itself. A listener that calls
+// next and returns the parent drops the row's isolate and intercept in the real
+// loader, and a test of it on the fake sees the parent come back.
+func TestPatchShowsAListenerThatDropsWhatNextBuilt(t *testing.T) {
+	f, provider := fake.New()
+	root := kerneltest.New(t)
+	var built *kernel.Context
+	l := kernel.Define(kernel.Plugin{ID: "aiops/dropper", Hooks: []kernel.HookUse{loader.PatchContext.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			loader.PatchContext.On(c, kernel.DefaultStage, func(_ context.Context, a loader.PatchContextArgs, next kernel.Next[*kernel.Context]) (*kernel.Context, error) {
+				var err error
+				if built, err = next(); a.Entry.ID == "drops" {
+					return a.Context, err
+				}
+				return built, err
+			})
+			return nil
+		}})
+	kerneltest.Mount(root, provider, l)
+	parent := root.Context()
+	if got, err := f.Patch(t.Context(), loader.EntrySpec{ID: "keeps"}, parent); err != nil || got != built || got == parent {
+		t.Errorf("a listener that returns what next built: Patch = %p, %v; next built %p, the parent is %p", got, err, built, parent)
+	}
+	if got, err := f.Patch(t.Context(), loader.EntrySpec{ID: "drops"}, parent); err != nil || got != parent || got == built {
+		t.Errorf("a listener that returns the parent: Patch = %p, %v; next built %p, the parent is %p", got, err, built, parent)
 	}
 }

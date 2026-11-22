@@ -1,0 +1,11 @@
+=== RUN   TestRuntimeProperties
+    runtime_test.go:732: mode=full-1000-seeds-x-1000-operations-per-real-candidate PRNG=SplitMix64 seed=0x53000000+index seeds=1000 operations=1000 providers=8 consumers=8 criteria=628bd6ec24e5983bfbe9fcdada096eaa84db3e95227f11e8fd5a7fa33a26f19c baseline=4a8f20d4e0d4103940b3233c96f51d7ab29ae74c source=a9bb6ceb2d7eab508c8544968c0797ecca8439f24dd31c151ccb60d380b7f88b executable=09a840c45a186394becadc7c86c6049d948ff81750334f52424bcbae72b2e0c7 go=go1.26.8 GOMAXPROCS=8
+=== RUN   TestRuntimeProperties/reconciler
+=== RUN   TestRuntimeProperties/graph-lock
+=== RUN   TestRuntimeProperties/kernel
+--- PASS: TestRuntimeProperties (5750.02s)
+    --- PASS: TestRuntimeProperties/reconciler (1513.93s)
+    --- PASS: TestRuntimeProperties/graph-lock (1413.59s)
+    --- PASS: TestRuntimeProperties/kernel (2822.22s)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/properties	5751.092s

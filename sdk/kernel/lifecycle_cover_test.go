@@ -101,7 +101,8 @@ func TestOwnerAnswersAStaleActivationWithErrInactive(t *testing.T) {
 	if _, err := h.childFn(pluginSpec{ID: "late"}); !errors.Is(err, ErrInactive) {
 		t.Fatalf("childFn = %v", err)
 	}
-	if _, err := h.scopeFn("late", func(*EffectScope) error { return nil }); !errors.Is(err, ErrInactive) {
+	// RequestEffectScope documents an error that matches both, whichever check refuses.
+	if _, err := h.scopeFn("late", func(*EffectScope) error { return nil }); !errors.Is(err, ErrInactive) || !errors.Is(err, ErrInactiveEffect) {
 		t.Fatalf("scopeFn = %v", err)
 	}
 	if _, err := h.trackedFn("late"); !errors.Is(err, ErrInactive) {

@@ -1,0 +1,32 @@
+{
+ "classification": "PASS full frozen property workload on three backends, including the converged S1 kernel (G1-G12, with the fixes of the three S1 review rounds) driven through its exported API by the adapter backend; run in a frozen checkout",
+ "exitCode": 0,
+ "sourceSHA256": "8360789ebf37b305f9800421ae7ebaff21495cef836e2c25d9484d329d78eb46",
+ "commit": "ab9b405",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 4280.72,
+ "backendSeconds": {
+  "reconciler": 1387.10,
+  "graph-lock": 1149.96,
+  "kernel": 1743.37
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ },
+ "note": "every source that summary.json lists matches its file at ab9b405; the commits after ab9b405 up to the one that adds this file change no kernel or test/spike source"
+}

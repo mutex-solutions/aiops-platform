@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -440,6 +441,7 @@ type fuzzFiber struct {
 	id       string
 	needs    []int
 	provides []int
+	ctx      atomic.Pointer[Context] // The context of its latest activation, the parent of a child mount.
 }
 
 type fuzzRun struct {
@@ -452,6 +454,9 @@ type fuzzRun struct {
 	nextID int
 	fibers []*fuzzFiber
 	byID   map[string]*fuzzFiber
+	// admitted lists the operations of each admitted batch, comma-separated: mount,
+	// update, child (under a fiber's context), root-child, update-cfg or dispose.
+	admitted []string
 }
 
 type reader struct {
@@ -499,7 +504,16 @@ func (run *fuzzRun) spec(rd *reader) (Plugin, *fuzzFiber) {
 		run.hangs++
 	}
 	gate := run.gate
-	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Apply: func(c *Context, _ any) error {
+	// Decode refuses a config whose first byte is a multiple of four, so an
+	// update with a config can be refused whole.
+	decode := func(raw any) (any, error) {
+		if n, ok := raw.(uint8); ok && n%4 == 0 {
+			return nil, errors.New("decode refused")
+		}
+		return raw, nil
+	}
+	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Decode: decode, Apply: func(c *Context, _ any) error {
+		ff.ctx.Store(c)
 		provide := func() error {
 			for _, i := range ff.provides {
 				if err := run.keys[i].Provide(c, i); err != nil {
@@ -581,24 +595,52 @@ func (run *fuzzRun) step(rd *reader) {
 	case 4:
 		var ops []BatchOp
 		var added []*fuzzFiber
+		var shape []string
 		for n := int(rd.next()%3) + 1; n > 0; n-- {
-			switch rd.next() % 3 {
+			switch rd.next() % 5 {
 			case 0:
 				p, ff := run.spec(rd)
 				added = append(added, ff)
-				ops = append(ops, MountOp(p, nil))
+				ops, shape = append(ops, MountOp(p, nil)), append(shape, "mount")
 			case 1:
 				if ff := run.pick(rd); ff != nil {
-					ops = append(ops, UpdateOp(ff.fiber))
+					ops, shape = append(ops, UpdateOp(ff.fiber)), append(shape, "update")
+				}
+			case 2: // A child of a picked fiber's latest activation, or of the root.
+				parent, kind := run.root.Context(), "root-child"
+				if ff := run.pick(rd); ff != nil && ff.ctx.Load() != nil {
+					parent, kind = ff.ctx.Load(), "child"
+				}
+				p, ff := run.spec(rd)
+				added = append(added, ff)
+				ops, shape = append(ops, parent.MountOp(p, nil)), append(shape, kind)
+			case 3: // An update that carries a config.
+				if ff := run.pick(rd); ff != nil {
+					ops, shape = append(ops, UpdateOpWith(ff.fiber, rd.next())), append(shape, "update-cfg")
 				}
 			default:
 				if ff := run.pick(rd); ff != nil {
-					ops = append(ops, DisposeOp(ff.fiber))
+					ops, shape = append(ops, DisposeOp(ff.fiber)), append(shape, "dispose")
 				}
 			}
 		}
+		retained := make(map[*cfgCell]any)
+		for _, op := range ops {
+			if op.hasCfg {
+				retained[op.fiber.cell] = op.fiber.cell.load()
+			}
+		}
 		fibers, err := run.root.Batch(run.ctx, ops...)
+		if err != nil {
+			// A refused batch retains no config.
+			for cell, was := range retained {
+				if now := cell.load(); now != was {
+					run.t.Fatalf("a refused batch (%v) retained the config %v over %v", err, now, was)
+				}
+			}
+		}
 		if err == nil {
+			run.admitted = append(run.admitted, strings.Join(shape, ","))
 			mounted := 0
 			for i, op := range ops {
 				if op.kind == batchMount {
@@ -692,45 +734,77 @@ func FuzzOperationSequence(f *testing.F) {
 	f.Add([]byte{0, 0, 1, 0, 0, 1, 0, 0, 4, 2, 1, 0, 2, 0, 6})          // batch: update and dispose
 	f.Add([]byte{0, 0, 1, 7, 0, 3, 0, 0, 0, 3, 4, 1, 0, 0, 5, 3, 0, 6}) // defer and tracked worker, consumers
 	f.Add([]byte{0, 0, 1, 2, 0, 1, 0, 3, 7, 0, 3, 1, 6})                // failing provider, panicking consumer
-	f.Fuzz(func(t *testing.T, data []byte) {
-		before := runtime.NumGoroutine()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		root, err := New(fuzzConfig())
-		if err != nil {
-			t.Fatal(err)
-		}
-		run := &fuzzRun{t: t, ctx: ctx, root: root, gate: make(chan struct{}), byID: make(map[string]*fuzzFiber)}
-		for i := range run.keys {
-			run.keys[i] = NewKey[int](fmt.Sprintf("k%d", i), 1)
-		}
-		rd := &reader{data: data}
-		for n := 0; n < fuzzMaxOps && rd.more(); n++ {
-			run.step(rd)
-		}
-		var once sync.Once
-		release := func() { once.Do(func() { close(run.gate) }) }
-		defer release()
-		run.settle()
-		run.checkGraph()
-		release()
-		run.settle()
-		run.checkGraph()
-		closeErr := closeKernel(t, root)
-		_ = closeErr // A failed or blocked fiber is reported by Close, not a defect.
+	f.Add([]byte{0, 0, 1, 0, 4, 0, 3, 0, 5, 6})                         // batch: update with a config
+	f.Add([]byte{0, 0, 1, 0, 4, 0, 3, 0, 4, 6})                         // batch: update with a refused config
+	f.Add(seedChildOfFiber)
+	f.Add(seedChildUpdateDispose)
+	f.Fuzz(func(t *testing.T, data []byte) { runSequence(t, data) })
+}
 
-		// The owner exits only when no fiber and not even the root is left.
-		select {
-		case <-root.core.done:
-		case <-time.After(3 * time.Second):
-			t.Fatal("a fiber is still live after Close")
+// A child mount under a fiber needs the fiber's context, which its Apply stores: each
+// of these seeds settles (6) after its mounts and before its batch (4).
+var (
+	// Mount p0, settle, batch: a child of p0.
+	seedChildOfFiber = []byte{0, 0, 1, 0, 6, 4, 0, 2, 0, 0, 0, 0, 6}
+	// Mount p0 providing k0 and p1 needing it, settle, batch: a child of p0, an
+	// update of p1 with the accepted config 5, a dispose of p1.
+	seedChildUpdateDispose = []byte{0, 0, 1, 0, 0, 1, 0, 0, 6, 4, 2, 2, 0, 0, 0, 0, 3, 1, 5, 4, 1, 6}
+)
+
+// The seeds that name a child mount under a fiber reach it: the fiber's Apply has
+// stored its context before the batch, and the batch is admitted.
+func TestFuzzSeedsMountAChildUnderAFiber(t *testing.T) {
+	for _, c := range []struct {
+		seed []byte
+		want string
+	}{{seedChildOfFiber, "child"}, {seedChildUpdateDispose, "child,update-cfg,dispose"}} {
+		if run := runSequence(t, c.seed); !slices.Contains(run.admitted, c.want) {
+			t.Errorf("seed %v admitted the batches %q, want one of %q", c.seed, run.admitted, c.want)
 		}
-		for deadline := time.Now().Add(3 * time.Second); runtime.NumGoroutine() > before+2; {
-			if time.Now().After(deadline) {
-				buf := make([]byte, 1<<16)
-				t.Fatalf("goroutines: %d before, %d after Close\n%s", before, runtime.NumGoroutine(), buf[:runtime.Stack(buf, true)])
-			}
-			time.Sleep(time.Millisecond)
+	}
+}
+
+// runSequence runs data as an operation sequence, then settles, closes and checks the
+// kernel.
+func runSequence(t *testing.T, data []byte) *fuzzRun {
+	before := runtime.NumGoroutine()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	root, err := New(fuzzConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := &fuzzRun{t: t, ctx: ctx, root: root, gate: make(chan struct{}), byID: make(map[string]*fuzzFiber)}
+	for i := range run.keys {
+		run.keys[i] = NewKey[int](fmt.Sprintf("k%d", i), 1)
+	}
+	rd := &reader{data: data}
+	for n := 0; n < fuzzMaxOps && rd.more(); n++ {
+		run.step(rd)
+	}
+	var once sync.Once
+	release := func() { once.Do(func() { close(run.gate) }) }
+	defer release()
+	run.settle()
+	run.checkGraph()
+	release()
+	run.settle()
+	run.checkGraph()
+	closeErr := closeKernel(t, root)
+	_ = closeErr // A failed or blocked fiber is reported by Close, not a defect.
+
+	// The owner exits only when no fiber and not even the root is left.
+	select {
+	case <-root.core.done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("a fiber is still live after Close")
+	}
+	for deadline := time.Now().Add(3 * time.Second); runtime.NumGoroutine() > before+2; {
+		if time.Now().After(deadline) {
+			buf := make([]byte, 1<<16)
+			t.Fatalf("goroutines: %d before, %d after Close\n%s", before, runtime.NumGoroutine(), buf[:runtime.Stack(buf, true)])
 		}
-	})
+		time.Sleep(time.Millisecond)
+	}
+	return run
 }

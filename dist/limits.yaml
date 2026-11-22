@@ -1,0 +1,8 @@
+# The limits of the release distribution (boot.ParseLimits). The documents give no
+# values for the three deadlines of the kernel; these are the launcher defaults, the
+# release defaults for now, revisited with the restart-under-load measurements of S3
+# (ADR-059 decision 30).
+loadDeadline: 10s
+drainDeadline: 10s
+disposeDeadline: 10s
+shutdownBound: 30s

@@ -34,6 +34,17 @@ func Admit(c Composition, mods ModuleTable, dist DistManifest, roles []Role) Adm
 	return a
 }
 
+// CheckReserved refuses a composition that holds a row with the id of the
+// loader's row: boot mounts the loader itself and adds that row to the copy it
+// admits (WithLoader), so a bundle or a patch may not hold it. Every caller that
+// admits as boot does calls it first: boot.Run and `aiopsctl profile render`.
+func CheckReserved(c Composition) error {
+	if _, clash := findRow(c, LoaderRowID); clash {
+		return fmt.Errorf("the row id %q is reserved: boot mounts the loader and no bundle holds it (03-c3-kernel.md:64)", LoaderRowID)
+	}
+	return nil
+}
+
 // Refused reports whether boot must stop: the gate refuses, or the graph or
 // the required set has an error.
 func (a Admission) Refused() bool { return a.Gate.Refused || len(a.Errors) > 0 }

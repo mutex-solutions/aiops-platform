@@ -5,6 +5,7 @@ package fake_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -151,6 +152,87 @@ func TestTimerLeavesWithItsFiber(t *testing.T) {
 	}
 	if _, err := cl.After(cc, time.Second); !errors.Is(err, kernel.ErrInactiveEffect) {
 		t.Fatalf("After on a disposed fiber: %v", err)
+	}
+}
+
+// The stop of a timer is recorded by the scope's setup, which the kernel never runs for
+// an activation that quiesced first: an Apply that starts a timer and then fails. Such
+// a timer is not pending and never fires.
+func TestTimerOfAFailedApplyNeverFires(t *testing.T) {
+	f, provider := fake.New(t0)
+	var timer clock.Timer
+	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
+		var err error
+		if timer, err = clock.Key.Of(c).After(c, time.Minute); err != nil {
+			return err
+		}
+		return errors.New("boom")
+	}})
+	root := kerneltest.New(t)
+	kerneltest.Mount(root, provider)
+	fib := root.Plugin(consumer, nil)
+	if err := fib.Await(t.Context()); err == nil {
+		t.Fatal("the Apply did not fail")
+	}
+	if err := fib.Dispose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	_ = fib.Await(t.Context())   // Dispose does not wait; Await reports the failure
+	_ = root.Settle(t.Context()) // it reports the failure
+	if f.Pending() != 0 {
+		t.Fatalf("Pending = %d after the fiber that started the timer failed and was disposed", f.Pending())
+	}
+	f.Advance(time.Hour)
+	if _, ok := fired(timer); ok {
+		t.Fatal("the timer of a failed and disposed fiber fired")
+	}
+}
+
+// A timer that fires or is stopped leaves its fiber's effect ledger, so a fiber that
+// starts one timer after another holds only those still pending.
+func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {
+	f, provider := fake.New(t0)
+	var cl clock.Clock
+	var cc *kernel.Context
+	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
+		cl, cc = clock.Key.Of(c), c
+		return nil
+	}})
+	root := kerneltest.New(t)
+	kerneltest.Mount(root, provider)
+	fib := root.Plugin(consumer, nil)
+	if err := fib.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for range 100 {
+		tm, err := cl.After(cc, time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Advance(time.Second)
+		if _, ok := fired(tm); !ok {
+			t.Fatal("the timer did not fire")
+		}
+	}
+	if _, err := cl.After(cc, 0); err != nil {
+		t.Fatal(err)
+	}
+	stopped, err := cl.After(cc, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stopped.Stop() {
+		t.Fatal("Stop reported a pending timer as fired")
+	}
+	if _, err := cl.After(cc, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	// The kernel withdraws an effect on the fiber's lane; Settle joins that work.
+	if err := root.Settle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if labels, _ := fib.Effects(t.Context()); !slices.Equal(labels, []string{"clock timer"}) {
+		t.Errorf("effects = %d %v, want the one pending timer", len(labels), labels[:min(len(labels), 3)])
 	}
 }
 

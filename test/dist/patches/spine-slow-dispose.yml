@@ -1,0 +1,3 @@
+# Layer 4 patch for the recomposition suite: the spine takes 600ms to dispose, which is
+# slow and within the dispose deadline of the test limits (1s).
+- {id: spine, config: {workers: 2, disposeDelay: 600ms}}

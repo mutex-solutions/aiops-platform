@@ -96,6 +96,9 @@ func (e *Event[A]) Use(stage string) HookUse { return e.def.use(stage) }
 // ErrHookUndeclared, ErrSealed, ErrHook or ErrInactiveEffect.
 func (e *Event[A]) On(c *Context, stage string, fn EventListener[A]) {
 	e.table.add(e.def, c, stage, fn, fn == nil)
+	if e.def.kernel {
+		c.root.startRelay()
+	}
 }
 
 // callEvent runs one listener under a lease of its fiber. A fiber that is

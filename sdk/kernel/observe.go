@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 )
 
 var (
@@ -39,6 +40,25 @@ type leaseHolder interface {
 	tryDefer(label string, dispose disposer) error
 }
 
+// lateDelivery is implemented by a leaseHolder whose observer still receives, once
+// its lease is refused, every event accepted before the dispatcher closes: the
+// observer of the root, which sees the whole of Close (see rootLease).
+type lateDelivery interface{ deliverLate() bool }
+
+// rootLease is the leaseHolder of an observer of the root (Root.Observe). The root
+// quiesces when Close begins, so with the plain lease every event of Close would be
+// skipped, among them the deadline of a leaking fiber, which is what a launcher
+// watches for. This lease is the root's while the root is active, and after that it
+// delivers without one: the dispatcher drains every accepted event before it stops
+// (advanceLocked), and Close joins it. It registers no cleanup effect on the root:
+// the observer is not removed when the root is disposed and sees the events of that
+// too, and an observer made again after an overflow leaves nothing behind (ADR-034
+// G11). The Disposer that Observe returns still removes it.
+type rootLease struct{ *handle }
+
+func (rootLease) deliverLate() bool               { return true }
+func (rootLease) tryDefer(string, disposer) error { return nil }
+
 // observerFunc runs on the dispatcher worker, never inline in append. The
 // event, including any referenced slices, pointers, or interface values, must
 // remain immutable. No cloning, marshaling, filtering, or event callbacks occur
@@ -62,17 +82,22 @@ type observerFunc func(context.Context, ledgerEvent) error
 type overflowHandler func(context.Context, *overflowError) error
 
 // overflowError describes one observer detached because the backlog reached its
-// bound while the worker was inside that observer.
+// bound while the worker was inside that observer, or, when Stall is set, because
+// it delivered nothing for Stall while Close waited for delivery (stallBarrier).
 type overflowError struct {
 	Label   string
-	Lost    uint64 // Events captured for the observer that it will never receive.
-	Through uint64 // Last sequence addressed to the observer; nothing after it is.
-	Limit   int    // The backlog bound that was reached.
+	Lost    uint64        // Events captured for the observer that it will never receive.
+	Through uint64        // Last sequence addressed to the observer; nothing after it is.
+	Limit   int           // The backlog bound that was reached; 0 for a stall.
+	Stall   time.Duration // The stall of Close that detached it; 0 for an overflow.
 }
 
 func (e *overflowError) Error() string {
-	return fmt.Sprintf("observer %q overflowed the backlog bound of %d events: %d events lost through sequence %d, observer detached",
-		e.Label, e.Limit, e.Lost, e.Through)
+	cause := fmt.Sprintf("overflowed the backlog bound of %d events", e.Limit)
+	if e.Stall != 0 {
+		cause = fmt.Sprintf("delivered nothing for %v while Close waited", e.Stall)
+	}
+	return fmt.Sprintf("observer %q %s: %d events lost through sequence %d, observer detached", e.Label, cause, e.Lost, e.Through)
 }
 
 func (e *overflowError) Unwrap() error { return errObserverOverflow }
@@ -98,6 +123,7 @@ type registration struct {
 	lost       uint64
 	overflowed bool
 	notified   bool
+	failure    *overflowError // Its detachment, once overflowed.
 }
 
 type envelope struct {
@@ -118,7 +144,8 @@ type envelope struct {
 // is detached. PeakBacklog is the most undelivered events ever seen, for sizing
 // and verifying the bound. Overflowed counts detached observers, EventsLost the
 // events they were denied, Orphaned the detached observers' goroutines still
-// inside a callback, and LastOverflow the text of the latest overflow.
+// inside a callback, and LastOverflow the text of the latest detachment, which
+// names its cause: the backlog bound or the stall of Close.
 type observerStatus struct {
 	Accepted          uint64
 	Delivered         uint64
@@ -337,7 +364,7 @@ func (d *dispatcher) append(sequence uint64, event ledgerEvent) error {
 		return errSequenceGap
 	}
 	if d.limit > 0 && d.backlogLocked() >= uint64(d.limit) {
-		d.overflowLocked()
+		d.overflowLocked(0)
 	}
 	d.queue = append(d.queue, envelope{sequence: sequence, event: event, listeners: d.listeners})
 	d.status.Accepted = sequence
@@ -358,8 +385,9 @@ func (d *dispatcher) backlogLocked() uint64 {
 // overflowLocked detaches the observer the worker is inside and hands the worker
 // role to a new goroutine, which resumes the same event at the next listener. If
 // the worker is not inside any listener nothing can be blamed and nothing
-// changes; the next append asks again.
-func (d *dispatcher) overflowLocked() {
+// changes; the next append asks again. A nonzero stall is the stall rule of Close
+// detaching it, not the backlog bound.
+func (d *dispatcher) overflowLocked(stall time.Duration) {
 	l := d.running
 	if l == nil || l.overflowed {
 		return
@@ -371,7 +399,11 @@ func (d *dispatcher) overflowLocked() {
 			l.lost = captured - l.handled
 		}
 	}
-	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit}
+	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit, Stall: stall}
+	if stall != 0 {
+		failure.Limit = 0
+	}
+	l.failure = failure
 	d.status.Overflowed++
 	d.status.EventsLost += l.lost
 	d.status.LastOverflow = failure.Error()
@@ -412,6 +444,27 @@ func (d *dispatcher) overflowErrLocked() error {
 // settle and then this barrier.
 func (d *dispatcher) barrier(ctx context.Context) error {
 	return d.waitBarrier(ctx, d.snapshot().Accepted)
+}
+
+// stallBarrier is barrier for Close: each time no event is delivered for stall, it
+// detaches the observer the worker is inside, by the overflow rule, so a callback
+// that never returns delays the wait by stall and not without bound.
+func (d *dispatcher) stallBarrier(ctx context.Context, stall time.Duration) error {
+	sequence := d.snapshot().Accepted
+	for {
+		delivered := d.snapshot().Delivered
+		wait, cancel := context.WithTimeout(ctx, stall)
+		err := d.waitBarrier(wait, sequence)
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+			return err
+		}
+		d.mu.Lock()
+		if d.status.Delivered == delivered {
+			d.overflowLocked(stall)
+		}
+		d.mu.Unlock()
+	}
 }
 
 // waitBarrier joins delivery through an already accepted sequence. Zero joins
@@ -647,9 +700,9 @@ func (d *dispatcher) terminal(l *registration) {
 		return
 	}
 	l.notified = true
-	failure := &overflowError{Label: l.label, Lost: l.lost, Through: l.last, Limit: d.limit}
+	failure := *l.failure
 	d.mu.Unlock()
-	if err := invokeTerminal(d.callback, l, handler, failure); err != nil {
+	if err := invokeTerminal(d.callback, l, handler, &failure); err != nil {
 		d.report(failure.Through, l.label, err)
 	}
 }
@@ -664,7 +717,10 @@ func invoke(ctx context.Context, r *registration, event ledgerEvent) (called boo
 	}()
 	leave, ok := r.owner.enter()
 	if !ok {
-		return false, nil
+		if l, ok := r.owner.(lateDelivery); !ok || !l.deliverLate() {
+			return false, nil
+		}
+		leave = func() {}
 	}
 	defer leave()
 	called = true
@@ -770,7 +826,7 @@ func (n *observerSet) append(e ledgerEvent) error {
 // outlives its activation's quiescence. The caller has already checked that owner
 // belongs to this core: registration calls the owner's tryDefer and can reenter
 // the core, so it never runs on the owner goroutine.
-func (n *observerSet) observe(owner *handle, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
+func (n *observerSet) observe(owner *handle, lease leaseHolder, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
 	var callback observerFunc
 	if fn != nil {
 		callback = func(dispatcherCtx context.Context, event ledgerEvent) error {
@@ -794,7 +850,7 @@ func (n *observerSet) observe(owner *handle, label string, fn func(context.Conte
 			return onOverflow(ctx, failure)
 		}
 	}
-	dispose, err := n.d.addObserverWith(owner, label, callback, terminal)
+	dispose, err := n.d.addObserverWith(lease, label, callback, terminal)
 	if errors.Is(err, errObserverInactive) {
 		return nil, ErrInactive
 	}
@@ -834,7 +890,13 @@ func (r *core) observe(owner *handle, label string, fn func(context.Context, led
 	if owner == nil || owner.core != r {
 		return nil, errObserverBinding
 	}
-	return r.observers.observe(owner, label, fn, onOverflow)
+	return r.observers.observe(owner, owner, label, fn, onOverflow)
+}
+
+// observeRoot is observe for the observer of the root (Root.Observe): it keeps
+// receiving the events of Close (see rootLease).
+func (r *core) observeRoot(owner *handle, label string, fn func(context.Context, ledgerEvent) error, onOverflow func(context.Context, *overflowError) error) (disposer, error) {
+	return r.observers.observe(owner, rootLease{owner}, label, fn, onOverflow)
 }
 
 // awaitObservers joins only the accepted watermark captured at the call, not

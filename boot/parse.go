@@ -24,6 +24,10 @@ const (
 	MaxRows = 20000
 	// MaxIncludeDepth is the deepest nesting of core:include rows.
 	MaxIncludeDepth = 4
+	// MaxComposeBytes bounds the bytes one composition parses: its layer files,
+	// and an included file at each of its mounts (a shipped profile parses a few
+	// tens of KiB).
+	MaxComposeBytes = 16 << 20
 )
 
 // How YAML scalars are typed. A plain scalar is typed by the YAML core rules
@@ -483,6 +487,12 @@ func (p *parser) intercept(b *fieldBag, n *yaml.Node, row string, depth int) err
 		v, err := p.value(pr.v, row, depth+1)
 		if err != nil {
 			return err
+		}
+		// config-refs resolves references through internal/config, so in the config
+		// of a row only (03-c3-kernel.md:68); one in an intercept would reach the
+		// provider unresolved.
+		if refs := collectRefs(v, "intercept."+pr.key, nil); len(refs) > 0 {
+			return p.err(pr.v, RuleReference, row, "%s holds a reference: references are resolved in config only", refs[0].Path)
 		}
 		fields = append(fields, Field{Key: pr.key, Value: v})
 	}

@@ -1,0 +1,4 @@
+# Layer 4 patch: restart-policy retries a failed fiber every 100ms at most and gives up
+# only after a thousand failures in a minute, which no test reaches: a provider that fails
+# while running is still being retried whenever the test lets it recover.
+- {id: restart-policy, config: {maxFailures: 1000, window: 1m, backoffMin: 20ms, backoffMax: 100ms, factor: 2, infrastructure: [toy.store]}}

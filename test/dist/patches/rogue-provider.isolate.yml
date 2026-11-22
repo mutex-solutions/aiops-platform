@@ -1,0 +1,4 @@
+# Layer 4 patch: isolate on a provider-bound key is a static graph error that stops
+# boot whatever the row (08-profiles-roadmap-adrs.md:469).
+- insert:
+    - {id: fault, plugin: aiops-test/rogue-provider, roles: [api], isolate: [toy.policy]}

@@ -1,0 +1,17 @@
+# Test-only bundle of the profile "smoke": the dependency chain of the toy plugins
+# spine <- store <- consumer, and the two rows a test needs to see the process.
+- insert:
+    - {id: clock, plugin: aiops/clock, roles: [api]}
+    - {id: refs, plugin: aiops/config-refs, roles: [api], config: {maxFileBytes: 65536}}
+    - {id: readiness, plugin: aiops/readiness, roles: [api]}
+    - {id: restart-policy, plugin: aiops/restart-policy, roles: [api], config: {maxFailures: 3, window: 1m, backoffMin: 20ms, backoffMax: 100ms, factor: 2, infrastructure: [toy.store]}}
+    - {id: reload, plugin: aiops/reload, roles: [api], config: {queue: 4, history: 16}}
+    - {id: spine, plugin: aiops-test/toy-spine, roles: [api], config: {workers: 2}}
+    - {id: store, plugin: aiops-test/toy-provider, roles: [api]}
+    - {id: consumer, plugin: aiops-test/toy-consumer, roles: [api], config: {note: hello}}
+    - {id: state, plugin: aiops-test/test-state, roles: [api]}
+    - {id: submit, plugin: aiops-test/test-submit, roles: [api]}
+    # Disabled until a generation enables it: the live recomposition case.
+    - {id: extra, plugin: aiops-test/toy-consumer, roles: [api], enabled: false, config: {note: extra}}
+    # Fails its first two applies when enabled, so restart-policy has something to retry.
+    - {id: flaky, plugin: aiops-test/fail-apply, roles: [api], enabled: false, config: {failTimes: 2}}

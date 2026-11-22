@@ -1,0 +1,32 @@
+{
+ "classification": "PASS full frozen property workload on three backends, including the kernel with the S1 additions (G1-G11: batch child mounts, update/commit with config, per-fiber config lock, internal events, registry lookup, RunWith, drain leak, Close delivery) driven through its exported API by the adapter backend; run in a frozen checkout",
+ "exitCode": 0,
+ "sourceSHA256": "a9bb6ceb2d7eab508c8544968c0797ecca8439f24dd31c151ccb60d380b7f88b",
+ "commit": "4a8f20d",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 5750.02,
+ "backendSeconds": {
+  "reconciler": 1513.93,
+  "graph-lock": 1413.59,
+  "kernel": 2822.22
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ },
+ "note": "later commits on the branch up to the one that adds this file change no kernel or test/spike source"
+}

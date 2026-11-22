@@ -1,0 +1,3 @@
+# Layer 4 patch, written by a live recomposition: test-submit polls at another interval,
+# which restarts the row that is making the submission.
+- {id: submit, config: {interval: 30ms}}

@@ -2,7 +2,7 @@
 
 // Package composition is the definition of the composition key: the committed
 // generation as read-only data, rows, declared hooks and registrations, states,
-// by scope (03-c3-kernel.md:64; plugin-system-2026-11.md:190). The loader
+// by scope (03-c3-kernel.md:64; plugin-system-2026-11.md §5). The loader
 // provides it; the gate owners, http-server and plugin-inventory read it
 // (03-c3-kernel.md:70; 07-c4-plugin-sdk.md:440 "Expected listeners").
 //

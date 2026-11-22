@@ -159,7 +159,7 @@ func ShowValue(v Value) string {
 
 // RenderHooks is --dump-hooks: every hook chain of the active rows in
 // dispatch order, which is the declared stage, then the plugin id
-// (07-c4-plugin-sdk.md:438; plugin-system-2026-11.md:311). Never by
+// (07-c4-plugin-sdk.md:438; plugin-system-2026-11.md §8). Never by
 // registration order. Rows of one plugin on one stage are ordered by row id.
 // A chain whose hook is sealed to the distribution is marked, with its
 // listener list. A stage is its ordinal in the definition that owns the hook;

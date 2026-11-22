@@ -28,3 +28,23 @@ func (l *logger) For(c *Context) *slog.Logger {
 	}
 	return l.base.With("plugin", c.frame.id)
 }
+
+// logHandlerOf is the handler of the kernel's own records: Config.LogHandler, or one
+// that drops them.
+func logHandlerOf(cfg coreConfig) slog.Handler {
+	if cfg.logHandler == nil {
+		return slog.DiscardHandler
+	}
+	return cfg.logHandler
+}
+
+// logError writes one structured record about a fiber to the kernel's handler: the
+// fiber id, the plugin id, a label (the tracked goroutine's, or the stage of a
+// deadline) and the error text. It carries no config value. The handler is the
+// launcher's and runs on the caller's goroutine, so the owner never calls it
+// directly: a tracked worker calls it on its own goroutine and the owner starts one
+// for a leak. A panic of the handler is contained.
+func (r *core) logError(msg string, fiber uint64, plugin, label, text string) {
+	defer func() { _ = recover() }()
+	r.log.Error(msg, "fiber", fiber, "plugin", plugin, "label", label, "error", text)
+}

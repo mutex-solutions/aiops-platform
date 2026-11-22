@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -51,6 +52,10 @@ type coreConfig struct {
 	// observerLog, when non-nil, receives each contained observer failure on the
 	// dispatcher worker. It is an option, not a number: nil disables logging.
 	observerLog logFunc
+	// logHandler, when non-nil, receives one record for a tracked goroutine that
+	// fails and one for a fiber marked leaked (logError). It is an option: nil
+	// writes nothing.
+	logHandler slog.Handler
 }
 
 // validate rejects a configuration in which any required number is zero or negative.
@@ -78,7 +83,7 @@ func newCore(cfg coreConfig) (*core, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	r := &core{cfg: cfg, inbox: make(chan message, cfg.ownerInbox), wake: make(chan struct{}, 1), done: make(chan struct{})}
+	r := &core{cfg: cfg, log: slog.New(logHandlerOf(cfg)), inbox: make(chan message, cfg.ownerInbox), wake: make(chan struct{}, 1), done: make(chan struct{})}
 	o := newOwner(r)
 	go o.run()
 	return r, nil

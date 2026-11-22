@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -62,7 +63,7 @@ func (c Config) core() coreConfig {
 	return coreConfig{
 		loadDeadline: c.LoadDeadline, drainDeadline: c.DrainDeadline, disposeDeadline: c.DisposeDeadline,
 		archiveLimit: c.ArchiveLimit, eventWindow: c.EventWindow, observerQueue: c.ObserverQueue,
-		ownerInbox: c.OwnerInbox, terminalLimit: c.TerminalLimit, observerLog: c.ObserverLog,
+		ownerInbox: c.OwnerInbox, terminalLimit: c.TerminalLimit, observerLog: c.ObserverLog, logHandler: c.LogHandler,
 	}
 }
 
@@ -76,7 +77,8 @@ type Root struct {
 	unbound   bool
 	host      entryID
 	ctx       *Context
-	aud       Audience // Reaches the listeners of this kernel only: see config.go.
+	aud       Audience  // Reaches the listeners of this kernel only: see config.go.
+	relayOnce sync.Once // Subscribes the relay of the kernel events: see relay.go.
 }
 
 // New constructs a kernel with the three binding maps of cfg (07-c4-plugin-sdk.md:1358;
@@ -109,7 +111,7 @@ func NewForTest(tb testing.TB, cfg Config) *Root {
 	}
 	tb.Cleanup(func() {
 		switch err := r.Close(context.Background()); {
-		case errors.Is(err, errLeaked):
+		case errors.Is(err, ErrLeaked):
 			tb.Errorf("kernel close: %v", err)
 		case err != nil:
 			tb.Logf("kernel close: %v", err)
@@ -150,7 +152,7 @@ func (r *Root) Plugin(p Plugin, cfg any) *Fiber { return r.ctx.Plugin(p, cfg) }
 // Settle returns when no fiber is mid-transition except fibers blocked past one of
 // their own deadlines. It returns nil when nothing is blocked, otherwise one joined
 // diagnostic per blocked fiber. If ctx ends first it returns ctx's error joined
-// with the diagnostics known so far (docs/design/plugin-system-2026-11.md:57).
+// with the diagnostics known so far (docs/design/plugin-system-2026-11.md §3).
 func (r *Root) Settle(ctx context.Context) error { return r.core.settle(ctx) }
 
 // Close disposes every fiber, then the root. It waits as Settle does and always
@@ -162,16 +164,75 @@ type BatchOp struct {
 	kind   batchKind
 	plugin Plugin
 	cfg    any
+	hasCfg bool // UpdateOpWith: cfg replaces the fiber's config.
 	fiber  *Fiber
+	parent *Context // Context.MountOp: the context the mount is a child of; nil for a top-level fiber.
 }
 
 // MountOp is the operation that mounts p, like Root.Plugin, as a top-level
 // fiber.
 func MountOp(p Plugin, cfg any) BatchOp { return BatchOp{kind: batchMount, plugin: p, cfg: cfg} }
 
+// MountOp is the operation that mounts p as a child fiber of c's fiber, with the
+// semantics of c.Plugin(p, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:197,
+// :367): the child inherits c's entry when p was not defined, sees c's isolate and
+// intercept chain, is an effect of c, and a declaration that is refused makes a
+// child that is mounted failed. What differs is that it is applied atomically with
+// the rest of the batch. A batch holding it is refused whole, with an error that
+// matches ErrInactive and ErrInactiveEffect and no effect, when c's activation has
+// ended or is ending when the batch is admitted, or when an earlier operation of
+// the same batch ends that activation: it disposes or restarts c's fiber, or a fiber
+// whose restart restarts or disposes c's, through a key it provides or as an ancestor,
+// at any depth (c.Plugin would panic and fail c's fiber; a batch has no fiber to fail).
+// A later one is allowed: the child goes with that activation. An UpdateOpWith whose
+// restart internal/update vetoes, and a CommitOp, restart nothing. A c of another
+// kernel is refused with an error. The Fiber that Batch returns at this position is
+// the new child. A nil c gives the zero BatchOp, which Batch refuses.
+func (c *Context) MountOp(p Plugin, cfg any) BatchOp {
+	if c == nil {
+		return BatchOp{}
+	}
+	return BatchOp{kind: batchMount, plugin: p, cfg: cfg, parent: c}
+}
+
 // UpdateOp is the operation that restarts f with the config it retains. The
 // contract gives it no shape; it runs no config hook and decodes at activation.
 func UpdateOp(f *Fiber) BatchOp { return BatchOp{kind: batchUpdate, fiber: f} }
+
+// UpdateOpWith is the operation that gives f the config cfg and restarts it, with
+// the effect of f.Update(ctx, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:205,
+// :358; ADR-034 owner decisions 9, 12, 13 and 15). Before the batch is admitted,
+// Batch handles every UpdateOpWith in operation order, each as Update does: it
+// resolves cfg through internal/config and Decode when the fiber has a desired
+// target, then runs the waterfall internal/commit, which fails closed. The first
+// operation that errors, or whose commit is vetoed (ErrCommitVetoed), refuses the
+// whole batch: nothing is retained, nothing mounts, updates or disposes. Only then
+// is the waterfall internal/update run for each fiber that has a target, in
+// operation order, and cfg of every operation is retained (the last one wins when f
+// appears twice) when the core admits the batch, before any activation it starts.
+// A listener of internal/update that does not call next vetoes the restart of that
+// fiber alone: as in Update, its cfg is still retained and applies at the next
+// restart, and the rest of the batch goes on. An error of internal/update refuses
+// the batch whole. A fiber with no target (gated on a need, FAILED, a disposal
+// pending) skips resolution and internal/update, as in Update. A batch the core
+// then refuses, such as one that disposes f before this operation (vetoed or not),
+// retains nothing. A fiber mounted with When takes no config, so the operation is
+// UpdateOp. The Fiber at this position is f.
+func UpdateOpWith(f *Fiber, cfg any) BatchOp {
+	return BatchOp{kind: batchUpdate, fiber: f, cfg: cfg, hasCfg: true}
+}
+
+// CommitOp is the operation that gives f the config cfg without restarting it, with
+// the effect of f.Commit(ctx, cfg) (ADR-059 decision 2; 07-c4-plugin-sdk.md:205,
+// :1374). It is handled with the other operations that carry a config (see
+// UpdateOpWith): resolved through internal/config and Decode when the fiber has a
+// target, committed through internal/commit, and retained only when the core admits
+// the whole batch; a refused batch, such as one that disposes f before this
+// operation, retains nothing. It runs no
+// internal/update and does not restart f. The Fiber at this position is f.
+func CommitOp(f *Fiber, cfg any) BatchOp {
+	return BatchOp{kind: batchKeep, fiber: f, cfg: cfg, hasCfg: true}
+}
 
 // DisposeOp is the operation that disposes f, like Fiber.Dispose.
 func DisposeOp(f *Fiber) BatchOp { return BatchOp{kind: batchDispose, fiber: f} }
@@ -180,8 +241,10 @@ var errForeignFiber = errors.New("fiber belongs to another kernel")
 
 // Batch commits all of ops as one desired state before any resulting work is
 // admitted, so two updates cannot start an intermediate activation
-// (docs/design/plugin-system-2026-11.md:57). It returns one Fiber per operation, in order, or an
-// error and no effect. The contract names Batch but not its shape; this one maps
+// (docs/design/plugin-system-2026-11.md §3). It returns one Fiber per operation, in
+// order (ADR-059 decision 2): at a MountOp, from Root or from a Context, the new
+// fiber; at an UpdateOp, UpdateOpWith or DisposeOp, the fiber that was given. It
+// returns an error and no effect otherwise, and a refused batch retains no config. The contract names Batch but not its shape; this one maps
 // the core's batch directly.
 func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	native := make([]batchOp, len(ops))
@@ -189,7 +252,14 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 	for i, op := range ops {
 		native[i].Kind = op.kind
 		if op.kind == batchMount {
-			native[i].Spec, cells[i] = r.ctx.mountSpec(op.plugin, op.cfg)
+			from := r.ctx
+			if op.parent != nil {
+				if op.parent.root != r {
+					return nil, fmt.Errorf("batch operation %d: %w", i, errForeignFiber)
+				}
+				from, native[i].Parent = op.parent, op.parent.h
+			}
+			native[i].Spec, cells[i] = from.mountSpec(op.plugin, op.cfg)
 			continue
 		}
 		if op.fiber == nil {
@@ -198,9 +268,17 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		if op.fiber.ref.c != r.core {
 			return nil, fmt.Errorf("batch operation %d: %w", i, errForeignFiber)
 		}
+		if op.hasCfg && op.fiber.cell == registryCell {
+			return nil, fmt.Errorf("batch operation %d: %w", i, errRegistryConfig)
+		}
 		native[i].Fiber = op.fiber.ref.id
 	}
+	done, err := r.stageUpdates(ctx, ops, native)
+	if err != nil {
+		return nil, err
+	}
 	ids, err := r.core.batch(ctx, native)
+	done()
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +298,7 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 // after the fiber is disposed, for as long as the kernel keeps its record.
 type Fiber struct {
 	ref  fiberRef
-	cell *cfgCell // The fiber's config; nil for a fiber that takes none (When).
+	cell *cfgCell // The fiber's config; nil for a fiber that takes none (When), registryCell when unknown.
 }
 
 // State returns the fiber's current state.

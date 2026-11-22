@@ -5,7 +5,7 @@ package composition
 import "github.com/mutex-solutions/aiops-platform/sdk/kernel"
 
 // Key is the composition key, class `-` (open) at major 0
-// (03-c3-kernel.md:64; plugin-system-2026-11.md:190).
+// (03-c3-kernel.md:64; plugin-system-2026-11.md §5).
 var Key = kernel.NewKey[Reader]("composition", 0)
 
 // Scope is the scope of a generation. Layer 5 and the tenant scope arrive at S4b
@@ -24,9 +24,11 @@ type Digest [32]byte
 
 // Row is one row of a committed generation, read-only. Docs list what it holds
 // (03-c3-kernel.md:64): the row, the hooks it declares, its registrations and its
-// state. The field names are the definition's own, a minimal reading (open point).
+// state. The field names are the definition's own, a minimal reading (open point,
+// settled before S2a: ADR-059 decision 37).
 type Row struct {
 	ID            string
+	Fiber         uint64       // the id of the row's fiber, as kernel.Fiber.ID gives it; 0 when it has none
 	Plugin        string       // "<owner>/<name>"
 	Parent        string       // composed id of the enclosing group, or ""
 	State         kernel.State // the row's fiber state now
@@ -34,12 +36,15 @@ type Row struct {
 	Registrations []string     // what the row registered, by label, as effects
 }
 
-// Generation is one committed generation of one scope.
+// Generation is one committed generation of one scope: its rows. The documents
+// list what the key serves as "rows, declared hooks and registrations, states, by
+// scope" (03-c3-kernel.md:64) and name no number or digest; the number and the
+// digest belong to reload, which commits, and to composition/applied, which carries
+// them (03-c3-kernel.md:382). The loader holds neither, so the generation here is
+// narrowed to the scope and the rows.
 type Generation struct {
-	Scope  Scope
-	Seq    uint64 // the generation number
-	Digest Digest
-	Rows   []Row
+	Scope Scope
+	Rows  []Row
 }
 
 // Reader is what the composition key serves. It has no mutating method and every

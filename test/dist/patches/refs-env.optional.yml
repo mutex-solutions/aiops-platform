@@ -1,0 +1,3 @@
+# Layer 4 patch: an optional row whose config holds a reference to the environment.
+- insert:
+    - {id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: "${env:AIOPS_REF_NOTE}"}}

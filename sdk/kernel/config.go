@@ -4,8 +4,10 @@
 package kernel
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"sync"
 )
 
@@ -29,6 +31,15 @@ type cfgCell struct {
 	decode func(raw any) (any, error)
 	mu     sync.Mutex
 	raw    any
+	// cmu serialises the changes of raw after the mount. Invariant: a value is
+	// retained only by change, which takes cmu, or by the owner in the turn that
+	// admits a batch (batchOp.cell), whose caller holds cmu from before the first
+	// internal/update of the batch until the core has admitted or refused it. So a
+	// refused batch retains nothing, no activation reads a config its batch then
+	// loses, and a newer Update or Commit waits and retains after the admission.
+	// cmu is held across nothing but the internal/update hooks, the core's
+	// admission and plain assignments, and a batch takes it in ascending fiber id.
+	cmu sync.Mutex
 }
 
 func (c *cfgCell) load() any {
@@ -41,6 +52,13 @@ func (c *cfgCell) retain(raw any) {
 	c.mu.Lock()
 	c.raw = raw
 	c.mu.Unlock()
+}
+
+// change retains raw as the config of every later activation.
+func (c *cfgCell) change(raw any) {
+	c.cmu.Lock()
+	c.retain(raw)
+	c.cmu.Unlock()
 }
 
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
@@ -73,6 +91,131 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 	return w.run(ctx, r.aud, a, own)
 }
 
+// stageUpdates is the half of every UpdateOpWith and CommitOp of a batch that runs
+// plugin code, done before the batch is admitted (ADR-059 decision 2; see
+// UpdateOpWith). It marks native[i] as batchKeep where internal/update vetoed the
+// restart, and gives native[i] the cell and the config that the owner retains in the
+// turn that admits the batch: nothing is retained before, so an activation cannot
+// apply the config of a batch the core then refuses. It returns done, which the
+// caller must call once the core has admitted or refused the batch, to release the
+// config locks of cell.cmu. A listener of internal/update runs with those locks
+// held, so it must not change the config of a fiber of its own batch.
+func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(), err error) {
+	type staged struct {
+		i             int
+		id            uint64
+		cell          *cfgCell
+		cfg, resolved any
+		loaded, keep  bool
+	}
+	var list []staged
+	for i, op := range ops {
+		if !op.hasCfg || op.fiber.cell == nil {
+			continue
+		}
+		snap, err := op.fiber.ref.snapshot(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !snap.Alive {
+			return nil, ErrInactive
+		}
+		s := staged{i: i, id: op.fiber.ref.id, cell: op.fiber.cell, cfg: op.cfg, loaded: snap.Target != nil, keep: op.kind == batchKeep}
+		if s.loaded {
+			if s.resolved, err = s.cell.resolve(ctx, op.cfg); err != nil {
+				return nil, err
+			}
+		}
+		committed, err := runInner(ctx, InternalCommit, r, op.cfg, func(context.Context, any) (bool, error) { return true, nil })
+		if err != nil {
+			return nil, err
+		}
+		if !committed {
+			return nil, ErrCommitVetoed
+		}
+		list = append(list, s)
+	}
+	var held []*cfgCell
+	for _, s := range slices.SortedStableFunc(slices.Values(list), func(a, b staged) int { return cmp.Compare(a.id, b.id) }) {
+		if len(held) == 0 || held[len(held)-1] != s.cell {
+			s.cell.cmu.Lock()
+			held = append(held, s.cell)
+		}
+	}
+	unlock := func() {
+		for _, c := range held {
+			c.cmu.Unlock()
+		}
+	}
+	for _, s := range list {
+		if !s.loaded || s.keep {
+			continue
+		}
+		restart := false
+		if _, err := runInner(ctx, InternalUpdate, r, s.resolved, func(context.Context, any) (any, error) { restart = true; return nil, nil }); err != nil {
+			unlock()
+			return nil, err
+		}
+		if !restart {
+			native[s.i].Kind = batchKeep
+		}
+	}
+	for _, s := range list {
+		native[s.i].cell, native[s.i].cfg = s.cell, s.cfg
+	}
+	return unlock, nil
+}
+
+// vet is the half of Update and Commit that comes before anything is retained:
+// when the fiber has a desired target it resolves cfg through internal/config and
+// Decode, then it runs the waterfall internal/commit, which fails closed. It
+// returns the resolved config and whether the fiber has a target.
+func (f *Fiber) vet(ctx context.Context, cfg any) (resolved any, loaded bool, err error) {
+	snap, err := f.ref.snapshot(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if !snap.Alive {
+		return nil, false, ErrInactive
+	}
+	if loaded = snap.Target != nil; loaded {
+		if resolved, err = f.cell.resolve(ctx, cfg); err != nil {
+			return nil, false, err
+		}
+	}
+	committed, err := runInner(ctx, InternalCommit, f.cell.root, cfg, func(context.Context, any) (bool, error) { return true, nil })
+	if err == nil && !committed {
+		err = ErrCommitVetoed
+	}
+	return resolved, loaded, err
+}
+
+// Commit retains cfg as the fiber's config without restarting it (ADR-059 decision
+// 2; 07-c4-plugin-sdk.md:205, :1374). It vets cfg exactly as Update does (see
+// Update): when the fiber has a desired target it resolves cfg through
+// internal/config and Decode, then it runs the waterfall internal/commit, which
+// fails closed. An error, or a veto (ErrCommitVetoed), retains nothing. Only a
+// commit that completes retains cfg. Then no internal/update runs, the fiber is not
+// restarted and the running activation keeps the value it was applied with. Its
+// Apply is not called again: a plugin learns the new value from whoever commits it
+// (the loader dispatches loader/volatile-update), and the next activation of the
+// fiber, whatever starts it, resolves the retained cfg. A fiber mounted with When
+// takes no config and Commit ignores cfg. Changes of one fiber's config are
+// serialised with those of Update and Batch (see cfgCell.cmu). Decode must be pure.
+func (f *Fiber) Commit(ctx context.Context, cfg any) error {
+	if f.cell == registryCell {
+		return errRegistryConfig
+	}
+	if f.cell == nil {
+		return nil
+	}
+	if _, _, err := f.vet(ctx, cfg); err != nil {
+		return err
+	}
+	f.cell.change(cfg)
+	return nil
+}
+
 // Update replaces the fiber's config with cfg and restarts it, and returns once
 // the request is admitted; use Await for the restart (07-c4-plugin-sdk.md:205,
 // :239, :358; ADR-034 owner decision 9). The contract gives no signature: this
@@ -101,36 +244,21 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // Decode must be pure: it runs here for the candidate and again at the activation
 // that applies the retained cfg.
 func (f *Fiber) Update(ctx context.Context, cfg any) error {
-	if f.cell == nil {
+	if f.cell == registryCell && cfg != nil {
+		return errRegistryConfig
+	}
+	if f.cell == nil || f.cell == registryCell {
 		return f.ref.update(ctx)
 	}
-	snap, err := f.ref.snapshot(ctx)
+	resolved, loaded, err := f.vet(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	if !snap.Alive {
-		return ErrInactive
-	}
-	root := f.cell.root
-	loaded := snap.Target != nil
-	var resolved any
-	if loaded {
-		if resolved, err = f.cell.resolve(ctx, cfg); err != nil {
-			return err
-		}
-	}
-	committed, err := runInner(ctx, InternalCommit, root, cfg, func(context.Context, any) (bool, error) { return true, nil })
-	if err != nil {
-		return err
-	}
-	if !committed {
-		return ErrCommitVetoed
-	}
-	f.cell.retain(cfg)
+	f.cell.change(cfg)
 	if !loaded {
 		return f.ref.update(ctx)
 	}
-	_, err = runInner(ctx, InternalUpdate, root, resolved, func(ctx context.Context, _ any) (any, error) {
+	_, err = runInner(ctx, InternalUpdate, f.cell.root, resolved, func(ctx context.Context, _ any) (any, error) {
 		return nil, f.ref.update(ctx)
 	})
 	return err

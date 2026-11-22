@@ -5,6 +5,8 @@ package fake_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
@@ -31,8 +33,12 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	l.LayerList = []launch.Layer{{Number: 2, Source: "profile:self-host-full", File: "p.yml"}}
 	l.Modules = []launch.CatalogEntry{{ID: "aiops/mod", Version: "1.0.0", Provides: []string{"k"}}}
 	l.Plugins = map[string]kernel.Plugin{"aiops/mod": mod}
+	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
+	l.Environ = map[string]string{"AIOPS_REF_X": "v"}
+	l.Current = launch.Composition{Digest: launch.Digest{7}}
+	l.Needed = launch.RequiredSet{Rows: []string{"r"}, Keys: []string{"sql"}}
 	cand := launch.Composition{Rows: []launch.Row{{ID: "a"}}, Digest: launch.Digest{1}}
 	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
 	l.AdmitFn = func(_ context.Context, c launch.Composition) (launch.Admission, error) {
@@ -76,6 +82,12 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if p, ok := cat.Plugin("aiops/mod"); !ok || p.ID != mod.ID {
 			t.Errorf("Plugin = %v, %v", p.ID, ok)
 		}
+		if k, ok := cat.Key("k"); !ok || k.Name() != "catalog" {
+			t.Errorf("Key = %v, %v", k, ok)
+		}
+		if _, ok := cat.Key("nope"); ok {
+			t.Error("Key found an unknown name")
+		}
 		if _, ok := cat.Plugin("nope"); ok {
 			t.Error("Plugin found an unknown id")
 		}
@@ -89,6 +101,36 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		}
 		if _, ok := cl.Flag("nope"); ok {
 			t.Error("Flag found an unknown name")
+		}
+
+		if v, ok := cl.Env("AIOPS_REF_X"); !ok || v != "v" {
+			t.Errorf("Env = %q, %v", v, ok)
+		}
+		if _, ok := cl.Env("nope"); ok {
+			t.Error("Env found an unknown name")
+		}
+		if pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Committed = %v", pc.Committed())
+		}
+		boom := errors.New("refused")
+		l.CommitFn = func(c launch.Composition) error {
+			if c.Digest == (launch.Digest{9}) {
+				return boom
+			}
+			return nil
+		}
+		if err := pc.Commit(launch.Composition{Digest: launch.Digest{9}}); !errors.Is(err, boom) || pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Commit of a refused composition = %v, committed %v", err, pc.Committed().Digest)
+		}
+		if err := pc.Commit(cand); err != nil || pc.Committed().Digest != cand.Digest {
+			t.Errorf("Commit = %v, committed %v", err, pc.Committed().Digest)
+		}
+		l.CommitFn = nil
+		if err := pc.Commit(launch.Composition{Digest: launch.Digest{7}}); err != nil || pc.Committed().Digest != (launch.Digest{7}) {
+			t.Errorf("Commit with no script = %v", err)
+		}
+		if req := pc.Required(); len(req.Rows) != 1 || req.Rows[0] != "r" || req.Keys[0] != "sql" {
+			t.Errorf("Required = %v", req)
 		}
 
 		rd := launch.ReadyKey.Of(c)
@@ -120,6 +162,91 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	}
 	if ex := l.Exits(); len(ex) != 1 || ex[0].Reason != launch.ExitGaveUp || ex[0].Detail != "sql" {
 		t.Fatalf("exits = %v", ex)
+	}
+}
+
+// Commit takes a composition that the launcher composed, the committed one or one it
+// committed before, and refuses any other with nothing changed, as boot's does.
+func TestCommitRefusesACompositionItDidNotCompose(t *testing.T) {
+	l, _ := fake.New()
+	boot, next := launch.Composition{Digest: launch.Digest{1}}, launch.Composition{Digest: launch.Digest{2}}
+	l.Current = boot
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return next, nil }
+	if err := l.Commit(launch.Composition{Digest: launch.Digest{9}}); err == nil || !strings.Contains(err.Error(), "not composed by this launcher") {
+		t.Fatalf("Commit of a stranger = %v", err)
+	}
+	if err := l.Commit(next); err == nil || l.Committed().Digest != boot.Digest {
+		t.Fatalf("Commit before Compose returned it = %v, committed %x", err, l.Committed().Digest[0])
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []launch.Composition{next, boot, boot} { // forward, rollback, and the committed one again
+		if err := l.Commit(c); err != nil || l.Committed().Digest != c.Digest {
+			t.Fatalf("Commit(%x) = %v, committed %x", c.Digest[0], err, l.Committed().Digest[0])
+		}
+	}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) {
+		return launch.Composition{Digest: launch.Digest{3}}, errors.New("no")
+	}
+	if _, err := l.Compose(t.Context()); err == nil || l.Commit(launch.Composition{Digest: launch.Digest{3}}) == nil {
+		t.Fatal("a composition whose Compose failed was committed")
+	}
+}
+
+// Required is the distribution's set (Needed) plus the rows of the committed
+// composition marked required, for the process role (ADR-059 decision 15): it
+// follows Commit.
+func TestRequiredFollowsTheCommittedComposition(t *testing.T) {
+	l, _ := fake.New()
+	l.RoleName = "api"
+	l.Modules = []launch.CatalogEntry{{ID: "aiops/sqlp", Provides: []string{"sql"}}, {ID: "aiops/q", Provides: []string{"queue"}}}
+	l.Needed = launch.RequiredSet{Rows: []string{"away", "dist"}, Keys: []string{"none", "queue", "sql"}}
+	must, other, plain := launch.Row{ID: "must", Required: true}, launch.Row{ID: "other", Required: true, Roles: []string{"worker"}}, launch.Row{ID: "plain"}
+	away := launch.Row{ID: "away", Roles: []string{"worker"}}
+	sql := launch.Row{ID: "db", Plugin: "aiops/sqlp", Roles: []string{"worker"}}
+	q := launch.Row{ID: "q", Plugin: "aiops/q", Roles: []string{"worker", "api"}}
+	cand := launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{must, other, plain, away, sql, q}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"away", "dist"}) || !slices.Equal(got.Keys, []string{"none", "queue", "sql"}) {
+		t.Fatalf("Required before the commit = %+v", got)
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Commit(cand); err != nil {
+		t.Fatal(err)
+	}
+	// "other" and "away" run in another role; so does every provider of sql. A key
+	// with no provider row stays.
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"dist", "must"}) || !slices.Equal(got.Keys, []string{"none", "queue"}) {
+		t.Errorf("Required after the commit = %+v", got)
+	}
+	l.RoleName = launch.RoleAll
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"away", "dist", "must", "other"}) || !slices.Equal(got.Keys, []string{"none", "queue", "sql"}) {
+		t.Errorf("Required for every role = %+v", got)
+	}
+}
+
+// RequiredOf is the required set of a composition that Commit would take, by the rule
+// of Required, and refuses any other.
+func TestRequiredOfACandidate(t *testing.T) {
+	l, _ := fake.New()
+	l.Needed = launch.RequiredSet{Rows: []string{"dist"}}
+	l.Current = launch.Composition{Digest: launch.Digest{1}, Rows: []launch.Row{{ID: "old", Required: true}}}
+	cand := launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{{ID: "new", Required: true}}}
+	l.ComposeFn = func(context.Context) (launch.Composition, error) { return cand, nil }
+	if _, err := l.RequiredOf(cand); err == nil || !strings.Contains(err.Error(), "not composed by this launcher") {
+		t.Fatalf("RequiredOf before Compose returned it = %v", err)
+	}
+	if _, err := l.Compose(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := l.RequiredOf(cand); err != nil || !slices.Equal(got.Rows, []string{"dist", "new"}) {
+		t.Errorf("RequiredOf(candidate) = %+v, %v", got, err)
+	}
+	if got := l.Required(); !slices.Equal(got.Rows, []string{"dist", "old"}) {
+		t.Errorf("Required = %+v: the candidate is not committed", got)
 	}
 }
 

@@ -536,13 +536,15 @@ func (o *owner) expire(now time.Time) {
 			f.checking.timedOut = true
 			f.checking.cancel()
 		}
-		if stage == "dispose" && f.effectRunning {
-			// A disposer is still running past the dispose deadline. A goroutine
-			// cannot be killed, so the contract marks the fiber leaked and has the
-			// launcher replace the process after the drain window
-			// (07-c4-plugin-sdk.md:359 and 03-c3-kernel.md:372).
+		if stage == "drain" || stage == "dispose" && f.effectRunning {
+			// A drain whose tracked goroutines or leases are still open, or a disposer
+			// still running, past its deadline: a goroutine cannot be killed, so the
+			// contract marks the fiber leaked and has the launcher replace the process
+			// after the drain window (07-c4-plugin-sdk.md:359 and 03-c3-kernel.md:372).
 			f.leaked = true
-			o.block(f, fmt.Errorf("fiber %d %s deadline: %w: %w", f.id, stage, context.DeadlineExceeded, errLeaked))
+			err := fmt.Errorf("fiber %d %s deadline: %w: %w", f.id, stage, context.DeadlineExceeded, ErrLeaked)
+			o.block(f, err)
+			go o.r.logError("fiber marked leaked", f.id, f.spec.ID, o.leakLabel(f, stage, at), err.Error())
 		} else {
 			o.block(f, fmt.Errorf("fiber %d %s deadline: %w", f.id, stage, context.DeadlineExceeded))
 		}
@@ -564,6 +566,27 @@ func (o *owner) expire(now time.Time) {
 	}
 }
 
+// leakLabel names what still runs at the deadline at of a fiber marked leaked
+// (08-profiles-roadmap-adrs.md §1.6, "Logged with its label"): the label of the
+// disposer in flight, or those of the tracked goroutines that had not returned,
+// sorted and comma-separated. A drain held by a lease alone is named by its stage.
+func (o *owner) leakLabel(f *fiber, stage string, at time.Time) string {
+	if stage == "dispose" {
+		return f.effects[len(f.effects)-1].label
+	}
+	var open []string
+	for _, w := range f.act.tracked {
+		if !w.run.inTime(at) {
+			open = append(open, w.label)
+		}
+	}
+	if len(open) == 0 {
+		return stage
+	}
+	slices.Sort(open)
+	return strings.Join(open, ",")
+}
+
 // stageOf names the stage a due deadline of f belongs to and returns the handshake
 // of the off-owner callback it waits for, if any.
 func (o *owner) stageOf(f *fiber) (string, *handshake) {
@@ -582,30 +605,25 @@ func (o *owner) stageOf(f *fiber) (string, *handshake) {
 
 // drainInTime reports whether all of a draining fiber's own work is already done,
 // or finished before at, so that only owner messages are pending.
-// The last lease is judged by the instant it was released (act.freed, stamped by
-// the releasing goroutine on the quiesced path only). A tracked worker keeps its
-// lease until the owner acknowledges its completion, so a worker whose callback
-// returned in time and waits for that acknowledgement is discounted from the
-// lease count instead of being blamed for the owner's delay.
+// Tracked work is judged by its stamp and the last lease by the instant it was
+// released (act.freed, stamped by the releasing goroutine on the quiesced path only).
+// A tracked worker releases its lease before it stamps its return (goTracked), so a
+// record stamped in time holds no lease, whether or not the owner has handled its
+// report yet, and a lease still open is never one of finished tracked work.
 func (o *owner) drainInTime(f *fiber, at time.Time) bool {
 	a := f.act
-	finished := int64(0)
 	for _, w := range a.tracked {
 		if !w.run.inTime(at) {
 			return false
 		}
-		finished++
 	}
-	if a.ctx.lease.Load() > finished {
-		return false
-	}
-	if !a.freed.inTime(at) && !a.freed.zero() {
+	if a.ctx.lease.Load() != 0 || !a.freed.inTime(at) && !a.freed.zero() {
 		return false
 	}
 	return f.checking == nil || f.checking.run.inTime(at)
 }
 
-// errLeaked marks a fiber whose disposer is still running past the dispose
-// deadline. It is wrapped in the blocked diagnostic that settle and close report,
+// ErrLeaked marks a fiber whose drain or disposer is still running past its
+// deadline. It is wrapped in the blocked diagnostic that Settle and Close report,
 // and the fiber's snapshot carries Leaked until the incarnation is archived.
-var errLeaked = errors.New("fiber leaked")
+var ErrLeaked = errors.New("fiber leaked")

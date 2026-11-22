@@ -1,0 +1,5 @@
+# Layer 4 patch, written by a live recomposition: config-refs is disabled in the same
+# generation that creates a row whose config holds a reference to the environment.
+- {id: refs, enabled: false}
+- insert:
+    - {id: fault, plugin: aiops-test/toy-consumer, roles: [api], config: {note: "${env:AIOPS_REF_NOTE}"}}

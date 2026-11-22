@@ -97,6 +97,19 @@ func (w *Waterfall[A, R]) On(c *Context, stage string, fn WaterfallListener[A, R
 // activation has ended returns an error that matches ErrInactive and calls no
 // listener (decision 10).
 func (d WaterfallDispatcher[A, R]) Run(ctx context.Context, aud Audience, a A) (R, error) {
+	return d.RunWith(ctx, aud, a, nil)
+}
+
+// RunWith is Run with the owner's built-in behaviour as the innermost step
+// (ADR-059 decision 2; 07-c4-plugin-sdk.md:386: "Listeners run outermost first. A
+// listener that does not call `next` vetoes the rest of the chain and the built-in
+// behaviour"). The next of the last listener calls inner with ctx and a, and with
+// no listener inner runs alone; a listener that does not call next means inner does
+// not run. The result is the outermost listener's. An error of inner fails the
+// dispatch as an error of a listener does, as a *ListenerError naming the owner's
+// fiber, and inner is never skipped for a fiber that is quiescing. A nil inner is
+// Run: past the last listener the result is the zero R.
+func (d WaterfallDispatcher[A, R]) RunWith(ctx context.Context, aud Audience, a A, inner func(context.Context, A) (R, error)) (R, error) {
 	if d.w == nil {
 		var zero R
 		return zero, ErrInactive
@@ -107,7 +120,12 @@ func (d WaterfallDispatcher[A, R]) Run(ctx context.Context, aud Audience, a A) (
 		return zero, err
 	}
 	defer leave()
-	return d.w.run(ctx, aud, a, nil)
+	var own *listener[WaterfallListener[A, R]]
+	if inner != nil {
+		own = &listener[WaterfallListener[A, R]]{id: d.c.frame.id, stage: len(d.w.def.stages), ctx: d.c, own: true,
+			fn: func(ctx context.Context, a A, _ Next[R]) (R, error) { return inner(ctx, a) }}
+	}
+	return d.w.run(ctx, aud, a, own)
 }
 
 // run is Run with no check of a dispatcher and an optional innermost listener: the

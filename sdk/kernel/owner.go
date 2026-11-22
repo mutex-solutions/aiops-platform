@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"reflect"
 	"slices"
 	"sync"
@@ -175,7 +177,7 @@ type fiber struct {
 	remove          bool
 	queued          bool
 	failure         error
-	leaked          bool  // A disposer ran past the dispose deadline (see expire); sticky for the incarnation.
+	leaked          bool  // A drain or a disposer ran past its deadline (see expire); sticky for the incarnation.
 	awaitErr        error // Activation/startup failure retained by Await, not cleanup diagnostics.
 	failureText     string
 	awaitText       string
@@ -253,6 +255,7 @@ type core struct {
 	cancelled atomic.Pointer[waiter] // Parked waiters whose context ended.
 	rootErr   error                  // Published before done closes; retained host-lifetime failure.
 	observers *observerSet
+	log       *slog.Logger // The kernel's own records: see logError.
 	// History bounds (inspect.go). The owner is the only writer; status readers
 	// use the atomic counters inside these values.
 	ledger  *eventLedger
@@ -314,8 +317,9 @@ func (r *core) notifyKeys(ctx context.Context, keys ...svcKey) error {
 //
 // Settle returns when no fiber is mid-transition except fibers blocked past one of their own deadlines. It returns nil when nothing is blocked, otherwise one joined diagnostic per blocked fiber naming the fiber and the stage. It never returns while an unblocked fiber is mid-transition. If ctx ends first it returns ctx's error joined with the diagnostics known so far.
 //
-// A blocked fiber whose disposer ran past the dispose deadline is reported as
-// leaked: its diagnostic wraps errLeaked and its snapshot has Leaked set.
+// A blocked fiber whose disposer ran past the dispose deadline, or whose drain passed
+// its deadline with tracked goroutines or leases still open, is reported as leaked:
+// its diagnostic wraps ErrLeaked and its snapshot has Leaked set.
 func (r *core) settle(ctx context.Context) error {
 	return r.exchange(ctx, message{kind: cmdSettle}).err
 }
@@ -365,7 +369,13 @@ func (r *core) close(ctx context.Context) error {
 	if err != nil {
 		// The diagnostic is returned while the owner may still be alive. The
 		// owner replies before it closes done, so join that exit off this call
-		// path; otherwise nobody closes the observer queue.
+		// path; otherwise nobody closes the observer queue. The events accepted so
+		// far, the deadline that made this diagnostic among them, are delivered
+		// before it is returned, within ctx: a launcher that reads the error and
+		// its observer's flag must not see the one without the other. An observer
+		// that delivers nothing for a drain deadline (a stuck listener of a kernel
+		// event) is detached, so the wait is bounded even when ctx never ends.
+		_ = r.observers.d.stallBarrier(ctx, r.cfg.drainDeadline)
 		r.releaseWhenDrained()
 		return err
 	}
@@ -682,7 +692,7 @@ func (o *owner) handle(m message) (answer, bool) {
 	case cmdScopeRequest:
 		f, err := o.current(m.act)
 		if err != nil {
-			return answer{err: err}, false
+			return answer{err: errors.Join(ErrInactiveEffect, err)}, false
 		}
 		if err := validateScope(m.label, m.setup); err != nil {
 			return answer{err: err}, false
@@ -773,6 +783,24 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	prepared, err := prepareBatch(operations, func(id uint64) bool {
 		f := o.fibers[id]
 		return f != nil && alive(f)
+	}, func(h *handle) bool {
+		// The test of cmdMountChild: this exact activation is current and not ending.
+		if h.act == nil {
+			return false
+		}
+		_, err := o.current(h.act)
+		return err == nil && !h.act.selfDispose.Load()
+	}, func(id uint64) (next []uint64) {
+		// The fibers whose activation ends with id's: the consumers that
+		// invalidateBatch restarts and the children that its effect walk disposes.
+		f := o.fibers[id]
+		for _, p := range f.provisions {
+			next = slices.AppendSeq(next, maps.Keys(o.byKey[p.key]))
+		}
+		if f.act != nil {
+			next = slices.AppendSeq(next, maps.Keys(f.act.children))
+		}
+		return next
 	})
 	if err != nil {
 		return nil, err
@@ -784,11 +812,18 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	touched := make([]*fiber, 0, len(prepared))
 	o.batchDepth++
 	for i, op := range prepared {
+		if op.cell != nil {
+			op.cell.retain(op.cfg)
+		}
 		switch op.Kind {
 		case batchMount:
 			// prepareBatch has validated the same mount declarations. IDs are
 			// consumed only now, after the entire prefix has been admitted.
-			f, _ := o.mount(op.Spec, nil)
+			var parent *activation
+			if op.Parent != nil {
+				parent = op.Parent.act
+			}
+			f, _ := o.mount(op.Spec, parent)
 			results[i] = f.id
 		case batchUpdate:
 			f := o.fibers[op.Fiber]
@@ -1416,27 +1451,43 @@ const (
 	batchMount batchKind = iota + 1
 	batchUpdate
 	batchDispose
+	batchKeep // An update whose restart internal/update vetoed: it admits and does nothing.
 )
 
-// batchOp is data. A mount uses Spec; the other operations use an existing nonzero
-// Fiber. Mount IDs are assigned only at actual commit.
+// batchOp is data. A mount uses Spec, and Parent when it is a child of that
+// activation's handle (nil: a top-level fiber); the other operations use an
+// existing nonzero Fiber. Mount IDs are assigned only at actual commit.
 //
 // A batch commits one validated desired-state prefix before admitting resulting
 // lifecycle and check work. Two updates increment the revision twice but cannot
-// start an intermediate activation. Repeated dispose is allowed; an update after
-// dispose is rejected before the entire prefix commits. No callback runs.
+// start an intermediate activation. Repeated dispose is allowed; any other
+// operation after a dispose of its fiber (an update, a vetoed one or a commit, both
+// batchKeep) is rejected before the entire prefix commits. No callback runs.
 type batchOp struct {
 	Kind  batchKind
 	Fiber uint64
 	Spec  pluginSpec
+	// Parent is the handle of the activation a mount is a child of. The whole batch
+	// is refused when that activation has ended or is ending, or when an earlier
+	// operation of the batch ends it, as a cmdMountChild would be: it disposes or
+	// restarts (batchKeep does not) that fiber, a provider of a key it needs, or an
+	// ancestor, at any depth.
+	Parent *handle
+	// cell, when set, takes cfg in the owner turn that admits the batch, before any
+	// activation can read it (UpdateOpWith and CommitOp; see stageUpdates). The
+	// owner only takes cell.mu, which guards plain assignments.
+	cell *cfgCell
+	cfg  any
 }
 
 // prepareBatch copies declarations and checks every operation before any writer
 // mutates state. live is native state data read by the owner; it must not invoke
-// plugin code. False means absent or already disposing.
-func prepareBatch(operations []batchOp, live func(uint64) bool) ([]batchOp, error) {
+// plugin code. False means absent or already disposing. ends lists the fibers whose
+// activation ends with that of a fiber; it is read only for a batch with a child mount.
+func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool, ends func(uint64) []uint64) ([]batchOp, error) {
 	prepared := slices.Clone(operations)
-	disposed := make(map[uint64]bool)
+	disposed, ended := make(map[uint64]bool), make(map[uint64]bool) // ended: its activation ends.
+	child := slices.ContainsFunc(operations, func(op batchOp) bool { return op.Parent != nil })
 	for i := range prepared {
 		op := &prepared[i]
 		switch op.Kind {
@@ -1445,7 +1496,10 @@ func prepareBatch(operations []batchOp, live func(uint64) bool) ([]batchOp, erro
 				return nil, fmt.Errorf("invalid batch Mount at operation %d", i)
 			}
 			op.Spec.Needs, op.Spec.Provides = slices.Clone(op.Spec.Needs), slices.Clone(op.Spec.Provides)
-		case batchUpdate, batchDispose:
+			if op.Parent != nil && (!parentLive(op.Parent) || ended[op.Parent.fiber]) {
+				return nil, fmt.Errorf("batch operation %d: %w", i, inactive())
+			}
+		case batchUpdate, batchDispose, batchKeep:
 			if op.Fiber == 0 || !live(op.Fiber) {
 				return nil, fmt.Errorf("batch operation %d: %w", i, errUnknown)
 			}
@@ -1453,11 +1507,17 @@ func prepareBatch(operations []batchOp, live func(uint64) bool) ([]batchOp, erro
 				len(op.Spec.Needs) != 0 || len(op.Spec.Provides) != 0 {
 				return nil, fmt.Errorf("batch operation %d carries an unused Mount specification", i)
 			}
-			if disposed[op.Fiber] && op.Kind == batchUpdate {
+			if disposed[op.Fiber] && op.Kind != batchDispose {
 				return nil, fmt.Errorf("batch operation %d updates a disposed target", i)
 			}
-			if op.Kind == batchDispose {
-				disposed[op.Fiber] = true
+			disposed[op.Fiber] = disposed[op.Fiber] || op.Kind == batchDispose
+			for q := []uint64{op.Fiber}; op.Kind != batchKeep && len(q) != 0; q = q[1:] {
+				if !ended[q[0]] {
+					ended[q[0]] = true
+					if child {
+						q = append(q, ends(q[0])...)
+					}
+				}
 			}
 		default:
 			return nil, errors.New("unknown batch operation kind")

@@ -1,6 +1,16 @@
-// Package boot is the launcher library. This part is the pure half: it reads
-// a profile and its layers and builds one immutable composition. It reads no
-// environment, no clock and no process, and it does not import the kernel.
+// Package boot is the launcher library. It has two halves.
+//
+// The pure half reads a profile and its layers and builds one immutable
+// composition, admits it and plans changes (compose.go, gate.go, graph.go,
+// required.go, plan.go and the dumps). It reads no environment, no clock and no
+// process, and does not import the kernel.
+//
+// The run half (run.go, launch.go, convert.go, limits.go) runs a composition on
+// the kernel: the five boot steps, the six launch services, signals, bounded
+// shutdown and exit codes. It takes every input as a value (RunOptions) and is the
+// only part that imports sdk/kernel and the launch, loader and composition
+// definitions. The package imports nothing from plugins/ or loader/: the loader
+// arrives as a kernel.Plugin value in the module table (Registry).
 //
 // The contract is ADR-059 (docs/adr/ADR-059-s1-scope.md) and, in order of
 // authority, docs/architecture/00-decisions.md section 6.1,
@@ -100,7 +110,8 @@ type Row struct {
 	Group     bool
 }
 
-// FieldName names one of the ten row fields.
+// FieldName names one of the ten row fields, or "intercept.<key>", the provenance of
+// one key of a row's intercept (see Provenance).
 type FieldName string
 
 // The ten row fields, in canonical order.
@@ -177,6 +188,9 @@ type FieldOrigin struct {
 
 // Provenance holds, for each of the ten fields in canonical order, the
 // origin of its current value: the insert, or the latest patch that set it.
+// After the ten, Compose appends one field "intercept.<key>" per key the row's
+// intercept has held, with the origin of the item that last added, changed or
+// removed that key (compose.go interceptField).
 type Provenance struct {
 	Fields []FieldOrigin
 }
@@ -219,8 +233,10 @@ type Composition struct {
 }
 
 // ModuleEntry is what the launcher knows of one plugin of the module table.
-// Plugin is an opaque handle for the kernel plugin value; boot never looks
-// inside it and it takes no part in the digest.
+// Plugin holds the kernel.Plugin value that kernel.Define returned. Run checks its
+// declarations against this entry, and gate check 7 reads the classes of the keys it
+// provides and injects (classesOf); it takes no part in the digest, and an entry read
+// from modules.yaml has none.
 type ModuleEntry struct {
 	ID       string // manifest id "<owner>/<name>"
 	Module   string // Go module path
@@ -241,6 +257,19 @@ type ModuleEntry struct {
 	// restart, until S2a derives them (ADR-059 decision 10). A path is
 	// dotted, as in RefUse.Path.
 	Volatile []string
+	// Classes are the classes that the definitions declare for the keys and hooks the
+	// entry names. An entry read from modules.yaml holds no Go value, so it carries
+	// them, and gate check 7 reads them as it reads the Go values' (ADR-059 decision
+	// 20). Nil when the entry carries none.
+	Classes *ModuleClasses
+}
+
+// ModuleClasses lists, of the keys and hooks that a module entry names, those whose
+// definitions bind or seal them: what kernel.KeyClasses and kernel.HookSealed report
+// of the Go values, written into modules.yaml. A key or hook it names and does not
+// list is open.
+type ModuleClasses struct {
+	ProviderBound, ConsumerBound, SealedHooks []string
 }
 
 // HookDecl is one hook a plugin listens on. Stage is the ordinal of the

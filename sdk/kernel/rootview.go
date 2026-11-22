@@ -31,7 +31,8 @@ var (
 	ErrEventsTruncated = errEventsTruncated
 	// ErrObserverOverflow matches the error of an observer that was detached because
 	// it stalled the dispatcher past Config.ObserverQueue (ADR-034, "2026-11-19
-	// bounded observer queue and overflow rule").
+	// bounded observer queue and overflow rule"), or because it delivered nothing for
+	// Config.DrainDeadline while Close waited for delivery (ObserverOverflow.Stall).
 	ErrObserverOverflow = errObserverOverflow
 	// ErrReentrant is returned by AwaitObservers when it is called with the context
 	// of an observer callback: a callback must not join its own dispatcher.
@@ -39,8 +40,8 @@ var (
 )
 
 // ObserverOverflow describes one observer detached for overflow: its label, the
-// events it lost, the last sequence addressed to it and the bound that was reached.
-// It matches ErrObserverOverflow.
+// events it lost, the last sequence addressed to it and the bound that was reached,
+// or the stall of Close that detached it. It matches ErrObserverOverflow.
 type ObserverOverflow = overflowError
 
 // ObserverStatus is a synchronized diagnostic snapshot of the observer dispatcher.
@@ -68,7 +69,7 @@ type FiberSnapshot struct {
 	Tracked    []string     // Labels of tracked work that has not returned.
 	Error      string       // The startup, blocked and cleanup diagnostics, joined.
 	Alive      bool         // False once disposal is requested, before cleanup.
-	Leaked     bool         // A disposer ran past the dispose deadline.
+	Leaked     bool         // A drain or a disposer ran past its deadline.
 	Target     *TargetEpoch // Nil when the desired epoch is inactive.
 }
 
@@ -228,7 +229,7 @@ func (r *Root) Observe(label string, fn func(context.Context, LedgerEvent) error
 	if fn != nil {
 		callback = func(ctx context.Context, e ledgerEvent) error { return fn(ctx, exportEvent(e)) }
 	}
-	return r.core.observe(r.ctx.h, label, callback, o.onOverflow)
+	return r.core.observeRoot(r.ctx.h, label, callback, o.onOverflow)
 }
 
 // AwaitObservers returns when every observer has been handed the events accepted

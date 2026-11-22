@@ -12,7 +12,7 @@ import (
 )
 
 // Exit codes. The documents give none for aiopsctl, so these are the
-// conventional ones (an open point of S1).
+// conventional ones (ADR-059 decision 29).
 const (
 	exitOK      = 0
 	exitRefused = 1 // the composition is refused: a read, compose, gate, graph or required-set error
@@ -96,7 +96,13 @@ func run(args []string, _ io.Reader, stdout, stderr io.Writer, fsys fs.FS, env f
 	for _, w := range warns {
 		fmt.Fprintf(stderr, "warning: %s\n", w)
 	}
-	a := boot.Admit(comp, mods, d, rs)
+	// boot mounts the loader itself and admits the composition with the loader's row,
+	// whose id no row of a profile may take (03-c3-kernel.md:64): render does the same.
+	if err := boot.CheckReserved(comp); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return exitRefused
+	}
+	a := boot.Admit(boot.WithLoader(comp), mods, d, rs)
 	for _, line := range a.Diagnostics() {
 		fmt.Fprintln(stderr, line)
 	}

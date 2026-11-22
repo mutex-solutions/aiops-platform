@@ -9,6 +9,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -17,25 +18,37 @@ import (
 )
 
 // Launcher serves every launch key. Set the exported fields before the plugin is
-// mounted; they are read, never written, by the services. The func fields script
-// Compose, Admit and Plan, and a nil one returns the zero value and no error.
+// mounted; the services read them and write only Current. The func fields script
+// Compose, Admit, Plan and Commit, and a nil one returns the zero value and no error.
+//
+// ProfileContext keeps the rules of boot's: Commit takes only a composition that
+// Compose returned, the committed one or one committed before, and Required is
+// Needed, the distribution's set, plus the rows of Current marked required, both
+// filtered by the role as boot.RequiredFor does (ADR-059 decision 15). RequiredOf
+// applies the same rule to a composition that Commit would take.
 type Launcher struct {
 	ProfileName string
 	RoleName    string
 	LayerList   []launch.Layer
 	Modules     []launch.CatalogEntry
 	Plugins     map[string]kernel.Plugin // by plugin id, for Catalog.Plugin
+	Keys        map[string]kernel.AnyKey // by key name, for Catalog.Key
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
+	Environ     map[string]string  // for Cmdline.Env
+	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
+	Needed      launch.RequiredSet // the distribution's required rows and keys, for ProfileContext.Required
 
 	ComposeFn func(context.Context) (launch.Composition, error)
 	AdmitFn   func(context.Context, launch.Composition) (launch.Admission, error)
 	PlanFn    func(context.Context, launch.Composition, launch.Composition) (launch.Plan, error)
+	CommitFn  func(launch.Composition) error // a non-nil error refuses the commit, before the digest is checked
 
 	mu    sync.Mutex
 	ready bool
 	exits []launch.ExitRequest
+	known map[launch.Digest]bool // composed or replaced by a commit
 }
 
 var (
@@ -51,7 +64,7 @@ var (
 // Each call returns a new plugin value, which a test lists in the provider binding
 // map to stand for the launcher.
 func New() (*Launcher, kernel.Plugin) {
-	f := &Launcher{}
+	f := &Launcher{known: map[launch.Digest]bool{}}
 	return f, kernel.Define(kernel.Plugin{
 		ID: "aiops/launch-fake",
 		Provides: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey,
@@ -84,11 +97,23 @@ func (f *Launcher) Profile() string        { return f.ProfileName }
 func (f *Launcher) Role() string           { return f.RoleName }
 func (f *Launcher) Layers() []launch.Layer { return slices.Clone(f.LayerList) }
 
+// Compose returns what ComposeFn does and remembers it, so that Commit takes it.
 func (f *Launcher) Compose(ctx context.Context) (launch.Composition, error) {
-	if f.ComposeFn == nil {
-		return launch.Composition{}, nil
+	var c launch.Composition
+	var err error
+	if f.ComposeFn != nil {
+		c, err = f.ComposeFn(ctx)
 	}
-	return f.ComposeFn(ctx)
+	if err == nil {
+		f.remember(c.Digest)
+	}
+	return c, err
+}
+
+func (f *Launcher) remember(d launch.Digest) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.known[d] = true
 }
 
 func (f *Launcher) Admit(ctx context.Context, c launch.Composition) (launch.Admission, error) {
@@ -103,6 +128,85 @@ func (f *Launcher) Plan(ctx context.Context, from, to launch.Composition) (launc
 		return launch.Plan{}, nil
 	}
 	return f.PlanFn(ctx, from, to)
+}
+
+func (f *Launcher) Committed() launch.Composition {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Current
+}
+
+// Commit makes c the committed composition, unless CommitFn refuses it or its digest
+// is neither Current's nor one that Compose returned or Commit replaced.
+func (f *Launcher) Commit(c launch.Composition) error {
+	if f.CommitFn != nil {
+		if err := f.CommitFn(c); err != nil {
+			return err
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.knownLocked(c); err != nil {
+		return err
+	}
+	f.known[f.Current.Digest], f.Current = true, c
+	return nil
+}
+
+// knownLocked is the refusal of a composition that Commit does not take. f.mu is held.
+func (f *Launcher) knownLocked(c launch.Composition) error {
+	if c.Digest != f.Current.Digest && !f.known[c.Digest] {
+		return fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", c.Digest[:6])
+	}
+	return nil
+}
+
+// Required is RequiredOf(Current).
+func (f *Launcher) Required() launch.RequiredSet { return f.requiredOf(f.Committed()) }
+
+// RequiredOf is the required set of c, a composition that Commit would take.
+func (f *Launcher) RequiredOf(c launch.Composition) (launch.RequiredSet, error) {
+	f.mu.Lock()
+	err := f.knownLocked(c)
+	f.mu.Unlock()
+	if err != nil {
+		return launch.RequiredSet{}, err
+	}
+	return f.requiredOf(c), nil
+}
+
+// requiredOf is Needed plus the rows of cur marked required, sorted. For a role other
+// than RoleAll ("" is RoleAll) a row of cur whose roles do not name it drops out, and
+// so does a key whose provider rows in cur all run elsewhere.
+func (f *Launcher) requiredOf(cur launch.Composition) launch.RequiredSet {
+	runs := func(r launch.Row) bool {
+		return f.RoleName == "" || f.RoleName == launch.RoleAll || len(r.Roles) == 0 || slices.Contains(r.Roles, f.RoleName)
+	}
+	rows := slices.Clone(f.Needed.Rows)
+	for _, r := range cur.Rows {
+		if r.Required {
+			rows = append(rows, r.ID)
+		}
+	}
+	rows = slices.DeleteFunc(rows, func(id string) bool {
+		i := slices.IndexFunc(cur.Rows, func(r launch.Row) bool { return r.ID == id })
+		return i >= 0 && !runs(cur.Rows[i])
+	})
+	keys := slices.DeleteFunc(slices.Clone(f.Needed.Keys), func(k string) bool {
+		providers, local := 0, 0
+		for _, r := range cur.Rows {
+			if e, _ := f.Lookup(r.Plugin); slices.Contains(e.Provides, k) {
+				providers++
+				if runs(r) {
+					local++
+				}
+			}
+		}
+		return providers > 0 && local == 0
+	})
+	slices.Sort(rows)
+	slices.Sort(keys)
+	return launch.RequiredSet{Rows: slices.Compact(rows), Keys: keys}
 }
 
 // Catalog.
@@ -123,12 +227,22 @@ func (f *Launcher) Plugin(id string) (kernel.Plugin, bool) {
 	return p, ok
 }
 
+func (f *Launcher) Key(name string) (kernel.AnyKey, bool) {
+	k, ok := f.Keys[name]
+	return k, ok
+}
+
 // Cmdline.
 
 func (f *Launcher) Args() []string { return slices.Clone(f.Argv) }
 
 func (f *Launcher) Flag(name string) (string, bool) {
 	v, ok := f.Flags[name]
+	return v, ok
+}
+
+func (f *Launcher) Env(name string) (string, bool) {
+	v, ok := f.Environ[name]
 	return v, ok
 }
 

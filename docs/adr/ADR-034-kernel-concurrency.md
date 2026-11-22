@@ -532,8 +532,12 @@ verdict and the queued message completes the transition. Not returned, or return
 at or after the deadline, is a real overrun and is failed as before. The drain
 stage is judged the same way over its own work: the last lease by the instant it
 was released (stamped on the quiesced release path only), tracked work by its
-stamp, a lease still held by a tracked worker that is waiting for the owner's
-acknowledgement is discounted.
+stamp. A tracked worker releases its own lease as its callback returns, before it
+stamps the return and reports it, so a record stamped in time holds no lease and
+its lease is judged by the same instant; the record keeps the drain open until the
+owner has the report. (Until the S1 review the worker released its lease after the
+owner acknowledged the report, and a deadline that fell due in between blamed a
+worker that had returned in time.)
 
 Interleaving argument: the owner reads its clock (now >= deadline) before it takes
 the handshake mutex, and the worker writes the stamp under the same mutex, so one
@@ -1100,3 +1104,316 @@ this ADR besides the performance gates on the port.
    222 sdk/kernel/waterfall.go
   7451 total (cap 8200)
 ```
+
+## S1 additions to the kernel API (ADR-059)
+
+ADR-059 decision 2 approves five additions for the loader, and decision 20 a sixth
+for the launcher's gate (G12). Decision 36 approves G6, G7, G8, G10 and G11, which no
+earlier decision named (see the owner decision at the end of this section). Each is
+built on what the kernel already does and changes no existing call. A batch with none of the new operations behaves as before.
+
+**G1, a child mount in a batch.**
+
+```go
+func (c *Context) MountOp(p Plugin, cfg any) BatchOp
+```
+
+It has the semantics of `c.Plugin(p, cfg)`: the child inherits c's entry when
+`p` was not defined, sees c's isolate and intercept chain, is an effect of c,
+and a refused declaration gives a child that is mounted failed. It is applied
+with the rest of the batch. `Root.Batch` returns one `*Fiber` per operation in
+operation order, so the position of a `MountOp` holds the new child. The batch
+is refused whole, with no effect and an error that matches `ErrInactive` and
+`ErrInactiveEffect`, when c's activation has ended, is ending or was replaced by
+a restart, and when an earlier operation of the same batch ends that activation
+(later in the batch is allowed: the child is mounted and goes with that
+activation). An operation ends it when it disposes or restarts c's fiber, or a fiber
+whose restart reaches c's fiber through a key that it provides or as an ancestor, at
+any depth: exactly the fibers that the batch's invalidation restarts and those that
+their effect walks dispose. A caller that cannot tell which activations its other
+operations end puts its child mounts first: each child then goes with an activation
+that ends, and the parent's next activation mounts what it needs (the loader's
+groups mount their children again when they activate). An `UpdateOpWith` whose restart `internal/update`
+vetoes, and a `CommitOp`, restart nothing. (Until the S1 review a restart earlier in
+the batch was not checked, and the batch was admitted with a child that was disposed
+at once. The first fix counted only operations on c's fiber itself, so a batch that
+restarted c's fiber through a provider or an ancestor still admitted such a child;
+the second review found it, and the refusal now follows every path of the
+invalidation.)
+
+**G2, an update with a config in a batch.**
+
+```go
+func UpdateOpWith(f *Fiber, cfg any) BatchOp
+```
+
+Its effect is that of `f.Update(ctx, cfg)`. Before the batch is admitted,
+`Root.Batch` takes the operations that carry a config in operation order and
+resolves each through `internal/config` and `Decode` (when the fiber has a
+desired target), then commits it through `internal/commit`. A refused config,
+an error, a failed commit or a veto (`ErrCommitVetoed`) refuses the whole batch
+and nothing is retained. When all have passed, `internal/update` runs for each
+fiber that has a target, in operation order, and the configs are retained, the
+last winning when a fiber appears twice, in the owner turn that admits the batch,
+before any activation it starts (see G7). A veto of `internal/update` follows
+`Fiber.Update`: the config is still retained, that fiber is not restarted, and the
+rest of the batch goes on. An error of `internal/update` refuses the batch whole
+and retains nothing, which departs from `Fiber.Update` (it retains before it
+runs that waterfall) because a batch is all or nothing. A batch that the core
+refuses after this, for example one that disposes the fiber earlier, retains
+nothing; the core refuses every operation but a dispose after a dispose of the
+same fiber, so a vetoed update and a `CommitOp` there are refused as an update is. A fiber with no target skips resolution and `internal/update`, and a
+`When` fiber takes no config.
+
+**G3, a dependency from an untyped key.**
+
+```go
+func NeedKey(k AnyKey) Dep
+```
+
+It is `Need` for a key held as `AnyKey`. A nil or zero key gives a `Dep` that a
+mount refuses with `ErrKey`. There is no untyped `Want`.
+
+**G4, the intercept config type.**
+
+```go
+func InterceptType(k AnyKey) (reflect.Type, bool)
+```
+
+It returns the type declared by `InterceptConfig[C]()`. `ok` is false for a nil
+or zero key and for a key whose intercept config is dynamically typed.
+
+**G5, the three kernel events and the registry lookup.**
+`InternalPlugin`, `InternalStatus` and `InternalService` are now
+`*Event[LedgerEvent]`. The kernel dispatches them from one internal observer of
+the dispatcher that `Root.Observe` uses. It is subscribed when the first
+listener of any of the three is registered, so a kernel with no listener
+subscribes to nothing and the owner does no work for these hooks. The
+subscription takes no lease of the root and leaves no effect on it (each listener
+runs under its own fiber's lease), so a stuck listener blames its own fiber alone
+and a subscription made again after an overflow costs the root nothing. A listener
+runs off the owner, one event at a time in the order of `Sequence`. A failing,
+panicking or slow listener is skipped and logged to `Config.ObserverLog`, and
+cannot block or fail the kernel. Listeners are admitted only through
+`Config.Listeners` or the root context. The stream is bounded by
+`Config.ObserverQueue`: a listener that stalls the dispatcher until that many
+events wait detaches the kernel's subscription by the overflow rule, so the
+events of that time are lost for every listener and no listener is removed. The
+kernel then subscribes again, and just before the first event it delivers it
+dispatches to all three hooks a `LedgerEvent` of Kind `overflow` whose
+`Sequence` is the one before that event. A listener resyncs by calling
+`Root.Inspect` and ignoring every later event whose `Sequence` is not above
+`Inspection.Sequence`.
+
+| Ledger Kind | Hook | Meaning |
+|---|---|---|
+| `mount` | `internal/plugin` | a fiber was created |
+| `state` | `internal/status` | the fiber changed state (`From`, `State`) |
+| `state` with `State` DISPOSED | `internal/plugin`, after `internal/status` | the fiber was removed |
+| `provide` | `internal/service` | a provision appeared (`Key`, `UID`) |
+| `service` | `internal/service` | a provision changed availability (`State` is its provider's) |
+| `remove` | `internal/service` | a provision ended |
+| `overflow` | all three | events were lost, see above |
+
+Every other Kind (`effect`, `dispose-effect`, `dispose:request`, `scope:*`,
+`go:*`, `deadline`) reaches no hook.
+
+```go
+func (r *registry) Fiber(id uint64) (*Fiber, bool)
+```
+
+This is the method of the `registry` built-in that the retry plugin needs. It
+finds a live or archived fiber by id and is false for id 0, an id never issued
+and an evicted record. The `*Fiber` can dispose, await and restart that fiber,
+so whoever holds the registry has those powers over every fiber. It restarts with
+`Update(ctx, nil)`, which keeps the config the fiber retains. The core does not
+keep a fiber's config cell, so it cannot change that config: `Commit`, `Update`
+with a config, `UpdateOpWith` and `CommitOp` of it return an error (until the S1
+review they reported success and retained nothing). The documents
+do not say who may hold it, so `RegistryKey` is now consumer-bound: only the
+entries that `Config.Consumers` lists resolve it, and `NewForTest` keeps every
+entry admitted. The project owner accepted this on 2026-11-21 (ADR-059 decision 33).
+`reflect`, `hooks` and `logger` stay open.
+
+**G6, a config committed without a restart.**
+
+```go
+func (f *Fiber) Commit(ctx context.Context, cfg any) error
+func CommitOp(f *Fiber, cfg any) BatchOp
+```
+
+`Commit` vets `cfg` exactly as `Fiber.Update` does: when the fiber has a desired
+target it resolves `cfg` through `internal/config` and `Decode`, then it runs
+`internal/commit`, which fails closed (a veto is `ErrCommitVetoed`). Only a
+commit that completes retains `cfg`. It runs no `internal/update` and does not
+restart the fiber: the running activation keeps the value it was applied with
+and its `Apply` is not called again. A plugin learns the new value from whoever
+commits it (the loader dispatches `loader/volatile-update`), and the next
+activation of the fiber, whatever starts it (a provider's epoch change, a
+retry, an `UpdateOp`), resolves the retained `cfg`. A fiber mounted with `When`
+takes no config and `Commit` ignores `cfg`. `CommitOp` is the same operation in
+a batch, handled with `UpdateOpWith` before the batch is admitted; the config is
+retained in the owner turn that admits the batch, and a refused batch retains
+nothing.
+
+**G7, config changes of one fiber are serialised.** This closes the open point
+of G2: a batch retained its configs before the core admitted it and restored the
+old ones when the core refused it, so a concurrent `Update` or `Commit` of the
+same fiber in that window could be overwritten by the restore. Each fiber's
+config now has a change lock. `Update` and `Commit` take it only to retain. A
+batch takes the locks of the fibers it changes in ascending fiber id (a fiber
+named twice once), from before its first `internal/update` until the core has
+admitted or refused it, and releases them after the restore. So a restore never
+overwrites a newer value: the newer change waits and retains after it. The lock
+is held across the `internal/update` hooks of the batch, so such a hook must
+not change the config of a fiber of its own batch; no other plugin code runs
+under it. Two `Update`s of one fiber race as before (the last retain wins, as
+if they ran in that order, and each restart applies the retained config).
+
+The S1 review found that the restore was not enough: a restart that takes no lock
+(an `UpdateOp`, the registry's `Update(ctx, nil)`, a provider's epoch change)
+could start an activation in that window and apply a config that the core then
+refused, and keep running with it. A batch now retains nothing before it is
+admitted: `Root.Batch` hands each config and its cell to the core, and the owner
+retains them in the turn that admits the batch, before it starts any activation.
+There is no restore; the locks are still held, as above, until the core has
+admitted or refused the batch, so a newer `Update` or `Commit` retains after it.
+
+**G8, the owner's built-in step is innermost in a waterfall.**
+
+```go
+func (d WaterfallDispatcher[A, R]) RunWith(ctx context.Context, aud Audience, a A,
+    inner func(context.Context, A) (R, error)) (R, error)
+```
+
+This is the contract of `07-c4-plugin-sdk.md:386`: listeners run outermost
+first, and a listener that does not call `next` vetoes the rest of the chain
+and the built-in behaviour. The next of the last listener calls `inner`, and
+with no listener `inner` runs alone; a listener that does not call `next` means
+`inner` does not run. An error of `inner` fails the dispatch as a listener's
+does, as a `*ListenerError` naming the owner's fiber, and `inner` is never
+skipped for an owner that is quiescing. `Run` is unchanged: a nil `inner`, and
+the zero result past the last listener. The loader uses it for
+`loader/patch-context`: the row's isolate and intercept are the innermost step,
+a listener wraps what `next` returns, and a veto (no `next`, or a nil context)
+fails that entry with `ErrPatchVetoed` and never runs its plugin. The docs do
+not say what a veto of this hook means; the project owner chose fail closed on
+2026-11-21 (ADR-059 decision 34).
+
+**G9, a drain past its deadline is a leak (ADR-059 decision 13).** When the drain
+deadline of a fiber falls due and the fiber's own work is not over (a tracked
+goroutine or a lease still open, judged by the rule that already decides whether
+the deadline is a verdict), the fiber is marked leaked exactly as one whose
+disposer is still running past the dispose deadline: the snapshot says `Leaked`
+for the rest of the incarnation, the archived one included, and the diagnostic
+of `Settle` and `Close` wraps the exported sentinel `ErrLeaked` together with
+`context.DeadlineExceeded`. The text "fiber leaked" is no longer the way to match
+it: the launcher uses `errors.Is(err, kernel.ErrLeaked)`. A drain that ends in
+time is not a leak, and nothing else about the lifecycle changes: the mark is the
+only effect. The `deadline` ledger event of the stage (`drain` or `dispose`) is
+appended after the mark, so an observer that sees it also sees `Leaked` in the
+snapshot.
+
+**G10, the kernel logs what it knows.** When a tracked goroutine returns an
+error or panics, and when a fiber is marked leaked, the kernel writes one record
+at level ERROR to `Config.LogHandler` (nothing when it is nil), with the
+attributes `fiber` (id), `plugin` (the plugin id), `label` and `error` (the error
+text), under the messages `tracked goroutine failed` and `fiber marked leaked`. The
+`label` of a failed goroutine is its own. The `label` of a leak is that of what still
+runs, as the failure matrix asks ("Logged with its label", 08 §1.6): the disposer in
+flight at the dispose deadline, or the tracked goroutines that had not returned by
+the drain deadline (sorted, comma-separated); a drain held by a lease alone has no
+label and gives its stage, `drain`. The stage is in `error` either way. No config value is
+in a record. The record of a goroutine is written on the goroutine's own worker,
+before the failure is reported to the owner, so the cause is in the log before
+the fiber is FAILED. The record of a leak is written by a goroutine that the
+owner starts, because the owner runs no foreign code; a panic of the handler is
+contained. A goroutine that ends because its context was cancelled writes no
+record.
+
+**G11, the observer of the root sees the events of `Close`.** The report that the
+launcher made was true: the root quiesces when `Close` begins, so the lease of
+the root refused every callback from then on and the dispatcher skipped each
+later event (in a test with two fibers, `ObserverStatus.Skipped` was 13 after `Close` and
+the observer had seen only the events before it; none of the skipped ones were
+delivered), among them the `deadline` of a leaking fiber. The observer that
+`Root.Observe` registers now delivers an event accepted before the dispatcher
+closes even when the root's lease is refused, with the context of the callback
+already cancelled by the quiescence, and it registers no cleanup effect on the root
+(see the owner decision below), so it is not removed when the root is disposed and
+the last events of the root are delivered too. The
+dispatcher already drained its queue before it stopped. When `Close` returns the
+diagnostic of a fiber that is still blocked, it now first waits, within its
+context, until the events accepted so far are delivered, so the diagnostic and
+the event reach a reader together. During that wait an observer that delivers
+nothing for one drain deadline (a listener of a kernel event stuck in the relay, say)
+is detached by the overflow rule, so the wait is bounded even when the context of
+`Close` never ends. An event for an observer that was detached is counted in
+`ObserverStatus.EventsLost`, and one still waiting when the context of `Close` ends
+is in `Remaining`. Such a detachment says that the stall caused it, not the backlog
+bound: its `ObserverOverflow` (in `Close`'s error, the terminal signal and
+`Config.ObserverLog`) has `Stall` set to the drain deadline and `Limit` 0, its text
+says that the observer delivered nothing for that long while `Close` waited, and so
+does `ObserverStatus.LastOverflow`. It is still counted in `Overflowed`, which counts
+every detached observer, and matches `ErrObserverOverflow`, the error of every
+detachment. (Until the second S1 review it was reported as an overflow of a backlog
+bound that was never reached.) Observers registered on
+a fiber's own handle by a test keep the old rule.
+
+**Owner decision, 2026-11-21: a launcher observer registers no effect on the
+root.** Until then `Root.Observe` registered an empty cleanup effect on the root,
+with its `effect` event in the ledger, and it stayed until `Close`. A launcher
+that observes again after each overflow, as boot's watch resyncs, so grew the
+root's effects by one per overflow for the life of the process. `Root.Observe` now
+registers none: the observer leaves when its `Disposer` is called or when the
+dispatcher closes, and an observer made again after an overflow leaves nothing
+behind, as the relay already did (G5). The S0 adapter's test that compared the
+ledger and the observer with the prototype, whose observer is an effect of its
+owner, no longer expects that event: the effect of the root's observer is not part
+of the contract a plugin sees, since only the launcher observes.
+
+**G12, the classes of a key and the seal of a hook (ADR-059 decision 20).**
+
+```go
+func KeyClasses(k AnyKey) (providerBound, consumerBound, ok bool)
+func HookSealed(h AnyHook) (sealed, ok bool)
+func (u HookUse) Sealed() bool
+```
+
+This is the sixth kernel addition of S1, which the project owner approved after the
+five of ADR-059 decision 2. Like `InterceptType`, each reads what a definition
+declared and nothing else. `providerBound` is `ProviderBound()`. `consumerBound` is
+`ConsumerBound()` or `Signed()`: both are keys that only the entries
+`Config.Consumers` lists resolve, and they differ only in who the distribution may
+list, which the kernel does not check. `sealed` is `Sealed()` or a hook of the
+kernel. `ok` is false for a nil or zero key or hook. `HookUse.Sealed` is the same
+seal for a hook as a plugin lists it in `Plugin.Hooks`, which holds a `HookUse`
+and no `AnyHook`; it is false for a zero `HookUse`. They are the predicates that
+`New` holds the binding maps and `Config.Listeners` to, so a launcher that derives
+the classes from the module table's definitions through them cannot disagree with
+the kernel. Gate check 7 derives the classes of keys and hooks this way, the hooks a
+plugin of the module table listens on included, and `dist.yaml` lists only who is
+allowed (bindings and listeners), never a class. They take no lock, run no plugin
+code and return values.
+
+**Owner decision, 2026-11-21: G6, G7, G8, G10 and G11 are approved** (ADR-059 decision
+36). No earlier decision named them: G6 adds `Commit` and `CommitOp`, G8 adds `RunWith`,
+G7 adds the per-fiber config change lock, G10 adds ERROR records to `Config.LogHandler`,
+and G11 delivers the events of `Close` and adds the exported field
+`ObserverOverflow.Stall`; decision 21 covered only the root observer's effect in G11.
+They merge to the main branch with G1 to G5 (decision 2), G9 (decision 13) and G12
+(decision 20) after the S0 gates on the final port are recorded (ADR-059 decision 1),
+their exact shapes are recorded here then, and the differential corpus, the property
+workload and the call-path gate run again on the merged kernel (decision 2). The full
+property workload passed on the branch kernel with G1 to G12 at `ab9b405`
+(`test/spike/s0/results/property-full-s1-converged/`); that run is evidence on the
+branch, not the run after the merge.
+
+The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
+G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
+27 for G7, 24 for G8 and 75 for G9 to G11. The fixes of the S1 review recorded in
+G1, G2, G5, G6, G7, G9 (R2 above), G10 and G11 bring it to 7,981, and the G1 comment
+that says which restarts refuse a child mount to 7,985. The fixes of the second
+review (18 lines for G1's refusal along every path of the invalidation, 13 for the
+stall detach of G11, 2 fewer for the root observer's effect) bring it to 8,014, and
+G12 (24, and 5 for `HookUse.Sealed`) to 8,043.

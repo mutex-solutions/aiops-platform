@@ -1,0 +1,3 @@
+# Layer 4 patch, written by a live recomposition: the config of the row "fault" gets a
+# reference that does not resolve (secret: until S3).
+- {id: fault, config: {note: "${secret:x}"}}

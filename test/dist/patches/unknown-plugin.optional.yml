@@ -1,0 +1,4 @@
+# Layer 4 patch: an optional row of a plugin that is not in the module table is a warning;
+# the row stays inactive.
+- insert:
+    - {id: ghost, plugin: aiops-test/no-such-plugin, roles: [api]}

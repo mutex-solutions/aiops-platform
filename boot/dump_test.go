@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-// loadS1 composes the fixture distribution under testdata/s1.
+// loadS1 composes the fixture distribution under testdata/s1 and admits it as boot
+// does, with the row of the loader that boot mounts.
 func loadS1(t *testing.T, roles ...Role) Admission {
 	t.Helper()
 	root := os.DirFS("testdata/s1")
@@ -34,7 +35,7 @@ func loadS1(t *testing.T, roles ...Role) Admission {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Admit(c, mods, dist, roles)
+	return Admit(WithLoader(c), mods, dist, roles)
 }
 
 func TestDumpGoldenS1(t *testing.T) {

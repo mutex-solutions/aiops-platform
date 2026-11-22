@@ -356,7 +356,7 @@ What the example shows:
 | `FAILED` | `DISPOSED` | The row was removed. |
 | `Provider` | `Epoch` | A provider swap changes the provision uid, so every consumer restarts. A provider keeps its implementation until its dependants have finished unloading. |
 | `Epoch` | `ACTIVE` | A fiber is ACTIVE only for the epoch it loaded with. A superseded load cannot fail the new target. |
-| `Effects` | `UNLOADING` | Disposers run last in, first out, one at a time, each under the dispose deadline. A process-scope disposer past its deadline marks the fiber leaked, and the process is replaced after the drain window. |
+| `Effects` | `UNLOADING` | Disposers run last in, first out, one at a time, each under the dispose deadline. A process-scope disposer past its deadline, or a drain past its deadline with a lease or a tracked goroutine still open, marks the fiber leaked (`kernel.ErrLeaked`, and `Leaked` in its snapshot), and the process is replaced after the drain window. |
 | `restart-policy` | `FAILED` | Calls `Update`. When it gives up, the fiber stays FAILED until an operator updates it; for an infrastructure provider the process then exits non-zero. |
 
 **What is an effect.** Everything a plugin starts or registers, so that unloading is total.
@@ -370,7 +370,7 @@ What the example shows:
 | A goroutine | `c.Go(label, run)` | Its context is cancelled and it is awaited |
 | A resource of the plugin's own | `c.Effect(label, setup)`, `c.Defer(label, d)` | The disposer that `setup` returned |
 
-**Unload is quiesce, then dispose.** The kernel module cancels `Std()`, refuses new leases and new effects, waits for open `Enter` leases and tracked goroutines up to the drain deadline, then runs the disposers in strict reverse. A dispatcher takes an `Enter` lease on a contribution's fiber around each call, so a call in flight finishes before the contribution is disposed. Go cannot revoke an interface value, so every definition's suite asserts that a call after the provider is disposed returns `ErrInactive`, and a registration on an unloading or disposed fiber returns `ErrInactiveEffect`.
+**Unload is quiesce, then dispose.** The kernel module cancels `Std()`, refuses new leases and new effects, waits for open `Enter` leases and tracked goroutines up to the drain deadline, then runs the disposers in strict reverse. A lease or a goroutine still open when the drain deadline passes marks the fiber leaked, as a disposer past its deadline does. A dispatcher takes an `Enter` lease on a contribution's fiber around each call, so a call in flight finishes before the contribution is disposed. Go cannot revoke an interface value, so every definition's suite asserts that a call after the provider is disposed returns `ErrInactive`, and a registration on an unloading or disposed fiber returns `ErrInactiveEffect`.
 
 **Runtime effects and durable effects.** A runtime effect lives in one replica and is reverted when that replica's fiber unloads. State that must outlive a fiber (a schema, a key prefix, job kinds, a secret scope, a sidecar instance, an external step) is not an effect: it is declared in `Spec.Durable` and reconciled by the `durable` leader from committed generations, so one replica that unloads a fiber never drops a schema or a tenant's pod (§5.2).
 
@@ -459,6 +459,7 @@ Rules, each deliberate and each different from Cordis:
 | `approval/gates`, `change/pre-dispatch` | gate (allow, raise, deny) | `approval`, `change-hub` | open | yes: plan digest, action class, scrubbed target references, requester subject | Change windows, freezes, a tenant policy engine |
 | `tenant/create`, `tenant/purge` | event (`serial`), with compensation | `tenant-lifecycle` | signed | no | How a loaded plugin performs its own step. The participant set comes from the `durable` registry, not from the listeners |
 | `composition/applied` | event | `reload` | open | no | Drift detection, inventory, audit |
+| `reload/operation` | event | `reload` | open | no | Dispatched once when an operation begins to apply a generation and once when it is final. `restart-policy` holds its give-ups, and the retries of the rows the plan lists, in between, while the generation is not yet judged. A final event whose `Err` holds `ErrStateUnknown` makes `readiness` keep the latch dropped (S1 addition; ADR-059 decisions 19 and 23) |
 
 The kernel module's own hooks (`internal/plugin`, `internal/status`, `internal/service`, `internal/config`, `internal/update`, `internal/commit`) and the loader's (`loader/patch-context`, `loader/entry-init`, `loader/volatile-update`) are sealed to the distribution. The complete list is plugin record §8.
 
@@ -1312,7 +1313,7 @@ The layer order and the per-layer rules are §6.1. A row is `{id, plugin, config
 | `inject`, `isolate`, `group` | Optional | Yes, never on a required row or a provider of a bound key | Never |
 | `intercept` | Optional | Yes; for a provider-bound key, bundle layers only | Never |
 
-An empty patch file fails boot; use `[]` to disable a layer. Rows carry no expressions: a platform gate is `roles`, a presence gate is a row-level `inject`, and a path or secret is a closed reference `${env|file|secret|flag:value}` resolved by `config-refs`, legal in layers 1 to 4 (§6.1). `aiopsctl profile render --profile self-host-full --tenant default --dump` prints the composed tree, each row headed by its provenance, with the required set and the static closure of its needs. `--dump-config-schema` prints the merged schema, `--dump-hooks` every hook chain. The dump also shows which capability is covered by which row (contributions in `signals`, tools by signal, the provider of each dialect key), derived from the composition.
+An empty patch file fails boot; use `[]` to disable a layer. Rows carry no expressions: a platform gate is `roles`, a presence gate is a row-level `inject`, and a path or secret is a closed reference `${env|file|secret|flag:value}` resolved by `config-refs`, legal in layers 1 to 4 (§6.1). `config-refs` provides `configRefsReady` and the dry run `configRefsDryRun` (`sdk/def/configrefs/v0`), both provider-bound to `aiops/config-refs`, and the launcher gives every row whose config holds a reference a row-level `inject` of `configRefsReady`, so such a row is applied only while its references can resolve (ADR-059, "configRefsReady"). When a required row holds a reference, the launcher adds `config-refs` and `configRefsReady` to that process's required set (ADR-059 decision 18), and so it does when an active provider of a required key in the root realm holds one (ADR-059 decision 24). `aiopsctl profile render --profile self-host-full --tenant default --dump` prints the composed tree, each row headed by its provenance, with the required set and the static closure of its needs. `--dump-config-schema` prints the merged schema, `--dump-hooks` every hook chain. The dump also shows which capability is covered by which row (contributions in `signals`, tools by signal, the provider of each dialect key), derived from the composition.
 
 **The bundle of an installed artifact** is narrower than a first-party bundle. It may only insert rows, each disabled, whose `plugin` is the artifact's own id or a first-party plugin marked `instantiable`; it cannot patch an existing row. Its rows mount under one group named by the artifact, so a row id is `<pack name>:<row>`, and their secret scope and purge key are the artifact's (§6.1; gate check 8, section 9). Such a bundle has no name of its own and is addressed by the plugin id (§8.1).
 
@@ -1371,7 +1372,7 @@ The unit of reload is the row and the unit of change is a generation (§6.1). Ev
 
 | Change | What the plugin sees |
 |---|---|
-| Only `Volatile` fields, which include every tenant-writable field | No call and no restart. The loader commits the value in place; the next read of the `Volatile` field, or the next `tenants.ConfigFor` call, returns it |
+| Only `Volatile` fields, which include every tenant-writable field | No call and no restart. The loader commits the value in place, unless the old or new value holds a reference, which restarts the row (ADR-059 decision 17); the next read of the `Volatile` field, or the next `tenants.ConfigFor` call, returns it |
 | Other `config`, or the row's `inject`, `intercept` or `isolate` | The fiber restarts: disposers in reverse, then `Apply` with the new config. Its dependants restart only if it provides something, through their epochs |
 | The row is enabled, disabled, inserted or removed, and its code is present | Live: the fiber is created, or unloaded and disposed |
 | A pack with no code is installed, and one of its rows enabled | Install inserts the rows disabled and starts nothing. Enabling one creates a fiber of the first-party plugin the row names, under the group named by the pack; no other fiber restarts |
@@ -1384,7 +1385,7 @@ The unit of reload is the row and the unit of change is a generation (§6.1). Ev
 | A kill switch | Nothing through config, and no listener. The readers ask the `killSwitches` launch service: `casefile`, `agent-runs` and `llm-gateway` read `agents-paused`, so no run starts and every model call is refused; `telemetry` reads `telemetry-disabled`, stays ACTIVE and exports nothing |
 | A tenant overlay that inserts a row, sets `plugin`, `roles` or `required`, or sets a field that is not tenant-writable; an installed artifact's bundle that changes an existing row | Never reaches a plugin: refused when written, or at install |
 
-The process is replaced, not restarted in place, in three cases only: a process-scope fiber leaked past its dispose deadline, a restore failed, or `restart-policy` gave up on an infrastructure provider. `reload` publishes `composition/applied` with the digest, the generation and the report, so replicas that disagree show up as drift.
+The process is replaced, not restarted in place, in three cases only: a process-scope fiber leaked past its drain or dispose deadline, a restore failed, or `restart-policy` gave up on an infrastructure provider. `reload` publishes `composition/applied` with the digest, the generation and the report, so replicas that disagree show up as drift.
 
 ## 8. Tests
 

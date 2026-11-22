@@ -481,7 +481,7 @@ Tenant isolation rests on the gateway injecting `X-Scope-OrgID`, because none of
 
 | Change | Applies |
 |---|---|
-| Only `Volatile` fields, which include every tenant-writable field | Committed in place by the loader; no restart |
+| Only `Volatile` fields, which include every tenant-writable field | Committed in place by the loader; no restart, unless the old or new value holds a reference, which restarts the row (ADR-059 decision 17) |
 | Other `config`, `inject`, `intercept`, `isolate` | That fiber restarts; its dependants restart only if it provides something, through their epochs |
 | Enable, disable, insert or remove a row whose code is present; a tenant overlay | Live; an overlay touches that tenant's scope and tree only |
 | A provider the replica cannot serve without (`sql`, `jobs`, `events`, `http`) | In place, in every profile: the replica fails readiness, quiesces under the drain deadline, the fibers restart and consumers return by epoch. No exit. A process-scope generation therefore goes to one replica at a time. A provider swap of a `durable` definition (`events`, `jobs`, `kek`, `blob`, `kv`) is admitted only when the old provider reports `Drained()`, or with an audited `--accept-loss <definition>` |
