@@ -144,11 +144,15 @@ func TestLaunchServices(t *testing.T) {
 	f.waitFor(t, done, func(s ProcessStatus) bool { return s.Ready })
 	l.ready.Drop()
 	f.waitFor(t, done, func(s ProcessStatus) bool { return !s.Ready })
-	if env, ok := l.cmd.Env("AIOPS_AGENTS_PAUSED"); !ok || env != "1" {
+	if env, ok := l.cmd.Env("AIOPS_REF_TOKEN"); !ok || env != "t" {
 		t.Fatalf("env %q %v", env, ok)
 	}
-	if _, ok := l.cmd.Env("AIOPS_NOT_SET"); ok {
+	if _, ok := l.cmd.Env("AIOPS_REF_NOT_SET"); ok {
 		t.Fatal("an unset variable")
+	}
+	// Env serves only names with launch.EnvPrefix: this one is set and reads as not set.
+	if env, ok := l.cmd.Env(EnvAgentsPaused); ok {
+		t.Fatalf("env %s = %q without the prefix", EnvAgentsPaused, env)
 	}
 
 	// catalog

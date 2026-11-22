@@ -540,10 +540,12 @@ func (c cmdline) Flag(name string) (string, bool) {
 	return v, ok
 }
 
-// Env reads the environment of the process: a variable that is empty is not set. It
-// filters nothing; the AIOPS_REF_ prefix rule is config-refs's
-// (08-profiles-roadmap-adrs.md:162).
+// Env reads the environment of the process for a name with launch.EnvPrefix: any
+// other name, and a variable that is empty, is not set (08-profiles-roadmap-adrs.md:162).
 func (c cmdline) Env(name string) (string, bool) {
+	if !strings.HasPrefix(name, launch.EnvPrefix) {
+		return "", false
+	}
 	v := c.env(name)
 	return v, v != ""
 }

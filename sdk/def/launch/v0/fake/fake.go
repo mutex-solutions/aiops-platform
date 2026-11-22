@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -35,7 +36,7 @@ type Launcher struct {
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
-	Environ     map[string]string  // for Cmdline.Env
+	Environ     map[string]string  // for Cmdline.Env, which serves only names with launch.EnvPrefix
 	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
 	Needed      launch.RequiredSet // the distribution's required rows and keys, for ProfileContext.Required
 
@@ -235,7 +236,11 @@ func (f *Launcher) Flag(name string) (string, bool) {
 	return v, ok
 }
 
+// Env serves Environ for a name with launch.EnvPrefix; any other name is not set.
 func (f *Launcher) Env(name string) (string, bool) {
+	if !strings.HasPrefix(name, launch.EnvPrefix) {
+		return "", false
+	}
 	v, ok := f.Environ[name]
 	return v, ok
 }

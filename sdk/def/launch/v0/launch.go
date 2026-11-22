@@ -260,6 +260,11 @@ type Catalog interface {
 	Key(name string) (kernel.AnyKey, bool)
 }
 
+// EnvPrefix is the prefix of the only environment names that Cmdline.Env serves:
+// "`env:` reads only names with the prefix `AIOPS_REF_`"
+// (08-profiles-roadmap-adrs.md:162).
+const EnvPrefix = "AIOPS_REF_"
+
 // Cmdline is the cmdline service: argv (plugin-system-2026-11.md §5).
 type Cmdline interface {
 	// Args is the argument vector, program name excluded.
@@ -268,10 +273,8 @@ type Cmdline interface {
 	// reference reads (03-c3-kernel.md:68).
 	Flag(name string) (string, bool)
 	// Env returns the value of an environment variable of the process, which is what
-	// the ${env:name} reference reads (03-c3-kernel.md:68). It filters nothing: the
-	// AIOPS_REF_ prefix rule (08-profiles-roadmap-adrs.md:162) is config-refs's.
-	// Added in S1: the launch definition had no environment reader (open point,
-	// settled before S2a: ADR-059 decision 37).
+	// the ${env:name} reference reads (03-c3-kernel.md:68). It serves only names with
+	// EnvPrefix: any other name is not set (08-profiles-roadmap-adrs.md:162).
 	Env(name string) (string, bool)
 }
 

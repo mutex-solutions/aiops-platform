@@ -191,8 +191,11 @@ func newFixture(t *testing.T, bundle string, extra ...ModuleEntry) *fixture {
 		Profile: "p", Home: f.files, Bundles: f.files, Signals: f.signal, Stdout: &f.out, Stderr: &f.errb,
 		Args: []string{"--profile", "p"}, Flags: map[string]string{"profile": "p", "home": "/h"},
 		Env: func(n string) string {
-			if n == EnvAgentsPaused {
+			switch n {
+			case EnvAgentsPaused:
 				return "1"
+			case "AIOPS_REF_TOKEN":
+				return "t"
 			}
 			return ""
 		},

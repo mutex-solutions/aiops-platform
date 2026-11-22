@@ -34,7 +34,7 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
-	l.Environ = map[string]string{"AIOPS_REF_X": "v"}
+	l.Environ = map[string]string{"AIOPS_REF_X": "v", "AIOPS_AGENTS_PAUSED": "1"}
 	l.Current = launch.Composition{Digest: launch.Digest{7}}
 	l.Needed = launch.RequiredSet{Rows: []string{"r"}, Keys: []string{"sql"}}
 	cand := launch.Composition{Rows: []launch.Row{{ID: "a"}}, Digest: launch.Digest{1}}
@@ -98,8 +98,11 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if v, ok := cl.Env("AIOPS_REF_X"); !ok || v != "v" {
 			t.Errorf("Env = %q, %v", v, ok)
 		}
-		if _, ok := cl.Env("nope"); ok {
+		if _, ok := cl.Env("AIOPS_REF_NOPE"); ok {
 			t.Error("Env found an unknown name")
+		}
+		if _, ok := cl.Env("AIOPS_AGENTS_PAUSED"); ok {
+			t.Error("Env served a name without launch.EnvPrefix")
 		}
 		if pc.Committed().Digest != (launch.Digest{7}) {
 			t.Errorf("Committed = %v", pc.Committed())
