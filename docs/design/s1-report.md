@@ -212,6 +212,7 @@ Commit counts are from `git rev-list --count <span>`. Main defect classes and ho
 - **S3:** `secret:` references (decision 10). Durable records for `restart-policy` come with the durable store (decision 22 says "a later step"; `durable` is built at S3, 08 §2.1).
 - **S4a:** committer, lock and audit (decision 12); the restore that replaces the unknown-state rule (decision 23).
 - **S4b:** the promotion case (decision 5); 17 matrix cells, 15 in the tenant-tree column and 2 in "While running" (12.4 and 13.4); the tenant-overlay part of check 8; layer 5.
+- **S5:** a case of recomposition (a) whose caller is shaped like a dispatcher, once S5 builds the first real dispatcher (decision 52).
 - **S5, S6b, S8a:** 11, 2 and 7 matrix cells.
 - **After the first community release, no step named (08 §2):** golden dumps per role.
 
