@@ -155,19 +155,36 @@ bytes):
 | 300 × 4 | 15,945 | 743,613 | 4 |
 | 300 × 2 | 22,825 | 735,517 | 4 |
 
-The heap record lists `"roots": 100` for the tree workloads, in the final
-record on all three backends as in the prototype. The record does not say how
-a tree maps to a root. A separate count of trees is still **not recorded**.
-In both runs `maxPerFiberBytes` equals `maxDeltaBytes` divided by trees ×
-width (2,000 fibers for 500 × 4), so the per-fiber figure counts tree fibers
-and leaves out the 97 shared fibers. That does not explain the `roots` value.
+The heap record lists `"roots": 100` for every tree workload and
+`"roots": 1000` for every 1,000-root workload, on all three backends. The
+final record's `plan` explains both. `roots` is the number of runs summarised
+per backend and workload, one retained-heap entry per run: repetitions (10) ×
+tree trials (10) = 100 for trees, and repetitions (10) × graph trials (100) =
+1,000 for the root workloads. Each run is a fresh root; a tree run mounts the
+97 shared fibers and then every tree of its workload. The tree counts are
+recorded in `plan.treeCounts` (500 and 300). The same plan gives 5,400 runs
+per backend (5 root workloads × 1,000 and 4 tree workloads × 100), which
+matches the 16,200 runs on three backends. In both runs `maxPerFiberBytes`
+equals `maxDeltaBytes` divided by trees × width (2,000 fibers for 500 × 4), so
+the per-fiber figure counts tree fibers and leaves out the 97 shared fibers.
+Prototype (history): the record has no `plan` and does not explain the
+`roots` value by itself. The harness code that sets `roots` (`summarizeHeap`
+in `test/spike/s0/scale/measure.go`) is the same at `225ffbe` and `8ec2d8c`,
+and the 10,800 prototype runs match the same plan on two backends.
 
 Goroutines at the last checkpoint, final port: 4 (reconciler), 3 (graph lock)
 and 4 (`kernel`). Each backend gives the same count in every workload of the
 record, tree and 1,000-root alike, as the prototype did (4 and 3). The count
 does not change between 300 and 500 trees or between widths 2 and 4, so in
-the range measured it does not grow with trees. The record still gives no
-count at zero trees, and it does not enumerate the fixed root workers.
+the range measured it does not grow with trees. The classification also
+checks every retained checkpoint of every tree run against the shared-only
+cut, taken after the shared fibers mount and before any tree mounts: a
+candidate goroutine owner above its count at that cut is a failure ("idle
+goroutines must be zero per instance"). The final-port classification has no
+reasons, so on all three backends no candidate owner held more goroutines
+with 300 or 500 trees mounted than with none. The prototype reasons are noise
+findings only, so the same check raised nothing there. The record still gives
+no count at zero trees, and it does not enumerate the fixed root workers.
 
 ### Cold-mount gate: ack path
 
@@ -327,7 +344,7 @@ The prototype reading is kept in its own column as history.
 | Total fibers at 300 tenants, "at most about 1,200" | Not decidable as written: 4 fibers per tree gives 1,297 | −97 at width 4 | the same | **owner decision on the figure** |
 | No tree at boot | No boot measurement in the final-port records | n/a | none in the files read | **not recorded** |
 | In-process mount under 50 ms | Max 9.83 ms (reconciler), 7.47 ms (graph lock), 13.79 ms (`kernel`) at 500 × 4; 7.99, 7.46 and 10.50 ms at 300 × 4 | 36.2 ms at worst (`kernel`, 500 × 4) | Max 9.69 ms (500 × 4, reconciler), 9.05 ms (graph lock); 12.22 ms (300 × 4, reconciler); margin 37.8 ms | pass |
-| Zero idle goroutines per tree | 4, 3 and 4 goroutines total at the last checkpoint, the same at 300 and 500 trees and at widths 2 and 4 | not a per-tree count | 4 goroutines total at the last checkpoint, 500 trees | **partial**: no growth from 300 to 500 trees; the zero-tree count is still not recorded |
+| Zero idle goroutines per tree | 4, 3 and 4 goroutines total at the last checkpoint, the same at 300 and 500 trees and at widths 2 and 4; no candidate owner above its shared-only (zero-tree) count at any tree checkpoint | not a per-tree count | 4 goroutines total at the last checkpoint, 500 trees | **partial**: no growth from 300 to 500 trees and none above the shared-only cut; the zero-tree count is still not recorded |
 | Remote mount within handshake (2 s) and one stream per row | Not measured in S0 | n/a | the same | deferred to S4b |
 | Root restart settles inside the drain deadline (5 s) | Max 174.3 ms (reconciler), 199.5 ms (graph lock), 183.4 ms (`kernel`) at 500 × 4 | 4.80 s at worst | Max 172.4 ms (reconciler), 198.7 ms (graph lock); margin 4.80 s | pass |
 | Retained heap, 500 trees (criteria) | Max 21.54 MiB (reconciler), 20.51 MiB (graph lock), 29.23 MiB (`kernel`) | 2.77 MiB (`kernel`) | Max 20.34 MiB (reconciler), 19.34 MiB (graph lock); margin 11.66 MiB | pass |
