@@ -132,7 +132,7 @@ func Run(t *testing.T, mount Mount) {
 		s.heard([]string{"a", "a", "g", "off"})
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
-		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": int64(1)}, Paths: []string{"level"}}}
+		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": int64(1)}, Paths: [][]string{{"level"}}}}
 		if !reflect.DeepEqual(s.h.volatile, want) {
 			t.Errorf("volatile-update heard %+v, want %+v", s.h.volatile, want)
 		}
@@ -158,7 +158,7 @@ func Run(t *testing.T, mount Mount) {
 		s.is("a", loader.Mounted, kernel.Active)
 		s.h.mu.Lock()
 		defer s.h.mu.Unlock()
-		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": nil}, Paths: []string{"level"}}}
+		want := []loader.VolatileUpdateArgs{{ID: "a", Config: map[string]any{"level": "debug", "port": nil}, Paths: [][]string{{"level"}}}}
 		if !reflect.DeepEqual(s.h.volatile, want) {
 			t.Errorf("volatile-update heard %+v, want %+v", s.h.volatile, want)
 		}

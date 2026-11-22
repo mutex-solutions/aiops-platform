@@ -98,7 +98,7 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	if len(hear.inits) != 1 || hear.inits[0].Entry.ID != "a" || hear.inits[0].Context == nil {
 		t.Errorf("entry-init heard %v", hear.inits)
 	}
-	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "a" || !slices.Equal(hear.volatiles[0].Paths, []string{"level"}) {
+	if len(hear.volatiles) != 1 || hear.volatiles[0].ID != "a" || !slices.EqualFunc(hear.volatiles[0].Paths, [][]string{{"level"}}, slices.Equal[[]string]) {
 		t.Errorf("volatile-update heard %v", hear.volatiles)
 	}
 	got, err := f.Patch(context.Background(), loader.EntrySpec{ID: "p"}, patched)

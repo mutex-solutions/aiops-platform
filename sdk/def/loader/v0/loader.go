@@ -193,10 +193,8 @@ type Loader interface {
 // returns. A listener that calls next and then returns Context drops the row's
 // isolate and intercept. A listener that does not call next, or returns a nil
 // context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
-// runs (fail closed, ADR-059 decision 34). The docs name the hook's use,
-// "isolate and intercept handling" (plugin-system-2026-11.md §8), and no payload;
-// this is the smallest the named listeners need (open point, settled before S2a:
-// ADR-059 decision 37).
+// runs (fail closed, ADR-059 decision 34). The hook's use is "isolate and intercept
+// handling" (plugin-system-2026-11.md §8).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -204,8 +202,7 @@ type PatchContextArgs struct {
 
 // EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
 // fiber is created, vetoed or not, with the context it was mounted from: the one
-// loader/patch-context returned, or the parent's for a vetoed entry. Payload not
-// described in the docs; minimal (open point, settled before S2a: ADR-059 decision 37).
+// loader/patch-context returned, or the parent's for a vetoed entry.
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -215,16 +212,16 @@ type EntryInitArgs struct {
 // the loader commits volatile values in place (07-c4-plugin-sdk.md:1374;
 // plugin-system-2026-11.md §8 "volatile commits"). Config is the whole new config
 // as the tree holds it with every reference replaced by nil (WithoutRefs), and Paths
-// are the sorted dotted config paths that changed. No value at Paths holds a
-// reference, old or new (VolatileOnly): such a change restarts the fiber, because the
-// tree holds references unresolved and only config-refs resolves one, at an
-// activation. A consumer reads the values at Paths; a field that holds a reference
-// did not change. Payload not described in the docs; minimal (open point, settled
-// before S2a: ADR-059 decision 37).
+// are the changed leaves, not the Volatile fields: each changed leaf path as its list
+// of keys, sorted (VolatileOnly). A consumer maps a path to its Volatile field by
+// prefix. No value at Paths holds a reference, old or new: such a change restarts the
+// fiber, because the tree holds references unresolved and only config-refs resolves
+// one, at an activation. A consumer reads the values at Paths; a field that holds a
+// reference did not change.
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any
-	Paths  []string
+	Paths  [][]string
 }
 
 // The three hooks of the loader, all owned by Key and sealed

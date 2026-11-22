@@ -122,17 +122,18 @@ func TestVolatileOnlyUpdateCommitsInPlace(t *testing.T) {
 	states := watchStates(t, x.root)
 	before := states.of(t, x.root, "t/v")
 
-	for _, tc := range []struct {
+	steps := []struct {
 		name  string
 		to    map[string]any
 		want  def.Outcome
-		paths []string
+		paths [][]string
 	}{
-		{"volatile scalar", cfg(6, "x", "a"), def.Committed, []string{"window"}},
-		{"volatile under a wildcard", cfg(6, "x", "b"), def.Committed, []string{"rules.0.url"}},
-		{"both", cfg(7, "x", "c"), def.Committed, []string{"rules.0.url", "window"}},
+		{"volatile scalar", cfg(6, "x", "a"), def.Committed, [][]string{{"window"}}},
+		{"volatile under a wildcard", cfg(6, "x", "b"), def.Committed, [][]string{{"rules", "0", "url"}}},
+		{"both", cfg(7, "x", "c"), def.Committed, [][]string{{"rules", "0", "url"}, {"window"}}},
 		{"nothing", cfg(7, "x", "c"), def.Unchanged, nil},
-	} {
+	}
+	for _, tc := range steps {
 		rv.Config = tc.to
 		if res := x.apply(update(rv)); res[0].Outcome != tc.want {
 			t.Fatalf("%s: %v", tc.name, res)
@@ -147,9 +148,14 @@ func TestVolatileOnlyUpdateCommitsInPlace(t *testing.T) {
 	l.mu.Lock()
 	heard := append([]def.VolatileUpdateArgs(nil), l.volatile...)
 	l.mu.Unlock()
-	if len(heard) != 3 || heard[0].ID != "v" || len(heard[0].Paths) != 1 || heard[0].Paths[0] != "window" ||
-		len(heard[2].Paths) != 2 || !deepEqual(heard[2].Config, cfg(7, "x", "c")) {
+	if len(heard) != 3 || !deepEqual(heard[2].Config, cfg(7, "x", "c")) {
 		t.Errorf("loader/volatile-update heard %+v", heard)
+	} else {
+		for i, a := range heard {
+			if a.ID != "v" || !deepEqual(a.Paths, steps[i].paths) {
+				t.Errorf("loader/volatile-update heard %+v, want the paths %q", a, steps[i].paths)
+			}
+		}
 	}
 
 	// Anything else restarts the fiber with the new config.

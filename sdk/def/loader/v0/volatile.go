@@ -136,22 +136,22 @@ func covers(pattern, path []string) bool {
 	return len(pattern) <= len(path) && slices.EqualFunc(pattern, path[:len(pattern)], func(p, s string) bool { return p == "*" || p == s })
 }
 
-// VolatileOnly returns the sorted dotted paths at which the trees differ, the Paths
-// of VolatileUpdateArgs, and whether every one of them is covered by one of the
-// volatile paths while neither its old nor its new value holds a reference. No
-// difference gives no path and true.
-func VolatileOnly(old, updated any, volatile []string) (paths []string, only bool) {
+// VolatileOnly returns the paths at which the trees differ, each as its list of keys
+// and sorted, the Paths of VolatileUpdateArgs, and whether every one of them is
+// covered by one of the volatile paths while neither its old nor its new value holds a
+// reference. No difference gives no path and true.
+func VolatileOnly(old, updated any, volatile []string) (paths [][]string, only bool) {
 	patterns := make([][]string, len(volatile))
 	for i, v := range volatile {
 		patterns[i] = strings.Split(v, ".")
 	}
 	only = true
-	for _, d := range changedPaths(nil, old, updated, nil) {
-		paths = append(paths, strings.Join(d, "."))
+	paths = changedPaths(nil, old, updated, nil)
+	for _, d := range paths {
 		if HoldsRef(at(old, d)) || HoldsRef(at(updated, d)) || !slices.ContainsFunc(patterns, func(p []string) bool { return covers(p, d) }) {
 			only = false
 		}
 	}
-	slices.Sort(paths)
+	slices.SortFunc(paths, slices.Compare)
 	return paths, only
 }
