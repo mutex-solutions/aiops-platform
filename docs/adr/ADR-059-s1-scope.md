@@ -502,8 +502,12 @@ decisions win.
     judges those results: a waiting entry that the plan created, enabled or replaced, or
     that was ACTIVE before or is required, fails the verdict and the rollback of
     decision 12 follows; when the inverse plan meets the same fiber still not DISPOSED,
-    the rollback fails and decision 23 applies. The loader definition names the three
-    causes.
+    the rollback fails and decision 23 applies. An entry held only by the key wait, such
+    as a child of a group the plan enables, that was not ACTIVE before and is not
+    required, is a warning only: the verdict can pass with `ErrNotDisposed` on the
+    result, and that entry stays with no fiber. When the context has ended, no verdict
+    is given: the operation is abandoned and the state of the tree is unknown
+    (decision 23). The loader definition names the three causes.
 
 48. **`reload` abandons its queued operations when its row unloads** (item 15), except
     at the restart that applies the row's own change, whose next activation runs the
