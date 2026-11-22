@@ -71,7 +71,7 @@ func TestResolvesEachScheme(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_DB": "env-value"}
 	l.Flags = map[string]string{"site": "flag-value", "refs-dir": dir}
-	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(64), "fileRootFlag": "refs-dir"})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(64)})
 
 	g, err := mountTarget(t, root, map[string]any{
 		"env":    ref("env", "AIOPS_REF_DB"),
@@ -256,11 +256,14 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 	}
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
-	l.Flags = map[string]string{"refs-dir": dir, "gone": "", "empty-root": ""}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 32, FileRootFlag: "refs-dir"})
-	noRoot := mount(t, l, lp, configrefs.Config{MaxFileBytes: 32})
-	badRoot := mount(t, l, lp, configrefs.Config{MaxFileBytes: 32, FileRootFlag: "gone"})
-	missingRoot := mount(t, l, lp, configrefs.Config{MaxFileBytes: 32, FileRootFlag: "never-set"})
+	l.Flags = map[string]string{"refs-dir": dir}
+	cfg := configrefs.Config{MaxFileBytes: 32}
+	root := mount(t, l, lp, cfg)
+	unset, unsetLp := fake.New()
+	unsetRoot := mount(t, unset, unsetLp, cfg)
+	empty, emptyLp := fake.New()
+	empty.Flags = map[string]string{"refs-dir": ""} // the server passes "" when --refs-dir is absent
+	emptyRoot := mount(t, empty, emptyLp, cfg)
 
 	for _, tc := range []struct {
 		name string
@@ -279,9 +282,8 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 		{"absolute path", root, ref("file", filepath.Join(outside, "out")), "outside the file root"},
 		{"symlink out of the root", root, ref("file", "link"), "outside the file root"},
 		{"directory", root, ref("file", "adir"), "cannot be read"},
-		{"no file root configured", noRoot, ref("file", "x"), "no file root is configured"},
-		{"file root flag empty", badRoot, ref("file", "x"), "is not set"},
-		{"file root flag unset", missingRoot, ref("file", "x"), "is not set"},
+		{"file root flag empty", emptyRoot, ref("file", "x"), "the flag refs-dir that names the file root is not set"},
+		{"file root flag unset", unsetRoot, ref("file", "x"), "the flag refs-dir that names the file root is not set"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := &target{}
@@ -306,7 +308,7 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 func TestUnreadableFileRootFails(t *testing.T) {
 	l, lp := fake.New()
 	l.Flags = map[string]string{"refs-dir": filepath.Join(t.TempDir(), "absent")}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8, FileRootFlag: "refs-dir"})
+	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
 	_, err := mountTarget(t, root, map[string]any{"a": ref("file", "x")})
 	if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), "file root cannot be opened") {
 		t.Errorf("err = %v", err)
@@ -355,7 +357,7 @@ func TestDecode(t *testing.T) {
 	}{
 		{"struct", configrefs.Config{MaxFileBytes: 1}, true},
 		{"map with int64", map[string]any{"maxFileBytes": int64(1)}, true},
-		{"map with int", map[string]any{"maxFileBytes": 1, "fileRootFlag": "d"}, true},
+		{"map with int", map[string]any{"maxFileBytes": 1}, true},
 		{"map with a whole float", map[string]any{"maxFileBytes": 2.0}, true},
 		{"nil", nil, false},
 		{"a string", "x", false},
@@ -363,7 +365,7 @@ func TestDecode(t *testing.T) {
 		{"negative bound", map[string]any{"maxFileBytes": int64(-1)}, false},
 		{"fractional bound", map[string]any{"maxFileBytes": 1.5}, false},
 		{"string bound", map[string]any{"maxFileBytes": "1"}, false},
-		{"flag not a string", map[string]any{"maxFileBytes": 1, "fileRootFlag": 3}, false},
+		{"a file root flag", map[string]any{"maxFileBytes": 1, "fileRootFlag": "refs-dir"}, false},
 		{"unknown field", map[string]any{"maxFileBytes": 1, "bogus": 1}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -47,7 +47,7 @@ func (e *Error) Is(target error) bool { return target == refsdef.ErrUnresolved }
 type Resolver struct {
 	Env      func(name string) (string, bool) // launch.Cmdline.Env
 	Flag     func(name string) (string, bool) // launch.Cmdline.Flag
-	RootFlag string                           // the flag that names the one directory ${file:} may read; "" for none
+	RootFlag string                           // the flag that names the one directory ${file:} may read
 	MaxBytes int64                            // the largest file that is read
 }
 
@@ -141,9 +141,6 @@ func (r *Resolver) one(ref launch.Ref) (string, error) {
 // and an absolute name. The docs say only "one directory named by flag"
 // (08-profiles-roadmap-adrs.md:162).
 func (r *Resolver) file(name string) (string, string) {
-	if r.RootFlag == "" {
-		return "", "no file root is configured"
-	}
 	dir, ok := r.Flag(r.RootFlag)
 	if !ok || dir == "" {
 		return "", "the flag " + r.RootFlag + " that names the file root is not set"

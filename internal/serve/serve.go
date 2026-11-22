@@ -12,9 +12,9 @@
 // more are S1 additions of this package: --bundles, the directory of
 // bundles/<name>/bundle.yaml (default: the home) and --limits, a limits.yaml that
 // replaces the limits of the distribution (boot.ParseLimits). A third, --refs-dir,
-// is the one directory that ${file:} reads when config-refs names the flag
-// "refs-dir" (08-profiles-roadmap-adrs.md:162: "one directory named by flag"), so
-// that a file reference need not read the home or the bundles. It must name an
+// is the one directory that ${file:} reads (08-profiles-roadmap-adrs.md:162: "one
+// directory named by flag"): config-refs reads no other, so a file reference never
+// reads the home or the bundles, and without the flag none resolves. It must name an
 // absolute directory that exists; anything else is a usage error.
 package serve
 

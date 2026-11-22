@@ -29,17 +29,18 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
-// Config is the config of the row. Both fields are the plugin's own: the docs name
-// a bound and a directory "named by flag" and give no number or name
-// (08-profiles-roadmap-adrs.md:162).
+// Config is the config of the row. The field is the plugin's own: the docs name a
+// bound and give no number (08-profiles-roadmap-adrs.md:162).
 type Config struct {
 	// MaxFileBytes is the largest file a ${file:} reference reads. It must be positive.
 	MaxFileBytes int64
-	// FileRootFlag is the name of the flag that holds the one directory ${file:} may
-	// read from, an absolute path; the server's flag for it is refs-dir. Empty means no
-	// file reference can resolve.
-	FileRootFlag string
 }
+
+// fileRootFlag names the "one directory named by flag" that ${file:} reads
+// (08-profiles-roadmap-adrs.md:162): the server's --refs-dir and no other flag, so a
+// file reference never reads the home or the bundles. Unset or empty, no file
+// reference resolves.
+const fileRootFlag = "refs-dir"
 
 // ReadyKey is configRefsReady: the row provides it once its listener is on
 // internal/config. The launcher gives every row whose config holds a reference a
@@ -74,7 +75,7 @@ func (d dryRun) Check(_ context.Context, config any, decode func(any) error) err
 func apply(c *kernel.Context, cfg any) error {
 	conf := cfg.(Config)
 	cl := launch.CmdlineKey.Of(c)
-	r := &refs.Resolver{Env: cl.Env, Flag: cl.Flag, RootFlag: conf.FileRootFlag, MaxBytes: conf.MaxFileBytes}
+	r := &refs.Resolver{Env: cl.Env, Flag: cl.Flag, RootFlag: fileRootFlag, MaxBytes: conf.MaxFileBytes}
 	kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[any]) (any, error) {
 		// What next returns may be the kernel's retained raw config: Resolve copies a
 		// map or a list it changes and never writes to it.
@@ -98,11 +99,6 @@ func decode(raw any) (any, error) {
 			switch k {
 			case "maxFileBytes":
 				conf.MaxFileBytes, err = integer(e)
-			case "fileRootFlag":
-				var ok bool
-				if conf.FileRootFlag, ok = e.(string); !ok {
-					err = fmt.Errorf("want a string, got %T", e)
-				}
 			default:
 				err = errors.New("unknown field")
 			}
