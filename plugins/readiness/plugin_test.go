@@ -345,8 +345,9 @@ func TestSlowTreeReadDoesNotHoldTheDispatcher(t *testing.T) {
 }
 
 // bound is a kernel with the binding maps on: the launch keys are provider-bound,
-// the appExit key is consumer-bound and internal/status is sealed to listeners.
-func bound(t *testing.T, launcher kernel.Plugin, listeners ...kernel.Plugin) *kernel.Root {
+// profileContext is consumer-bound to reader, appExit is consumer-bound and
+// internal/status is sealed to listeners.
+func bound(t *testing.T, launcher, reader kernel.Plugin, listeners ...kernel.Plugin) *kernel.Root {
 	t.Helper()
 	const n = 64
 	r, err := kernel.New(kernel.Config{
@@ -356,7 +357,7 @@ func bound(t *testing.T, launcher kernel.Plugin, listeners ...kernel.Plugin) *ke
 			launch.ProfileContextKey: {launcher}, launch.CatalogKey: {launcher}, launch.CmdlineKey: {launcher},
 			launch.ReadyKey: {launcher}, launch.KillSwitchesKey: {launcher}, launch.AppExitKey: {launcher},
 		},
-		Consumers: kernel.Bindings{launch.AppExitKey: nil},
+		Consumers: kernel.Bindings{launch.ProfileContextKey: {reader}, launch.AppExitKey: nil},
 		Listeners: map[kernel.AnyHook][]kernel.Plugin{kernel.InternalStatus: listeners},
 	})
 	if err != nil {
@@ -377,7 +378,7 @@ func TestSealedHookNeedsAListenerEntry(t *testing.T) {
 			if listed {
 				l = append(l, p)
 			}
-			root := bound(t, lp, l...)
+			root := bound(t, lp, p, l...)
 			for _, p := range []kernel.Plugin{lp, cp, rp} {
 				if err := root.Plugin(p, nil).Await(t.Context()); err != nil {
 					t.Fatal(err)

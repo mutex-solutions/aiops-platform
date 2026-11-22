@@ -181,6 +181,8 @@ func newFixture(t *testing.T, bundle string, extra ...ModuleEntry) *fixture {
 		LoaderConfig: func(rows []loaderdef.EntrySpec, batch BatchFunc, plugins map[string]kernel.Plugin) any {
 			return toyLoaderCfg{rows, batch, plugins}
 		}}
+	// The loader reads the role from profileContext, which is consumer-bound.
+	f.dist.Consumers = []Binding{{Key: "profileContext", Plugins: []string{LoaderID}}}
 	f.files = fstest.MapFS{
 		"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")},
 		"bundles/b/bundle.yaml":   {Data: []byte(bundle)},

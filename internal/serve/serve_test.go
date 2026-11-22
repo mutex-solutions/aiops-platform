@@ -56,7 +56,9 @@ func distribution(t *testing.T) Distribution {
 		t.Fatal(err)
 	}
 	reg.Modules = boot.ModuleTable{boot.LoaderID: reg.Modules[boot.LoaderID]}
-	return Distribution{Registry: reg, Limits: lim}
+	// The loader reads the role from profileContext, which is consumer-bound.
+	man := boot.DistManifest{Consumers: []boot.Binding{{Key: "profileContext", Plugins: []string{boot.LoaderID}}}}
+	return Distribution{Registry: reg, Manifest: man, Limits: lim}
 }
 
 func env(args ...string) (Env, *safeBuf, chan os.Signal) {

@@ -95,8 +95,14 @@ func probe(l *launched) ModuleEntry {
 		}})
 }
 
-// bindExit lets the plugins of ids resolve appExit, which is consumer-bound.
-func bindExit(f *fixture, ids ...string) {
+// bindLaunch lets the plugins of ids resolve the two consumer-bound launch keys,
+// profileContext and appExit. newFixture lists the loader for profileContext.
+func bindLaunch(f *fixture, ids ...string) {
+	for i, b := range f.dist.Consumers {
+		if b.Key == "profileContext" {
+			f.dist.Consumers[i].Plugins = append(slices.Clone(b.Plugins), ids...)
+		}
+	}
 	f.dist.Consumers = append(f.dist.Consumers, Binding{Key: "appExit", Plugins: ids})
 }
 
@@ -109,7 +115,7 @@ func TestLaunchServices(t *testing.T) {
     - {id: probe, plugin: t/probe, roles: [api]}
 `, probe(&l))
 	f.dist.RequiredKeys, f.dist.RequiredRows = []string{"store"}, []string{"loader"}
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -506,7 +512,7 @@ func TestRunAppExit(t *testing.T) {
 				return nil
 			}})
 			f := newFixture(t, happyBundle+"    - {id: exiter, plugin: t/exiter, roles: [api]}\n", exiter)
-			bindExit(f, "t/exiter")
+			bindLaunch(f, "t/exiter")
 			code := f.run(t.Context())
 			if code != tc.code || !strings.Contains(f.errb.String(), "process replaced: "+string(tc.reason)+": the detail") {
 				t.Fatalf("exit %d, want %d; stderr:\n%s", code, tc.code, f.errb.String())
@@ -663,7 +669,7 @@ func TestCommitFollowsTheAppliedGeneration(t *testing.T) {
 	var l launched
 	f := newFixture(t, "- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n    - {id: user, plugin: t/user, roles: [api], required: true}\n    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
 	f.dist.RequiredKeys = []string{"store"}
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -707,7 +713,7 @@ func TestCommitFollowsTheAppliedGeneration(t *testing.T) {
 func TestComposeRefusesTheReservedRowWhileRunning(t *testing.T) {
 	var l launched
 	f := newFixture(t, "- insert:\n    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -772,7 +778,7 @@ func TestRunReadinessStaysDownAfterALeak(t *testing.T) {
 	trigger, release := make(chan struct{}), make(chan struct{})
 	f := newFixture(t, happyBundle+"    - {id: slow, plugin: t/slow, roles: [api]}\n    - {id: probe, plugin: t/probe, roles: [api]}\n",
 		slowDispose(trigger, release), probe(&l))
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
 	f.opt.Limits.LeakGrace = 7 * time.Millisecond
 	f.opt.Clock = f.clock
@@ -842,7 +848,7 @@ func TestLatchPublishesTheValueItHolds(t *testing.T) {
 func TestCommittedHoldsTheAdmittedRows(t *testing.T) {
 	var l launched
 	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n    - {id: ghost, plugin: t/ghost, roles: [api]}\n", probe(&l))
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -876,7 +882,7 @@ func TestAdmitJudgesTheNewestProvenance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var l launched
 			f := newFixture(t, tc.bootBundle, probe(&l))
-			bindExit(f, "t/probe")
+			bindLaunch(f, "t/probe")
 			f.dist.Providers = []Binding{{Key: "policy", Plugins: []string{"t/store"}}}
 			if tc.bootSite {
 				f.files["aiops.patch.yml"] = &fstest.MapFile{Data: []byte(site)}
@@ -928,7 +934,7 @@ func TestAdmitJudgesTheNewestProvenance(t *testing.T) {
 func TestAdmitListsADeniedRequiredRow(t *testing.T) {
 	var l launched
 	f := newFixture(t, happyBundle+"    - {id: probe, plugin: t/probe, roles: [api]}\n", probe(&l))
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -1005,7 +1011,7 @@ func TestAdmitDecodesTheChangedConfigs(t *testing.T) {
 	f := newFixture(t, base+"    - {id: m, plugin: t/lax, roles: [api], config: {bad: true}}\n", probe(&l),
 		ModuleEntry{ID: "t/strict", Module: "example.test/strict", Version: "v0.1.0", Plugin: strict},
 		ModuleEntry{ID: "t/lax", Module: "example.test/lax", Version: "v0.1.0", Plugin: lax})
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()

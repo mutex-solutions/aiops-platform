@@ -137,6 +137,7 @@ func newFx(t *testing.T, o fxOpt) *fx {
 			cfg.Providers[k] = []kernel.Plugin{lp}
 		}
 		cfg.Consumers[launch.AppExitKey] = []kernel.Plugin{lp}
+		cfg.Consumers[launch.ProfileContextKey] = []kernel.Plugin{loaderPlugin}
 		maps.Copy(cfg.Consumers, o.bindings)
 		r, err := kernel.New(cfg)
 		if err != nil {

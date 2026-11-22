@@ -286,27 +286,33 @@ func TestKeysAreProviderBound(t *testing.T) {
 	}
 }
 
-// appExit is also consumer-bound: it resolves only for the listed entries; the
-// other five launch keys resolve for any entry (03-c3-kernel.md:63).
-func TestAppExitIsConsumerBound(t *testing.T) {
+// profileContext and appExit are also consumer-bound: each resolves only for the
+// entries listed for it; the other four launch keys resolve for any entry
+// (03-c3-kernel.md:63).
+func TestProfileContextAndAppExitAreConsumerBound(t *testing.T) {
 	_, plugin := fake.New()
 	providers := kernel.Bindings{}
 	for _, k := range allKeys {
 		providers[k] = []kernel.Plugin{plugin}
 	}
-	listed := deftest.Plugin("aiops/listed", []kernel.Dep{kernel.Need(launch.AppExitKey)}, nil, nil, func(c *kernel.Context) error {
+	listed := deftest.Plugin("aiops/listed", []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.AppExitKey)}, nil, nil, func(c *kernel.Context) error {
+		_ = launch.ProfileContextKey.Of(c).Committed()
 		launch.AppExitKey.Of(c).RequestExit(launch.ExitRequest{Reason: launch.ExitRestoreFail})
 		return nil
 	})
-	stranger := deftest.Plugin("aiops/stranger", []kernel.Dep{kernel.Need(launch.AppExitKey)}, nil, nil, func(*kernel.Context) error { return nil })
-	others := deftest.Plugin("aiops/others", needAll()[:5], nil, nil, func(*kernel.Context) error { return nil })
+	others := deftest.Plugin("aiops/others", needAll()[1:5], nil, nil, func(*kernel.Context) error { return nil })
 
-	root := deftest.Bound(t, deftest.Config(providers, kernel.Bindings{launch.AppExitKey: {listed}}))
+	root := deftest.Bound(t, deftest.Config(providers, kernel.Bindings{launch.ProfileContextKey: {listed}, launch.AppExitKey: {listed}}))
 	deftest.Active(t, root.Plugin(plugin, nil))
 	deftest.Active(t, root.Plugin(listed, nil))
 	deftest.Active(t, root.Plugin(others, nil))
-	if err := deftest.Failure(t, root.Plugin(stranger, nil)); !errors.Is(err, kernel.ErrBinding) {
-		t.Fatalf("err = %v, want ErrBinding", err)
+	for _, k := range []kernel.AnyKey{launch.ProfileContextKey, launch.AppExitKey} {
+		t.Run(k.Name(), func(t *testing.T) {
+			stranger := deftest.Plugin("aiops/stranger", []kernel.Dep{kernel.NeedKey(k)}, nil, nil, func(*kernel.Context) error { return nil })
+			if err := deftest.Failure(t, root.Plugin(stranger, nil)); !errors.Is(err, kernel.ErrBinding) {
+				t.Fatalf("err = %v, want ErrBinding", err)
+			}
+		})
 	}
 }
 

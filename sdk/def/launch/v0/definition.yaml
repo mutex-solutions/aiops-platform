@@ -1,12 +1,12 @@
 # Layout: 07-c4-plugin-sdk.md:529-537 (R13).
-# Contract: 03-c3-kernel.md:63 (six keys, `P`, `appExit` is `PC`),
-# 07-c4-plugin-sdk.md:555-556. One definition holds the six launch keys
+# Contract: 03-c3-kernel.md:63 (six keys, `P`, `profileContext` and `appExit` are
+# `PC`), 07-c4-plugin-sdk.md:556-557. One definition holds the six launch keys
 # (07-c4-plugin-sdk.md:1345); `class` lists each.
 key: launch
 version: "0.1"
 stability: preview
 class:
-  profileContext: {provider: bound, consumer: open}
+  profileContext: {provider: bound, consumer: bound}
   catalog: {provider: bound, consumer: open}
   cmdline: {provider: bound, consumer: open}
   ready: {provider: bound, consumer: open}

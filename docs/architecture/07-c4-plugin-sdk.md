@@ -554,7 +554,7 @@ Each key has a provider class and a consumer class (§4.2). The kernel module ch
 | Class | Mark in §4.1 | What the SDK does | Count |
 |---|---|---|---|
 | Provider-bound | `P` | `Provide` succeeds only for a module-table entry in the allowed set. One provider; `Isolate` is refused except by the bound provider; `Want` is refused | 37 keys: 6 launch keys, 24 named keys (`harnesses` among them, bound to `agent-runs`), 7 `.Bound` keys |
-| Consumer-bound | `C` | The key resolves only for the entries the manifest lists | 11 keys: `platformSql`, `sqlDriver`, `tokens`, `kek`, `loader`, `reload`, `pluginManager`, `tenantMint`, `credentials`, `durablePurge`, `appExit` |
+| Consumer-bound | `C` | The key resolves only for the entries the manifest lists | 12 keys: `platformSql`, `sqlDriver`, `tokens`, `kek`, `loader`, `reload`, `pluginManager`, `tenantMint`, `credentials`, `durablePurge`, `profileContext`, `appExit` |
 | Signed | `s` | Injected only by first-party plugins, or by an in-process plugin whose signer `trust.yaml` trusts for that key | 3 keys: `identities`, `approval`, `gateway` |
 | Open | `-` | Any plugin may provide it, isolate it in a subtree or inject it | every other key |
 

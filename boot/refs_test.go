@@ -409,7 +409,7 @@ func TestRowMountedWhileConfigRefsRestartsSeesNoReference(t *testing.T) {
 // liveAdmit boots f and returns a function that admits the generation of a bundle.
 func liveAdmit(t *testing.T, f *fixture, l *launched) (func(bundle string) error, <-chan int) {
 	t.Helper()
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()
@@ -640,7 +640,7 @@ func TestStaticGraphHasConfigRefsReady(t *testing.T) {
 	close(gate)
 	const bundle = "- insert:\n    - {id: refs, plugin: aiops/config-refs, roles: [api]%s}\n    - {id: user, plugin: t/rec, roles: [api], config: {note: \"${env:AIOPS_REF_X}\"}}\n    - {id: probe, plugin: t/probe, roles: [api]}\n"
 	f = refsFixture(t, fmt.Sprintf(bundle, ""), fakeRefs(entered, gate), recorder("t/rec", make(chan any, 4)), probe(&l))
-	bindExit(f, "t/probe")
+	bindLaunch(f, "t/probe")
 	done := f.start(t.Context())
 	f.waitReady(t, done)
 	l.mu.Lock()

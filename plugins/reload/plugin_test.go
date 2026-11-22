@@ -856,7 +856,7 @@ func TestBindingMaps(t *testing.T) {
 	rl := reload.New()
 	providers := kernel.Bindings{launch.ProfileContextKey: {lp}, launch.CatalogKey: {lp}, launch.CmdlineKey: {lp},
 		launch.ReadyKey: {lp}, launch.KillSwitchesKey: {lp}, launch.AppExitKey: {lp}}
-	consumers := kernel.Bindings{loader.Key: {rl}, def.Key: {submitter}, launch.AppExitKey: nil}
+	consumers := kernel.Bindings{loader.Key: {rl}, def.Key: {submitter}, launch.ProfileContextKey: {rl}, launch.AppExitKey: nil}
 	root := bound(t, providers, consumers)
 	active(t, root.Plugin(lp, nil))
 	active(t, root.Plugin(ldp, nil))
@@ -868,7 +868,7 @@ func TestBindingMaps(t *testing.T) {
 
 	// The loader key is consumer-bound too: a reload row that is not listed cannot
 	// reach it.
-	other := bound(t, providers, kernel.Bindings{loader.Key: nil, def.Key: nil, launch.AppExitKey: nil})
+	other := bound(t, providers, kernel.Bindings{loader.Key: nil, def.Key: nil, launch.ProfileContextKey: {rl}, launch.AppExitKey: nil})
 	active(t, other.Plugin(lp, nil))
 	active(t, other.Plugin(ldp, nil))
 	if err := failure(t, other.Plugin(rl, reload.Config{Queue: 1, History: 1})); !errors.Is(err, kernel.ErrBinding) {

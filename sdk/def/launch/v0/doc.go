@@ -5,8 +5,9 @@
 // 07-c4-plugin-sdk.md:1345; plugin-system-2026-11.md §5). The launcher provides
 // them in its prepare step, before any row mounts (03-c3-kernel.md:81,
 // 03-c3-kernel.md:360), so every key is provider-bound to the launcher
-// (07-c4-plugin-sdk.md:555) and appExit is also consumer-bound
-// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:556).
+// (07-c4-plugin-sdk.md:556). profileContext and appExit are also consumer-bound
+// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:557): profileContext holds Commit, and
+// appExit requests a process exit.
 //
 // Reload reaches composition through profileContext (ADR-059 decision 7): it
 // holds Compose, Admit and Plan, the three pure steps of 03-c3-kernel.md:376-378.

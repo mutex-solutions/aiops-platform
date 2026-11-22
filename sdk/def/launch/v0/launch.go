@@ -20,8 +20,10 @@ var ErrRefsUnchecked = errors.New("launch: the references of the candidate canno
 // (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:555, :1359). The names and the major
 // are fixed by 03-c3-kernel.md:63.
 var (
-	// ProfileContextKey: class P (03-c3-kernel.md:63).
-	ProfileContextKey = kernel.NewKey[ProfileContext]("profileContext", 0, kernel.ProviderBound())
+	// ProfileContextKey: class PC, provider-bound and consumer-bound
+	// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:557): Commit sets what the tree runs,
+	// so only the entries that the distribution manifest lists resolve the key.
+	ProfileContextKey = kernel.NewKey[ProfileContext]("profileContext", 0, kernel.ProviderBound(), kernel.ConsumerBound())
 	// CatalogKey: class P (03-c3-kernel.md:63).
 	CatalogKey = kernel.NewKey[Catalog]("catalog", 0, kernel.ProviderBound())
 	// CmdlineKey: class P (03-c3-kernel.md:63).
@@ -31,7 +33,7 @@ var (
 	// KillSwitchesKey: class P (03-c3-kernel.md:63).
 	KillSwitchesKey = kernel.NewKey[KillSwitches]("killSwitches", 0, kernel.ProviderBound())
 	// AppExitKey: class PC, provider-bound and consumer-bound
-	// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:556).
+	// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:557).
 	AppExitKey = kernel.NewKey[AppExit]("appExit", 0, kernel.ProviderBound(), kernel.ConsumerBound())
 )
 
@@ -197,29 +199,23 @@ type ProfileContext interface {
 	// pure (03-c3-kernel.md:378).
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
 	// Committed is the composition the process runs: the one boot composed until
-	// Commit says another. reload plans from it. Added in S1 for reload, which has no
-	// other way to know what it diffs against (docs silent; open point, settled
-	// before S2a: ADR-059 decision 37).
+	// Commit says another. reload plans from it.
 	Committed() Composition
 	// Commit records c as the composition the tree runs: Committed returns it and
 	// Required is its required set from then on. c is one that Compose returned.
 	// reload calls it after a generation passed its verdict, and after a rollback
-	// with the composition it restored (ADR-059 decision 15). It returns an error for
-	// a composition that this launcher did not compose, or has forgotten, and then
-	// changes nothing. Added in S1; the committer of S4a replaces the caller (open
-	// point, settled before S2a: ADR-059 decision 37).
+	// with the composition it restored (ADR-059 decision 15); the committer of S4a
+	// replaces that caller. It returns an error for a composition that this launcher
+	// did not compose, or has forgotten, and then changes nothing.
 	Commit(c Composition) error
 	// Required is the required set of the committed composition for the process role:
 	// the distribution's rows and keys plus the rows that a layer marked required
-	// (00-decisions.md:492). readiness and reload judge by it. Added in S1: the docs
-	// say readiness reads it from the launch definition and name no method (open
-	// point, settled before S2a: ADR-059 decision 37).
+	// (00-decisions.md:492). readiness and reload judge by it.
 	Required() RequiredSet
 	// RequiredOf is the required set of c for the process role, by the rule of
 	// Required, which is RequiredOf(Committed()). reload judges a candidate by it
 	// before it commits the candidate. c is one that Commit would take; for another it
-	// returns an error. Added in S1 (open point, settled before S2a: ADR-059 decision
-	// 37, as Required).
+	// returns an error.
 	RequiredOf(c Composition) (RequiredSet, error)
 }
 
