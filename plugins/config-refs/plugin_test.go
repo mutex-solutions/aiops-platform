@@ -3,6 +3,7 @@
 package configrefs_test
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"os"
@@ -86,6 +87,37 @@ func TestResolvesEachScheme(t *testing.T) {
 	want := map[string]any{"env": "env-value", "flag": "flag-value", "file": "file-value\n", "nested": "nested", "keep": "plain", "n": int64(7)}
 	got := g.config().(map[string]any)
 	if !maps.Equal(got, want) {
+		t.Errorf("config = %v, want %v", got, want)
+	}
+}
+
+// A listener of internal/config inward of config-refs runs, and what it returns is
+// resolved: config-refs resolves what next returns ("aiops/z-inner" sorts after
+// "aiops/config-refs", so it is inward).
+func TestInwardListenersRunAndTheirResultIsResolved(t *testing.T) {
+	l, lp := fake.New()
+	l.Environ = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
+	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	inner := kernel.Define(kernel.Plugin{ID: "aiops/z-inner", Hooks: []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
+		Apply: func(c *kernel.Context, _ any) error {
+			kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[any]) (any, error) {
+				v, err := next()
+				m, ok := v.(map[string]any)
+				if err != nil || !ok {
+					return v, err
+				}
+				m = maps.Clone(m)
+				m["w"] = ref("env", "AIOPS_REF_B")
+				return m, nil
+			})
+			return nil
+		}})
+	kerneltest.Mount(root, inner)
+	g, err := mountTarget(t, root, map[string]any{"v": ref("env", "AIOPS_REF_A")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := g.config().(map[string]any), map[string]any{"v": "a", "w": "b"}; !maps.Equal(got, want) {
 		t.Errorf("config = %v, want %v", got, want)
 	}
 }

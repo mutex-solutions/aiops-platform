@@ -6,6 +6,8 @@
 // plugin-system-2026-11.md §9). A reference that does not resolve is an error of
 // that fiber's config resolution, so the fiber is FAILED, or on a live recomposition
 // the update is refused and the row keeps its instance (08-profiles-roadmap-adrs.md:468).
+// The listener resolves what next returns, so every listener inward of it runs and
+// sees the references unresolved (07-c4-plugin-sdk.md §3.4).
 // The row also provides the dry run of the same resolution (sdk/def/configrefs/v0),
 // which the launcher calls to reject such a generation at admission.
 //
@@ -73,18 +75,14 @@ func apply(c *kernel.Context, cfg any) error {
 	conf := cfg.(Config)
 	cl := launch.CmdlineKey.Of(c)
 	r := &refs.Resolver{Env: cl.Env, Flag: cl.Flag, RootFlag: conf.FileRootFlag, MaxBytes: conf.MaxFileBytes}
-	kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, raw any, next kernel.Next[any]) (any, error) {
-		out, changed, err := r.Resolve(raw)
-		if err != nil {
-			return nil, err
+	kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[any]) (any, error) {
+		// What next returns may be the kernel's retained raw config: Resolve copies a
+		// map or a list it changes and never writes to it.
+		v, err := next()
+		if err == nil {
+			v, _, err = r.Resolve(v)
 		}
-		if !changed {
-			return next()
-		}
-		// A waterfall listener cannot pass a changed value to next (next takes no
-		// argument and hands the original on), so the resolved config is the result
-		// and the listeners inward of this one do not run. Open point for the kernel.
-		return out, nil
+		return v, err
 	})
 	return errors.Join(refsdef.Key.Provide(c, dryRun{r}), ReadyKey.Provide(c, struct{}{}))
 }

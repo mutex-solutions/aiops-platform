@@ -383,7 +383,7 @@ A hook is declared by a definition, named `<owner noun>/<event>`, and has one of
 | Kind | Type | Semantics |
 |---|---|---|
 | Event | `kernel.Event[A]` | Four dispatch modes: `Emit`, `Parallel`, `Serial`, `Bail`. Observers cannot change an outcome; a listener that errors or times out is skipped and logged |
-| Waterfall | `kernel.Waterfall[A, R]` | Listeners run outermost first. A listener that does not call `next` vetoes the rest of the chain and the built-in behaviour; calling `next` twice is an error. A decision that grants is never a waterfall |
+| Waterfall | `kernel.Waterfall[A, R]` | Listeners run outermost first. A listener that does not call `next` vetoes the rest of the chain and the built-in behaviour; calling `next` twice is an error. `next` takes no argument: a listener transforms what `next` returns, and the listeners inward of it see the argument as dispatched. A decision that grants is never a waterfall |
 | Gate | `gate.Gate[A, V]` in `sdk/gate`, built on `Event` | Monotonic. The definition declares an order over its verdicts (approval: allow, raise, deny; send: allow, delay, drop). Every listener runs, the strictest verdict wins and none may grant. An error, a panic or a timeout is the strictest verdict |
 
 ```go
