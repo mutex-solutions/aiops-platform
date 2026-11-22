@@ -5,6 +5,7 @@ package kernel
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -183,6 +184,61 @@ func TestLeaseCounterSumsAcrossShards(t *testing.T) {
 	}
 	if got := l.Load(); got != want {
 		t.Fatalf("sum = %d, want %d", got, want)
+	}
+}
+
+// Every Enter and every Leave writes one lease shard, so under contention the
+// path costs the moves of shard lines between cores and nothing else (ADR-034,
+// 2026-11-18). That holds only while each shard counter has its 64-byte line to
+// itself and no other handle field, read on the path (live, leave) or not, sits on
+// a shard's line. The allocator may place the handle at any 8-byte offset of a
+// line, so every one is tried. A field added to handle, such as act, cannot break
+// it unless it lands inside the padding.
+func TestLeaseShardsOwnTheirCacheLines(t *testing.T) {
+	checkShardLines(t, reflect.TypeFor[handle]())
+}
+
+// A zero-size field, such as a leading `_ struct{}` marker, occupies no line and
+// must not make the check run past its end.
+func TestShardLineCheckTakesZeroSizeFields(t *testing.T) {
+	h := reflect.TypeFor[handle]()
+	fields := []reflect.StructField{{Name: "_", PkgPath: h.PkgPath(), Type: reflect.TypeFor[struct{}]()}}
+	for i := range h.NumField() {
+		fields = append(fields, h.Field(i))
+	}
+	checkShardLines(t, reflect.StructOf(fields))
+}
+
+func checkShardLines(t *testing.T, h reflect.Type) {
+	t.Helper()
+	const line = 64
+	lease, _ := h.FieldByName("lease")
+	shards, _ := reflect.TypeFor[leaseCount]().FieldByName("shards")
+	n, _ := reflect.TypeFor[leaseShard]().FieldByName("n")
+	stride := reflect.TypeFor[leaseShard]().Size()
+	for base := uintptr(0); base < line; base += 8 {
+		shardOn := make(map[uintptr]uintptr) // Line -> shard index.
+		for i := range uintptr(leaseShards) {
+			at := base + lease.Offset + shards.Offset + i*stride + n.Offset
+			if first, last := at/line, (at+n.Type.Size()-1)/line; first != last {
+				t.Fatalf("base %d: shard %d straddles lines %d and %d", base, i, first, last)
+			}
+			if j, ok := shardOn[at/line]; ok {
+				t.Fatalf("base %d: shards %d and %d share line %d", base, j, i, at/line)
+			}
+			shardOn[at/line] = i
+		}
+		for i := range h.NumField() {
+			f := h.Field(i)
+			if f.Name == "lease" || f.Type.Size() == 0 { // A zero-size field has no last byte.
+				continue
+			}
+			for l := (base + f.Offset) / line; l <= (base+f.Offset+f.Type.Size()-1)/line; l++ {
+				if j, ok := shardOn[l]; ok {
+					t.Errorf("base %d: field %s shares line %d with shard %d", base, f.Name, l, j)
+				}
+			}
+		}
 	}
 }
 
