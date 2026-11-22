@@ -1409,6 +1409,15 @@ property workload passed on the branch kernel with G1 to G12 at `ab9b405`
 (`test/spike/s0/results/property-full-s1-converged/`); that run is evidence on the
 branch, not the run after the merge.
 
+**Merged to the main branch, 2026-11-22.** G1 to G12 reached the main branch in
+`fb0a86b`, with the final-port kernel backend adapter. On the merged kernel the live
+oracle comparison passed at `GOMAXPROCS=8` and at `GOMAXPROCS=2`, 68.5 s and 67.3 s of
+package time (`test/spike/s0/results/causal-main-merged/`), and the full property
+workload passed on three backends in a frozen checkout: exit 0, 4,525.13 s in total,
+kernel backend 1,686.34 s, with the same source closure as `7f497a6`
+(`test/spike/s0/results/property-full-main-merged/`). The call-path gate on `fb0a86b`
+is pending; its result is not recorded.
+
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
 27 for G7, 24 for G8 and 75 for G9 to G11. The fixes of the S1 review recorded in
