@@ -1417,3 +1417,25 @@ that says which restarts refuse a child mount to 7,985. The fixes of the second
 review (18 lines for G1's refusal along every path of the invalidation, 13 for the
 stall detach of G11, 2 fewer for the root observer's effect) bring it to 8,014, and
 G12 (24, and 5 for `HookUse.Sealed`) to 8,043.
+
+## 2026-11-22 S0 closed; lease cost under contention as a tracking point
+
+S0 closed on 2026-11-22 on the project owner's approval of the S0 report
+([`s0-report.md`](../design/s0-report.md)).
+
+**Tracking point: lease cost under contention.** The final-port call-path gate
+(`test/spike/s0/results/callpath-full-final-port/`, commit `8ec2d8c`, classification
+pass; S0 report §4.3) measured `owner_enter_leave` in the baseline arm:
+
+| p50 / p99 | 1 caller | 8 callers | 32 callers |
+|---|---|---|---|
+| `kernel` | 151 / 370 ns | 315 / 1,054 ns | 332 / 1,073 ns |
+| reconciler | 130 / 194 ns | 130 / 631 ns | 130 / 609 ns |
+| graph lock | 130 / 287 ns | 130 / 367 ns | 130 / 436 ns |
+
+With 8 and 32 callers, `Enter` and `Leave` on `kernel` cost about 2.5 times the
+prototypes' at p50. The `kernel` p99 is at most 1,073 ns, inside the 2 µs bound, and no
+run of any candidate allocates. The cause: the lease counter picks a random shard per
+call, so concurrent callers share cache lines. The owner decided on 2026-11-22 to keep
+the kernel as it is, with no change now, and to review this point at the S3
+measurements.

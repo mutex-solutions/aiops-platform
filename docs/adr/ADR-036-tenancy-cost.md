@@ -1,9 +1,11 @@
 # ADR-036: Tenancy cost (S0 reading)
 
-- Status: **proposed, awaiting the project owner.** This record gives the S0
-  reading only. The S4b cost model (one pod per tenant and remote plugin) and
-  the numeric leak budget per replica are out of scope and stay **open**.
-- Date: 2026-11-20; read against the final-port runs on 2026-11-22.
+- Status: **accepted 2026-11-22 by the project owner (S0 reading); S4b cost
+  model and leak budget open.** This record gives the S0 reading only. The S4b
+  cost model (one pod per tenant and remote plugin) and the numeric leak budget
+  per replica are out of scope and stay **open**.
+- Date: 2026-11-20; read against the final-port runs on 2026-11-22; accepted
+  2026-11-22.
 - Scope: the S0 bench of the tenancy budget in the plugin record §10
   ([`plugin-system-2026-11.md`](../design/plugin-system-2026-11.md)), measured
   on the prototype cores and on the kernel port. Criteria: §8.2 and §9 of
@@ -41,6 +43,8 @@ Three points in the budget need owner attention:
 3. **Numeric deadlines.** §10 names the drain and handshake deadlines without
    values. This reading uses the criteria values: load 2 s, drain 5 s,
    dispose 2 s (criteria §4). The 2 s handshake figure is from §10 itself.
+
+The owner decided points 1 and 2 on 2026-11-22 (Decision, items 1 and 2).
 
 ## Measurements
 
@@ -334,12 +338,16 @@ section 10 bounds in every arm.
     in 08 §1.6 (line 484 of
     [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md))
     says the replica is "recycled only above the leak budget" and gives no
-    value. The budget value is **not recorded**.
+    value. The budget value is **not recorded**. On 2026-11-22 the owner kept
+    it open until S4b (Decision, item 3).
 - **Remote and pod costs were not measured.** The criteria state that S0
   provides no remote runtime and no tenant cache (§8.2). The remote handshake,
   the stream per remote row and the pod cost are S4b items.
 
-## Decision proposed
+## Decision
+
+The project owner accepted the S0 reading on 2026-11-22, with the three
+decisions under "Owner decisions" below.
 
 The S0 reading of each budget line, with the margin where a number exists.
 Pass/fail is on the final-port evidence above. Where a row gives one figure,
@@ -349,7 +357,7 @@ The prototype reading is kept in its own column as history.
 | Budget line | S0 reading, final port | Margin | Prototype reading (history) | Reading status |
 |---|---|---|---|---|
 | Shared fibers and 2 to 4 fibers per tenant | Fixture shapes are 2 and 4 fibers per tree, with 97 shared fibers | not a measured quantity | the same | pass as a fixture shape |
-| Total fibers at 300 tenants, "at most about 1,200" | Not decidable as written: 4 fibers per tree gives 1,297 | −97 at width 4 | the same | **owner decision on the figure** |
+| Total fibers at 300 tenants, "at most about 1,200" | Not decidable as written: 4 fibers per tree gives 1,297 | −97 at width 4 | the same | **decided** 2026-11-22: the ceiling is 97 + 4 × N, 2,097 at 500 tenants (item 1) |
 | No tree at boot | No boot measurement in the final-port records | n/a | none in the files read | **not recorded** |
 | In-process mount under 50 ms | Max 9.83 ms (reconciler), 7.47 ms (graph lock), 13.79 ms (`kernel`) at 500 × 4; 7.99, 7.46 and 10.50 ms at 300 × 4 | 36.2 ms at worst (`kernel`, 500 × 4) | Max 9.69 ms (500 × 4, reconciler), 9.05 ms (graph lock); 12.22 ms (300 × 4, reconciler); margin 37.8 ms | pass |
 | Zero idle goroutines per tree | 4, 3 and 4 goroutines total at the last checkpoint, the same at 300 and 500 trees and at widths 2 and 4; no candidate owner above its shared-only (zero-tree) count at any tree checkpoint | not a per-tree count | 4 (reconciler) and 3 (graph lock) at the last checkpoint, 500 trees | **partial**: no growth from 300 to 500 trees and none above the shared-only cut; the zero-tree count is still not recorded |
@@ -359,27 +367,33 @@ The prototype reading is kept in its own column as history.
 | Cold mount under 50 ms (criteria) | Max 13.79 ms (`kernel`, 500 × 4) | 36.2 ms | Max 9.69 ms; margin 40.3 ms | pass |
 | Ack path with cold mount (criteria §9) | Worst B1 p99, both on `kernel`: 1.42 ms against 250 ms at 100 items; 7.90 ms against 1 s at 1 MiB. Worst matched-pair churn delta 0.235 ms against 5 ms | 248.6 ms; 992.1 ms; 4.76 ms | 100-item B1 p99 1.38 ms; 1 MiB B1 p99 7.23 ms; margins 248.6 ms and 992.8 ms | pass |
 | Pod per (tenant, remote plugin) | Not measured in S0 | n/a | the same | deferred to S4b |
-| Leak budget per replica | No numeric value in the record | n/a | the same | **owner decision**; measurement **open** (S4b) |
+| Leak budget per replica | No numeric value in the record | n/a | the same | **open until S4b** (owner, 2026-11-22; item 3) |
 
-**Proposed reading.** The S0 bench passes every measured budget line on the
-final port, on all three backends, `kernel` included. The smallest margin is
-the `kernel` retained heap for 500 trees of width 4 (2.77 MiB under 32 MiB).
-One line is partial (zero idle goroutines) and one is not recorded (no tree at
-boot). Four items are deferred: the remote mount, the pod cost, the numeric
-leak budget, and the S4b cost model. Acceptance waits for the owner's three
-decisions.
+**Reading, accepted 2026-11-22.** The S0 bench passes every measured budget
+line on the final port, on all three backends, `kernel` included. The smallest
+margin is the `kernel` retained heap for 500 trees of width 4 (2.77 MiB under
+32 MiB). One line is partial (zero idle goroutines) and one is not recorded (no
+tree at boot). Four items are deferred: the remote mount, the pod cost, the
+numeric leak budget, and the S4b cost model.
 
-**Owner decisions.** Each item with the evidence that bears on it:
+**Owner decisions, 2026-11-22.** Each item with the evidence that bears on it
+and what the owner decided:
 
 1. **Fiber total.** The budget says "at most about 1,200"; at 300 tenants the
    budget's own shapes give 1,297 at width 4 and 697 at width 2. The bench
    ran up to 500 trees of width 4, 2,097 fibers with the shared ones, and met
    every bound on all three backends. The measurement does not choose between
    the figures; the owner chooses the figure the budget states.
+   **Decided:** the phrase "at most about 1,200" is replaced by a formula: 97
+   shared fibers plus at most 4 fibers per loaded tenant, 97 + 4 × N for N
+   loaded tenants, which is 2,097 at 500 tenants.
 2. **Tenant count, 500 or 300.** Both counts meet every bound on all three
    backends. On `kernel`, 500 × 4 against 300 × 4: retained heap 29.23 MiB
    against 18.25 MiB (margins 2.77 and 13.75 MiB), cold mount max 13.79 ms
    against 10.50 ms, restart max 183.4 ms against 112.1 ms.
+   **Decided:** 500 tenants. The 500-tenant benchmark governs; the run at 300
+   trees stays as a comparison. The `kernel` retained heap at 500 trees of
+   width 4 is 29.2 MiB against the 32 MiB bound, 2.8 MiB of headroom.
 3. **Numeric leak budget per replica.** No value exists in the plugin record
    or in 08 §1.6. The restart gate shows zero residual resources after
    teardown in one process, library-owned and kernel-owned. The slope fields
@@ -387,6 +401,8 @@ decisions.
    cycles and do not establish a leak rate.
    No multi-replica or remote evidence exists. The owner sets the value or
    keeps it open for S4b.
+   **Decided:** kept open until S4b. No number is set now; S4b sets it with
+   the pod cost model and multi-replica measurements.
 
 **Deferred to S4b.** The pod cost model; the remote handshake and stream costs;
 the cold budget of scaled-to-zero definitions; the numeric leak budget per
@@ -396,7 +412,8 @@ replica; the tenant directory and cache costs.
 
 The reruns are recorded: scale at `583e1bd` on the code of `8ec2d8c`, cold
 mount at `8ec2d8c`. Steps 1 to 7 are applied above, with the prototype values
-kept beside them as history. Step 8 waits for the owner.
+kept beside them as history. Step 8 is applied: the owner decided on
+2026-11-22, and the status line and the ADR-036 row of 08 say so.
 
 1. Scale record: `commit`, `host`, `elapsedSeconds`, `classification` and
    `reasons` in the new `scale-full-*/invocation.json`.

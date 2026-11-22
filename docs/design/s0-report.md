@@ -1,8 +1,9 @@
 # S0 exit report
 
 - Date: 2026-11-20; final-port gates recorded 2026-11-22.
+- Status: **S0 closed on 2026-11-22** by the project owner's approval of this report.
 - For: the project owner, who decides whether S0 is closed and whether S1 may start.
-- Sources: the roadmap S0 row and ADR table in [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md), the frozen criteria in [`s0-spike-criteria.md`](s0-spike-criteria.md), ADR-034, ADR-035, ADR-036 (draft) and ADR-045, and `test/spike/s0/results/`.
+- Sources: the roadmap S0 row and ADR table in [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md), the frozen criteria in [`s0-spike-criteria.md`](s0-spike-criteria.md), ADR-034, ADR-035, ADR-036 (accepted 2026-11-22) and ADR-045, and `test/spike/s0/results/`.
 - Status vocabulary: **met**, **met with recorded exception**, **pending** (a run or decision is still needed), **not met** (a recorded failure stands).
 
 ## 1. Verdict
@@ -17,14 +18,14 @@
 | 6 | Restart spike | **met**. 100 of 100 cycles at frozen scale with the resources owned by fibers of the final kernel, section 10 accounting without findings, recovery 252 to 454 ms. The library-owned run passed earlier. The unowned-handler snooze and the two-client case pass in the worker probe. | `test/spike/s0/results/restart-full-kernel-owned/`; `restart-full-section10/`; `worker-functional-corrected.json` | d683ebe |
 | 7 | Both cores on the corpus | **met with recorded exceptions**. Prototype: 64 of 68 pairs match, in 100 of 100 runs under race and under two processors. The port is in row 1. | `docs/design/s0-causal-coverage.md`; ADR-035 | not recorded |
 | 8 | Both cores on a 10,000-fiber bench | **met**. The final-port run passed with no reasons on the reconciler, graph-lock and `kernel` backends: every bound met and no bucket above the noise limit. The prototype run before it was invalid by the noise rule. | `test/spike/s0/results/scale-full-final-port/invocation.json`; §4.4 | `8ec2d8c` |
-| 9 | 500 tenant trees | **met**. Same run as row 8. Cold tree mount at most 13.8 ms on `kernel` (bound 50 ms); retained heap for 500 trees of width 4 at most 29.2 MiB (bound 32 MiB). The tenancy figures of ADR-036 still await the owner (§6(b)). | `test/spike/s0/results/scale-full-final-port/invocation.json`; §4.4; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `8ec2d8c` |
+| 9 | 500 tenant trees | **met**. Same run as row 8. Cold tree mount at most 13.8 ms on `kernel` (bound 50 ms); retained heap for 500 trees of width 4 at most 29.2 MiB (bound 32 MiB). The owner decided the tenancy figures of ADR-036 on 2026-11-22 (§6(b)). | `test/spike/s0/results/scale-full-final-port/invocation.json`; §4.4; [`ADR-036`](../adr/ADR-036-tenancy-cost.md) | `8ec2d8c` |
 | 10 | Cold mount on the ack path | **met**. The final-port run passed with no reasons on all three backends, `kernel` included: 180 runs, every request answered. | `test/spike/s0/results/coldmount-full-final-port/`; §4.5 | `8ec2d8c` |
 | 11 | `sdk/testkit/kerneltest` | **met**. Built as a separate module and run in CI. | `sdk/testkit/kerneltest/`; `.github/workflows/ci.yml` lines 60 to 65 | current tree |
 | 12 | Coverage: 100% statements per production file | **met**. Every production file of `sdk/kernel` is at 100.0%; CI enforces it per file on every push. | `test/spike/s0/results/final-port-checks/coverage.txt`; CI step "Kernel structural checks" | 83b2746 |
 | 13 | Fuzzing, 60 s per selected entry point | **met**. Five targets ran 60 s each with no kernel defect. One target's own oracle was wrong under load and was corrected; its failing inputs are kept as seeds. Fuzzing is run by hand, not in CI. | `test/spike/s0/results/final-port-checks/fuzz.log` and `invocation.json` | b596374 |
 | 14 | Notices | **met** for `sdk/kernel`. The NOTICE names the reference and keeps both copyright notices. Oracle package notices are in `s0-reference-pins.md` and were not re-checked here. | `sdk/kernel/LICENSE`; `sdk/kernel/NOTICE`; `docs/design/s0-reference-pins.md` | current tree |
 
-**Overall.** Every row is met, met with a recorded exception, or closed by a recorded design change (row 5). The scale, cold-mount and call-path gates passed on the final port on 2026-11-22 (§4.3 to §4.5). S0 closes on the owner's approval of this report; the items of §6(b) are the owner's. Updated 2026-11-22.
+**Overall.** Every row is met, met with a recorded exception, or closed by a recorded design change (row 5). The scale, cold-mount and call-path gates passed on the final port on 2026-11-22 (§4.3 to §4.5). The owner approved this report on 2026-11-22, and S0 is closed on that date; the owner's answers to the items of §6(b) are recorded there. Updated 2026-11-22.
 
 ## 2. What was built
 
@@ -130,7 +131,7 @@ Final port: `test/spike/s0/results/callpath-full-final-port/` (commit `8ec2d8c`,
 | graph lock, p50 / p99 | 130 / 287 ns | 130 / 367 ns | 130 / 436 ns |
 | Allocations per run, every candidate | 0 | 0 | 0 |
 
-- Every `kernel` p99 is inside the 2 µs bound. With 8 and 32 callers the `kernel` lease costs about 2.5 times the prototypes' at p50. The lease counter picks a random shard per call, so concurrent callers share cache lines. Changing that is a kernel change and is left to the owner.
+- Every `kernel` p99 is inside the 2 µs bound. With 8 and 32 callers the `kernel` lease costs about 2.5 times the prototypes' at p50. The lease counter picks a random shard per call, so concurrent callers share cache lines. Changing that is a kernel change and is left to the owner. The owner kept it as is on 2026-11-22, to be reviewed at the S3 measurements (§6(b); ADR-034).
 - Lookups: `lookup_view` and `lookup_view_lease_call` allocate 4 objects per operation on `kernel` against 3 on the prototypes, with p99 up to 3.2 µs at 8 and 32 callers against 2.5 to 2.8 µs. Lookup costs are reported, not bounded (criteria §8.3).
 - Ten aggregates show candidate variation of 11.3% to 16.3% with a clean control, as in the fourth run: observations, not an invalid run.
 - The first final-port run, on `dcc5f10`, failed: some `kernel` runs at one caller allocated one object. The adapter kept each activation's leave function on its first `Enter`, which allocated. `a4e3d82` keeps it when the Context is built.
@@ -225,13 +226,13 @@ Found by the restart harness, not by the port: River's fetch on a forced-RLS tab
 
 None. Every run that the earlier versions of this section listed is recorded: the call-path, scale and cold-mount gates on the final port (§4.3 to §4.5), the property workload on the final port (row 2), the restart gate with kernel-owned resources and the worker cases (row 6), `go test -race -count=3 ./...` per module (row 2), fuzzing (row 13) and per-file coverage (row 12). The criteria §5 transaction thresholds no longer apply to the raw-SQL surface (row 5).
 
-### (b) Proposals awaiting the owner
+### (b) Proposals to the owner
 
 - **Line budget.** Decided: the owner fixed the cap at 8,200 lines on 2026-11-20 (row 4).
-- **ADR-036** (draft, `docs/adr/ADR-036-tenancy-cost.md`). The owner must decide the fiber total (1,297 against "about 1,200"), the tenant count (500 against 300) and the numeric leak budget.
+- **ADR-036** ([`ADR-036-tenancy-cost.md`](../adr/ADR-036-tenancy-cost.md)). The owner had to decide the fiber total (1,297 against "about 1,200"), the tenant count (500 against 300) and the numeric leak budget. Decided on 2026-11-22, and ADR-036 is accepted (S0 reading): the 500-tenant benchmark governs, and the run at 300 trees stays as a comparison; the phrase "at most about 1,200" is replaced by the ceiling of 97 shared fibers plus at most 4 fibers per loaded tenant, 97 + 4 × N (2,097 at 500 tenants); the numeric leak budget per replica stays open until S4b, which sets it with the pod cost model and multi-replica measurements. The `kernel` retained heap at 500 trees of width 4 is 29.2 MiB against the 32 MiB bound (2.8 MiB headroom).
 - **ADR-058** (change impact reasoning). Draft, proposed 2026-11-19, awaiting the owner. Not required for S0 exit.
 - **Scale protocol noise rule.** No amendment is needed: the final-port run is within the noise limit.
-- **`kernel` lease cost under contention.** At 8 and 32 callers the `kernel` Enter and Leave cost about 2.5 times the prototypes' at p50, inside the 2 µs bound (§4.3). Changing the lease counter's shard choice is a kernel change; the owner decides whether and when.
+- **`kernel` lease cost under contention.** At 8 and 32 callers the `kernel` Enter and Leave cost about 2.5 times the prototypes' at p50, inside the 2 µs bound (§4.3). Changing the lease counter's shard choice is a kernel change; the owner decides whether and when. Decided on 2026-11-22: kept as is, with no kernel change now, and reviewed at the S3 measurements. [`ADR-034`](../adr/ADR-034-kernel-concurrency.md) records it as a tracking point.
 
 ### (c) Obligations to later steps
 
@@ -247,4 +248,4 @@ None. Every run that the earlier versions of this section listed is recorded: th
 
 ## 7. Stop point
 
-S0 stops here. This report, ADR-034, ADR-035, ADR-036 (draft) and ADR-045 form the S0 exit record. Every run is recorded; S0 closes on the owner's approval of this report, and the proposals of section 6(b) are the owner's to decide. S1 started in parallel on the owner's word of 2026-11-20 (ADR-059).
+S0 is closed: the owner approved this report on 2026-11-22. This report, ADR-034, ADR-035, ADR-036 and ADR-045 form the S0 exit record. Every run is recorded, and the owner's answers to the proposals of section 6(b) are recorded there; ADR-058 still awaits the owner and is not required for S0 exit. S1 started in parallel on the owner's word of 2026-11-20 (ADR-059), and its branch is merged into main in `fb0a86b`.
