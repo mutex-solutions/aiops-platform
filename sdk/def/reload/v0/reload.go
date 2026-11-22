@@ -48,15 +48,18 @@ var (
 	ErrQueueFull = errors.New("reload: queue is full")
 	// ErrClosed refuses a Submit once the reload fiber is unloading or disposed.
 	ErrClosed = errors.New("reload: closed")
-	// ErrNested refuses a Submit made with the context of the reload goroutine's own
-	// work, for example from a listener of composition/applied or of a loader hook
-	// ("a nested submission is rejected", 03-c3-kernel.md:87).
+	// ErrNested refuses a nested submission: a Submit made under the context of the
+	// reload goroutine's own work, for example from a listener of composition/applied
+	// or of a loader hook (03-c3-kernel.md:83).
 	ErrNested = errors.New("reload: nested submission")
 	// ErrUnknown reports an operation id that was never issued or whose result was
 	// evicted from the bounded history.
 	ErrUnknown = errors.New("reload: unknown operation")
 	// ErrAbandoned is the cause of a result whose operation was queued or running when
-	// the reload fiber was disposed.
+	// the reload row unloaded, unless the unload is the restart that applies the row's
+	// own change, whose next activation runs the queue. A queued operation that is
+	// abandoned never touched the tree; a submitter that still wants the change submits
+	// again to the row's next activation (an Op carries no content).
 	ErrAbandoned = errors.New("reload: abandoned at disposal")
 	// ErrVerdict is the cause of a result whose generation was applied and judged
 	// failed.
@@ -79,9 +82,9 @@ var (
 type ID uint64
 
 // Op is one submission: a request to compose the layers again and apply the result.
-// Source says who submitted, for the audit trail ("aiopsctl", "reload-watch-files");
-// the docs give an operation no field (open point, settled before S2a: ADR-059
-// decision 37).
+// Source names the submitter ("aiopsctl", "reload-watch-files") on the Result and the
+// reload/operation event. It is a label, not an identity: it is not authenticated, and
+// composition/applied does not carry it.
 type Op struct{ Source string }
 
 // Stage is a step of the pipeline of 03-c3-kernel.md:376-382.
@@ -122,9 +125,12 @@ const (
 	// gate denied, or of a plugin that is not in the module table, is rejected at the
 	// admit stage with ErrDenied (ADR-059 decision 15).
 	Rejected Status = "rejected"
-	// Abandoned: the reload fiber was disposed first. An operation that was running
-	// may have touched the tree, and Stage says how far it got; one whose generation
-	// was applied has ErrStateUnknown in its Err.
+	// Abandoned: the reload row unloaded first, and the unload is not the restart that
+	// applies the row's own change, whose next activation runs the queue. An operation
+	// that was running may have touched the tree, and Stage says how far it got; one
+	// whose generation was applied has ErrStateUnknown in its Err. One that was queued
+	// never touched the tree, and its submitter submits again if it still wants the
+	// change (ADR-059, the record of the S1 exit).
 	Abandoned Status = "abandoned"
 )
 
@@ -170,13 +176,13 @@ type Rollback struct {
 	Err        error              // nil when the previous composition is running again
 }
 
-// Reload is what the reload key serves (03-c3-kernel.md:65, :87).
+// Reload is what the reload key serves (03-c3-kernel.md:65, :83).
 type Reload interface {
 	// Submit queues op and returns its id at once. It never waits, so it is safe in a
-	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed,
-	// ErrStateUnknown, or ErrNested for a ctx that carries the reload goroutine's work. The docs write
-	// Submit(op); ctx is added so that a nested submission can be told from an
-	// independent one (open point, settled before S2a: ADR-059 decision 37).
+	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed or
+	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the
+	// AsyncLocalStorage of dsh runExclusive does: a Submit made under it is a nested
+	// submission and is refused with ErrNested, and any other Submit only queues.
 	Submit(ctx context.Context, op Op) (ID, error)
 	// Result returns the result of id as it stands, false for an unknown id.
 	Result(id ID) (Result, bool)

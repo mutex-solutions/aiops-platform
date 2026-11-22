@@ -24,14 +24,15 @@ type Digest [32]byte
 
 // Row is one row of a committed generation, read-only. Docs list what it holds
 // (03-c3-kernel.md:64): the row, the hooks it declares, its registrations and its
-// state. The field names are the definition's own, a minimal reading (open point,
-// settled before S2a: ADR-059 decision 37).
+// state. ID, Fiber, Plugin, Parent and State are the names that launch.Row,
+// launch.RowState and kernel.LedgerEvent give the same values; Hooks and
+// Registrations are the docs' own words.
 type Row struct {
 	ID            string
 	Fiber         uint64       // the id of the row's fiber, as kernel.Fiber.ID gives it; 0 when it has none
-	Plugin        string       // "<owner>/<name>"
+	Plugin        string       // "<owner>/<name>", "core:group" or "core:include"
 	Parent        string       // composed id of the enclosing group, or ""
-	State         kernel.State // the row's fiber state now
+	State         kernel.State // the row's fiber state now; PENDING when Fiber is 0
 	Hooks         []string     // hook names the row declares in Plugin.Hooks
 	Registrations []string     // what the row registered, by label, as effects
 }

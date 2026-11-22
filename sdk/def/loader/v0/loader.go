@@ -142,11 +142,11 @@ type Result struct {
 // (03-c3-kernel.md:64). The docs name the five operations and no signatures;
 // these are minimal. reload applies a plan as one kernel.Batch of remove, update
 // and create (03-c3-kernel.md:379, :84), so Apply takes the whole plan, and Create,
-// Update and Remove are Apply with one operation. The docs say both that the plan
-// is one batch and that the loader never creates an entry for an id whose previous
-// fiber is not DISPOSED (07-c4-plugin-sdk.md:341); an id that is removed and created
-// again therefore has its create in a second batch, after the wait (open point,
-// settled before S2a: ADR-059 decision 37).
+// Update and Remove are Apply with one operation. The plan is one batch, and the
+// loader never creates an entry for an id whose previous fiber is not DISPOSED
+// (07-c4-plugin-sdk.md:341): an entry the plan creates, enables or replaces whose id
+// still has a previous fiber is mounted in the plan's second batch once that fiber is
+// DISPOSED (ADR-059: decision 25 and the record of the S1 exit).
 //
 // The rule holds by key too (ADR-059 decision 25): an entry whose plugin provides a
 // key, and that the plan creates, enables or replaces or that a group the plan mounts
@@ -160,10 +160,14 @@ type Result struct {
 type Loader interface {
 	// Apply applies the operations in order against the tree as the earlier ones
 	// leave it. It validates everything first: a refused operation refuses the whole
-	// plan with no effect. An error after the first kernel batch has committed
-	// (the context ended while waiting for a disposal) leaves the tree as it is:
-	// the entry list is the truth, and an Update of an entry with no fiber mounts it.
-	// It is not re-entrant: a hook listener must not call it.
+	// plan with no effect. An error after the first kernel batch has committed leaves
+	// the tree as it is: the context ended while waiting for a disposal, a previous
+	// fiber settled in a state other than DISPOSED (ErrNotDisposed, which includes a
+	// fiber blocked past its load deadline), or the second kernel batch failed. The
+	// first batch stays committed, an entry that waited stays in the tree with no fiber
+	// and reads PENDING, and the results come back with the error (ADR-059, the record
+	// of the S1 exit): the entry list is the truth, and an Update of an entry with no
+	// fiber mounts it. It is not re-entrant: a hook listener must not call it.
 	Apply(ctx context.Context, ops []Op) ([]Result, error)
 	// Create mounts a fiber for the entry. It returns ErrExists for a known id.
 	Create(ctx context.Context, e EntrySpec) error

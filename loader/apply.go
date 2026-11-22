@@ -79,9 +79,9 @@ func (t *tree) restore(s snapshot) {
 // unloads, so a mount of an id that was removed or replaced, in this plan or in an
 // earlier one, goes in a second batch after the wait for that disposal. So does a
 // mount of a provider of a key that such a fiber, or one a group activation that ended
-// gave up, provides in the same realm (stage). The docs do not say what happens when
-// the wait is cut short: the first batch stays committed, the entry stays in the tree
-// with no fiber, and the error is returned (open point).
+// gave up, provides in the same realm (stage). A wait cut short leaves the first batch
+// committed and the entry in the tree with no fiber, and returns the error (ADR-059,
+// the record of the S1 exit).
 //
 // A group activation that mounts its children waits while a plan is staged and its
 // first batch runs, and the plan waits for it, so a refused plan is put back exactly

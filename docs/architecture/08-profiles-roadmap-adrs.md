@@ -199,7 +199,7 @@ The process is replaced, not restarted in place, in three cases only: a process-
 1. Compose layers 0 to 4 into a candidate. Pure.
 2. Admit: the gate, signatures, bindings, every changed config, the static graph, the `Drained()` precondition. Pure.
 3. Plan: diff by row id, then compute and print the restart closure. A failure in steps 1 to 3 rejects the generation with nothing touched.
-4. Apply in one batch: remove, update, create. The loader never creates an entry for an id whose previous fiber is not DISPOSED. There is no planned wave; per-fiber transitions do the rest.
+4. Apply in one batch: remove, update, create. The loader never creates an entry for an id whose previous fiber is not DISPOSED. An entry the plan creates, enables or replaces whose id, or a key it provides in the same realm, still has a previous fiber is mounted in a second batch once that fiber is DISPOSED. There is no planned wave; per-fiber transitions do the rest.
 5. Settle, then judge: every row this generation created, changed or explicitly enabled must be ACTIVE, and so must every required row; a row that was ACTIVE must still be; rows that were inactive before and are untouched are warnings. A fiber still UNLOADING at the settle deadline means wait, not judge.
 6. Report the verdict to the committer, which commits or restores: `reload` itself on one process, `composer` from S4b. A failed restore ends readiness and the process is replaced.
 7. Publish `composition/applied` with digest, generation and report, into the audit chain.
