@@ -28,11 +28,9 @@ func needAll() []kernel.Dep {
 
 func TestConsumerCallsEveryMethod(t *testing.T) {
 	l, plugin := fake.New()
-	mod := kernel.Define(kernel.Plugin{ID: "aiops/mod", Apply: func(*kernel.Context, any) error { return nil }})
 	l.ProfileName, l.RoleName = "self-host-full", "api"
 	l.LayerList = []launch.Layer{{Number: 2, Source: "profile:self-host-full", File: "p.yml"}}
 	l.Modules = []launch.CatalogEntry{{ID: "aiops/mod", Version: "1.0.0", Provides: []string{"k"}}}
-	l.Plugins = map[string]kernel.Plugin{"aiops/mod": mod}
 	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
@@ -79,17 +77,11 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 		if _, ok := cat.Lookup("nope"); ok {
 			t.Error("Lookup found an unknown id")
 		}
-		if p, ok := cat.Plugin("aiops/mod"); !ok || p.ID != mod.ID {
-			t.Errorf("Plugin = %v, %v", p.ID, ok)
-		}
 		if k, ok := cat.Key("k"); !ok || k.Name() != "catalog" {
 			t.Errorf("Key = %v, %v", k, ok)
 		}
 		if _, ok := cat.Key("nope"); ok {
 			t.Error("Key found an unknown name")
-		}
-		if _, ok := cat.Plugin("nope"); ok {
-			t.Error("Plugin found an unknown id")
 		}
 
 		cl := launch.CmdlineKey.Of(c)

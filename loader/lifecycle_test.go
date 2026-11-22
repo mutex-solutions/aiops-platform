@@ -86,8 +86,8 @@ func TestAParentIsNotChargedForItsChildren(t *testing.T) {
 
 func TestRemountingTheLoaderLeavesNothingBehind(t *testing.T) {
 	p := newProbe()
-	root, l := bareKernel(t)
-	l.Plugins = plugins(p.plugin("t/a", nil), p.plugin("t/k", nil))
+	root, _ := bareKernel(t)
+	table := plugins(p.plugin("t/a", nil), p.plugin("t/k", nil))
 	rows := []def.EntrySpec{row("a", "t/a"), group("g"), child("g", "k", "t/k")}
 	baseline := func() (n int) {
 		in, err := root.Inspect(t.Context())
@@ -106,7 +106,7 @@ func TestRemountingTheLoaderLeavesNothingBehind(t *testing.T) {
 	}
 	idle := baseline()
 	for i := 1; i <= 3; i++ {
-		f := root.Plugin(New(), Config{Rows: rows, Batch: root.Batch})
+		f := root.Plugin(New(), Config{Rows: rows, Batch: root.Batch, Plugins: table})
 		if err := f.Await(t.Context()); err != nil {
 			t.Fatal(err)
 		}

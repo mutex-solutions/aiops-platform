@@ -46,7 +46,7 @@ func (r reader) Committed(scope composition.Scope) (composition.Generation, bool
 	g := composition.Generation{Scope: scope, Rows: make([]composition.Row, len(rows))}
 	for i, h := range rows {
 		row := composition.Row{ID: specs[i].ID, Plugin: specs[i].Plugin, Parent: specs[i].Parent, State: kernel.Pending}
-		if p, ok := t.cat.Plugin(specs[i].Plugin); ok {
+		if p, ok := t.plugins[specs[i].Plugin]; ok {
 			for _, u := range p.Hooks {
 				row.Hooks = append(row.Hooks, u.Hook())
 			}

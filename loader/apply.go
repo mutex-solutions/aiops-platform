@@ -276,7 +276,7 @@ func (t *tree) stage(ctx context.Context, ops []def.Op) (*plan, error) {
 // each with its realm: the nearest entry, id first, whose isolate names the key, or the
 // root (the reading of boot's static graph).
 func (t *tree) provides(entries map[string]entry, id string) []string {
-	p, _ := t.cat.Plugin(entries[id].spec.Plugin)
+	p := t.plugins[entries[id].spec.Plugin]
 	var out []string
 	for _, k := range p.Provides {
 		realm := ""

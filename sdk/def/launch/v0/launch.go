@@ -248,18 +248,14 @@ type CatalogEntry struct {
 // Catalog is the catalog service: the module table and manifests
 // (plugin-system-2026-11.md §5). The docs give no methods; this is the minimum
 // that plugin-manager needs to list and inspect (03-c3-kernel.md:71) and the
-// loader to mount and to resolve the key names of a row.
+// loader to resolve the key names of a row. It holds no kernel.Plugin value: a
+// holder of one runs code under that entry's bindings (03-c3-kernel.md:80), so the
+// launcher gives the module table's values to the loader alone, in its config.
 type Catalog interface {
 	// Entries lists every entry, sorted by id.
 	Entries() []CatalogEntry
 	// Lookup returns the entry of a plugin id.
 	Lookup(id string) (CatalogEntry, bool)
-	// Plugin returns the kernel.Plugin value of a plugin id, the one the module
-	// table holds (07-c4-plugin-sdk.md:1339, :1355). The loader needs it to mount a
-	// row (03-c3-kernel.md:82). Docs silent: it hands the value to every consumer of
-	// the open-class consumer side (open point, settled before S2a: ADR-059
-	// decision 37).
-	Plugin(id string) (kernel.Plugin, bool)
 	// Key returns the key that a row names by string in inject, isolate and
 	// intercept (07-c4-plugin-sdk.md:1244, :1347): the kernel addresses keys by
 	// value and has no lookup by name, so the launcher fills this read-only table

@@ -159,11 +159,12 @@ func TestLaunchServices(t *testing.T) {
 	if _, ok := l.cat.Lookup("t/none"); ok {
 		t.Fatal("lookup of an unknown id")
 	}
-	if p, ok := l.cat.Plugin("t/store"); !ok || p.ID != "t/store" {
-		t.Fatal("plugin")
-	}
-	if _, ok := l.cat.Plugin("t/none"); ok {
-		t.Fatal("plugin of an unknown id")
+	// A plugin value runs code under its entry's bindings: only the loader gets the
+	// table, in its config, and no catalog value hands one out.
+	if _, ok := l.cat.(interface {
+		Plugin(string) (kernel.Plugin, bool)
+	}); ok {
+		t.Fatal("the catalog hands out plugin values")
 	}
 	for _, name := range []string{"store", "profileContext", "loader", "composition", "registry", "logger"} {
 		if k, ok := l.cat.Key(name); !ok || k.Name() != name {
@@ -482,7 +483,7 @@ func TestRunRequiredKeyMissingAtRunTime(t *testing.T) {
 
 func TestRunLoaderFails(t *testing.T) {
 	f := newFixture(t, happyBundle)
-	f.reg.LoaderConfig = func([]loaderdef.EntrySpec, BatchFunc) any { return "not a config" }
+	f.reg.LoaderConfig = func([]loaderdef.EntrySpec, BatchFunc, map[string]kernel.Plugin) any { return "not a config" }
 	code := f.run(t.Context())
 	if code != ExitRequired || !strings.Contains(f.errb.String(), "error: loader:") || !strings.Contains(f.errb.String(), `required row "loader" is FAILED`) {
 		t.Fatalf("exit %d, stderr:\n%s", code, f.errb.String())

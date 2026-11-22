@@ -25,8 +25,9 @@ var (
 )
 
 type toyLoaderCfg struct {
-	rows  []loaderdef.EntrySpec
-	batch BatchFunc
+	rows    []loaderdef.EntrySpec
+	batch   BatchFunc
+	plugins map[string]kernel.Plugin
 }
 
 // toyLoader mounts the enabled rows whose roles name the process role, as children,
@@ -53,7 +54,7 @@ func toyLoader() kernel.Plugin {
 				if !s.Enabled || role != launch.RoleAll && !contains(s.Roles, role) {
 					continue
 				}
-				p, _ := cat.Plugin(s.Plugin)
+				p := cfg.plugins[s.Plugin]
 				for _, n := range s.Inject {
 					k, _ := cat.Key(n)
 					p.Inject = append(p.Inject[:len(p.Inject):len(p.Inject)], kernel.NeedKey(k))
@@ -176,8 +177,10 @@ func newFixture(t *testing.T, bundle string, extra ...ModuleEntry) *fixture {
 		mods[e.ID] = e
 	}
 	f.reg = Registry{Modules: mods, Keys: map[string]kernel.AnyKey{"cache": cacheKey, "policy": policyKey},
-		Hooks:        map[string]kernel.AnyHook{},
-		LoaderConfig: func(rows []loaderdef.EntrySpec, batch BatchFunc) any { return toyLoaderCfg{rows, batch} }}
+		Hooks: map[string]kernel.AnyHook{},
+		LoaderConfig: func(rows []loaderdef.EntrySpec, batch BatchFunc, plugins map[string]kernel.Plugin) any {
+			return toyLoaderCfg{rows, batch, plugins}
+		}}
 	f.files = fstest.MapFS{
 		"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")},
 		"bundles/b/bundle.yaml":   {Data: []byte(bundle)},

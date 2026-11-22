@@ -150,7 +150,7 @@ func newFx(t *testing.T, o fxOpt) *fx {
 		mount = func(ps ...kernel.Plugin) { kerneltest.Mount(root, ps...) }
 		mount(lp)
 	}
-	l.RoleName, l.Plugins, l.Keys, l.Modules = cmp(o.role, "api"), o.plugins, o.keys, o.modules
+	l.RoleName, l.Keys, l.Modules = cmp(o.role, "api"), o.keys, o.modules
 	mount(o.pre...)
 	cfg := o.cfg
 	if cfg == nil {
@@ -158,7 +158,7 @@ func newFx(t *testing.T, o fxOpt) *fx {
 		if o.batch != nil {
 			b = o.batch(root)
 		}
-		cfg = Config{Rows: o.rows, Batch: b}
+		cfg = Config{Rows: o.rows, Batch: b, Plugins: o.plugins}
 	}
 	x.root, x.cat = root, l
 	x.fiber = root.Plugin(loaderPlugin, cfg)

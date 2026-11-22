@@ -397,8 +397,10 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 	return launchPlan(Diff(fa, ta, g)), nil
 }
 
-// catalog is the catalog service: the module table, its Go values and the key
-// table. All of it is read-only after construction.
+// catalog is the catalog service: the module table and the key table. It keeps the
+// Go values of the module table for boot, which builds the binding maps and the
+// loader's config from them; no method returns one. All of it is read-only after
+// construction.
 type catalog struct {
 	entries []launch.CatalogEntry
 	byID    map[string]launch.CatalogEntry
@@ -413,11 +415,6 @@ func (c *catalog) Entries() []launch.CatalogEntry { return slices.Clone(c.entrie
 func (c *catalog) Lookup(id string) (launch.CatalogEntry, bool) {
 	e, ok := c.byID[id]
 	return e, ok
-}
-
-func (c *catalog) Plugin(id string) (kernel.Plugin, bool) {
-	p, ok := c.plugins[id]
-	return p, ok
 }
 
 func (c *catalog) Key(name string) (kernel.AnyKey, bool) {

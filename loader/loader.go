@@ -33,18 +33,20 @@ import (
 
 // BatchFunc commits operations as one kernel batch: it is (*kernel.Root).Batch. A
 // plugin never holds the Root, and the kernel has no batch on a context, so the
-// launcher hands the loader this one function in its config, the value of
+// launcher hands the loader this function in its config, the value of
 // "root.Plugin(loader, tree)" (07-c4-plugin-sdk.md:1360). A launch key would be a
 // seventh one (03-c3-kernel.md:63 names six), and it would offer the power to
 // dispose any fiber to every consumer of the key.
 type BatchFunc func(ctx context.Context, ops ...kernel.BatchOp) ([]*kernel.Fiber, error)
 
 // Config is the config of the loader plugin: the tree to mount, parents before
-// children, and the batch function. A loader with no Batch mounts Rows and serves
-// its keys, and Apply answers ErrUnsupported.
+// children, the batch function, and the module table's plugin values by id, which
+// come here as Batch does: a holder of one runs code under its entry's bindings. A
+// loader with no Batch mounts Rows and serves its keys; Apply answers ErrUnsupported.
 type Config struct {
-	Rows  []def.EntrySpec
-	Batch BatchFunc
+	Rows    []def.EntrySpec
+	Batch   BatchFunc
+	Plugins map[string]kernel.Plugin
 }
 
 // New returns the loader plugin. Each call returns a new plugin value, a new entry:
@@ -67,7 +69,7 @@ func New() kernel.Plugin {
 			cfg := raw.(Config)
 			t := &tree{
 				role: launch.ProfileContextKey.Of(c).Role(), cat: launch.CatalogKey.Of(c), batch: cfg.Batch,
-				sem: make(chan struct{}, 1), excl: make(chan struct{}, 1), lc: c,
+				plugins: cfg.Plugins, sem: make(chan struct{}, 1), excl: make(chan struct{}, 1), lc: c,
 				patch: def.PatchContext.Bind(c), init: def.EntryInit.Bind(c), volatile: def.VolatileUpdate.Bind(c),
 				entries: map[string]*entry{}, prev: map[string][]previous{},
 			}
@@ -103,10 +105,11 @@ type entry struct {
 }
 
 type tree struct {
-	role  string
-	cat   launch.Catalog
-	batch BatchFunc
-	sem   chan struct{} // one Apply at a time; a channel so that a wait can end with its context
+	role    string
+	cat     launch.Catalog
+	plugins map[string]kernel.Plugin // Config.Plugins
+	batch   BatchFunc
+	sem     chan struct{} // one Apply at a time; a channel so that a wait can end with its context
 	// excl is held by a group activation while it mounts its children and by a plan
 	// from its stage until its first batch is committed or undone (Apply), so neither
 	// sees the other half done. A listener of a loader hook must not call Apply.
@@ -377,7 +380,7 @@ func (t *tree) resolve(ctx context.Context, pc *kernel.Context, e def.EntrySpec)
 		p = t.group(e)
 	} else {
 		var ok bool
-		if p, ok = t.cat.Plugin(e.Plugin); !ok {
+		if p, ok = t.plugins[e.Plugin]; !ok {
 			return p, nil, nil, fmt.Errorf("row %q: plugin %q: %w", e.ID, e.Plugin, def.ErrUnknownPlugin)
 		}
 		cfg = e.Config

@@ -85,8 +85,8 @@ func Table(mods ...Module) boot.Registry {
 			loaderdef.PatchContext.Name(): loaderdef.PatchContext, loaderdef.EntryInit.Name(): loaderdef.EntryInit,
 			loaderdef.VolatileUpdate.Name(): loaderdef.VolatileUpdate,
 		},
-		LoaderConfig: func(rows []loaderdef.EntrySpec, batch boot.BatchFunc) any {
-			return loader.Config{Rows: rows, Batch: batch}
+		LoaderConfig: func(rows []loaderdef.EntrySpec, batch boot.BatchFunc, plugins map[string]kernel.Plugin) any {
+			return loader.Config{Rows: rows, Batch: batch, Plugins: plugins}
 		},
 	}
 }

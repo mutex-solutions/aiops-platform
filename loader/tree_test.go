@@ -324,7 +324,7 @@ func TestRowInjectOfAWantedKeyGatesTheRow(t *testing.T) {
 func TestLoaderConfigAndAbsentBatch(t *testing.T) {
 	p := newProbe()
 	a := p.plugin("t/a", nil)
-	x := newFx(t, fxOpt{plugins: plugins(a), cfg: Config{Rows: []def.EntrySpec{row("a", "t/a")}}})
+	x := newFx(t, fxOpt{cfg: Config{Rows: []def.EntrySpec{row("a", "t/a")}, Plugins: plugins(a)}})
 	x.want("a", kernel.Active)
 	for _, err := range []error{
 		x.ld.Create(t.Context(), row("b", "t/a")), x.ld.Update(t.Context(), row("a", "t/a")), x.ld.Remove(t.Context(), "a"),

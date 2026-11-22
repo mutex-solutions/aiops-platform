@@ -81,11 +81,13 @@ type Registry struct {
 	// six hooks of the kernel (internal/plugin, internal/status and so on) are always
 	// known and need no entry.
 	Hooks map[string]kernel.AnyHook
-	// LoaderConfig builds the config of the loader plugin from the rows to mount
-	// and the batch function (loader.Config{Rows, Batch}). boot may not import the
-	// loader package (08-profiles-roadmap-adrs.md:1252), so the module table, which
-	// may, carries this one function.
-	LoaderConfig func(rows []loaderdef.EntrySpec, batch BatchFunc) any
+	// LoaderConfig builds the config of the loader plugin from the rows to mount,
+	// the batch function and the plugin values of the module table by id
+	// (loader.Config{Rows, Batch, Plugins}). The loader is the one holder of those
+	// values: no launch key offers them. boot may not import the loader package
+	// (08-profiles-roadmap-adrs.md:1252), so the module table, which may, carries
+	// this one function.
+	LoaderConfig func(rows []loaderdef.EntrySpec, batch BatchFunc, plugins map[string]kernel.Plugin) any
 }
 
 // kernelHooks are the hooks that boot knows to be sealed by their definition: the
@@ -330,7 +332,7 @@ func (r *run) run(ctx context.Context) int {
 			signalled <- false
 		}
 	}()
-	loader := root.Plugin(loaderPlugin, o.Registry.LoaderConfig(entrySpecs(a.Admitted), root.Batch))
+	loader := root.Plugin(loaderPlugin, o.Registry.LoaderConfig(entrySpecs(a.Admitted), root.Batch, cat.plugins))
 	root.Plugin(r.auditPlugin(), nil)
 
 	// 5. Settle under a bound, then the required audit over the live tree

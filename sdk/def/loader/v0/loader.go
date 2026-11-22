@@ -56,9 +56,10 @@ var (
 )
 
 // EntrySpec is one entry of the tree: a row, as the loader needs it. Plugin, Inject,
-// Isolate and Intercept are names: the loader resolves them through the catalog
-// launch service (launch.Catalog.Plugin and Key), because the kernel has no lookup
-// from a name to a key. Config is the parsed tree of the row, as plain values. The
+// Isolate and Intercept are names: the loader resolves Plugin through the plugin
+// values that the launcher gives it, and the key names through the catalog launch
+// service (launch.Catalog.Key), because the kernel has no lookup from a name to a
+// key. Config is the parsed tree of the row, as plain values. The
 // row's inject, intercept and isolate are applied to the entry's context
 // (07-c4-plugin-sdk.md:1347, :1375). Only an entry that is Enabled and whose Roles
 // include the process role is mounted (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:1360).
