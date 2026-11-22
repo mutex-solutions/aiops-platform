@@ -212,11 +212,12 @@ func TestConfigRefsRuleByKeyCitesItsDecision(t *testing.T) {
 	}
 }
 
-// TestDecision37LeavesItsPointsOpen: decision 37 has the definition points that S1
-// recorded in its own code settled before S2a, and settles none of them itself. So a
-// comment that cites it still calls its point an open point, and the decision accepts
-// nothing as built.
-func TestDecision37LeavesItsPointsOpen(t *testing.T) {
+// TestDecision37SettlesNothingItself: the 37th decision of ADR-059 has the points that
+// S1 recorded in its own code settled before S2a and settles none of them itself;
+// decisions 40 to 49 settle them. So it accepts nothing as built and names the
+// decisions that settle its points, and a comment cites the decision that settled its
+// point instead of it.
+func TestDecision37SettlesNothingItself(t *testing.T) {
 	cites := regexp.MustCompile(`\bdecision 37\b`)
 	accepted := regexp.MustCompile(`\baccepted as built\b|\bstands at s1\b`)
 	n := 0
@@ -230,11 +231,12 @@ func TestDecision37LeavesItsPointsOpen(t *testing.T) {
 				if s := accepted.FindString(text); s != "" {
 					t.Errorf("%s:%d decision 37 says %q, which the owner did not decide", rel, p.line, s)
 				}
+				if !strings.Contains(text, "decisions 40 to 49 settle") {
+					t.Errorf("%s:%d decision 37 does not name decisions 40 to 49, which settle its points", rel, p.line)
+				}
 			case filepath.Ext(rel) != ".md" && cites.MatchString(text):
 				n++
-				if !strings.Contains(text, "open point") {
-					t.Errorf("%s:%d cites decision 37 and no longer calls its point open", rel, p.line)
-				}
+				t.Errorf("%s:%d cites decision 37; cite the decision of 40 to 49 that settled its point", rel, p.line)
 			}
 		}
 	})

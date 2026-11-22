@@ -7,7 +7,7 @@
 // that fiber's config resolution, so the fiber is FAILED, or on a live recomposition
 // the update is refused and the row keeps its instance (08-profiles-roadmap-adrs.md:468).
 // The listener resolves what next returns, so every listener inward of it runs and
-// sees the references unresolved (07-c4-plugin-sdk.md §3.4).
+// sees the references unresolved (07-c4-plugin-sdk.md §3.4; ADR-059 decision 49).
 // The row also provides the dry run of the same resolution (sdk/def/configrefs/v0),
 // which the launcher calls to reject such a generation at admission.
 //
@@ -38,8 +38,8 @@ type Config struct {
 
 // fileRootFlag names the "one directory named by flag" that ${file:} reads
 // (08-profiles-roadmap-adrs.md:162): the server's --refs-dir and no other flag, so a
-// file reference never reads the home or the bundles. Unset or empty, no file
-// reference resolves.
+// file reference never reads the home or the bundles (ADR-059 decision 51). Unset or
+// empty, no file reference resolves.
 const fileRootFlag = "refs-dir"
 
 // ReadyKey is configRefsReady: the row provides it once its listener is on

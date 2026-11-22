@@ -84,7 +84,7 @@ type ID uint64
 // Op is one submission: a request to compose the layers again and apply the result.
 // Source names the submitter ("aiopsctl", "reload-watch-files") on the Result and the
 // reload/operation event. It is a label, not an identity: it is not authenticated, and
-// composition/applied does not carry it.
+// composition/applied does not carry it (ADR-059 decision 45).
 type Op struct{ Source string }
 
 // Stage is a step of the pipeline of 03-c3-kernel.md:376-382.
@@ -130,7 +130,7 @@ const (
 	// that was running may have touched the tree, and Stage says how far it got; one
 	// whose generation was applied has ErrStateUnknown in its Err. One that was queued
 	// never touched the tree, and its submitter submits again if it still wants the
-	// change (ADR-059, the record of the S1 exit).
+	// change (ADR-059 decision 48).
 	Abandoned Status = "abandoned"
 )
 
@@ -182,7 +182,8 @@ type Reload interface {
 	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed or
 	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the
 	// AsyncLocalStorage of dsh runExclusive does: a Submit made under it is a nested
-	// submission and is refused with ErrNested, and any other Submit only queues.
+	// submission and is refused with ErrNested, and any other Submit only queues
+	// (ADR-059 decision 45).
 	Submit(ctx context.Context, op Op) (ID, error)
 	// Result returns the result of id as it stands, false for an unknown id.
 	Result(id ID) (Result, bool)

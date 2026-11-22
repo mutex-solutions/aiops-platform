@@ -157,7 +157,7 @@ func (e *Engine) Await(ctx context.Context, id def.ID) (def.Result, error) {
 // Run is the one goroutine. It returns when ctx ends, which is when the reload fiber
 // unloads. A queued operation is then abandoned, not applied: applying a generation
 // while the process is disposing the plugin that applies it would leave the tree
-// half way with no one to judge it (ADR-059, the record of the S1 exit). Once the
+// half way with no one to judge it (ADR-059 decision 48). Once the
 // worker has applied a restart of its own row, it takes no more operations and leaves
 // them queued for the next activation. Run first emits the final event of an operation
 // that left the state unknown when the activation that ran it could not.

@@ -400,6 +400,7 @@ a sentence above says otherwise, these decisions win.
     that item 15 also lists, on which the report recommends nothing: a loader wait that
     is cut short, `reload` abandoning its queued operations when its row unloads, and a
     waterfall listener that cannot pass a changed value to `next`. They stay open points.
+    Note of 2026-11-23: decisions 40 to 49 settle these points.
 
 38. **The section "configRefsReady (recorded 2026-11-21)" is accepted as recorded**
     (item 16), with the rule that decision 18 replaced.
@@ -420,10 +421,143 @@ a sentence above says otherwise, these decisions win.
     then LOADING as restarted by someone else; the clock edge case; whether `config-refs`
     refuses a file root named by another launcher flag; the untracked caller in
     recomposition case (a); a seam for a kernel-side oracle in the suites; requiring
-    `Handler` in an `http.Server` literal.
+    `Handler` in an `http.Server` literal. Note of 2026-11-23: decisions 50 to 53 settle
+    these questions.
 
 Decision 27 is built in the no-provider rule of `boot`'s static graph (`BuildGraph`),
 which `Admit` runs at boot and for a live generation: a need with no provider in the
 realm of the row is an error when the key is required or the row is required, by row or
 by key. A row is required by key when it is active and provides a key of the process's
 required set in the root realm; `RequiredFor` reads the same predicate for decision 24.
+
+## Owner decisions of 2026-11-23, S1 open points
+
+The project owner decided the following on 2026-11-23, on the definition and behaviour
+points that decision 37 left open and the round 1 questions that decision 39 left to the
+record of the S1 exit (`docs/design/s1-report.md`, §7(a), items 15 and 17). Each names
+the item it answers and what changed. Where a sentence above says otherwise, these
+decisions win.
+
+40. **`profileContext` keeps `Committed`, `Commit`, `Required` and `RequiredOf`, and is
+    consumer-bound** (item 15). The four methods are the `v0` shape: `Committed` is the
+    composition the process runs, `Commit` records one that `Compose` returned,
+    `Required` is the required set of the committed composition, and `RequiredOf`
+    applies the same rule to a candidate, which `reload` judges before it commits it.
+    `Commit` changes what the tree runs and the set that readiness judges, so
+    `profileContext` is class `PC`, as `appExit` is. The release manifest lists
+    `aiops/loader`, `aiops/reload` and `aiops/readiness` as its consumers, and the test
+    manifest adds `aiops-test/test-state`. The launch definition, its `definition.yaml`
+    and the class cells of `03`, `07` and the design record say so, and the
+    consumer-bound keys go from 11 to 12.
+
+41. **The catalog holds no plugin value** (item 15). `Catalog.Plugin` is removed from
+    the launch definition and its fake: whoever holds a `kernel.Plugin` value runs code
+    under that entry's bindings, so the open catalog key let any consumer act as any
+    entry of the module table, `aiops/reload` included. `boot` gives the module table's
+    values to the loader alone, in `loader.Config.Plugins`, as it gives the batch
+    function, and `Registry.LoaderConfig` takes the table as a third argument. The
+    loader still resolves key names through `Catalog.Key`. Decision 40 rests on this.
+
+42. **`Cmdline.Env` serves only names with the prefix `AIOPS_REF_`** (item 15). The
+    launch definition holds the prefix as `EnvPrefix`, and the launcher and the fake
+    report any other name as not set, the rule that `08-profiles-roadmap-adrs.md:162`
+    states for `${env:}` references. `config-refs` takes the prefix from the definition
+    and keeps its own check for the text of its error.
+
+43. **A mount that waits for a disposal goes in the plan's second batch** (item 15). A
+    plan is one kernel batch. An entry the plan creates, enables or replaces whose id, or
+    a key it provides in the same realm (decision 25), still has a previous fiber is
+    mounted in a second batch once that fiber is DISPOSED. An id removed and created
+    again is one case of this rule. Step 4 of the apply pipeline in `03`, `08` and the
+    design record states it.
+
+44. **The payloads of the loader hooks** (item 15). `PatchContextArgs` and
+    `EntryInitArgs` stay as they are, with their timing. `VolatileUpdateArgs` keeps `ID`
+    and `Config`, and `Paths` becomes `[][]string`: each changed leaf path as its list of
+    keys, sorted, so a key that holds a dot is no longer read as a nested field. A path
+    names a changed leaf, not a volatile field; a consumer maps a path to its field by
+    prefix. Section 8 of the design record states the three payloads.
+
+45. **`Submit(ctx, op)` and `Op.Source` stay** (item 15). A nested submission is one
+    made under the context of the reload goroutine's own work, for example from a
+    listener of `composition/applied` or of a loader hook; it is refused with
+    `ErrNested`, and any other submission only queues. `Op.Source` is a label on the
+    result and the `reload/operation` event, not an identity: it is not authenticated,
+    and `composition/applied` does not carry it. The key tables of `00`, `03` and the
+    design record write `Submit(ctx, op)`.
+
+46. **The field names of `composition.Row` stay** (item 15). `ID`, `Fiber`, `Plugin`,
+    `Parent` and `State` are the names that `launch.Row`, `launch.RowState` and
+    `kernel.LedgerEvent` give the same values; `Hooks` and `Registrations` are the words
+    of `03`. `State` reads PENDING for a row with no fiber.
+
+47. **A loader wait cut short leaves the first batch committed** (item 15). After the
+    first kernel batch has committed, the wait for a previous fiber ends early when the
+    context ends or the fiber settles in a state other than DISPOSED (`ErrNotDisposed`,
+    which includes a fiber blocked past its load deadline), and the second batch may
+    fail too. In each case the first batch stays committed, an entry that waited stays in
+    the tree with no fiber and reads PENDING, and `Apply` returns the results with the
+    error. The loader never mounts over a fiber that is not DISPOSED, and the first
+    batch cannot be undone, because the fibers it disposed cannot come back. `reload`
+    judges those results: a waiting entry that the plan created, enabled or replaced, or
+    that was ACTIVE before or is required, fails the verdict and the rollback of
+    decision 12 follows; when the inverse plan meets the same fiber still not DISPOSED,
+    the rollback fails and decision 23 applies. The loader definition names the three
+    causes.
+
+48. **`reload` abandons its queued operations when its row unloads** (item 15), except
+    at the restart that applies the row's own change, whose next activation runs the
+    queue (the change of the `reload` row itself, accepted on 2026-11-21). Applying a
+    generation while the process disposes the plugin that applies it would leave the
+    tree half way with no one to judge it. An abandoned queued operation never touched
+    the tree, and a submitter that still wants the change submits again: an `Op` carries
+    no content. The `reload` definition says so.
+
+49. **A waterfall listener transforms what `next` returns** (item 15). The kernel stays
+    as it is: `next` takes no argument, and the listeners inward of a listener see the
+    argument as dispatched. `config-refs` now calls `next` first and resolves its result,
+    so every listener inward of it on `internal/config` runs and sees references
+    unresolved; `Resolve` copies what it changes, so the kernel's retained raw config is
+    never written. Before, it returned the resolved config without calling `next`, and
+    those listeners did not run. A hook whose inward listeners must see a changed input
+    declares a pointer payload made for that dispatch. The waterfall row of `07` §3.4
+    states the rule.
+
+50. **Check 8 reads a patch on a group as a patch of the rows it holds** (item 17). A
+    patch of `inject`, `isolate` or `group` is refused on a required row, a provider of
+    a bound key, or a group that holds one. The per-layer table at
+    `08-profiles-roadmap-adrs.md:147` and its copies in `00`, `07` and the design record
+    say so, and a gate case covers a required row beneath a patched group.
+
+51. **`${file:}` reads only the directory that `--refs-dir` names** (item 17).
+    `Config.FileRootFlag` is removed from `config-refs`: it let a row config point file
+    references at any launcher flag with an absolute value, the home and the bundles
+    included, so a reference could read profiles, patches and `run/status.json`. A
+    `config-refs` config that sets `fileRootFlag` is refused as an unknown field.
+    Passing `--refs-dir` alone enables `${file:}` references for every row of the
+    process, rows that an installed artifact inserts included; without it no file
+    reference resolves.
+
+52. **The other round 1 questions are answered by the code as built** (item 17):
+    - The intercept provenance of each key stays in the `Provenance` entries
+      `intercept.<key>`, which `Provenance.Of` also finds.
+    - `restart-policy` tracks a fiber that goes UNLOADING then LOADING afresh, as one
+      that someone else restarted. A provider change that skipped PENDING would reset
+      the counts of its dependants too; at S1 a dependant always waits PENDING.
+    - The clock drops a timer whose activation quiesces before the kernel records its
+      stop, as after an `Apply` that fails after `After`; the clock definition and its
+      fake say so.
+    - The untracked goroutine of the toy row stays the non-dependant caller of
+      recomposition case (a). A case shaped like a dispatcher is added when S5 builds
+      the first real dispatcher.
+    - Plugin vet requires a non-nil `Handler` in an `http.Server` literal and refuses a
+      server assembled in steps. The rule is syntactic: a struct field, an embedded
+      field, a type alias and a nil variable escape it. It is revisited at S3 if the
+      `http-server` provider must assemble its server in steps or another row needs a
+      listener.
+
+53. **The kernel seam of the suites observes only** (item 17), beside decision 9. The
+    kernel-side oracle reaches the root through the `Kernel` field of `boot.RunOptions`
+    and `serve.Distribution`. That field is the one test hook outside the two test-only
+    rows; the suites use it only to observe, through `Root.Inspect`, and it is nil in
+    every shipped binary.

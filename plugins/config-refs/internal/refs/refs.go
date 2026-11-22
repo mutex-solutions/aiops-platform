@@ -25,8 +25,8 @@ import (
 // EnvPrefix is the prefix of the only environment names a reference may read:
 // "`env:` reads only names with the prefix `AIOPS_REF_`"
 // (08-profiles-roadmap-adrs.md:162; plugin-system-2026-11.md §9). The launch
-// definition holds it, and Cmdline.Env serves no other name; the check here names the
-// rule in the error.
+// definition holds it, and Cmdline.Env serves no other name (ADR-059 decision 42); the
+// check here names the rule in the error.
 const EnvPrefix = launch.EnvPrefix
 
 // Error says which reference failed and why. The reason is fixed text: it never holds

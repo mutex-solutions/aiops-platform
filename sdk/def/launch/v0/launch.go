@@ -22,7 +22,8 @@ var ErrRefsUnchecked = errors.New("launch: the references of the candidate canno
 var (
 	// ProfileContextKey: class PC, provider-bound and consumer-bound
 	// (03-c3-kernel.md:63; 07-c4-plugin-sdk.md:557): Commit sets what the tree runs,
-	// so only the entries that the distribution manifest lists resolve the key.
+	// so only the entries that the distribution manifest lists resolve the key
+	// (ADR-059 decision 40).
 	ProfileContextKey = kernel.NewKey[ProfileContext]("profileContext", 0, kernel.ProviderBound(), kernel.ConsumerBound())
 	// CatalogKey: class P (03-c3-kernel.md:63).
 	CatalogKey = kernel.NewKey[Catalog]("catalog", 0, kernel.ProviderBound())
@@ -199,7 +200,8 @@ type ProfileContext interface {
 	// pure (03-c3-kernel.md:378).
 	Plan(ctx context.Context, from, to Composition) (Plan, error)
 	// Committed is the composition the process runs: the one boot composed until
-	// Commit says another. reload plans from it.
+	// Commit says another. reload plans from it. Committed, Commit, Required and
+	// RequiredOf are the v0 shape (ADR-059 decision 40).
 	Committed() Composition
 	// Commit records c as the composition the tree runs: Committed returns it and
 	// Required is its required set from then on. c is one that Compose returned.
@@ -246,7 +248,8 @@ type CatalogEntry struct {
 // that plugin-manager needs to list and inspect (03-c3-kernel.md:71) and the
 // loader to resolve the key names of a row. It holds no kernel.Plugin value: a
 // holder of one runs code under that entry's bindings (03-c3-kernel.md:80), so the
-// launcher gives the module table's values to the loader alone, in its config.
+// launcher gives the module table's values to the loader alone, in its config
+// (ADR-059 decision 41).
 type Catalog interface {
 	// Entries lists every entry, sorted by id.
 	Entries() []CatalogEntry
@@ -262,7 +265,7 @@ type Catalog interface {
 
 // EnvPrefix is the prefix of the only environment names that Cmdline.Env serves:
 // "`env:` reads only names with the prefix `AIOPS_REF_`"
-// (08-profiles-roadmap-adrs.md:162).
+// (08-profiles-roadmap-adrs.md:162; ADR-059 decision 42).
 const EnvPrefix = "AIOPS_REF_"
 
 // Cmdline is the cmdline service: argv (plugin-system-2026-11.md §5).

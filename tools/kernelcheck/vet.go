@@ -330,7 +330,7 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 		case *ast.CompositeLit:
 			// The rule is syntactic: a Server held in a struct field or embedded, a type
 			// alias of it and a Handler set to a nil variable pass. At S3, serving may be
-			// confined to the provider of the http key.
+			// confined to the provider of the http key (ADR-059 decision 52).
 			sel, ok := x.Type.(*ast.SelectorExpr)
 			if !ok || pkgOf(sel.X) != "net/http" || sel.Sel.Name != "Server" {
 				return true

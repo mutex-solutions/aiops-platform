@@ -146,7 +146,7 @@ type Result struct {
 // loader never creates an entry for an id whose previous fiber is not DISPOSED
 // (07-c4-plugin-sdk.md:341): an entry the plan creates, enables or replaces whose id
 // still has a previous fiber is mounted in the plan's second batch once that fiber is
-// DISPOSED (ADR-059: decision 25 and the record of the S1 exit).
+// DISPOSED (ADR-059 decisions 25 and 43).
 //
 // The rule holds by key too (ADR-059 decision 25): an entry whose plugin provides a
 // key, and that the plan creates, enables or replaces or that a group the plan mounts
@@ -165,9 +165,9 @@ type Loader interface {
 	// fiber settled in a state other than DISPOSED (ErrNotDisposed, which includes a
 	// fiber blocked past its load deadline), or the second kernel batch failed. The
 	// first batch stays committed, an entry that waited stays in the tree with no fiber
-	// and reads PENDING, and the results come back with the error (ADR-059, the record
-	// of the S1 exit): the entry list is the truth, and an Update of an entry with no
-	// fiber mounts it. It is not re-entrant: a hook listener must not call it.
+	// and reads PENDING, and the results come back with the error (ADR-059 decision
+	// 47): the entry list is the truth, and an Update of an entry with no fiber mounts
+	// it. It is not re-entrant: a hook listener must not call it.
 	Apply(ctx context.Context, ops []Op) ([]Result, error)
 	// Create mounts a fiber for the entry. It returns ErrExists for a known id.
 	Create(ctx context.Context, e EntrySpec) error
@@ -198,7 +198,7 @@ type Loader interface {
 // isolate and intercept. A listener that does not call next, or returns a nil
 // context, vetoes the entry: it is FAILED with ErrPatchVetoed and its plugin never
 // runs (fail closed, ADR-059 decision 34). The hook's use is "isolate and intercept
-// handling" (plugin-system-2026-11.md §8).
+// handling" (plugin-system-2026-11.md §8; ADR-059 decision 44).
 type PatchContextArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -206,7 +206,8 @@ type PatchContextArgs struct {
 
 // EntryInitArgs is the payload of loader/entry-init, dispatched after an entry's
 // fiber is created, vetoed or not, with the context it was mounted from: the one
-// loader/patch-context returned, or the parent's for a vetoed entry.
+// loader/patch-context returned, or the parent's for a vetoed entry (ADR-059
+// decision 44).
 type EntryInitArgs struct {
 	Entry   EntrySpec
 	Context *kernel.Context
@@ -221,7 +222,7 @@ type EntryInitArgs struct {
 // prefix. No value at Paths holds a reference, old or new: such a change restarts the
 // fiber, because the tree holds references unresolved and only config-refs resolves
 // one, at an activation. A consumer reads the values at Paths; a field that holds a
-// reference did not change.
+// reference did not change (ADR-059 decision 44).
 type VolatileUpdateArgs struct {
 	ID     string
 	Config any

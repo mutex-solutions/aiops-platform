@@ -77,11 +77,11 @@ func (t *tree) restore(s snapshot) {
 // (07-c4-plugin-sdk.md:341; plugin-system-2026-11.md §9, step 4: "dsh recomposeProfile
 // waits for disposal"), and a batch commits its desired state before any fiber
 // unloads, so a mount of an id that was removed or replaced, in this plan or in an
-// earlier one, goes in a second batch after the wait for that disposal. So does a
-// mount of a provider of a key that such a fiber, or one a group activation that ended
-// gave up, provides in the same realm (stage). A wait cut short leaves the first batch
-// committed and the entry in the tree with no fiber, and returns the error (ADR-059,
-// the record of the S1 exit).
+// earlier one, goes in a second batch after the wait for that disposal (ADR-059
+// decision 43). So does a mount of a provider of a key that such a fiber, or one a
+// group activation that ended gave up, provides in the same realm (stage). A wait cut
+// short leaves the first batch committed and the entry in the tree with no fiber, and
+// returns the error (ADR-059 decision 47).
 //
 // A group activation that mounts its children waits while a plan is staged and its
 // first batch runs, and the plan waits for it, so a refused plan is put back exactly

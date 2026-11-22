@@ -406,9 +406,8 @@ func (r *Retrier) moved(id uint64, st kernel.State) {
 // unloaded by the kernel because a provider left, and keeps its count. A restart by
 // a provider change that skipped PENDING would reset the count too, which only delays
 // a give-up; at S1 a dependant always waits PENDING, since a new provider waits for
-// the old one (ADR-059 decision 25). A fiber that someone else restarted is tracked
-// afresh. For any other the ACTIVE period, if any,
-// is over.
+// the old one (ADR-059 decisions 25 and 52). A fiber that someone else restarted is
+// tracked afresh. For any other the ACTIVE period, if any, is over.
 func (r *Retrier) updated(e kernel.LedgerEvent) {
 	now := r.Clock.Now()
 	r.mu.Lock()

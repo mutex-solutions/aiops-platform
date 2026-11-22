@@ -26,7 +26,7 @@ type Digest [32]byte
 // (03-c3-kernel.md:64): the row, the hooks it declares, its registrations and its
 // state. ID, Fiber, Plugin, Parent and State are the names that launch.Row,
 // launch.RowState and kernel.LedgerEvent give the same values; Hooks and
-// Registrations are the docs' own words.
+// Registrations are the docs' own words (ADR-059 decision 46).
 type Row struct {
 	ID            string
 	Fiber         uint64       // the id of the row's fiber, as kernel.Fiber.ID gives it; 0 when it has none
