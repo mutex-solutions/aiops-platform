@@ -1,0 +1,4 @@
+{"baselineCommit":"8ec2d8caf5c19c057cda08c08b7fdbdc3d3e74fe",
+ "commands":["GOMAXPROCS=8 S0_CALLPATH_RUN=1 go test ./test/spike/s0/callpath -run ^TestFullCallpath$ -count=1 -timeout 8h -v"],
+ "finalParityCompleted":true,
+ "hostEvidence":"dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job; semantic parity declared complete by the project owner on 2026-11-19 (ADR-035)"}

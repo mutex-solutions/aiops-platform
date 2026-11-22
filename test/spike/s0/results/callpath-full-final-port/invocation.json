@@ -1,0 +1,28 @@
+{
+ "classification": "PASS: first full callpath run on the final port, protocol amendment 2, three candidates (reconciler, graph-lock and the sdk/kernel backend); ten observations of candidate variation above 10% with a clean control, none invalidating",
+ "commit": "8ec2d8c",
+ "protocolAmendment": 2,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "8h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "S0_CALLPATH_OUT": "<out>/result",
+  "S0_CALLPATH_IDENTITY": "<out>/identity.json",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local",
+  "GOFLAGS": "-mod=readonly"
+ },
+ "host": "dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job",
+ "elapsedSeconds": 10833.69,
+ "allocationBound": "owner Enter+Leave: zero allocations in every run of every aggregate, all three candidates, the kernel included",
+ "note": "the report label (\"candidate evidence, not final-port evidence\") is fixed text in the harness; the baseline commit and finalParityCompleted in identity.json make this the final-port run. The first final-port run, on dcc5f10, failed on one allocation in some kernel runs at one caller; a4e3d82 keeps each activation's leave function when its Context is built. Raw per-run records (703 MiB) stay on the measurement host."
+}

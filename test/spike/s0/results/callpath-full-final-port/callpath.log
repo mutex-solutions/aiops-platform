@@ -1,0 +1,138 @@
+=== RUN   TestFullCallpath
+    harness_test.go:51: warmup baseline reconciler
+    harness_test.go:51: warmup baseline graph-lock
+    harness_test.go:51: warmup baseline kernel
+    harness_test.go:51: rep 0 baseline reconciler
+    harness_test.go:51: rep 0 baseline graph-lock
+    harness_test.go:51: rep 0 baseline kernel
+    harness_test.go:51: rep 0 stress reconciler callers 1
+    harness_test.go:51: rep 0 stress reconciler callers 8
+    harness_test.go:51: rep 0 stress reconciler callers 32
+    harness_test.go:51: rep 0 stress graph-lock callers 1
+    harness_test.go:51: rep 0 stress graph-lock callers 8
+    harness_test.go:51: rep 0 stress graph-lock callers 32
+    harness_test.go:51: rep 0 stress kernel callers 1
+    harness_test.go:51: rep 0 stress kernel callers 8
+    harness_test.go:51: rep 0 stress kernel callers 32
+    harness_test.go:51: rep 1 stress kernel callers 1
+    harness_test.go:51: rep 1 stress kernel callers 8
+    harness_test.go:51: rep 1 stress kernel callers 32
+    harness_test.go:51: rep 1 stress graph-lock callers 1
+    harness_test.go:51: rep 1 stress graph-lock callers 8
+    harness_test.go:51: rep 1 stress graph-lock callers 32
+    harness_test.go:51: rep 1 stress reconciler callers 1
+    harness_test.go:51: rep 1 stress reconciler callers 8
+    harness_test.go:51: rep 1 stress reconciler callers 32
+    harness_test.go:51: rep 1 baseline kernel
+    harness_test.go:51: rep 1 baseline graph-lock
+    harness_test.go:51: rep 1 baseline reconciler
+    harness_test.go:51: rep 2 baseline reconciler
+    harness_test.go:51: rep 2 baseline graph-lock
+    harness_test.go:51: rep 2 baseline kernel
+    harness_test.go:51: rep 2 stress reconciler callers 1
+    harness_test.go:51: rep 2 stress reconciler callers 8
+    harness_test.go:51: rep 2 stress reconciler callers 32
+    harness_test.go:51: rep 2 stress graph-lock callers 1
+    harness_test.go:51: rep 2 stress graph-lock callers 8
+    harness_test.go:51: rep 2 stress graph-lock callers 32
+    harness_test.go:51: rep 2 stress kernel callers 1
+    harness_test.go:51: rep 2 stress kernel callers 8
+    harness_test.go:51: rep 2 stress kernel callers 32
+    harness_test.go:51: rep 3 stress kernel callers 1
+    harness_test.go:51: rep 3 stress kernel callers 8
+    harness_test.go:51: rep 3 stress kernel callers 32
+    harness_test.go:51: rep 3 stress graph-lock callers 1
+    harness_test.go:51: rep 3 stress graph-lock callers 8
+    harness_test.go:51: rep 3 stress graph-lock callers 32
+    harness_test.go:51: rep 3 stress reconciler callers 1
+    harness_test.go:51: rep 3 stress reconciler callers 8
+    harness_test.go:51: rep 3 stress reconciler callers 32
+    harness_test.go:51: rep 3 baseline kernel
+    harness_test.go:51: rep 3 baseline graph-lock
+    harness_test.go:51: rep 3 baseline reconciler
+    harness_test.go:51: rep 4 baseline reconciler
+    harness_test.go:51: rep 4 baseline graph-lock
+    harness_test.go:51: rep 4 baseline kernel
+    harness_test.go:51: rep 4 stress reconciler callers 1
+    harness_test.go:51: rep 4 stress reconciler callers 8
+    harness_test.go:51: rep 4 stress reconciler callers 32
+    harness_test.go:51: rep 4 stress graph-lock callers 1
+    harness_test.go:51: rep 4 stress graph-lock callers 8
+    harness_test.go:51: rep 4 stress graph-lock callers 32
+    harness_test.go:51: rep 4 stress kernel callers 1
+    harness_test.go:51: rep 4 stress kernel callers 8
+    harness_test.go:51: rep 4 stress kernel callers 32
+    harness_test.go:51: rep 5 stress kernel callers 1
+    harness_test.go:51: rep 5 stress kernel callers 8
+    harness_test.go:51: rep 5 stress kernel callers 32
+    harness_test.go:51: rep 5 stress graph-lock callers 1
+    harness_test.go:51: rep 5 stress graph-lock callers 8
+    harness_test.go:51: rep 5 stress graph-lock callers 32
+    harness_test.go:51: rep 5 stress reconciler callers 1
+    harness_test.go:51: rep 5 stress reconciler callers 8
+    harness_test.go:51: rep 5 stress reconciler callers 32
+    harness_test.go:51: rep 5 baseline kernel
+    harness_test.go:51: rep 5 baseline graph-lock
+    harness_test.go:51: rep 5 baseline reconciler
+    harness_test.go:51: rep 6 baseline reconciler
+    harness_test.go:51: rep 6 baseline graph-lock
+    harness_test.go:51: rep 6 baseline kernel
+    harness_test.go:51: rep 6 stress reconciler callers 1
+    harness_test.go:51: rep 6 stress reconciler callers 8
+    harness_test.go:51: rep 6 stress reconciler callers 32
+    harness_test.go:51: rep 6 stress graph-lock callers 1
+    harness_test.go:51: rep 6 stress graph-lock callers 8
+    harness_test.go:51: rep 6 stress graph-lock callers 32
+    harness_test.go:51: rep 6 stress kernel callers 1
+    harness_test.go:51: rep 6 stress kernel callers 8
+    harness_test.go:51: rep 6 stress kernel callers 32
+    harness_test.go:51: rep 7 stress kernel callers 1
+    harness_test.go:51: rep 7 stress kernel callers 8
+    harness_test.go:51: rep 7 stress kernel callers 32
+    harness_test.go:51: rep 7 stress graph-lock callers 1
+    harness_test.go:51: rep 7 stress graph-lock callers 8
+    harness_test.go:51: rep 7 stress graph-lock callers 32
+    harness_test.go:51: rep 7 stress reconciler callers 1
+    harness_test.go:51: rep 7 stress reconciler callers 8
+    harness_test.go:51: rep 7 stress reconciler callers 32
+    harness_test.go:51: rep 7 baseline kernel
+    harness_test.go:51: rep 7 baseline graph-lock
+    harness_test.go:51: rep 7 baseline reconciler
+    harness_test.go:51: rep 8 baseline reconciler
+    harness_test.go:51: rep 8 baseline graph-lock
+    harness_test.go:51: rep 8 baseline kernel
+    harness_test.go:51: rep 8 stress reconciler callers 1
+    harness_test.go:51: rep 8 stress reconciler callers 8
+    harness_test.go:51: rep 8 stress reconciler callers 32
+    harness_test.go:51: rep 8 stress graph-lock callers 1
+    harness_test.go:51: rep 8 stress graph-lock callers 8
+    harness_test.go:51: rep 8 stress graph-lock callers 32
+    harness_test.go:51: rep 8 stress kernel callers 1
+    harness_test.go:51: rep 8 stress kernel callers 8
+    harness_test.go:51: rep 8 stress kernel callers 32
+    harness_test.go:51: rep 9 stress kernel callers 1
+    harness_test.go:51: rep 9 stress kernel callers 8
+    harness_test.go:51: rep 9 stress kernel callers 32
+    harness_test.go:51: rep 9 stress graph-lock callers 1
+    harness_test.go:51: rep 9 stress graph-lock callers 8
+    harness_test.go:51: rep 9 stress graph-lock callers 32
+    harness_test.go:51: rep 9 stress reconciler callers 1
+    harness_test.go:51: rep 9 stress reconciler callers 8
+    harness_test.go:51: rep 9 stress reconciler callers 32
+    harness_test.go:51: rep 9 baseline kernel
+    harness_test.go:51: rep 9 baseline graph-lock
+    harness_test.go:51: rep 9 baseline reconciler
+    harness_test.go:59: OBSERVATION: baseline reconciler/owner_enter_leave/c1: candidateVariation 14.4% > 10% with a clean control (3.1%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline graph-lock/lookup_view/c1: candidateVariation 15.4% > 10% with a clean control (3.6%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline reconciler/lookup_view/c8: candidateVariation 14.6% > 10% with a clean control (3.0%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline reconciler/owner_enter_leave/c8: candidateVariation 15.4% > 10% with a clean control (3.0%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline reconciler/lookup_view_lease_call/c8: candidateVariation 12.8% > 10% with a clean control (3.0%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline kernel/owner_enter_leave/c8: candidateVariation 14.8% > 10% with a clean control (2.6%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline reconciler/lookup_view/c32: candidateVariation 16.3% > 10% with a clean control (2.9%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline reconciler/lookup_view_lease_call/c32: candidateVariation 11.6% > 10% with a clean control (2.9%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline kernel/owner_enter_leave/c32: candidateVariation 15.3% > 10% with a clean control (3.9%); characteristic of the candidate, not an invalid run
+    harness_test.go:59: OBSERVATION: baseline kernel/lookup_view_lease_call/c32: candidateVariation 11.3% > 10% with a clean control (3.9%); characteristic of the candidate, not an invalid run
+    harness_test.go:61: callpath classification pass; candidate evidence only; raw records in <out>/result
+--- PASS: TestFullCallpath (10833.69s)
+PASS
+ok  	github.com/mutex-solutions/aiops-platform/test/spike/s0/callpath	10833.742s

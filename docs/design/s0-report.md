@@ -24,7 +24,7 @@
 | 13 | Fuzzing, 60 s per selected entry point | **met**. Five targets ran 60 s each with no kernel defect. One target's own oracle was wrong under load and was corrected; its failing inputs are kept as seeds. Fuzzing is run by hand, not in CI. | `test/spike/s0/results/final-port-checks/fuzz.log` and `invocation.json` | b596374 |
 | 14 | Notices | **met** for `sdk/kernel`. The NOTICE names the reference and keeps both copyright notices. Oracle package notices are in `s0-reference-pins.md` and were not re-checked here. | `sdk/kernel/LICENSE`; `sdk/kernel/NOTICE`; `docs/design/s0-reference-pins.md` | current tree |
 
-**Overall.** S0 is not closed. Rows 8, 9 and 10 are open: the scale, tree and cold-mount gates are being rerun on the final port, and the call-path gate with them. Every other row is met, met with a recorded exception, or closed by a recorded design change (row 5). Updated 2026-11-20.
+**Overall.** S0 is not closed. Rows 8 and 9 are open: the scale gate (the 10,000-fiber bench and the 500 trees) is being rerun on the final port. The cold-mount gate (row 10) and the call-path gate (§4.3) passed on the final port on 2026-11-22. Every other row is met, met with a recorded exception, or closed by a recorded design change (row 5). Updated 2026-11-22.
 
 ## 2. What was built
 
@@ -113,13 +113,27 @@ Prototype results are candidate evidence. Port results are candidate evidence un
 
 1,000 seeds × 1,000 operations under `-race`, exit code 0, on the reconciler, graph-lock and `kernel` backends. Elapsed 4,440.89 s on a shared development host; elapsed time is not a performance result. Evidence: `test/spike/s0/results/property-full-kernel-port/invocation.json`.
 
-### 4.3 Call-path gate (prototype, fourth run)
+### 4.3 Call-path gate (prototype, fourth run; final port, pass)
 
 - Evidence: `test/spike/s0/results/callpath-full-fourth/` (commit `c5f0a79`, 7,224 s, dedicated host). Classification **pass**.
 - `Enter` and `Leave` allocate nothing in every aggregate on both prototype cores (`allocsPerOp` 0 for `owner_enter_leave`).
 - `lookup_view` and `lookup_view_lease_call` report 3 allocations per operation. The zero-allocation rule covers Enter and leave only. Lookup costs are reported separately (criteria §8.3).
 - Six aggregates show throughput variation of 11.5% to 17.0% under the mutation stress arm. Amendment 2 records this as a candidate characteristic, not an invalid run.
-- Per-aggregate p99 values are in `report.json` and are not transcribed here. The criteria threshold is p99 at or below 2 µs. The port has not been rerun.
+- Per-aggregate p99 values are in `report.json` and are not transcribed here. The criteria threshold is p99 at or below 2 µs.
+
+Final port: `test/spike/s0/results/callpath-full-final-port/` (commit `8ec2d8c`, protocol amendment 2, three candidates, 10,834 s, dedicated host, `GOMAXPROCS=8`). Classification **pass**. No stress run overflowed, failed, timed out, ran an inactive body or overran a drain, on any candidate.
+
+| `owner_enter_leave`, baseline arm | 1 caller | 8 callers | 32 callers |
+|---|---|---|---|
+| `kernel`, p50 / p99 | 151 / 370 ns | 315 / 1,054 ns | 332 / 1,073 ns |
+| reconciler, p50 / p99 | 130 / 194 ns | 130 / 631 ns | 130 / 609 ns |
+| graph lock, p50 / p99 | 130 / 287 ns | 130 / 367 ns | 130 / 436 ns |
+| Allocations per run, every candidate | 0 | 0 | 0 |
+
+- Every `kernel` p99 is inside the 2 µs bound. With 8 and 32 callers the `kernel` lease costs about 2.5 times the prototypes' at p50. The lease counter picks a random shard per call, so concurrent callers share cache lines. Changing that is a kernel change and is left to the owner.
+- Lookups: `lookup_view` and `lookup_view_lease_call` allocate 4 objects per operation on `kernel` against 3 on the prototypes, with p99 up to 3.2 µs at 8 and 32 callers against 2.5 to 2.8 µs. Lookup costs are reported, not bounded (criteria §8.3).
+- Ten aggregates show candidate variation of 11.3% to 16.3% with a clean control, as in the fourth run: observations, not an invalid run.
+- The first final-port run, on `dcc5f10`, failed: some `kernel` runs at one caller allocated one object. The adapter kept each activation's leave function on its first `Enter`, which allocated. `a4e3d82` keeps it when the Context is built.
 
 ### 4.4 Scale gate (prototype, invalid by the noise rule)
 
