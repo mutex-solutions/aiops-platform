@@ -400,7 +400,8 @@ a sentence above says otherwise, these decisions win.
     that item 15 also lists, on which the report recommends nothing: a loader wait that
     is cut short, `reload` abandoning its queued operations when its row unloads, and a
     waterfall listener that cannot pass a changed value to `next`. They stay open points.
-    Note of 2026-11-23: decisions 40 to 49 settle these points.
+    Note of 2026-11-23: decisions 40 to 49 settle all the points of this decision,
+    40 to 46 the definition points and 47 to 49 the behaviour points.
 
 38. **The section "configRefsReady (recorded 2026-11-21)" is accepted as recorded**
     (item 16), with the rule that decision 18 replaced.
