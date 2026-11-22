@@ -13,8 +13,8 @@ import (
 )
 
 // Key is the reload key: consumer-bound, class C, at major 0, with an open provider
-// side (03-c3-kernel.md:65; 07-c4-plugin-sdk.md:556, where `reload` is among the
-// eleven consumer-bound keys).
+// side (03-c3-kernel.md:65; 07-c4-plugin-sdk.md:557, where `reload` is among the
+// twelve consumer-bound keys).
 var Key = kernel.NewKey[Reload]("reload", 0, kernel.ConsumerBound())
 
 // Applied is the composition/applied event, owned by Key, as the composition

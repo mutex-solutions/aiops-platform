@@ -1,5 +1,5 @@
 # Layout: 07-c4-plugin-sdk.md:529-537 (R13).
-# Contract: 03-c3-kernel.md:64 (`loader` is class `C`), 07-c4-plugin-sdk.md:556.
+# Contract: 03-c3-kernel.md:64 (`loader` is class `C`), 07-c4-plugin-sdk.md:557.
 key: loader
 version: "0.1"
 stability: preview

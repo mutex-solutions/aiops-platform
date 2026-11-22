@@ -8,7 +8,7 @@
 //
 // The reload key is consumer-bound and loader is too: the distribution lists this row
 // among the consumers of loader and the rows that submit among those of reload
-// (07-c4-plugin-sdk.md:556).
+// (07-c4-plugin-sdk.md:557).
 package reload
 
 import (

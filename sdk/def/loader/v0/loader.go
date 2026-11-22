@@ -10,7 +10,7 @@ import (
 )
 
 // Key is the loader key: consumer-bound, class C, at major 0
-// (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:556).
+// (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:557).
 var Key = kernel.NewKey[Loader]("loader", 0, kernel.ConsumerBound())
 
 // The two plugin names that make an entry a group: its fiber mounts the entries
