@@ -195,8 +195,8 @@ type Provenance struct {
 	Fields []FieldOrigin
 }
 
-// Of returns the origin of a field, and false for a name that is not a row
-// field.
+// Of returns the origin of a row field or of an "intercept.<key>" entry, and false
+// for any other name.
 func (p Provenance) Of(f FieldName) (Origin, bool) {
 	for _, fo := range p.Fields {
 		if fo.Field == f {

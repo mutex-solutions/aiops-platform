@@ -328,6 +328,9 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 				bad(x.Pos(), fmt.Sprintf("%s.%s with a nil handler serves http.DefaultServeMux", sel.X.(*ast.Ident).Name, sel.Sel.Name), docVet)
 			}
 		case *ast.CompositeLit:
+			// The rule is syntactic: a Server held in a struct field or embedded, a type
+			// alias of it and a Handler set to a nil variable pass. At S3, serving may be
+			// confined to the provider of the http key.
 			sel, ok := x.Type.(*ast.SelectorExpr)
 			if !ok || pkgOf(sel.X) != "net/http" || sel.Sel.Name != "Server" {
 				return true
