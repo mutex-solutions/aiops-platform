@@ -561,7 +561,7 @@ decisions win.
       `http-server` provider must assemble its server in steps or another row needs a
       listener.
 
-53. **The kernel seam of the suites observes only** (item 17), beside decision 9. The
+53. **The suites use the kernel seam only to observe** (item 17), beside decision 9. The
     kernel-side oracle reaches the root through the `Kernel` field of `boot.RunOptions`
     and `serve.Distribution`. That field is the one test hook outside the two test-only
     rows; the suites use it only to observe, through `Root.Inspect`, and it is nil in
