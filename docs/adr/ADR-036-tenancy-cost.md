@@ -318,8 +318,16 @@ section 10 bounds in every arm.
     roots and 16,336,736 bytes for chain 1,000 roots on `kernel`; 10,760 and
     18,912,744 bytes on the reconciler; 1,160,576 bytes for 500 trees of
     width 4 on `kernel`. Prototype (history): 9,624 and 19,000,448 bytes
-    (reconciler). The scale record does not define the checkpoint spacing or
-    the fit window. These fields do not establish a leak rate. The heap
+    (reconciler). The harness defines them: a graph run takes two retained
+    checkpoints (after the mount and after the root restart), a tree run one
+    per tree cycle (10 per run, each after every tree is mounted again), and
+    the slope is the least-squares fit over one run's checkpoints, the record
+    keeping the maximum over runs (`retainedMetrics` and `runTrees` in
+    `test/spike/s0/scale`). The tree slopes are about 1 MiB per cycle at 500
+    trees and 0.6 to 0.7 MiB at 300 trees on all three backends alike
+    (`kernel` 1,160,576 bytes at 500 × 4), so they do not single out the port;
+    ten cycles in one process are too few to tell growth that levels off from
+    a leak. These fields do not establish a leak rate. The heap
     maxima show retained heap stayed under its limit at the checkpoints
     recorded. They do not show zero growth.
   - No numeric leak budget appears in the plugin record. The failure table
@@ -344,7 +352,7 @@ The prototype reading is kept in its own column as history.
 | Total fibers at 300 tenants, "at most about 1,200" | Not decidable as written: 4 fibers per tree gives 1,297 | −97 at width 4 | the same | **owner decision on the figure** |
 | No tree at boot | No boot measurement in the final-port records | n/a | none in the files read | **not recorded** |
 | In-process mount under 50 ms | Max 9.83 ms (reconciler), 7.47 ms (graph lock), 13.79 ms (`kernel`) at 500 × 4; 7.99, 7.46 and 10.50 ms at 300 × 4 | 36.2 ms at worst (`kernel`, 500 × 4) | Max 9.69 ms (500 × 4, reconciler), 9.05 ms (graph lock); 12.22 ms (300 × 4, reconciler); margin 37.8 ms | pass |
-| Zero idle goroutines per tree | 4, 3 and 4 goroutines total at the last checkpoint, the same at 300 and 500 trees and at widths 2 and 4; no candidate owner above its shared-only (zero-tree) count at any tree checkpoint | not a per-tree count | 4 goroutines total at the last checkpoint, 500 trees | **partial**: no growth from 300 to 500 trees and none above the shared-only cut; the zero-tree count is still not recorded |
+| Zero idle goroutines per tree | 4, 3 and 4 goroutines total at the last checkpoint, the same at 300 and 500 trees and at widths 2 and 4; no candidate owner above its shared-only (zero-tree) count at any tree checkpoint | not a per-tree count | 4 (reconciler) and 3 (graph lock) at the last checkpoint, 500 trees | **partial**: no growth from 300 to 500 trees and none above the shared-only cut; the zero-tree count is still not recorded |
 | Remote mount within handshake (2 s) and one stream per row | Not measured in S0 | n/a | the same | deferred to S4b |
 | Root restart settles inside the drain deadline (5 s) | Max 174.3 ms (reconciler), 199.5 ms (graph lock), 183.4 ms (`kernel`) at 500 × 4 | 4.80 s at worst | Max 172.4 ms (reconciler), 198.7 ms (graph lock); margin 4.80 s | pass |
 | Retained heap, 500 trees (criteria) | Max 21.54 MiB (reconciler), 20.51 MiB (graph lock), 29.23 MiB (`kernel`) | 2.77 MiB (`kernel`) | Max 20.34 MiB (reconciler), 19.34 MiB (graph lock); margin 11.66 MiB | pass |
@@ -375,7 +383,8 @@ decisions.
 3. **Numeric leak budget per replica.** No value exists in the plugin record
    or in 08 §1.6. The restart gate shows zero residual resources after
    teardown in one process, library-owned and kernel-owned. The slope fields
-   are recorded without a checkpoint spacing and do not establish a leak rate.
+   grow by about 1 MiB per tree cycle on all three backends alike over ten
+   cycles and do not establish a leak rate.
    No multi-replica or remote evidence exists. The owner sets the value or
    keeps it open for S4b.
 
