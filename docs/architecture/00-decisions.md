@@ -469,7 +469,7 @@ Tenant isolation rests on the gateway injecting `X-Scope-OrgID`, because none of
 | `config` | Replaces the whole config; there is no deep merge | Only fields the schema marks tenant-writable, validated when written, volatile by rule, literal values |
 | `enabled` | Yes, except the last enabled provider of a provider-bound key | Only on a `scope: tenant` row or a tenant-toggleable process-scope row; never a row in a required set, a row that listens on a gate, or a provider of a bound key |
 | `required` | May be raised, never lowered | Never |
-| `inject`, `isolate`, `group` | Yes, never on a required row or a provider of a bound key | Never |
+| `inject`, `isolate`, `group` | Yes, never on a required row, a provider of a bound key, or a group that holds one | Never |
 | `intercept` | Yes; for a provider-bound key, bundle layers only | Never |
 
 - **Row format.** A row is `{id, plugin, config, enabled, required, roles, inject, intercept, isolate, group}`. `plugin` is the manifest id and replaces `type`. `inject`, `intercept`, `isolate` and `group` are the Cordis loader's entry fields. `roles` is ours: every row of a server bundle states it (lint), so no row lands in the internet-facing role by omission. Row order carries no load semantics. `core:group` nests rows (a pillar, a tenant tree) and `core:include` mounts a file-backed tree.

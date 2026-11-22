@@ -122,6 +122,9 @@ func TestGateChecksTable(t *testing.T) {
 		{name: "inject patched on the group of a provider of a bound key", bundle: rows("id: g, plugin: core:group, config: [{id: a, plugin: o/prov}]"),
 			patches: []string{"- {id: g, inject: [nothere]}"},
 			want:    []string{"8 g:a bound-provider-field stop=true"}, refused: true},
+		{name: "inject patched on the group of a required row", bundle: rows("id: g, plugin: core:group, config: [{id: x, plugin: o/open}]"),
+			patches: []string{"- {id: g, inject: [nothere]}"}, dist: "requiredRows: [g:x]",
+			want: []string{"8 g:x required-row-field stop=true"}, refused: true},
 		// The intercept of a bound key is the bundle's: a later patch may not add, change or drop it.
 		{name: "a patch drops the bundle intercept of a bound key", bundle: rows("id: a, plugin: o/open, intercept: {pk: {x: 1}, ok: {y: 1}}"),
 			patches: []string{"- {id: a, intercept: {ok: {y: 2}}}"},

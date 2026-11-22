@@ -144,7 +144,7 @@ What each layer may do to a row (`00-decisions.md` §6.1). Gate check 8 enforces
 | `config` | Replaces the whole config; there is no deep merge | Only fields the schema marks tenant-writable, validated when written, volatile by rule, literal values |
 | `enabled` | Yes, except the last enabled provider of a provider-bound key | Only on a `scope: tenant` row or a tenant-toggleable process-scope row; never a row in a required set, a row that listens on a gate, or a provider of a bound key |
 | `required` | May be raised, never lowered. A required row binds its id to its plugin | Never |
-| `inject`, `isolate`, `group` | Yes, never on a required row or a provider of a bound key | Never |
+| `inject`, `isolate`, `group` | Yes, never on a required row, a provider of a bound key, or a group that holds one | Never |
 | `intercept` | Yes; for a provider-bound key, bundle layers only | Never |
 
 **Kill switches.** With `agents-paused` set, no agent run starts and no model call leaves: `casefile` checks the switch before it dispatches the `incident/investigate` gate, `agent-runs` starts no run, an `ask` turn included, and `llm-gateway` refuses every call, so a harness that is already running stops at its next model request. Ingest, paging and human-approved changes keep working, because none of them passes that gate and paging has no hook. With `telemetry-disabled` set, the `telemetry` row stays ACTIVE and exports nothing. The switches are neither listeners nor rows, and `test/policy-bypass/` sets `agents-paused`, tries to undo it by config and tries to start a run.
