@@ -1416,7 +1416,7 @@ package time (`test/spike/s0/results/causal-main-merged/`), and the full propert
 workload passed on three backends in a frozen checkout: exit 0, 4,525.13 s in total,
 kernel backend 1,686.34 s, with the same source closure as `7f497a6`
 (`test/spike/s0/results/property-full-main-merged/`). The call-path gate on `fb0a86b`
-is pending; its result is not recorded.
+failed; see "2026-11-22 call-path gate on the merge commit" below.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
@@ -1448,3 +1448,88 @@ run of any candidate allocates. The cause: the lease counter picks a random shar
 call, so concurrent callers share cache lines. The owner decided on 2026-11-22 to keep
 the kernel as it is, with no change now, and to review this point at the S3
 measurements.
+
+## 2026-11-22 call-path gate on the merge commit
+
+The call-path gate failed on `fb0a86b` on the measurement host: `FAIL: baseline
+kernel/owner_enter_leave/c8: run 9 p99 5548ns > 2000ns`. With 8 and 32 callers, the
+`kernel` p50 over all runs rose from 315 and 332 ns (`8ec2d8c`) to 433 and 464 ns. Five
+runs at 8 callers and seven at 32 had a p99 of 1,418 to 1,595 ns, from the fourth run
+on, against one run at each count on `8ec2d8c` (1,619 and 1,487 ns). One caller did not
+move (151 and 150 ns), nor did the prototypes.
+
+**Cause: not a change of the kernel or the adapter.** Nothing the merge added runs on
+the contended `Enter` and `Leave`:
+
+- The machine code of `handle.enter`, `confirm`, `release`, `leaseCount.shard` and
+  the adapter's `Enter`, `Leave` and forwarding closure is the same on both commits,
+  except that the handle's field offsets are 8 bytes higher: `handle.act`, which G1's
+  child mount in a batch reads, sits before `live`.
+- The shift moves no field onto another cache line. The handle is in the 1,408-byte
+  size class (128-byte aligned slots, 8-byte header): `live` stays on line 0, each
+  shard counter alone on lines 1 to 16, `leave` on line 18.
+  `TestLeaseShardsOwnTheirCacheLines` holds this: each shard has its line to itself
+  and no other handle field shares one, at every 8-byte offset of the handle.
+- The adapter's changes (values filed by provision identity, pruning by watermark)
+  run inside `Provide` only. The fixture listens on no kernel event, so no relay runs.
+
+Under contention every `Enter` and `Leave` moves a randomly picked shard line from
+another core, so the cost follows the transfer latency between the cores the callers'
+threads run on. That has two modes, on the measurement host and on the development host
+alike: fast, about 250 to 350 ns p50 and 700 ns p99, and slow, about 500 to 620 ns and
+1,450 to 1,800 ns. The mode changes from window to window, even between the 8- and
+32-caller windows of one fixture, on both commits. The `fb0a86b` run met the slow mode
+from its fourth run on; `8ec2d8c` met it in one run. On the measurement host one window
+alone crossed 2 µs and failed the gate: run 9 at 8 callers, 5,548 ns; the next highest of
+either commit there is 1,619 ns (`8ec2d8c`). A host disturbance is the most likely cause
+of that window, but this is inferred: the run's raw records and host-noise samples are
+not in the repository.
+
+Development host (shared 2-socket KVM guest, 24 vCPU, `GOMAXPROCS=8`; not acceptance),
+commits run in alternating processes, medians of the per-window p50 / p99 in ns:
+
+| `owner_enter_leave` | `8ec2d8c` | `c06304f` | `2576547` (test only) |
+|---|---|---|---|
+| protocol order, c8 (30 windows) | 447 / 1,542 | 488 / 1,599 | |
+| protocol order, c32 (30 windows) | 419 / 1,500 | 500 / 1,619 | |
+| fixture lease, c8 (30 windows) | 525 / 1,734 | 500 / 1,681 | 501 / 1,743 |
+| fixture lease, c32 (30 windows) | 535 / 1,788 | 520 / 1,746 | 531 / 1,790 |
+| kernel only, c8 (30 windows) | 499 / 1,731 | 502 / 1,750 | 486 / 1,796 |
+| kernel only, c32 (30 windows) | 517 / 1,753 | 526 / 1,766 | 502 / 1,763 |
+
+"Protocol order" is the gate's own sequence (warm-up, then baseline and stress arms of
+all three candidates alternating, 10 repetitions, stress windows shortened to 2 s), three
+processes per commit. The other rows are fresh 100-leaf fixtures measured with the gate's
+`MeasureArm`, ten processes per commit. Slow windows (p99 above 1,200 ns) in protocol
+order: 23 and 21 of 30 on `8ec2d8c`, 23 and 26 on `c06304f`. On this host the p99 of
+`8ec2d8c` itself exceeds 2 µs in 5 of the 120 windows of the last four rows. No
+`owner_enter_leave` window allocated in protocol order; in the other rows a single
+allocation appeared in some windows of every arm, also in a control arm that calls no
+kernel code.
+
+Re-run on the same host on 2026-11-23, after the guard test was amended. `c06304f` and
+`2576547` build a byte-identical gate test binary, so protocol order ran `8ec2d8c` and
+`2576547` only, four processes each; the other rows rotated the three commits by process,
+ten processes each. "Kernel only" here is `Context.Enter` and its leave on a test root
+with one owner and 100 leaf fibers, with the loop of `MeasureArm`.
+
+| `owner_enter_leave`, re-run | `8ec2d8c` | `c06304f` | `2576547` (test only) |
+|---|---|---|---|
+| protocol order, c8 (40 windows) | 444 / 1,498 | | 334 / 892 |
+| protocol order, c32 (40 windows) | 461 / 1,484 | | 364 / 1,086 |
+| fixture lease, c8 (30 windows) | 506 / 1,696 | 515 / 1,752 | 512 / 1,741 |
+| fixture lease, c32 (30 windows) | 518 / 1,758 | 524 / 1,774 | 520 / 1,744 |
+| kernel only, c8 (30 windows) | 472 / 1,678 | 460 / 1,646 | 465 / 1,677 |
+| kernel only, c32 (30 windows) | 477 / 1,664 | 469 / 1,640 | 476 / 1,690 |
+
+In protocol order the slow windows were 30 and 28 of 40 on `8ec2d8c` and 19 and 20 on
+`2576547`, between 2 and 19 of 20 per process, and the p99 exceeded 2 µs in four windows
+of `8ec2d8c` (2,001 to 2,880 ns) and one of `2576547` (2,277 ns). All but one window of
+the other rows were slow. No `owner_enter_leave` window allocated in protocol order; in
+the other rows one to three allocations appeared in about half the windows on every
+commit, and one in 3 of the 90 windows of the control arm.
+
+No kernel or adapter change is made: removing `act` or padding the handle changes no
+line that is written, and the shard choice stays as decided above for S3. The gate on the
+merged kernel is to be run again on the measurement host with `8ec2d8c` in the same
+session, alternating by process, and judged against it.
