@@ -1,0 +1,25 @@
+// The handshake of the remote protocol: the one message whose shape does not
+// depend on the protocol major (07-c4-plugin-sdk.md §5, rule 2). It opens every
+// connection. The kernel dials, both sides send the protocol majors they speak,
+// and the kernel picks the highest common one; with none, both sides log the two
+// lists and the kernel closes the stream. This is gate check 3.
+//
+// Frozen-additive from its first release (00-decisions.md §4.3): a field may be
+// added to Hello with a new name and a new number, and nothing else changes
+// (ADR-060 decision 42; handshake_test.go). No Go is generated from this file
+// before S2b. The field names are descriptive (07-c4-plugin-sdk.md R9).
+syntax = "proto3";
+
+package aiops.remote.handshake;
+
+message Hello {
+  repeated uint32 majors = 1;          // the protocol majors the sender speaks
+  Kind kind = 2;                       // the sender
+  map<string, string> diagnostics = 3; // SDK name and version, release; logged, never read for a decision
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0; // the zero value proto3 requires; it names no sender
+  KERNEL = 1;
+  PLUGIN = 2;
+}
