@@ -1565,10 +1565,13 @@ cost under contention stays the tracking point for S3 that the owner decided.
 
 ## 2026-11-23 proposed addition G13: the Volatile hand-off
 
-- Status: **proposed 2026-11-23, awaiting the project owner; revised the same day after
-  review.** Nothing of it is on `main` or on `s2a/integration`. Its code lands on
-  `s2a/integration` and reaches `main` by merge (ADR-060 decision 32), and only after the
-  owner accepts this section (ADR-060 decision 3).
+- Status: **accepted 2026-11-23 by the project owner.** Proposed and revised after review
+  on the same date. The owner answered the five questions on that date with the
+  recommended option of each; the section "Owner answers of 2026-11-23" at the end of this
+  section records them as decisions 16 to 20. Nothing of it is on `main` or on
+  `s2a/integration` yet. It is built at S2a: its code lands on `s2a/integration` and
+  reaches `main` by merge (ADR-060 decision 32), only after the verification plan below
+  has passed (ADR-060 decision 3).
 - Citations: `00`, `03`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, at `a3c85ae`. `07:1377` there is `07:1375` at `491a518`, the line that ADR-060
   decision 3 cites, and `07:1382` on `s2a/integration` (`502a355`). On `502a355` the
@@ -1710,7 +1713,7 @@ committed in place needs the ADR-034 addition that ADR-060 decision 3 names.
   `Apply` would receive it, exist only inside the kernel, and only the kernel sees an
   activation start while a commit runs (point 4).
 
-### Decision (proposed)
+### Decision
 
 One optional function of a `Plugin`, stamped by a kernel function (question Q1):
 
@@ -2086,6 +2089,7 @@ amendment of plugin record §3 stated in "What the reference loader does".
   a form it already has, it leaves `07:192` and the plugin record's `Plugin` as written,
   and it follows the precedent of the entry token. Needed before the G13 code lands on
   `s2a/integration`.
+- **Answered 2026-11-23: (b)**, decision 16.
 
 **Q2. What does a commit do for an activation that began while it ran, on a fiber that had
 no target when it began?** G6 resolves nothing for a fiber with no target, and such an
@@ -2109,6 +2113,7 @@ has passed does nothing (point 4).
 - Recommended: (a). It is what the reference loader does and what the failure matrix
   states, no commit restarts a fiber, and G1 and G6 keep their text. Needed before the
   G13 code lands on `s2a/integration`.
+- **Answered 2026-11-23: (a)**, decision 17.
 
 **Q3. What does a read return when one commit changes several `Volatile` fields?** The
 reference loader stores every volatile value of a commit in one JavaScript turn
@@ -2130,6 +2135,7 @@ may straddle a commit. Either option therefore changes §15 row 16 from "As is" 
   in one struct, decided where the config type is written, at the lowest cost on a read;
   (b) gives it only to code that calls a new accessor. Needed before the `sdk/plugin`
   part of G13 lands on `s2a/integration`.
+- **Answered 2026-11-23: (a), with the departure accepted**, decision 18.
 
 **Q4. Do the S0 harnesses check the hand-off itself?** The corpus and the property
 workload commit nothing in place: the adapter never calls `Fiber.Commit` or `CommitOp`,
@@ -2143,6 +2149,7 @@ the workload mounts with no config, and the two prototype cores have no such ope
 - Recommended: (a). The oracle and the two prototypes give nothing to compare a hand-off
   with, and (b) changes frozen S0 evidence for a check that a fuzz target of the kernel
   package makes directly. Needed before the G13 code merges into `main`.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q5. What does a hand-off do with a value that `internal/config` resolves again?**
 `committed` is resolved through `internal/config`, where `config-refs` resolves
@@ -2182,3 +2189,77 @@ a reference is resolved "only when a fiber activates" (`volatile.go:37-38`).
   and (c) one that `volatile.go:39` does not have. Accepting (a) records the departure
   from `entry.ts:180-182` in §15 row 16 beside that of Q3. Needed before the G13 code
   lands on `s2a/integration`.
+- **Answered 2026-11-23: (a)**, decision 20.
+
+### Owner answers of 2026-11-23
+
+The project owner accepted this section on 2026-11-23 and answered every question of
+"Questions for the owner" on the same date, each with its recommended option. The owner
+approved G13 to be built at S2a and merged into `main` after its verification: the
+differential corpus, the property workload and the call-path gate of the verification
+plan (ADR-059 decision 2; ADR-060 decision 3). The decisions below continue the
+numbering of the owner decisions of this ADR, and each names the question it answers.
+
+16. **The hand-off is stamped by `kernel.WithCommit`** (Q1 (b)). The exported function
+    `kernel.WithCommit(p Plugin, fn func(applied, committed any)) Plugin` stamps an
+    unexported field of `Plugin`, as `kernel.Define` stamps the entry token (decision 7).
+    `plugin.Define` calls it for a config type that has a `Volatile` field, and plugin
+    vet refuses the selector `kernel.WithCommit` in plugin code with one entry of
+    `forbiddenCalls`. `07:192`, `sdk/kernel/root.go:17` and the `Plugin` sketch of plugin
+    record §4 stay as written. With this answer the owner accepted the amendment of
+    plugin record §3: the loader decides and commits volatile values, and the kernel
+    stores them in the running activation's fields at that commit.
+
+17. **A commit on a fiber that had no target when it began resolves after the retain and
+    restarts nothing** (Q2 (a)). The commit resolves `cfg` after the retain and hands it
+    off. When `cfg` does not resolve then, it hands nothing off and restarts nothing: the
+    activation keeps its values, and the next activation resolves the retained config
+    and fails on the error. `Commit` returns that error after the retain; `Batch` has
+    admitted its batch and does not. No commit restarts a fiber, so G1 (line 1137), G6
+    (lines 1248-1249) and `sdk/kernel/root.go:188` keep their text.
+
+18. **Each `Volatile` field is stored and read on its own** (Q3 (a)), and the owner
+    accepted the departure. Each `Volatile[T]` has its own cell, and a commit stores the
+    cells one after another, so two reads may return values of two commits, or of one
+    commit partly stored. Fields that must change together go in one `Volatile` of a
+    struct type. `Get` is two dependent loads and a dereference, with no lock and no
+    allocation. The reference stores every volatile value of a commit in one JavaScript
+    turn (`entry.ts:184-189`), so no reader sees part of a commit; the port does not keep
+    that guarantee, and plugin record §15 row 16 changes from "As is" to "Adapted" with
+    that loss stated.
+
+19. **The S0 harnesses run unchanged, and the kernel package checks the hand-off** (Q4
+    (a)). The differential corpus, the property workload and the call-path gate run
+    unchanged, as evidence that nothing else moved. The hand-off is checked by kernel
+    tests 1 to 9 and by a 30-minute run of `FuzzOperationSequence`, with its duration and
+    result recorded beside the other runs. The property workload and its frozen source
+    digest do not change.
+
+20. **A hand-off stores every `Volatile` field of the resolved config** (Q5 (a)), a
+    reference resolved again included, and leaves every other field to the next
+    activation, as G6 does today. This is `entry.ts:184-188` for a volatile field and
+    departs from `entry.ts:180-182`, which restarts the fiber when a value outside the
+    volatile fields changed; plugin record §15 row 16 records that departure beside the
+    one of decision 18. `sdk/def/loader/v0/volatile.go:37-38`, "config-refs resolves
+    them only when a fiber activates", is amended to "when a fiber activates, and again
+    when a commit hands a `Volatile` value off". No commit restarts a fiber.
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:997`). Decisions 18 and 20 change plugin record §15 row 16 from "As is" to
+"Adapted", with what is lost, and decision 16 amends the sentence of plugin record §3 on
+who commits volatile values; both passages are marked "amended 2026-11-23", and plugin
+record §17 records the amendment. The section "Edits that come with the code" placed
+these edits with the code. They are made with this record instead, because they state
+what the owner accepted, as ADR-060 decision 58 made its edits with its record. The lines
+that restate row 16 or the counts of §15 are edited with them: row 16 of `08` §1.1
+(`08:58`), from "carried" to "adapted"; the counts of `08:34-35`; the counts of plugin
+record §15; and `00:91`. Left to the commit that lands the G13 code on
+`s2a/integration`, as "Edits that come with the code" lists them: the documentation of
+`sdk/kernel` and `sdk/plugin`, `sdk/def/loader/v0/volatile.go:37-38` (decision 20), the
+test distribution's toy consumer and its `plugin.yaml`, the text of G6 and G7 above, and
+the shape and line counts as merged. Left to the commit that brings the ADR tables to the
+proposals accepted on 2026-11-23: the row of ADR-034 in `00` §9 (`00:770`) and in the ADR
+table of `08` §3 (`08:1166`). `00:484`, `07:192`, `07:1377`, `08:188`, ADR-059 decisions
+10, 17 and 44, and ADR-060 decision 3, which this addition follows, stand as written. The
+dated designs under `docs/design/` other than the plugin record keep the text of their
+date. An option the owner did not choose edits nothing.
