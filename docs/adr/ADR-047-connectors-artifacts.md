@@ -121,9 +121,9 @@ gaps:
    - A reader, `install` and the gate included, ignores a layer type it does not know and
      fetches no blob of it, as a reader of `plugin.yaml` ignores an unknown field of a
      higher minor; `plugin check` refuses one, as it refuses an unknown field (`07:120`).
-     The layout is frozen-additive on the same terms. The `v1` of a type changes only
-     with a break of that layer's container format; the schema of `plugin.yaml` keeps its
-     own `manifestVersion` (ADR-048).
+     The `v1` of a type changes only with a break of that layer's container format; the
+     schema of `plugin.yaml` keeps its own `manifestVersion` (ADR-048). Whether the layout
+     is a frozen-additive contract is question Q7.
    - The module layer holds `{"path", "version", "sum"}`, the entry form of `plugins` in
      the site's `dist.yaml` (`08:401`), so install prints the `dist.yaml` lines of `08:397`
      from it.
@@ -487,8 +487,8 @@ gaps:
 - The exit's pack fixture of step P1 carries at least one content file, so that step C1
   prints a content path and step C3 unpacks one (ADR-060 decision 30).
 - The layout, the media types and the annotation key are documented in the repository for
-  third parties with the attestation type (ADR-060 decision 18). They become
-  frozen-additive at their first publication, which waits for L14 (`08:1343`).
+  third parties with the attestation type (ADR-060 decision 18). Their first publication
+  waits for L14 (`08:1343`); with question Q7 (a) they are frozen-additive from then.
 - The root module gains `oras-go` and two modules through it, and two more in its module
   graph and `go.sum` only; `golang.org/x/sync` is already in its graph. The licence report
   of both binaries lists them (ADR-060 decision 36). The release builds pass only once
@@ -503,8 +503,12 @@ in the same change:
 
 - `02:483` (item 26): settled by decisions 13 to 15. `02:313`: in D-2 the directory is
   bound into a `kernel` container at the same path, read-only.
-- `07:72` (R14): the artifact form and the files of section 8.4 are fixed by this ADR; the
-  config keys of `tool-mcp` rows stay for S8a start.
+- `07:72` (R14): this ADR fixes the artifact form, the local layout, the layer forms of
+  the content and the fixtures, and the path of a pack's conformance case per obligation
+  (decisions 1, 3 and 12). A `bundle.yaml` is a bundle layer (`08:143-148`) with the
+  clause of decision 11. The rest of the fixture directory is fixed with the scenario
+  that reads it, the echo scenario at S2a (ADR-060 decision 49) and the connector
+  scenario at S8a start, and the config keys of `tool-mcp` rows stay for S8a start.
 - `07:1650-1660` and `07:1690-1708`: the layout of decisions 1 and 3, and a bundle with no
   `${env:}` reference at `07:1697`, whose endpoint the operator sets in the profile layer
   as decision 12 describes.
@@ -514,7 +518,8 @@ in the same change:
 - The one gate text of ADR-060 decision 16: the clause of decision 11, the boot rule of
   decision 6, and the clauses that the answers to questions Q3 and Q4 add.
 - The lines that the chosen option of question Q2 names.
-- The lines that the chosen option of question Q6 names.
+- The lines that the chosen option of question Q6 names, and with question Q7 (a) `00:266`
+  and the table of `08:912-920`.
 
 ## Questions for the owner
 
@@ -572,8 +577,8 @@ and a clash of its id, are ours under every option.
 **Q3. Does boot check what install kept against the locked digest?** Install verifies
 every blob it pulls against its descriptor, and the signature over the image manifest. The
 kept files then sit in the home until boot, and nothing in the documents reads them
-against a digest again, while "a changed runbook or label map is a new generation like any
-other change" (`08:1288`) and a generation "also pins plugin and pack versions" (`08:184`).
+against a digest again, while a generation "also pins plugin and pack versions" (`08:184`)
+and the content digest "is part of the generation digest" (`08:1288`).
 - (a) At every composition, boot hashes `bundles/<plugin id>/artifact.json` and compares
   it with the digest in `plugins.lock`, then hashes `plugin.yaml`, `bundle.yaml` and the
   content tree in the form of decision 3 and compares each with its descriptor in that
@@ -583,11 +588,12 @@ other change" (`08:1288`) and a generation "also pins plugin and pack versions" 
   entry, the same check starts from the digest that install recorded (ADR-020). ADR-020
   then has only `plugins.lock` and the records of install to protect until boot.
 - (b) Install alone verifies. The read-only mount and the ownership of decisions 13 and 14
-  keep the files, and `08:1288` is edited to say that a change made to the unpacked files
-  is not detected.
-- Recommended: (a). It keeps `08:1288` and `08:184` whole: no tree that differs from the
-  lock runs under that lock's generation digest. The cost is hashing a few small files per
-  artifact at each composition. Needed before the boot reader of `plugins.lock` merges.
+  keep the files; a change made to them in place runs, undetected, under the generation
+  digest of the lock it no longer matches.
+- Recommended: (a). With it, no tree that differs from the lock runs under that lock's
+  generation digest, so `08:184` holds for what runs and not only for what was installed.
+  The cost is hashing a few small files per artifact at each composition. Needed before
+  the boot reader of `plugins.lock` merges.
 
 **Q4. Which fields may a row of an installed artifact's bundle set?** Check 8 restricts
 `enabled`, `plugin` and references (decision 11). A bundle layer may also raise
@@ -605,13 +611,19 @@ a provider-bound key (`08:148`).
   Needed before the installed-artifact clause of check 8 merges.
 
 **Q5. Which prefix do the media types and the annotation key take?** They are written into
-every artifact and become frozen-additive at their first publication.
+every artifact, and question Q7 asks whether they then stay frozen. The image
+specification says that annotation keys "SHOULD be named using a reverse domain notation"
+and reserves the prefix `org.opencontainers` (`github.com/opencontainers/image-spec@v1.1.1`,
+`annotations.md`).
 - (a) `application/vnd.aiops.plugin.*` and `aiops.plugin.content.paths`: the id of the
   system and of its binaries (`00:198`), the first-party owner (`00:657`), and the prefix
-  of the digest encoding in the code (`aiops/composition/v1`, `boot/digest.go`).
-- (b) `application/vnd.mutex-solutions.aiops.plugin.*`, with the annotation key under the
-  same name: the organisation of the module prefix that the owner chose (ADR-057), which no
-  other producer uses.
+  of the digest encoding in the code (`aiops/composition/v1`, `boot/digest.go`). The key
+  departs from that SHOULD: the documents name no domain of the project, and only
+  `aiopsctl` reads the key, which a SHOULD leaves room for with a stated reason.
+- (b) `application/vnd.mutex-solutions.aiops.plugin.*`, and the key in reverse-domain form
+  of the module path that the owner chose (ADR-057),
+  `com.github.mutex-solutions.aiops.plugin.content.paths`. It follows the SHOULD and no
+  other producer uses it, and it writes the host of the repository into every artifact.
 - Recommended: (a). It matches every other id of the platform. Neither prefix is
   registered, and nothing is published before L14 (`08:1343`), so the answer can change at
   no cost until then. Needed before `plugin pack` merges.
@@ -640,3 +652,20 @@ CC-BY-SA-4.0, both release binaries fail their build, and no register entry can 
 - Recommended: (a). The per-directory scan stays whole and admits one named file, so any
   other CC-BY-SA file still fails the build. Needed before the first commit that links
   `oras-go` merges (ADR-060 decision 34).
+
+**Q7. Is the artifact layout a frozen-additive contract?** Decision 1 has a reader ignore
+a layer type it does not know and `plugin check` refuse one, and changes the `v1` of a
+type only with a break of its container format. `00:266` (ADR-040) names the
+frozen-additive contracts, the manifest schema, the index format and the handshake
+message, and the versioned things of `08:912-920` do not list the layout, while `08:935`
+publishes it for third parties at S2a.
+- (a) Frozen-additive from its first publication, after L14 (`08:1343`): a later release
+  may add a layer type, a media type or an annotation, and changes the layout otherwise
+  only under a new `artifactType`, which a reader of `v1` refuses. Edits `00:266` and
+  adds a row "Artifact layout" to the table of `08:912-920`.
+- (b) No promise before platform 1.0: the layout may change at a minor release with a
+  migration note, as the author API may (`08:918`), and `artifactType` names its version.
+- Recommended: (a). A third party that publishes packs, or runs an index, needs the
+  layout as fixed as the manifest it carries; the readers of decision 1 already behave so,
+  and the edit is one clause of `00` and one row of `08`. Needed before `plugin pack`
+  merges.
