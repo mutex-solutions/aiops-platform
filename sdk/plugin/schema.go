@@ -169,6 +169,9 @@ func fieldOf(sf reflect.StructField) (*field, error) {
 	if hasTag && (name == "" || hasOpts) {
 		return nil, fmt.Errorf("json:%q: give a name and no option", tag)
 	}
+	if name == "*" || strings.Contains(name, ".") {
+		return nil, fmt.Errorf(`json:%q: a key is not "*" and holds no ".", which a config path cannot name`, tag)
+	}
 	f := &field{key: name}
 	if name == "" {
 		f.key = keyOf(sf.Name)

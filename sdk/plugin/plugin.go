@@ -28,7 +28,9 @@
 //     the last of them kept when a lower-case letter follows, so Timeout is
 //     timeout, URL is url, MaxLines is maxLines and URLPath is urlPath, but IDs
 //     is iDs, so such a field takes a json tag. A json tag takes a name and no
-//     option; json:"-" leaves the field out. Unexported fields are not config. An
+//     option; json:"-" leaves the field out. A key is not "*" and holds no ".":
+//     a config path, as the loader writes it, reads "*" as any key and "." as a
+//     separator (loader.VolatileOnly). Unexported fields are not config. An
 //     embedded field, and two fields with one key, are refused.
 //   - Unknown fields. A key that names no field is an error, at every depth.
 //   - Absence. A nil config is an empty map. An absent key leaves its field at
