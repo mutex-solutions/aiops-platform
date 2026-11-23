@@ -31,8 +31,9 @@ type Config struct {
 
 // Plugin is the echoer.
 var Plugin = plugin.Define(plugin.Spec[Config]{
-	ID:     ID,
-	Inject: []kernel.Dep{kernel.Need(echoers.Key)},
+	ID:        ID,
+	Inject:    []kernel.Dep{kernel.Need(echoers.Key)},
+	Registers: []kernel.AnyKey{echoers.Key},
 	Validate: func(cfg *Config) error {
 		if cfg.Name == "" {
 			return errors.New("name is empty")

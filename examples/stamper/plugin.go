@@ -30,8 +30,9 @@ type Config struct {
 
 // Plugin is the stamper.
 var Plugin = plugin.Define(plugin.Spec[Config]{
-	ID:     ID,
-	Inject: []kernel.Dep{kernel.Need(stampers.Key)},
+	ID:        ID,
+	Inject:    []kernel.Dep{kernel.Need(stampers.Key)},
+	Registers: []kernel.AnyKey{stampers.Key},
 	Validate: func(cfg *Config) error {
 		if cfg.Name == "" {
 			return errors.New("name is empty")

@@ -41,6 +41,8 @@ check:
 	$(KC) imports .
 	$(KC) pluginvet plugins loader boot
 	go run ./tools/deflint .
+	@# ADR-060 decisions 11 and 36: manifest parity of every plugin.yaml and its generated tests.
+	go run ./tools/plugingen .
 	@# ADR-054 decision 12, ADR-060 decision 51: the register check U7.
 	go run ./tools/register .
 	go test -count=1 -coverprofile=cover-boot.out ./boot

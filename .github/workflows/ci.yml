@@ -114,6 +114,11 @@ jobs:
         # definition under sdk/def has its files, a provider and a consumer among the
         # plugins of the distributions, and keeps the static rules of 07-c4-plugin-sdk.md:514-520.
         run: go run ./tools/deflint .
+      - name: Manifest parity
+        # ADR-060 decisions 11 and 36 (08-profiles-roadmap-adrs.md:1257): the generated half
+        # of every plugin.yaml, read as data, and the generated tests beside it are what
+        # plugingen writes from the plugin's value.
+        run: go run ./tools/plugingen .
       - name: Register check (U7)
         # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package
         # graphs has an entry of tools/upstream-components.yaml at its pin, and no entry

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -89,6 +90,9 @@ func importReasons(rel string, test bool, imp string) []string {
 	add := func(rule, doc string) { out = append(out, rule+" ("+doc+")") }
 	seg := strings.Split(rel, "/")
 	tk := test && isTestkit(imp)
+	if test && imp == modPath+"/"+path.Dir(rel) {
+		return nil // an external test of the package in its own directory, as plugingen writes
+	}
 	switch {
 	case hasPath(rel, "sdk/kernel"):
 		if !std {
