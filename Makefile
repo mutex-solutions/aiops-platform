@@ -30,6 +30,7 @@ check:
 	cd sdk/kernel && go test -count=1 -coverprofile=cover.out ./...
 	$(KC) modfile sdk/kernel
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
+	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
 	$(KC) testctor .
