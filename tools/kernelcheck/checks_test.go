@@ -21,6 +21,26 @@ func imp(paths ...string) string {
 
 func noList(string, string) ([]string, error) { return nil, nil }
 
+// testRegister holds what U2 reads of the upstream register (ADR-054 decision 13): the
+// YAML library with its importers, pgx and River for the S0 probes, an upstream that a
+// plugin wraps, and two entries where one module path holds the other.
+var testRegister = []upstream{
+	{ID: "go-yaml", Modules: []string{"go.yaml.in/yaml/v3"}, Importers: dirs("boot", "tools", "internal/plugingen")},
+	{ID: "river", Modules: []string{"github.com/riverqueue/river", "github.com/riverqueue/river/rivertype"}, Importers: dirs("plugins/jobs-river")},
+	{ID: "pgx", Modules: []string{"github.com/jackc/pgx/v5"}, Importers: dirs("plugins/jobs-river")},
+	{ID: "wrapped", Modules: []string{"example.org/wrapped"}, Plugins: []string{"aiops/wrapper"}},
+	{ID: "a", Modules: []string{"example.org/a"}, Importers: dirs("internal/serve")},
+	{ID: "b", Modules: []string{"example.org/a/b"}, Importers: dirs("tools")},
+}
+
+func dirs(d ...string) []importDir {
+	var out []importDir
+	for _, x := range d {
+		out = append(out, importDir{Dir: x})
+	}
+	return out
+}
+
 func TestImports(t *testing.T) {
 	for _, tc := range []struct {
 		name, file, src string
@@ -40,12 +60,12 @@ func TestImports(t *testing.T) {
 		{"boot cmd", "boot/a.go", imp(mp + "/cmd/aiopsctl"), "boot imports"},
 		{"boot test dir", "boot/a.go", imp(mp + "/test/x"), "boot imports"},
 		{"boot dist", "boot/a.go", imp(mp + "/dist"), "boot imports"},
-		{"boot third party", "boot/a.go", imp("github.com/jackc/pgx/v5"), "boot imports"},
+		{"boot third party", "boot/a.go", imp("github.com/jackc/pgx/v5"), "U2: imported outside the plugins and importers of its register entry pgx"},
 		{"boot testdata skipped", "boot/testdata/a.go", imp(mp + "/plugins/clock"), ""},
 		{"loader allowed", "loader/a.go", imp("os", mp+"/sdk/kernel", mp+"/sdk/def/launch/v0", mp+"/sdk/def/loader/v0", mp+"/sdk/def/composition/v0"), ""},
 		{"loader other def", "loader/a.go", imp(mp + "/sdk/def/reload/v0"), "loader imports"},
 		{"loader test other def", "loader/a_test.go", imp(mp + "/sdk/def/clock/v0/fake"), "loader imports"},
-		{"loader yaml", "loader/a.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
+		{"loader yaml", "loader/a.go", imp("go.yaml.in/yaml/v3"), "loader imports"},
 		{"loader plugin", "loader/a.go", imp(mp + "/plugins/clock"), "loader imports"},
 		{"loader test fake", "loader/a_test.go", imp(mp + "/sdk/def/loader/v0/fake"), ""},
 		{"loader non-test fake", "loader/a.go", imp(mp + "/sdk/def/clock/v0/fake"), "no fake or sdk/testkit"},
@@ -56,18 +76,20 @@ func TestImports(t *testing.T) {
 		{"sdk/plugin test testkit", "sdk/plugin/a_test.go", imp(mp + "/sdk/testkit/kerneltest"), ""},
 		{"sdk/plugin external test", "sdk/plugin/a_test.go", imp(mp+"/sdk/plugin", mp+"/sdk/kernel"), ""},
 		{"sdk/plugin non-test testkit", "sdk/plugin/a.go", imp(mp + "/sdk/testkit/kerneltest"), "sdk/plugin imports"},
-		{"sdk/plugin yaml", "sdk/plugin/a.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
+		{"sdk/plugin yaml", "sdk/plugin/a.go", imp("go.yaml.in/yaml/v3"), "sdk/plugin imports"},
 		{"def imports sdk/plugin", "sdk/def/clock/v0/a.go", imp(mp + "/sdk/plugin"), "sdk/def imports"},
 		{"boot imports sdk/plugin", "boot/a.go", imp(mp + "/sdk/plugin"), "boot imports"},
 		{"loader imports sdk/plugin", "loader/a.go", imp(mp + "/sdk/plugin"), "loader imports"},
-		{"plugin third party", "plugins/a/internal/x/x.go", imp("github.com/jackc/pgx/v5"), "a plugin imports"},
-		{"grandfathered pgx", "plugins/jobs-river/internal/s0/x.go", imp("github.com/jackc/pgx/v5", "github.com/riverqueue/river/rivertype"), ""},
-		{"grandfather is per plugin", "plugins/a/internal/x/x.go", imp("github.com/riverqueue/river"), "a plugin imports"},
+		{"plugin third party", "plugins/a/internal/x/x.go", imp("github.com/jackc/pgx/v5"), "U2: imported outside the plugins and importers of its register entry pgx"},
+		{"importer of pgx and River", "plugins/jobs-river/internal/s0/x.go", imp("github.com/jackc/pgx/v5", "github.com/riverqueue/river/rivertype"), ""},
+		{"an importer is a directory", "plugins/a/internal/x/x.go", imp("github.com/riverqueue/river"), "U2: imported outside the plugins and importers of its register entry river"},
+		{"the plugin of an entry", "plugins/wrapper/internal/x/x.go", imp("example.org/wrapped/client"), ""},
+		{"another plugin of no entry", "plugins/other/internal/x/x.go", imp("example.org/wrapped/client"), "U2: imported outside the plugins and importers of its register entry wrapped"},
 		{"plugin other plugin", "plugins/a/plugin.go", imp(mp + "/plugins/b"), "a plugin imports"},
 		{"plugin boot", "plugins/a/plugin.go", imp(mp + "/boot"), "a plugin imports"},
 		{"plugin loader", "plugins/a/plugin.go", imp(mp + "/loader"), "a plugin imports"},
 		{"plugin cmd", "plugins/a/plugin.go", imp(mp + "/cmd/x"), "a plugin imports"},
-		{"plugin yaml", "plugins/a/plugin.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
+		{"plugin yaml", "plugins/a/plugin.go", imp("go.yaml.in/yaml/v3"), "U2: imported outside the plugins and importers of its register entry go-yaml"},
 		{"plugin test testkit", "plugins/a/plugin_test.go", imp(mp + "/sdk/testkit/kerneltest"), ""},
 		{"plugin non-test testkit", "plugins/a/plugin.go", imp(mp + "/sdk/testkit/kerneltest"), "no fake or sdk/testkit"},
 		{"plugin exported package", "plugins/a/api/api.go", imp("fmt"), "under internal/"},
@@ -84,11 +106,15 @@ func TestImports(t *testing.T) {
 		{"example list", "examples/examples.go", imp(mp+"/examples/a", mp+"/sdk/kernel"), ""},
 		{"example list internal", "examples/examples.go", imp(mp + "/internal/runfile"), "an example imports"},
 		{"yaml in tools", "tools/x/x.go", imp("go.yaml.in/yaml/v3"), ""},
-		{"yaml in test", "test/x/x_test.go", imp("gopkg.in/yaml.v3"), "YAML package"},
+		{"module of no entry", "test/x/x_test.go", imp("gopkg.in/yaml.v3"), "U2: its module is in no entry's modules"},
 		{"yaml in plugingen", "internal/plugingen/x.go", imp("go.yaml.in/yaml/v3"), ""},
 		{"loader test of its own package", "loader/zz_cycle_test.go", imp(mp+"/loader", mp+"/sdk/testkit/cycle", mp+"/sdk/def/launch/v0/fake"), ""},
 		{"loader source of its own package", "loader/a.go", imp(mp + "/loader"), "loader imports"},
-		{"yaml in another internal package", "internal/serve/x.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
+		{"yaml in another internal package", "internal/serve/x.go", imp("go.yaml.in/yaml/v3"), "U2: imported outside the plugins and importers of its register entry go-yaml"},
+		{"module of no entry in a command", "cmd/aiopsctl/x.go", imp("example.org/unlisted"), "U2: its module is in no entry's modules"},
+		{"the longest module path names the entry", "tools/x/x.go", imp("example.org/a/b/c"), ""},
+		{"the longest module path names the entry elsewhere", "internal/serve/x.go", imp("example.org/a/b/c"), "U2: imported outside the plugins and importers of its register entry b"},
+		{"a shorter module path", "internal/serve/x.go", imp("example.org/a/c"), ""},
 		{"fake in test tree", "test/x/x.go", imp(mp + "/sdk/def/clock/v0/fake"), ""},
 		{"fake in aiopsctl", "cmd/aiopsctl/x.go", imp(mp + "/sdk/def/clock/v0/fake"), ""},
 		{"fake in cmd/aiops", "cmd/aiops/x.go", imp(mp + "/sdk/def/clock/v0/fake"), "no fake or sdk/testkit"},
@@ -97,7 +123,7 @@ func TestImports(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()
 			write(t, d, tc.file, tc.src)
-			err := checkImports(d, noList)
+			err := checkImports(d, testRegister, noList)
 			switch {
 			case tc.want == "" && err != nil:
 				t.Fatal(err)
@@ -115,7 +141,7 @@ func TestImportsReportFormatAndOrder(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "plugins/b/plugin.go", imp(mp+"/plugins/a", "fmt"))
 	write(t, d, "boot/a.go", imp("fmt", mp+"/loader"))
-	err := checkImports(d, noList)
+	err := checkImports(d, testRegister, noList)
 	if err == nil {
 		t.Fatal("no violation")
 	}
@@ -129,17 +155,17 @@ func TestImportsServerClosure(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "cmd/aiops/main.go", "package main\n")
 	ok := func(string, string) ([]string, error) { return []string{"fmt", mp + "/boot"}, nil }
-	if err := checkImports(d, ok); err != nil {
+	if err := checkImports(d, testRegister, ok); err != nil {
 		t.Fatal(err)
 	}
 	for _, leak := range []string{mp + "/sdk/def/clock/v0/fake", mp + "/sdk/testkit/kerneltest"} {
 		leaky := func(string, string) ([]string, error) { return []string{"fmt", leak}, nil }
-		if err := checkImports(d, leaky); err == nil || !strings.Contains(err.Error(), "cmd/aiops: dependency closure contains "+leak) {
+		if err := checkImports(d, testRegister, leaky); err == nil || !strings.Contains(err.Error(), "cmd/aiops: dependency closure contains "+leak) {
 			t.Errorf("leak %s: %v", leak, err)
 		}
 	}
 	failing := func(string, string) ([]string, error) { return nil, errors.New("boom") }
-	if err := checkImports(d, failing); err == nil {
+	if err := checkImports(d, testRegister, failing); err == nil {
 		t.Error("list failure ignored")
 	}
 }
@@ -147,7 +173,7 @@ func TestImportsServerClosure(t *testing.T) {
 func TestImportsParseError(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "boot/a.go", "package")
-	if checkImports(d, noList) == nil {
+	if checkImports(d, testRegister, noList) == nil {
 		t.Fatal("parse error ignored")
 	}
 }
@@ -339,10 +365,32 @@ func TestLinesProvisionalAndTestdata(t *testing.T) {
 	}
 }
 
+// The imports command reads the register it is given, with every key of an entry, and
+// fails when it cannot.
+func TestRunImportsReadsTheRegister(t *testing.T) {
+	d, r := t.TempDir(), t.TempDir()
+	reg := filepath.Join(r, "register.yaml")
+	write(t, r, "register.yaml", "entries:\n  - id: y\n    names: [y]\n    form: library\n    modules: [example.org/y]\n    importers:\n      - {dir: boot, decision: an accepted decision}\nexceptions: []\n")
+	write(t, d, "boot/b.go", imp("example.org/y/z"))
+	if err := run([]string{"imports", d, reg}); err != nil {
+		t.Fatalf("an importer the register lists is refused: %v", err)
+	}
+	write(t, d, "plugins/p/internal/x/x.go", imp("example.org/y/z"))
+	if err := run([]string{"imports", d, reg}); err == nil || !strings.Contains(err.Error(), "register entry y") {
+		t.Fatalf("an import outside the importers of the register: %v", err)
+	}
+	write(t, r, "bad.yaml", "entries: {\n")
+	for _, p := range []string{filepath.Join(r, "missing.yaml"), filepath.Join(r, "bad.yaml")} {
+		if run([]string{"imports", d, p}) == nil {
+			t.Errorf("imports with the register %s succeeded", p)
+		}
+	}
+}
+
 func TestRunNewCommands(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "boot/a.go", "package boot\n")
-	if err := run([]string{"imports", d}); err != nil {
+	if err := run([]string{"imports", d, filepath.Join("..", "upstream-components.yaml")}); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"pluginvet", d}); err != nil {
@@ -354,7 +402,7 @@ func TestRunNewCommands(t *testing.T) {
 	if err := run([]string{"lines", filepath.Join(d, "boot"), "-1"}); err == nil {
 		t.Error("negative cap accepted")
 	}
-	for _, a := range [][]string{{"pluginvet"}, {"imports"}, {"lines", d, "5", "other"}} {
+	for _, a := range [][]string{{"pluginvet"}, {"imports"}, {"imports", d}, {"lines", d, "5", "other"}} {
 		if run(a) == nil {
 			t.Errorf("run(%v) succeeded", a)
 		}
