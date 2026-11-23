@@ -99,6 +99,11 @@ func TestBootInputTrust(t *testing.T) {
 			&Release{KeyID: "K"}, "", "release root, key K, is trusted; the built-in record of sha256:"},
 		{"a release binary whose root the site removed, on the current record", nil,
 			&Release{KeyID: "K"}, "", "is removed in trust.yaml; the built-in record of sha256:"},
+		// ADR-020 decision 30, reading 5: the built-in record is a record of its own.
+		{"a release binary on its built-in record beside a current file that does not read", func(h fstest.MapFS, _ *Distribution) {
+			delete(h, "trust.yaml")
+			h["verified/current"] = &fstest.MapFile{Data: []byte("x\n")}
+		}, &Release{KeyID: "K"}, "", "release root, key K, is trusted; the built-in record of sha256:"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, d := homeFor(t)
@@ -115,6 +120,9 @@ func TestBootInputTrust(t *testing.T) {
 			}
 			if tc.rel != nil && strings.Contains(lines[0], "removed") != strings.Contains(lines[0], "not in use") {
 				t.Fatalf("line %q", lines[0])
+			}
+			if warned := slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "warning: verified/current") }); warned != strings.Contains(tc.name, "beside a current file") {
+				t.Fatalf("lines %q", lines)
 			}
 		})
 	}

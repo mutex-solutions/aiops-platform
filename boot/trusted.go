@@ -1,7 +1,6 @@
 package boot
 
 import (
-	"cmp"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -143,12 +142,16 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	in := GateInput{Entry: EntryBoot, Mods: mods, Bindings: d.Bindings(), Dist: &d, Tie: tie, Artifacts: map[string]Artifact{}}
 	trust, err := ReadTrust(home)
 	in.Trust = &trust
+	// The built-in record is a record of its own, so current is read only where it does
+	// not apply (ADR-020 decision 30, reading 5).
 	current, cerr := ReadCurrent(home)
 	switch {
-	case cmp.Or(err, cerr) != nil:
-		in.Trusted = cmp.Or(err, cerr)
+	case err != nil:
+		in.Trusted = err
 	case rel != nil && slices.Contains(trust.Distributions, ReleaseRoot):
 		in.BuiltIn = true
+	case cerr != nil:
+		in.Trusted = cerr
 	case current != d.Digest:
 		in.Trusted = fmt.Errorf("the embedded distribution manifest %s is not the current distribution %q that dist use recorded; run aiopsctl dist use <image>", d.Digest, current)
 	default:
@@ -174,6 +177,9 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 			use = "in use"
 		}
 		lines[0] = fmt.Sprintf("trust: the default release root, key %s, is %s; the built-in record of %s is %s (ADR-020 decision 13)", rel.KeyID, state, d.Digest, use)
+	}
+	if in.BuiltIn && cerr != nil {
+		lines = append(lines, "warning: "+cerr.Error())
 	}
 	if len(trust.AllowUnsigned) > 0 {
 		lines = append(lines, "trust: allowUnsigned lists "+strings.Join(trust.AllowUnsigned, ", "))
