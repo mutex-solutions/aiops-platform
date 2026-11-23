@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package toy holds the toy plugins of the test distribution: a provider, a consumer
-// and a heavy spine provider, each with a tiny typed key from test/dist/def. They
-// stand for the infrastructure providers and policy services of a real profile, so
-// that the launcher, the loader and the kernel are exercised with a realistic
-// dependency chain: spine <- provider <- consumer, and spine <- consumer.
+// Package toyspine is the heavy spine provider of the test distribution. It and the
+// toy provider and consumer stand for the infrastructure providers and policy services
+// of a real profile, so that the launcher, the loader and the kernel are exercised
+// with a realistic dependency chain: spine <- provider <- consumer, and spine <-
+// consumer.
 //
-// Every delay is config data, never a default sleep: a row with no config applies
-// and disposes at once.
-package toy
+// Every delay is config data, never a default sleep: a row with no config applies and
+// disposes at once.
+package toyspine
 
 import (
 	"context"
@@ -22,83 +22,11 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
+	spine "github.com/mutex-solutions/aiops-platform/test/dist/def/spine/v0"
 )
 
-// The plugin ids of the toys.
-const (
-	ProviderID = "aiops-test/toy-provider"
-	ConsumerID = "aiops-test/toy-consumer"
-	SpineID    = "aiops-test/toy-spine"
-)
-
-// Provider provides toy.store and the provider-bound toy.policy. It needs the spine.
-// Config: applyDelay (duration, default 0).
-func Provider() kernel.Plugin {
-	type cfg struct{ applyDelay time.Duration }
-	return kernel.Define(kernel.Plugin{
-		ID:       ProviderID,
-		Inject:   []kernel.Dep{kernel.Need(def.SpineKey)},
-		Provides: []kernel.AnyKey{def.StoreKey, def.PolicyKey},
-		Decode: func(raw any) (any, error) {
-			c := def.Parse(raw)
-			out := cfg{applyDelay: c.Duration("applyDelay", 0)}
-			return out, c.Err()
-		},
-		Apply: func(c *kernel.Context, raw any) error {
-			_ = def.SpineKey.Of(c)
-			if !def.Wait(raw.(cfg).applyDelay, c.Std().Done()) {
-				return c.Std().Err()
-			}
-			if err := def.StoreKey.Provide(c, def.Store{Owner: ProviderID}); err != nil {
-				return err
-			}
-			return def.PolicyKey.Provide(c, def.Policy{Owner: ProviderID})
-		},
-	})
-}
-
-// Consumer needs toy.store and toy.spine and provides nothing, so a profile may hold
-// several. Config: note (string, the volatile field of the plugin), applyDelay
-// (duration, default 0) and, to put the spine under load, callEvery (duration; with
-// it a tracked goroutine calls the spine, holding its lease for callHold, every
-// callEvery until the row unloads; default 0, no load).
-func Consumer() kernel.Plugin {
-	type cfg struct {
-		note                string
-		applyDelay          time.Duration
-		callEvery, callHold time.Duration
-	}
-	return kernel.Define(kernel.Plugin{
-		ID:     ConsumerID,
-		Inject: []kernel.Dep{kernel.Need(def.StoreKey), kernel.Need(def.SpineKey), kernel.Need(kernel.LoggerKey)},
-		Decode: func(raw any) (any, error) {
-			c := def.Parse(raw)
-			out := cfg{note: c.String("note", ""), applyDelay: c.Duration("applyDelay", 0),
-				callEvery: c.Duration("callEvery", 0), callHold: c.Duration("callHold", 0)}
-			return out, c.Err()
-		},
-		Apply: func(c *kernel.Context, raw any) error {
-			cf := raw.(cfg)
-			_ = def.StoreKey.Of(c)
-			sp := def.SpineKey.Of(c)
-			if !def.Wait(cf.applyDelay, c.Std().Done()) {
-				return c.Std().Err()
-			}
-			if cf.callEvery > 0 {
-				c.Go("toy-consumer-load", func(ctx context.Context) error {
-					for {
-						_ = sp.Call(cf.callHold) // what the spine saw of the call is its own record
-						if !def.Wait(cf.callEvery, ctx.Done()) {
-							return nil
-						}
-					}
-				})
-			}
-			kernel.LoggerKey.Of(c).For(c).Info("toy-consumer applied", "note", cf.note)
-			return nil
-		},
-	})
-}
+// ID is the plugin id.
+const ID = "aiops-test/toy-spine"
 
 // SpineReport is what the spine writes to <home>/run/<report>: the tally of every
 // incarnation of the row since the process started, so that a test of the built binary
@@ -117,7 +45,7 @@ type SpineReport struct {
 // ErrHalfDisposed is what a call returns when it ran while the provider's disposer did.
 var ErrHalfDisposed = errors.New("toy-spine: a call ran while the provider was being disposed")
 
-// Spine is the heavy spine provider: it provides toy.spine, which the provider and
+// New returns the heavy spine provider: it provides toy.spine, which the provider and
 // the consumers need, holds a number of tracked workers that end only when their
 // context does, and has a slow but bounded unload. The value it provides has Call, a
 // call under a lease of the provider's fiber that records what it saw.
@@ -128,8 +56,9 @@ var ErrHalfDisposed = errors.New("toy-spine: a call ran while the provider was b
 // in the runtime directory that the row keeps up to date with its SpineReport; default
 // none) and outsideHold (default 0, none; see below). A delay that is longer than the
 // matching deadline of the kernel is cut at the deadline by the context it waits on:
-// the spine is slow, never a leak. The leaks are the fault plugins. The tally is kept per plugin value, which a distribution creates
-// once, so it spans the restarts of the row.
+// the spine is slow, never a leak. The leaks are the fault plugins. The tally is kept
+// per plugin value, which a distribution creates once, so it spans the restarts of the
+// row.
 //
 // With outsideHold each incarnation has an outside caller: a goroutine that no fiber
 // tracks and no dependant owns, as an admin call or the dispatcher of another row has
@@ -137,7 +66,7 @@ var ErrHalfDisposed = errors.New("toy-spine: a call ran while the provider was b
 // (07-c4-plugin-sdk.md:373). It takes a lease at once and holds it until the unload
 // begins and for outsideHold more, which the drain waits for, then calls again, which
 // is refused. A disposer that began within outsideHold is a half-disposed call.
-func Spine() kernel.Plugin {
+func New() kernel.Plugin {
 	type cfg struct {
 		applyDelay, drainDelay, disposeDelay, outsideHold time.Duration
 		workers                                           int
@@ -154,9 +83,9 @@ func Spine() kernel.Plugin {
 			OpenAtUnload: openAtUnload.Load(), Active: active.Load()}
 	}
 	return kernel.Define(kernel.Plugin{
-		ID:       SpineID,
+		ID:       ID,
 		Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
-		Provides: []kernel.AnyKey{def.SpineKey},
+		Provides: []kernel.AnyKey{spine.Key},
 		Decode: func(raw any) (any, error) {
 			c := def.Parse(raw)
 			out := cfg{applyDelay: c.Duration("applyDelay", 0), drainDelay: c.Duration("drainDelay", 0),
@@ -244,7 +173,7 @@ func Spine() kernel.Plugin {
 			}
 			if cf.outsideHold > 0 {
 				std := c.Std()
-				go func() { // the outside caller: deliberately untracked, see Spine
+				go func() { // the outside caller: deliberately untracked, see New
 					leave, ok := c.Enter()
 					if !ok {
 						refused.Add(1)
@@ -266,7 +195,7 @@ func Spine() kernel.Plugin {
 			}
 			incarnations.Add(1)
 			active.Store(true)
-			return def.SpineKey.Provide(c, def.NewSpine(cf.workers, call))
+			return spine.Key.Provide(c, spine.New(cf.workers, call))
 		},
 	})
 }

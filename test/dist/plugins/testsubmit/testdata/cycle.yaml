@@ -1,0 +1,3 @@
+# The row config the generated cycle test mounts the row with. The directory holds no
+# control file, so the row submits and writes nothing.
+dir: testdata/run

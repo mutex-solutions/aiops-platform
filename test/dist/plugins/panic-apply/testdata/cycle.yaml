@@ -1,0 +1,6 @@
+# The row config the generated cycle test mounts the row with: a tracked goroutine
+# that panics on a trigger in this directory, where no file of that name exists, so it
+# never panics and ends with the row.
+mode: tracked
+trigger: absent
+dir: testdata

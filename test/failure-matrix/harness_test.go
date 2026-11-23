@@ -167,7 +167,7 @@ type plan struct {
 	then []variant
 }
 
-// leakLabel is the label of the open work of each leak fault (test/dist/plugins/fault).
+// leakLabel is the label of the open work of each leak fault (test/dist/plugins/<fault>).
 var leakLabel = map[string]string{"leaky-goroutine": "leaky", "slow-dispose": "slow-dispose"}
 
 type variant struct {

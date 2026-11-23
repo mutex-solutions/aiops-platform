@@ -21,10 +21,18 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
-	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/fault"
+	badconfig "github.com/mutex-solutions/aiops-platform/test/dist/plugins/bad-config"
+	failapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/fail-apply"
+	leakygoroutine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/leaky-goroutine"
+	panicapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/panic-apply"
+	rogueprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/rogue-provider"
+	slowapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-apply"
+	slowdispose "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-dispose"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
-	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy"
+	toyconsumer "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-consumer"
+	toyprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-provider"
+	toyspine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-spine"
 )
 
 // Shipped is what the test binary carries: dist.yaml and limits.yaml and the bundles
@@ -39,16 +47,16 @@ var shipped embed.FS
 // ones. The count of FailApply is per plugin value, so each call makes new values.
 func Modules() []dist.Module {
 	return append(dist.Modules(),
-		dist.Module{Plugin: toy.Provider()},
-		dist.Module{Plugin: toy.Consumer(), Volatile: []string{"config.note"}},
-		dist.Module{Plugin: toy.Spine()},
-		dist.Module{Plugin: fault.FailApply()},
-		dist.Module{Plugin: fault.PanicApply()},
-		dist.Module{Plugin: fault.SlowApply()},
-		dist.Module{Plugin: fault.BadConfig()},
-		dist.Module{Plugin: fault.RogueProvider()},
-		dist.Module{Plugin: fault.LeakyGoroutine()},
-		dist.Module{Plugin: fault.SlowDispose()},
+		dist.Module{Plugin: toyprovider.New()},
+		dist.Module{Plugin: toyconsumer.New(), Volatile: []string{"config.note"}},
+		dist.Module{Plugin: toyspine.New()},
+		dist.Module{Plugin: failapply.New()},
+		dist.Module{Plugin: panicapply.New()},
+		dist.Module{Plugin: slowapply.New()},
+		dist.Module{Plugin: badconfig.New()},
+		dist.Module{Plugin: rogueprovider.New()},
+		dist.Module{Plugin: leakygoroutine.New()},
+		dist.Module{Plugin: slowdispose.New()},
 		dist.Module{Plugin: teststate.New()},
 		dist.Module{Plugin: testsubmit.New()},
 	)

@@ -12,7 +12,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
-	"github.com/mutex-solutions/aiops-platform/test/dist/def"
+	toy "github.com/mutex-solutions/aiops-platform/test/dist/def/toy/v0"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 )
 
@@ -25,9 +25,9 @@ import (
 // adrs.md §1.6: a live Apply error is rolled back, not left in a failed rollback).
 func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 	var failNext atomic.Bool
-	flip := kernel.Define(kernel.Plugin{ID: "aiops-test/flip", Inject: []kernel.Dep{kernel.Need(def.StoreKey)},
+	flip := kernel.Define(kernel.Plugin{ID: "aiops-test/flip", Inject: []kernel.Dep{kernel.Need(toy.StoreKey)},
 		Apply: func(c *kernel.Context, _ any) error {
-			_ = def.StoreKey.Of(c)
+			_ = toy.StoreKey.Of(c)
 			if failNext.CompareAndSwap(true, false) {
 				return errors.New("flip: fails once")
 			}

@@ -25,7 +25,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/test/dist/harness"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
-	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy"
+	toyspine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-spine"
 )
 
 func TestMain(m *testing.M) {
@@ -133,7 +133,7 @@ func (w *world) verdictOf(id uint64) harness.Snapshot {
 	return s
 }
 
-func (w *world) spine() (r toy.SpineReport) {
+func (w *world) spine() (r toyspine.SpineReport) {
 	w.p.ReadJSON("spine.json", &r)
 	return r
 }
@@ -171,7 +171,7 @@ func (w *world) stop() {
 // (a) The heavy spine provider restarts in place while three consumers call it in a
 // loop, each call holding a lease of the spine's fiber, and while an outside caller that
 // no fiber tracks and no dependant owns holds a lease across the start of the unload
-// (toy.Spine, outsideHold). The consumers are dependants, so the unload waits for them
+// (toyspine.New, outsideHold). The consumers are dependants, so the unload waits for them
 // anyway; the outside call is held back by its lease alone. The restart drains the
 // leases before the disposer runs: no call is open when the disposer begins and none
 // sees a provider that is being disposed. A call that arrives once the unload began is
