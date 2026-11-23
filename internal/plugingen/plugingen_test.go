@@ -158,6 +158,18 @@ func TestCycleTestImportNames(t *testing.T) {
 	}
 }
 
+// The fake of a definition provides every key the definition declares, so the cycle
+// test of a plugin that injects one key of a definition and provides another could
+// never pass: the fake and the plugin would both provide the key. plugingen refuses
+// such a plugin, naming the key and the definition, instead of writing that test
+// (ADR-060 decision 12).
+func TestTwoKeysOfOneDefinition(t *testing.T) {
+	_, err := Generate(filepath.Join("testdata", "twokeys"))
+	if err == nil || !strings.Contains(err.Error(), "appExit") || !strings.Contains(err.Error(), mod+"/sdk/def/launch/v0") {
+		t.Fatalf("Generate of a plugin that provides a key of a definition it injects: %v", err)
+	}
+}
+
 const s1Manifest = `# The hand-written half (07-c4-plugin-sdk.md section 2).
 manifestVersion: "1.0"
 id: aiops/example
