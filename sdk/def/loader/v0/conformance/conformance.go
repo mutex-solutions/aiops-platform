@@ -4,7 +4,8 @@
 // and the fake must both do (07-c4-plugin-sdk.md, T2 "every provider and the fake
 // behave the same"). It drives a loader through its interface and its three hooks
 // and checks the outcomes, the refusals, the mount state and fiber state of each
-// entry, and the payloads the hooks carry. It imports the standard library,
+// entry, the payloads the hooks carry, and that a call after the provider's release
+// fails with kernel.ErrInactive. It imports the standard library,
 // sdk/kernel and definitions only.
 package conformance
 
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -29,9 +31,11 @@ type Setup struct {
 	Volatile map[string][]string
 }
 
-// Mount returns a loader with no entry, set up as s says, that dispatches its hooks
-// in the returned root, on which the suite mounts its listener.
-type Mount func(t *testing.T, s Setup) (loader.Loader, *kernel.Root)
+// Mount mounts a provider of loader.Key with no entry, set up as s says, on a root of
+// its own, and returns the root and the provider's fiber, ACTIVE. The suite reads the
+// loader through a consumer of the key, mounts its listener on the root and releases
+// the provider by disposing the fiber.
+type Mount func(t *testing.T, s Setup) (*kernel.Root, *kernel.Fiber)
 
 // The process role and the two plugins that rows name. Neither plugin does anything.
 const (
@@ -251,6 +255,24 @@ func Run(t *testing.T, mount Mount) {
 		}
 	})
 
+	// No use after release (07-c4-plugin-sdk.md:518): every method of the value kept
+	// from before the provider's release that has an error result returns
+	// kernel.ErrInactive. Locate has none.
+	t.Run("a call after release fails with ErrInactive", func(t *testing.T) {
+		s := start(t, mount, nil)
+		s.apply([]string{"created a"}, create(row("a", p)))
+		deftest.Dispose(t, s.root, s.provider)
+		ctx := t.Context()
+		_, errApply := s.ld.Apply(ctx, []loader.Op{create(row("b", p))})
+		_, errAwait := s.ld.Await(ctx, "a")
+		for name, err := range map[string]error{"Apply": errApply, "Create": s.ld.Create(ctx, row("b", p)),
+			"Update": s.ld.Update(ctx, row("a", p)), "Remove": s.ld.Remove(ctx, "a"), "Await": errAwait} {
+			if !errors.Is(err, kernel.ErrInactive) {
+				t.Errorf("%s after release = %v, want ErrInactive", name, err)
+			}
+		}
+	})
+
 	t.Run("remove takes the entries beneath", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created g", "created g:c", "created a"}, create(row("g", group)), create(child("g", "c", p)), create(row("a", p)))
@@ -290,10 +312,11 @@ func Run(t *testing.T, mount Mount) {
 }
 
 type suite struct {
-	t    *testing.T
-	ld   loader.Loader
-	h    *heard
-	root *kernel.Root
+	t        *testing.T
+	ld       loader.Loader
+	h        *heard
+	root     *kernel.Root
+	provider *kernel.Fiber
 }
 
 func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
@@ -302,8 +325,9 @@ func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
 	for _, id := range []string{p, q} {
 		plugins[id] = kernel.Define(kernel.Plugin{ID: id, Apply: func(*kernel.Context, any) error { return nil }})
 	}
-	ld, root := mount(t, Setup{Role: role, Plugins: plugins, Volatile: volatile})
-	return &suite{t: t, ld: ld, h: listen(t, root), root: root}
+	root, provider := mount(t, Setup{Role: role, Plugins: plugins, Volatile: volatile})
+	_, _, ld := deftest.Consume(t, root, loader.Key)
+	return &suite{t: t, ld: ld, h: listen(t, root), root: root, provider: provider}
 }
 
 // apply applies ops and wants the outcomes, as "<outcome> <id>".

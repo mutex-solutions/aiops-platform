@@ -6,8 +6,10 @@
 // launcher to the six services as the setup describes the process. The guard half
 // holds it to what it refuses, its release and its method sets: Commit and
 // RequiredOf refuse a composition it did not compose; after the launcher's release
-// the consumer it served is released, and a read of any of the six keys fails with
-// kernel.ErrInactive; no provided value has a method outside its interface. Each
+// the consumer it served is released, a read of any of the six keys fails with
+// kernel.ErrInactive, and so does every method with an error result of the
+// profileContext kept from before (07-c4-plugin-sdk.md:518), while an exit request
+// still returns at once; no provided value has a method outside its interface. Each
 // obligation has an id, the first word of its case's name. The package imports the
 // standard library, sdk/kernel and definitions only.
 package conformance
@@ -203,7 +205,25 @@ func Run(t *testing.T, mount Mount) {
 
 		t.Run("launch.G2 after release the keys fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
+			ctx := t.Context()
+			c, err := u.pc.Compose(ctx)
+			if err != nil {
+				t.Fatalf("Compose = %v", err)
+			}
 			u.release()
+			// The values kept from before the release refuse every call that can.
+			_, errCompose := u.pc.Compose(ctx)
+			_, errAdmit := u.pc.Admit(ctx, c)
+			_, errPlan := u.pc.Plan(ctx, c, c)
+			errCommit := u.pc.Commit(c)
+			_, errRequired := u.pc.RequiredOf(c)
+			for name, err := range map[string]error{"Compose": errCompose, "Admit": errAdmit, "Plan": errPlan,
+				"Commit": errCommit, "RequiredOf": errRequired} {
+				if !errors.Is(err, kernel.ErrInactive) {
+					t.Errorf("%s after release = %v, want ErrInactive", name, err)
+				}
+			}
+			u.ex.RequestExit(launch.ExitRequest{Reason: launch.ExitGaveUp, Detail: "after release"}) // returns at once
 			for _, read := range []func(){
 				func() { launch.ProfileContextKey.Of(u.c) }, func() { launch.CatalogKey.Of(u.c) },
 				func() { launch.CmdlineKey.Of(u.c) }, func() { launch.ReadyKey.Of(u.c) },
