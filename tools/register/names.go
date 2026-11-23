@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,8 +20,8 @@ const decisionsFile = "docs/architecture/00-decisions.md"
 
 // place is a text that the name lint U1 reads (ADR-054 decisions 14 and 22). key is
 // what the places of an item of exceptions and the directories of an entry are matched
-// against: the repository path of a file, "ids" for an id, or a documentation place
-// such as "00 §2.1 row 9".
+// against: the repository path of a file, "ids" for an id, "schemas" for the
+// configSchema of a row, or a documentation place such as "00 §2.1 row 9".
 type place struct{ where, key, text string }
 
 // lint returns one line per name of an entry that a place holds where neither the
@@ -58,7 +59,7 @@ func permitted(r register, e entry, n, key string) bool {
 			return true
 		}
 	}
-	if key == "ids" {
+	if key == "ids" || key == "schemas" {
 		return false
 	}
 	for _, p := range e.Plugins {
@@ -140,9 +141,10 @@ func splitCamel(s string) []string {
 
 // places returns what U1 reads at S2a (decisions 14 and 22): every file and its path
 // under sdk/, boot/ and loader/, the SDK tree holding every definition, hook, fake and
-// suite; the id of every plugin under plugins/, which at S2a are the rows of aiops-core
-// and aiops-cli; and the documentation places of 00-decisions.md. The dumps of the
-// shipped profiles enter with their first file.
+// suite; the id and the configSchema of every plugin under plugins/, which at S2a are
+// the rows of aiops-core and aiops-cli, the schema read as JSON, its property names,
+// keywords and string values; and the documentation places of 00-decisions.md. The
+// dumps of the shipped profiles enter with their first file.
 func places(root string) ([]place, error) {
 	var out []place
 	for _, d := range []string{"sdk", "boot", "loader"} {
@@ -174,13 +176,19 @@ func places(root string) ([]place, error) {
 		if err != nil {
 			return nil, err
 		}
-		var id struct {
-			ID string `yaml:"id"`
+		var man struct {
+			ID           string `yaml:"id"`
+			ConfigSchema any    `yaml:"configSchema"`
 		}
-		if err := yaml.Unmarshal(b, &id); err != nil {
+		if err := yaml.Unmarshal(b, &man); err != nil {
 			return nil, fmt.Errorf("%s: %w", repoPath(root, m), err)
 		}
-		out = append(out, place{repoPath(root, m) + ": id", "ids", id.ID})
+		schema, err := json.Marshal(man.ConfigSchema)
+		if err != nil {
+			return nil, fmt.Errorf("%s: configSchema: %w", repoPath(root, m), err)
+		}
+		out = append(out, place{repoPath(root, m) + ": id", "ids", man.ID},
+			place{repoPath(root, m) + ": configSchema", "schemas", string(schema)})
 	}
 	doc, err := os.ReadFile(filepath.Join(root, decisionsFile))
 	if err != nil {
