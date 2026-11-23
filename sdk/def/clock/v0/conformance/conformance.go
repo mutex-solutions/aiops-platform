@@ -5,9 +5,9 @@
 // the fake behave the same"). The obligations half holds a provider to the methods
 // of clock.Clock. The guard half holds it to what it ends and refuses: a timer leaves
 // with the fiber that started it; after the provider's release the consumer it
-// served is released, and both a read of the key and After with that consumer's
-// context fail with kernel.ErrInactive; the provided value has no method outside
-// the interface. Each obligation has an id, the first word of its case's name. The
+// served is released, a read of the key fails with kernel.ErrInactive, and so does
+// After on the value kept from before, even from a fiber that is live, which then
+// holds no effect of it; the provided value has no method outside the interface. Each obligation has an id, the first word of its case's name. The
 // package imports the standard library, sdk/kernel and definitions only.
 package conformance
 
@@ -95,12 +95,19 @@ func Run(t *testing.T, mount Mount) {
 
 		t.Run("clock.G2 after release the key and After fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
+			live, lc := hold(t, u.root)
 			deftest.Dispose(t, u.root, u.provider)
 			if err := deftest.ReadError(func() { clock.Key.Of(u.c) }); !errors.Is(err, kernel.ErrInactive) {
 				t.Errorf("a read of the key after release = %v, want ErrInactive", err)
 			}
-			if _, err := u.clk.After(u.c, time.Second); !errors.Is(err, kernel.ErrInactive) {
-				t.Errorf("After after release = %v, want ErrInactive", err)
+			// lc is the context of a fiber that does not need the clock, so it is live:
+			// only the released provider can refuse the call.
+			if _, err := u.clk.After(lc, 0); !errors.Is(err, kernel.ErrInactive) {
+				t.Errorf("After from a live fiber after release = %v, want ErrInactive", err)
+			}
+			_ = u.root.Settle(t.Context())
+			if labels, err := live.Effects(t.Context()); err != nil || len(labels) != 0 {
+				t.Errorf("a refused After left %q, %v in the caller's ledger", labels, err)
 			}
 		})
 
@@ -129,6 +136,16 @@ func use(t *testing.T, mount Mount) *user {
 	u.root, u.provider = mount(t)
 	u.f, u.c, u.clk = deftest.Consume(t, u.root, clock.Key)
 	return u
+}
+
+// hold mounts on root a fiber that needs nothing and returns it with its context.
+func hold(t *testing.T, root *kernel.Root) (*kernel.Fiber, *kernel.Context) {
+	t.Helper()
+	var held *kernel.Context
+	f := root.Plugin(kernel.Define(kernel.Plugin{ID: "conformance/holder",
+		Apply: func(c *kernel.Context, _ any) error { held = c; return nil }}), nil)
+	deftest.Active(t, f)
+	return f, held
 }
 
 func (u *user) after(d time.Duration) clock.Timer {
