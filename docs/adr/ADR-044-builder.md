@@ -844,6 +844,18 @@ settles it.
     package graph compiles into that binary's `THIRD_PARTY_LICENSES/`, as a notice file,
     not classified (decision 3).
 
+**The gRPC codec exemption from S2a, a consequence of ADR-020.** ADR-020, accepted the
+same day, has `aiopsctl` and the server image link sigstore-go from S2a, the gRPC runtime
+among them (ADR-020 decision 16 and its Consequences), and has the builder build with the
+tag `grpcnotrace` and exempt, by package and pinned version, the codec registration of
+`google.golang.org/grpc/encoding/proto` (ADR-020 decision 27, its question Q9 (a)).
+Decision 21 and question Q7 take gRPC to enter with the remote runtime of S2b. From S2a,
+therefore, the exceptions table of decision 21 holds the entry of
+`google.golang.org/grpc/encoding/proto`, keyed by package and pinned version, which the
+register entry records and which is read again at every version bump, and the tag
+`grpcnotrace` applies to every binary the builder writes, `aiopsctl` included. This is
+ADR-020's decision; no option of this ADR changes.
+
 **Edits made with this record.** The commit that records these answers makes the edits
 that "Edits on acceptance" names for the options chosen: `00:778` (status); `07:1874`;
 `08:401`, `:402`, `:403`, `:1284`, `:1342` (L13), `:1381` and `:1407`; plugin record
