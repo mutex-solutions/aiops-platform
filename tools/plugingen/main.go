@@ -3,15 +3,17 @@
 // argument is a directory searched for plugin.yaml files, outside testdata and
 // hidden directories; each directory that holds one is a Go plugin.
 //
-//	go run ./tools/plugingen .                       # parity of every plugin
-//	go run ./tools/plugingen -write plugins/clock     # write one plugin's files
+//	go run ./tools/plugingen .                        # parity of every plugin
+//	go run ./tools/plugingen --write plugins/clock     # write one plugin's files
 //
 // aiopsctl plugin check --write runs the same package for an author.
 package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,29 +23,35 @@ import (
 )
 
 func main() {
-	args := os.Args[1:]
-	write := len(args) > 0 && args[0] == "-write"
-	if write {
-		args = args[1:]
+	if err := run(os.Args[1:], os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "plugingen:", err)
+		os.Exit(1)
 	}
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: plugingen [-write] <dir>...")
-		os.Exit(2)
+}
+
+func run(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("plugingen", flag.ContinueOnError)
+	write := flags.Bool("write", false, "write each plugin's generated half and generated tests")
+	if err := flags.Parse(args); err != nil {
+		return err
 	}
-	dirs, err := pluginDirs(args)
-	var errs []error
+	if flags.NArg() == 0 {
+		return errors.New("usage: plugingen [--write] <dir>...")
+	}
+	dirs, err := pluginDirs(flags.Args())
+	errs := []error{err}
 	for _, d := range dirs {
-		if write {
+		if *write {
 			errs = append(errs, plugingen.Write(d))
 		} else {
 			errs = append(errs, plugingen.Check(d))
 		}
 	}
-	if err := errors.Join(append(errs, err)...); err != nil {
-		fmt.Fprintln(os.Stderr, "plugingen:", err)
-		os.Exit(1)
+	if err := errors.Join(errs...); err != nil {
+		return err
 	}
-	fmt.Printf("plugingen: %d plugins, every generated half and generated test as plugingen writes it\n", len(dirs))
+	fmt.Fprintf(stdout, "plugingen: %d plugins, every generated half and generated test as plugingen writes it\n", len(dirs))
+	return nil
 }
 
 // pluginDirs returns each directory under roots that holds a plugin.yaml.
