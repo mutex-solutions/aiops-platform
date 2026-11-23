@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -248,6 +249,48 @@ func TestVolatileGet(t *testing.T) {
 	cfg, err := plugin.Define(plugin.Spec[config]{ID: "t/v"}).Decode(map[string]any{"url": "u"})
 	if err != nil || cfg.(*config).URL.Get() != "u" {
 		t.Fatalf("Decode: %v, %v", cfg, err)
+	}
+}
+
+// A change of Volatile values alone reaches the plugin. The test takes the loader's
+// path for it: a change that loader.VolatileOnly finds volatile only over the paths
+// Describe reports is committed in place, any other restarts the row. Until the
+// kernel hands a value committed in place to a running field (ADR-060 decision 3),
+// Get could not return it, so the change must restart the row and reach Apply.
+func TestVolatileChangeReachesThePlugin(t *testing.T) {
+	type cfg struct{ URL plugin.Volatile[string] }
+	applied := make(chan *cfg, 2)
+	p := plugin.Define(plugin.Spec[cfg]{ID: "test/volatile",
+		Apply: func(_ *kernel.Context, c *cfg) error { applied <- c; return nil }})
+	before, after := map[string]any{"url": "https://a"}, map[string]any{"url": "https://b"}
+	f := kerneltest.New(t).Plugin(p, before)
+	if s, err := await(t, f); s != kernel.Active {
+		t.Fatalf("state %s, err %v", s, err)
+	}
+	running := <-applied
+	info, err := plugin.Describe[cfg]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, v := range info.Volatile {
+		paths = append(paths, strings.Join(v, "."))
+	}
+	if _, only := loader.VolatileOnly(before, after, paths); only {
+		if err := f.Commit(t.Context(), after); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err := f.Update(t.Context(), after); err != nil {
+			t.Fatal(err)
+		}
+		if s, err := await(t, f); s != kernel.Active {
+			t.Fatalf("state after the restart %s, err %v", s, err)
+		}
+		running = <-applied
+	}
+	if got := running.URL.Get(); got != "https://b" {
+		t.Fatalf("after the change the plugin reads URL %q, want https://b", got)
 	}
 }
 
