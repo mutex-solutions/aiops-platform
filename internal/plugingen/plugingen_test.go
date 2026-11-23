@@ -158,7 +158,7 @@ func TestRewrite(t *testing.T) {
 	}
 	text := string(out)
 	for _, line := range []string{"# The hand-written half (07-c4-plugin-sdk.md section 2).", `manifestVersion: "1.0"`,
-		"publisher: {id: aiops}", "scope: [process] # a set", "  - {key: echoers, major: 0, as: need}", "provides: []",
+		"publisher: {id: aiops}", "scope: [process]   # a set", "  - {key: echoers, major: 0, as: need}", "provides: []",
 		"# " + Marker, `  pluginApi: "` + plugin.APIVersion + `"`, `    echoers: ["0.1"]`,
 		"description: A description long enough to pass the width at which an emitter might fold a plain scalar onto a second line."} {
 		if !strings.Contains(text, line+"\n") {
@@ -181,6 +181,52 @@ func TestRewrite(t *testing.T) {
 	}
 	if err := Parity(out, generated()); err != nil {
 		t.Errorf("Parity of the rewritten file: %v", err)
+	}
+}
+
+// Rewrite keeps every line of the hand-written half as written, blank lines, a folded
+// scalar, spacing, comments and list indentation included, and moves a hand-written
+// field that follows a generated one, with its comment, before the generated half
+// (ADR-048 decision 1).
+func TestRewriteKeepsTheHandWrittenLines(t *testing.T) {
+	const hand = `# The hand-written half.
+manifestVersion: "1.0"
+
+id: aiops/example
+version: 0.1.0
+title: Example
+description: >
+  A folded description
+  across two lines.
+license:   Apache-2.0   # spaced
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes:
+- inproc
+`
+	out, err := Rewrite([]byte(hand+"\n"), generated())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(out), hand+"# "+Marker+"\nuses:\n") {
+		t.Errorf("Rewrite changed a hand-written line:\n%s", out)
+	}
+	again, err := Rewrite(out, generated())
+	if err != nil || string(again) != string(out) {
+		t.Errorf("Rewrite is not idempotent (%v):\n%s", err, again)
+	}
+	mixed := hand + "provides:\n  - {key: old, major: 0}\n# The comment of instantiable.\ninstantiable: false\nhooks: []\n"
+	out, err = Rewrite([]byte(mixed), generated())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := hand + "# The comment of instantiable.\ninstantiable: false\n# " + Marker + "\n"; !strings.HasPrefix(string(out), want) ||
+		strings.Contains(string(out), "key: old") {
+		t.Errorf("Rewrite of a generated field before a hand-written one:\n%s", out)
+	}
+	if err := Parity(out, generated()); err != nil {
+		t.Errorf("Parity: %v", err)
 	}
 }
 
