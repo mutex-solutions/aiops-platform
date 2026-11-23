@@ -274,7 +274,7 @@ func TestARetainDuringTheResolveOfAnActivationResolvesAgain(t *testing.T) {
 	var w handOffs
 	g = newHold("c")
 	f = r.Plugin(w.plugin("x/w", []Dep{Need(svc)}, decodeUpper), "a")
-	err := window(t, r, svc, f, "c", func() {
+	err := window(t, r, svc, f, f.Commit, "c", func() {
 		<-g.entered
 		if _, err := r.Batch(ctx, UpdateOp(f)); err != nil {
 			t.Error(err)
@@ -290,11 +290,12 @@ func TestARetainDuringTheResolveOfAnActivationResolvesAgain(t *testing.T) {
 	}
 }
 
-// window commits cfg to a fiber that waits for svc, and lets the provider arrive
-// and the fiber become ACTIVE while internal/commit holds the commit, so that the
-// commit began with no target and finds an activation that applied the older
-// config. It returns the error of Commit, which runs to its end after.
-func window(t *testing.T, r *Root, svc Key[int], f *Fiber, cfg any, after func()) error {
+// window commits cfg to a fiber that waits for svc, with commit (f.Commit or a
+// CommitOp of f), and lets the provider arrive and the fiber become ACTIVE while
+// internal/commit holds the commit, so that the commit began with no target and
+// finds an activation that applied the older config. It returns the error of the
+// commit, which runs to its end after.
+func window(t *testing.T, r *Root, svc Key[int], f *Fiber, commit func(context.Context, any) error, cfg any, after func()) error {
 	t.Helper()
 	g := newHold(cfg)
 	InternalCommit.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[bool]) (bool, error) {
@@ -303,7 +304,7 @@ func window(t *testing.T, r *Root, svc Key[int], f *Fiber, cfg any, after func()
 	})
 	want(t, f, Pending)
 	done := make(chan error, 1)
-	go func() { done <- f.Commit(frontCtx(t), cfg) }()
+	go func() { done <- commit(frontCtx(t), cfg) }()
 	<-g.entered
 	want(t, provider(r, svc), Active)
 	want(t, f, Active)
@@ -319,7 +320,7 @@ func TestCommitResolvesForAnActivationThatBeganWithoutATarget(t *testing.T) {
 	svc := NewKey[int]("svc", 0)
 	var h handOffs
 	f := r.Plugin(h.plugin("x/a", []Dep{Need(svc)}, decodeUpper), "a")
-	if err := window(t, r, svc, f, "b", nil); err != nil {
+	if err := window(t, r, svc, f, f.Commit, "b", nil); err != nil {
 		t.Fatal(err)
 	}
 	want(t, f, Active)
@@ -336,7 +337,7 @@ func TestCommitKeepsTheActivationWhenTheHandOffCannotBeMade(t *testing.T) {
 		svc := NewKey[int]("svc", 0)
 		var h handOffs
 		f := r.Plugin(h.plugin("x/a", []Dep{Need(svc)}, decodeUpper), "a")
-		err := window(t, r, svc, f, 1, nil)
+		err := window(t, r, svc, f, f.Commit, 1, nil)
 		if err == nil || !strings.Contains(err.Error(), "want string") {
 			t.Fatalf("Commit returned %v, want the error of Decode", err)
 		}
@@ -362,7 +363,7 @@ func TestCommitKeepsTheActivationWhenTheHandOffCannotBeMade(t *testing.T) {
 		})
 		var h handOffs
 		f := r.Plugin(h.plugin("x/a", []Dep{Need(svc)}, decodeUpper), "a")
-		err := window(t, r, svc, f, "b", func() {
+		err := window(t, r, svc, f, f.Commit, "b", func() {
 			<-g.entered
 			if err := f.Commit(ctx, "c"); err != nil {
 				t.Error(err)
@@ -402,6 +403,60 @@ func TestCommitKeepsTheActivationWhenTheHandOffCannotBeMade(t *testing.T) {
 			t.Fatalf("the next activation applied %v", applied[len(applied)-1].cfg)
 		}
 	})
+}
+
+// A retain that hands nothing off, of an Update or an UpdateOpWith whose restart
+// internal/update vetoes or of a CommitOp that is not the last change of its fiber
+// in its batch, does not cancel the hand-off of a commit whose retain it passes:
+// the newer retain that hands off is the one that cancels it (point 4).
+func TestARetainThatHandsNothingOffKeepsAHandOff(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		op     bool // The commit is a CommitOp.
+		passes func(context.Context, *Root, *Fiber) error
+	}{
+		{"Commit, then a vetoed Update", false, func(ctx context.Context, _ *Root, f *Fiber) error { return f.Update(ctx, "v") }},
+		{"CommitOp, then a vetoed UpdateOpWith", true, func(ctx context.Context, r *Root, f *Fiber) error {
+			_, err := r.Batch(ctx, UpdateOpWith(f, "v"))
+			return err
+		}},
+		{"Commit, then a CommitOp that is not last", false, func(ctx context.Context, r *Root, f *Fiber) error {
+			_, err := r.Batch(ctx, CommitOp(f, "u"), UpdateOpWith(f, "v"))
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newKernel(t)
+			ctx := frontCtx(t)
+			InternalUpdate.On(r.Context(), DefaultStage, func(context.Context, any, Next[any]) (any, error) { return nil, nil })
+			g := newHold("x")
+			InternalConfig.On(r.Context(), DefaultStage, func(_ context.Context, raw any, next Next[any]) (any, error) {
+				g.pass(raw)
+				return next()
+			})
+			svc := NewKey[int]("svc", 0)
+			var h handOffs
+			f := r.Plugin(h.plugin("x/a", []Dep{Need(svc)}, nil), "a")
+			commit := f.Commit
+			if tc.op {
+				commit = func(ctx context.Context, cfg any) error { _, err := r.Batch(ctx, CommitOp(f, cfg)); return err }
+			}
+			err := window(t, r, svc, f, commit, "x", func() {
+				<-g.entered // The commit retained x and resolves it for its hand-off.
+				if err := tc.passes(ctx, r, f); err != nil {
+					t.Error(err)
+				}
+				g.release()
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want(t, f, Active)
+			if applied, calls := h.get(); len(applied) != 1 || len(calls) != 1 || applied[0].now() != "x" || f.cell.load() != "v" {
+				t.Fatalf("applies %d, hand-offs %+v, retained %v", len(applied), calls, f.cell.load())
+			}
+		})
+	}
 }
 
 func TestCommitHandsNothingToAnEndedActivation(t *testing.T) {

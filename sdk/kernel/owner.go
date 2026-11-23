@@ -814,7 +814,7 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	o.batchDepth++
 	for i, op := range prepared {
 		if op.cell != nil {
-			op.cell.retain(op.cfg)
+			op.cell.retain(op.cfg, op.handOff)
 		}
 		if op.handOff {
 			results[i] = op.Fiber

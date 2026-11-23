@@ -33,6 +33,7 @@ type cfgCell struct {
 	mu     sync.Mutex
 	raw    any
 	seq    uint64 // Counts the retains of raw.
+	hseq   uint64 // The latest retain that hands off: of Commit, or an admitted hand-off CommitOp.
 	// cur is the running activation of a fiber with a hand-off: what its Apply
 	// received, its Std context and the retain it resolved.
 	cur struct {
@@ -52,27 +53,32 @@ type cfgCell struct {
 	cmu sync.Mutex
 }
 
-// retain makes raw the config of every later activation and returns its count.
-func (c *cfgCell) retain(raw any) uint64 {
+// retain makes raw the config of every later activation and returns its count;
+// off marks a retain that hands off.
+func (c *cfgCell) retain(raw any, off bool) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.raw = raw
 	c.seq++
+	if off {
+		c.hseq = c.seq
+	}
 	return c.seq
 }
 
 // change retains raw under the config lock.
-func (c *cfgCell) change(raw any) uint64 {
+func (c *cfgCell) change(raw any, off bool) uint64 {
 	c.cmu.Lock()
 	defer c.cmu.Unlock()
-	return c.retain(raw)
+	return c.retain(raw, off)
 }
 
 // handOff gives the running activation the config of retain s (G13): committed,
 // resolved by vet or stageUpdates, or cfg resolved now, under no lock, when the
 // fiber had no target then (loaded is false). It hands nothing when the activation
-// ended or holds s already, or once a newer retain passed s, and returns the error
-// of that resolve or a panic of the hand-off as a *PanicError.
+// ended or holds s already, or once a newer retain that hands off passed s (one that
+// hands nothing off, such as a vetoed Update, does not cancel it), and returns the
+// error of that resolve or a panic of the hand-off as a *PanicError.
 func (c *cfgCell) handOff(ctx context.Context, s uint64, cfg, committed any, loaded bool) (err error) {
 	if c.commit == nil {
 		return nil
@@ -101,11 +107,12 @@ func (c *cfgCell) handOff(ctx context.Context, s uint64, cfg, committed any, loa
 }
 
 // running returns the value of the running activation when s is the latest retain
-// and the activation, whose unload has not begun, resolved an older one.
+// that hands off and the activation, whose unload has not begun, resolved an older
+// retain.
 func (c *cfgCell) running(s uint64) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.cur.v, c.seq == s && c.cur.ctx != nil && c.cur.ctx.Err() == nil && c.cur.seq < s
+	return c.cur.v, c.hseq == s && c.cur.ctx != nil && c.cur.ctx.Err() == nil && c.cur.seq < s
 }
 
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
@@ -308,7 +315,7 @@ func (f *Fiber) Commit(ctx context.Context, cfg any) error {
 	if err != nil {
 		return err
 	}
-	return f.cell.handOff(ctx, f.cell.change(cfg), cfg, resolved, loaded)
+	return f.cell.handOff(ctx, f.cell.change(cfg, true), cfg, resolved, loaded)
 }
 
 // Update replaces the fiber's config with cfg and restarts it, and returns once
@@ -349,7 +356,7 @@ func (f *Fiber) Update(ctx context.Context, cfg any) error {
 	if err != nil {
 		return err
 	}
-	f.cell.change(cfg)
+	f.cell.change(cfg, false)
 	if !loaded {
 		return f.ref.update(ctx)
 	}
