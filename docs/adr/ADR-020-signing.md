@@ -1110,7 +1110,7 @@ Decisions 10 and 12 are edited to that answer: boot finds the record of an in-pr
 row by its plugin id in the records install wrote under `$AIOPS_HOME/verified/`, whose
 `record.yaml` carries the plugin id, and not through the lock. `07:1841` and `:1855`, the
 row `Lock` and the relationship from `Install` to `Lock` in `07` §9, say that in-process
-code has no entry, and `:1855` does not gain the entry that "Edits on acceptance" names
-for it. `00:478`, `01:282` and `02:206` lock only a remote plugin or a pack with no code,
+code has no entry, and neither `07:1841` nor `:1855` gains the lock entry of in-process
+code that "Edits on acceptance" names for them. `00:478`, `01:282` and `02:206` lock only a remote plugin or a pack with no code,
 so they already agree and are not edited, and ADR-047 decisions 8 and 18 stand as
 written.
