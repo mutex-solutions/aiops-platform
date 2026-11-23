@@ -53,6 +53,10 @@
 //     default:"0.5", default:"true", default:"text". Define refuses a default
 //     the field could not take, and one on a list, a map or a struct. The schema
 //     carries it as the field's default.
+//   - Examples. example:"..." gives a field of a scalar type an example, written
+//     and checked as a default is. The schema carries it as the field's examples,
+//     the annotation from which a template takes a row config (ADR-060 decision
+//     24). It changes nothing the decoder does.
 //   - Volatile. A Volatile[T] field is decoded as T. Its path is one of the
 //     volatile paths: a change of volatile values alone is to commit in place,
 //     with no restart of the row (07-c4-plugin-sdk.md:1375). Until the kernel can

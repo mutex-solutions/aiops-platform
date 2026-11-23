@@ -111,7 +111,7 @@ func TestDescribeExamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	var doc struct {
-		Properties map[string]struct{ Examples []json.Number }
+		Properties map[string]struct{ Examples []any }
 	}
 	dec := json.NewDecoder(bytes.NewReader(info.Schema))
 	dec.UseNumber()
@@ -123,11 +123,11 @@ func TestDescribeExamples(t *testing.T) {
 		if len(p.Examples) == 0 {
 			continue
 		}
-		var v any = p.Examples[0].String()
-		if n, err := p.Examples[0].Int64(); err == nil {
-			v = n
-		} else if f, err := p.Examples[0].Float64(); err == nil {
-			v = f
+		v := p.Examples[0]
+		if n, isNum := v.(json.Number); isNum {
+			if v, err = n.Int64(); err != nil {
+				v, _ = n.Float64()
+			}
 		}
 		cfg[k] = v
 	}

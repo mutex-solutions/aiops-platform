@@ -195,12 +195,12 @@ func TestDefineRefusesABadConfigType(t *testing.T) {
 			plugin.Define(plugin.Spec[struct {
 				L []string `default:"a"`
 			}]{ID: "t/x"})
-		}, "only a scalar field has a default"},
+		}, "only a scalar field takes the tag default"},
 		{"default on a struct", func() {
 			plugin.Define(plugin.Spec[struct {
 				S inner `default:"a"`
 			}]{ID: "t/x"})
-		}, "only a scalar field has a default"},
+		}, "only a scalar field takes the tag default"},
 		{"default out of range", func() {
 			plugin.Define(plugin.Spec[struct {
 				N int8 `default:"300"`
@@ -230,7 +230,7 @@ func TestDefineRefusesABadConfigType(t *testing.T) {
 			plugin.Define(plugin.Spec[struct {
 				L []string `example:"a"`
 			}]{ID: "t/x"})
-		}, "only a scalar field has an example"},
+		}, "only a scalar field takes the tag example"},
 		{"default float", func() {
 			plugin.Define(plugin.Spec[struct {
 				F float64 `default:"x"`

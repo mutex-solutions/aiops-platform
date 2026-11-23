@@ -35,7 +35,7 @@ type node struct {
 // NewValidator compiles schema, a JSON Schema 2020-12 document that uses only the
 // keywords the derivation emits: $schema at the root, type with one name,
 // properties, additionalProperties, items, minimum, maximum and pattern, and the
-// annotations default and x-aiops-tenant. Any other keyword is refused rather
+// annotations default, examples and x-aiops-tenant. Any other keyword is refused rather
 // than ignored, so the validator never passes a tree that a constraint it does
 // not know would refuse.
 //
@@ -105,6 +105,10 @@ func compile(doc any, root bool) (*node, error) {
 			s, _ := v.(string)
 			if n.pattern, err = regexp.Compile(s); err != nil || s == "" {
 				err = fmt.Errorf("pattern %s is not a regular expression", show(v))
+			}
+		case "examples":
+			if _, isList := v.([]any); !isList {
+				err = fmt.Errorf("examples %s is not a list", show(v))
 			}
 		case "default", tenantKey:
 		default:

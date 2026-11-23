@@ -40,6 +40,7 @@ type field struct {
 	index  int
 	key    string
 	def    any // The default as a tree value; nil for none.
+	ex     any // The example as a tree value; nil for none.
 	nested bool
 }
 
@@ -148,6 +149,9 @@ func (d *described) structSchema(t reflect.Type, path []string, open map[reflect
 		if f.def != nil {
 			s["default"] = f.def
 		}
+		if f.ex != nil {
+			s["examples"] = []any{f.ex}
+		}
 		props[f.key] = s
 		fields = append(fields, *f)
 	}
@@ -194,10 +198,15 @@ func fieldOf(sf reflect.StructField) (*field, error) {
 	case a != "" && a != "tenant":
 		return nil, fmt.Errorf(`aiops:%q: the only value is "tenant"`, a)
 	}
-	if s, ok := sf.Tag.Lookup("default"); ok {
-		var err error
-		if f.def, err = defaultOf(inner, s); err != nil {
-			return nil, fmt.Errorf("default:%q: %w", s, err)
+	for _, t := range []struct {
+		tag string
+		out *any
+	}{{"default", &f.def}, {"example", &f.ex}} {
+		if s, ok := sf.Tag.Lookup(t.tag); ok {
+			var err error
+			if *t.out, err = scalarOf(inner, s, t.tag); err != nil {
+				return nil, fmt.Errorf("%s:%q: %w", t.tag, s, err)
+			}
 		}
 	}
 	return f, nil
@@ -220,9 +229,9 @@ func keyOf(name string) string {
 	return string(r)
 }
 
-// defaultOf reads the default tag s of a field of type t as the tree value that
-// the field takes, and checks that the field can take it.
-func defaultOf(t reflect.Type, s string) (any, error) {
+// scalarOf reads s, the value of the default or example tag of a field of type t,
+// as the tree value that the field takes, and checks that the field can take it.
+func scalarOf(t reflect.Type, s, tag string) (any, error) {
 	var v any
 	var err error
 	switch k := t.Kind(); {
@@ -235,9 +244,9 @@ func defaultOf(t reflect.Type, s string) (any, error) {
 	case k == reflect.Float32 || k == reflect.Float64:
 		v, err = strconv.ParseFloat(s, 64)
 	case k == reflect.Bool:
-		return nil, errors.New("a bool default is true or false")
+		return nil, fmt.Errorf("a bool %s is true or false", tag)
 	default:
-		return nil, errors.New("only a scalar field has a default")
+		return nil, fmt.Errorf("only a scalar field takes the tag %s", tag)
 	}
 	if err != nil {
 		return nil, err
