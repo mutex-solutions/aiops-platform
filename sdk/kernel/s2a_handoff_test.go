@@ -459,6 +459,61 @@ func TestARetainThatHandsNothingOffKeepsAHandOff(t *testing.T) {
 	}
 }
 
+// The same under -race on a fiber with a target, where no hook can hold a commit
+// between its retain and its hand-off: each commit races an update whose restart
+// internal/update vetoes, and once both return the activation reads the commit,
+// whichever retained first. A kernel that lets such an update cancel the hand-off
+// loses the commit in a few percent of the trials.
+func TestCommitsRaceVetoedUpdates(t *testing.T) {
+	const trials = 1000
+	for _, tc := range []struct {
+		name           string
+		commit, update func(context.Context, *Root, *Fiber, int) error
+	}{
+		{"Commit, Update",
+			func(ctx context.Context, _ *Root, f *Fiber, i int) error { return f.Commit(ctx, i) },
+			func(ctx context.Context, _ *Root, f *Fiber, i int) error { return f.Update(ctx, i) }},
+		{"CommitOp, UpdateOpWith",
+			func(ctx context.Context, r *Root, f *Fiber, i int) error {
+				_, err := r.Batch(ctx, CommitOp(f, i))
+				return err
+			},
+			func(ctx context.Context, r *Root, f *Fiber, i int) error {
+				_, err := r.Batch(ctx, UpdateOpWith(f, i))
+				return err
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newKernel(t)
+			ctx := frontCtx(t)
+			InternalUpdate.On(r.Context(), DefaultStage, func(context.Context, any, Next[any]) (any, error) { return nil, nil })
+			var h handOffs
+			f := r.Plugin(h.plugin("x/race", nil, nil), 0)
+			want(t, f, Active)
+			applied, _ := h.get()
+			for i := 1; i <= trials; i++ {
+				var wg sync.WaitGroup
+				wg.Go(func() {
+					if err := tc.update(ctx, r, f, -i); err != nil {
+						t.Error(err)
+					}
+				})
+				err := tc.commit(ctx, r, f, i)
+				wg.Wait()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := applied[0].now(); got != i {
+					t.Fatalf("after commit %d the activation reads %v", i, got)
+				}
+			}
+			if a, _ := h.get(); len(a) != 1 {
+				t.Fatalf("%d applies", len(a))
+			}
+		})
+	}
+}
+
 func TestCommitHandsNothingToAnEndedActivation(t *testing.T) {
 	r := newKernel(t)
 	ctx := frontCtx(t)
