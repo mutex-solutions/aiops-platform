@@ -4,8 +4,9 @@
 // and the fake must both do (07-c4-plugin-sdk.md, T2 "every provider and the fake
 // behave the same"). It drives a loader through its interface and its three hooks
 // and checks the outcomes, the refusals, the mount state and fiber state of each
-// entry, the payloads the hooks carry, and that a call after the provider's release
-// fails with kernel.ErrInactive. It imports the standard library,
+// entry, the payloads the hooks carry, that a call after the provider's release
+// fails with kernel.ErrInactive, and that the provided value has no method outside
+// the interface. It imports the standard library,
 // sdk/kernel and definitions only.
 package conformance
 
@@ -270,6 +271,12 @@ func Run(t *testing.T, mount Mount) {
 			if !errors.Is(err, kernel.ErrInactive) {
 				t.Errorf("%s after release = %v, want ErrInactive", name, err)
 			}
+		}
+	})
+
+	t.Run("no side door", func(t *testing.T) {
+		if doors := deftest.SideDoors[loader.Loader](start(t, mount, nil).ld); len(doors) > 0 {
+			t.Errorf("the provided value has methods outside loader.Loader: %v", doors)
 		}
 	})
 

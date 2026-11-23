@@ -237,6 +237,35 @@ func TestShapes(t *testing.T) {
 		"registry Bad has no Inventory()", "contribution Loose.Do does not take")
 }
 
+// The side-door check judges every package of the root module and of the SDK module
+// outside tools/, and lists the fake and the suite of each definition, so that what a
+// fake gives to Provide is judged too.
+func TestSideDoorScope(t *testing.T) {
+	got := patterns([]*definition{{rel: "sdk/def/x/v0"}})
+	for _, p := range []string{"./dist", "./test/dist", "./examples", modPath + "/sdk/def/x/v0", modPath + "/sdk/def/x/v0/fake", modPath + "/sdk/def/x/v0/conformance"} {
+		if !slices.Contains(got, p) {
+			t.Errorf("patterns = %q, want %s among them", got, p)
+		}
+	}
+	mod := func(path string) *struct{ Path string } { return &struct{ Path string }{path} }
+	for _, tc := range []struct {
+		p    listed
+		want bool
+	}{
+		{listed{ImportPath: modPath + "/examples/a", Module: mod(modPath)}, true},
+		{listed{ImportPath: modPath + "/sdk/def/x/v0/fake", Module: mod(modPath + "/sdk")}, true},
+		{listed{ImportPath: modPath + "/sdk/plugin", Module: mod(modPath + "/sdk")}, true},
+		{listed{ImportPath: modPath + "/tools/x", Module: mod(modPath)}, false},
+		{listed{ImportPath: modPath + "/sdk/kernel", Module: mod(modPath + "/sdk/kernel")}, false},
+		{listed{ImportPath: "go.yaml.in/yaml/v3", Module: mod("go.yaml.in/yaml/v3")}, false},
+		{listed{ImportPath: "fmt"}, false},
+	} {
+		if got := judged(&tc.p); got != tc.want {
+			t.Errorf("judged(%s) = %v, want %v", tc.p.ImportPath, got, tc.want)
+		}
+	}
+}
+
 func TestSideDoors(t *testing.T) {
 	problems := typed(t, source+providers)
 	want(t, problems(), "Provide has methods beyond "+modPath+"/sdk/def/x/v0.Registry: Debug",
