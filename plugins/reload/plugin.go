@@ -73,7 +73,17 @@ func apply(c *kernel.Context, conf Config, m *engine.Memory) error {
 		},
 	}, m, conf.Queue, conf.History)
 	c.Go("reload", e.Run)
-	return def.Key.Provide(c, e)
+	return def.Key.Provide(c, served{e})
+}
+
+// served is what the reload key serves: the methods of def.Reload and no other, so no
+// consumer reaches the engine's loop by a type assertion (07-c4-plugin-sdk.md:516).
+type served struct{ e *engine.Engine }
+
+func (s served) Submit(ctx context.Context, op def.Op) (def.ID, error) { return s.e.Submit(ctx, op) }
+func (s served) Result(id def.ID) (def.Result, bool)                   { return s.e.Result(id) }
+func (s served) Await(ctx context.Context, id def.ID) (def.Result, error) {
+	return s.e.Await(ctx, id)
 }
 
 func decode(raw any) (any, error) {
