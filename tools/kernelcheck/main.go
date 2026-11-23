@@ -28,7 +28,7 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
@@ -40,10 +40,7 @@ func run(args []string) error {
 	}
 	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 2}
 	n, ok := need[args[0]]
-	if args[0] == "lines" && len(args) == 4 && args[3] == "provisional" {
-		n = 4
-	}
-	if args[0] == "modfile" && len(args) > 2 {
+	if (args[0] == "lines" || args[0] == "modfile") && len(args) > n {
 		n = len(args)
 	}
 	if !ok || len(args) != n {
@@ -59,7 +56,12 @@ func run(args []string) error {
 		if err != nil || c < 0 {
 			return fmt.Errorf("invalid cap %q", args[2])
 		}
-		return checkLines(args[1], c, len(args) == 4)
+		subs := args[3:]
+		provisional := len(subs) > 0 && subs[0] == "provisional"
+		if provisional {
+			subs = subs[1:]
+		}
+		return checkLines(args[1], c, provisional, subs...)
 	case "testctor":
 		return checkTestCtor(args[1])
 	case "imports":
@@ -267,13 +269,16 @@ func checkVocab(dir, wordlist string) error {
 
 // checkLines holds dir to one package and a line cap. A provisional cap is
 // printed as such: it stands until the budget is fixed by ADR-059 decision 11.
-func checkLines(dir string, limit int, provisional bool) error {
+// Each of subs names a direct subdirectory that is a package of its own with a cap
+// of its own, as the fake and the suite of a definition are (ADR-060 decision 35):
+// it is neither counted nor refused.
+func checkLines(dir string, limit int, provisional bool, subs ...string) error {
 	clean := filepath.Clean(dir)
 	err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && d.Name() == "testdata" {
+		if d.IsDir() && (d.Name() == "testdata" || filepath.Dir(p) == clean && slices.Contains(subs, d.Name())) {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
