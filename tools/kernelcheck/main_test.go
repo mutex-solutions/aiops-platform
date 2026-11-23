@@ -107,7 +107,7 @@ func TestRepositoryModules(t *testing.T) {
 }
 
 func TestVocab(t *testing.T) {
-	list := "# c\ntenant # trailing\nriver\n"
+	list := "# c\ntenant # trailing\nriver\nprofile\n"
 	for _, tc := range []struct {
 		name, src string
 		fail      bool
@@ -118,6 +118,13 @@ func TestVocab(t *testing.T) {
 		{"comment", "package k\n// the Tenant owns it\n", true},
 		{"string", "package k\nvar s = \"a river\"\n", true},
 		{"acronym", "package k\nvar HTTPTenant int\n", true},
+		{"plural", "package k\n// zzProbe counts tenants per row.\n", true},
+		{"plural es", "package k\nfunc Rivers() {}\n", true},
+		{"inflected", "package k\n// the tenanted rows and the tenanting step\n", true},
+		{"digit", "package k\nvar River3 int\n", true},
+		{"digit first", "package k\nvar s = \"3river\"\n", true},
+		{"cited document", "package k\n// See 08-profiles-roadmap-adrs.md:12.\n", false},
+		{"other document", "package k\n// See 09-profiles-plan.md:12.\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()
