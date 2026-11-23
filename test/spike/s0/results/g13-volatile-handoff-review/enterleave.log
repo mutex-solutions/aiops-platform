@@ -1,0 +1,96 @@
+== round 1 base
+BenchmarkG13EnterLeave/callers=8-8         	35646567	        66.08 ns/op	        66.08 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	29813209	        73.68 ns/op	        73.68 wall-ns/op	       0 B/op	       0 allocs/op
+== round 1 head
+BenchmarkG13EnterLeave/callers=8-8         	32012835	        69.55 ns/op	        69.55 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	32754342	        77.11 ns/op	        77.11 wall-ns/op	       0 B/op	       0 allocs/op
+== round 2 base
+BenchmarkG13EnterLeave/callers=8-8         	33679525	        76.54 ns/op	        76.54 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	28629170	        74.79 ns/op	        74.79 wall-ns/op	       0 B/op	       0 allocs/op
+== round 2 head
+BenchmarkG13EnterLeave/callers=8-8         	35210761	        76.95 ns/op	        76.95 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	46597863	        76.37 ns/op	        76.37 wall-ns/op	       0 B/op	       0 allocs/op
+== round 3 base
+BenchmarkG13EnterLeave/callers=8-8         	33826002	        77.53 ns/op	        77.53 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	29146382	        83.99 ns/op	        83.99 wall-ns/op	       0 B/op	       0 allocs/op
+== round 3 head
+BenchmarkG13EnterLeave/callers=8-8         	33876666	        83.65 ns/op	        83.65 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31123117	        86.07 ns/op	        86.07 wall-ns/op	       0 B/op	       0 allocs/op
+== round 4 base
+BenchmarkG13EnterLeave/callers=8-8         	36051136	        76.33 ns/op	        76.33 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	30511228	        79.14 ns/op	        79.14 wall-ns/op	       0 B/op	       0 allocs/op
+== round 4 head
+BenchmarkG13EnterLeave/callers=8-8         	34996952	        84.07 ns/op	        84.07 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31032295	        83.51 ns/op	        83.51 wall-ns/op	       0 B/op	       0 allocs/op
+== round 5 base
+BenchmarkG13EnterLeave/callers=8-8         	39130596	        72.75 ns/op	        72.75 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	33055534	        79.52 ns/op	        79.52 wall-ns/op	       0 B/op	       0 allocs/op
+== round 5 head
+BenchmarkG13EnterLeave/callers=8-8         	30052617	        75.50 ns/op	        75.50 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	59777215	        43.60 ns/op	        43.60 wall-ns/op	       0 B/op	       0 allocs/op
+== round 6 base
+BenchmarkG13EnterLeave/callers=8-8         	33799744	        76.89 ns/op	        76.89 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	32531794	        74.02 ns/op	        74.02 wall-ns/op	       0 B/op	       0 allocs/op
+== round 6 head
+BenchmarkG13EnterLeave/callers=8-8         	33530535	        76.34 ns/op	        76.34 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31364196	        75.58 ns/op	        75.58 wall-ns/op	       0 B/op	       0 allocs/op
+== round 7 base
+BenchmarkG13EnterLeave/callers=8-8         	39611052	        55.28 ns/op	        55.28 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	38635020	        69.35 ns/op	        69.35 wall-ns/op	       0 B/op	       0 allocs/op
+== round 7 head
+BenchmarkG13EnterLeave/callers=8-8         	34159623	        80.43 ns/op	        80.43 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	38034069	        72.98 ns/op	        72.98 wall-ns/op	       0 B/op	       0 allocs/op
+== round 8 base
+BenchmarkG13EnterLeave/callers=8-8         	31314134	        81.33 ns/op	        81.33 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	35715566	        67.40 ns/op	        67.40 wall-ns/op	       0 B/op	       0 allocs/op
+== round 8 head
+BenchmarkG13EnterLeave/callers=8-8         	65503999	        61.07 ns/op	        61.07 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	35833815	        62.33 ns/op	        62.33 wall-ns/op	       0 B/op	       0 allocs/op
+== round 9 base
+BenchmarkG13EnterLeave/callers=8-8         	39202323	        83.73 ns/op	        83.73 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	32237641	        77.51 ns/op	        77.51 wall-ns/op	       0 B/op	       0 allocs/op
+== round 9 head
+BenchmarkG13EnterLeave/callers=8-8         	33579456	        70.29 ns/op	        70.29 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	38250746	        80.96 ns/op	        80.96 wall-ns/op	       0 B/op	       0 allocs/op
+== round 10 base
+BenchmarkG13EnterLeave/callers=8-8         	36756984	        79.67 ns/op	        79.67 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	33085366	        84.88 ns/op	        84.88 wall-ns/op	       0 B/op	       0 allocs/op
+== round 10 head
+BenchmarkG13EnterLeave/callers=8-8         	35039630	        78.20 ns/op	        78.20 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31050943	        68.59 ns/op	        68.59 wall-ns/op	       0 B/op	       0 allocs/op
+== round 11 base
+BenchmarkG13EnterLeave/callers=8-8         	39902163	        67.35 ns/op	        67.35 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	37636840	        78.37 ns/op	        78.37 wall-ns/op	       0 B/op	       0 allocs/op
+== round 11 head
+BenchmarkG13EnterLeave/callers=8-8         	42178188	        69.92 ns/op	        69.92 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	33572467	        68.07 ns/op	        68.07 wall-ns/op	       0 B/op	       0 allocs/op
+== round 12 base
+BenchmarkG13EnterLeave/callers=8-8         	60563521	        60.27 ns/op	        60.27 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	36220524	        75.18 ns/op	        75.18 wall-ns/op	       0 B/op	       0 allocs/op
+== round 12 head
+BenchmarkG13EnterLeave/callers=8-8         	35544777	        71.12 ns/op	        71.12 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31209970	        81.81 ns/op	        81.81 wall-ns/op	       0 B/op	       0 allocs/op
+== round 13 base
+BenchmarkG13EnterLeave/callers=8-8         	66400196	        67.78 ns/op	        67.78 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	33557132	        70.75 ns/op	        70.75 wall-ns/op	       0 B/op	       0 allocs/op
+== round 13 head
+BenchmarkG13EnterLeave/callers=8-8         	66204458	        70.45 ns/op	        70.45 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	33122336	        62.25 ns/op	        62.25 wall-ns/op	       0 B/op	       0 allocs/op
+== round 14 base
+BenchmarkG13EnterLeave/callers=8-8         	34672824	        83.08 ns/op	        83.08 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	60995006	        77.91 ns/op	        77.91 wall-ns/op	       0 B/op	       0 allocs/op
+== round 14 head
+BenchmarkG13EnterLeave/callers=8-8         	38487792	        66.09 ns/op	        66.09 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	30546751	        79.64 ns/op	        79.64 wall-ns/op	       0 B/op	       0 allocs/op
+== round 15 base
+BenchmarkG13EnterLeave/callers=8-8         	39591202	        76.41 ns/op	        76.41 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	39477042	        69.52 ns/op	        69.52 wall-ns/op	       0 B/op	       0 allocs/op
+== round 15 head
+BenchmarkG13EnterLeave/callers=8-8         	36050745	        77.27 ns/op	        77.27 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	31672662	        85.68 ns/op	        85.68 wall-ns/op	       0 B/op	       0 allocs/op
+== round 16 base
+BenchmarkG13EnterLeave/callers=8-8         	30636694	        73.79 ns/op	        73.79 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	37814728	        74.50 ns/op	        74.50 wall-ns/op	       0 B/op	       0 allocs/op
+== round 16 head
+BenchmarkG13EnterLeave/callers=8-8         	31799409	        79.09 ns/op	        79.09 wall-ns/op	       0 B/op	       0 allocs/op
+BenchmarkG13EnterLeave/callers=32-8        	30087962	        83.01 ns/op	        83.01 wall-ns/op	       0 B/op	       0 allocs/op
