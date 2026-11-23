@@ -31,7 +31,7 @@ func TestCallsBothRegistriesWhenAsked(t *testing.T) {
 	root := kerneltest.New(t)
 	l, lp := launchfake.New()
 	l.Flags = map[string]string{"home": home}
-	clk, cp := clockfake.New(time.Unix(0, 0))
+	clk, cp := clockfake.NewAt(time.Unix(0, 0))
 	kerneltest.Mount(root, lp, cp, dispatch.Plugin, echoer.Plugin, stamper.Plugin)
 	f := root.Plugin(echoer.Plugin, map[string]any{"name": "loud", "prefix": "LOUD "})
 	if err := f.Await(t.Context()); err != nil {

@@ -22,20 +22,28 @@ type DryRun struct {
 
 var _ configrefs.DryRun = DryRun{}
 
-// New returns the dry run, in which a reference resolves when resolves says so, and
-// the plugin that provides it under configrefs.Key. Each call returns a new plugin
-// value, a new entry of its own. Each activation provides a dry run of its own, which
-// is refused once that activation unloads.
-func New(resolves func(launch.Ref) bool) (DryRun, kernel.Plugin) {
+// New returns the dry run in which every reference resolves, and its plugin. It
+// takes no argument, so the generated cycle test mounts it (ADR-060 decision 12).
+func New() (DryRun, kernel.Plugin) { return NewWith(func(launch.Ref) bool { return true }) }
+
+// NewWith returns the dry run, in which a reference resolves when resolves says so,
+// and the plugin that provides it under configrefs.Key. Each call returns a new
+// plugin value, a new entry of its own. Each activation provides a dry run of its
+// own, which is refused once that activation unloads.
+func NewWith(resolves func(launch.Ref) bool) (DryRun, kernel.Plugin) {
 	f := DryRun{resolves: resolves}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/config-refs-fake",
 		Provides: []kernel.AnyKey{configrefs.Key},
 		Apply: func(c *kernel.Context, _ any) error {
-			return configrefs.Key.Provide(c, DryRun{resolves: resolves, std: c.Std()})
+			// The served value has the methods of configrefs.DryRun only: Inventory is the test's.
+			return configrefs.Key.Provide(c, struct{ configrefs.DryRun }{DryRun{resolves: resolves, std: c.Std()}})
 		},
 	})
 }
+
+// Inventory is empty: a dry run leaves nothing behind (ADR-060 decision 12).
+func (DryRun) Inventory() []string { return nil }
 
 // Check walks maps and lists and fails at the first reference that does not resolve.
 // When each one resolves, it calls decode with the tree in which every reference is

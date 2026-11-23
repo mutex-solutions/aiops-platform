@@ -7,8 +7,10 @@
 package fake
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -27,11 +29,20 @@ type Clock struct {
 
 var _ clock.Clock = (*Clock)(nil)
 
-// New returns a clock standing at start and the plugin that provides it under
+// Epoch is where New stands: a fixed instant, so a test that names none reads the
+// same time at every run.
+var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// New returns a clock standing at Epoch and the plugin that provides it under
+// clock.Key. It takes no argument, so the generated cycle test mounts it (ADR-060
+// decision 12).
+func New() (*Clock, kernel.Plugin) { return NewAt(Epoch) }
+
+// NewAt returns a clock standing at start and the plugin that provides it under
 // clock.Key. Each call returns a new plugin value, a new entry of its own. Each
-// activation provides the methods of clock.Clock only, as served: Advance and
-// Pending are the test's (no side door, 07-c4-plugin-sdk.md §4.3).
-func New(start time.Time) (*Clock, kernel.Plugin) {
+// activation provides the methods of clock.Clock only, as served: Advance, Pending
+// and Inventory are the test's (no side door, 07-c4-plugin-sdk.md §4.3).
+func NewAt(start time.Time) (*Clock, kernel.Plugin) {
 	f := &Clock{now: start}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/clock-fake",
@@ -148,6 +159,21 @@ func (f *Clock) Pending() int {
 	defer f.mu.Unlock()
 	f.prune()
 	return len(f.pending)
+}
+
+// Inventory lists what the callers left behind: one line per pending timer, in
+// order of time and start (07-c4-plugin-sdk.md:494; ADR-060 decision 12).
+func (f *Clock) Inventory() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prune()
+	ts := slices.Clone(f.pending)
+	slices.SortFunc(ts, func(a, b *timer) int { return cmp.Or(a.at.Compare(b.at), cmp.Compare(a.seq, b.seq)) })
+	out := make([]string, len(ts))
+	for i, t := range ts {
+		out[i] = fmt.Sprintf("timer %d at %s", t.seq, t.at.Format(time.RFC3339Nano))
+	}
+	return out
 }
 
 // prune drops the timers whose stop was never recorded. f.mu is held.

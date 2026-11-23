@@ -52,6 +52,10 @@ func New() (*Reload, kernel.Plugin) {
 	})
 }
 
+// Inventory is empty: a submission is a call, not a registration, so a caller
+// leaves nothing behind (ADR-060 decision 12).
+func (*Reload) Inventory() []string { return nil }
+
 // served is what an activation provides: the reload, whose Submit is refused with
 // reload.ErrClosed once that activation unloads, as the reload row refuses it.
 type served struct {

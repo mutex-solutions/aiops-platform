@@ -32,7 +32,7 @@ func fired(t clock.Timer) (time.Time, bool) {
 // mount mounts the fake and a consumer, and returns what the consumer got.
 func mount(t *testing.T) (*fake.Clock, clock.Clock, *kernel.Context) {
 	t.Helper()
-	f, provider := fake.New(t0)
+	f, provider := fake.NewAt(t0)
 	var got clock.Clock
 	var cc *kernel.Context
 	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
@@ -118,7 +118,7 @@ func TestStopAndImmediateTimers(t *testing.T) {
 // A timer is an effect of the caller's fiber: it is gone when the fiber is
 // disposed, and a disposed fiber cannot start one (07-c4-plugin-sdk.md:516).
 func TestTimerLeavesWithItsFiber(t *testing.T) {
-	f, provider := fake.New(t0)
+	f, provider := fake.NewAt(t0)
 	var timer clock.Timer
 	var cc *kernel.Context
 	var cl clock.Clock
@@ -159,7 +159,7 @@ func TestTimerLeavesWithItsFiber(t *testing.T) {
 // an activation that quiesced first: an Apply that starts a timer and then fails. Such
 // a timer is not pending and never fires.
 func TestTimerOfAFailedApplyNeverFires(t *testing.T) {
-	f, provider := fake.New(t0)
+	f, provider := fake.NewAt(t0)
 	var timer clock.Timer
 	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
 		var err error
@@ -191,7 +191,7 @@ func TestTimerOfAFailedApplyNeverFires(t *testing.T) {
 // A timer that fires or is stopped leaves its fiber's effect ledger, so a fiber that
 // starts one timer after another holds only those still pending.
 func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {
-	f, provider := fake.New(t0)
+	f, provider := fake.NewAt(t0)
 	var cl clock.Clock
 	var cc *kernel.Context
 	consumer := kernel.Define(kernel.Plugin{ID: "aiops/consumer", Inject: []kernel.Dep{kernel.Need(clock.Key)}, Apply: func(c *kernel.Context, _ any) error {
@@ -238,7 +238,7 @@ func TestFiredAndStoppedTimersLeaveTheLedger(t *testing.T) {
 
 // clock is open (03-c3-kernel.md:69): any plugin provides and injects it under binding maps.
 func TestKeyIsOpenUnderBindingMaps(t *testing.T) {
-	_, provider := fake.New(t0)
+	_, provider := fake.NewAt(t0)
 	consumer := deftest.Plugin("aiops/consumer", []kernel.Dep{kernel.Need(clock.Key)}, nil, nil, func(c *kernel.Context) error { _ = clock.Key.Of(c); return nil })
 	root := deftest.Bound(t, deftest.Config(nil, nil))
 	deftest.Active(t, root.Plugin(provider, nil))

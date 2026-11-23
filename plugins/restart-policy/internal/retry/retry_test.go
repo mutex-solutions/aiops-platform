@@ -75,7 +75,7 @@ func newRig(t *testing.T, p Policy) *rig {
 	t.Helper()
 	g := &rig{t: t, root: kerneltest.New(t), reg: &registry{m: map[uint64]*kernel.Fiber{}}, logs: make(chan string, 256)}
 	var kp, cp kernel.Plugin
-	g.clk, kp = clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
+	g.clk, kp = clockfake.NewAt(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
 	g.comp, cp = compfake.New()
 	var c *kernel.Context
 	holder := kernel.Define(kernel.Plugin{ID: "aiops/holder", Apply: func(hc *kernel.Context, _ any) error { c = hc; return nil }})

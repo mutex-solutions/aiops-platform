@@ -412,6 +412,14 @@ func (f *Loader) Entries() []loader.Entry {
 	return out
 }
 
+// Inventory lists what the callers left behind: the id of every entry of the tree,
+// sorted (ADR-060 decision 12).
+func (f *Loader) Inventory() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Sorted(maps.Keys(f.entries))
+}
+
 // Patch dispatches loader/patch-context for an entry mounted from c and returns the
 // context the chain ended with. Its innermost step stands for the real loader's,
 // which applies the row's isolate and intercept: it returns a new context derived

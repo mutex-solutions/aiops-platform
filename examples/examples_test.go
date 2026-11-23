@@ -20,7 +20,7 @@ func TestPluginsMountTogether(t *testing.T) {
 	root := kerneltest.New(t)
 	l, lp := launchfake.New()
 	l.Flags = map[string]string{"home": t.TempDir()}
-	_, cp := clockfake.New(time.Unix(0, 0))
+	_, cp := clockfake.NewAt(time.Unix(0, 0))
 	kerneltest.Mount(root, append([]kernel.Plugin{lp, cp}, examples.Plugins()...)...)
 	var ids []string
 	for _, p := range examples.Plugins() {

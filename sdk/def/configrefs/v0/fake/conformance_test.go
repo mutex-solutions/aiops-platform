@@ -17,7 +17,7 @@ import (
 // resolves when the setup's environment holds its name.
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) (*kernel.Root, *kernel.Fiber) {
-		_, p := fake.New(func(r launch.Ref) bool {
+		_, p := fake.NewWith(func(r launch.Ref) bool {
 			_, ok := s.Env[r.Name]
 			return r.Scheme == "env" && ok
 		})

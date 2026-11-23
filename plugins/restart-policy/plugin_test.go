@@ -132,7 +132,7 @@ func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
 	var lp, kp, cp, rp kernel.Plugin
 	w.launch, lp = launchfake.New()
 	w.launch.Modules = []launch.CatalogEntry{{ID: "aiops/sql", Provides: []string{"sql"}}, {ID: "aiops/other"}}
-	w.clk, kp = clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
+	w.clk, kp = clockfake.NewAt(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
 	w.comp, cp = compfake.New()
 	w.reload, rp = reloadfake.New()
 	kerneltest.Mount(w.root, lp, kp, cp, rp)
@@ -1104,7 +1104,7 @@ func TestBindingMapsMustListTheRow(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, lp := launchfake.New()
-			_, kp := clockfake.New(time.Time{})
+			_, kp := clockfake.NewAt(time.Time{})
 			_, cp := compfake.New()
 			rp := restartpolicy.New()
 			var consumers, listeners []kernel.Plugin
@@ -1135,7 +1135,7 @@ func TestRetriesAFiberThatFailedBeforeRestartPolicyWasActive(t *testing.T) {
 	root := kerneltest.New(t, kerneltest.WithConfig(func(c *kernel.Config) { c.LogHandler = logTap{logs} }))
 	l, lp := launchfake.New()
 	l.Modules = []launch.CatalogEntry{{ID: "aiops/other"}}
-	clk, kp := clockfake.New(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
+	clk, kp := clockfake.NewAt(time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC))
 	comp, cp := compfake.New()
 	kerneltest.Mount(root, lp, kp, cp)
 	fl := newFlaky("aiops/other", true)

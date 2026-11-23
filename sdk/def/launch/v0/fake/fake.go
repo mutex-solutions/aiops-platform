@@ -311,6 +311,15 @@ func (f *Launcher) IsReady() bool {
 	return f.ready
 }
 
+// Inventory lists what the callers left behind: "ready" while the latch is set
+// (ADR-060 decision 12).
+func (f *Launcher) Inventory() []string {
+	if f.IsReady() {
+		return []string{"ready"}
+	}
+	return nil
+}
+
 // KillSwitches.
 
 func (f *Launcher) On(name string) bool { return f.Switches[name] }

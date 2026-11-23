@@ -15,7 +15,7 @@ import (
 // The fake passes the suite that the clock row passes.
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T) (*kernel.Root, *kernel.Fiber) {
-		_, p := fake.New(t0)
+		_, p := fake.NewAt(t0)
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)

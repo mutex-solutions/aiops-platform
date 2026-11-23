@@ -15,7 +15,7 @@ import (
 
 func TestCheckFindsAReferenceThatDoesNotResolve(t *testing.T) {
 	env := func(r launch.Ref) bool { return r.Scheme == "env" }
-	f, p := fake.New(env)
+	f, p := fake.NewWith(env)
 	// The key is provider-bound: the kernel admits the fake's plugin when the binding
 	// lists it, and the dry run is what a consumer resolves.
 	root := deftest.Bound(t, deftest.Config(kernel.Bindings{configrefs.Key: {p}}, nil))

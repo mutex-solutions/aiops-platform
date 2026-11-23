@@ -37,6 +37,10 @@ func New() (*Reader, kernel.Plugin) {
 	})
 }
 
+// Inventory is empty: a caller of composition only reads, so it leaves nothing
+// behind (ADR-060 decision 12).
+func (*Reader) Inventory() []string { return nil }
+
 // Commit makes a copy of g the committed generation of its scope.
 func (f *Reader) Commit(g composition.Generation) {
 	f.mu.Lock()
