@@ -33,7 +33,7 @@
   `commands` (`00:137`, `:515`; `02:95`; `08:271`, `:359`, `:1208`; plugin record §2 row
   15). This is dsh's rule: one launcher, and an app differs from another only by the
   bundles it lists and the startup plugin that parses the leftover argv (dsh §7), which
-  `08:73` (row 31) carries.
+  `08:73` (row 31) carries and this ADR records as adapted (Edits on acceptance).
 - **The catalogue.** `commands` is a key of class `-` whose first-party provider row is
   `cli`, with no remote contribution (`00:222`). Its consumers are `admin-api`, `cli` and
   every plugin with a command, and its fake records (plugin record §5). `aiops-cli`
@@ -203,8 +203,9 @@
        so `Run` writes only to the streams of its invocation on those paths.
      - `commands/cancel`: each case gives an argv and a delay. The context of the
        invocation ends after the delay, and `Run` returns within 5 seconds of that with
-       an error that matches the context's error: the bound in which the `cli` row
-       returns at a signal (decision 17).
+       an error that matches the context's error. Five seconds is half the drain
+       deadline of ADR-059 decision 30, inside which the `cli` row must return at a
+       signal (decision 17).
 
      A stub that returns "not implemented" fails `commands/run` and `commands/cancel`
      once their cases exist, since neither outcome matches, and fails every obligation
@@ -321,25 +322,26 @@
     - `ExitRequest` gains `Code`, read only with the new reason `ExitCommand`: the
       launcher stops under its shutdown bound and returns that code, which is 0, 1 or 2.
       Any other code with that reason is a launcher failure.
-    - `boot.RunOptions` gains `Command`, which `cmd/aiopsctl` sets and `cmd/aiops` does
-      not. Under it, a stop that an `ExitCommand` request began returns the request's
-      code when the tree disposed within the shutdown bound with no leak, and `ExitLeak`
-      otherwise; a stop that a signal or the end of `ctx` began returns
-      `ExitInterrupted`, a new launcher code 8; and where boot would return `ExitUsage`
-      it returns `ExitInternal`. A launcher code of 0 or 2 is then always a command's.
-      At `a3c85ae` a signal returns `ExitOK`, the code of a command's success, and a
-      leak replaces only `ExitOK` (`boot/run.go`), so `cmd/aiopsctl` could tell neither a
-      signal from a success nor a leak after a failed command. The codes of `aiops` do
-      not change.
+
+    Whatever question Q2 decides, `boot.RunOptions` gains `Command`, which `cmd/aiopsctl`
+    sets and `cmd/aiops` does not. Under it, a stop that an `ExitCommand` request began
+    returns the request's code when the tree disposed within the shutdown bound with no
+    leak, and `ExitLeak` otherwise; a stop that a signal or the end of `ctx` began returns
+    `ExitInterrupted`, a new launcher code 8; and where boot would return `ExitUsage` it
+    returns `ExitInternal`. A launcher code of 0 or 2 is then always a command's. At
+    `a3c85ae` a signal returns `ExitOK`, the code of a command's success, and a leak
+    replaces only `ExitOK` (`boot/run.go`), so `cmd/aiopsctl` could tell neither a signal
+    from a success nor a leak after a failed command. The codes of `aiops` do not change.
 
 ### The `operations` definition and plugin
 
 14. **Name** (question Q3 (a)): definition `sdk/def/operations/v0`, key `operations`,
     plugin `aiops/operations` in `plugins/operations/`, and row `operations` of
     `aiops-cli` (ADR-060 decision 41). It is the documents' name for the library
-    (`08:369`; `07:1846`; plugin record §12) and dsh's (`operations.ts`, dsh §4.2). Keys
-    with a plural name for one engine exist: `jobs`, `secrets`, `tokens`, `credentials`
-    (`00:216`, `:218`, `:224`, `:226`).
+    (`08:369`; `07:1846`; plugin record §12) and dsh's (`operations.ts`, dsh §4.2). A
+    plural key for one engine departs from `00:206` and `:656`, as `jobs`, `secrets`,
+    `tokens` and `credentials` already do (`00:216`, `:218`, `:224`, `:226`); question Q3
+    names the edit and a singular option.
 
 15. **Class `C`**: provider open, consumer bound, as `pluginManager` (`00:222`). The
     release manifest lists as its consumers the five command rows of decision 30 and,
@@ -492,12 +494,14 @@
       and syncs it. The set covers the profile definition, `plugins.lock` and the profile
       patch (`08:374`), the records under `verified/` and `verified/current`, which are
       restored with `plugins.lock` (ADR-020 decision 10), `trust.yaml`, `image.yaml`, and
-      the directories under `bundles/` and `content/`. It then renames: `Install` the
-      directories of ADR-047 decision 10, then the records, then `plugins.lock`, then the
-      bundle list; `Remove` the bundle list, then `plugins.lock`, then, after the
-      submission, the directories that no profile names any more; `UseDist` the record,
-      then `current`, then `image.yaml`. Last, it submits, removes the snapshot and
-      releases the lock.
+      the directories that install creates under `bundles/` and `content/`. It then
+      renames: `Install` the directories of ADR-047 decision 10, then the records, then
+      `plugins.lock`, then the bundle list; `Remove` the bundle list, then
+      `plugins.lock`; `UseDist` the record, then `current`, then `image.yaml`. Last, it
+      submits, removes the snapshot and releases the lock. `Remove` deletes the
+      directories that no profile names any more only after a submission that kept the
+      change, so the snapshot holds no copy of them, and a directory that a failure leaves
+      behind is removed by the next install (ADR-047 decision 10).
     - **Restore.** On a failure, a refused submission or the end of `ctx`, the method
       restores the snapshot, copying each file back and removing each created path. It
       runs the restore under a context detached from `ctx`, bounded to 5 seconds, half
@@ -880,7 +884,9 @@
     the image's own run passes `local` (decision 21). `--profile` on a command that writes
     a profile defaults to the profile that `run/status.json` of the home names, so the
     written forms `plugin enable <row>` and `plugin install <spec>` (`08:395`-`397`;
-    `07:1855`) work against a running process; with no such file it is a usage error.
+    `07:1855`) work against a running process; with no such file it is a usage error,
+    and a step of the exit test with no running process passes `--profile`, as step C3
+    of ADR-060 decision 30 does.
 
 ### Tests
 
@@ -905,7 +911,10 @@
       owned by another user.
     - The distribution rule of decision 26, with a release `aiopsctl` after `dist use` of
       a site image.
-    - The goldens of decision 27, with the dump and the hook dump of the `cli` profile.
+    - The goldens of decision 27, with the dump and the hook dump of the `cli` profile,
+      and the help goldens of the CLI spec (decision 30).
+    - With question Q9 (a), a broken site layer: the first boot stops, the second runs,
+      and `profile sanitize` sets the file aside.
 
 ### What this ADR does not settle
 
@@ -1033,10 +1042,9 @@ Made in the commit that records the owner's answers (`08:997`):
   key `operations`, and the write lock is `$AIOPS_HOME/write.lock`.
 - ADR-047 decision 13: the rows of `write.lock` and `snapshot/`. ADR-047 decision 14:
   `write.lock` is the one file not replaced by a rename (decision 19). ADR-060 decision
-  24: the template of
-  `commands`. ADR-060 decision 35: the caps of the Consequences. ADR-059 decision 29 and
-  ADR-060 decision 23: the exit table is recorded in the help of the `cli` row and in the
-  exit mapping of `cmd/aiopsctl`.
+  24: the template of `commands`. ADR-060 decision 35: the caps of the Consequences.
+  ADR-059 decision 29 and ADR-060 decision 23: the exit table is recorded in the help of
+  the `cli` row and in the exit mapping of `cmd/aiopsctl`.
 - ADR-060 decision 23: the command `profile sanitize`, with question Q9 (a) or (b).
 - The lines that the chosen options of questions Q1, Q3, Q6, Q7, Q8 and Q9 name.
 
@@ -1053,14 +1061,15 @@ the launch keys stay six (ADR-059 decision 35).
 - (a) `profileContext` gains `Toolbox()` in launch 0.2 (decision 21), and the release
   manifest lists `aiops/operations` among its consumers. The six keys stay, and the
   toolbox sits beside compose, admit and plan, which the owner placed in
-  `profileContext` for `reload`. Costs: the operations plugin can also call `Commit`,
-  which only `reload` calls today, which in the `cli` process is its own composition and
-  in a server profile from S6a a power the manager's path does not need; and every other
-  consumer of `profileContext`, `loader`, `reload` and `readiness` (`dist/dist.yaml`),
-  can call `Build`, `Suite` and every other part, so the operations plugin is the one
-  consumer of the toolbox by review only, not by binding. In `aiops` the parts of
-  `Tools` answer `ErrNotCarried`, so there that reach covers `boot`'s parts alone. `00:212` and plugin record §5 name the toolbox
-  in the contract of `launch`.
+  `profileContext` for `reload`. Two costs. The operations plugin can also call
+  `Commit`, which only `reload` calls today: in the `cli` process that is its own
+  composition, and in a server profile from S6a a power the manager's path does not
+  need. And every other consumer of `profileContext`, `loader`, `reload` and
+  `readiness` (`dist/dist.yaml`), can call `Build`, `Suite` and every other part, so the
+  operations plugin is the one consumer of the toolbox by review only, not by binding;
+  in `aiops` the parts of `Tools` answer `ErrNotCarried`, so there that reach covers
+  `boot`'s parts alone. `00:212` and plugin record §5 name the toolbox in the contract
+  of `launch`.
 - (b) A seventh launch key, `toolbox`, class `PC`, consumer-bound to `aiops/operations`
   and provided by every launcher, with the parts that only `aiopsctl` carries absent in
   `aiops`. The operations plugin gets nothing else of `profileContext`, and no other row
@@ -1078,16 +1087,19 @@ the launch keys stay six (ADR-059 decision 35).
   removes both at the price of a seventh key. Needed before the first command row
   merges.
 
-**Q2. Where does the `cli` row get its streams, the end of boot and its exit code?**
-`cmdline` serves argv only, `appExit` carries no code, and no launch service says when
-boot has finished (`00:212`; `sdk/def/launch/v0/launch.go`).
-- (a) Launch 0.2 as decision 13 states: `Cmdline` gains the three streams, `Ready` gains
-  `Booted()`, and `ExitRequest` gains `Code` with the reason `ExitCommand`. The `cli` row
-  and each command row mount alone with the launch fake and a test's buffers (`03:81`).
-- (b) Only `ExitRequest` gains `Code`. The `cli` row uses the streams of the package
-  `os`, and dispatches once `composition` has shown no row loading for an interval it
-  measures on `clock`. A test of the row replaces the process's streams, and the
-  interval is a guess at a fact that the launcher already knows.
+**Q2. Where does the `cli` row get its streams, its working directory and environment,
+the end of boot and its exit code?** `cmdline` serves argv only, `appExit` carries no
+code, and no launch service says when boot has finished (`00:212`;
+`sdk/def/launch/v0/launch.go`). Decision 13's `Command` holds under either option.
+- (a) Launch 0.2 as decision 13 states: `Cmdline` gains the three streams, `Dir()` and
+  `Environ()`, filled in `aiopsctl` only; `Ready` gains `Booted()`; and `ExitRequest`
+  gains `Code` with the reason `ExitCommand`. The `cli` row and each command row mount
+  alone with the launch fake and a test's buffers, directory and environment (`03:81`).
+- (b) Only `ExitRequest` gains `Code`. The `cli` row uses the streams, the working
+  directory and the environment of the package `os`, and dispatches once `composition`
+  has shown no row loading for an interval it measures on `clock`. A test of the row
+  replaces the process's streams and environment, and the interval is a guess at a fact
+  that the launcher already knows.
 - Recommended: (a). The launcher owns the streams, the settle and the exit code
   (`07:1344`), and (a) hands each to the row as a launch service, as dsh's launcher
   provides argv, the exit and readiness before any row mounts (dsh §7). Needed before the
@@ -1120,7 +1132,8 @@ of one engine that `00` already holds (`00:216`, `:218`, `:224`, `:226`).
 **Q4. How many command rows?**
 - (a) One per command group: five at S2a (decision 30). A group is one row that an
   operator can enable or disable, and each stays under its cap.
-- (b) One per command: twenty-one at S2a, each with its own manifest, tests and T3 boot.
+- (b) One per command: twenty-one at S2a, twenty-two with `profile sanitize` (question
+  Q9), each with its own manifest, tests and T3 boot.
 - (c) One row for every S2a command, whose plugin would pass the cap of 1,500 lines of a
   command row (ADR-060 decision 35).
 - Recommended: (a). It is the fewest rows that keep each plugin under its cap. Needed
