@@ -245,6 +245,24 @@ func TestDecision37SettlesNothingItself(t *testing.T) {
 	}
 }
 
+// A citation of decision 37 names ADR-059's unless it names another ADR: ADR-060 has
+// a decision 37 of its own, the toy caller, which code may cite.
+func TestDecision37CitationNamesADR059(t *testing.T) {
+	for text, want := range map[string]bool{
+		"see decision 37.":                     true,
+		"(adr-059 decision 37)":                true,
+		"adr-059, decision 37":                 true,
+		"the toy caller (adr-060 decision 37)": false,
+		"adr-060 decision 37 and decision 37":  true,
+		"adr-060 decisions 37 and 38":          false,
+		"decision 370":                         false,
+	} {
+		if got := citesDecision37(text); got != want {
+			t.Errorf("citesDecision37(%q) = %v, want %v", text, got, want)
+		}
+	}
+}
+
 // TestLimitsFilesCiteTheirDecisions: decision 30 makes the release limits the defaults
 // for now and decision 39 confirms the test limits, so the comment of each limits file
 // cites its decision and calls its values an open point no longer.
