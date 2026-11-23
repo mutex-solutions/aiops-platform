@@ -182,8 +182,8 @@ type Rollback struct {
 type Reload interface {
 	// Submit queues op and returns its id at once. It never waits, so it is safe in a
 	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed or
-	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the
-	// AsyncLocalStorage of dsh runExclusive does: a Submit made under it is a nested
+	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the exclusive
+	// run of the reference design marks its own: a Submit made under it is a nested
 	// submission and is refused with ErrNested, and any other Submit only queues
 	// (ADR-059 decision 45).
 	Submit(ctx context.Context, op Op) (ID, error)

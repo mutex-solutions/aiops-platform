@@ -1,5 +1,9 @@
-// Command register is the register check U7 of ADR-054 (decision 12; ADR-060
-// decisions 36 and 51). It reads tools/upstream-components.yaml and fails when an
+// Command register runs the checks of ADR-054 that read the names of the upstream
+// register: the name lint U1 (decisions 14 and 22) and suite neutrality U3 (decision
+// 15), in names.go, and the register check U7 (decision 12; ADR-060 decisions 36 and
+// 51). The import boundary U2 is tools/kernelcheck imports.
+//
+// U7 reads tools/upstream-components.yaml and fails when an
 // entry breaks the schema of ADR-054 decisions 3 and 4, when a module in the package
 // graph of a module of the repository, tests included, has no entry, when a build
 // of a module selects a version other than an entry's pin, and on the clauses of
@@ -64,10 +68,21 @@ func runCheck(root string) error {
 	if err != nil {
 		return err
 	}
-	if bad := check(r, in); len(bad) > 0 {
-		return fmt.Errorf("U7 fails (ADR-054 decision 12):\n%s", strings.Join(bad, "\n"))
+	ps, err := places(root)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("register: %d entries; every module of the package graphs has an entry at its pin\n", len(r.Entries))
+	var fails []string
+	if bad := check(r, in); len(bad) > 0 {
+		fails = append(fails, "U7 fails (ADR-054 decision 12):\n"+strings.Join(bad, "\n"))
+	}
+	if bad := lint(r, ps); len(bad) > 0 {
+		fails = append(fails, "U1 or U3 fails (ADR-054 decisions 14, 15 and 22):\n"+strings.Join(bad, "\n"))
+	}
+	if len(fails) > 0 {
+		return errors.New(strings.Join(fails, "\n"))
+	}
+	fmt.Printf("register: %d entries; every module of the package graphs has an entry at its pin; %d places hold no name outside its places\n", len(r.Entries), len(ps))
 	return nil
 }
 
@@ -344,7 +359,7 @@ func gather(root string) (inputs, error) {
 		}
 		in.dist[filepath.ToSlash(strings.TrimPrefix(f, filepath.Clean(root)+string(filepath.Separator)))] = string(b)
 	}
-	dec, err := os.ReadFile(filepath.Join(root, "docs/architecture/00-decisions.md"))
+	dec, err := os.ReadFile(filepath.Join(root, decisionsFile))
 	if err != nil {
 		return in, err
 	}

@@ -120,10 +120,13 @@ jobs:
         # of every plugin.yaml, read as data, and the generated tests beside it are what
         # plugingen writes from the plugin's value.
         run: go run ./tools/plugingen .
-      - name: Register check (U7)
+      - name: Register check (U7), name lint (U1) and suite neutrality (U3)
         # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package
         # graphs has an entry of tools/upstream-components.yaml at its pin, and no entry
         # breaks the schema or a clause of decision 12. Reads the module cache only.
+        # ADR-054 decisions 14, 15 and 22: no name of an entry in sdk/, boot/, loader/,
+        # the ids of the plugins and the documentation places of 00-decisions.md outside
+        # the places the register gives it.
         run: go run ./tools/register .
       - name: Boot and loader statement coverage profiles
         run: |

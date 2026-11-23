@@ -64,10 +64,10 @@ func TestVolatileOnly(t *testing.T) {
 }
 
 // A path is its list of keys, so a key that holds a dot stays one key: a change of the
-// label "k8s.pod" and a change of the field pod of the map k8s have different paths.
+// label "app.pod" and a change of the field pod of the map app have different paths.
 func TestVolatileOnlyPathsKeepADottedKey(t *testing.T) {
-	dotted, _ := loader.VolatileOnly(m{"labels": m{"k8s.pod": "a"}}, m{"labels": m{"k8s.pod": "b"}}, nil)
-	nested, _ := loader.VolatileOnly(m{"labels": m{"k8s": m{"pod": "a"}}}, m{"labels": m{"k8s": m{"pod": "b"}}}, nil)
+	dotted, _ := loader.VolatileOnly(m{"labels": m{"app.pod": "a"}}, m{"labels": m{"app.pod": "b"}}, nil)
+	nested, _ := loader.VolatileOnly(m{"labels": m{"app": m{"pod": "a"}}}, m{"labels": m{"app": m{"pod": "b"}}}, nil)
 	if reflect.DeepEqual(dotted, nested) {
 		t.Errorf("a dotted key and a nested field have the same paths: %q", dotted)
 	}

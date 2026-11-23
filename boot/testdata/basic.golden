@@ -1,4 +1,4 @@
-digest sha256:8a6bd42ff56ca33d5653d4e66e9fa92b77d1f43875a562adc3b89697aab04740
+digest sha256:9205efc0cf967b8152de8d33a3c9cad9e8180a12ad7c1bbfbc0eb2490c8509ae
 warning profiles/demo/aiops.patch.yml:5: unknown-id: patch targets unknown id "ghost" and is skipped
 
 row loader plugin=aiops/loader parent="" enabled=true required=true group=false roles=[api worker] inject=[] isolate=[]
@@ -7,7 +7,7 @@ row loader plugin=aiops/loader parent="" enabled=true required=true group=false 
   required set by L3 site aiops.patch.yml:4
 
 row metrics-query plugin=aiops/metrics-query-http parent="" enabled=true required=false group=false roles=[api] inject=[metrics] isolate=[logsQuery]
-  config {endpoint: "https://prometheus.example.internal"}
+  config {endpoint: "https://metrics.example.internal"}
   intercept {logsQuery: {mode: "strict"}}
   inserted L1 bundle:core bundles/core/bundle.yaml:16
   config set by L2 profile:demo profiles/demo/aiops.patch.yml:2

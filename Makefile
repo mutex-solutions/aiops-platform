@@ -44,7 +44,8 @@ check:
 	go run ./tools/deflint .
 	@# ADR-060 decisions 11 and 36: manifest parity of every plugin.yaml and its generated tests.
 	go run ./tools/plugingen .
-	@# ADR-054 decision 12, ADR-060 decision 51: the register check U7.
+	@# ADR-054 decisions 12, 14, 15 and 22, ADR-060 decision 51: the register check U7,
+	@# the name lint U1 and suite neutrality U3.
 	go run ./tools/register .
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader

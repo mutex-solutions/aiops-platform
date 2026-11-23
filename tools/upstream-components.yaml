@@ -2,7 +2,10 @@
 # §7.2). One entry per upstream and per content source, with the keys of ADR-054
 # decision 3 and the values of decision 4; `exceptions`, the stated exceptions of
 # 00-decisions.md:267 (decision 9); `baseProviders`, the base provider allow-list
-# (decision 10). The register check U7 is `go run ./tools/register .` (decision 12).
+# (decision 10). `go run ./tools/register .` runs the register check U7 (decision 12),
+# the name lint U1 (decisions 14 and 22) and suite neutrality U3 (decision 15);
+# `go run ./tools/kernelcheck imports . tools/upstream-components.yaml` runs the import
+# boundary U2 (decision 13).
 #
 # A dependency lands in one commit with its entry, its reading at the pinned version
 # and the row of the licence record (decisions 7 and 16). A version bump reads the
@@ -298,11 +301,15 @@ entries:
     mark: needs-approval
     default: false
 
-# The stated exceptions of 00-decisions.md:267 (ADR-054 decisions 9, 19 and 21).
+# The stated exceptions of 00-decisions.md:267 (ADR-054 decisions 9, 19 and 21). U1 and
+# U3 read an item's place when it is `every place`, `ids`, a directory of the repository
+# with its trailing slash, or a documentation place of decision 22 written
+# `00 §2.1 row <n>` where the item's tokens name its contract; any other place is prose
+# that no check reads before its first case lands.
 exceptions:
   - item: The PostgreSQL dialect behind sql, sql.Bound, platformSql and sqlDriver
     tokens: [postgres, postgresql, pgx]
-    places: [those definitions and their suites, the sql fake and sdk/testkit/sqlfake, an import of pgx v5 in sdk/def/sql, the participants of sqlDriver, the suffix of a row on the allow-list that wraps it]
+    places: [those definitions and their suites, the sql fake and sdk/testkit/sqlfake, an import of pgx v5 in sdk/def/sql, the participants of sqlDriver, the suffix of a row on the allow-list that wraps it, 00 §2.1 row 9]
     source: 00-decisions.md:267; ADR-054 decision 23
   - item: The two query dialect keys, metricsQuery and logsQuery
     tokens: [promql, prometheus, logql, loki]
@@ -314,7 +321,7 @@ exceptions:
     source: 00-decisions.md:267; ADR-054 decision 19
   - item: The Cordis semantics of the kernel port
     tokens: [cordis, deepseek, dsh]
-    places: [sdk/kernel/, loader/, test/differential/, test/spike/s0/, their notices included]
+    places: [sdk/kernel/, loader/, test/differential/, test/spike/s0/, their notices included, 00 §2.1 row 1]
     source: 00-decisions.md:267; 08 §5.1 L12
   - item: The default stack bundle (aiops-stack, agent-base and the agent bundles)
     tokens: [the names of every entry whose plugins sit in one of those bundles]
