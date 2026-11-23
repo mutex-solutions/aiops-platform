@@ -293,12 +293,16 @@ gaps:
     required set (`08:1220`). The signed distribution manifest is what the builder writes
     from either: the module table, mapping each plugin id to its value and its manifest
     (`07:1344`), with each module's sum and detected licence; the packages the binary
-    links, which the fake clause of check 7 reads at boot; the pins; both binding maps;
-    the sealed-hook listeners; the required set; the accepted licences; and `serves`
-    (`07:1846`). The binary embeds the manifest it was built with. A release publishes
-    the signed file for `plugin gate --against` (`08:936`). The release module table is
-    generated into `dist/` and committed, CI fails when it differs from the generator's
-    output, and `go build ./...` keeps building `cmd/aiops`.
+    links, which the fake clause of check 7 reads at boot; the pins, with the `go.sum`
+    lines of the release's own build, each version raised by `--allow-bump` beside the
+    release's pin and each hash checked against nothing (ADR-044 decisions 8 and 10); the
+    toolchain module `golang.org/toolchain` at the pinned version with its hash (ADR-044
+    decision 16); both binding maps; the sealed-hook listeners; the required set; each
+    entry a site added, marked as the site's (ADR-044 decision 13); the accepted
+    licences; and `serves` (`07:1846`). The binary embeds the manifest it was built with.
+    A release publishes the signed file for `plugin gate --against` (`08:936`). The
+    release module table is generated into `dist/` and committed, CI fails when it differs
+    from the generator's output, and `go build ./...` keeps building `cmd/aiops`.
 21. **SDK module versions outside the repository.** Inside the repository the three SDK
     modules require each other at `v0.0.0` through `replace` lines, and the root module
     reaches them the same way; that stays, for work inside the repository only.
@@ -306,7 +310,9 @@ gaps:
       writes the served copy of each SDK `go.mod`: its `require` lines name the SDK
       version and it holds no `replace` line. A test fails when a served copy differs
       from the repository's file in anything else. Where the modules are served is
-      question Q4.
+      question Q4. A release also serves the root module at the release version, from the
+      same module source, with a served `go.mod` that names the SDK version and holds no
+      `replace` line, under the same test (ADR-044 decision 23).
     - The release image, the release `aiopsctl` and the release's signed manifest are
       built by the builder from the served modules, never through `replace`, so the pins
       of the signed manifest name the SDK version, and the strict-version check of the
@@ -319,6 +325,8 @@ gaps:
       `GOTOOLCHAIN=local`; `GOFLAGS=-mod=readonly`; and a network that reaches only the
       exit's module proxy and registry. No lookup of the private module path leaves the
       job (`08:1342` L14). `dist build` passes the same settings into the builder image.
+      Until L14 clears, every module source of the builder is a `file://` directory and
+      `dist build` refuses a proxy URL (ADR-044 decision 7).
 22. **The builder** (ADR-044) is a root-module package compiled into `aiopsctl`, run with
     a local toolchain or through the builder image, whose definition lives under `dist/`
     (`08:402`; `08:1201`, assumption 3). It takes the four fields of the site's
@@ -1197,8 +1205,9 @@ to a question, the decision here settles it.
 40. **The exit serves the SDK modules from a module proxy inside the job** (Q4 (a)). The
     exit job serves the three SDK modules from a file-based module proxy that exists only
     inside the job, at one pre-release version per run that no tag of the repository
-    carries, with the `go.mod` copies of decision 21, together with the author's echoer
-    module at the version its artifact names. The test release, its signed manifest and
+    carries, with the `go.mod` copies of decision 21, together with the root module at
+    the test release's version (ADR-044 decision 23) and the author's echoer module at
+    the version its artifact names. The test release, its signed manifest and
     its `aiopsctl` are built from those served modules, so the release pins and the
     author's build agree, and both environments get that `aiopsctl`. Nothing is tagged or
     published.

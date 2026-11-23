@@ -1,8 +1,9 @@
 # ADR-044: The builder for a self-hoster on one VM, possibly air-gapped
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. ADR-060 decision 2 requires it to be accepted before the builder code merges into
-  `main`; the owner's answers to the questions below become decisions of this record.
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all 13
+  questions on the same date with the recommended option of each; the section "Owner
+  answers of 2026-11-23" records them as decisions 15 to 27. ADR-060 decision 2 required
+  this acceptance before the builder code merges into `main`.
 - Scope: ADR-044 as `08:1175` and `00:778` state it (the builder image, the module cache
   format, when `--allow-bump` is acceptable, the content of the `init` deny-list), with
   the points ADR-060 decision 33 adds: the base layer and SBOM tool of the builder image
@@ -493,6 +494,7 @@ local toolchain, where those tools are absent.
   installed, three linked modules replace hundreds of shipped ones (beside the three
   that the deny-list scan links whatever the answer, decision 12), and the SBOM item of
   L13 closes with first-party code. Needed before the licence scan merges.
+- **Answered 2026-11-23: (a)**, decision 15.
 
 **Q2. Which toolchain does the local path run?** The image holds "the pinned Go
 toolchain" (`00:139`), `toolchain go1.26.8` in the root `go.mod` at `8e1f7b9`, and
@@ -518,6 +520,7 @@ proves neither the licence texts of decision 3 nor the binary.
 - Recommended: (a). Both paths run one verified tree, the local job of the exit (ADR-060
   decision 30) then proves the image path byte for byte, and a self-built binary links
   the standard library the release tested. Needed before the local path merges.
+- **Answered 2026-11-23: (a)**, decision 16.
 
 **Q3. What is the base layer of the builder image?** It is UNVERIFIED until named and read
 (`08:1342` L13; licence:258), and the image owes a source offer for the copyleft packages
@@ -543,6 +546,7 @@ in it (`08:402`).
   S2a the builder runs no program a base layer would bring; the S3 suites reopen the
   question with the base they need read then. Needed before the image definition merges
   under `dist/`.
+- **Answered 2026-11-23: (a)**, decision 17.
 
 **Q4. What is the base layer of the server images the builder writes?** ADR-060 decision
 34 has it read before S2a ends, and no document names it.
@@ -559,6 +563,7 @@ in it (`08:402`).
 - Recommended: (a). Nothing is shipped before a row reads it, the image owes no source
   offer, and a site's third-party row gets its files at run time without a second image.
   Needed before the builder writes its first image.
+- **Answered 2026-11-23: (a)**, decision 18.
 
 **Q5. How does a site fill the module cache?** `08:402` gives the flag and no way to fill
 it, and the project publishes no offline bundle (`08:1284`). Until L14 clears nothing is
@@ -580,6 +585,7 @@ exit fills its own.
   resolution the build itself makes, so it holds the graph versions' `go.mod` files that
   an offline build needs and a copy of the build list alone would miss. Needed before
   `--modcache` merges.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q6. May `--allow-bump` name a module the release pipeline builds?** Plugin record §11
 lets it name any pinned module, "the SDK included". Row 33 of plugin record §15, carried
@@ -594,6 +600,7 @@ that requires a minor no longer served (`08:498`).
   at boot whether the first-party rows still pass.
 - Recommended: (a). It is the dsh rule carried as is, and (b) admits a build that check 2
   denies row by row. Needed before the strict-version check merges.
+- **Answered 2026-11-23: (a)**, decision 20.
 
 **Q7. What does "a global codec" cover, and where do exceptions live?** gRPC registers
 its own proto codec from `init` in every binary that links it, and links
@@ -620,6 +627,7 @@ into the server (`07:1097`). Every generated protobuf package registers its type
 - Recommended: (a). It denies the four kinds as written, keeps the release buildable
   with one exception where (b) needs two, and leaves no default-mux handler in any server
   binary. Needed before the deny-list scan merges.
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q8. Where does a self-built distribution list sealed-hook listeners and raise the
 required set?** `dist.yaml` has four fields and `bindings` is `{providers, consumers}`
@@ -644,6 +652,7 @@ the bindings.
   allowed" lists, and both the raise that W3 allows and the listeners that `07:439`
   leaves to the distribution have a place. Needed before the builder reads the site's
   `dist.yaml`.
+- **Answered 2026-11-23: (a)**, decision 22.
 
 **Q9. Is the root module served beside the SDK modules?** The scratch module requires the
 root module at the release's version (Context, this record's reading), and the root
@@ -660,6 +669,7 @@ decision 40 lists what the exit's module proxy serves.
 - Recommended: (a). Every module a build resolves comes through one module source, and
   the exit's test release needs it either way (ADR-060 decision 38). Needed before the
   first build from a scratch directory.
+- **Answered 2026-11-23: (a)**, decision 23.
 
 **Q10. Does a registry package's own registration count?** `08:402` fails the build on "a
 transitive `init` that registers ... a default-registry collector or a global codec",
@@ -677,6 +687,7 @@ server's package graph at `8e1f7b9`.
 - Recommended: (a). It keeps the written requirement, S2a links neither package, and
   each such registration becomes a reviewed exception. Needed before the deny-list scan
   merges.
+- **Answered 2026-11-23: (a)**, decision 24.
 
 **Q11. Which calls does the deny-list scan follow?** "Finds a transitive `init`"
 (`08:402`) sets no limit, and a static scan cannot follow a call made through reflection
@@ -689,6 +700,7 @@ or `unsafe`.
   passes. This narrows `08:402`, `07:1860` and plugin record §11.
 - Recommended: (a). It is the reading nearest to the written text, and a false finding is
   visible and cleared in review. Needed before the deny-list scan merges.
+- **Answered 2026-11-23: (a)**, decision 25.
 
 **Q12. Which licence texts does the classifier carry?** With question Q1 (a) the
 classifier needs a corpus, and ADR-060 decision 34 admits an embedded data set only with
@@ -715,6 +727,7 @@ say whether a licence text carried as data, to recognise that licence, is one.
 - Recommended: (b). The corpus then has a source whose terms are read, as decision 34
   asks, and its names are the ids that L16 records. Needed before the licence scan
   merges.
+- **Answered 2026-11-23: (b)**, decision 26.
 
 **Q13. Do the header notices of the standard library enter `THIRD_PARTY_LICENSES/`?**
 Sixteen standard-library files that the server's package graph compiles carry a
@@ -734,3 +747,112 @@ packages reproduces neither notice.
 - Recommended: (a). It carries notices whose own terms ask to be carried, costs one
   generated list per toolchain pin, and does not wait for counsel to be safe. Needed
   before the builder writes its first image.
+- **Answered 2026-11-23: (a)**, decision 27.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option:
+(a) for every question but Q12, and (b) for Q12. Each decision below names the question
+it answers. Where a decision above leaves a point to a question, the decision here
+settles it.
+
+15. **The licence scan and the SBOM writer live in the builder package** (Q1 (a)).
+    Detection links `github.com/google/licenseclassifier/v2` at v2.0.0, with `go-spew`
+    v1.1.1 and `go-diff` v1.1.0, over the corpus of decision 26. The SBOM is SPDX 2.3 in
+    JSON, written with the standard library from the build list and the layer inputs.
+    Both paths and the CI licence report (`08:1245`; ADR-060 decision 36) run the same
+    code, and the builder image holds no scanner and no SBOM tool.
+
+16. **The local path runs the pinned toolchain module, never the host's** (Q2 (a)). It
+    takes `golang.org/toolchain` at the pinned version for the host's system and
+    architecture from the module source, checks it against the hash that the signed
+    manifest records, extracts it under the builder's own cache and runs its `go` with
+    `GOROOT` set to it. Both paths run the tree the image ships, a host needs no
+    installed Go, and the module cache of an air-gapped site holds the toolchain module
+    for the local path (decision 9).
+
+17. **The builder image has no base layer** (Q3 (a)): the toolchain tree, `aiopsctl` and
+    the files of decision 5 on an empty base, with no shell and no CA bundle. Where the
+    module source is an `https` URL, `dist build` mounts the host's trust store read-only
+    and points `SSL_CERT_FILE` at it. The source offer of decision 5 states that the
+    image holds no package under GPL, LGPL or AGPL. The base layer is asked again before
+    the S3 suites run in the builder.
+
+18. **The server images the builder writes have no base layer at S2a** (Q4 (a)): the
+    server binary, built with cgo off, and the files of decision 6. A trust store, time
+    zone data or any other file enters the image with the first row that needs it, under
+    its own register entry. A site whose third-party in-process row needs a trust store
+    or zone data mounts the files and sets `SSL_CERT_FILE` and `ZONEINFO` in its own
+    deployment files.
+
+19. **A site fills the module cache through `--modcache`, once L14 clears** (Q5 (a)).
+    With `--modcache <dir>` and a proxy URL in the caller's `GOPROXY`, the module sources
+    are `file://<dir>` and then that proxy (decision 7); `<dir>` must then be writable,
+    the image path mounts it read-write in that case only, and after a successful build
+    the builder copies into `<dir>` the files the build fetched, in the layout of
+    decision 7. Without a proxy URL, `<dir>` is read-only and never written. No command
+    is added.
+
+20. **`--allow-bump` never names a module the release pipeline builds** (Q6 (a)). The
+    three SDK modules and the root module fail strict versions with or without the flag,
+    and an author requires the SDK version of the release the plugin targets, which
+    `plugin smoke --against` proves before a site builds.
+
+21. **"A global codec" and the exceptions** (Q7 (a)). The table of decision 11 holds,
+    with `gob`'s type registry under "a global codec"; image format and protobuf type
+    registries are not on the list. The exceptions are a table in the builder package,
+    one entry per registering package and function with its reason, changed only by a
+    reviewed pull request; a site adds none, and the table is empty at S2a. When gRPC
+    enters the server binary, the builder builds every server binary with `-tags
+    grpcnotrace`, and the table gains `google.golang.org/grpc/encoding/proto` with
+    `RegisterCodecV2`; `grpc.EnableTracing` then does nothing in a server binary.
+
+22. **A self-built distribution lists sealed-hook listeners and its raise of the required
+    set in `bindings`** (Q8 (a)). `bindings` gains `sealedHooks`, the listeners a site
+    adds per hook, and `required`, the keys and rows it adds; `dist.yaml` keeps its four
+    fields.
+
+23. **The root module is served beside the SDK modules** (Q9 (a)). A release serves the
+    root module at the release version, from the same module source as the SDK modules,
+    with a served `go.mod` that names the SDK version and holds no `replace` line, under
+    the test of ADR-060 decision 21. Until L14 clears it is served only where the SDK
+    modules are, inside the exit job (ADR-060 decision 40).
+
+24. **A registry package's own registration counts** (Q10 (a)), as decision 11 writes. A
+    server binary that links the package `prometheus` of the Prometheus client or
+    `encoding/gob` fails unless an exception of decision 21 names the call; the
+    Prometheus client gets one when a first-party row first links it.
+
+25. **The deny-list scan follows static calls, interface method calls and calls through
+    function values** (Q11 (a)), on the call graph that
+    `golang.org/x/tools/go/callgraph/vta` builds over the SSA form of the whole program
+    (decision 12). An edge that over-approximates a dynamic call and reaches a
+    registration is a finding, cleared only by an exception of decision 21.
+
+26. **The classifier carries a corpus built from the SPDX License List data** (Q12 (b)),
+    at a pinned version and embedded by the builder package. The classifier is linked
+    without its package `assets`, and its names are SPDX ids, so no table maps them. The
+    terms of the data are read at a primary source before the classifier merges. The
+    header and supplement variants of the module's corpus are not carried; a text the
+    corpus cannot name is `unknown` and fails the build (L16).
+
+27. **The header notices of the standard library enter `THIRD_PARTY_LICENSES/`** (Q13
+    (a)). The release pipeline generates, at each toolchain pin and by a walk of the
+    tree, the list of standard-library files whose header carries a notice other than
+    the Go Authors'. The builder copies the notice of each such file that a binary's
+    package graph compiles into that binary's `THIRD_PARTY_LICENSES/`, as a notice file,
+    not classified (decision 3).
+
+**Edits made with this record.** The commit that records these answers makes the edits
+that "Edits on acceptance" names for the options chosen: `00:778` (status); `07:1874`;
+`08:401`, `:402`, `:403`, `:1284`, `:1342` (L13), `:1381` and `:1407`; plugin record
+§11, where it gives `release`, the shape of `bindings` and "the SDK included"; and
+ADR-060 decisions 20, 21 and 40. With `08:402` it closes the clause that left the base
+layer and the SBOM tool of the builder image UNVERIFIED. Two lines that restate edited
+text are edited with them: `08:1236`, the layout line of `deploy/mirror/` (decision 9),
+and `08:1390`, since the libraries of the licence scan are linked into `aiopsctl`
+(decision 15). Left to a later commit: `08:1175`, the row of this ADR in the ADR table of
+`08` §3, which the commit that updates that table for the ADRs accepted on 2026-11-23
+edits. The licence record keeps its date. An option the owner did not choose edits
+nothing.
