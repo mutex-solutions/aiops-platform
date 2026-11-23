@@ -1380,7 +1380,9 @@ install into the profile `cli` takes in-process code only (decision 40); and the
 `key generate` in ADR-060 decision 23, which restates `00:137`. Left to later commits: the ADR table of `08` §3 and
 the next free number of `08:997`, which the commit that updates that table for the ADRs
 accepted on 2026-11-23 edits; `06:764`, where the built-in on-call provider registers
-`oncall override` with `commands`, and the lists of optional bundles in `01:254`,
-`02:178`, `07:1880` and `08:399`, which the steps that build `oncall override` and
+`oncall override` with `commands`, and the lists of optional bundles in `00:519` (§6.3),
+`01:254`, `02:178` and `:324`, `07:1880`, and `08:279`, `:399`, `:729` and `:1470`,
+which the steps that build `oncall override` and
 `slack manifest` (P1, `00:137`) edit when they build their command rows by decision 40
-(decision 32). An option the owner did not choose edits nothing.
+(decision 32). Until then those lists omit `aiops-chatops-slack-cli`, which `00` §4.4
+and `08` §1.4 list. An option the owner did not choose edits nothing.
