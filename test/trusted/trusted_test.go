@@ -72,11 +72,36 @@ func TestInstallWritesWhatBootReads(t *testing.T) {
 		if (rec.Signer == boot.Unsigned) != a.Unsigned || !a.Unsigned && rec.Signer != trust.Signers[0].KeyID {
 			t.Fatalf("signer %s, trust.yaml %s", rec.Signer, trust.Signers[0].KeyID)
 		}
+		// The record of an artifact holds the files of ADR-020 decision 10.
+		for _, name := range []string{"record.yaml", "signature.sigstore.json", "attestation.sigstore.json", "attestation.json"} {
+			if _, err := os.Stat(filepath.Join(home, "verified", strings.Replace(d, ":", "-", 1), name)); err != nil {
+				t.Errorf("the record of the artifact: %v", err)
+			}
+		}
 	}
 	if err := Install(t.TempDir(), Artifact{Manifest: []byte("x: [")}); err == nil {
 		t.Fatal("a malformed manifest installs")
 	}
 	if err := Install(t.TempDir(), Artifact{Manifest: []byte(manifest)}); err == nil {
 		t.Fatal("a home with no trust.yaml installs")
+	}
+}
+
+// The record of a distribution holds the files of ADR-020 decision 10: record.yaml, the
+// manifest and its Sigstore bundle, here a placeholder, since nothing is signed.
+func TestFilesWriteTheRecordOfADistribution(t *testing.T) {
+	manifest := []byte("distVersion: 1\n")
+	files, err := Files(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := "verified/" + strings.Replace(digest(manifest), ":", "-", 1) + "/"
+	for _, name := range []string{"record.yaml", "manifest", "manifest.sigstore.json"} {
+		if files[dir+name] == nil {
+			t.Errorf("no %s in the record of the distribution", name)
+		}
+	}
+	if string(files[dir+"manifest"]) != string(manifest) || !strings.Contains(string(files[dir+"manifest.sigstore.json"]), "not a Sigstore bundle") {
+		t.Errorf("files %q", files)
 	}
 }

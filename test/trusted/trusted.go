@@ -5,13 +5,16 @@
 // (ADR-060 decision 28; ADR-020 decisions 10, 12 and 13): trust.yaml with a throwaway
 // key under distributions, the record of the manifest's digest with that key as its
 // signer, and verified/current. It also writes what plugin install keeps and records of
-// an in-process artifact (Install). The files have the exact format that boot reads
-// (boot.Trust, boot.Record, boot.ReadCurrent, boot.ReadKept).
+// an in-process artifact (Install). Each record holds the files of ADR-020 decision 10,
+// in the format that boot reads (boot.Trust, boot.Record, boot.ReadCurrent,
+// boot.ReadKept).
 //
 // It signs nothing: the key pair is made in the test and dropped, and boot verifies no
-// signature. The signing code of dist sign, dist use and plugin install replaces it
-// once that code exists, so that the harness signs and records as those commands do.
-// It is test code: no shipped distribution links it.
+// signature, so each Sigstore bundle of a record (manifest.sigstore.json,
+// signature.sigstore.json and attestation.sigstore.json) is a placeholder that says so.
+// The signing code of dist sign, dist use and plugin install replaces this package once
+// that code exists, so that the harness signs and records as those commands do. It is
+// test code: no shipped distribution links it.
 package trusted
 
 import (
@@ -48,6 +51,9 @@ func newKey() (string, string, error) {
 	return strings.ReplaceAll(pub, "\n", "\n      "), base64.StdEncoding.EncodeToString(id[:]), nil
 }
 
+// placeholder stands where a record holds a Sigstore bundle: nothing is signed.
+var placeholder = []byte(`{"placeholder": "not a Sigstore bundle: the test harness signs nothing (ADR-020 decision 10)"}` + "\n")
+
 // digest returns "sha256:" and the hex of the SHA-256 of b.
 func digest(b []byte) string {
 	sum := sha256.Sum256(b)
@@ -65,7 +71,8 @@ func statement(m boot.Manifest, subject, definitions string) string {
 // Files returns the files, by slash path under the home, by which a home trusts the
 // distribution manifest: trust.yaml that lists a throwaway ECDSA P-256 key under
 // distributions, verified/sha256-<hex>/record.yaml of kind distribution whose signer
-// is that key, beside it the manifest as dist use keeps it, and verified/current.
+// is that key, beside it the manifest as dist use keeps it and the placeholder of its
+// bundle, and verified/current.
 func Files(manifest []byte) (map[string][]byte, error) {
 	pub, id, err := newKey()
 	if err != nil {
@@ -74,10 +81,11 @@ func Files(manifest []byte) (map[string][]byte, error) {
 	d := digest(manifest)
 	dir := "verified/" + strings.Replace(d, ":", "-", 1)
 	return map[string][]byte{
-		"trust.yaml":         []byte("distributions:\n  - key: |\n      " + pub + "\n"),
-		dir + "/record.yaml": fmt.Appendf(nil, "kind: distribution\ndigest: %s\nsigner: %s\n", d, id),
-		dir + "/manifest":    manifest,
-		"verified/current":   []byte(d + "\n"),
+		"trust.yaml":                    []byte("distributions:\n  - key: |\n      " + pub + "\n"),
+		dir + "/record.yaml":            fmt.Appendf(nil, "kind: distribution\ndigest: %s\nsigner: %s\n", d, id),
+		dir + "/manifest":               manifest,
+		dir + "/manifest.sigstore.json": placeholder,
+		"verified/current":              []byte(d + "\n"),
 	}, nil
 }
 
@@ -141,11 +149,12 @@ type Artifact struct {
 // Install writes into home, once per home and after Write, what plugin install keeps
 // and records of a (ADR-047 decision 18; ADR-020 decision 10): bundles/<id>/ with the
 // OCI image manifest artifact.json, plugin.yaml and bundle.yaml; verified/sha256-<hex>/
-// of the digest of artifact.json with record.yaml and attestation.json; and in
-// trust.yaml a throwaway key under signers, for the id and the runtime inproc, which
-// signed it. The record pins the repository's root module by its path, as the signed
-// manifest of a build inside the repository lists it (ADR-020 decision 28). In-process
-// code has no entry in plugins.lock.
+// of the digest of artifact.json with record.yaml, attestation.json and the placeholders
+// of the signature and attestation bundles; and in trust.yaml a throwaway key under
+// signers, for the id and the runtime inproc, which signed it. The record pins the
+// repository's root module by its path, as the signed manifest of a build inside the
+// repository lists it (ADR-020 decision 28). In-process code has no entry in
+// plugins.lock.
 func Install(home string, a Artifact) error {
 	m, err := boot.ReadManifest("plugin.yaml", a.Manifest, boot.ManifestLenient)
 	if err != nil {
@@ -178,7 +187,8 @@ func Install(home string, a Artifact) error {
 		kept + "/artifact.json": art, kept + "/plugin.yaml": a.Manifest, kept + "/bundle.yaml": a.Bundle,
 		dir + "/record.yaml": fmt.Appendf(nil, "kind: artifact\ndigest: %s\nsigner: %s\nid: %s\nversion: %s\nruntimes: [inproc]\nmodule: {path: github.com/mutex-solutions/aiops-platform}\n",
 			d, signer, m.ID, m.Version),
-		dir + "/attestation.json": []byte(statement(m, subject, a.Definitions)),
-		"trust.yaml":              fmt.Appendf(trust, "signers:\n  - key: |\n      %s\n    ids: [%s]\n    runtimes: [inproc]\n", pub, m.ID),
+		dir + "/attestation.json":        []byte(statement(m, subject, a.Definitions)),
+		dir + "/signature.sigstore.json": placeholder, dir + "/attestation.sigstore.json": placeholder,
+		"trust.yaml": fmt.Appendf(trust, "signers:\n  - key: |\n      %s\n    ids: [%s]\n    runtimes: [inproc]\n", pub, m.ID),
 	})
 }
