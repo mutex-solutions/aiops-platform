@@ -10,7 +10,8 @@
 // Every case has an id. A failed case prints one line, which starts with its id, so
 // plugin check and a fresh template print one line per failed obligation
 // (07-c4-plugin-sdk.md:1561, :1563; ADR-060 decision 5). The package imports the
-// standard library, sdk/kernel, the definition and its fake only.
+// standard library, sdk/kernel, the definition, its fake and the shared helpers of
+// sdk/def/internal/deftest only.
 package conformance
 
 import (
@@ -21,6 +22,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
 	stampers "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -203,6 +205,11 @@ var guards = []check{
 		if !errors.Is(errCall, kernel.ErrInactive) || !errors.Is(errReg, kernel.ErrInactive) || len(e.reg.Inventory()) != 0 {
 			e.fail("after the dispatcher was disposed: Stamp = %v, Register = %v, Inventory = %v; want kernel.ErrInactive twice and nothing listed",
 				errCall, errReg, e.reg.Inventory())
+		}
+	}},
+	{"stampers/guard-side-door", func(e *env) {
+		if doors := deftest.SideDoors[stampers.Registry](e.reg); len(doors) > 0 {
+			e.fail("the provided registry has methods outside stampers.Registry: %v", doors)
 		}
 	}},
 }
