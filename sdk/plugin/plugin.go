@@ -61,15 +61,15 @@
 //     and checked as a default is. The schema carries it as the field's examples,
 //     the annotation from which a template takes a row config (ADR-060 decision
 //     24). It changes nothing the decoder does.
-//   - Volatile. A Volatile[T] field is decoded as T. Its path is one of the
-//     volatile paths: a change of volatile values alone is to commit in place,
-//     with no restart of the row (07-c4-plugin-sdk.md:1375). Until the kernel can
-//     hand such a value to a running field, Describe reports no volatile path and
-//     the change restarts the row (see Volatile).
+//   - Volatile. A Volatile[T] field is decoded as T. The schema marks it with
+//     "x-aiops-volatile": true, and its path is one of the volatile paths: a
+//     change of volatile values alone commits in place, with no restart of the
+//     row (07-c4-plugin-sdk.md:1375; ADR-048 decision 9). See Volatile for what
+//     the running activation reads.
 //   - Tenant. aiops:"tenant" marks a field tenant-writable, and such a field
 //     must be a Volatile[T] (07-c4-plugin-sdk.md:137, :473). The schema marks it
-//     with "x-aiops-tenant": true. The overlay that writes it arrives at S4b. No
-//     other value of the aiops tag exists.
+//     with "x-aiops-tenant": true, beside its volatile mark. The overlay that
+//     writes it arrives at S4b. No other value of the aiops tag exists.
 //   - Validate. Spec.Validate runs on the decoded value. Every error, from the
 //     tree or from Validate, is returned as "invalid config: ...", and the row
 //     fails with it.
@@ -153,13 +153,16 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 	return kernel.Define(p)
 }
 
-// Volatile is a config field whose change alone is to commit in place, with no
-// restart of the row (07-c4-plugin-sdk.md:473, :1375). Every tenant-writable field
-// is one. Its path is derived from the config type, so no list is written by hand.
-// Get returns the value of the activation: the kernel cannot hand a value committed
-// in place to a running field until the ADR-034 addition that ADR-060 decision 3
-// asks for, so until then Describe reports no volatile path, the loader restarts
-// the row on a change of the field, and the new value reaches Apply.
+// Volatile is a config field whose change alone commits in place, with no restart
+// of the row (07-c4-plugin-sdk.md:473, :1375). Every tenant-writable field is one.
+// Its path is derived from the config type and carried in configSchema, so no list
+// is written by hand (ADR-048 decision 9). The loader commits such a change with
+// kernel.Fiber.Commit: Apply is not called again, the running activation keeps the
+// value it was applied with, and the next activation of the row, whatever starts
+// it, reads the committed value. Get returns the value of the activation. That the
+// next read of a running field returns a value committed in place
+// (07-c4-plugin-sdk.md:1382) needs a kernel change, the ADR-034 addition that
+// ADR-060 decision 3 names, and stays open until the owner accepts it.
 type Volatile[T any] struct{ v T }
 
 // Get returns the value.
@@ -174,21 +177,17 @@ type ConfigInfo struct {
 	Schema []byte
 	// Volatile lists the paths whose change alone commits in place, sorted, each
 	// as its list of keys, the shape of loader.VolatileUpdateArgs.Paths (ADR-059
-	// decision 44). The segment "*" stands for any list index or map key. It is
-	// empty until the kernel can hand a value committed in place to a running
-	// Volatile field (see Volatile).
+	// decision 44). The segment "*" stands for any list index or map key: the
+	// paths of the subschemas of Schema marked "x-aiops-volatile".
 	Volatile [][]string
 }
 
 // Describe derives the schema and the volatile paths of C, or says which rule of
-// the package documentation C breaks. The paths of the Volatile fields are derived
-// and checked, and Describe reports none of them until the kernel can hand a value
-// committed in place to a running field: a change of one restarts the row and
-// reaches Apply.
+// the package documentation C breaks.
 func Describe[C any]() (ConfigInfo, error) {
 	d, err := describe(reflect.TypeFor[C]())
 	if err != nil {
 		return ConfigInfo{}, err
 	}
-	return ConfigInfo{Schema: d.schema}, nil
+	return ConfigInfo{Schema: d.schema, Volatile: d.volatile}, nil
 }

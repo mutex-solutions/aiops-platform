@@ -36,6 +36,7 @@ configSchema:
       type: string
     note:
       type: string
+      x-aiops-volatile: true
   type: object
 durable: []
 requires:

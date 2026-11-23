@@ -35,9 +35,9 @@ type node struct {
 // NewValidator compiles schema, a JSON Schema 2020-12 document that uses only the
 // keywords the derivation emits: $schema at the root, type with one name,
 // properties, additionalProperties, items, minimum, maximum and pattern, and the
-// annotations default, examples and x-aiops-tenant. Any other keyword is refused rather
-// than ignored, so the validator never passes a tree that a constraint it does
-// not know would refuse.
+// annotations default, examples, x-aiops-tenant and x-aiops-volatile. Any other
+// keyword is refused rather than ignored, so the validator never passes a tree
+// that a constraint it does not know would refuse.
 //
 // It reads the tree types of the package documentation. integer admits an int64
 // and number an int64 or a float64: the launcher keeps integers and floats
@@ -110,7 +110,7 @@ func compile(doc any, root bool) (*node, error) {
 			if _, isList := v.([]any); !isList {
 				err = fmt.Errorf("examples %s is not a list", show(v))
 			}
-		case "default", tenantKey:
+		case "default", tenantKey, volatileKey:
 		default:
 			err = fmt.Errorf("keyword %q is not one this validator reads", k)
 		}

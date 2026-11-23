@@ -18,8 +18,9 @@ import (
 // The derivation emits these keywords and no other, and the validator reads
 // exactly these (validate.go).
 const (
-	dialect   = "https://json-schema.org/draft/2020-12/schema"
-	tenantKey = "x-aiops-tenant"
+	dialect     = "https://json-schema.org/draft/2020-12/schema"
+	tenantKey   = "x-aiops-tenant"
+	volatileKey = "x-aiops-volatile"
 	// durationPattern is the syntax of time.ParseDuration, in the subset of
 	// regular expressions that RE2 and ECMA-262 read alike.
 	durationPattern = `^[-+]?(0|(([0-9]+(\.[0-9]*)?|\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$`
@@ -75,12 +76,17 @@ func describe(t reflect.Type) (*described, error) {
 }
 
 // schemaOf returns the schema of t, found at path, and records the volatile
-// paths and the struct fields beneath it. open holds the struct types of the
-// path, so a recursive type is refused instead of looping.
+// paths and the struct fields beneath it. The schema of a Volatile is that of its
+// value, marked "x-aiops-volatile": true (ADR-048 decision 9). open holds the
+// struct types of the path, so a recursive type is refused instead of looping.
 func (d *described) schemaOf(t reflect.Type, path []string, open map[reflect.Type]bool) (map[string]any, error) {
 	if isVolatile(t) {
 		d.volatile = append(d.volatile, slices.Clone(path))
-		return d.schemaOf(t.Field(0).Type, path, open)
+		s, err := d.schemaOf(t.Field(0).Type, path, open)
+		if err == nil {
+			s[volatileKey] = true
+		}
+		return s, err
 	}
 	if t == durationType {
 		return map[string]any{"type": "string", "pattern": durationPattern}, nil
