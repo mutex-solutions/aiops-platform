@@ -23,21 +23,25 @@ type Reader struct {
 var _ composition.Reader = (*Reader)(nil)
 
 // New returns an empty composition and the plugin that provides it under
-// composition.Key. Each call returns a new plugin value.
+// composition.Key. Each call returns a new plugin value. The plugin provides the
+// methods of composition.Reader only: Commit is the test's (no side door,
+// 07-c4-plugin-sdk.md §4.3).
 func New() (*Reader, kernel.Plugin) {
 	f := &Reader{gens: map[composition.Scope]composition.Generation{}}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/composition-fake",
 		Provides: []kernel.AnyKey{composition.Key},
-		Apply:    func(c *kernel.Context, _ any) error { return composition.Key.Provide(c, f) },
+		Apply: func(c *kernel.Context, _ any) error {
+			return composition.Key.Provide(c, struct{ composition.Reader }{f})
+		},
 	})
 }
 
-// Commit makes g the committed generation of its scope.
+// Commit makes a copy of g the committed generation of its scope.
 func (f *Reader) Commit(g composition.Generation) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	g.Rows = slices.Clone(g.Rows)
+	g.Rows = clone(g.Rows)
 	f.gens[g.Scope] = g
 }
 
@@ -46,7 +50,7 @@ func (f *Reader) Committed(scope composition.Scope) (composition.Generation, boo
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	g, ok := f.gens[scope]
-	g.Rows = slices.Clone(g.Rows)
+	g.Rows = clone(g.Rows)
 	return g, ok
 }
 
@@ -60,6 +64,15 @@ func (f *Reader) Declaring(scope composition.Scope, hook string) []composition.R
 		if slices.Contains(r.Hooks, hook) {
 			out = append(out, r)
 		}
+	}
+	return clone(out)
+}
+
+// clone copies rows and the lists each row holds.
+func clone(rows []composition.Row) []composition.Row {
+	out := slices.Clone(rows)
+	for i := range out {
+		out[i].Hooks, out[i].Registrations = slices.Clone(out[i].Hooks), slices.Clone(out[i].Registrations)
 	}
 	return out
 }
