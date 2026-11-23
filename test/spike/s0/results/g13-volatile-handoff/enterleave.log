@@ -1,0 +1,96 @@
+batch 1: == round 1 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	58117453	        44.95 ns/op	        44.95 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	39542934	        71.25 ns/op	        71.25 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 1 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	31512014	        81.50 ns/op	        81.50 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	31286197	        71.88 ns/op	        71.88 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 2 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	58972995	        44.98 ns/op	        44.98 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	39623419	        63.17 ns/op	        63.17 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 2 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	60502107	        70.63 ns/op	        70.63 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	40957357	        75.15 ns/op	        75.15 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 3 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	35718794	        75.67 ns/op	        75.67 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	31033221	        76.73 ns/op	        76.73 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 3 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	34624461	        69.86 ns/op	        69.86 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	53358711	        80.21 ns/op	        80.21 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 4 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	30962484	        77.53 ns/op	        77.53 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	37428547	        75.50 ns/op	        75.50 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 4 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	35386609	        87.55 ns/op	        87.55 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	30617550	        87.01 ns/op	        87.01 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 5 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	33687543	        84.66 ns/op	        84.66 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	31621933	        76.97 ns/op	        76.97 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 5 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	29896518	        78.65 ns/op	        78.65 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	32726077	        70.80 ns/op	        70.80 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 6 base
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	30212166	        84.44 ns/op	        84.44 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	30854110	        74.54 ns/op	        74.54 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: == round 6 head
+batch 1: BenchmarkG13EnterLeave/callers=8-8         	33574690	        83.25 ns/op	        83.25 wall-ns/op	       0 B/op	       0 allocs/op
+batch 1: BenchmarkG13EnterLeave/callers=32-8        	31420338	        73.93 ns/op	        73.93 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 1 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	31755313	        76.32 ns/op	        76.32 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	40884541	        60.40 ns/op	        60.40 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 1 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	34161961	        80.29 ns/op	        80.29 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	37412516	        77.74 ns/op	        77.74 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 2 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	36539218	        63.44 ns/op	        63.44 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	28460894	        75.86 ns/op	        75.86 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 2 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	31266159	        80.95 ns/op	        80.95 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	31395189	        78.62 ns/op	        78.62 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 3 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	32937831	        81.36 ns/op	        81.36 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	31613636	        80.46 ns/op	        80.46 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 3 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	33173437	        77.37 ns/op	        77.37 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	31201023	        83.11 ns/op	        83.11 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 4 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	29970290	        78.01 ns/op	        78.01 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32042847	        83.20 ns/op	        83.20 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 4 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	33385399	        81.23 ns/op	        81.23 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	33193216	        79.27 ns/op	        79.27 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 5 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	33436014	        74.15 ns/op	        74.15 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32404821	        83.74 ns/op	        83.74 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 5 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	32450792	        78.90 ns/op	        78.90 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	31495471	        83.74 ns/op	        83.74 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 6 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	33876674	        75.59 ns/op	        75.59 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32945217	        84.02 ns/op	        84.02 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 6 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	31210597	        86.06 ns/op	        86.06 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	31767288	        82.61 ns/op	        82.61 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 7 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	34923459	        76.58 ns/op	        76.58 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32859876	        77.53 ns/op	        77.53 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 7 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	33555016	        75.98 ns/op	        75.98 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32753991	        79.73 ns/op	        79.73 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 8 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	35255635	        83.87 ns/op	        83.87 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	30747319	        83.10 ns/op	        83.10 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 8 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	27828723	        84.61 ns/op	        84.61 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	29287446	        83.16 ns/op	        83.16 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 9 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	29833968	        76.92 ns/op	        76.92 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	32873367	        86.93 ns/op	        86.93 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 9 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	31515129	        84.10 ns/op	        84.10 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	27494800	        75.46 ns/op	        75.46 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 10 base
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	32551797	        83.64 ns/op	        83.64 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	30075438	        74.93 ns/op	        74.93 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: == round 10 head
+batch 2: BenchmarkG13EnterLeave/callers=8-8         	35942562	        71.87 ns/op	        71.87 wall-ns/op	       0 B/op	       0 allocs/op
+batch 2: BenchmarkG13EnterLeave/callers=32-8        	36272246	        69.11 ns/op	        69.11 wall-ns/op	       0 B/op	       0 allocs/op

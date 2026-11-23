@@ -1,0 +1,27 @@
+{
+ "classification": "ADR-034 G13 (the Volatile hand-off), verification plan items 2 and 5 and the hot-path checks, on the s2a/integration commits that carry it: the live oracle comparison passes at GOMAXPROCS=8 and =2 with the per-test outcomes of causal-main-merged, the 30-minute FuzzOperationSequence run passes, the call-path dry run measures 0 mallocs for kernel owner_enter_leave, and the contended Enter/Leave microbenchmark shows no change against 502a355",
+ "commits": {
+  "kernel": "cd94ecd (sdk/kernel is unchanged from cd94ecd to fbc0bf4)",
+  "tree": "fbc0bf4 (the oracle runs, the call-path dry run and the head benchmark binary)",
+  "base": "502a355 (the base benchmark binary: its sdk/kernel, same benchmark file)"
+ },
+ "commands": [
+  "GOMAXPROCS=8 S0_ORACLE_RUN=1 S0_CAUSAL_RUN=1 go test -race -count=1 -v -run TestCausal ./test/spike/s0/replay/   (gomaxprocs8.log)",
+  "GOMAXPROCS=2 S0_ORACLE_RUN=1 S0_CAUSAL_RUN=1 go test -race -count=1 -v -run TestCausal ./test/spike/s0/replay/   (gomaxprocs2.log)",
+  "cd sdk/kernel && go test -run '^$' -fuzz '^FuzzOperationSequence$' -fuzztime 30m -parallel 8 .   (fuzz.log)",
+  "S0_CALLPATH_DRYRUN=1 S0_CALLPATH_OUT=<fresh dir> go test -count=1 -v -run TestDryRunCallpath ./test/spike/s0/callpath/",
+  "GOMAXPROCS=8 <kernel test binary> -test.run '^$' -test.bench BenchmarkG13EnterLeave -test.benchtime 2s -test.benchmem, base then head, 16 rounds each in two batches   (enterleave.log)"
+ ],
+ "results": {
+  "oracle": "exit 0 at both GOMAXPROCS values; 105 test outcomes identical, case for case, to causal-main-merged at the same GOMAXPROCS, with 95 of 102 classifications 'match' and the other seven 'mismatch-or-invalid' in diagnostic tests that pass, as there. The adapter's plugins have no hand-off, so every case runs the code of G6 (G13 point 9)",
+  "fuzz": "PASS after 30m1s with 8 workers: 4,516,384 executions, 369 new interesting inputs (1,574 in the corpus), no failing input; the target checks after each settled step that each ACTIVE fiber's activation reads the config of the last commit that a hand-off may carry, retained after the config it applied, that resolves, or else the config it applied",
+  "callpathDryRun": "the kernel candidate's owner_enter_leave arm has mallocsInWindow 0 and allocsPerOp 0 at 1, 8 and 32 callers in the warmup and both repetitions; the dry run is NOT ACCEPTANCE and classifies inconclusive by construction",
+  "enterLeave": "BenchmarkG13EnterLeave drives Context.Enter and leave on one kernel activation from 8 and 32 goroutines, the shape of BenchmarkEnterLeave of test/spike/s0/concurrency, which drives only the two prototype cores. Medians of 16 interleaved rounds, ns per Enter+leave: 8 callers base 76.8 (45.0 to 84.7), head 80.6 (69.9 to 87.5); 32 callers base 76.8 (60.4 to 86.9), head 78.9 (69.1 to 87.0); the second batch alone gives 32 callers base 81.8 and head 79.5. Every round is 0 B/op and 0 allocs/op. The differences lie inside the spread of either binary and change sign between batches; effect.go and context.go, which hold the lease path, are byte-identical at 502a355 and at the head",
+  "lines": "kernelcheck lines sdk/kernel 8200: 8168 (8043 at 502a355); kernelcheck lines sdk/plugin 2500 provisional: 1176 (1084 at 502a355)"
+ },
+ "limits": [
+  "shared development host under other load (load average 6 to 13 on 24 cores during the benchmark); durations are not performance observations, and the benchmark is a development aid whose file was not committed",
+  "the fuzz run overlapped with other work on the host for its first 25 minutes, hence 8 workers",
+  "not run here: the full frozen property workload (item 3) and the full call-path gate on the measurement host (item 4) of the G13 verification plan"
+ ]
+}
