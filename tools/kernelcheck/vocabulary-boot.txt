@@ -1,0 +1,38 @@
+# Words boot/ must not contain (whole word, case-insensitive); ADR-060 decision 45.
+# Not tenant: boot legitimately handles it, a scope class of its closed vocabulary.
+# Every word here is also in vocabulary-loader.txt and vocabulary.txt (TestVocabularyLists).
+
+# Domain words.
+incident
+alert
+approval
+dashboard
+pillar
+harness
+remediation
+estate
+
+# Upstream names (00-decisions.md §3.2 and §4.3), as lowercase technical names. Words split
+# at case changes, so PostgreSQL reads as Postgre and SQL; the PostgreSQL dialect behind sql is
+# a stated exception (§4.3), as are the protocols with several implementations and Cordis.
+envoy
+postgres
+postgresql
+seaweedfs
+minio
+mimir
+alertmanager
+loki
+tempo
+pyroscope
+kafka
+grafana
+holmesgpt
+goalert
+tetragon
+nats
+jetstream
+krr
+chromium
+river
+pgx
