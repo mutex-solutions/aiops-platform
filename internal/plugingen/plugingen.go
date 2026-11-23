@@ -33,8 +33,6 @@ import (
 	"slices"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
-
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
@@ -325,20 +323,28 @@ func injected(defs []Definition, uses []plugin.Use) []Definition {
 	return out
 }
 
-// cycleConfig returns the Go literal of testdata/cycle.yaml in dir, or "nil".
+// cycleConfig returns the Go literal of testdata/cycle.yaml in dir, or "nil". The
+// file is read as a layer reads a row config (boot.ParseConfig), so the cycle test
+// mounts only a config that the launcher would hand the row. A reference is refused:
+// nothing resolves it in the cycle test.
 func cycleConfig(dir string) (string, error) {
-	src, err := os.ReadFile(filepath.Join(dir, "testdata", "cycle.yaml"))
+	file := filepath.Join(dir, "testdata", "cycle.yaml")
+	src, err := os.ReadFile(file)
 	if errors.Is(err, os.ErrNotExist) {
 		return "nil", nil
 	}
 	if err != nil {
 		return "", err
 	}
-	var tree any
-	if err := yaml.Unmarshal(src, &tree); err != nil {
-		return "", fmt.Errorf("%s/testdata/cycle.yaml: %w", dir, err)
+	tree, err := boot.ParseConfig(file, src)
+	if err != nil {
+		return "", err
 	}
-	return goLiteral(tree)
+	lit, err := goLiteral(tree)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", file, err)
+	}
+	return lit, nil
 }
 
 func goCmd(dir string, args ...string) ([]byte, error) {

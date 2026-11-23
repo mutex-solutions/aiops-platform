@@ -435,7 +435,7 @@ func TestCycleConfigReadsTheLayerRules(t *testing.T) {
 // A config in testdata/cycle.yaml is the row config the cycle test mounts with,
 // written as a Go literal of the tree types the launcher parses.
 func TestCycleConfigLiteral(t *testing.T) {
-	got, err := goLiteral(map[string]any{"queue": 4, "rate": 0.5, "on": true, "name": "x", "tags": []any{"a"}, "none": nil})
+	got, err := goLiteral(map[string]any{"queue": int64(4), "rate": 0.5, "on": true, "name": "x", "tags": []any{"a"}, "none": nil})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,9 +7,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
@@ -611,6 +614,31 @@ func TestScalarTyping(t *testing.T) {
 				t.Errorf("got %s, want %s", got, tc.want)
 			}
 		})
+	}
+}
+
+// ParseConfig reads one row config as a layer does and returns the tree the launcher
+// hands the row; every rule of the layer parser holds.
+func TestParseConfig(t *testing.T) {
+	got, err := ParseConfig("cycle.yaml", []byte("n: 10\nr: 0.5\nname: \"yes\"\nl: [a, true]\nm: {k: ~}\nref: ${env:AIOPS_REF_X}\n"))
+	want := map[string]any{"n": int64(10), "r": 0.5, "name": "yes", "l": []any{"a", true}, "m": map[string]any{"k": nil},
+		"ref": launch.Ref{Scheme: "env", Name: "AIOPS_REF_X"}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseConfig = %#v, %v", got, err)
+	}
+	for src, rule := range map[string]Rule{
+		strings.Repeat("#", MaxFileBytes+1): RuleLimit,
+		"# only a comment\n":                RuleEmpty,
+		"a: [\n":                            RuleSyntax,
+		"a: 1\n---\nb: 2\n":                 RuleDocument,
+		"- a\n":                             RuleType,
+		"n: 012\n":                          RuleType,
+		"n: &v 1\nm: *v\n":                  RuleAlias,
+	} {
+		var e *Error
+		if _, err := ParseConfig("cycle.yaml", []byte(src)); !errors.As(err, &e) || e.Rule != rule || e.File != "cycle.yaml" {
+			t.Errorf("ParseConfig(%.20q) = %v, want rule %s", src, err, rule)
+		}
 	}
 }
 

@@ -86,8 +86,6 @@ func goLiteral(v any) (string, error) {
 		return "nil", nil
 	case bool:
 		return strconv.FormatBool(x), nil
-	case int:
-		return fmt.Sprintf("int64(%d)", x), nil
 	case int64:
 		return fmt.Sprintf("int64(%d)", x), nil
 	case float64:
@@ -115,5 +113,5 @@ func goLiteral(v any) (string, error) {
 		}
 		return "map[string]any{" + strings.Join(parts, ", ") + "}", nil
 	}
-	return "", fmt.Errorf("%v of type %T is not a config tree value", v, v)
+	return "", fmt.Errorf("%v of type %T is not a literal config value; a reference has no resolver in the cycle test", v, v)
 }

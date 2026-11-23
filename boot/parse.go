@@ -701,6 +701,32 @@ func (p *parser) item(n *yaml.Node) (Item, error) {
 	return Item{Line: n.Line, Patch: &pt}, nil
 }
 
+// ParseConfig reads data, the content of file, as the config of one row under the
+// rules of a layer (ADR-059 decision 6): one YAML document, a mapping, with the
+// layer parser's typing of plain scalars, its refusal of anchors, aliases, tags,
+// merge keys and duplicate keys, its references and its bounds. It returns the tree
+// the launcher hands the row (launch.Row.Config): nil, bool, int64, float64,
+// string, launch.Ref, []any and map[string]any. plugingen reads the row config of a
+// generated cycle test with it.
+func ParseConfig(file string, data []byte) (any, error) {
+	if len(data) > MaxFileBytes {
+		return nil, &Error{File: file, Rule: RuleLimit, Msg: "a config is larger than " + strconv.Itoa(MaxFileBytes) + " bytes"}
+	}
+	root, err := parseDocument(file, data)
+	if err != nil {
+		return nil, err
+	}
+	p := &parser{file: file}
+	v, err := p.value(root, "", 1)
+	if err != nil {
+		return nil, err
+	}
+	if v.Kind != KindMap {
+		return nil, p.err(root, RuleType, "", "config must be a mapping")
+	}
+	return plain(v), nil
+}
+
 // parseProfile reads profile.yaml: {bundles: [name, ...]} in bundle order.
 func parseProfile(file string, data []byte) ([]string, error) {
 	root, err := parseDocument(file, data)
