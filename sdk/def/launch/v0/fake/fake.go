@@ -62,7 +62,8 @@ var (
 
 // New returns an empty launcher and the plugin that provides the six launch keys.
 // Each call returns a new plugin value, which a test lists in the provider binding
-// map to stand for the launcher.
+// map to stand for the launcher. Each key serves a value with the methods of its own
+// interface only: Exits is the test's (no side door, 07-c4-plugin-sdk.md §4.3).
 func New() (*Launcher, kernel.Plugin) {
 	f := &Launcher{known: map[launch.Digest]bool{}}
 	return f, kernel.Define(kernel.Plugin{
@@ -71,9 +72,12 @@ func New() (*Launcher, kernel.Plugin) {
 			launch.ReadyKey, launch.KillSwitchesKey, launch.AppExitKey},
 		Apply: func(c *kernel.Context, _ any) error {
 			for _, err := range []error{
-				launch.ProfileContextKey.Provide(c, f), launch.CatalogKey.Provide(c, f),
-				launch.CmdlineKey.Provide(c, f), launch.ReadyKey.Provide(c, f),
-				launch.KillSwitchesKey.Provide(c, f), launch.AppExitKey.Provide(c, f),
+				launch.ProfileContextKey.Provide(c, struct{ launch.ProfileContext }{f}),
+				launch.CatalogKey.Provide(c, struct{ launch.Catalog }{f}),
+				launch.CmdlineKey.Provide(c, struct{ launch.Cmdline }{f}),
+				launch.ReadyKey.Provide(c, struct{ launch.Ready }{f}),
+				launch.KillSwitchesKey.Provide(c, struct{ launch.KillSwitches }{f}),
+				launch.AppExitKey.Provide(c, struct{ launch.AppExit }{f}),
 			} {
 				if err != nil {
 					return err
