@@ -65,8 +65,8 @@ const (
 )
 
 // Kept is what install kept of an artifact: its plugin.yaml and bundle.yaml, and the
-// digest of its content layer, "" for an artifact with none, which plugins.lock
-// records beside the artifact's digest.
+// digest of its content layer, "" for an artifact with none. For an artifact of
+// plugins.lock, Content must equal the content digest of its entry.
 type Kept struct {
 	Manifest, Bundle []byte
 	Content          string
