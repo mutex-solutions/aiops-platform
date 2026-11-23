@@ -129,7 +129,7 @@ func TestTwoMajorsOfOneDefinition(t *testing.T) {
 // imports of the file take one name, a package named cycle or testing included, and
 // the plugin is reached through its own import.
 func TestCycleTestImportNames(t *testing.T) {
-	for _, name := range []string{"cycle", "testing", "echoersfake", "target"} {
+	for _, name := range []string{"cycle", "testing", "echoersfake", "target", "zzplugin"} {
 		tg := target{ID: "test/x", Name: name, ImportPath: mod + "/x/" + name, Accessor: "Plugin"}
 		src, err := cycleTest(tg, defs(t)[:1], nil, "nil")
 		if err != nil {
@@ -370,7 +370,7 @@ func TestGenerate(t *testing.T) {
 		t.Errorf("echo = %+v", r.Generated)
 	}
 	cyc := string(r.Files[CycleFile])
-	for _, s := range []string{"package echo_test", `echoersfake "` + mod + `/sdk/def/echoers/v0/fake"`, "echo.Plugin",
+	for _, s := range []string{"package echo_test", `echoersfake "` + mod + `/sdk/def/echoers/v0/fake"`, "zzplugin.Plugin",
 		`[]string{"echoers"}`, "cycle.Fake{Plugin: echoersPlugin, Inventory: echoersFake.Inventory}",
 		`map[string]any{"name": "loud"}`} {
 		if !strings.Contains(cyc, s) {
@@ -398,7 +398,7 @@ func TestGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(l.Generated.ConfigSchema) != 0 || len(l.Generated.Registers) != 0 || l.Files[TenantsFile] != nil ||
-		!strings.Contains(string(l.Files[CycleFile]), "legacy.New()") {
+		!strings.Contains(string(l.Files[CycleFile]), "zzplugin.New()") {
 		t.Errorf("legacy = %+v\n%s", l.Generated, l.Files[CycleFile])
 	}
 }

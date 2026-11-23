@@ -6,14 +6,14 @@ package loader_test
 import (
 	"testing"
 
-	loader "github.com/mutex-solutions/aiops-platform/loader"
+	zzplugin "github.com/mutex-solutions/aiops-platform/loader"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, loader.New(), nil, nil,
+	cycle.Run(t, zzplugin.New(), nil, nil,
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 	)
 }

@@ -8,12 +8,12 @@ import (
 
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	panicapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/panic-apply"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/panic-apply"
 )
 
 func TestCycle(t *testing.T) {
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, panicapply.New(), map[string]any{"dir": "testdata", "mode": "tracked", "trigger": "absent"}, nil,
+	cycle.Run(t, zzplugin.New(), map[string]any{"dir": "testdata", "mode": "tracked", "trigger": "absent"}, nil,
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 	)
 }

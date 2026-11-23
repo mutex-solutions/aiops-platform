@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	slowapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-apply"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-apply"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, slowapply.New(), map[string]any{"delay": "0s"}, nil)
+	cycle.Run(t, zzplugin.New(), map[string]any{"delay": "0s"}, nil)
 }

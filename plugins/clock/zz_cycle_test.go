@@ -6,10 +6,10 @@ package clock_test
 import (
 	"testing"
 
-	clock "github.com/mutex-solutions/aiops-platform/plugins/clock"
+	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/clock"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, clock.Plugin, nil, nil)
+	cycle.Run(t, zzplugin.Plugin, nil, nil)
 }

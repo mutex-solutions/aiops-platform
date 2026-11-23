@@ -6,14 +6,14 @@ package stamper_test
 import (
 	"testing"
 
-	stamper "github.com/mutex-solutions/aiops-platform/examples/stamper"
+	zzplugin "github.com/mutex-solutions/aiops-platform/examples/stamper"
 	stampersfake "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	stampersFake, stampersPlugin := stampersfake.New()
-	cycle.Run(t, stamper.Plugin, nil, []string{"stampers"},
+	cycle.Run(t, zzplugin.Plugin, nil, []string{"stampers"},
 		cycle.Fake{Plugin: stampersPlugin, Inventory: stampersFake.Inventory},
 	)
 }

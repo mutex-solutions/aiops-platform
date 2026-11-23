@@ -10,14 +10,14 @@ import (
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	testsubmit "github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
 )
 
 func TestCycle(t *testing.T) {
 	clockFake, clockPlugin := clockfake.New()
 	launchFake, launchPlugin := launchfake.New()
 	reloadFake, reloadPlugin := reloadfake.New()
-	cycle.Run(t, testsubmit.New(), map[string]any{"dir": "testdata/run"}, nil,
+	cycle.Run(t, zzplugin.New(), map[string]any{"dir": "testdata/run"}, nil,
 		cycle.Fake{Plugin: clockPlugin, Inventory: clockFake.Inventory},
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 		cycle.Fake{Plugin: reloadPlugin, Inventory: reloadFake.Inventory},

@@ -6,14 +6,14 @@ package configrefs_test
 import (
 	"testing"
 
-	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
+	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, configrefs.Plugin, map[string]any{"maxFileBytes": int64(65536)}, nil,
+	cycle.Run(t, zzplugin.Plugin, map[string]any{"maxFileBytes": int64(65536)}, nil,
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 	)
 }

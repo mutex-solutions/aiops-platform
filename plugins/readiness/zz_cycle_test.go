@@ -6,7 +6,7 @@ package readiness_test
 import (
 	"testing"
 
-	readiness "github.com/mutex-solutions/aiops-platform/plugins/readiness"
+	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/readiness"
 	compositionfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
@@ -15,7 +15,7 @@ import (
 func TestCycle(t *testing.T) {
 	compositionFake, compositionPlugin := compositionfake.New()
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, readiness.New(), nil, nil,
+	cycle.Run(t, zzplugin.New(), nil, nil,
 		cycle.Fake{Plugin: compositionPlugin, Inventory: compositionFake.Inventory},
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 	)

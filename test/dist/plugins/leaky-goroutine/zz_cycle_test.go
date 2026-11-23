@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	leakygoroutine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/leaky-goroutine"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/leaky-goroutine"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, leakygoroutine.New(), map[string]any{"hold": "0s"}, nil)
+	cycle.Run(t, zzplugin.New(), map[string]any{"hold": "0s"}, nil)
 }

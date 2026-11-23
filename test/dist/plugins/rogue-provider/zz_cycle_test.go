@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	rogueprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/rogue-provider"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/rogue-provider"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, rogueprovider.New(), nil, nil)
+	cycle.Run(t, zzplugin.New(), nil, nil)
 }

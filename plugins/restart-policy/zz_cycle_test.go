@@ -6,7 +6,7 @@ package restartpolicy_test
 import (
 	"testing"
 
-	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
+	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
 	clockfake "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0/fake"
 	compositionfake "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0/fake"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
@@ -17,7 +17,7 @@ func TestCycle(t *testing.T) {
 	clockFake, clockPlugin := clockfake.New()
 	compositionFake, compositionPlugin := compositionfake.New()
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, restartpolicy.New(), map[string]any{"backoffMax": "100ms", "backoffMin": "20ms", "factor": int64(2), "infrastructure": []any{"sql"}, "maxFailures": int64(3), "window": "1m"}, nil,
+	cycle.Run(t, zzplugin.New(), map[string]any{"backoffMax": "100ms", "backoffMin": "20ms", "factor": int64(2), "infrastructure": []any{"sql"}, "maxFailures": int64(3), "window": "1m"}, nil,
 		cycle.Fake{Plugin: clockPlugin, Inventory: clockFake.Inventory},
 		cycle.Fake{Plugin: compositionPlugin, Inventory: compositionFake.Inventory},
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},

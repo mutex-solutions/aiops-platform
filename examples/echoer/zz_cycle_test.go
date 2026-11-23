@@ -6,14 +6,14 @@ package echoer_test
 import (
 	"testing"
 
-	echoer "github.com/mutex-solutions/aiops-platform/examples/echoer"
+	zzplugin "github.com/mutex-solutions/aiops-platform/examples/echoer"
 	echoersfake "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	echoersFake, echoersPlugin := echoersfake.New()
-	cycle.Run(t, echoer.Plugin, nil, []string{"echoers"},
+	cycle.Run(t, zzplugin.Plugin, nil, []string{"echoers"},
 		cycle.Fake{Plugin: echoersPlugin, Inventory: echoersFake.Inventory},
 	)
 }

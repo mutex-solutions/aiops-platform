@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
-	slowdispose "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-dispose"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-dispose"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, slowdispose.New(), map[string]any{"delay": "0s"}, nil)
+	cycle.Run(t, zzplugin.New(), map[string]any{"delay": "0s"}, nil)
 }

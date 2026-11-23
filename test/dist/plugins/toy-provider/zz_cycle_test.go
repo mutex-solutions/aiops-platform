@@ -8,12 +8,12 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 	spinefake "github.com/mutex-solutions/aiops-platform/test/dist/def/spine/v0/fake"
-	toyprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-provider"
+	zzplugin "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-provider"
 )
 
 func TestCycle(t *testing.T) {
 	spineFake, spinePlugin := spinefake.New()
-	cycle.Run(t, toyprovider.New(), nil, nil,
+	cycle.Run(t, zzplugin.New(), nil, nil,
 		cycle.Fake{Plugin: spinePlugin, Inventory: spineFake.Inventory},
 	)
 }

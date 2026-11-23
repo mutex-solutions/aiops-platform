@@ -6,14 +6,14 @@ package legacy_test
 import (
 	"testing"
 
-	legacy "github.com/mutex-solutions/aiops-platform/internal/plugingen/testdata/legacy"
+	zzplugin "github.com/mutex-solutions/aiops-platform/internal/plugingen/testdata/legacy"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	launchFake, launchPlugin := launchfake.New()
-	cycle.Run(t, legacy.New(), nil, nil,
+	cycle.Run(t, zzplugin.New(), nil, nil,
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
 	)
 }

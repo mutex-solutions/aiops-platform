@@ -6,10 +6,10 @@ package dispatch_test
 import (
 	"testing"
 
-	dispatch "github.com/mutex-solutions/aiops-platform/examples/dispatch"
+	zzplugin "github.com/mutex-solutions/aiops-platform/examples/dispatch"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, dispatch.Plugin, nil, nil)
+	cycle.Run(t, zzplugin.Plugin, nil, nil)
 }

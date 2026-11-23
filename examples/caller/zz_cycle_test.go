@@ -6,7 +6,7 @@ package caller_test
 import (
 	"testing"
 
-	caller "github.com/mutex-solutions/aiops-platform/examples/caller"
+	zzplugin "github.com/mutex-solutions/aiops-platform/examples/caller"
 	clockfake "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0/fake"
 	echoersfake "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/fake"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
@@ -19,7 +19,7 @@ func TestCycle(t *testing.T) {
 	echoersFake, echoersPlugin := echoersfake.New()
 	launchFake, launchPlugin := launchfake.New()
 	stampersFake, stampersPlugin := stampersfake.New()
-	cycle.Run(t, caller.Plugin, map[string]any{"dir": "testdata/run"}, nil,
+	cycle.Run(t, zzplugin.Plugin, map[string]any{"dir": "testdata/run"}, nil,
 		cycle.Fake{Plugin: clockPlugin, Inventory: clockFake.Inventory},
 		cycle.Fake{Plugin: echoersPlugin, Inventory: echoersFake.Inventory},
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
