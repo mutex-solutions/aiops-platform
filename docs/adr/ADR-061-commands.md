@@ -158,8 +158,12 @@
      `kernel.ErrInactiveEffect` when the caller's fiber is unloading.
    - `Dispatch` parses `argv` by decision 8, prints help by decision 9, calls the command
      inside an `Enter` lease on the fiber that registered it (`07:203`, `:511`), and
-     returns the exit code of decision 10. `admin-api`, which plugin record §5 lists as a
-     consumer, could call it from S4a; what it may dispatch is S4a's to decide.
+     returns the exit code of decision 10. It recovers a panic of `Run` and answers it
+     as an error, so a panicking command still ends the process with a code instead of
+     leaving the `cli` row's goroutine FAILED and the process waiting. The deadline, the
+     concurrency cap and the breaker of the owner-side guard (M2, `07:511`) are question
+     Q7. `admin-api`, which plugin record §5 lists as a consumer, could call it from S4a;
+     what it may dispatch is S4a's to decide.
    - `Inventory` lists the registered paths, sorted. The owning fiber of each is the
      fiber whose ledger holds `Label(path)`, as for the toy registries (`07:521`; ADR-060
      decision 5).
@@ -256,7 +260,8 @@
 
 9. **Help.** `aiopsctl help [<word>...]`, and `--help` or `-h` after any words, print the
    registered commands grouped by their first word with their summaries, or one
-   command's synopsis and flags, then the three exit codes, then each row of the
+   command's synopsis and flags, then the three exit codes with the note that a Go
+   panic also exits 2 (ADR-059 decision 29), then each row of the
    composition that needs `commands` and is not ACTIVE, with its state and what it waits
    for, read from `composition` and `catalog`. Help that was asked for goes to stdout and
    exits 0. `aiopsctl` with no argument prints the same list to stderr and exits 2, as the
@@ -266,16 +271,23 @@
 
     | Outcome | Code | stderr |
     |---|---|---|
-    | `Run` returned `nil`; help that was asked for | 0 | Warnings only |
+    | `Run` returned `nil`; help that was asked for; a write whose submission outcome is `applied`, `not-running` or `restart-required` (decision 17) | 0 | Warnings, and `restart-required: <reason>` where that is the outcome |
     | A usage error: of parsing, an error of `Run` that matches `ErrUsage`, or a path that no row registered while every row that needs `commands` is ACTIVE | 2 | The error and the synopsis |
-    | A denial, a failed step, `rebuild-required`, or any other error of `Run` | 1 | `aiopsctl: <path>: <reason>` |
+    | A denial, a failed step, `rebuild-required`, any other error of `Run`, or a panic of `Run`, which `Dispatch` recovers (decision 3) | 1 | `aiopsctl: <path>: <reason>`, with the stack for a panic |
+    | A write whose submission the running process refused; the files are restored (decision 17) | 1 | The verdict, and that the files were restored |
+    | A write whose submission got no answer within its bound; the files stay | 1 | That the outcome in the running process is unknown |
     | A path that no row registered while a row that needs `commands` is not ACTIVE | 1 | That row, its state and what it waits for |
-    | A stop by a signal before the command returned | 1 | `interrupted` |
-    | The boot of the `cli` profile failed (launcher codes 1 and 3 to 7), or a fiber leaked at shutdown | 1 | The launcher's reason |
+    | A signal before the command returned: launcher code 8 (decision 13) | 1 | `interrupted`, and whether the snapshot was restored or left for the next writer (decision 17) |
+    | The boot of the `cli` profile failed (launcher codes 1 and 3 to 7), or after the command returned a fiber leaked or the shutdown overran its bound (launcher code 4) | 1 | The launcher's reason |
+    | A Go panic that no fiber recovers | 2 | The Go runtime's trace, which tells it from a usage error (ADR-059 decision 29) |
 
     ADR-059 decision 29 records the table in `cmd/aiopsctl/run.go`. From this ADR it is
     in the help text of the `cli` row and in the exit mapping of `cmd/aiopsctl`
-    (decision 25).
+    (decision 25). The mapping reads the launcher's code under decision 13: 0 and 2 are
+    the command's, 8 is a signal, and 1 and 3 to 7 are the launcher's. A panic exits 2
+    from the Go runtime, outside the mapping, as ADR-059 decision 29 records; the
+    kernel recovers a panic in a tracked goroutine (`08` §1.6), so only a panic outside
+    every fiber reaches it.
 
 11. **stdout and stderr.** stdout carries only what a command was asked to print: a dump,
     a report with `--json` (`07:1565`), what `inspect` shows, the `dist.yaml` lines of
@@ -307,6 +319,16 @@
     - `ExitRequest` gains `Code`, read only with the new reason `ExitCommand`: the
       launcher stops under its shutdown bound and returns that code, which is 0, 1 or 2.
       Any other code with that reason is a launcher failure.
+    - `boot.RunOptions` gains `Command`, which `cmd/aiopsctl` sets and `cmd/aiops` does
+      not. Under it, a stop that an `ExitCommand` request began returns the request's
+      code when the tree disposed within the shutdown bound with no leak, and `ExitLeak`
+      otherwise; a stop that a signal or the end of `ctx` began returns
+      `ExitInterrupted`, a new launcher code 8; and where boot would return `ExitUsage`
+      it returns `ExitInternal`. A launcher code of 0 or 2 is then always a command's.
+      At `a3c85ae` a signal returns `ExitOK`, the code of a command's success, and a
+      leak replaces only `ExitOK` (`boot/run.go`), so `cmd/aiopsctl` could tell neither a
+      signal from a success nor a leak after a failed command. The codes of `aiops` do
+      not change.
 
 ### The `operations` definition and plugin
 
@@ -394,7 +416,7 @@
 
     | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
     |---|---|---|---|---|---|
-    | `Home` | None at S2a; `plugin list` reads it from S6a | No | None | None | `08:371`; decision 18 |
+    | `Home` | None at S2a; `plugin list` reads it from S6a | No | None | None | `08:373`; decision 18 |
     | `Render` | `profile render` | No | Boot | `Render` | `08:359`; `03:63` |
     | `VerifyProfile` | `profile verify` | No | Boot | `Render` | `08:366` |
     | `InitProfile` | `profile init <p>` | Yes | None | `Shipped` | `08:72` row 30; ADR-060 decision 27 |
@@ -418,28 +440,115 @@
 
     `Purge` joins at S3 with `durable` (ADR-060 decision 47).
 
-17. **Rules every provider keeps.**
-    - `Install` runs every clause of its entry point before it writes, writes nothing on
-      a denial, answers `rebuild-required` for in-process code with no file changed, and
-      restores a snapshot of the profile definition, `plugins.lock` and the profile patch
-      on a failure (`08:374`, `:397`; ADR-060 decision 23).
-    - `Enable` and `Disable` write only a departure from the bundle layers into the
+17. **Rules every provider keeps.** `08:369` reads, as plugin record §12 does: "Every
+    operation is a submission to the reload queue, is audited and emits
+    `plugin-manager/changed`. ... The manager cannot disable itself, a required row, the
+    last provider of a bound key or another profile." `03:71` has "audited and submitted
+    to `reload`" and the first three of the four. Each clause is kept below, or deferred
+    with its trigger.
+    - **Install.** `Install` runs every clause of its entry point before it writes,
+      writes nothing on a denial and answers `rebuild-required` for in-process code with
+      no file changed (`08:374`, `:397`; ADR-060 decision 23). It refuses an artifact
+      whose group id clashes with a row of the target profile, read from a `Render` with
+      the artifact's bundle appended (ADR-047 decision 17). Into the profile `cli` it
+      follows question Q8: with (b) it installs in-process code after `dist use` there,
+      its rows disabled, and refuses a pack and remote code, since a pack's rows
+      contribute no command and `commands` takes no remote contribution (`00:222`); with
+      (a) or (c) it refuses, as `08:269` writes.
+    - **Enable and Disable.** They write only a departure from the bundle layers into the
       profile layer, with no `--tenant` (`08:375`; ADR-060 decision 47), and only after
       `Render` has admitted the changed profile as boot would (ADR-060 decision 17, boot
       row), so a change that boot would refuse writes nothing.
-    - A write to a profile that the home does not hold first copies the shipped template
-      with `InitProfile` and says so (ADR-060 decision 27).
-    - Each file is replaced by a rename (ADR-047 decision 8). `Install` writes the
-      directories of ADR-047 decision 10, then the records of ADR-020 decision 10, then
-      `plugins.lock`, then the bundle list; `Remove` deletes in the reverse order. A
-      reader that takes no lock therefore sees the state before the operation, the state
-      after it, or a state in which only files that no profile names yet have changed.
-    - A change that disables or removes a row of `aiops-cli` in the profile `cli`, or
-      takes that bundle out of it, is refused. The manager cannot disable itself or a
-      required row (`08:369`) and dsh's manager cannot remove itself (dsh §6); without
-      the rule, one command could leave `aiopsctl` unable to run the command that undoes
-      it. An operator who wants that change edits the file.
-    - Every write that changes a profile ends with `Submit` (`08:369`, `:446`; `07:1855`).
+    - **What the manager cannot disable.** `Disable` and `Remove` refuse, and write
+      nothing for, a change that disables or removes: a row of `aiops-cli` in the profile
+      `cli`, or that bundle itself, since that is the manager, and without the rule one
+      command could leave `aiopsctl` unable to run the command that undoes it (dsh's
+      manager cannot remove itself, dsh §6); a row of the profile's required set; or the
+      last enabled provider in the profile of a provider-bound or consumer-bound key
+      (`00:245`). Both are read from the `Rendered` of the changed profile, since
+      disabling the last provider of a key that is not required leaves its consumers
+      PENDING (`08:471`) and is no refusal of admission. An operation changes only the
+      profile its request names, which is the reading of "another profile" for a CLI
+      that writes any profile of the home; from S6a `plugin-manager` names only the
+      profile of its own process, and the ADR of S6a says so (decision 32). An operator
+      who wants a refused change edits the file.
+    - **A profile the home does not hold.** A write to it first copies the shipped
+      template with `InitProfile` and says so (ADR-060 decision 27).
+    - **The home** (ADR-047 decision 14). The library refuses to write into a home whose
+      owner is not its effective user, creates the home and `run/` with mode 0700 where
+      they are missing, and writes each file with mode 0600, replaced by a rename in its
+      directory (ADR-047 decision 8); `write.lock` is the one exception (decision 19).
+      With `$AIOPS_HOME` unset or empty there is no home: a method that writes the home
+      returns an error that matches `ErrUsage` and names the variable, and `Render`
+      composes the shipped profiles alone (decision 25). With `$AIOPS_HOME` naming a
+      directory that does not exist, a read finds an empty home and the first write
+      creates it, as `trust add` does on the clean machine of ADR-060 decision 30, step
+      C1; a missing parent directory fails the write.
+    - **Order and snapshot.** A method that writes the home takes the lock (decision 19),
+      runs the checks that read the home, then writes into `$AIOPS_HOME/snapshot/` a copy
+      of every file it will replace or delete and the list of the paths it will create,
+      and syncs it. The set covers the profile definition, `plugins.lock` and the profile
+      patch (`08:374`), the records under `verified/` and `verified/current`, which are
+      restored with `plugins.lock` (ADR-020 decision 10), `trust.yaml`, `image.yaml`, and
+      the directories under `bundles/` and `content/`. It then renames: `Install` the
+      directories of ADR-047 decision 10, then the records, then `plugins.lock`, then the
+      bundle list; `Remove` the bundle list, then `plugins.lock`, then, after the
+      submission, the directories that no profile names any more; `UseDist` the record,
+      then `current`, then `image.yaml`. Last, it submits, removes the snapshot and
+      releases the lock.
+    - **Restore.** On a failure, a refused submission or the end of `ctx`, the method
+      restores the snapshot, copying each file back and removing each created path. It
+      runs the restore under a context detached from `ctx`, bounded to 5 seconds, half
+      the drain deadline of ADR-059 decision 30, so that the `cli` row returns inside the
+      launcher's drain after a signal (decision 10). When the bound passes, or the process
+      dies, the snapshot stays: the next writer, once it holds the lock, restores it
+      before it writes and says so, and `Home` reports it. T1 tests of
+      `plugins/operations` run an install in a child process that stops after its first
+      rename, kill it, and check that the next write first restores the home to its state
+      before the install; kill a restore in the middle and check the same; and interrupt
+      the install at the same point and check exit 1 with the home restored.
+    - **Submission** (`08:369`, `:446`; `07:1855`). Every method that writes the home ends
+      with a submission while it holds the lock. `Install`, `Enable`, `Disable`,
+      `Remove`, `InitProfile` and `SanitizeProfile` submit the profile they changed, and
+      `AddTrust` the profile that `run/status.json` names, since every composition reads
+      `trust.yaml`. `UseDist` answers `restart-required` with the reason `image`, since a
+      new image is a new process (`07:1869`). The other methods write no home and submit
+      nothing. The transport is the ADR of ADR-060 decision 48, which keeps these
+      outcomes or amends this decision; every `restart-required` carries its reason, as
+      dsh's does (dsh §4.4).
+
+      | Case | `Change.Outcome` | Files | Exit (decision 10) |
+      |---|---|---|---|
+      | No `run/status.json` of the home names a running process of that profile | `not-running`: the change applies at the next start | Kept | 0 |
+      | A process runs it and no transport exists, which is every S2a commit before the transport ADR merges | `restart-required`, reason `no-transport` | Kept | 0 |
+      | The process has no `reload` row (`03:65`) | `restart-required`, reason `no-reload` | Kept | 0 |
+      | The generation is applied and judged | `applied` (`07:1855`) | Kept | 0 |
+      | The generation is rejected, or its verdict fails | `refused`, with the verdict | Restored | 1 |
+      | No answer within the bound that the transport ADR fixes | `unknown` | Kept | 1 |
+
+    - **Audit.** "Is audited" waits for `audit-chain` (S5, `08:698`), which no profile of
+      S2a composes. The step that builds it says how an operation of `aiopsctl` is
+      audited, through the submission that the running process audits or otherwise; until
+      then no operation is audited, as ADR-060 decision 29 defers the audit of each
+      generation (decision 32).
+    - **`plugin-manager/changed`.** The hook belongs with `pluginManager`, which lands
+      with its first consumer at S6a (`00:206`). From S6a the operations library emits it
+      after every completed operation in the process that runs it, as dsh's manager does
+      (dsh §4.4), and the ADR of S6a names the definition that owns it (decision 32).
+    - **trust add.** `AddTrust` takes both forms of ADR-020 decision 5. It refuses a
+      pattern that is neither an exact id nor `<owner>/*`, the owners `aiops` and
+      `contrib`, and the runtime `wasm` (ADR-020 decision 6), and with `--distribution`
+      it writes `key: release` first when it creates the field `distributions`, so adding
+      a site key never drops the default root (ADR-020 decision 13).
+    - **Secrets.** Registry credentials come from the Docker-format `config.json` that
+      `$DOCKER_CONFIG`, or `.docker/` under `$HOME`, names in the invocation's
+      environment, read through the OCI client (ADR-047 decision 4). The password of an
+      encrypted key comes from `AIOPS_KEY_PASSWORD`, which may be empty as cosign allows
+      (ADR-020 decision 4); with the variable unset, `key generate`, `plugin sign` and
+      `dist sign` return an error that matches `ErrUsage` and names it. Neither is written
+      into the home, and neither reaches a server process (`00:183`, `:412`): the library
+      reads the environment only through `Caller.Env`, which `aiops` never fills (decision
+      13). Where `plugin-manager` takes its credentials from S6a is question Q6.
 
 18. **Fake and suite.** Neither may import the YAML library, which is never in `sdk/`
     (ADR-060 decision 41), nor any upstream module (`07:522`, U3; ADR-054 decision 17),
@@ -477,20 +586,46 @@
 
 19. **One lock per home** (question Q5 (a)): the file `$AIOPS_HOME/write.lock`. The
     operations plugin holds it for the whole of each method that writes the home
-    (decision 16), from the snapshot to the last rename or the restore (`08:374`).
+    (decision 16): from before the checks that read the home, through the renames and
+    the submission, to the removal or the restore of the snapshot (`08:374`; decision
+    17).
     - It is the operating system's exclusive advisory lock on that open file, `flock(2)`
       on Linux and macOS through the standard library's `syscall` package, so the system
-      releases it when the holder exits and a crash leaves no stale lock. dsh's lock
-      needs an idle timeout because it can go stale (dsh §4.2); this one cannot.
+      releases it when the holder exits and a crash leaves no stale lock. A holder holds
+      it only through bounded steps, the submission included (decision 17), so it has no
+      idle timeout. dsh's lock has a wait of 120 s and an idle timeout of 600 s (dsh
+      §4.2), which the record gives no reason for; row 34 of the dsh checklist records
+      the adaptation (Edits on acceptance). What is lost: a waiter cannot break the lock
+      of a live holder that hangs.
+    - `write.lock` is created once, with mode 0600, and is never renamed or deleted:
+      `flock(2)` binds to one inode, and a renamed file would let a second writer lock
+      the new inode while the first holds the old one. It is the one exception to the
+      rename rule of ADR-047 decision 14. The holder writes its record, its process id
+      and its command, in place through the locked descriptor, truncating first.
     - A second writer waits up to 120 seconds, dsh's lock wait (dsh §4.2), then fails
-      with exit 1, naming the holder by the process id and the command that the holder
-      writes into the file while it holds the lock.
-    - Readers take no lock: boot, `Render` and `Inspect` read files that are replaced by
-      a rename in the order of decision 17.
-    - The path joins the home contract of ADR-047 decision 13: written by `aiopsctl` and
-      mounted read-only into a `kernel` that runs as a container, which takes no lock at
-      S2a. From S6a `plugin-manager` writes the home from inside the kernel (ADR-047
-      decision 13), and the ADR of S6a says how that process takes this lock.
+      with exit 1, naming the holder from that record. It reads the record without the
+      lock and treats a short or empty read as an unknown holder.
+    - Readers take no lock: boot, `Render` and `Inspect` read files that are each
+      replaced whole by a rename, so each file is read old or new and never torn. A read
+      of several files can still pair states:
+      - `Install` writes every file that the new bundle list names before the list, so a
+        reader that reads the list first composes the old or the new profile. A reader
+        that reads `plugins.lock` before the list can pair the new list with the old
+        lock, and boot then detaches the artifact's rows by check 5 (ADR-047 decision
+        18); those rows were disabled anyway.
+      - `Remove` deletes the directories only after the submission, so a running process
+        has recomposed without the id before its files go. A boot that read the old
+        bundle list while a remove deletes them stops, as `08:465` has for a missing
+        bundle file, and a live recomposition in that window is rejected whole and keeps
+        the running tree; the next boot or generation composes the new state.
+
+      Readers take no shared lock, because a writer holds the lock through its
+      submission while the process that judges the submission reads the home (`03:84`).
+    - `write.lock` and `snapshot/` join the home contract of ADR-047 decision 13:
+      written by `aiopsctl`, and mounted read-only into a `kernel` that runs as a
+      container, which takes no lock and reads neither at S2a. From S6a `plugin-manager`
+      writes the home from inside the kernel (ADR-047 decision 13), and the ADR of S6a
+      says how that process takes this lock.
 
 ### How command rows reach the operations library, the builder and the gate
 
@@ -620,12 +755,30 @@
 
     It parses no flag of its own, and it maps the launcher's code by decision 10.
 
-26. **Its own boot** passes the gate as every profile does (ADR-060 decision 17, boot
-    row). Its first-party rows pass checks 5 and 10 on the release's built-in record
-    (ADR-060 decision 50; ADR-020 decision 13), and a site that removed that root runs the
-    `aiopsctl` that `dist build` wrote (ADR-020 decision 29). A denied command row is
-    detached as disabled (`08:467`) and its commands answer by decision 10; a denied
-    `cli`, which is required, stops the boot with exit 1.
+26. **Its own boot, and the distribution the server runs.**
+    - Its own boot passes the gate as every profile does (ADR-060 decision 17, boot
+      row). Its first-party rows pass checks 5 and 10 on the release's built-in record
+      (ADR-060 decision 50; ADR-020 decision 13), and a site that removed that root runs
+      the `aiopsctl` that `dist build` wrote (ADR-020 decision 29). A denied command row
+      is detached as disabled (`08:467`) and its commands answer by decision 10; a
+      denied `cli`, which is required, stops the boot with exit 1.
+    - The distribution that the server of a home runs is the one that
+      `verified/current` names, or the release's where none is current (ADR-020
+      decisions 12 and 13). A release `aiopsctl` keeps booting on its built-in record
+      after `dist use` of a site image (ADR-020 decision 30, reading 5), but its module
+      table lacks the site's in-process modules, so what it composes is not "exactly
+      what the server would compose" (`08:359`), and ADR-060 decision 17 evaluates an
+      install after `dist use` "with the module table of the recorded distribution".
+      So the toolbox's `Render` and `Gate`, given a home, compare the digest of the
+      manifest that this binary embeds with that distribution's. When the two differ,
+      they refuse with exit 1, naming both digests and the site's `aiopsctl` that `dist
+      build` wrote, which boots on `current` (ADR-020 decision 29); `profile render`,
+      `profile verify`, `plugin install`, `enable`, `disable` and `remove` then write
+      nothing. A command that composes nothing of the home, such as `inspect`, `gate
+      --against`, `check`, `trust add` or `dist use`, still runs. A test runs the
+      release `aiopsctl` on a home after `dist use` of a site image and checks each
+      refusal, then runs the site's `aiopsctl` on the same home and checks that each
+      command runs.
 
 27. **`profile render` is a command row.** It is a command of `command-profile` that
     calls `operations.Render`, so it composes with the same `boot` code and this binary's
@@ -677,13 +830,21 @@
       exits 0 and lists every command of decision 30, which needs every row of
       `aiops-cli` ACTIVE.
     - Exit codes: no argument exits 2; an unknown path exits 2; a command whose row a test
-      detaches exits 1 and names the row; a command interrupted by a signal exits 1; a
-      denial and `rebuild-required` exit 1 with the reason on stderr and nothing on stdout
-      but what decision 11 allows.
+      detaches exits 1 and names the row; a command interrupted by a signal exits 1,
+      launcher code 8 under `Command`; a command that returned 2 and then leaked exits
+      1; a panicking command exits 1 with its stack; a denial and `rebuild-required` exit
+      1 with the reason on stderr and nothing on stdout but what decision 11 allows; each
+      outcome of the submission table of decision 17 exits with its code.
     - The lock: of two concurrent writes to one home, the second waits and, with a short
       bound in the test, fails naming the holder; a writer killed while it holds the lock
-      leaves a home that the next writer locks at once.
-    - The refusal of decision 17 for a row of `aiops-cli` in the profile `cli`.
+      leaves a home that the next writer locks at once; `write.lock` keeps its inode
+      across writes.
+    - The restore of decision 17 after a kill, a killed restore and an interrupt.
+    - Each refusal of decision 17: a row of `aiops-cli` in the profile `cli`, a required
+      row, the last provider of a bound key, each refused form of `trust add`, and a home
+      owned by another user.
+    - The distribution rule of decision 26, with a release `aiopsctl` after `dist use` of
+      a site image.
     - The goldens of decision 27, with the dump and the hook dump of the `cli` profile.
 
 ### What this ADR does not settle
