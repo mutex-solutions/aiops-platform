@@ -1,0 +1,10 @@
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: plugin-system-2026-11.md §5 (a toy registry, class `-`, no tenant data);
+# ADR-060 decisions 5 and 39 (stability experimental, `remote: "no"` until S2b marks it
+# `contrib` in a minor). The definition owns no hook.
+key: stampers
+version: "0.1"
+stability: experimental
+class: {provider: open, consumer: open}
+remote: "no"
+suite: 1
