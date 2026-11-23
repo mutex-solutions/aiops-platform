@@ -483,7 +483,8 @@ func (r *mreader) schema(n *yaml.Node) map[string]any {
 }
 
 // requires reads requires: pluginApi exactly when runtimes holds inproc,
-// remoteProtocol exactly when it holds remote (ADR-048 decision 12).
+// remoteProtocol exactly when it holds remote, by presence and not by length, and
+// never empty (ADR-048 decision 12).
 func (r *mreader) requires(n *yaml.Node, runtimes []string) ManifestRequires {
 	f := r.fields(n, "requires", []string{"pluginApi", "remoteProtocol", "definitions"}, "definitions")
 	q := ManifestRequires{PluginAPI: r.word(f["pluginApi"], "requires.pluginApi", func(s string) bool {
@@ -501,8 +502,8 @@ func (r *mreader) requires(n *yaml.Node, runtimes []string) ManifestRequires {
 	if (q.PluginAPI != "") != slices.Contains(runtimes, "inproc") {
 		r.fail(n, "requires states pluginApi exactly when runtimes holds inproc")
 	}
-	if (len(q.RemoteProtocol) > 0) != slices.Contains(runtimes, "remote") {
-		r.fail(n, "requires states remoteProtocol exactly when runtimes holds remote")
+	if remote := slices.Contains(runtimes, "remote"); (f["remoteProtocol"] != nil) != remote || remote && len(q.RemoteProtocol) == 0 {
+		r.fail(n, "requires states remoteProtocol exactly when runtimes holds remote, with at least one major")
 	}
 	return q
 }
