@@ -147,19 +147,26 @@ gaps:
    the store of `oras-go` (decision 4), package `content/oci`, which implements that
    specification.
 
-2. **What each command fetches.** Every blob is checked against the digest of its
-   descriptor before it is used, after the signature over the image manifest is verified
-   as ADR-020 fixes.
-   - `plugin inspect` fetches the image manifest, `plugin.yaml` and the bundle and nothing
-     else (ADR-060 decision 58; `08:373`; `07:1853`). The content paths it prints come from
-     the annotation `aiops.plugin.content.paths` on the content layer's descriptor, a JSON
-     array of the paths in the layer in the order of decision 3. `plugin pack` writes it,
-     and install refuses an artifact whose content layer holds other paths.
-   - `plugin install` also fetches the module and content layers and the attestation; it
-     never fetches the fixtures or the SBOM.
-   - `plugin gate --against` fetches what `inspect` fetches and the attestation (ADR-060
-     decision 17).
-   - `plugin verify` and an index also fetch the fixtures (`07:1512`; community:192).
+2. **What each command fetches and verifies.** Every blob is checked against the digest of
+   its descriptor before it is used. A command that verifies the signature over the image
+   manifest, as ADR-020 fixes, fetches the image manifest and the signature first and uses
+   no other blob until the signature verifies.
+   - `plugin inspect` fetches the image manifest, `plugin.yaml` and the bundle, and never
+     the content, module or image (ADR-060 decision 58; `08:373`; `07:1853`). It verifies
+     no signature, since it installs and runs nothing: it prints the artifact digest and
+     that no signer was verified, and `install` verifies the signature over that same
+     digest. The content paths it prints come from the annotation
+     `aiops.plugin.content.paths` (its prefix is question Q5) on the content layer's
+     descriptor, a JSON array of the paths in the layer in the order of decision 3. `plugin
+     pack` writes it, and install refuses an artifact whose content layer holds other
+     paths.
+   - `plugin gate --against` fetches what `inspect` fetches and the attestation, and
+     verifies no signature: it does not evaluate check 5 (ADR-060 decision 17).
+   - `plugin install` verifies the signature, then fetches `plugin.yaml`, the bundle, the
+     module and content layers and the attestation; it never fetches the fixtures or the
+     SBOM.
+   - `plugin verify` verifies the signature and fetches what install fetches and the
+     fixtures (`07:1512`); from S6a an index fetches the fixtures too (community:192).
 
 3. **The content layer and the content digest.**
    - `plugin pack` writes the artifact's `content/` directory as one uncompressed tar in a
