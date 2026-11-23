@@ -1875,7 +1875,7 @@ Install is not enable and runs no third-party code. The detail of each command i
 | `Image` | `Install` | Run again, `plugin install <spec>` now appends the bundle with its disabled rows. |
 | `Install` | `Enable` | Every path ends the same way: `plugin enable <row>`, which writes only a departure from the bundle layers into the profile layer or, from S4b, a tenant overlay. |
 
-**The bundle of an installed artifact** is narrower than a first-party bundle (§6.1). It may only insert rows; every inserted row is disabled; its `plugin` is the artifact's own id or a first-party plugin marked `instantiable`. The rows mount under one group named by the artifact, and their secret scope and purge key are the artifact's. Gate check 8 refuses anything else. Section 8.4 works one such artifact through.
+**The bundle of an installed artifact** is narrower than a first-party bundle (§6.1). It may only insert rows; every inserted row is disabled; its `plugin` is the artifact's own id or a first-party plugin marked `instantiable`; a row sets only `id`, `plugin`, `roles`, `enabled: false` and `config` (ADR-047 decision 19), and holds no `${env:}` or `${file:}` reference, since the operator sets a credential reference in the profile or site layer (ADR-060 decision 57). The rows mount under one group named by the artifact, and their secret scope and purge key are the artifact's. Gate check 8 refuses anything else, and check 5 every row of an artifact whose kept files differ from its digest (ADR-047 decision 18). Section 8.4 works one such artifact through.
 
 **Who can add what.**
 
@@ -1891,18 +1891,7 @@ W3 and W4 (§2.4) are owner decisions of 2026-11-11 under ADR-033; an ADR that c
 
 **The compatibility gate.** It is `boot` library code that reads manifests only, with what install recorded beside each digest. It verifies no signature itself: `boot/` imports neither cosign nor sigstore-go (ADR-020; R17). It runs at build, at `plugin check`, at install, at boot, at every recomposition and at every remote handshake, and `aiopsctl plugin gate <spec> --against <dist.yaml>` runs it against a published release with no kernel.
 
-| # | Check | Denies when |
-|---|---|---|
-| 1 | Manifest schema and author API | `manifestVersion` is absent or names an unknown major; `requires` is absent; `requires.pluginApi` is not served by this binary |
-| 2 | Definition versions | `requires.definitions` names a major that the distribution's `serves` lacks, or a minor it does not satisfy: at major 0 the exact minor unless `compatibleFrom` admits it, on a stable major a needed minor above the served one (section 4.1) |
-| 3 | Remote protocol | No common major at the handshake; the manifest digest differs from the lock; a registration names a definition version that is not served |
-| 4 | Stability | Below the profile's `minStability` |
-| 5 | Trust | No verified signer is recorded beside the digest, or that signer is outside `trust.yaml` for this id and runtime; a Go module absent from a trusted distribution manifest; an id resolved through an index that may not list it |
-| 6 | Licence | An in-process module whose detected licence is outside the in-process allow-list (licence record §7.1; 08 §5.1 L7) and not in the manifest's recorded `acceptLicenses`; any acceptance in `aiops` or `aiops-contrib` |
-| 7 | Key and hook classes | A provider or consumer outside a binding, read from the generated `provides` and `uses`; a `signed` key or hook used by an untrusted signer; a `fake` in a server graph; a required key or row whose static need closure contains a provider outside the required set |
-| 8 | Layer rules | Any violation of the table in section 7.1; a tenant overlay enabling a row that is not installed, or that is neither `scope: tenant` nor tenant-toggleable; a `scope: tenant` plugin injecting the process form of a bound key; an installed artifact's bundle that changes an existing row, inserts an enabled row, or inserts a row of a plugin that is neither its own nor `instantiable` |
-| 9 | Remote scope | A remote row at process scope in a multi-tenant profile; a remote manifest that declares anything outside the contribution set |
-| 10 | Attestation | The typed conformance attestation is missing or names another subject digest; it omits the version of a definition of `requires`, or names one that differs from `requires`; or it lacks the suite revision of a definition the plugin provides, contributes to or, for a pack, feeds (ADR-060 decision 56) |
+The ten checks are the one gate text of `08-profiles-roadmap-adrs.md` §1.6 (ADR-060 decision 16), which also says which clauses each entry point evaluates.
 
 A denied row is detached as disabled in the launcher's copy; no file is rewritten, and the dump names the unmet check. An allowed row that uses a deprecated major gets a warning, never a denial. Exemptions name an exact `id@version` against exact served versions and cover only the minor comparison of checks 1 and 2, and check 4; an unserved major cannot be exempted, because there is no provider to call. Hosted denies exemptions. The gate has ten checks and no edition or entitlement check: a manifest of a later major is refused by check 1. Admission also refuses a `harnesses` contributor that declares `dialer` or a network capability (section 2); which of the ten checks carries that refusal is fixed with the definition, under ADR-051.
 
