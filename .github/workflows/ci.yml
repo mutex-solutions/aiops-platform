@@ -66,8 +66,10 @@ jobs:
           go build ./...
           go vet ./...
           go test -race -count=1 ./...
-      - name: Definitions module build, vet, race tests
-        working-directory: sdk/def
+      - name: SDK module build, vet, race tests
+        # The module github.com/mutex-solutions/aiops-platform/sdk, rooted at sdk/ (ADR-060
+        # decision 54); sdk/kernel and sdk/testkit are nested modules of their own.
+        working-directory: sdk
         run: |
           go build ./...
           go vet ./...
@@ -82,6 +84,10 @@ jobs:
           go run ./tools/kernelcheck lines sdk/kernel 8200
           go run ./tools/kernelcheck testctor .
           go run ./tools/kernelcheck coverage sdk/kernel/cover.out github.com/mutex-solutions/aiops-platform/sdk/kernel
+      - name: SDK module require list
+        # 00-decisions.md §4.3: sdk requires sdk/kernel, and sdk/testkit for its tests only;
+        # pgx v5 joins at S3 (ADR-060 decision 4).
+        run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
       - name: Import boundaries
         # docs/architecture/07-c4-plugin-sdk.md:27-48, ADR-059 decision 6; skips the
         # server-closure part until cmd/aiops exists.

@@ -1,4 +1,4 @@
-module github.com/mutex-solutions/aiops-platform/sdk/def
+module github.com/mutex-solutions/aiops-platform/sdk
 
 go 1.26.0
 
@@ -12,6 +12,6 @@ require github.com/mutex-solutions/aiops-platform/sdk/kernel v0.0.0
 require github.com/mutex-solutions/aiops-platform/sdk/testkit v0.0.0
 
 replace (
-	github.com/mutex-solutions/aiops-platform/sdk/kernel => ../kernel
-	github.com/mutex-solutions/aiops-platform/sdk/testkit => ../testkit
+	github.com/mutex-solutions/aiops-platform/sdk/kernel => ./kernel
+	github.com/mutex-solutions/aiops-platform/sdk/testkit => ./testkit
 )

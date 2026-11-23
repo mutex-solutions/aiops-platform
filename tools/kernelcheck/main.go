@@ -3,14 +3,17 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,7 +28,7 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
@@ -40,12 +43,15 @@ func run(args []string) error {
 	if args[0] == "lines" && len(args) == 4 && args[3] == "provisional" {
 		n = 4
 	}
+	if args[0] == "modfile" && len(args) > 2 {
+		n = len(args)
+	}
 	if !ok || len(args) != n {
 		return usage
 	}
 	switch args[0] {
 	case "modfile":
-		return checkModfile(args[1])
+		return checkModfile(args[1], args[2:]...)
 	case "vocab":
 		return checkVocab(args[1], args[2])
 	case "lines":
@@ -142,21 +148,44 @@ func checkTestCtor(root string) error {
 	return nil
 }
 
-var directive = regexp.MustCompile(`^(require|replace|exclude)\b`)
-
-func checkModfile(dir string) error {
-	f, err := os.Open(filepath.Join(dir, "go.mod"))
+// checkModfile fails on any exclude directive of dir/go.mod, and on a require or
+// replace directive for a module not in allowed. With no allowed module, as for
+// sdk/kernel, every require and replace line fails. The go command parses the
+// file, so the block and single-line forms read alike.
+func checkModfile(dir string, allowed ...string) error {
+	out, err := exec.Command("go", "mod", "edit", "-json", filepath.Join(dir, "go.mod")).Output()
 	if err != nil {
+		msg := err.Error()
+		if ee, ok := err.(*exec.ExitError); ok {
+			msg = strings.TrimSpace(string(ee.Stderr))
+		}
+		return fmt.Errorf("%s/go.mod: %s", dir, msg)
+	}
+	var m struct {
+		Require, Exclude []struct{ Path string }
+		Replace          []struct{ Old struct{ Path string } }
+	}
+	if err := json.Unmarshal(out, &m); err != nil {
 		return err
 	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for n := 1; sc.Scan(); n++ {
-		if m := directive.FindString(strings.TrimSpace(sc.Text())); m != "" {
-			return fmt.Errorf("%s/go.mod:%d: forbidden %q directive", dir, n, m)
+	var bad []string
+	for _, r := range m.Require {
+		if !slices.Contains(allowed, r.Path) {
+			bad = append(bad, "require "+r.Path)
 		}
 	}
-	return sc.Err()
+	for _, r := range m.Replace {
+		if !slices.Contains(allowed, r.Old.Path) {
+			bad = append(bad, "replace "+r.Old.Path)
+		}
+	}
+	for _, r := range m.Exclude {
+		bad = append(bad, "exclude "+r.Path)
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("%s/go.mod: forbidden directives (allowed modules: %q):\n%s", dir, allowed, strings.Join(bad, "\n"))
+	}
+	return nil
 }
 
 // sourceFiles lists non-test .go files directly in dir.
