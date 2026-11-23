@@ -13,11 +13,14 @@ import (
 
 type service interface{}
 
+// stages are the stages of ordered, which its declaration and its Hook both take.
+var stages = []string{"a", "b", "c"}
+
 var (
 	open    = kernel.NewKey[service]("thing", 0)
 	bound   = kernel.NewKey[service]("thing", 0, kernel.ProviderBound(), kernel.Signed())
 	major1  = kernel.NewKey[service]("thing", 1)
-	ordered = kernel.NewEvent[int]("thing/ordered", kernel.OwnedBy(bound), kernel.Stages("a", "b", "c"))
+	ordered = kernel.NewEvent[int]("thing/ordered", kernel.OwnedBy(bound), kernel.Stages(stages...))
 	sealed  = kernel.NewWaterfall[int, int]("thing/sealed", kernel.OwnedBy(bound), kernel.Sealed())
 	foreign = kernel.NewEvent[int]("thing/foreign", kernel.OwnedBy(kernel.NewKey[service]("other", 0)))
 )
@@ -48,9 +51,14 @@ func TestCheckAgrees(t *testing.T) {
 	if p := check(t, file(t, thing+openCls+tail), Decl{Keys: []kernel.AnyKey{open}}); len(p) != 0 {
 		t.Errorf("open key: %v", p)
 	}
-	d := Decl{Keys: []kernel.AnyKey{bound}, Hooks: []Hook{Event(ordered), Waterfall(sealed)}, Provide: provideBound}
+	d := Decl{Keys: []kernel.AnyKey{bound}, Signed: []string{"thing"}, Hooks: []Hook{Event(ordered, stages...), Waterfall(sealed)},
+		Provide: provideBound}
 	if p := check(t, file(t, thing+bdCls+tail+hookLines), d); len(p) != 0 {
 		t.Errorf("bound key with hooks: %v", p)
+	}
+	d.Signed = append(d.Signed, "thing/ordered")
+	if p := check(t, file(t, thing+bdCls+tail+strings.Replace(hookLines, "access: open", "access: signed", 1)), d); len(p) != 0 {
+		t.Errorf("a signed hook: %v", p)
 	}
 	perKey := "key: thing\nversion: \"0.1\"\nstability: preview\nclass:\n  thing: {provider: open, consumer: open}\n" + tail
 	if p := check(t, file(t, perKey), Decl{Keys: []kernel.AnyKey{open}}); len(p) != 0 {
@@ -59,7 +67,10 @@ func TestCheckAgrees(t *testing.T) {
 }
 
 func TestCheckFindsEachDisagreement(t *testing.T) {
-	d := Decl{Keys: []kernel.AnyKey{bound}, Hooks: []Hook{Event(ordered), Waterfall(sealed)}, Provide: provideBound}
+	d := Decl{Keys: []kernel.AnyKey{bound}, Signed: []string{"thing"}, Hooks: []Hook{Event(ordered, stages...), Waterfall(sealed)},
+		Provide: provideBound}
+	signedHook := d
+	signedHook.Signed = []string{"thing", "thing/ordered"}
 	for _, tc := range []struct {
 		name, src, want string
 		decl            Decl
@@ -74,12 +85,29 @@ func TestCheckFindsEachDisagreement(t *testing.T) {
 		{"per-key name", "key: other\nversion: \"0.1\"\nstability: preview\nclass:\n  thing: {provider: open, consumer: open}\n" + tail, "it names the definition", Decl{Keys: []kernel.AnyKey{open}}},
 		{"hook missing", thing + bdCls + tail, "hook thing/ordered: not in definition.yaml", d},
 		{"hook unlisted", thing + bdCls + tail + hookLines, "hook thing/sealed: in definition.yaml, not declared in Go",
-			Decl{Keys: []kernel.AnyKey{bound}, Hooks: []Hook{Event(ordered)}, Provide: provideBound}},
+			Decl{Keys: []kernel.AnyKey{bound}, Signed: []string{"thing"}, Hooks: []Hook{Event(ordered, stages...)}, Provide: provideBound}},
 		{"foreign owner", thing + bdCls + tail + "hooks:\n  thing/foreign: {stages: [default], access: open, remote: \"no\"}\n",
 			"not owned by a key of the definition", Decl{Keys: []kernel.AnyKey{bound}, Hooks: []Hook{Event(foreign)}}},
 		{"seal", thing + bdCls + tail + strings.Replace(hookLines, "access: sealed", "access: signed", 1), "kernel.HookSealed says true", d},
 		{"stage order", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c, b]", 1), "the kernel called the stages in the order [a b c]", d},
-		{"unknown stage", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, x]", 1), "unknown hook stage", d},
+		{"unknown stage", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, b, c, x]", 1), "the Go declaration [a b c]", d},
+		{"stage left out", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c]", 1),
+			"hook thing/ordered: definition.yaml lists the stages [a c], the Go declaration [a b c]", d},
+		{"one stage of three", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[b]", 1),
+			"hook thing/ordered: definition.yaml lists the stages [b], the Go declaration [a b c]", d},
+		{"default stage", thing + bdCls + tail + strings.Replace(hookLines, "[default]", "[a]", 1),
+			"hook thing/sealed: definition.yaml lists the stages [a], the Go declaration [default]", d},
+		{"signed key written bound", thing + strings.Replace(bdCls, "signed", "bound", 1) + tail + hookLines,
+			"key thing: declared signed in Go; definition.yaml says consumer bound", d},
+		{"bound key written signed", thing + bdCls + tail, "key thing: definition.yaml says consumer signed; Go declares no signed key",
+			Decl{Keys: []kernel.AnyKey{bound}}},
+		{"signed hook written open", thing + bdCls + tail + hookLines, "hook thing/ordered: declared signed in Go; definition.yaml says access open", signedHook},
+		{"open hook written signed", thing + bdCls + tail + strings.Replace(hookLines, "access: open", "access: signed", 1),
+			"hook thing/ordered: definition.yaml says access signed; Go declares it not signed", d},
+		{"signed name unknown", thing + openCls + tail, "signed: none is a key or a hook of the definition",
+			Decl{Keys: []kernel.AnyKey{open}, Signed: []string{"none"}}},
+		{"signed key not consumer-bound", thing + strings.Replace(openCls, "consumer: open", "consumer: signed", 1) + tail,
+			"kernel.KeyClasses says provider-bound false, consumer-bound false", Decl{Keys: []kernel.AnyKey{open}, Signed: []string{"thing"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := file(t, tc.src)

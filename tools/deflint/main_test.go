@@ -3,6 +3,7 @@ package main
 import (
 	"go/ast"
 	"go/parser"
+	"go/types"
 	"os"
 	"path/filepath"
 	"slices"
@@ -207,8 +208,8 @@ func provide(c *kernel.Context, r Registry) error {
 }
 `
 
-// typed type-checks src as the package sdk/def/x/v0.
-func typed(t *testing.T, src string) func() []string {
+// typedPkg type-checks src as the package sdk/def/x/v0.
+func typedPkg(t *testing.T, src string) (*checker, *types.Package, *types.Info, *ast.File) {
 	t.Helper()
 	pkgs, err := list(filepath.Join("..", ".."), kernelPath, "context")
 	if err != nil {
@@ -223,9 +224,39 @@ func typed(t *testing.T, src string) func() []string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return c, pkg, info, f
+}
+
+// typed type-checks src as the package sdk/def/x/v0 and returns its shape and
+// side-door problems.
+func typed(t *testing.T, src string) func() []string {
+	t.Helper()
+	c, pkg, info, f := typedPkg(t, src)
 	return func() []string {
 		return append(shapes(pkg), sideDoors(c.fset, filepath.Dir(c.fset.Position(f.Pos()).Filename), info, []*ast.File{f})...)
 	}
+}
+
+const hooks = `
+var (
+	Done = kernel.NewEvent[int]("xs/done", kernel.OwnedBy(Key))
+	Late = kernel.NewWaterfall[int, int]("xs/late", kernel.OwnedBy(Key))
+	n    = 1
+)
+`
+
+// Every key and hook a definition package declares at package level is named in the
+// Decl of its deftest.Agree test, so that Agree holds each to definition.yaml.
+func TestDeclared(t *testing.T) {
+	_, pkg, _, _ := typedPkg(t, source+hooks)
+	agree := "package x_test\n\nfunc TestDefinitionFile(t *testing.T) {\n\tdeftest.Agree(t, deftest.Decl{Keys: []kernel.AnyKey{x.Key}, " +
+		"Hooks: []deftest.Hook{deftest.Event(x.Done)}})\n}\n"
+	other := "package x_test\n\nfunc TestOther(t *testing.T) { _ = x.Plain }\n"
+	d := fixture(t, "x", map[string]string{"x_test.go": agree, "other_test.go": other})
+	want(t, declared(d, pkg), "key Plain is not named in the Decl", "hook Late is not named in the Decl")
+	all := strings.Replace(agree, "x.Key}", "x.Key, x.Plain}", 1)
+	want(t, declared(fixture(t, "x", map[string]string{"x_test.go": strings.Replace(all, "(x.Done)}", "(x.Done), deftest.Waterfall(x.Late)}", 1)}), pkg))
+	want(t, declared(fixture(t, "x", nil), pkg)) // files reports a missing Agree
 }
 
 func TestShapes(t *testing.T) {
