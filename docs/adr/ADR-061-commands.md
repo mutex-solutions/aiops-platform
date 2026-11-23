@@ -715,6 +715,21 @@
     the builder or what it links (ADR-044, Consequences), and `plugin-manager` at S6a,
     which builds nothing, needs none of them.
 
+    **The builder image and smoke.** On the image path, the host's `aiopsctl` runs the
+    image's `aiopsctl`, its entry point (ADR-044 decisions 1 and 4), with the same
+    command and arguments and `--builder local`. That run is a command row like any
+    other (ADR-060 decision 53): the container has no `$AIOPS_HOME`, so the inner
+    `aiopsctl` boots the shipped `cli` profile with no home (decision 25), with the
+    inputs that the command names (`dist.yaml`, the module cache, the plugin directory)
+    bound read-only and its output directory bound read-write. `dist build`, `plugin
+    smoke` and `plugin verify` write no home, so they need none. For smoke, `Build` then
+    starts the throwaway image with the test-only profile on a throwaway home, and reads
+    each row's state and what it waits for from `run/status.json`, which gains the field
+    `rows`, written at settle and at every committed generation. At `a3c85ae` the file
+    holds no row state (ADR-059 decision 31) and `plugin-inventory` is S6a (`08:373`), so
+    without the field smoke could not apply its rule (ADR-060 decision 58, reading 1).
+    The field is additive, and `aiops` writes it too.
+
 22. **One reader.** `ReadManifest` is boot's reader, the one that `plugingen` already
     reads with (`internal/plugingen/plugingen.go`). `plugin check` and the gate therefore
     share one reader, and there is no second copy (ADR-048 decision 15).
@@ -746,14 +761,19 @@
       is not a server profile and its rows state no roles (`boot/run.go` sets the rule
       for every run at `a3c85ae`);
     - the home from `$AIOPS_HOME`, passed as the flag `home` that `cmdline` serves
-      (`internal/serve/serve.go` does the same for `aiops`). With no home it composes the
-      shipped `cli` profile alone, and a command that needs a home is a usage error;
-    - every argument as argv, the three streams, and the toolbox parts of decision 21;
+      (`internal/serve/serve.go` does the same for `aiops`). With `$AIOPS_HOME` unset or
+      empty there is no home: it composes the shipped `cli` profile alone, and a command
+      that needs a home is a usage error (decision 17);
+    - every argument as argv, the three streams, the working directory and the
+      environment for `cmdline` (decision 13), and the `Tools` of decision 21;
+    - `Command` (decision 13);
     - nothing that the launcher writes on stdout, a kernel log handler at the warning
       level on stderr, and no status file, since `run/status.json` is the server's
       readiness channel (ADR-059 decision 31).
 
-    It parses no flag of its own, and it maps the launcher's code by decision 10.
+    It parses no flag of its own, and it maps the launcher's code by decision 10. When
+    the boot of the `cli` profile stops on a layer file of the home that is malformed or
+    empty (`08:465`), the recovery is question Q9.
 
 26. **Its own boot, and the distribution the server runs.**
     - Its own boot passes the gate as every profile does (ADR-060 decision 17, boot
@@ -812,15 +832,53 @@
 
     | Row | Commands at S2a | Source |
     |---|---|---|
-    | `command-profile` | `profile render`, `profile verify`, `profile init <p>` | `00:137`; `08:72` row 30, `:366`; ADR-060 decision 27 |
+    | `command-profile` | `profile render`, `profile verify`, `profile init <p>`, and with question Q9 (a) `profile sanitize [<p>]` | `00:137`; `08:72` row 30, `:366`; ADR-060 decision 27; dsh §3.4 |
     | `command-plugin` | `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`, `verify`, `gate --against`, `install`, `enable`, `disable`, `remove` | `00:137`; `07:1565`, `:1578`; `08:373`-`375`; ADR-060 decisions 23 and 47 |
     | `command-trust` | `trust add` | `07:1861`; ADR-020 decision 6 |
     | `command-dist` | `dist build`, `dist sign`, `dist use` | `08:402`; `07:1852`, `:1869` |
     | `command-key` | `key generate <prefix>`, which writes `<prefix>.key` and `<prefix>.pub` in the format of ADR-020 decision 4 | ADR-020 decision 21, which leaves the name to the CLI spec (`00:137`) |
 
     `plugin purge` joins `command-plugin` at S3 (ADR-060 decision 47). A later command
-    joins the row of its group, or the row of the plugin that owns it, as `slack
-    manifest` is a contribution of `chat-surface-slack` (`06:312`).
+    joins the row of its group, or a row of the plugin that owns it, as `slack manifest`
+    is a contribution of the Slack plugin (`06:312`), placed as question Q8 decides.
+
+    **The CLI spec.** `00:137` leaves exact names to "the CLI spec", as do ADR-020
+    decision 21 and `09:840` (A4). The CLI spec is the help of `aiopsctl`: `aiopsctl help
+    <path>` prints each command's synopsis and flags from its `Spec` (decision 2), and a
+    golden file of that output per command, under `testdata/help/` of the command row,
+    holds it in review, so a change to a name or a flag is a change of that file. Its
+    first content is the table below; a flag that the documents write keeps its name.
+
+    | Command | Synopsis | Source |
+    |---|---|---|
+    | `help` | `help [<word>...]`; `--help` or `-h` after any words | Decision 9 |
+    | `profile render` | `profile render --profile <p> [--home <dir>] [--bundles <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]` | `08:359`-`364`; `cmd/aiopsctl/run.go` at S1, less `--dist` (decision 27) |
+    | `profile verify` | `profile verify` | `08:366` |
+    | `profile init` | `profile init <p>` | `08:72` row 30; ADR-060 decision 27 |
+    | `profile sanitize` | `profile sanitize [<p>]` | `08:72` row 30; dsh §3.4; question Q9 |
+    | `plugin new` | `plugin new <registry> <id> --lang go [--contrib]`; `plugin new connector <id> [--contrib] [--against <dist.yaml>] [--plugin <id>]...` | `07:1528`, `:1551`; ADR-047 decision 12; ADR-060 decision 24. `--lang python` arrives at S2b (`07:1551`) |
+    | `plugin check` | `plugin check [<dir>] [--write] [--json] [--against <dist.yaml>]` | `07:1531`, `:1543`, `:1565`; ADR-060 decision 23 |
+    | `plugin smoke` | `plugin smoke <dir> --against <release> [--builder image\|local]` | `07:1578`; ADR-044 decision 1 |
+    | `plugin pack` | `plugin pack [<dir>] [--out <dir>]` | `07:1533`; ADR-047 decision 1 |
+    | `plugin sign` | `plugin sign --key <file> [--out <dir>]` | `07:1859`; ADR-020 decision 4; ADR-047 decision 1 |
+    | `plugin push` | `plugin push <registry> [--out <dir>]` | `07:1859`; ADR-047 decision 1 |
+    | `plugin inspect` | `plugin inspect <spec>` | `08:373`; `07:1860` |
+    | `plugin verify` | `plugin verify <spec> [--builder image\|local]` | ADR-060 decisions 31 and 46; ADR-044 decision 1 |
+    | `plugin gate` | `plugin gate <spec> --against <dist.yaml>` | `08:493` |
+    | `plugin install` | `plugin install <spec> [--profile <p>]` | `08:395`-`397` |
+    | `plugin enable`, `disable` | `plugin enable <row> [--profile <p>]`; `plugin disable <row> [--profile <p>]` | `08:375`, `:395` |
+    | `plugin remove` | `plugin remove <id> [--profile <p>]` | ADR-047 decision 10 |
+    | `trust add` | `trust add <public key file> --ids <pattern>[,...] [--runtimes <runtime>[,...]] [--signed <key or hook>[,...]]`; `trust add <public key file> --distribution` | ADR-020 decision 5 |
+    | `key generate` | `key generate <prefix>` | ADR-020 decision 21, which leaves the name to this spec |
+    | `dist build` | `dist build <dist.yaml> [--modcache <dir>] [--mirror <prefix>=<site prefix>]... [--allow-bump <module>]... [--builder image\|local]` | `08:402`; ADR-044 decisions 1, 7, 9 and 10 |
+    | `dist sign` | `dist sign <image> --key <file>` | `07:1868`; ADR-020 decision 12 |
+    | `dist use` | `dist use <image>` | `07:1869`; ADR-020 decision 12 |
+
+    `--builder` defaults to `image`, the path of a host with no toolchain (`08:402`), and
+    the image's own run passes `local` (decision 21). `--profile` on a command that writes
+    a profile defaults to the profile that `run/status.json` of the home names, so the
+    written forms `plugin enable <row>` and `plugin install <spec>` (`08:395`-`397`;
+    `07:1855`) work against a running process; with no such file it is a usage error.
 
 ### Tests
 
@@ -856,8 +914,24 @@
       `aiops-core`, from serving the transport.
     - Commands of rows outside `aiops-cli`: `slack manifest` (`00:137`; `06:312`) and
       `oncall override` (`06:638`, `:764`) are contributions of rows of server bundles,
-      while the `cli` profile lists `aiops-core` and `aiops-cli` only (`08:253`). The
-      step that builds the first of them says how its row reaches the `cli` profile.
+      while the `cli` profile lists `aiops-core` and `aiops-cli` only (`08:253`).
+      Question Q8 resolves `08:265` and `:269` against `00:137` and `:515`, and the step
+      that builds the first of them builds its row by that answer.
+    - `aiopsctl agent render` and `agent check` run the `agent-host` or `agent-k8s`
+      profile in the same binary (`00:515`, `:516`), at S7 (`00:137`). Decision 25 fixes
+      the profile of the process to `cli`; the S7 step adds a toolbox part that composes
+      and runs a second profile inside the `aiopsctl` process, an additive minor of
+      `launch`, or records another form.
+    - `aiopsctl tree --effects` (`07:345`; `08:57` row 15; plugin record §15 row 15)
+      prints the effect ledger of a running process. It needs a read of that process:
+      the transport ADR of ADR-060 decision 48, or `plugin-inventory` at S6a, whose
+      listing shows effects (`08:373`). The first of the two to merge builds it.
+    - `aiopsctl plugin start <id>` (`02:312`; `08:1288`) starts the compose deployment
+      unit of a remote plugin: S2b, with the remote runtime and its one shared instance
+      per plugin (`08:695`).
+    - The guard of M2 for `commands`: question Q7.
+    - How an operation of `aiopsctl` is audited: the step that builds `audit-chain`
+      (S5, `08:698`; decision 17).
     - The required set of the `cli` profile. The signed manifest carries the set of every
       server profile (`08:455`); at S2a it holds the rows `loader`, `restart-policy`,
       `reload` and `readiness` and the key `clock` (`dist/dist.yaml`), all served by
@@ -867,7 +941,12 @@
     - How the operations plugin dials once plugin vet refuses a dial outside `dialer`:
       question Q6.
     - What `admin-api` may dispatch (S4a); `--tenant` on `enable` and `disable` (S4b,
-      `08:375`); where `plugin-manager` sits from S6a (ADR-060 decision 41).
+      `08:375`).
+    - At S6a: where `plugin-manager` sits (ADR-060 decision 41); where it takes registry
+      credentials, which `00:183` and `:412` keep out of the kernel (question Q6); how
+      it takes the write lock (decision 19); that it names only the profile of its own
+      process; and which definition owns `plugin-manager/changed`, which the library
+      emits from then on (decision 17).
     - A build of `aiopsctl` for a system without `flock(2)`: no document names one.
 
 ## Consequences
@@ -922,7 +1001,8 @@ Made in the commit that records the owner's answers (`08:997`):
   `commands`. ADR-060 decision 35: the caps of the Consequences. ADR-059 decision 29 and
   ADR-060 decision 23: the exit table is recorded in the help of the `cli` row and in the
   exit mapping of `cmd/aiopsctl`.
-- The lines that the chosen options of questions Q1 and Q6 name.
+- ADR-060 decision 23: the command `profile sanitize`, with question Q9 (a) or (b).
+- The lines that the chosen options of questions Q1, Q3, Q6, Q7, Q8 and Q9 name.
 
 ## Questions for the owner
 
@@ -1020,3 +1100,83 @@ cell egress fence of `00` §5.7 applies.
   (b) opens the egress fence of a server process. Needed before the vet rule of
   harness:58 merges, or before S2a closes if the owner reads that rule as in force at
   S2a.
+
+**Q7. What of the owner-side guard does the `commands` dispatcher apply?** `07:511` (M2)
+has a dispatcher apply "a deadline, a concurrency cap and a breaker per (tenant, row), an
+`Enter` lease on the contribution's fiber, the invariant, then the call". The `cli` row
+dispatches one command per process; that command runs as long as its work, minutes for
+`dist build` and `plugin smoke`, and the operator ends it with a signal (decision 10).
+`commands` holds no tenant data (decision 1).
+- (a) At S2a `Dispatch` applies the lease and the invariants of decisions 8 to 10, and
+  recovers a panic (decision 3), with no deadline, cap or breaker: with one call per
+  process a cap of one and a breaker over one call never act, and a deadline would end a
+  build that is still working. The deadline, the cap and the breaker per (tenant, row)
+  arrive with the first caller that dispatches more than once in a process, `admin-api`
+  at S4a, whose step builds them with their guard cases. This defers three parts of
+  `07:511` for `commands` until S4a, and `07:511` gains that sentence.
+- (b) `Dispatch` applies the whole guard at S2a: each `Spec` states a deadline, the
+  longest for `dist build`, `plugin smoke` and `plugin verify`; a cap of one call per
+  row; and a breaker per row that opens after repeated failures. The guard half tests
+  each. In `aiopsctl` the cap and the breaker never act, and a deadline set too short
+  ends a build that is still working.
+- Recommended: (a). The parts it defers have nothing to act on in a process that runs one
+  command, and S4a builds them where they act, with tests that can fail. (b) keeps
+  `07:511` whole at S2a at the cost of code that never acts in `aiopsctl` and a deadline
+  guessed per command. Needed before the `cli` row merges.
+
+**Q8. How does a command of a row outside `aiops-cli` reach the `cli` profile?**
+`00:137` makes `slack manifest` "a `commands` contribution of the optional Slack bundle
+... present only where that bundle is enabled", `06:312` makes it a contribution of the
+row `chat-surface-slack`, and `00:515` and `08:271` say that a plugin contributes its own
+commands through `commands`. `08:265` and `:269` mark the optional Slack bundle and the
+bundles of installed artifacts "-" in the `cli` column, so neither enters the `cli`
+profile. The rows of `aiops-chatops-slack` need keys that only server bundles serve, so
+`chat-surface-slack` would stay PENDING in the `cli` profile and never register its
+command. dsh installs a plugin into any profile (dsh §4.2).
+- (a) Every command row is a row of `aiops-cli`. `slack manifest` becomes a command row
+  of the Slack module in `aiops-cli`, present in every `cli` profile; `00:137` and
+  `06:312` are edited, and `00:515` and `08:271` read "a first-party or `contrib`
+  plugin". A third-party plugin contributes no command, and `08:265` and `:269` hold.
+- (b) A bundle that holds a command ships it in a companion bundle of command rows that
+  need only what the `cli` profile serves, `aiops-chatops-slack-cli` for `slack
+  manifest`, which the `cli` column of the table of `08:265` lists as optional; `06:312`
+  names the command row of the Slack module in it. An installed in-process artifact may
+  be installed into the profile `cli`, its rows disabled, and the operator enables its
+  command row there; the `cli` cell of `08:269` becomes "last". `00:137` and `00:515`
+  hold. A third-party command row then runs in `aiopsctl` and sees the invocation's
+  environment, registry credentials and key password included (decision 17), though not
+  `operations`, which is consumer-bound (decision 15); its signer is trusted for that as
+  for any in-process code it installs.
+- (c) At S2a `Install` refuses `--profile cli`, as `08:269` writes, the template serves
+  first-party and `contrib/` command rows, and the step that builds `slack manifest`
+  (P1, `00:137`) chooses between (a) and (b).
+- Recommended: (b). It keeps `00:137` and `00:515` whole and follows dsh, where every
+  profile takes an installed plugin; its cost at S2a is one rule of `Install` (decision
+  17). (a) removes a written extension point, and (c) leaves the template of decision 6
+  with no third-party author until P1. Needed before the profile rule of `Install`
+  merges.
+
+**Q9. How does `aiopsctl` recover when a layer file of the home stops its own boot?** A
+malformed or empty layer stops boot (`08:465`), and the site layer applies to every
+profile, `cli` included (`08:123`). A broken `$AIOPS_HOME/aiops.patch.yml` or
+`profiles/cli/aiops.patch.yml` therefore stops every `aiopsctl` command, the ones that
+would repair the home included. dsh renames a broken patch to `.bak-<timestamp>` without
+loading plugins (`sanitizeProfile`, dsh §3.4), and `08:72` and plugin record §15, row 30,
+carry "`aiopsctl profile init` and `sanitize`" with no step named.
+- (a) S2a builds `profile sanitize [<p>]` as a command of `command-profile`. Under the
+  write lock it renames each layer file of the home that is malformed or empty, the site
+  layer and the profile layer of `<p>`, to `<name>.bak-<timestamp>`, parsing it and
+  loading no plugin (dsh §3.4). When the boot of the `cli` profile stops on such a file,
+  `cmd/aiopsctl` boots once more with the shipped `cli` profile alone and the home still
+  passed, prints which file stopped the first boot, and dispatches. The first boot stops
+  as `08:465` says; the second composes no layer of the home, so a command in it does
+  not see the site's patches of the `cli` profile, and stderr says so.
+- (b) No second boot: `aiopsctl` exits 1, naming the file and the `mv` that sets it
+  aside, and `profile sanitize` is built at S2a for the profile layers of other profiles
+  only.
+- (c) `profile sanitize` is code of `cmd/aiopsctl` that runs before boot, as dsh's runs in
+  its launcher, and ADR-060 decision 53, under which every S2a command is a row, gains
+  that exception.
+- Recommended: (a). It carries row 30 at S2a, keeps `08:465` for every boot, and keeps
+  every command a row; (b) leaves a broken site layer to be found by hand, and (c) breaks
+  an accepted decision. Needed before `command-profile` merges.
