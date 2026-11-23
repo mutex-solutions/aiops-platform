@@ -11,6 +11,14 @@
 # and the row of the licence record (decisions 7 and 16). A version bump reads the
 # licence again in the same commit (decision 6). The entries at S2a are those of
 # decision 8 and the five items refused by name of decision 20.
+#
+# Completeness is over package graphs (decisions 12 and 18): every module that the
+# package graph of a module of the repository, tests included, reaches (go list -deps
+# -test) has an entry or sits in the contains of the entry that brings it in. A module
+# that a go.sum lists and no such graph reaches, as a dependency of an upstream's own
+# tests is (github.com/jackc/pgerrcode, github.com/robfig/cron/v3 and
+# github.com/stretchr/testify with its dependencies at S2a), is linked by nothing and
+# needs no entry; it gets one when a graph first reaches it.
 entries:
   - id: go
     names: [go, golang]
