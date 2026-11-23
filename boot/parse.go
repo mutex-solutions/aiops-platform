@@ -51,6 +51,8 @@ const (
 type parser struct {
 	file   string
 	server bool
+	// literal reads ${ as text: a manifest holds no reference (ADR-048 decision 3).
+	literal bool
 }
 
 func (p *parser) err(n *yaml.Node, rule Rule, row, format string, a ...any) *Error {
@@ -133,7 +135,7 @@ func (p *parser) pairs(n *yaml.Node, row, what string) ([]pair, error) {
 		if k.ShortTag() == "!!merge" {
 			return nil, p.err(k, RuleAlias, row, "merge keys are not accepted")
 		}
-		if strings.Contains(k.Value, "${") {
+		if !p.literal && strings.Contains(k.Value, "${") {
 			return nil, p.err(k, RuleReference, row, "a reference cannot be a key")
 		}
 		if seen[k.Value] {
@@ -241,7 +243,7 @@ func decimal(s string) bool {
 
 // str builds a string Value, or a reference node when the string holds one.
 func (p *parser) str(n *yaml.Node, row string) (Value, error) {
-	if !strings.Contains(n.Value, "${") {
+	if p.literal || !strings.Contains(n.Value, "${") {
 		return Value{Kind: KindString, Str: n.Value}, nil
 	}
 	ref, ok := parseRef(n.Value)

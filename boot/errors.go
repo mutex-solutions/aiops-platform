@@ -62,6 +62,9 @@ const (
 	RuleInclude Rule = "include"
 	// RuleMatrix: the failure matrix file breaks its schema.
 	RuleMatrix Rule = "matrix"
+	// RuleManifest: a plugin manifest breaks a rule of schema 1.0 or names a major
+	// this reader does not know; gate check 1 denies it (ADR-048 decisions 3 and 24).
+	RuleManifest Rule = "manifest"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

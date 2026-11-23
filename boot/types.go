@@ -2,8 +2,8 @@
 //
 // The pure half reads a profile and its layers and builds one immutable
 // composition, admits it and plans changes (compose.go, gate.go, graph.go,
-// required.go, plan.go and the dumps). It reads no environment, no clock and no
-// process, and does not import the kernel.
+// required.go, plan.go and the dumps), and reads plugin manifests (manifest.go). It
+// reads no environment, no clock and no process, and does not import the kernel.
 //
 // The run half (run.go, launch.go, convert.go, limits.go) runs a composition on
 // the kernel: the five boot steps, the six launch services, signals, bounded

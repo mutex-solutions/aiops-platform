@@ -129,11 +129,13 @@ jobs:
           go test -count=1 -coverprofile=cover-boot.out ./boot
           go test -count=1 -coverprofile=cover-loader.out ./loader
       - name: Boot structural checks
-        # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 5707 lines + 10%, rounded up to the next 100.
+        # Line cap: 9,000, provisional during S2a (ADR-060 decision 35), in place of the
+        # 6,800 fixed at the S1 exit (ADR-059 decision 11); the manifest reader adds to it
+        # (ADR-048 decision 18).
         # Its vocabulary list holds the domain words and upstream names of ADR-060 decision 45
         # and not tenant, which boot legitimately handles (a scope class of its closed vocabulary).
         run: |
-          go run ./tools/kernelcheck lines boot 6800
+          go run ./tools/kernelcheck lines boot 9000 provisional
           go run ./tools/kernelcheck vocab boot tools/kernelcheck/vocabulary-boot.txt
           go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
       - name: Loader structural checks
