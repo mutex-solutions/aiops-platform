@@ -230,8 +230,8 @@ entry, and cosign is pinned as a CI tool with its entry (ADR-060 decisions 23 an
    upstream in use at `8e1f7b9`, in the table below, and each one S2a adds; with question
    Q4 (c), River and pgx stay on the hand list of `tools/kernelcheck` until S3 and enter
    then. Each item S2a adds enters with its licence read when it merges (ADR-060 decision
-   34): the signature library and its graph (ADR-020 chooses it and is open; `08:1151`
-   proposes sigstore-go), whose protobuf runtime, sigstore protobuf specifications and
+   34): the signature library and its graph (sigstore-go v1.3.0, which ADR-020, accepted
+   on 2026-11-23, chooses), whose protobuf runtime, sigstore protobuf specifications and
    in-toto attestation module are read at the versions its build list selects, in the
    commit that adds it, since licence:43 names protobuf-go with no version and licence:7
    reads "at a tag or at the default branch"; goleak in `sdk/testkit` (ADR-060 decision
@@ -506,9 +506,10 @@ Accepted decisions place libraries elsewhere: the YAML library in `boot/` and `t
 decision 41); goleak in `sdk/testkit` (ADR-060 decision 12), which `07:33` lets import
 "anything", and with it testcontainers-go and the embedded PostgreSQL wrapper (licence:54;
 `08:1382`); and the OCI client, which `aiopsctl` and the builder use (ADR-060 decisions 19,
-22 and 34). `08:1151` proposes the signature library "in `aiopsctl`" and on the
-`plugin-manager` side, a plugin of `aiops-core` (`00:275`), for ADR-020, which is open. The
-participants of `sqlDriver` and the telemetry rows are question Q7.
+22 and 34). ADR-020, accepted on 2026-11-23, places the signature library in the
+operations plugin, linked into `aiopsctl` and the server image, and from S6a on the
+`plugin-manager` side, a plugin of `aiops-core` (`00:275`). The participants of
+`sqlDriver` and the telemetry rows are question Q7.
 - (a) An entry may list `importers`: directories outside its plugins where its modules may
   be imported and its names may appear, each with the accepted decision that put them
   there. At S2a: the YAML library in `boot/`, `tools/`, the operations plugin, `plugingen`
