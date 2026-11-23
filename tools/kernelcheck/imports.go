@@ -24,7 +24,7 @@ const (
 	docPlugin  = "07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255"
 	docExample = "07-c4-plugin-sdk.md:36,42"
 	docBoot    = "07-c4-plugin-sdk.md:37-38; 08-profiles-roadmap-adrs.md:1254"
-	docYAML    = "ADR-059-s1-scope.md:43"
+	docYAML    = "ADR-059-s1-scope.md:43; ADR-060 decision 41"
 	docFake    = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
 )
 
@@ -127,10 +127,10 @@ func importReasons(rel string, test bool, imp string) []string {
 			add("an example imports the SDK and its own packages only (the other examples too in tests and in examples/examples.go); never internal, a plugin, boot, loader, cmd, test, dist", docExample)
 		}
 	}
-	if !hasPath(rel, "boot") && !hasPath(rel, "tools") {
+	if !hasPath(rel, "boot") && !hasPath(rel, "tools") && !hasPath(rel, "internal/plugingen") {
 		for _, y := range yamlPrefixes {
 			if strings.HasPrefix(imp, y) {
-				add("the YAML package is imported in boot/ and tools/ only", docYAML)
+				add("the YAML package is imported in boot/, tools/ and internal/plugingen only", docYAML)
 				break
 			}
 		}
