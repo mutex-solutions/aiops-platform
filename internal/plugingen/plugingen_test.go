@@ -3,10 +3,14 @@
 package plugingen
 
 import (
+	goparser "go/parser"
+	"go/token"
 	"math"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -117,6 +121,38 @@ func TestTwoMajorsOfOneDefinition(t *testing.T) {
 		"cycle.Fake{Plugin: echoersv1Plugin, Inventory: echoersv1Fake.Inventory}"} {
 		if !strings.Contains(string(src), s) {
 			t.Errorf("%s lacks %q:\n%s", CycleFile, s, src)
+		}
+	}
+}
+
+// The generated cycle test compiles whatever the plugin's package is called: no two
+// imports of the file take one name, a package named cycle or testing included, and
+// the plugin is reached through its own import.
+func TestCycleTestImportNames(t *testing.T) {
+	for _, name := range []string{"cycle", "testing", "echoersfake", "target"} {
+		tg := target{ID: "test/x", Name: name, ImportPath: mod + "/x/" + name, Accessor: "Plugin"}
+		src, err := cycleTest(tg, defs(t)[:1], nil, "nil")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := goparser.ParseFile(token.NewFileSet(), CycleFile, src, goparser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]string{}
+		for _, im := range f.Imports {
+			p, _ := strconv.Unquote(im.Path.Value)
+			n := path.Base(p)
+			if im.Name != nil {
+				n = im.Name.Name
+			}
+			if seen[n] != "" {
+				t.Errorf("package %s: %s and %s are both imported as %s:\n%s", name, seen[n], p, n, src)
+			}
+			seen[n] = p
+			if p == tg.ImportPath && !strings.Contains(string(src), n+".Plugin,") {
+				t.Errorf("package %s: the plugin is imported as %s and not run through it:\n%s", name, n, src)
+			}
 		}
 	}
 }
