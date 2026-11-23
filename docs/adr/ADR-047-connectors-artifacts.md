@@ -6,15 +6,29 @@
   (ADR-060 decision 2).
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
-  lists for it. The rest of ADR-047 stays for S8a start (`08:1178`; `07:72` R14, `07:73`
-  R15): the read contract, `tools` as the read seam, `tool-mcp` and the digest of its
-  recorded tool list with the config keys of its rows, the `signals` fields and busy reply,
-  `evidenceSources`, the `dialer-guarded` ranges on self-host, the third-party naming rules,
-  the context pack footer, the refusals of a default label map, playbooks without query
-  text, and whether a `signals` contribution may supply its own signature verifier. That
-  part is proposed to the owner at S8a start as an addition to this ADR. This ADR changes
-  no decision of `00-decisions.md`; where an answer edits a line elsewhere, the question or
-  the section "Edits on acceptance" names it.
+  lists for it.
+  - Two parts of the written artifact rule are built at S3 on what this ADR records: the
+    secret scope and the purge key of the rows under an artifact's group (`00:478`;
+    `08:391`; `07:1817`; community:298), with `secret:` in the artifact's own scope
+    (ADR-060 decision 57) and `purge` with `durable` (ADR-060 decisions 29 and 47). Both
+    read the origin-artifact record of decision 5.
+  - The third-party naming rules apply at S2a as written: the name lint of `plugin check`
+    step 1 checks the forms of `00:657` and T7 (`08:1363`; ADR-060 decision 23), and
+    decision 12 writes them.
+  - The rest of ADR-047 stays for S8a start (`08:1178`; `07:72` R14, `07:73` R15): the
+    read contract, `tools` as the read seam, `tool-mcp` and the digest of its recorded
+    tool list with the config keys of its rows, the `signals` fields and busy reply, the
+    `dialer-guarded` ranges on self-host, what T7 leaves UNVERIFIED (each vendor's naming
+    rules, and counsel's review of reading a plugin id as a technical identifier;
+    `08:1363`), the context pack footer, the refusals of a default label map, playbooks
+    without query text, and whether a `signals` contribution may supply its own signature
+    verifier. That part is proposed to the owner at S8a start as an addition to this ADR.
+  - `evidenceSources`, which the ADR-047 rows also list (`00:781`; `08:1178`), is fixed at
+    P2 start under ADR-028 as ADR-047 re-scopes it (`07:70` R12; `08:1159`), and the S8a
+    part says so.
+
+  This ADR changes no decision of `00-decisions.md`; where an answer edits a line of `00`
+  or elsewhere, the question or the section "Edits on acceptance" names it.
 - Citations: `00`, `02`, `03`, `07` and `08` are the files of `docs/architecture/` with
   those numbers, and `08:391` is line 391 of `08` at commit `8e1f7b9`. "community" and
   "licence" are `docs/design/community-first-2026-11.md` and `licence-audit-2026-11.md`,
