@@ -31,6 +31,7 @@ check:
 	$(KC) modfile sdk/kernel
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
 	$(KC) lines sdk/plugin 2500 provisional
+	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
 	$(KC) testctor .

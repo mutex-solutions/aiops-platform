@@ -91,6 +91,10 @@ jobs:
       - name: Plugin package line cap
         # ADR-060 decision 35: the package sdk/plugin, provisional cap during S2a.
         run: go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
+      - name: pluginApi check
+        # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
+        # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.
+        run: go run ./tools/pluginapi .
       - name: Import boundaries
         # docs/architecture/07-c4-plugin-sdk.md:27-48, ADR-059 decision 6; skips the
         # server-closure part until cmd/aiops exists.

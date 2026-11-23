@@ -1,0 +1,340 @@
+# The exported API of sdk/kernel and sdk/plugin (ADR-060 decision 8), written by
+# go run ./tools/pluginapi -write .; raise plugin.APIVersion before recording a change.
+pluginApi 0.1
+pkg kernel, const Active State = "ACTIVE"
+pkg kernel, const DefaultStage untyped string = "default"
+pkg kernel, const Disposed State = "DISPOSED"
+pkg kernel, const Failed State = "FAILED"
+pkg kernel, const Loading State = "LOADING"
+pkg kernel, const Pending State = "PENDING"
+pkg kernel, const ScopeCleaning untyped string = "cleaning"
+pkg kernel, const ScopeDone untyped string = "done"
+pkg kernel, const ScopePending untyped string = "pending"
+pkg kernel, const ScopeReady untyped string = "ready"
+pkg kernel, const ScopeSetup untyped string = "setup"
+pkg kernel, const ScopeWithdraw untyped string = "withdraw"
+pkg kernel, const Unloading State = "UNLOADING"
+pkg kernel, func Available(func(*Context) bool) ProvideOption
+pkg kernel, func CommitOp(*Fiber, any) BatchOp
+pkg kernel, func ConsumerBound() KeyOption
+pkg kernel, func Define(Plugin) Plugin
+pkg kernel, func DisposeOp(*Fiber) BatchOp
+pkg kernel, func HookSealed(AnyHook) (bool, bool)
+pkg kernel, func InterceptConfig[C any]() KeyOption
+pkg kernel, func InterceptType(AnyKey) (reflect.Type, bool)
+pkg kernel, func Intercepts[C any](*Context, AnyKey) []C
+pkg kernel, func KeyClasses(AnyKey) (bool, bool, bool)
+pkg kernel, func MountOp(Plugin, any) BatchOp
+pkg kernel, func NeedKey(AnyKey) Dep
+pkg kernel, func NeedWith[T any, C any](Key[T], C) Dep
+pkg kernel, func Need[T any](Key[T]) Dep
+pkg kernel, func New(Config) (*Root, error)
+pkg kernel, func NewEvent[A any](string, ...HookOption) *Event[A]
+pkg kernel, func NewForTest(testing.TB, Config) *Root
+pkg kernel, func NewKey[T any](string, int, ...KeyOption) Key[T]
+pkg kernel, func NewLabel(string) Label
+pkg kernel, func NewScope[V any](AnyKey) Scope[V]
+pkg kernel, func NewWaterfall[A any, R any](string, ...HookOption) *Waterfall[A, R]
+pkg kernel, func OnOverflow(func(context.Context, *ObserverOverflow) error) ObserveOption
+pkg kernel, func OwnedBy(AnyKey) HookOption
+pkg kernel, func ProviderBound() KeyOption
+pkg kernel, func Scoped() HookOption
+pkg kernel, func Sealed() HookOption
+pkg kernel, func Signed() KeyOption
+pkg kernel, func Stages(...string) HookOption
+pkg kernel, func UpdateOp(*Fiber) BatchOp
+pkg kernel, func UpdateOpWith(*Fiber, any) BatchOp
+pkg kernel, func Want[T any](Key[T]) Dep
+pkg kernel, method (*Context) Defer(string, Disposer)
+pkg kernel, method (*Context) Dispose() error
+pkg kernel, method (*Context) Effect(string, func() (Disposer, error)) error
+pkg kernel, method (*Context) Enter() (func(), bool)
+pkg kernel, method (*Context) Extend() *Context
+pkg kernel, method (*Context) Go(string, func(context.Context) error)
+pkg kernel, method (*Context) Intercept(AnyKey, any) *Context
+pkg kernel, method (*Context) Isolate(AnyKey, ...Label) *Context
+pkg kernel, method (*Context) MountOp(Plugin, any) BatchOp
+pkg kernel, method (*Context) Plugin(Plugin, any) *Fiber
+pkg kernel, method (*Context) RequestEffectScope(string, func(*EffectScope) error) (*EffectHandle, error)
+pkg kernel, method (*Context) Std() context.Context
+pkg kernel, method (*Context) When([]Dep, func(*Context) error) *Fiber
+pkg kernel, method (*EffectHandle) Await(context.Context) error
+pkg kernel, method (*EffectHandle) AwaitSetup(context.Context) error
+pkg kernel, method (*EffectHandle) Metadata() EffectMeta
+pkg kernel, method (*EffectHandle) RequestWithdraw() error
+pkg kernel, method (*EffectScope) Defer(string, Disposer) error
+pkg kernel, method (*EffectScope) Scope(string, func(*EffectScope) error) error
+pkg kernel, method (*Event[A]) Bind(*Context) EventDispatcher[A]
+pkg kernel, method (*Event[A]) Name() string
+pkg kernel, method (*Event[A]) On(*Context, string, EventListener[A])
+pkg kernel, method (*Event[A]) Owner() AnyKey
+pkg kernel, method (*Event[A]) Use(string) HookUse
+pkg kernel, method (*Fiber) Await(context.Context) error
+pkg kernel, method (*Fiber) Commit(context.Context, any) error
+pkg kernel, method (*Fiber) Dispose(context.Context) error
+pkg kernel, method (*Fiber) Effects(context.Context) ([]string, error)
+pkg kernel, method (*Fiber) ID() uint64
+pkg kernel, method (*Fiber) State(context.Context) (State, error)
+pkg kernel, method (*Fiber) Update(context.Context, any) error
+pkg kernel, method (*InjectError) Error() string
+pkg kernel, method (*InjectError) Unwrap() error
+pkg kernel, method (*ListenerError) Error() string
+pkg kernel, method (*ListenerError) Unwrap() error
+pkg kernel, method (*ObserverOverflow) Error() string
+pkg kernel, method (*ObserverOverflow) Unwrap() error
+pkg kernel, method (*PanicError) Error() string
+pkg kernel, method (*PanicError) Unwrap() error
+pkg kernel, method (*Root) AwaitObservers(context.Context) error
+pkg kernel, method (*Root) Batch(context.Context, ...BatchOp) ([]*Fiber, error)
+pkg kernel, method (*Root) Close(context.Context) error
+pkg kernel, method (*Root) Context() *Context
+pkg kernel, method (*Root) Events(context.Context) ([]LedgerEvent, error)
+pkg kernel, method (*Root) Inspect(context.Context) (Inspection, error)
+pkg kernel, method (*Root) Notify(context.Context, ...AnyKey) error
+pkg kernel, method (*Root) Observe(string, func(context.Context, LedgerEvent) error, ...ObserveOption) (Disposer, error)
+pkg kernel, method (*Root) ObserverStatus() ObserverStatus
+pkg kernel, method (*Root) Plugin(Plugin, any) *Fiber
+pkg kernel, method (*Root) RetentionStatus() RetentionStatus
+pkg kernel, method (*Root) Settle(context.Context) error
+pkg kernel, method (*Root) Snapshots(context.Context) ([]FiberSnapshot, error)
+pkg kernel, method (*ScopePanicError) Error() string
+pkg kernel, method (*ScopePanicError) Unwrap() error
+pkg kernel, method (*Waterfall[A, R]) Bind(*Context) WaterfallDispatcher[A, R]
+pkg kernel, method (*Waterfall[A, R]) Name() string
+pkg kernel, method (*Waterfall[A, R]) On(*Context, string, WaterfallListener[A, R])
+pkg kernel, method (*Waterfall[A, R]) Owner() AnyKey
+pkg kernel, method (*Waterfall[A, R]) Use(string) HookUse
+pkg kernel, method (*keyData) Major() int
+pkg kernel, method (*keyData) Name() string
+pkg kernel, method (*registry) Fiber(uint64) (*Fiber, bool)
+pkg kernel, method (Audience) Matches(*Context) bool
+pkg kernel, method (Dep) Config() (any, bool)
+pkg kernel, method (Dep) Key() AnyKey
+pkg kernel, method (Dep) Optional() bool
+pkg kernel, method (EventDispatcher[A]) Bail(context.Context, Audience, A) (any, error)
+pkg kernel, method (EventDispatcher[A]) Emit(context.Context, Audience, A) error
+pkg kernel, method (EventDispatcher[A]) Parallel(context.Context, Audience, A) error
+pkg kernel, method (EventDispatcher[A]) Serial(context.Context, Audience, A) (any, error)
+pkg kernel, method (HookUse) Hook() string
+pkg kernel, method (HookUse) Sealed() bool
+pkg kernel, method (HookUse) Stage() string
+pkg kernel, method (Key[T]) Major() int
+pkg kernel, method (Key[T]) Name() string
+pkg kernel, method (Key[T]) Of(*Context) T
+pkg kernel, method (Key[T]) Provide(*Context, T, ...ProvideOption) error
+pkg kernel, method (Key[T]) ProvideFor(*Context, func(*Context) T, ...ProvideOption) error
+pkg kernel, method (Scope[V]) Audience(*Context, func(V) bool) (Audience, error)
+pkg kernel, method (Scope[V]) From(*Context) (V, bool)
+pkg kernel, method (Scope[V]) With(*Context, V) (*Context, error)
+pkg kernel, method (WaterfallDispatcher[A, R]) Run(context.Context, Audience, A) (R, error)
+pkg kernel, method (WaterfallDispatcher[A, R]) RunWith(context.Context, Audience, A, func(context.Context, A) (R, error)) (R, error)
+pkg kernel, type AnyHook interface
+pkg kernel, type AnyHook interface, Name() string
+pkg kernel, type AnyHook interface, unexported methods
+pkg kernel, type AnyKey interface
+pkg kernel, type AnyKey interface, Major() int
+pkg kernel, type AnyKey interface, Name() string
+pkg kernel, type AnyKey interface, unexported methods
+pkg kernel, type Audience struct
+pkg kernel, type BatchOp struct
+pkg kernel, type Bindings map[AnyKey][]Plugin
+pkg kernel, type Config struct
+pkg kernel, type Config struct, ArchiveLimit int
+pkg kernel, type Config struct, Consumers Bindings
+pkg kernel, type Config struct, DisposeDeadline time.Duration
+pkg kernel, type Config struct, DrainDeadline time.Duration
+pkg kernel, type Config struct, EventWindow int
+pkg kernel, type Config struct, Listeners map[AnyHook][]Plugin
+pkg kernel, type Config struct, LoadDeadline time.Duration
+pkg kernel, type Config struct, LogHandler slog.Handler
+pkg kernel, type Config struct, ObserverLog func(error)
+pkg kernel, type Config struct, ObserverQueue int
+pkg kernel, type Config struct, OwnerInbox int
+pkg kernel, type Config struct, Providers Bindings
+pkg kernel, type Config struct, TerminalLimit int
+pkg kernel, type Context struct
+pkg kernel, type Dep struct
+pkg kernel, type Disposer func(context.Context) error
+pkg kernel, type EffectHandle struct
+pkg kernel, type EffectMeta struct
+pkg kernel, type EffectMeta struct, Children []EffectMeta
+pkg kernel, type EffectMeta struct, Label string
+pkg kernel, type EffectMeta struct, State string
+pkg kernel, type EffectScope struct
+pkg kernel, type EventDispatcher[A any] struct
+pkg kernel, type EventListener[A any] func(context.Context, A) (any, error)
+pkg kernel, type Event[A any] struct
+pkg kernel, type Fiber struct
+pkg kernel, type FiberSnapshot struct
+pkg kernel, type FiberSnapshot struct, Alive bool
+pkg kernel, type FiberSnapshot struct, EffectTree []EffectMeta
+pkg kernel, type FiberSnapshot struct, Effects []string
+pkg kernel, type FiberSnapshot struct, Epoch []uint64
+pkg kernel, type FiberSnapshot struct, Error string
+pkg kernel, type FiberSnapshot struct, ID uint64
+pkg kernel, type FiberSnapshot struct, Leaked bool
+pkg kernel, type FiberSnapshot struct, Plugin string
+pkg kernel, type FiberSnapshot struct, Revision uint64
+pkg kernel, type FiberSnapshot struct, State State
+pkg kernel, type FiberSnapshot struct, Target *TargetEpoch
+pkg kernel, type FiberSnapshot struct, Tracked []string
+pkg kernel, type HookOption func(*hookDef)
+pkg kernel, type HookUse struct
+pkg kernel, type InjectError struct
+pkg kernel, type InjectError struct, Err error
+pkg kernel, type InjectError struct, Major int
+pkg kernel, type InjectError struct, Name string
+pkg kernel, type Inspection struct
+pkg kernel, type Inspection struct, Fibers []FiberSnapshot
+pkg kernel, type Inspection struct, Provisions []Provision
+pkg kernel, type Inspection struct, Sequence uint64
+pkg kernel, type KeyOption func(*keyData)
+pkg kernel, type Key[T any] struct
+pkg kernel, type Label struct
+pkg kernel, type LedgerEvent struct
+pkg kernel, type LedgerEvent struct, Fiber uint64
+pkg kernel, type LedgerEvent struct, From State
+pkg kernel, type LedgerEvent struct, Key string
+pkg kernel, type LedgerEvent struct, Kind string
+pkg kernel, type LedgerEvent struct, Label string
+pkg kernel, type LedgerEvent struct, Plugin string
+pkg kernel, type LedgerEvent struct, Sequence uint64
+pkg kernel, type LedgerEvent struct, State State
+pkg kernel, type LedgerEvent struct, UID uint64
+pkg kernel, type ListenerError struct
+pkg kernel, type ListenerError struct, Cause error
+pkg kernel, type ListenerError struct, PluginID string
+pkg kernel, type Logger interface
+pkg kernel, type Logger interface, For(*Context) *slog.Logger
+pkg kernel, type Next[R any] func() (R, error)
+pkg kernel, type ObserveOption func(*observeOptions)
+pkg kernel, type ObserverOverflow struct
+pkg kernel, type ObserverOverflow struct, Label string
+pkg kernel, type ObserverOverflow struct, Limit int
+pkg kernel, type ObserverOverflow struct, Lost uint64
+pkg kernel, type ObserverOverflow struct, Stall time.Duration
+pkg kernel, type ObserverOverflow struct, Through uint64
+pkg kernel, type ObserverStatus struct
+pkg kernel, type ObserverStatus struct, Accepted uint64
+pkg kernel, type ObserverStatus struct, Backlog int
+pkg kernel, type ObserverStatus struct, Callbacks uint64
+pkg kernel, type ObserverStatus struct, Closing bool
+pkg kernel, type ObserverStatus struct, Delivered uint64
+pkg kernel, type ObserverStatus struct, EventsLost uint64
+pkg kernel, type ObserverStatus struct, FormattingPanics uint64
+pkg kernel, type ObserverStatus struct, InFlight bool
+pkg kernel, type ObserverStatus struct, LastLoggerError string
+pkg kernel, type ObserverStatus struct, LastObserverError string
+pkg kernel, type ObserverStatus struct, LastOverflow string
+pkg kernel, type ObserverStatus struct, LoggerPanics uint64
+pkg kernel, type ObserverStatus struct, ObserverErrors uint64
+pkg kernel, type ObserverStatus struct, Observers int
+pkg kernel, type ObserverStatus struct, Orphaned int
+pkg kernel, type ObserverStatus struct, Overflowed uint64
+pkg kernel, type ObserverStatus struct, PeakBacklog int
+pkg kernel, type ObserverStatus struct, Queued int
+pkg kernel, type ObserverStatus struct, Remaining uint64
+pkg kernel, type ObserverStatus struct, Skipped uint64
+pkg kernel, type ObserverStatus struct, Stopped bool
+pkg kernel, type PanicError struct
+pkg kernel, type PanicError struct, Value any
+pkg kernel, type Plugin struct
+pkg kernel, type Plugin struct, Apply func(*Context, any) error
+pkg kernel, type Plugin struct, Decode func(any) (any, error)
+pkg kernel, type Plugin struct, Hooks []HookUse
+pkg kernel, type Plugin struct, ID string
+pkg kernel, type Plugin struct, Inject []Dep
+pkg kernel, type Plugin struct, Provides []AnyKey
+pkg kernel, type ProvideOption func(*provided)
+pkg kernel, type Provision struct
+pkg kernel, type Provision struct, Active bool
+pkg kernel, type Provision struct, Key string
+pkg kernel, type Provision struct, Owner uint64
+pkg kernel, type Provision struct, Plugin string
+pkg kernel, type Provision struct, UID uint64
+pkg kernel, type Provision struct, Value any
+pkg kernel, type RetentionStatus struct
+pkg kernel, type RetentionStatus struct, ArchiveEvicted uint64
+pkg kernel, type RetentionStatus struct, ArchiveLimit int
+pkg kernel, type RetentionStatus struct, Archived int
+pkg kernel, type RetentionStatus struct, EventWindow int
+pkg kernel, type RetentionStatus struct, EventsTotal uint64
+pkg kernel, type RetentionStatus struct, ObserverBacklog int
+pkg kernel, type RetentionStatus struct, TerminalDropped uint64
+pkg kernel, type RetentionStatus struct, Windowed int
+pkg kernel, type Root struct
+pkg kernel, type ScopePanicError struct
+pkg kernel, type ScopePanicError struct, Value any
+pkg kernel, type Scope[V any] struct
+pkg kernel, type State string
+pkg kernel, type TargetEpoch struct
+pkg kernel, type TargetEpoch struct, Revision uint64
+pkg kernel, type TargetEpoch struct, UIDs []uint64
+pkg kernel, type WaterfallDispatcher[A any, R any] struct
+pkg kernel, type WaterfallListener[A any, R any] func(context.Context, A, Next[R]) (R, error)
+pkg kernel, type Waterfall[A any, R any] struct
+pkg kernel, type hookDef struct
+pkg kernel, type hooksService struct
+pkg kernel, type keyData struct
+pkg kernel, type observeOptions struct
+pkg kernel, type provided struct
+pkg kernel, type reflectService struct
+pkg kernel, type registry struct
+pkg kernel, var ErrBinding error
+pkg kernel, var ErrClosed error
+pkg kernel, var ErrCommitVetoed error
+pkg kernel, var ErrConfig error
+pkg kernel, var ErrDuplicate error
+pkg kernel, var ErrEventsTruncated error
+pkg kernel, var ErrExpired error
+pkg kernel, var ErrHook error
+pkg kernel, var ErrHookUndeclared error
+pkg kernel, var ErrInactive error
+pkg kernel, var ErrInactiveEffect error
+pkg kernel, var ErrIsolation error
+pkg kernel, var ErrKey error
+pkg kernel, var ErrLeaked error
+pkg kernel, var ErrNext error
+pkg kernel, var ErrNextExpired error
+pkg kernel, var ErrNotOwner error
+pkg kernel, var ErrObserverOverflow error
+pkg kernel, var ErrReentrant error
+pkg kernel, var ErrRootDispose error
+pkg kernel, var ErrScope error
+pkg kernel, var ErrScopeSealed error
+pkg kernel, var ErrScopeStarted error
+pkg kernel, var ErrSealed error
+pkg kernel, var ErrStage error
+pkg kernel, var ErrUndeclared error
+pkg kernel, var ErrUnknown error
+pkg kernel, var ErrUnscoped error
+pkg kernel, var ErrWant error
+pkg kernel, var HooksKey Key[*hooksService]
+pkg kernel, var InternalCommit *Waterfall[any, bool]
+pkg kernel, var InternalConfig *Waterfall[any, any]
+pkg kernel, var InternalPlugin *Event[LedgerEvent]
+pkg kernel, var InternalService *Event[LedgerEvent]
+pkg kernel, var InternalStatus *Event[LedgerEvent]
+pkg kernel, var InternalUpdate *Waterfall[any, any]
+pkg kernel, var LoggerKey Key[Logger]
+pkg kernel, var ReflectKey Key[*reflectService]
+pkg kernel, var RegistryKey Key[*registry]
+pkg kernel, var Unscoped Audience
+pkg plugin, const APIVersion untyped string = "0.1"
+pkg plugin, func Define[C any](Spec[C]) kernel.Plugin
+pkg plugin, func Describe[C any]() (ConfigInfo, error)
+pkg plugin, func NewValidator([]byte) (Validator, error)
+pkg plugin, method (Volatile[T]) Get() T
+pkg plugin, type ConfigInfo struct
+pkg plugin, type ConfigInfo struct, Schema []byte
+pkg plugin, type ConfigInfo struct, Volatile [][]string
+pkg plugin, type Spec[C any] struct
+pkg plugin, type Spec[C any] struct, Apply func(*kernel.Context, *C) error
+pkg plugin, type Spec[C any] struct, Hooks []kernel.HookUse
+pkg plugin, type Spec[C any] struct, ID string
+pkg plugin, type Spec[C any] struct, Inject []kernel.Dep
+pkg plugin, type Spec[C any] struct, Provides []kernel.AnyKey
+pkg plugin, type Spec[C any] struct, Validate func(*C) error
+pkg plugin, type Validator interface
+pkg plugin, type Validator interface, Validate(any) error
+pkg plugin, type Volatile[T any] struct
