@@ -33,6 +33,9 @@ type GateInput struct {
 	// built-in record of a release binary (ADR-020 decision 13).
 	Trusted error
 	BuiltIn bool
+	// ReleaseKey is the id of the release key that the binary carries, "" for none
+	// (Release; ADR-060 decision 50).
+	ReleaseKey string
 	// Tie is, by plugin id of Dist, the module that the binary runs for it and the
 	// result of the module tie (ADR-020 decision 12). Nil where no binary runs.
 	Tie map[string]Tie
@@ -257,7 +260,9 @@ func servedList(sds []ServedDefinition) string {
 // signer of the trusted manifest, and its module must tie to that manifest (ADR-020
 // decisions 12 and 13); an installed artifact needs its kept files to match the
 // digest and a signer that trust.yaml lists for its id and runtimes, or allowUnsigned
-// (ADR-020 decisions 6 and 8; ADR-047 decision 18).
+// (ADR-020 decisions 6 and 8; ADR-047 decision 18), and one with no module whose id is
+// under a reserved owner needs the release key the binary carries as its signer
+// (ADR-048 decision 14).
 func (g *gate) trust(r ComposedRow, s *subject, what string) []RowResult {
 	var out []RowResult
 	f := func(rule Rule, format string, a ...any) {
@@ -282,7 +287,9 @@ func (g *gate) trust(r ComposedRow, s *subject, what string) []RowResult {
 	if rec := a.Record; s.err == nil && (rec.ID != man.ID || rec.Version != man.Version || !slices.Equal(rec.Runtimes, man.Runtimes)) {
 		f(RuleRecord, "the record of %s vouches for %s@%s %v, and the kept manifest is %s@%s %v", a.Digest, rec.ID, rec.Version, rec.Runtimes, man.ID, man.Version, man.Runtimes)
 	}
-	switch {
+	switch owner, _, _ := strings.Cut(s.id, "/"); {
+	case a.Record.Module == nil && (owner == "aiops" || owner == "contrib") && (in.ReleaseKey == "" || a.Record.Signer != in.ReleaseKey):
+		f(RuleSigner, "it has no module, its id is under the reserved owner %s, and its signer %s is not the release key the binary carries (ADR-048 decision 14)", owner, a.Record.Signer)
 	case a.Record.Signer == Unsigned && in.Trust != nil && slices.Contains(in.Trust.AllowUnsigned, s.id):
 	case a.Record.Signer == Unsigned:
 		f(RuleSigner, "no verified signer is recorded beside %s, and allowUnsigned does not list %s", a.Digest, s.id)

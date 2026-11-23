@@ -3,6 +3,7 @@ package boot
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -24,9 +25,9 @@ const (
   stable: [{version: "1.3", suite: 2, classes: {stable.k: {provider: open, consumer: open}}}]}`
 )
 
-// packManifestText is the manifest of the pack acme/pack: no code, feeding echoers.
-func packManifestText() string {
-	return manifestText("acme/pack", "runtimes: []", "uses: -", "provides: -", "registers: -", "hooks: -", "configSchema: -", "durable: -",
+// packManifestText is the manifest of the pack id: no code, feeding echoers.
+func packManifestText(id string) string {
+	return manifestText(id, "runtimes: []", "uses: -", "provides: -", "registers: -", "hooks: -", "configSchema: -", "durable: -",
 		`requires: {definitions: {echoers: ["0.1"]}}`)
 }
 
@@ -66,7 +67,7 @@ func newGateFix() *gateFix {
 	return &gateFix{dist: d,
 		arts: map[string]Artifact{
 			"acme/pack": {ID: "acme/pack", Digest: "sha256:" + hexA,
-				Kept: Kept{Manifest: []byte(packManifestText()), Bundle: []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {reply: hi}}\n")},
+				Kept: Kept{Manifest: []byte(packManifestText("acme/pack")), Bundle: []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {reply: hi}}\n")},
 				Record: Record{Kind: "artifact", Digest: "sha256:" + hexA, Signer: keyP256ID, ID: "acme/pack", Version: "0.1.0",
 					Attestation: []byte(statementOf("acme/pack@0.1.0", hexA, `{"echoers": {"version": "0.1", "suite": 1, "halves": ["obligations"]}}`,
 						`, "scenario": {"name": "echo", "version": 1, "halves": ["kernel"]}`))}},
@@ -88,18 +89,34 @@ func (fx *gateFix) art(id string, edit func(a *Artifact)) {
 	fx.arts[id] = a
 }
 
-// run composes the profile and runs the gate on it.
+// reserve moves the pack acme/pack to the plugin id id, signed by keyP256ID.
+func (fx *gateFix) reserve(id string) {
+	a := fx.arts["acme/pack"]
+	delete(fx.arts, "acme/pack")
+	a.ID, a.Record.ID, a.Kept.Manifest = id, id, []byte(packManifestText(id))
+	a.Record.Attestation = []byte(strings.Replace(string(a.Record.Attestation), "acme/pack@", id+"@", 1))
+	fx.arts[id] = a
+}
+
+// run composes the profile, whose bundles are b and each installed artifact's, and runs
+// the gate on it.
 func (fx *gateFix) run(t *testing.T) GateResult {
 	t.Helper()
-	home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b, acme/pack, acme/echoer]")},
-		"bundles/b/bundle.yaml": {Data: []byte(fx.bundles["b"])}}
-	for _, id := range []string{"acme/pack", "acme/echoer"} {
+	home := fstest.MapFS{"bundles/b/bundle.yaml": {Data: []byte(fx.bundles["b"])}}
+	ids := slices.Sorted(maps.Keys(fx.arts))
+	for id := range fx.bundles {
+		if id != "b" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	for _, id := range ids {
 		data, ok := fx.bundles[id]
 		if !ok {
 			data = string(fx.arts[id].Kept.Bundle)
 		}
 		home["bundles/"+id+"/bundle.yaml"] = &fstest.MapFile{Data: []byte(data)}
 	}
+	home["profiles/p/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b, " + strings.Join(ids, ", ") + "]")}
 	patch := File{FS: fstest.MapFS{"enable.yml": {Data: []byte("- {id: e1, enabled: true}\n- {id: e2, enabled: true}\n")}}, Path: "enable.yml"}
 	c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home, Patches: []File{patch}}, Options{})
 	if err != nil {
@@ -125,7 +142,7 @@ func (fx *gateFix) run(t *testing.T) GateResult {
 	return GateWith(c, in)
 }
 
-// openLines lists the row results that the entry point did not evaluate.
+// openLines lists, sorted, the row results that the entry point did not evaluate.
 func openLines(g GateResult) []string {
 	var out []string
 	for _, s := range g.Slots {
@@ -133,6 +150,7 @@ func openLines(g GateResult) []string {
 			out = append(out, fmt.Sprintf("%d %s %s open", s.N, f.Row, f.Rule))
 		}
 	}
+	slices.Sort(out)
 	return out
 }
 
@@ -219,6 +237,11 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.art("acme/pack", func(a *Artifact) { a.Record.Signer = Unsigned })
 			fx.trust.AllowUnsigned = []string{"acme/pack"}
 		}, nil},
+		{"an unsigned pack under a reserved owner, though allowUnsigned lists it", func(fx *gateFix) {
+			fx.reserve("contrib/pack")
+			fx.art("contrib/pack", func(a *Artifact) { a.Record.Signer = Unsigned })
+			fx.trust.AllowUnsigned = []string{"contrib/pack"}
+		}, []string{"5 e1 signer stop=false"}},
 		{"a module the trusted manifest does not list", func(fx *gateFix) {
 			fx.art("acme/echoer", func(a *Artifact) { a.Record.Module = &GoModule{Path: "example.com/acme", Version: "v0.1.0", Sum: sumA} })
 		}, []string{"5 e2 module stop=false", "10 e2 attestation stop=false"}},
@@ -345,6 +368,30 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Check 5 denies an artifact with no module whose id is under a reserved owner unless its
+// signer is the release key the binary carries (ADR-048 decision 14). trust.yaml lists no
+// signer for aiops or contrib, so such a pack is still denied by the signer clause until
+// the release key signs contrib packs at S6a (ADR-020 decision 17).
+func TestGateReservedOwners(t *testing.T) {
+	for _, tc := range []struct {
+		id, release string
+		reserved    bool
+	}{
+		{"aiops/pack", "", true},
+		{"contrib/pack", "another key", true},
+		{"aiops/pack", keyP256ID, false},
+		{"acme/pack", "", false},
+	} {
+		fx := newGateFix()
+		fx.reserve(tc.id)
+		fx.in.ReleaseKey = tc.release
+		f, denied := fx.run(t).Denial("e1")
+		if got := strings.Contains(f.Reason, "ADR-048 decision 14"); got != tc.reserved || denied != (tc.id != "acme/pack") || denied && f.Check != CheckTrust {
+			t.Errorf("%s with the release key %q: denied %v by %+v", tc.id, tc.release, denied, f)
+		}
 	}
 }
 

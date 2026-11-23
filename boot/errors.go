@@ -90,8 +90,10 @@ const (
 	// RuleModule: gate check 5, a Go module absent from a trusted distribution
 	// manifest or not the one it lists (ADR-020 decision 12).
 	RuleModule Rule = "module"
-	// RuleSigner: gate check 5, no verified signer recorded beside the digest, or one
-	// that trust.yaml does not list for the id and runtimes (ADR-020 decisions 6 to 8).
+	// RuleSigner: gate check 5, no verified signer recorded beside the digest, one
+	// that trust.yaml does not list for the id and runtimes (ADR-020 decisions 6 to 8),
+	// or, for an artifact with no module under a reserved owner, one that is not the
+	// release key the binary carries (ADR-048 decision 14).
 	RuleSigner Rule = "signer"
 	// RuleLicence: gate check 6, a module under a licence outside the L7 allow-list and
 	// not accepted, or an acceptance in the release (08-profiles-roadmap-adrs.md:1346).

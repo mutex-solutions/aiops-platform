@@ -165,6 +165,7 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	}
 	lines := []string{"trust: no release key and no built-in record: the distribution that dist use made current is trusted (ADR-020 decision 13)"}
 	if rel != nil {
+		in.ReleaseKey = rel.KeyID
 		state, use := "removed in trust.yaml", "not in use"
 		if slices.Contains(trust.Distributions, ReleaseRoot) {
 			state = "trusted"
