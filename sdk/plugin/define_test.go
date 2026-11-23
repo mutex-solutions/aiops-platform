@@ -104,7 +104,7 @@ func TestDefineValidatesTheDecodedValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := p.Decode(nil)
-	if a == b || len(seen) != 2 || seen[0] != a || seen[0].Timeout != 5*time.Second {
+	if a == b || len(seen) != 2 || seen[0] != plugin.ConfigOf(a) || seen[0].Timeout != 5*time.Second {
 		t.Fatalf("Decode returned %p and %p, Validate saw %v", a, b, seen)
 	}
 	if p.Apply != nil {
@@ -257,7 +257,7 @@ func TestVolatileGet(t *testing.T) {
 		t.Fatal("zero Volatile is not empty")
 	}
 	cfg, err := plugin.Define(plugin.Spec[config]{ID: "t/v"}).Decode(map[string]any{"url": "u"})
-	if err != nil || cfg.(*config).URL.Get() != "u" {
+	if err != nil || plugin.ConfigOf(cfg).(*config).URL.Get() != "u" {
 		t.Fatalf("Decode: %v, %v", cfg, err)
 	}
 }
@@ -266,9 +266,8 @@ func TestVolatileGet(t *testing.T) {
 // (07-c4-plugin-sdk.md:1375; ADR-048 decision 9). The test takes the loader's path
 // for it: a change that loader.VolatileOnly finds volatile only over the paths
 // Describe reports is committed with kernel.Fiber.Commit, any other restarts the row.
-// Apply is not called again, and the running activation keeps the value it was
-// applied with: handing it the committed value is the ADR-034 addition that ADR-060
-// decision 3 names (see plugin.Volatile).
+// Apply is not called again, and the running activation reads the committed value
+// (07-c4-plugin-sdk.md:1382; ADR-034 G13).
 func TestVolatileChangeCommitsInPlace(t *testing.T) {
 	type cfg struct {
 		URL  plugin.Volatile[string]
@@ -306,8 +305,8 @@ func TestVolatileChangeCommitsInPlace(t *testing.T) {
 	if len(applied) != 0 {
 		t.Fatalf("Apply ran again after a commit in place: %+v", <-applied)
 	}
-	if got := running.URL.Get(); got != "https://a" {
-		t.Fatalf("the running activation reads URL %q, want the value it was applied with", got)
+	if got := running.URL.Get(); got != "https://b" {
+		t.Fatalf("the running activation reads URL %q, want the committed value", got)
 	}
 }
 

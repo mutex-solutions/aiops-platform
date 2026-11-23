@@ -31,9 +31,14 @@ var (
 	volatilePkg  = reflect.TypeFor[Volatile[int]]().PkgPath()
 )
 
-// isVolatile reports whether t is an instance of Volatile; its value is field 0.
+// isVolatile reports whether t is an instance of Volatile.
 func isVolatile(t reflect.Type) bool {
 	return t.Kind() == reflect.Struct && t.PkgPath() == volatilePkg && strings.HasPrefix(t.Name(), "Volatile[")
+}
+
+// elemOf returns the T of the Volatile[T] t.
+func elemOf(t reflect.Type) reflect.Type {
+	return reflect.Zero(t).Interface().(interface{ elem() reflect.Type }).elem()
 }
 
 // field is one exported field of a config struct.
@@ -82,7 +87,7 @@ func describe(t reflect.Type) (*described, error) {
 func (d *described) schemaOf(t reflect.Type, path []string, open map[reflect.Type]bool) (map[string]any, error) {
 	if isVolatile(t) {
 		d.volatile = append(d.volatile, slices.Clone(path))
-		s, err := d.schemaOf(t.Field(0).Type, path, open)
+		s, err := d.schemaOf(elemOf(t), path, open)
 		if err == nil {
 			s[volatileKey] = true
 		}
@@ -195,7 +200,7 @@ func fieldOf(sf reflect.StructField) (*field, error) {
 	}
 	inner := sf.Type
 	for isVolatile(inner) {
-		inner = inner.Field(0).Type
+		inner = elemOf(inner)
 	}
 	f.nested = inner.Kind() == reflect.Struct && inner != durationType
 	switch a := sf.Tag.Get("aiops"); {
@@ -257,5 +262,5 @@ func scalarOf(t reflect.Type, s, tag string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return v, (&described{}).decode(nil, v, reflect.New(t).Elem())
+	return v, (&decoder{described: &described{}}).decode(nil, v, reflect.New(t).Elem())
 }

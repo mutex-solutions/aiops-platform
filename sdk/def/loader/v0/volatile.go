@@ -35,7 +35,8 @@ import (
 //
 // A change whose old or new value holds a launch.Ref is not volatile either (ADR-059,
 // owner decision 17): the tree holds references unresolved and config-refs resolves
-// them only when a fiber activates, so such a change restarts the fiber. A literal
+// them when a fiber activates, and again when a commit hands a Volatile value off
+// (ADR-034 G13), so such a change restarts the fiber. A literal
 // changed beside a reference that did not change is volatile; loader/volatile-update
 // carries the new config through WithoutRefs, so the event never carries a reference.
 // The launcher's plan (boot Diff) calls VolatileOnly too.

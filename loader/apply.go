@@ -387,9 +387,11 @@ func (t *tree) stageOne(ctx context.Context, p *plan, op def.Op) (def.Result, er
 // internal/config, Decode or internal/commit refuses as for any other, puts the tree
 // back and the kernel's retained config is put back with the batch, and the error is
 // returned. The running activation is not restarted and its Apply is not called
-// again: the consumer of the event makes the new values visible, and a restart that
-// the kernel starts later (a provider's epoch change, a retry) applies the committed
-// config.
+// again: the kernel stores the committed values in its Volatile fields when the
+// batch is admitted (ADR-034 G13), the consumer of the event learns of them, and a
+// restart that the kernel starts later (a provider's epoch change, a retry) applies
+// the committed config. The vets of stage hand nothing off: their batch disposes the
+// fiber or its group.
 func (t *tree) stageUpdate(ctx context.Context, p *plan, cur *entry, e def.EntrySpec) def.Outcome {
 	old, was := cur.spec, t.mount(cur)
 	cur.spec = e

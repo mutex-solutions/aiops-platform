@@ -45,7 +45,46 @@ type rules struct {
 // defaults is what an empty config decodes to.
 func defaults() rules {
 	return rules{Timeout: 50 * time.Millisecond, Scale: 0.5, On: true, Mode: "fast",
-		Auth: window{Limit: 3}, Settings: Volatile[window]{window{Limit: 3}}}
+		Auth: window{Limit: 3}, Settings: vol(window{Limit: 3})}
+}
+
+// vol is a Volatile holding v.
+func vol[T any](v T) Volatile[T] {
+	var x Volatile[T]
+	p, _ := x.alloc()
+	*p.(*T) = v
+	return x
+}
+
+// sameValue is reflect.DeepEqual that reads a Volatile by its value: each decoded
+// Volatile has a cell of its own.
+func sameValue(a, b reflect.Value) bool {
+	switch t := a.Type(); {
+	case isVolatile(t):
+		return sameValue(a.MethodByName("Get").Call(nil)[0], b.MethodByName("Get").Call(nil)[0])
+	case t.Kind() == reflect.Pointer:
+		return a.IsNil() == b.IsNil() && (a.IsNil() || sameValue(a.Elem(), b.Elem()))
+	case t.Kind() == reflect.Struct:
+		for i := range t.NumField() {
+			if !sameValue(a.Field(i), b.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case t.Kind() == reflect.Slice:
+		if a.IsNil() != b.IsNil() || a.Len() != b.Len() {
+			return false
+		}
+		for i := range a.Len() {
+			if !sameValue(a.Index(i), b.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case t.Kind() == reflect.Map:
+		return reflect.DeepEqual(a.Interface(), b.Interface()) // no map of the table holds a Volatile
+	}
+	return a.Equal(b)
 }
 
 // TestDecodeRules is the table of the decode rules of the package documentation.
@@ -74,11 +113,11 @@ func TestDecodeRules(t *testing.T) {
 			"windows", l(m(), m("name", "w")), "ids", l(int64(1), int64(2)), "urlPath", "/p", "mode", "slow",
 			"settings", m("limit", int64(1))),
 			func(r *rules) {
-				r.Timeout, r.URL, r.Count, r.Small, r.Size, r.Big = 90*time.Minute, Volatile[string]{"https://h"}, -7, -128, 65535, 1<<62
+				r.Timeout, r.URL, r.Count, r.Small, r.Size, r.Big = 90*time.Minute, vol("https://h"), -7, -128, 65535, 1<<62
 				r.Ratio, r.Scale, r.On, r.Tags, r.Labels = 1.5, 2, false, []string{"a", "b"}, map[string]string{"k": "v"}
-				r.Auth = window{Name: "n", Limit: 9, Until: Volatile[time.Duration]{time.Second}}
+				r.Auth = window{Name: "n", Limit: 9, Until: vol(time.Second)}
 				r.Windows = []window{{Limit: 3}, {Name: "w", Limit: 3}}
-				r.IDs, r.URLPath, r.Mode, r.Settings = []int{1, 2}, "/p", "slow", Volatile[window]{window{Limit: 1}}
+				r.IDs, r.URLPath, r.Mode, r.Settings = []int{1, 2}, "/p", "slow", vol(window{Limit: 1})
 			}, ""},
 		{"empty list and map stay empty, not nil", m("tags", l(), "labels", m()), func(r *rules) { r.Tags, r.Labels = []string{}, map[string]string{} }, ""},
 		{"explicit false beats a true default", m("on", false), func(r *rules) { r.On = false }, ""},
@@ -129,7 +168,7 @@ func TestDecodeRules(t *testing.T) {
 				}
 				want := defaults()
 				tc.want(&want)
-				if !reflect.DeepEqual(got, &want) {
+				if !sameValue(reflect.ValueOf(ConfigOf(got)), reflect.ValueOf(&want)) {
 					t.Fatalf("Decode:\n got %+v\nwant %+v", got, &want)
 				}
 			}
@@ -146,7 +185,7 @@ func TestDecodeRules(t *testing.T) {
 				tree = map[string]any{}
 			}
 			verr := v.Validate(tree)
-			derr := d.decode(nil, tree, reflect.New(reflect.TypeFor[rules]()).Elem())
+			derr := (&decoder{d, map[string]volatileCell{}}).decode(nil, tree, reflect.New(reflect.TypeFor[rules]()).Elem())
 			if (verr == nil) != (tc.err == "") || (derr == nil) != (tc.err == "") {
 				t.Fatalf("the validator and the decoder disagree: validator %v, decoder %v", verr, derr)
 			}
@@ -164,7 +203,7 @@ func TestDecodeRefusesWhatTheSchemaCannotSay(t *testing.T) {
 	if v, _ := NewValidator(d.schema); v.Validate(tree) != nil {
 		t.Fatal("the schema refuses a duration past the range of time.Duration; this test needs another value")
 	}
-	err = d.decode(nil, tree, reflect.New(reflect.TypeFor[rules]()).Elem())
+	err = (&decoder{d, map[string]volatileCell{}}).decode(nil, tree, reflect.New(reflect.TypeFor[rules]()).Elem())
 	if err == nil || !strings.Contains(err.Error(), "config.timeout: want a duration") {
 		t.Fatalf("decode: %v", err)
 	}

@@ -11,15 +11,30 @@ import (
 	"time"
 )
 
+// decoder is one decode of a config type: cells records by path the cell it gives
+// each Volatile field (ADR-034 G13). It is nil for a type with no Volatile field.
+type decoder struct {
+	*described
+	cells map[string]volatileCell
+}
+
+// alloc gives the Volatile out a new cell, records it at path and returns the value
+// that the cell holds.
+func (d *decoder) alloc(path []string, out reflect.Value) reflect.Value {
+	p, c := out.Addr().Interface().(interface{ alloc() (any, volatileCell) }).alloc()
+	d.cells[fmt.Sprintf("%q", path)] = c
+	return reflect.ValueOf(p).Elem()
+}
+
 // decode sets out, at path of the tree, from tree by the rules of the package
 // documentation. Define validates the tree against the derived schema first, so
 // what is left for decode to refuse is what the schema cannot say: a duration
 // past the range of time.Duration, an int or uint past a 32-bit platform's
 // range. It checks every rule anyway, so it is correct on its own.
-func (d *described) decode(path []string, tree any, out reflect.Value) error {
+func (d *decoder) decode(path []string, tree any, out reflect.Value) error {
 	t := out.Type()
 	if isVolatile(t) {
-		return d.decode(path, tree, reflect.ValueOf(out.Addr().Interface().(interface{ ptr() any }).ptr()).Elem())
+		return d.decode(path, tree, d.alloc(path, out))
 	}
 	if t == durationType {
 		s, ok := tree.(string)
@@ -97,8 +112,9 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 }
 
 // decodeStruct sets each field of the struct out from its key of tree, or from
-// its default when the key is absent.
-func (d *described) decodeStruct(path []string, tree any, out reflect.Value) error {
+// its default when the key is absent. An absent Volatile field with no default
+// gets a cell of the zero value, which a commit can set.
+func (d *decoder) decodeStruct(path []string, tree any, out reflect.Value) error {
 	m, ok := tree.(map[string]any)
 	if !ok {
 		return pathErr(path, "want a map, got %s", showValue(tree))
@@ -117,6 +133,9 @@ func (d *described) decodeStruct(path []string, tree any, out reflect.Value) err
 			v = f.def
 		case f.nested:
 			v = map[string]any{}
+		case isVolatile(out.Field(f.index).Type()):
+			d.alloc(with(path, f.key), out.Field(f.index))
+			continue
 		default:
 			continue
 		}

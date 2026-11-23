@@ -166,7 +166,7 @@ func TestDescribeExamples(t *testing.T) {
 		t.Fatalf("the config of the examples %v: %v", cfg, err)
 	}
 	got, err := plugin.Define(plugin.Spec[row]{ID: "t/examples"}).Decode(cfg)
-	if r, _ := got.(*row); err != nil || r.Name != "loud" || r.Every.Get() != time.Second || r.Retries != 3 || !r.Quiet {
+	if r, _ := plugin.ConfigOf(got).(*row); err != nil || r.Name != "loud" || r.Every.Get() != time.Second || r.Retries != 3 || !r.Quiet {
 		t.Fatalf("Decode(%v) = %+v, %v", cfg, got, err)
 	}
 }

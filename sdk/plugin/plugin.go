@@ -84,6 +84,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sync/atomic"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -109,7 +110,7 @@ type Spec[C any] struct {
 	Registers []kernel.AnyKey
 	Hooks     []kernel.HookUse // Every hook Apply may listen on, with its stage; an undeclared On fails.
 	// Validate checks the decoded config. Optional; it must be pure, since it
-	// runs at every activation and on every candidate update.
+	// runs at every activation, on every candidate update and at every commit.
 	Validate func(cfg *C) error
 	// Apply is the only entry point; everything it registers is an effect.
 	Apply func(c *kernel.Context, cfg *C) error
@@ -135,9 +136,13 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 				raw = map[string]any{}
 			}
 			cfg := new(C)
+			dec := &decoder{described: d}
+			if len(d.volatile) != 0 {
+				dec.cells = map[string]volatileCell{}
+			}
 			err := d.validator.Validate(raw)
 			if err == nil {
-				err = d.decode(nil, raw, reflect.ValueOf(cfg).Elem())
+				err = dec.decode(nil, raw, reflect.ValueOf(cfg).Elem())
 			}
 			if err == nil && s.Validate != nil {
 				err = s.Validate(cfg)
@@ -145,10 +150,21 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 			if err != nil {
 				return nil, fmt.Errorf("invalid config: %w", err)
 			}
+			if dec.cells != nil {
+				return &decoded{cfg: cfg, cells: dec.cells}, nil
+			}
 			return cfg, nil
 		}}
 	if s.Apply != nil {
-		p.Apply = func(c *kernel.Context, cfg any) error { return s.Apply(c, cfg.(*C)) }
+		p.Apply = func(c *kernel.Context, cfg any) error {
+			if r, ok := cfg.(*decoded); ok {
+				cfg = r.cfg
+			}
+			return s.Apply(c, cfg.(*C))
+		}
+	}
+	if len(d.volatile) != 0 {
+		p = kernel.WithCommit(p, handOff)
 	}
 	return kernel.Define(p)
 }
@@ -157,19 +173,71 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 // of the row (07-c4-plugin-sdk.md:473, :1375). Every tenant-writable field is one.
 // Its path is derived from the config type and carried in configSchema, so no list
 // is written by hand (ADR-048 decision 9). The loader commits such a change with
-// kernel.Fiber.Commit: Apply is not called again, the running activation keeps the
-// value it was applied with, and the next activation of the row, whatever starts
-// it, reads the committed value. Get returns the value of the activation. That the
-// next read of a running field returns a value committed in place
-// (07-c4-plugin-sdk.md:1382) needs a kernel change, the ADR-034 addition that
-// ADR-060 decision 3 names, and stays open until the owner accepts it.
-type Volatile[T any] struct{ v T }
+// kernel.Fiber.Commit: Apply is not called again, and the kernel hands the committed
+// config to the running activation (ADR-034 G13), whose Volatile fields then read
+// the committed values (07-c4-plugin-sdk.md:1382). A field that is not Volatile
+// keeps the value Apply received, and the next activation of the row, whatever
+// starts it, applies the committed config. A Volatile field that holds a reference
+// such as ${secret:name} reads the value the reference resolves to at the commit.
+//
+// Each Volatile field has a cell of its own, which a copy of the config shares, and
+// a commit stores the cells one after another: two reads may return values of two
+// commits, or of one commit partly stored. Fields that must change together go in
+// one Volatile of a struct type. A value that holds a slice or a map is shared by the
+// commit and every reader, and a reader must not modify it.
+type Volatile[T any] struct{ c *cell[T] }
 
-// Get returns the value.
-func (v Volatile[T]) Get() T { return v.v }
+// Get returns the value committed last, or the decoded value: two dependent loads
+// and a dereference, with no lock and no allocation. The zero Volatile returns the
+// zero T.
+func (v Volatile[T]) Get() T {
+	if v.c == nil {
+		var zero T
+		return zero
+	}
+	return *v.c.Load()
+}
 
-// ptr gives the decoder the address of the value.
-func (v *Volatile[T]) ptr() any { return &v.v }
+// cell holds the value of one Volatile field.
+type cell[T any] struct{ atomic.Pointer[T] }
+
+// volatileCell is a cell of any T: take stores the value of from, a cell of the same
+// field of another decoded config.
+type volatileCell interface{ take(from volatileCell) }
+
+func (c *cell[T]) take(from volatileCell) { c.Store(from.(*cell[T]).Load()) }
+
+// alloc gives v a new cell and returns the address of the value it holds, which the
+// decoder sets, and the cell.
+func (v *Volatile[T]) alloc() (any, volatileCell) {
+	v.c = new(cell[T])
+	v.c.Store(new(T))
+	return v.c.Load(), v.c
+}
+
+// elem returns T.
+func (Volatile[T]) elem() reflect.Type { return reflect.TypeFor[T]() }
+
+// decoded is what Decode returns for a config type with a Volatile field (ADR-034
+// G13): the *C that Apply receives and, by path, the cell of each Volatile field.
+type decoded struct {
+	cfg   any
+	cells map[string]volatileCell
+}
+
+// handOff is the hand-off of a config type with a Volatile field: it stores the
+// value of each cell of committed into the cell of applied at the same path. It
+// reads the two records only, never a *C, whose slices and maps the author may
+// change while it runs. A path in one record only is skipped: a volatile-only
+// change keeps the shape of lists and maps.
+func handOff(applied, committed any) {
+	to := applied.(*decoded).cells
+	for path, c := range committed.(*decoded).cells {
+		if a, ok := to[path]; ok {
+			a.take(c)
+		}
+	}
+}
 
 // ConfigInfo is what the manifest carries of a config type.
 type ConfigInfo struct {
