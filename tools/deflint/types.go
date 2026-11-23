@@ -223,6 +223,52 @@ func shapes(pkg *types.Package) []string {
 	return out
 }
 
+// declared checks that every package-level key and hook of the definition package pkg
+// is named in a test file of the definition that calls deftest.Agree, as the Decl it
+// passes: Agree holds what the Decl names to definition.yaml (ADR-060 decision 7), so
+// a key or hook left out of both would pass unseen. files reports a definition with no
+// such test.
+func declared(d *definition, pkg *types.Package) []string {
+	named := map[string]bool{}
+	for _, p := range goFiles(d.dir, true) {
+		src, err := os.ReadFile(p)
+		if err != nil || !bytes.Contains(src, []byte("deftest.Agree(")) {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), p, src, parser.SkipObjectResolution)
+		if err != nil {
+			return []string{err.Error()}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				named[id.Name] = true
+			}
+			return true
+		})
+	}
+	if len(named) == 0 {
+		return nil
+	}
+	var out []string
+	for _, name := range pkg.Scope().Names() {
+		v, ok := pkg.Scope().Lookup(name).(*types.Var)
+		if !ok {
+			continue
+		}
+		kind := ""
+		switch t := v.Type(); {
+		case is(t, false, kernelPath, "Key"):
+			kind = "key"
+		case is(t, true, kernelPath, "Event"), is(t, true, kernelPath, "Waterfall"):
+			kind = "hook"
+		}
+		if kind != "" && !named[name] {
+			out = append(out, fmt.Sprintf("%s %s is not named in the Decl of the deftest.Agree test, so nothing holds it to definition.yaml (ADR-060 decision 7)", kind, name))
+		}
+	}
+	return out
+}
+
 // contribution checks that every method of a contribution interface of pkg takes the
 // caller's context first.
 func contribution(t types.Type, pkg *types.Package, bad func(string, ...any)) {

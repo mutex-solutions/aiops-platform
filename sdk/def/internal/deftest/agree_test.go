@@ -89,7 +89,11 @@ func TestCheckFindsEachDisagreement(t *testing.T) {
 		{"foreign owner", thing + bdCls + tail + "hooks:\n  thing/foreign: {stages: [default], access: open, remote: \"no\"}\n",
 			"not owned by a key of the definition", Decl{Keys: []kernel.AnyKey{bound}, Hooks: []Hook{Event(foreign)}}},
 		{"seal", thing + bdCls + tail + strings.Replace(hookLines, "access: sealed", "access: signed", 1), "kernel.HookSealed says true", d},
-		{"stage order", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c, b]", 1), "the kernel called the stages in the order [a b c]", d},
+		{"stage order", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c, b]", 1), "the Go declaration [a b c]", d},
+		// A Go list in another order than the one given to kernel.Stages: the kernel's
+		// dispatch shows it.
+		{"declared order", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c, b]", 1), "the kernel called the stages in the order [a b c]",
+			Decl{Keys: d.Keys, Signed: d.Signed, Hooks: []Hook{Event(ordered, "a", "c", "b"), Waterfall(sealed)}, Provide: provideBound}},
 		{"unknown stage", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, b, c, x]", 1), "the Go declaration [a b c]", d},
 		{"stage left out", thing + bdCls + tail + strings.Replace(hookLines, "[a, b, c]", "[a, c]", 1),
 			"hook thing/ordered: definition.yaml lists the stages [a c], the Go declaration [a b c]", d},
@@ -104,8 +108,8 @@ func TestCheckFindsEachDisagreement(t *testing.T) {
 		{"signed hook written open", thing + bdCls + tail + hookLines, "hook thing/ordered: declared signed in Go; definition.yaml says access open", signedHook},
 		{"open hook written signed", thing + bdCls + tail + strings.Replace(hookLines, "access: open", "access: signed", 1),
 			"hook thing/ordered: definition.yaml says access signed; Go declares it not signed", d},
-		{"signed name unknown", thing + openCls + tail, "signed: none is a key or a hook of the definition",
-			Decl{Keys: []kernel.AnyKey{open}, Signed: []string{"none"}}},
+		{"signed name unknown", thing + openCls + tail, "signed: thing/none is neither a key nor a hook of the definition",
+			Decl{Keys: []kernel.AnyKey{open}, Signed: []string{"thing/none"}}},
 		{"signed key not consumer-bound", thing + strings.Replace(openCls, "consumer: open", "consumer: signed", 1) + tail,
 			"kernel.KeyClasses says provider-bound false, consumer-bound false", Decl{Keys: []kernel.AnyKey{open}, Signed: []string{"thing"}}},
 	} {

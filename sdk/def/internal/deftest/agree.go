@@ -19,27 +19,45 @@ import (
 
 // Decl is what a definition package declares in Go: its keys, the hooks it owns, and
 // how a fiber provides the keys that own those hooks, so that the hooks can be bound.
+// The definition lint fails when a package-level key or hook of the package is not
+// named in the Decl of its Agree test.
 type Decl struct {
-	Keys  []kernel.AnyKey
-	Hooks []Hook
+	Keys []kernel.AnyKey
+	// Signed names the keys declared with kernel.Signed and the hooks whose access
+	// is signed. kernel.KeyClasses reports a signed key as consumer-bound and the
+	// kernel has no signed hook (ADR-060 decision 15), so the test names them.
+	Signed []string
+	Hooks  []Hook
 	// Provide provides every key that owns one of Hooks, from the context of a fiber
 	// that declares them in Provides. Nil when Hooks is empty.
 	Provide func(c *kernel.Context) error
 }
 
-// Hook is one hook a definition owns, with what the test needs to listen on each of
-// its stages and to dispatch it once. Event and Waterfall make one.
+// Hook is one hook a definition owns, with its stages and what the test needs to
+// listen on each of them and to dispatch it once. Event and Waterfall make one.
 type Hook struct {
 	hook   kernel.AnyHook
 	owner  kernel.AnyKey
+	stages []string
 	use    func(stage string) kernel.HookUse
 	listen func(c *kernel.Context, stage string, heard func())
 	bind   func(c *kernel.Context) func(context.Context) error
 }
 
-// Event declares an event the definition owns; its dispatch is Serial, in chain order.
-func Event[A any](e *kernel.Event[A]) Hook {
-	return Hook{hook: e, owner: e.Owner(), use: e.Use,
+// stagesOf is the stage list a hook is declared with: the one given to kernel.Stages,
+// or kernel.DefaultStage alone when none is given.
+func stagesOf(stages []string) []string {
+	if len(stages) == 0 {
+		return []string{kernel.DefaultStage}
+	}
+	return slices.Clone(stages)
+}
+
+// Event declares an event the definition owns with the stages it passes to
+// kernel.Stages, none for the default stage; its dispatch is Serial, in chain order.
+// A definition whose hook has stages exports the list it declares them with.
+func Event[A any](e *kernel.Event[A], stages ...string) Hook {
+	return Hook{hook: e, owner: e.Owner(), stages: stagesOf(stages), use: e.Use,
 		listen: func(c *kernel.Context, stage string, heard func()) {
 			e.On(c, stage, func(context.Context, A) (any, error) { heard(); return nil, nil })
 		},
@@ -53,9 +71,10 @@ func Event[A any](e *kernel.Event[A]) Hook {
 		}}
 }
 
-// Waterfall declares a waterfall the definition owns; each listener calls next.
-func Waterfall[A, R any](w *kernel.Waterfall[A, R]) Hook {
-	return Hook{hook: w, owner: w.Owner(), use: w.Use,
+// Waterfall declares a waterfall the definition owns with the stages it passes to
+// kernel.Stages, none for the default stage; each listener calls next.
+func Waterfall[A, R any](w *kernel.Waterfall[A, R], stages ...string) Hook {
+	return Hook{hook: w, owner: w.Owner(), stages: stagesOf(stages), use: w.Use,
 		listen: func(c *kernel.Context, stage string, heard func()) {
 			w.On(c, stage, func(_ context.Context, _ A, next kernel.Next[R]) (R, error) { heard(); return next() })
 		},
@@ -73,9 +92,11 @@ func Waterfall[A, R any](w *kernel.Waterfall[A, R]) Hook {
 // package directory sdk/def/<name>/v<N> of a definition test, agrees with d (ADR-060
 // decision 7): the file is in its fixed layout; the major of its version is N and the
 // major of every key; its keys are d's keys, and their bound classes are what
-// kernel.KeyClasses reports; its hooks are d's hooks, each owned by a key of d, sealed
-// exactly when kernel.HookSealed says so; and a listener on each stage the file names is
-// called in the file's order when the kernel dispatches the hook.
+// kernel.KeyClasses reports, signed exactly for the keys d.Signed names; its hooks are
+// d's hooks, each owned by a key of d, sealed exactly when kernel.HookSealed says so,
+// signed exactly when d.Signed names them, and with the stages of the Go declaration
+// in its order; and a listener on each stage is called in that order when the kernel
+// dispatches the hook.
 func Agree(t *testing.T, d Decl) {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -111,6 +132,7 @@ func check(tb testing.TB, dir string, d Decl) []string {
 		names = append(names, k.Name())
 		c, ok := f.Class[k.Name()]
 		pb, cb, valid := kernel.KeyClasses(k)
+		signed := slices.Contains(d.Signed, k.Name())
 		switch {
 		case !ok:
 			bad("key %s: not in definition.yaml", k.Name())
@@ -118,6 +140,10 @@ func check(tb testing.TB, dir string, d Decl) []string {
 			bad("key %s: major %d, definition.yaml has version %s", k.Name(), k.Major(), f.Version)
 		case pb != (c.Provider == "bound") || cb != (c.Consumer != "open"):
 			bad("key %s: kernel.KeyClasses says provider-bound %v, consumer-bound %v; definition.yaml says %+v", k.Name(), pb, cb, c)
+		case signed && c.Consumer != "signed":
+			bad("key %s: declared signed in Go; definition.yaml says consumer %s", k.Name(), c.Consumer)
+		case !signed && c.Consumer == "signed":
+			bad("key %s: definition.yaml says consumer signed; Go declares no signed key", k.Name())
 		}
 	}
 	for name := range f.Class {
@@ -130,6 +156,7 @@ func check(tb testing.TB, dir string, d Decl) []string {
 		hooks = append(hooks, h.hook.Name())
 		decl, ok := f.Hooks[h.hook.Name()]
 		sealed, _ := kernel.HookSealed(h.hook)
+		signed := slices.Contains(d.Signed, h.hook.Name())
 		switch {
 		case !ok:
 			bad("hook %s: not in definition.yaml", h.hook.Name())
@@ -137,6 +164,17 @@ func check(tb testing.TB, dir string, d Decl) []string {
 			bad("hook %s: not owned by a key of the definition", h.hook.Name())
 		case sealed != (decl.Access == "sealed"):
 			bad("hook %s: kernel.HookSealed says %v; definition.yaml says access %s", h.hook.Name(), sealed, decl.Access)
+		case signed && decl.Access != "signed":
+			bad("hook %s: declared signed in Go; definition.yaml says access %s", h.hook.Name(), decl.Access)
+		case !signed && decl.Access == "signed":
+			bad("hook %s: definition.yaml says access signed; Go declares it not signed", h.hook.Name())
+		case !slices.Equal(decl.Stages, h.stages):
+			bad("hook %s: definition.yaml lists the stages %v, the Go declaration %v", h.hook.Name(), decl.Stages, h.stages)
+		}
+	}
+	for _, name := range d.Signed {
+		if !slices.Contains(names, name) && !slices.Contains(hooks, name) {
+			bad("signed: %s is neither a key nor a hook of the definition", name)
 		}
 	}
 	for name := range f.Hooks {
@@ -182,7 +220,7 @@ func stageOrder(tb testing.TB, f File, d Decl) []string {
 	}
 	var mount []kernel.Plugin
 	for _, h := range d.Hooks {
-		stages := f.Hooks[h.hook.Name()].Stages
+		stages := h.stages
 		for i, stage := range stages {
 			p := Plugin(fmt.Sprintf("deftest/listen-%03d-%s", len(stages)-i, h.hook.Name()), nil, nil,
 				[]kernel.HookUse{h.use(stage)}, func(c *kernel.Context) error {
@@ -213,7 +251,7 @@ func stageOrder(tb testing.TB, f File, d Decl) []string {
 		if err := bound[i](tb.Context()); err != nil {
 			out = append(out, fmt.Sprintf("hook %s: dispatch: %v", h.hook.Name(), err))
 		}
-		if want := f.Hooks[h.hook.Name()].Stages; !slices.Equal(heard[h.hook.Name()], want) {
+		if want := h.stages; !slices.Equal(heard[h.hook.Name()], want) {
 			out = append(out, fmt.Sprintf("hook %s: the kernel called the stages in the order %v, definition.yaml says %v", h.hook.Name(), heard[h.hook.Name()], want))
 		}
 	}

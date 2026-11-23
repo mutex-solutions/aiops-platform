@@ -4,7 +4,8 @@
 // definition sdk/def/<name>/v<N> it checks:
 //
 //   - the files: definition.yaml, the definition package, fake/, conformance/ with Run,
-//     and a test of the package that calls deftest.Agree (ADR-060 decision 7);
+//     and a test of the package that calls deftest.Agree (ADR-060 decision 7), which
+//     names every package-level key and hook of the package in its Decl;
 //   - definition.yaml in its fixed layout, read with the YAML library, with a suite
 //     revision of 1 or more (decisions 7, 10 and 55);
 //   - at least one provider and one consumer among the plugins of the repository's
@@ -114,6 +115,7 @@ func lint(root string, plugins []plugin) ([]string, int, error) {
 			return nil, 0, err
 		}
 		out = append(out, prefix(d, shapes(pkg))...)
+		out = append(out, prefix(d, declared(d, pkg))...)
 	}
 	for _, path := range sortedKeys(pkgs) {
 		if !judged(pkgs[path]) {
