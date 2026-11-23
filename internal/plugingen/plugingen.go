@@ -13,6 +13,10 @@
 // value of a plugin that holds memory of its own, as func New() kernel.Plugin.
 // requires.definitions comes from the definition.yaml of each definition in the
 // plugin's package graph (ADR-060 decision 9).
+//
+// It reads plugin.yaml with boot's reader in the strict mode, the reading of plugin
+// check, plugin check --write and the parity check: one reader, not a second copy
+// (ADR-048 decision 15).
 package plugingen
 
 import (
@@ -31,6 +35,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
@@ -73,19 +78,18 @@ func Generate(dir string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("%s: write the hand-written half of plugin.yaml first: %w", t.ID, err)
 	}
-	var hand struct {
-		ID    string   `yaml:"id"`
-		Scope []string `yaml:"scope"`
-	}
-	if err := yaml.Unmarshal(src, &hand); err != nil {
-		return Result{}, fmt.Errorf("%s/plugin.yaml: %w", dir, err)
-	}
-	if hand.ID != t.ID {
-		return Result{}, fmt.Errorf("%s/plugin.yaml: id %q is not the ID %q of the plugin's value", dir, hand.ID, t.ID)
-	}
 	r := Result{Generated: g, Files: map[string][]byte{}}
 	if r.Manifest, err = Rewrite(src, g); err != nil {
 		return Result{}, err
+	}
+	// The strict reading of plugin check --write (ADR-048 decision 15): the
+	// hand-written half as written, the generated half as rewritten.
+	m, err := boot.ReadManifest(filepath.Join(dir, "plugin.yaml"), r.Manifest, boot.ManifestStrict)
+	if err != nil {
+		return Result{}, err
+	}
+	if m.ID != t.ID {
+		return Result{}, fmt.Errorf("%s/plugin.yaml: id %q is not the ID %q of the plugin's value", dir, m.ID, t.ID)
 	}
 	config, err := cycleConfig(dir)
 	if err != nil {
@@ -104,7 +108,7 @@ func Generate(dir string) (Result, error) {
 	if r.Files[CycleFile], err = cycleTest(t, fakes, registers, config); err != nil {
 		return Result{}, err
 	}
-	if slices.Contains(hand.Scope, "process") {
+	if slices.Contains(m.Scope, "process") {
 		if r.Files[TenantsFile], err = tenantsTest(t); err != nil {
 			return Result{}, err
 		}

@@ -12,6 +12,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
@@ -105,75 +106,37 @@ func generatedNodes(g plugin.Generated) ([]*yaml.Node, error) {
 	return out, nil
 }
 
-// Parity compares the generated half of src, as read, with g, and names each field
-// that differs or is missing. A comment, a layout and a hand-written field never
-// fail it (ADR-048 decision 1; 08-profiles-roadmap-adrs.md:1257).
+// Parity reads src with boot's strict mode, the reading of plugin check (ADR-048
+// decision 15), and compares its generated half, as read, with g, naming each field
+// that differs. A comment, a layout and a hand-written field never fail it (ADR-048
+// decision 1; 08-profiles-roadmap-adrs.md:1257).
 func Parity(src []byte, g plugin.Generated) error {
-	var have map[string]any
-	if err := yaml.Unmarshal(src, &have); err != nil {
-		return fmt.Errorf("plugin.yaml: %w", err)
-	}
-	want, err := asRead(g)
+	m, err := boot.ReadManifest("plugin.yaml", src, boot.ManifestStrict)
 	if err != nil {
 		return err
 	}
+	have, want := jsonFields(m), jsonFields(g)
 	var errs []error
 	for _, f := range generatedFields {
-		v, ok := have[f]
-		if !ok {
-			errs = append(errs, fmt.Errorf("%s: missing; run plugingen", f))
-			continue
-		}
-		a, errA := canonical(v)
-		b, errB := canonical(want[f])
-		if err := errors.Join(errA, errB); err != nil {
-			return err
-		}
-		if a != b {
-			errs = append(errs, fmt.Errorf("%s: the file holds %s, plugingen writes %s", f, a, b))
+		name := strings.ToUpper(f[:1]) + f[1:] // the Go name of the field in both types
+		if have[name] != want[name] {
+			errs = append(errs, fmt.Errorf("%s: the file holds %s, plugingen writes %s", f, have[name], want[name]))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// asRead returns g as a reader of the file sees it.
-func asRead(g plugin.Generated) (map[string]any, error) {
-	b, err := yaml.Marshal(g)
-	if err != nil {
-		return nil, err
+// jsonFields returns each field of v, a boot.Manifest or a plugin.Generated, as JSON
+// by its Go name, so that an int64 and a float64 of one value and the key order of a
+// map compare equal. The two types name and order the fields alike, which a test of
+// this package holds.
+func jsonFields(v any) map[string]string {
+	b, _ := json.Marshal(v) // never fails: the values are JSON data
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(b, &fields)
+	out := make(map[string]string, len(fields))
+	for k, raw := range fields {
+		out[k] = string(raw)
 	}
-	var m map[string]any
-	return m, yaml.Unmarshal(b, &m)
-}
-
-// canonical is the JSON of v, so that an integer and a float of one value, an empty
-// and a nil list, and key order compare equal.
-func canonical(v any) (string, error) {
-	b, err := json.Marshal(normalise(v))
-	return string(b), err
-}
-
-func normalise(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		if len(x) == 0 {
-			return map[string]any{}
-		}
-		out := map[string]any{}
-		for k, e := range x {
-			out[k] = normalise(e)
-		}
-		return out
-	case []any:
-		out := []any{}
-		for _, e := range x {
-			out = append(out, normalise(e))
-		}
-		return out
-	case int:
-		return float64(x)
-	case nil:
-		return nil
-	}
-	return v
+	return out
 }
