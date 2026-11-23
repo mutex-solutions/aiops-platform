@@ -7,7 +7,7 @@ manifestVersion: "1.0"
 id: aiops-test/toy-consumer
 version: 0.1.0
 title: Toy consumer
-description: Needs toy.store and the spine, logs its volatile note and can put the spine under load.
+description: Needs toy.store and the spine, logs its volatile note and tag and can put the spine under load.
 license: Apache-2.0
 publisher: {id: aiops-test}
 stability: experimental
@@ -35,6 +35,9 @@ configSchema:
       pattern: ^[-+]?(0|(([0-9]+(\.[0-9]*)?|\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$
       type: string
     note:
+      type: string
+      x-aiops-volatile: true
+    tag:
       type: string
       x-aiops-volatile: true
   type: object

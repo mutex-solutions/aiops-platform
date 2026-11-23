@@ -340,7 +340,7 @@ plugins:
       id: aiops-test/toy-consumer
       version: 0.1.0
       title: Toy consumer
-      description: Needs toy.store and the spine, logs its volatile note and can put the spine under load.
+      description: Needs toy.store and the spine, logs its volatile note and tag and can put the spine under load.
       license: Apache-2.0
       publisher: {id: aiops-test}
       stability: experimental
@@ -370,6 +370,9 @@ plugins:
           note:
             type: string
             x-aiops-volatile: true
+          tag:
+            type: string
+            x-aiops-volatile: true
         type: object
       durable: []
       requires:
@@ -377,7 +380,7 @@ plugins:
         definitions:
           spine: ["0.1"]
           toy: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"spine":{"version":"0.1"},"toy":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9d62f30ed291b62a51356dbc17d9eeb0165b9febe40d44bc8d1e9d649beab810"},"name":"aiops-test/toy-consumer@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"spine":{"version":"0.1"},"toy":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"552e5570c7ae3440f3eadaceb64969f8e2f3b65d359448d22b399426e46e4b30"},"name":"aiops-test/toy-consumer@0.1.0"}]}'
   aiops-test/toy-provider:
     package: github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-provider
     manifest: |

@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,11 +70,17 @@ func patch(name string) string {
 // extra environment variables.
 func start(t *testing.T, bin string, env []string, patches ...string) *process {
 	t.Helper()
+	return startWith(t, bin, env, nil, patches...)
+}
+
+// startWith is start with extra flags.
+func startWith(t *testing.T, bin string, env, flags []string, patches ...string) *process {
+	t.Helper()
 	home := t.TempDir()
 	if err := trusted.Write(home, testdist.Signed); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--profile", "smoke", "--home", home}
+	args := append([]string{"--profile", "smoke", "--home", home}, flags...)
 	for _, p := range patches {
 		args = append(args, "--patch", p)
 	}
@@ -160,6 +167,56 @@ func rowState(s teststate.State, id string) string {
 		}
 	}
 	return ""
+}
+
+// logLines returns the lines of stderr that hold every one of parts.
+func (p *process) logLines(parts ...string) []string {
+	var out []string
+	for _, l := range strings.Split(p.stderr.String(), "\n") {
+		if !slices.ContainsFunc(parts, func(s string) bool { return !strings.Contains(l, s) }) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// waitLog polls stderr until a line holds every one of parts, within a bound.
+func (p *process) waitLog(parts ...string) {
+	p.t.Helper()
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for len(p.logLines(parts...)) == 0 {
+		select {
+		case <-tick.C:
+		case code := <-p.exited:
+			p.t.Fatalf("exited with %d; stderr:\n%s", code, p.stderr.String())
+		case <-deadline.C:
+			p.t.Fatalf("no log line holds %q; stderr:\n%s", parts, p.stderr.String())
+		}
+	}
+}
+
+// generation submits the generation id after the live layer holds body, and returns
+// the reload operation once it has finished.
+func (p *process) generation(live string, id uint64, body string) *teststate.Op {
+	p.t.Helper()
+	if err := os.WriteFile(live, []byte(body), 0o644); err != nil {
+		p.t.Fatal(err)
+	}
+	p.submit(string(rune('0' + id)))
+	return p.waitState(func(s teststate.State) bool {
+		return s.Reload != nil && s.Reload.ID == id && s.Reload.Status != "queued" && s.Reload.Status != "running"
+	}).Reload
+}
+
+func (p *process) stop() {
+	p.t.Helper()
+	_ = p.cmd.Process.Signal(syscall.SIGTERM)
+	if code := p.wait(); code != boot.ExitOK {
+		p.t.Fatalf("exit %d; stderr:\n%s", code, p.stderr.String())
+	}
 }
 
 func (p *process) submit(marker string) {
@@ -323,6 +380,83 @@ func TestLoaderSmoke(t *testing.T) {
 		if code := p.wait(); code != boot.ExitOK {
 			t.Fatalf("exit %d; stderr:\n%s", code, p.stderr.String())
 		}
+	})
+
+	// ADR-034 G13 end to end. The toy consumer logs its note and tag at each call of its
+	// load goroutine, so a run sees what the running activation reads after Apply.
+	const call, applied = `msg="toy-consumer call"`, `msg="toy-consumer applied"`
+	write := func(t *testing.T, file, body string) {
+		t.Helper()
+		if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("a volatile note is committed in place", func(t *testing.T) {
+		live := filepath.Join(t.TempDir(), "live.yml")
+		const row = "- {id: consumer, config: {callEvery: 20ms, note: %s}}\n"
+		write(t, live, fmt.Sprintf(row, "first"))
+		p := start(t, bin, nil, live)
+		p.waitState(func(s teststate.State) bool { return s.Ready && rowState(s, "consumer") == "ACTIVE" })
+		p.waitLog(call, "note=first")
+		if op := p.generation(live, 1, fmt.Sprintf(row, "second")); op.Status != "passed" || !slices.Contains(op.Applied["committed"], "consumer") {
+			t.Fatalf("operation %+v", op)
+		}
+		p.waitLog(call, "note=second")
+		if a, b := p.logLines(applied, "note=first"), p.logLines(applied, "note=second"); len(a) != 1 || len(b) != 0 {
+			t.Fatalf("the row applied again: %q, %q", a, b)
+		}
+		p.stop()
+	})
+
+	// A literal changed beside a reference that did not change commits in place, and
+	// the reference is resolved again for the hand-off (question Q5 (a)).
+	t.Run("a tag committed beside a reference reads the reference again", func(t *testing.T) {
+		dir := t.TempDir()
+		refs, live := filepath.Join(dir, "refs"), filepath.Join(dir, "live.yml")
+		if err := os.Mkdir(refs, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		const row = "- {id: consumer, config: {callEvery: 20ms, note: \"${file:note}\", tag: %s}}\n"
+		write(t, filepath.Join(refs, "note"), "file-one")
+		write(t, live, fmt.Sprintf(row, "alpha"))
+		p := startWith(t, bin, nil, []string{"--refs-dir", refs}, live)
+		p.waitState(func(s teststate.State) bool { return s.Ready && rowState(s, "consumer") == "ACTIVE" })
+		p.waitLog(call, "note=file-one", "tag=alpha")
+		write(t, filepath.Join(refs, "note"), "file-two")
+		if op := p.generation(live, 1, fmt.Sprintf(row, "beta")); op.Status != "passed" || !slices.Contains(op.Applied["committed"], "consumer") {
+			t.Fatalf("operation %+v", op)
+		}
+		p.waitLog(call, "note=file-two", "tag=beta")
+		if a := p.logLines(applied); len(a) != 1 {
+			t.Fatalf("the row applied again: %q", a)
+		}
+		p.stop()
+	})
+
+	// The loader checks a child's new config on its fiber before the batch disposes the
+	// group, with a CommitOp: the child's running activation is handed nothing, and the
+	// activation that replaces it, mounted only once the old one is disposed, applies it.
+	// How long the child runs after the batch is the kernel's to order; the kernel test
+	// TestCommitOpHandsItsConfigOnceTheBatchIsAdmitted holds that window open.
+	t.Run("a child of a replaced group does not take its new note in place", func(t *testing.T) {
+		dir := t.TempDir()
+		group, live := filepath.Join(dir, "group.yml"), filepath.Join(dir, "live.yml")
+		write(t, group, "- insert:\n    - {id: grp, plugin: core:group, roles: [api], config: ["+
+			"{id: a, plugin: aiops-test/toy-consumer, roles: [api], config: {callEvery: 20ms, note: old}}]}\n")
+		write(t, live, "- {id: extra, enabled: false}\n")
+		p := start(t, bin, nil, group, live)
+		p.waitTree(func(s teststate.State) bool { return s.Ready && rowState(s, "grp:a") == "ACTIVE" })
+		p.waitLog(call, "note=old")
+		op := p.generation(live, 1, "- {id: grp, inject: [toy.store]}\n- {id: \"grp:a\", config: {callEvery: 20ms, note: new}}\n")
+		if op.Status != "passed" || !slices.Contains(op.Applied["restarted"], "grp") {
+			t.Fatalf("operation %+v", op)
+		}
+		p.waitLog(call, "note=new")
+		if first := p.logLines("note=new")[0]; !strings.Contains(first, applied) {
+			t.Fatalf("the running activation of grp:a read the new note before its replacement applied: %s", first)
+		}
+		p.stop()
 	})
 
 	for _, tc := range []struct {

@@ -25,12 +25,17 @@
         "note": {
           "type": "string",
           "x-aiops-volatile": true
+        },
+        "tag": {
+          "type": "string",
+          "x-aiops-volatile": true
         }
       },
       "type": "object",
       "x-aiops-plugin": "aiops-test/toy-consumer",
       "x-aiops-volatile": [
-        "config.note"
+        "config.note",
+        "config.tag"
       ]
     },
     "loader": {

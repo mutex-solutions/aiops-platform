@@ -28,10 +28,10 @@ import (
 // holds those files.
 //
 // Not covered by golden files, and said so: the rows of the roles edge and worker,
-// which the profile does not have. The volatile path config.note of
-// aiops-test/toy-consumer is the mark of its plugin.Volatile field in the configSchema
-// of its manifest (ADR-048 decision 9), and the stage of each hook listener is its
-// ordinal in the stages that serves holds (ADR-060 decision 7).
+// which the profile does not have. The volatile paths config.note and config.tag of
+// aiops-test/toy-consumer are the marks of its plugin.Volatile fields in the
+// configSchema of its manifest (ADR-048 decision 9), and the stage of each hook
+// listener is its ordinal in the stages that serves holds (ADR-060 decision 7).
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
