@@ -127,7 +127,11 @@ gaps:
    recording fake that exposes `Inventory()` (`07:494`); and a suite with an obligations
    half and a guard half, both on `conformance.Run(t, Mount)` (`07:1463`). Each
    obligation has an id, so `plugin check` and a fresh template print one line per
-   failed obligation with its id (`07:1561`, `:1563`). Both definitions are `remote:
+   failed obligation with its id (`07:1561`, `:1563`). `Inventory()` lists the
+   registered names, and the fiber that owns each is the one whose ledger holds its
+   label (`kernel.Fiber.Effects`): a `*kernel.Context` gives a registry no fiber
+   identity to record, and decision 3 plans no kernel change, so this is the reading
+   of "registrations by owning fiber" (`07:519`) at S2a. Both definitions are `remote:
    "no"` at S2a; S2b marks them `contrib` with the adapter generator, as a minor of each
    (plugin record §5; `08:643`, `:695`). The dispatcher `example-dispatch` provides both
    registries and the toy caller of question Q1 consumes both; these and the other toy

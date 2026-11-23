@@ -41,9 +41,11 @@ type Registry interface {
 	// Stamp calls the stamper registered under name inside a lease on its fiber and
 	// returns its stamp and its error unchanged, or ErrUnknown.
 	Stamp(ctx context.Context, name, body string) (string, error)
-	// Inventory lists the registered names, sorted. The fiber that owns each holds
-	// Label(name) in its ledger (kernel.Fiber.Effects; 07-c4-plugin-sdk.md:519). It is
-	// empty once the registry is released.
+	// Inventory lists the registered names, sorted. The fiber that owns each is the
+	// one that holds Label(name) in its ledger (kernel.Fiber.Effects): a
+	// *kernel.Context gives the registry no fiber identity to record, so this is the
+	// reading of "registrations by owning fiber" (07-c4-plugin-sdk.md:519; ADR-060
+	// decision 5). It is empty once the registry is released.
 	Inventory() []string
 }
 
