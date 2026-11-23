@@ -44,9 +44,10 @@ gaps:
   decision 29).
 - **Two homes for `plugins.lock`.** `07:1841` calls it a "Site file". `install` takes
   `--profile`, and a failure restores "a snapshot of the profile definition, `plugins.lock`
-  and the profile patch" (`08:374`, `:395`), the set dsh keeps in one profile directory and
-  restores from one snapshot (dsh-architecture §4.2). ADR-060 decision 26 leaves the choice
-  here.
+  and the profile patch" (`08:374`, `:395`). dsh keeps its manifest, its lockfile and the
+  profile patch in one profile directory (dsh-architecture §3.1, §3.2, §4.2) and restores
+  the manifest and the lockfile from one snapshot, which leaves the patch out (§4.2).
+  ADR-060 decision 26 leaves the choice here.
 - **One name, two owners.** "A row id is `<pack name>:<row>` and two packs cannot collide"
   (`08:391`; `07:1817`; community:298), and the group is "named by the artifact"
   (`00:478`). A plugin id is `<owner>/<name>` and a row id is kebab-case (`00:657`), so
@@ -184,9 +185,10 @@ gaps:
    - Install refuses, before it writes anything, a content layer that is not in that form
      (writing back the entries it read must give the same bytes), that holds a link, a
      device or a directory entry, or that holds a path outside the rules above. It unpacks
-     into a staging directory beside `$AIOPS_HOME/content/<plugin id>/` and renames it into
-     place, so a reader sees the old tree or the whole new one, as `internal/runfile` does
-     for one file.
+     into a staging directory beside `$AIOPS_HOME/content/<plugin id>/` and renames the
+     staging directory to that path, which no tree occupies then: decision 7 never
+     replaces a tree that a profile names, and install removes a leftover one first
+     (decision 10). A reader sees no tree or the whole one.
    - The fixtures layer has the same form; nothing unpacks it into the home. The name lint
      of `plugin check` step 1 already covers content paths (`07:1567`).
 
@@ -268,18 +270,27 @@ gaps:
      profile layer (`07:1737`; `08:375`).
 
 6. **A second artifact of the same name under another owner** is question Q2. Whatever
-   the answer, install decides it before it writes anything (`08:374`), and boot refuses a
-   composition in which a group and another row share an id, by the rule that an existing
-   id fails in every layer (`08:143`).
+   the answer, install decides it before it writes anything (`08:374`). At boot, a group
+   whose id equals the id of a row composed before it, such as a first-party row that a
+   later release adds under that id, is a denial of check 8 on the bundle of that
+   installed artifact, which may insert new ids only (`08:143`, `:504`): boot inserts none
+   of that artifact's rows, names the artifact, both ids and check 8 at boot and in the
+   dump (`08:508`), and composes the rest of the profile. A composition error, the S1
+   handling of an existing id (`boot/compose.go`), would instead stop the boot of every
+   profile that holds the artifact after such an upgrade.
 
-7. **One digest per plugin id per site.** The content directory, and from S2b the one
-   shared instance of a remote plugin, exist once per site and plugin id (`07:1843`;
-   `08:386`; `02:312`). Install of an id already locked at the same digest, into another
-   profile, appends that profile's bundle list and reuses the kept files. Install of an id
-   locked at another digest refuses, names the locked digest and the profiles that hold
-   it, and writes nothing, as dsh refuses to install a bundle that is already installed
-   (dsh-architecture §4.4). A new version arrives by `update` at S6b (`08:377`),
-   or by `remove` and `install`.
+7. **One digest per plugin id per site.** The content directory `content/<plugin id>/` is
+   one path per site (`07:1843`; `02:313`), and from S2b a remote plugin has one shared
+   instance per site (`08:386`; `02:312`), so a site holds one digest of a plugin id. This
+   departs from dsh, which installs with pnpm inside each profile directory, so that each
+   profile can hold its own version of a package (dsh-architecture §4.2). Install of an id
+   whose kept files (decision 5) are at the same digest, into another profile, appends
+   that profile's bundle list and reuses them. Install of an id kept at another digest
+   refuses, names the kept digest and the profiles that name the id, and writes nothing. A
+   new version arrives by `update` at S6b (`08:377`), or by `remove` and `install`. A
+   `profile rollback` at S6b that would return a lock to another digest of an id
+   (`08:378`) is bound by this rule or needs content kept per digest; S6b chooses, and its
+   step names the choice.
 
 8. **`plugins.lock`.** Where it lives is question Q1. It is YAML, read by `boot` and
    written by the operations plugin (ADR-060 decisions 6 and 41), replaced by a rename,
@@ -304,13 +315,19 @@ gaps:
 9. **What install kept, at boot,** is question Q3.
 
 10. **Remove.** `remove <id> --profile <p>` (ADR-060 decision 47) takes the id out of the
-    profile's bundle list, drops the profile layer's departures for the rows under its
-    group, so that a later install inserts them disabled again (`00:478`), and drops its
-    lock entry as question Q1 places the lock. `bundles/<plugin id>/` and
-    `content/<plugin id>/` go when no profile names the id. Install writes those
-    directories before it changes the lock and the bundle list, and remove deletes them
-    after, so a failure that restores the snapshot of `08:374` never leaves a lock entry
-    without its files.
+    profile's bundle list and drops its lock entry as question Q1 places the lock. In the
+    profile layer it drops the `enabled` field of every item whose id is under the
+    artifact's group, and an item left with its id alone, so that a later install leaves
+    those rows disabled (`00:478`). It keeps every other field there, such as a config or
+    a credential reference that the operator set, and prints each item it kept: a later
+    install of the same id finds them again, and until then boot warns on each as an
+    unknown id (`08:160`). `bundles/<plugin id>/` and `content/<plugin id>/` go when no
+    profile names the id. Install writes those directories before it changes the lock and
+    the bundle list, and remove deletes them after, so a failure that restores the
+    snapshot of `08:374` never leaves a lock entry without its files. A failure between
+    those steps can leave either directory with no profile that names the id; install
+    removes such a leftover, and says so, after the checks of decision 7 and before it
+    writes.
 
 ### The gate rule
 
@@ -417,8 +434,8 @@ gaps:
 
 - The S2a code gains, in the operations plugin, the writer and reader of decisions 1 to 3
   on `oras-go`, for a registry and for the local layout of decision 1, and the checks of decisions 3, 6 and 7 at install. `boot` gains the reader
-  of `bundles/<plugin id>/`, the group row of decision 5, the clause of decision 11 and
-  the lock entries of decision 8; the bundle names of `profile.yaml` admit a plugin id;
+  of `bundles/<plugin id>/`, the group row of decision 5, the boot rule of decision 6,
+  the clause of decision 11 and the lock entries of decision 8; the bundle names of `profile.yaml` admit a plugin id;
   `internal/serve` creates `run/` with mode 0700 and finds it present under a read-only
   home.
 - A site cannot hold two digests of one plugin id, and, with question Q2 (a), two
@@ -450,8 +467,8 @@ in the same change:
 - `07:1841`, as question Q1 is answered.
 - `08:121` (layer 1) and `08:430` (profile files): the bundle of an installed artifact is
   `$AIOPS_HOME/bundles/<plugin id>/bundle.yaml`.
-- The one gate text of ADR-060 decision 16: the clause of decision 11, and the clauses
-  that the answers to questions Q3 and Q4 add.
+- The one gate text of ADR-060 decision 16: the clause of decision 11, the boot rule of
+  decision 6, and the clauses that the answers to questions Q3 and Q4 add.
 - The lines that an option of question Q2 other than (a) names.
 - The lines that the chosen option of question Q6 names.
 
@@ -463,19 +480,18 @@ Each question gives its options, the recommended one, why, and when the answer i
 file". `install --profile` and its restore rule treat it as a file of the profile
 (`08:374`, `:395`), as dsh does: its lock sits in the profile directory and is restored
 with the profile's manifest from one snapshot (dsh-architecture §4.2), the install that
-`08:76` (row 34) adapts. Either way one site holds one digest per plugin id (decision 7).
+`08:76` (row 34) adapts. Either way one site holds one digest per plugin id, and an S6b
+rollback that changes a lock digest is bound by that rule (decision 7).
 - (a) One per site, `$AIOPS_HOME/plugins.lock`, as `07:1841` has it. A profile's
   generation digest takes the entries whose id its bundle list names, and an entry goes
   when no profile names the id.
 - (b) One per profile, `$AIOPS_HOME/profiles/<p>/plugins.lock`, beside the two files it is
-  restored with. A profile's generation digest takes its own file whole, and `profile
-  rollback --scope process` (S6b, `08:378`) returns one profile's lock and touches no
-  other. Install reads the other profiles' locks for the rule of decision 7. `07:1841`
-  becomes "Profile file".
-- Recommended: (b). It is the dsh shape, the snapshot of `08:374` becomes one profile's
-  three files, and a lock has the scope of the generation digest it feeds; the cost is one
-  edited line of `07` and a read of the other locks at install and remove. Needed before
-  the first commit that writes `plugins.lock` merges.
+  restored with. A profile's generation digest takes its own file whole. Install reads
+  the other profiles' locks for the rule of decision 7. `07:1841` becomes "Profile file".
+- Recommended: (b). It is the dsh shape for the lockfile, the snapshot of `08:374` becomes
+  one profile's three files, and a lock has the scope of the generation digest it feeds;
+  the cost is one edited line of `07` and a read of the other locks at install and
+  remove. Needed before the first commit that writes `plugins.lock` merges.
 
 **Q2. What does install do when an artifact of the same name under another owner enters
 a profile?** The group of `acme/connector-x` and that of `beta/connector-x` are both
