@@ -1,6 +1,6 @@
 # The exported API of sdk/kernel and sdk/plugin (ADR-060 decision 8), written by
 # go run ./tools/pluginapi -write .; raise plugin.APIVersion before recording a change.
-pluginApi 0.1
+pluginApi 0.2
 pkg kernel, const Active State = "ACTIVE"
 pkg kernel, const DefaultStage untyped string = "default"
 pkg kernel, const Disposed State = "DISPOSED"
@@ -320,21 +320,78 @@ pkg kernel, var LoggerKey Key[Logger]
 pkg kernel, var ReflectKey Key[*reflectService]
 pkg kernel, var RegistryKey Key[*registry]
 pkg kernel, var Unscoped Audience
-pkg plugin, const APIVersion untyped string = "0.1"
+pkg plugin, const APIVersion untyped string = "0.2"
 pkg plugin, func Define[C any](Spec[C]) kernel.Plugin
 pkg plugin, func Describe[C any]() (ConfigInfo, error)
+pkg plugin, func Generate(kernel.Plugin) (Generated, error)
 pkg plugin, func NewValidator([]byte) (Validator, error)
 pkg plugin, method (Volatile[T]) Get() T
+pkg plugin, type Capabilities struct
+pkg plugin, type Capabilities struct, Network []string
+pkg plugin, type Capabilities struct, Secrets []string
 pkg plugin, type ConfigInfo struct
 pkg plugin, type ConfigInfo struct, Schema []byte
 pkg plugin, type ConfigInfo struct, Volatile [][]string
+pkg plugin, type Generated struct
+pkg plugin, type Generated struct, ConfigSchema map[string]any
+pkg plugin, type Generated struct, Durable []any
+pkg plugin, type Generated struct, Hooks []HookRef
+pkg plugin, type Generated struct, Provides []KeyRef
+pkg plugin, type Generated struct, Registers []KeyRef
+pkg plugin, type Generated struct, Requires Requires
+pkg plugin, type Generated struct, Uses []Use
+pkg plugin, type HookRef struct
+pkg plugin, type HookRef struct, Hook string
+pkg plugin, type HookRef struct, Stage string
+pkg plugin, type Integration struct
+pkg plugin, type Integration struct, Credential string
+pkg plugin, type Integration struct, License string
+pkg plugin, type Integration struct, System string
+pkg plugin, type Integration struct, Tested []string
+pkg plugin, type Integration struct, Versions string
+pkg plugin, type KeyRef struct
+pkg plugin, type KeyRef struct, Key string
+pkg plugin, type KeyRef struct, Major int
+pkg plugin, type Manifest struct
+pkg plugin, type Manifest struct, Capabilities *Capabilities
+pkg plugin, type Manifest struct, Description string
+pkg plugin, type Manifest struct, Generated
+pkg plugin, type Manifest struct, ID string
+pkg plugin, type Manifest struct, Instantiable bool
+pkg plugin, type Manifest struct, Integrates []Integration
+pkg plugin, type Manifest struct, License string
+pkg plugin, type Manifest struct, ManifestVersion string
+pkg plugin, type Manifest struct, Publisher Publisher
+pkg plugin, type Manifest struct, Runtimes []string
+pkg plugin, type Manifest struct, Scope []string
+pkg plugin, type Manifest struct, Source string
+pkg plugin, type Manifest struct, Stability string
+pkg plugin, type Manifest struct, Support *Support
+pkg plugin, type Manifest struct, Title string
+pkg plugin, type Manifest struct, Version string
+pkg plugin, type Publisher struct
+pkg plugin, type Publisher struct, ID string
+pkg plugin, type Publisher struct, Name string
+pkg plugin, type Publisher struct, URL string
+pkg plugin, type Requires struct
+pkg plugin, type Requires struct, Definitions map[string][]string
+pkg plugin, type Requires struct, PluginAPI string
+pkg plugin, type Requires struct, RemoteProtocol []int
 pkg plugin, type Spec[C any] struct
 pkg plugin, type Spec[C any] struct, Apply func(*kernel.Context, *C) error
 pkg plugin, type Spec[C any] struct, Hooks []kernel.HookUse
 pkg plugin, type Spec[C any] struct, ID string
 pkg plugin, type Spec[C any] struct, Inject []kernel.Dep
 pkg plugin, type Spec[C any] struct, Provides []kernel.AnyKey
+pkg plugin, type Spec[C any] struct, Registers []kernel.AnyKey
 pkg plugin, type Spec[C any] struct, Validate func(*C) error
+pkg plugin, type Support struct
+pkg plugin, type Support struct, Email string
+pkg plugin, type Support struct, URL string
+pkg plugin, type Use struct
+pkg plugin, type Use struct, As string
+pkg plugin, type Use struct, Key string
+pkg plugin, type Use struct, Major int
 pkg plugin, type Validator interface
 pkg plugin, type Validator interface, Validate(any) error
 pkg plugin, type Volatile[T any] struct

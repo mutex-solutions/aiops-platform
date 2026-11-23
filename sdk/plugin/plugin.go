@@ -5,10 +5,14 @@
 // (07-c4-plugin-sdk.md:212-226; ADR-060 decisions 4 and 8):
 //
 //	var Plugin = plugin.Define(plugin.Spec[Config]{
-//		ID:     "acme/notifier-webhook",
-//		Inject: []kernel.Dep{kernel.Need(notifiers.Key)},
-//		Apply:  func(c *kernel.Context, cfg *Config) error { ... },
+//		ID:        "acme/notifier-webhook",
+//		Inject:    []kernel.Dep{kernel.Need(notifiers.Key)},
+//		Registers: []kernel.AnyKey{notifiers.Key},
+//		Apply:     func(c *kernel.Context, cfg *Config) error { ... },
 //	})
+//
+// Generate reads the generated half of the plugin's manifest from that value
+// without running Apply, and Manifest is manifest schema 1.0 as Go data (ADR-048).
 //
 // The package imports the standard library and sdk/kernel only, so the require
 // list of the SDK module stays the one 00-decisions.md:262 allows.
@@ -77,6 +81,7 @@ package plugin
 import (
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -86,15 +91,21 @@ import (
 // While it is 0.y a minor may break, and gate check 1 needs the exact minor.
 // tools/pluginapi fails when the exported API of either package changed and this
 // constant did not.
-const APIVersion = "0.1"
+const APIVersion = "0.2"
 
 // Spec is what an author writes (07-c4-plugin-sdk.md:215-223). Durable joins at
 // S3 with the durable definition (ADR-060 decision 29).
 type Spec[C any] struct {
-	ID       string           // "<owner>/<name>", equal to the manifest id.
-	Inject   []kernel.Dep     // Data: profile render and the gate read it without running code.
-	Provides []kernel.AnyKey  // Provide of an undeclared key fails.
-	Hooks    []kernel.HookUse // Every hook Apply may listen on, with its stage; an undeclared On fails.
+	ID       string          // "<owner>/<name>", equal to the manifest id.
+	Inject   []kernel.Dep    // Data: profile render and the gate read it without running code.
+	Provides []kernel.AnyKey // Provide of an undeclared key fails.
+	// Registers lists every registry Apply contributes to (ADR-048 decision 21), as
+	// Provides lists what it provides: plugingen writes registers from it, and the
+	// generated cycle test fails when the plugin's fiber holds a registration in a
+	// registry it does not list. kernel.Plugin does not carry it, so nothing refuses
+	// an unlisted Register at run time.
+	Registers []kernel.AnyKey
+	Hooks     []kernel.HookUse // Every hook Apply may listen on, with its stage; an undeclared On fails.
 	// Validate checks the decoded config. Optional; it must be pure, since it
 	// runs at every activation and on every candidate update.
 	Validate func(cfg *C) error
@@ -114,6 +125,10 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 	}
 	p := kernel.Plugin{ID: s.ID, Inject: s.Inject, Provides: s.Provides, Hooks: s.Hooks,
 		Decode: func(raw any) (any, error) {
+			if probe, ok := raw.(*declared); ok { // Generate, never the kernel
+				*probe = declared{registers: slices.Clone(s.Registers), schema: d.schema}
+				return nil, nil
+			}
 			if raw == nil {
 				raw = map[string]any{}
 			}
