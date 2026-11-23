@@ -44,7 +44,10 @@
 //     a float64 inside the type's range; a slice a list; a map with string keys a
 //     map; a struct a map. A type defined over one of these kinds, such as
 //     type Mode string, follows its kind. Define refuses every other kind:
-//     pointer, interface, array, channel, function, complex and uintptr.
+//     pointer, interface, array, channel, function, complex and uintptr. It
+//     refuses a struct other than C itself that has no config field, such as
+//     time.Time, and a type defined over Volatile, which keeps none of its
+//     methods.
 //   - Defaults. default:"..." sets the default of a field of a scalar type,
 //     written as the field takes it: default:"50ms", default:"3",
 //     default:"0.5", default:"true", default:"text". Define refuses a default

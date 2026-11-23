@@ -151,6 +151,13 @@ func (d *described) structSchema(t reflect.Type, path []string, open map[reflect
 		props[f.key] = s
 		fields = append(fields, *f)
 	}
+	switch {
+	case len(fields) > 0:
+	case t.NumField() == 1 && t.Field(0).PkgPath == volatilePkg:
+		return nil, fmt.Errorf("%s is defined over plugin.Volatile, which keeps none of its methods; use plugin.Volatile[T]", t)
+	case path != nil:
+		return nil, fmt.Errorf("%s has no config field (an exported field), so it holds nothing; time.Time is not a config type, use a string or a time.Duration", t)
+	}
 	d.fields[t] = fields
 	return map[string]any{"type": "object", "properties": props, "additionalProperties": false}, nil
 }
