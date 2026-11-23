@@ -206,7 +206,7 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	for _, r := range c.Rows {
 		if id := installedBundle(r); id != "" {
 			if _, done := in.Artifacts[id]; !done {
-				in.Artifacts[id] = installedArtifact(home, id, lock, lerr)
+				in.Artifacts[id] = installedArtifact(home, profile, id, lock, lerr)
 			}
 		}
 		// A pack states its credential class in its own manifest (08-profiles-roadmap-adrs.md:391).
@@ -228,10 +228,13 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 
 // installedArtifact reads one installed artifact: the digest that plugins.lock names,
 // or for in-process code, which has no entry, that of the artifact.json install kept
-// (ADR-047 decision 18); then the kept files against it and the record beside it.
-func installedArtifact(home fs.FS, id string, lock []LockEntry, lerr error) Artifact {
+// (ADR-047 decisions 8 and 18); then the kept files against it and the record beside
+// it. An artifact the lock names no digest for is in-process code by its record, or it
+// is denied.
+func installedArtifact(home fs.FS, profile, id string, lock []LockEntry, lerr error) Artifact {
 	a := Artifact{ID: id, Err: lerr}
-	if i := slices.IndexFunc(lock, func(e LockEntry) bool { return e.ID == id }); i >= 0 {
+	i := slices.IndexFunc(lock, func(e LockEntry) bool { return e.ID == id })
+	if i >= 0 {
 		a.Digest, a.Content = lock[i].Digest, lock[i].Content
 	} else if a.Err == nil {
 		art, err := readFile(File{FS: home, Path: path.Join("bundles", id, "artifact.json")})
@@ -242,6 +245,9 @@ func installedArtifact(home fs.FS, id string, lock []LockEntry, lerr error) Arti
 	}
 	if a.Err == nil {
 		a.Record, a.Err = ReadRecord(home, a.Digest)
+	}
+	if a.Err == nil && i < 0 && a.Record.Module == nil {
+		a.Err = &Error{File: path.Join("profiles", profile, "plugins.lock"), Rule: RuleKept, Msg: "names no digest for " + id + ", and only in-process code has no entry"}
 	}
 	return a
 }

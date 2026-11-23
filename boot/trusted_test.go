@@ -220,7 +220,12 @@ func TestBootInputArtifacts(t *testing.T) {
 		locks      int
 	}{
 		{"locked", lock, nil, "", 2},
-		{"in-process code, with no lock entry", "", nil, "", 0},
+		{"in-process code, with no lock entry", "", func(h fstest.MapFS) {
+			h[rec] = &fstest.MapFile{Data: []byte("kind: artifact\ndigest: " + digest + "\nsigner: " + keyP256ID + "\nid: acme/connector-x\nversion: 0.1.0\nruntimes: [inproc]\nmodule: {path: " + testModule + "}\n")}
+		}, "", 0},
+		// Only in-process code has no lock entry (ADR-047 decisions 8 and 18).
+		{"a pack with no lock entry", "", nil, "profiles/p/plugins.lock: kept: names no digest for acme/connector-x", 0},
+		{"a pack with no lock entry in a lock", "lockVersion: 1\nartifacts: []\n", nil, "names no digest", 0},
 		{"no artifact.json and no lock entry", "", func(h fstest.MapFS) { delete(h, keptDir+"artifact.json") }, "artifact.json", 0},
 		{"kept files that differ", lock, func(h fstest.MapFS) { h[keptDir+"bundle.yaml"] = &fstest.MapFile{Data: []byte("[]\n")} }, "kept", 2},
 		{"no record", lock, func(h fstest.MapFS) { delete(h, rec) }, "file-missing", 2},
