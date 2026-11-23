@@ -334,6 +334,11 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 		{"a group that takes the id of a row composed before it", func(fx *gateFix) {
 			fx.bundles["b"] = rows("id: plain, plugin: o/plain", "id: user, plugin: o/user", "id: prov, plugin: o/prov", "id: pack, plugin: o/plain")
 		}, []string{"8 acme/pack group-clash stop=false"}},
+		// The loader's row id and a required row id are not an artifact's to take.
+		{"a group that takes the loader's reserved row id", func(fx *gateFix) { fx.reserve("acme/loader") },
+			[]string{"8 acme/loader group-clash stop=false"}},
+		{"a group that takes the id of a required row", func(fx *gateFix) { fx.dist.bindings = "{required: {rows: [pack]}}" },
+			[]string{"8 pack group-clash stop=true"}},
 		{"an installed bundle that does not parse", func(fx *gateFix) {
 			fx.bundles["acme/pack"] = string(fx.arts["acme/pack"].Kept.Bundle)
 			fx.art("acme/pack", func(a *Artifact) { a.Kept.Bundle = []byte("{}") })
@@ -437,7 +442,7 @@ func TestGateGroupClashIsNamed(t *testing.T) {
 	fx := newGateFix()
 	fx.bundles["b"] = rows("id: pack, plugin: o/plain")
 	g := fx.run(t)
-	want := `warning: the installed artifact acme/pack is left out: gate check 8 (Layer rules), rule group-clash: the group "pack" of the installed artifact acme/pack takes the id of the row "pack" composed before it, so none of its rows is inserted (ADR-047 decision 6)`
+	want := `warning: the installed artifact acme/pack is left out: gate check 8 (Layer rules), rule group-clash: the group "pack" of the installed artifact acme/pack takes the id of a row composed before it or of the loader's row, so none of its rows is inserted (ADR-047 decision 6)`
 	if d := (Admission{Gate: g}).Diagnostics(); !slices.Contains(d, want) || g.Result(CheckLayerRules, "acme/pack").Status != StatusFail ||
 		g.Result(CheckLayerRules, "pack").Status != StatusPass {
 		t.Fatalf("%q", d)

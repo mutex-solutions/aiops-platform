@@ -229,8 +229,8 @@ type Digest [32]byte
 // described at EncodeDigest. MinStability is minStability of profile.yaml, ""
 // when absent, which sets no minimum; gate check 4 reads it (ADR-060 decision 14).
 // Clashes are the plugin ids of the installed artifacts whose group takes the id of a
-// row composed before it, so none of their rows is inserted; gate check 8 denies them
-// (ADR-047 decision 6).
+// row composed before it or of the loader's row, so none of their rows is inserted;
+// gate check 8 denies them (ADR-047 decision 6).
 type Composition struct {
 	Rows         []ComposedRow
 	Digest       Digest

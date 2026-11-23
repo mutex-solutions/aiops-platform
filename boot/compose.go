@@ -224,10 +224,11 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 // them states, or none when one states none, so it mounts wherever a row does (ADR-047
 // decision 5). The bundle places no row outside the group, so its other items change
 // nothing, and gate check 8 denies the artifact for them. When a row composed before it
-// holds the group's id, it inserts nothing and records the clash (ADR-047 decision 6).
+// holds the group's id, or the id is the loader's, it inserts nothing and records the
+// clash (ADR-047 decision 6).
 func (c *composer) artifact(id string, items []Item) []Item {
 	_, name, _ := strings.Cut(id, "/")
-	if _, clash := c.index[name]; clash {
+	if _, clash := c.index[name]; clash || name == LoaderRowID {
 		c.clashes = append(c.clashes, id)
 		return nil
 	}

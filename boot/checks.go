@@ -527,13 +527,18 @@ func (g *gate) suites(s *subject) map[string]int {
 func (g *gate) installed(c Composition) []RowResult {
 	var out []RowResult
 	for _, id := range slices.Sorted(maps.Keys(g.feeds)) {
+		_, name, _ := strings.Cut(id, "/")
+		if slices.Contains(g.in.Bindings.RequiredRows, name) {
+			out = append(out, g.fail(CheckLayerRules, Row{ID: name}, RuleGroupClash, false,
+				"the group %q of the installed artifact %s takes the id of a required row, which no artifact stands in for (ADR-047 decision 6)", name, id))
+		}
 		a, ok := g.in.Artifacts[id]
 		if !ok || a.Err != nil {
 			continue
 		}
 		why := g.bundleRule(id, a.Kept.Bundle)
 		for _, r := range c.Rows {
-			if _, name, _ := strings.Cut(id, "/"); why != "" && installedBundle(r) == id && r.ID != name {
+			if why != "" && installedBundle(r) == id && r.ID != name {
 				out = append(out, g.fail(CheckLayerRules, r.Row, RuleInstalled, false, "row %q: the bundle of the installed artifact %s %s", r.ID, id, why))
 			}
 		}
@@ -541,7 +546,7 @@ func (g *gate) installed(c Composition) []RowResult {
 	for _, id := range c.Clashes {
 		_, name, _ := strings.Cut(id, "/")
 		out = append(out, g.fail(CheckLayerRules, Row{ID: id}, RuleGroupClash, false,
-			"the group %q of the installed artifact %s takes the id of the row %q composed before it, so none of its rows is inserted (ADR-047 decision 6)", name, id, name))
+			"the group %q of the installed artifact %s takes the id of a row composed before it or of the loader's row, so none of its rows is inserted (ADR-047 decision 6)", name, id))
 	}
 	return out
 }
