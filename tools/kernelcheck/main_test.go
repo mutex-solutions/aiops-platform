@@ -145,8 +145,10 @@ func TestVocab(t *testing.T) {
 // goroutine, observe.go), row (a row of the plugin record, config.go), model (the
 // Cordis lifecycle model, every file header) and gate (the Needs gate
 // activation, root.go and seam.go). The boot list holds the domain words of
-// decision 45 and the upstream names; the loader list adds tenant, as at S1; the
-// kernel list holds both, so no layer below boot holds a word boot may not.
+// decision 45; the loader list adds tenant, as at S1; the kernel list holds both,
+// so no layer below boot holds a word boot may not. No list holds an upstream
+// name: those are the names of the upstream register, which the name lint U1 reads
+// over sdk/, boot/ and loader/ (ADR-054 decision 14).
 func TestVocabularyLists(t *testing.T) {
 	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "architecture", "00-decisions.md"))
 	if err != nil {
@@ -156,36 +158,28 @@ func TestVocabularyLists(t *testing.T) {
 	if m == nil {
 		t.Fatal("00-decisions.md §4.3 names no product word")
 	}
-	read := func(name string) map[string]bool {
-		w, err := readWords(name)
+	boot := map[string]bool{}
+	for _, w := range []string{"incident", "alert", "approval", "dashboard", "pillar", "harness", "remediation", "estate"} {
+		boot[w] = true
+	}
+	loader := maps.Clone(boot)
+	loader["tenant"] = true
+	kernel := maps.Clone(loader)
+	for _, w := range strings.Split(string(m[1]), ", ") {
+		if w = strings.ToLower(w); !slices.Contains([]string{"role", "row", "model", "gate"}, w) {
+			kernel[w] = true
+		}
+	}
+	for _, l := range []struct {
+		name string
+		want map[string]bool
+	}{{"vocabulary-boot.txt", boot}, {"vocabulary-loader.txt", loader}, {"vocabulary.txt", kernel}} {
+		got, err := readWords(l.name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return w
-	}
-	kernel := read("vocabulary.txt")
-	for _, w := range strings.Split(string(m[1]), ", ") {
-		if w = strings.ToLower(w); !kernel[w] && !slices.Contains([]string{"role", "row", "model", "gate"}, w) {
-			t.Errorf("vocabulary.txt lacks %q of 00-decisions.md §4.3", w)
-		}
-	}
-	loader, boot := read("vocabulary-loader.txt"), read("vocabulary-boot.txt")
-	for _, w := range []string{"incident", "alert", "approval", "dashboard", "pillar", "harness", "remediation", "estate"} {
-		if !boot[w] {
-			t.Errorf("vocabulary-boot.txt lacks %q of ADR-060 decision 45", w)
-		}
-	}
-	if !loader["tenant"] {
-		t.Error(`vocabulary-loader.txt lacks "tenant"`)
-	}
-	for _, w := range slices.Sorted(maps.Keys(boot)) {
-		if !loader[w] {
-			t.Errorf("vocabulary-loader.txt lacks %q of vocabulary-boot.txt", w)
-		}
-	}
-	for _, w := range slices.Sorted(maps.Keys(loader)) {
-		if !kernel[w] {
-			t.Errorf("vocabulary.txt lacks %q of vocabulary-loader.txt", w)
+		if !maps.Equal(got, l.want) {
+			t.Errorf("%s holds %q, want %q", l.name, slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(l.want)))
 		}
 	}
 }
