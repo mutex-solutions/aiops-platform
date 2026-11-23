@@ -33,6 +33,7 @@ check:
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
+	$(KC) lines cmd/aiopsctl 2500 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200

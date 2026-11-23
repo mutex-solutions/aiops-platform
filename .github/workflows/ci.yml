@@ -93,11 +93,13 @@ jobs:
         # 00-decisions.md §4.3: sdk requires sdk/kernel, and sdk/testkit for its tests only;
         # pgx v5 joins at S3 (ADR-060 decision 4).
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
-      - name: Plugin package and plugingen line caps
-        # ADR-060 decision 35: the package sdk/plugin and plugingen, provisional caps during S2a.
+      - name: Plugin package, plugingen and aiopsctl line caps
+        # ADR-060 decision 35: the package sdk/plugin, plugingen and cmd/aiopsctl,
+        # provisional caps during S2a.
         run: |
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
+          go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
       - name: pluginApi check
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
         # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.
