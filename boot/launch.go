@@ -420,10 +420,13 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 	if err != nil {
 		return launch.Plan{}, err
 	}
+	// The plan starts from what the tree runs: the committed composition is the copy the
+	// gate admitted when it was committed, and a candidate the tree runs passed Admit.
+	// Gating it again against the home as it is now would disable a row it still mounts.
 	f, t = WithLoader(f), WithLoader(t)
-	fa, ta := GateWith(f, p.input(f)).Admitted(f), GateWith(t, p.input(t)).Admitted(t)
+	ta := GateWith(t, p.input(t)).Admitted(t)
 	g, _, _ := BuildGraph(ta, p.mods, p.dist, p.roles)
-	return launchPlan(Diff(fa, ta, g)), nil
+	return launchPlan(Diff(f, ta, g)), nil
 }
 
 // catalog is the catalog service: the module table and the key table. It keeps the

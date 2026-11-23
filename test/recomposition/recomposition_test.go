@@ -13,19 +13,25 @@
 //	(c) the judge fires while a fiber is UNLOADING
 //	(d) a newly enabled row that never activates
 //	(e) a replica restart during promotion converging without a second exit: S4b
+//
+// It also holds the gate's own cases at a live generation (ADR-060 decision 17).
 package recomposition
 
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mutex-solutions/aiops-platform/dist"
+	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 	"github.com/mutex-solutions/aiops-platform/test/dist/harness"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit"
 	toyspine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-spine"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 func TestMain(m *testing.M) {
@@ -52,13 +58,20 @@ type world struct {
 // an absolute path) and the live layer last, and waits for it to say it is ready.
 func boot(t *testing.T, patches ...string) *world {
 	t.Helper()
+	return bootInstalled(t, nil, patches...)
+}
+
+// bootInstalled is boot on a home into which install has written more before the
+// process starts (harness.Options.Install).
+func bootInstalled(t *testing.T, install func(home string) error, patches ...string) *world {
+	t.Helper()
 	bin := harness.Binary(t)
 	dir := t.TempDir()
 	w := &world{t: t, live: filepath.Join(dir, "live.yml")}
 	if err := os.WriteFile(w.live, []byte(liveBase), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	opts := harness.Options{Context: t.Context()}
+	opts := harness.Options{Context: t.Context(), Install: install}
 	for _, f := range patches {
 		if !filepath.IsAbs(f) {
 			f = harness.PatchFile(f)
@@ -381,6 +394,49 @@ func TestFirstReferenceThatDoesNotResolveIsRejected(t *testing.T) {
 	s, ok = w.p.Until(budget, func(s harness.Snapshot) bool { return s.RowState("consumer") == "ACTIVE" && fiber(s) != 0 })
 	if !ok || fiber(s) != fiber(s0) {
 		t.Fatalf("the consumer did not keep its instance: fiber %d, then %d (state %q)", fiber(s0), fiber(s), s.RowState("consumer"))
+	}
+	w.stop()
+}
+
+// A row whose signer trust.yaml no longer lists stays mounted until a generation
+// changes the composition: the gate runs at a generation (ADR-020 decision 15). A
+// generation that disables the row unmounts it, since the plan starts from what the
+// tree runs, the committed composition, and not from a copy of it gated again against
+// the home as it is now, in which the revoked row is already disabled.
+func TestDisablingARevokedRowUnmountsIt(t *testing.T) {
+	const id, row = "aiops-test/unsigned-row", "unsigned-row:fault"
+	install := func(home string) error {
+		mods := testdist.Modules()
+		m := mods[slices.IndexFunc(mods, func(m dist.Module) bool { return m.Plugin.ID == id })]
+		err := trusted.Install(home, trusted.Artifact{Manifest: m.Manifest, Definitions: `{"toy": {"version": "0.1"}}`,
+			Bundle: []byte("- insert:\n    - {id: fault, plugin: " + id + ", roles: [api], enabled: false}\n")})
+		if err == nil {
+			err = os.MkdirAll(filepath.Join(home, "profiles", "smoke"), 0o755)
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(home, "profiles", "smoke", "profile.yaml"), []byte("bundles: [smoke, "+id+"]\n"), 0o644)
+		}
+		return err
+	}
+	w := bootInstalled(t, install, "unsigned-row.optional.yml")
+	if s, ok := w.p.Until(budget, func(s harness.Snapshot) bool { return s.RowState(row) == "ACTIVE" }); !ok {
+		t.Fatalf("the signed row is not ACTIVE at boot: %+v", s.State.Rows)
+	}
+	trust := filepath.Join(w.p.Home, "trust.yaml")
+	data, err := os.ReadFile(trust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _, _ := strings.Cut(string(data), "signers:")
+	if err := os.WriteFile(trust, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := w.verdictOf(w.submitBody(liveBase+"- {id: "+row+", enabled: false}\n", ""))
+	if op := s.State.Reload; op.Status != "passed" || !contains(op.Applied["unmounted"], row) {
+		t.Fatalf("the generation should pass and unmount %s: %+v", row, op)
+	}
+	if rs, ok := s.Row(row); !ok || rs.Mount != "disabled" {
+		t.Fatalf("row %s after the generation: %+v (present %v), want disabled", row, rs, ok)
 	}
 	w.stop()
 }
