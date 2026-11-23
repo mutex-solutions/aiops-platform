@@ -10,7 +10,8 @@
         },
         "token": {
           "type": "string",
-          "x-aiops-tenant": true
+          "x-aiops-tenant": true,
+          "x-aiops-volatile": true
         }
       },
       "type": "object"
@@ -22,7 +23,8 @@
     },
     "headers": {
       "additionalProperties": {
-        "type": "string"
+        "type": "string",
+        "x-aiops-volatile": true
       },
       "type": "object"
     },
@@ -46,7 +48,8 @@
           },
           "until": {
             "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
-            "type": "string"
+            "type": "string",
+            "x-aiops-volatile": true
           }
         },
         "type": "object"
@@ -60,7 +63,8 @@
     },
     "url": {
       "type": "string",
-      "x-aiops-tenant": true
+      "x-aiops-tenant": true,
+      "x-aiops-volatile": true
     },
     "windows": {
       "items": {
@@ -71,13 +75,15 @@
           },
           "until": {
             "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
-            "type": "string"
+            "type": "string",
+            "x-aiops-volatile": true
           }
         },
         "type": "object"
       },
       "type": "array",
-      "x-aiops-tenant": true
+      "x-aiops-tenant": true,
+      "x-aiops-volatile": true
     }
   },
   "type": "object"

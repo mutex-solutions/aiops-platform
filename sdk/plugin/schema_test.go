@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -58,14 +59,11 @@ func TestDescribeSchemaGolden(t *testing.T) {
 
 // The volatile paths are derived from the type, sorted, each a list of keys with
 // "*" for a list index or a map key; a Volatile inside a Volatile is listed too.
-// Describe reports none of them until the kernel can hand a value committed in place
-// to a running field (see plugin.Volatile).
+// Each is the path of a subschema marked "x-aiops-volatile": true, the mark that the
+// generated manifest carries, and a field marked tenant is marked volatile too
+// (ADR-048 decision 9).
 func TestDescribeVolatilePaths(t *testing.T) {
 	info, err := plugin.Describe[webhook]()
-	if err != nil || info.Volatile != nil {
-		t.Fatalf("Describe reports the volatile paths %q, %v; want none", info.Volatile, err)
-	}
-	derived, err := plugin.DerivedVolatile[webhook]()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,18 +75,44 @@ func TestDescribeVolatilePaths(t *testing.T) {
 		{"windows"},
 		{"windows", "*", "until"},
 	}
-	if !reflect.DeepEqual(derived, want) {
-		t.Fatalf("volatile paths %q, want %q", derived, want)
+	if !reflect.DeepEqual(info.Volatile, want) {
+		t.Fatalf("volatile paths %q, want %q", info.Volatile, want)
 	}
-	none, err := plugin.DerivedVolatile[struct{ A int }]()
-	if err != nil || none != nil {
-		t.Fatalf("a type with no Volatile field: %q, %v", none, err)
+	var schema any
+	if err := json.Unmarshal(info.Schema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	var marked [][]string
+	var walk func(s any, path []string)
+	walk = func(s any, path []string) {
+		m, _ := s.(map[string]any)
+		if m["x-aiops-volatile"] == true {
+			marked = append(marked, path)
+		}
+		if m["x-aiops-tenant"] == true && m["x-aiops-volatile"] != true {
+			t.Errorf("the tenant field %q is not marked volatile", path)
+		}
+		props, _ := m["properties"].(map[string]any)
+		for k, sub := range props {
+			walk(sub, append(slices.Clone(path), k))
+		}
+		for _, kw := range []string{"items", "additionalProperties"} {
+			if sub, ok := m[kw].(map[string]any); ok {
+				walk(sub, append(slices.Clone(path), "*"))
+			}
+		}
+	}
+	walk(schema, nil)
+	slices.SortFunc(marked, slices.Compare)
+	if !reflect.DeepEqual(marked, want) {
+		t.Fatalf("subschemas marked volatile %q, want %q", marked, want)
+	}
+	none, err := plugin.Describe[struct{ A int }]()
+	if err != nil || none.Volatile != nil || bytes.Contains(none.Schema, []byte("x-aiops-volatile")) {
+		t.Fatalf("a type with no Volatile field: %q, %v", none.Volatile, err)
 	}
 	if _, err := plugin.Describe[int](); err == nil || !strings.Contains(err.Error(), "must be a struct") {
 		t.Fatalf("Describe[int]: %v", err)
-	}
-	if _, err := plugin.DerivedVolatile[int](); err == nil {
-		t.Fatal("DerivedVolatile[int] took a type that is not a struct")
 	}
 }
 

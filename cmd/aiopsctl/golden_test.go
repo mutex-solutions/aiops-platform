@@ -30,10 +30,10 @@ import (
 //
 // Not covered by golden files, and said so: a stage number of a hook (a manifest names
 // the stage and not its ordinal, which is served data that boot reads with the signed
-// distribution manifest, so the dump shows stage 0 for every listener); a volatile
-// path (sdk/plugin marks no Volatile field in configSchema until the kernel can hand a
-// value committed in place to a running field, so no plugin of the test distribution
-// has one); and the rows of the roles edge and worker, which the profile does not have.
+// distribution manifest, so the dump shows stage 0 for every listener) and the rows of
+// the roles edge and worker, which the profile does not have. The volatile path
+// config.note of aiops-test/toy-consumer is the mark of its plugin.Volatile field in
+// the configSchema of its manifest (ADR-048 decision 9).
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 

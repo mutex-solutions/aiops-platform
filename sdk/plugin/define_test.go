@@ -262,13 +262,18 @@ func TestVolatileGet(t *testing.T) {
 	}
 }
 
-// A change of Volatile values alone reaches the plugin. The test takes the loader's
-// path for it: a change that loader.VolatileOnly finds volatile only over the paths
-// Describe reports is committed in place, any other restarts the row. Until the
-// kernel hands a value committed in place to a running field (ADR-060 decision 3),
-// Get could not return it, so the change must restart the row and reach Apply.
-func TestVolatileChangeReachesThePlugin(t *testing.T) {
-	type cfg struct{ URL plugin.Volatile[string] }
+// A change of Volatile values alone commits in place, with no restart of the row
+// (07-c4-plugin-sdk.md:1375; ADR-048 decision 9). The test takes the loader's path
+// for it: a change that loader.VolatileOnly finds volatile only over the paths
+// Describe reports is committed with kernel.Fiber.Commit, any other restarts the row.
+// Apply is not called again, and the running activation keeps the value it was
+// applied with: handing it the committed value is the ADR-034 addition that ADR-060
+// decision 3 names (see plugin.Volatile).
+func TestVolatileChangeCommitsInPlace(t *testing.T) {
+	type cfg struct {
+		URL  plugin.Volatile[string]
+		Mode string
+	}
 	applied := make(chan *cfg, 2)
 	p := plugin.Define(plugin.Spec[cfg]{ID: "test/volatile",
 		Apply: func(_ *kernel.Context, c *cfg) error { applied <- c; return nil }})
@@ -286,21 +291,23 @@ func TestVolatileChangeReachesThePlugin(t *testing.T) {
 	for _, v := range info.Volatile {
 		paths = append(paths, strings.Join(v, "."))
 	}
-	if _, only := loader.VolatileOnly(before, after, paths); only {
-		if err := f.Commit(t.Context(), after); err != nil {
-			t.Fatal(err)
-		}
-	} else {
-		if err := f.Update(t.Context(), after); err != nil {
-			t.Fatal(err)
-		}
-		if s, err := await(t, f); s != kernel.Active {
-			t.Fatalf("state after the restart %s, err %v", s, err)
-		}
-		running = <-applied
+	if _, only := loader.VolatileOnly(before, after, paths); !only {
+		t.Fatalf("a change of url alone is not volatile over the paths %q", paths)
 	}
-	if got := running.URL.Get(); got != "https://b" {
-		t.Fatalf("after the change the plugin reads URL %q, want https://b", got)
+	if _, only := loader.VolatileOnly(before, map[string]any{"url": "https://a", "mode": "m"}, paths); only {
+		t.Fatalf("a change of mode is volatile over the paths %q", paths)
+	}
+	if err := f.Commit(t.Context(), after); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := await(t, f); s != kernel.Active {
+		t.Fatalf("state after the commit %s, err %v", s, err)
+	}
+	if len(applied) != 0 {
+		t.Fatalf("Apply ran again after a commit in place: %+v", <-applied)
+	}
+	if got := running.URL.Get(); got != "https://a" {
+		t.Fatalf("the running activation reads URL %q, want the value it was applied with", got)
 	}
 }
 

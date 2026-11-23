@@ -151,6 +151,12 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	if _, ok := d.Registry.Modules["aiops/loader"]; !ok {
 		t.Fatal("the release loader is missing")
 	}
+	// The volatile path of toy-consumer is derived from its plugin.Volatile field and
+	// read from the mark in its manifest, the path the S1 hand list named, so a change
+	// of note alone commits in place (ADR-048 decisions 9 and 18).
+	if v := d.Registry.Modules["aiops-test/toy-consumer"].Volatile; !slices.Equal(v, []string{"config.note"}) {
+		t.Fatalf("toy-consumer volatile paths %q, want [config.note]", v)
+	}
 	// The launcher checks every entry against its plugin and every key name against the
 	// key table when it starts, so a run of any profile proves the table is consistent.
 }

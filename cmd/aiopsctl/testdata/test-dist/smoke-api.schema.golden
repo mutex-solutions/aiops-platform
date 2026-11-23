@@ -15,7 +15,10 @@
         }
       },
       "type": "object",
-      "x-aiops-plugin": "aiops-test/toy-consumer"
+      "x-aiops-plugin": "aiops-test/toy-consumer",
+      "x-aiops-volatile": [
+        "config.note"
+      ]
     },
     "loader": {
       "additionalProperties": true,
