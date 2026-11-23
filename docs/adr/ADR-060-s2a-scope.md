@@ -96,9 +96,10 @@ gaps:
    definitions (`07:29`; `00:262`). Its directory, and so the import path every author
    compiles against, is question Q18. `sdk/gate` and `sdk/entity` follow the same answer
    when their consumers create them. The package holds:
-   - `Spec[C]` with `ID`, `Inject`, `Provides`, `Hooks`, `Validate` and `Apply`, and
-     `Define[C](Spec[C]) kernel.Plugin` (`07:212-226`; `00:207`). `Durable` is added to
-     `Spec` at S3 with the `durable` definition (decision 29).
+   - `Spec[C]` with `ID`, `Inject`, `Provides`, `Registers` (ADR-048 decision 21),
+     `Hooks`, `Validate` and `Apply`, and `Define[C](Spec[C]) kernel.Plugin`
+     (`07:212-226`; `00:207`). `Durable` is added to `Spec` at S3 with the `durable`
+     definition (decision 29).
    - `Volatile[T]`. The volatile paths are derived from `C` and carried in the generated
      manifest, so the hand lists in `dist.Module.Volatile` and `boot.ModuleEntry.Volatile`
      go (ADR-059 decision 10). A path is a list of keys, as in `VolatileUpdateArgs.Paths`
@@ -166,7 +167,10 @@ gaps:
    `deprecated` and the classes and stages of decision 7, so check 2, the deprecation
    warning and the offline gate need no `definition.yaml` (`08:498`, `:936`; `07:538`,
    `:1895`). It lists every definition the binary links, at the version linked; whether
-   a provider row is composed is the static graph's question, not check 2's. A pack's
+   a provider row is composed is the static graph's question, not check 2's. `serves`
+   also carries a kernel part for the `pluginApi` the binary serves: the four built-in
+   keys with their classes and the six hooks of the kernel with their stage and seal,
+   written by the builder from `sdk/kernel` (ADR-048 decision 12). A pack's
    `requires.definitions` is derived by `plugin check --write` from the registries its
    rows feed (`07:139`; community:134).
 10. **The suite revision** is the integer `suite` of `definition.yaml`, raised when a
@@ -177,15 +181,18 @@ gaps:
     `as: need|want`), `provides`, `registers`, `hooks` with their stages,
     `configSchema`, `durable` and `requires` (`07:102-115`), and the tests of decision
     12. It reads the `Spec` without a kernel change, without an `init` registry and
-    without running a plugin's `Apply`. Where `registers` comes from is fixed in ADR-048:
-    the `Spec` of `07:215-223` has no field for it, a `Need` on a registry key reads the
-    same for a consumer and a contributor, and the gate and the tenant-toggleable rule
-    read it without running code (`07:135`, `:141`). A CI parity check fails when a
-    committed manifest differs from what `plugingen` writes (`08:1257`).
+    without running a plugin's `Apply`. Where `registers` comes from is fixed in ADR-048,
+    as the field `Spec.Registers` (ADR-048 decision 21): the `Spec` of `07:215-223` had
+    no field for it, a `Need` on a registry key reads the same for a consumer and a
+    contributor, and the gate and the tenant-toggleable rule read it without running
+    code (`07:135`, `:141`). A CI parity check fails when a committed manifest differs
+    from what `plugingen` writes (`08:1257`).
 12. **The generated tests.** `zz_cycle_test.go` mounts, disposes and remounts three
     times and asserts that every fake's `Inventory()` is back at its baseline, that the
-    effect ledger is empty, that no goroutine leaked and that a late registration returns
-    `ErrInactiveEffect`. It imports the fake of each definition `Spec.Inject` names, so
+    effect ledger is empty, that no goroutine leaked, that a late registration returns
+    `ErrInactiveEffect` and that no fake's `Inventory()` holds a registration of the
+    plugin's fiber in a registry that `Spec.Registers` does not list (ADR-048 decision
+    21). It imports the fake of each definition `Spec.Inject` names, so
     `kerneltest` imports no definition (`07:1430-1434`). Every fake exposes
     `Inventory()`; a fake of a definition that takes no registration reports what its
     callers left behind, timers for `clock`, or nothing. `sdk/testkit` gains goleak for
@@ -270,11 +277,12 @@ gaps:
     the statement is a layer of the artifact or an OCI referrer. The attestation type and
     the OCI layout of decision 19 are documented in the repository for third parties
     (`08:935`); making them public waits for L14 (`08:1342`).
-19. **The artifact form** (ADR-047): one OCI artifact with the module path, version and
-    sum of in-process code, or nothing for a pack; `plugin.yaml`; a bundle of rows, all
-    disabled; for a pack its content and fixtures; the signed attestation; an SBOM
-    (`08:391`; `07:1838`). Check 8 reads `instantiable: true` from the manifest of a
-    first-party plugin of the module table; no list of ids is written in code
+19. **The artifact form** (ADR-047): one OCI artifact with its signature and attestation
+    as referrers (ADR-020 decision 24), holding the module path, version and sum of
+    in-process code, or nothing for a pack; `plugin.yaml`; a bundle of rows, all
+    disabled; for a pack its content and fixtures; an SBOM (`08:391`; `07:1838`). Check
+    8 reads `instantiable: true` from the manifest of a first-party plugin of the module
+    table; no list of ids is written in code
     (`07:132`). The rows of an installed artifact mount under one group named by the
     artifact, so a row id is `<pack name>:<row>` (`08:391`; community:298; `03:64`), and
     the loader records each row's origin artifact. A profile names an artifact's bundle
@@ -289,12 +297,16 @@ gaps:
     required set (`08:1220`). The signed distribution manifest is what the builder writes
     from either: the module table, mapping each plugin id to its value and its manifest
     (`07:1344`), with each module's sum and detected licence; the packages the binary
-    links, which the fake clause of check 7 reads at boot; the pins; both binding maps;
-    the sealed-hook listeners; the required set; the accepted licences; and `serves`
-    (`07:1846`). The binary embeds the manifest it was built with. A release publishes
-    the signed file for `plugin gate --against` (`08:936`). The release module table is
-    generated into `dist/` and committed, CI fails when it differs from the generator's
-    output, and `go build ./...` keeps building `cmd/aiops`.
+    links, which the fake clause of check 7 reads at boot; the pins, with the `go.sum`
+    lines of the release's own build, each version raised by `--allow-bump` beside the
+    release's pin and each hash checked against nothing (ADR-044 decisions 8 and 10); the
+    toolchain module `golang.org/toolchain` at the pinned version with its hash (ADR-044
+    decision 16); both binding maps; the sealed-hook listeners; the required set; each
+    entry a site added, marked as the site's (ADR-044 decision 13); the accepted
+    licences; and `serves` (`07:1846`). The binary embeds the manifest it was built with.
+    A release publishes the signed file for `plugin gate --against` (`08:936`). The
+    release module table is generated into `dist/` and committed, CI fails when it differs
+    from the generator's output, and `go build ./...` keeps building `cmd/aiops`.
 21. **SDK module versions outside the repository.** Inside the repository the three SDK
     modules require each other at `v0.0.0` through `replace` lines, and the root module
     reaches them the same way; that stays, for work inside the repository only.
@@ -302,7 +314,9 @@ gaps:
       writes the served copy of each SDK `go.mod`: its `require` lines name the SDK
       version and it holds no `replace` line. A test fails when a served copy differs
       from the repository's file in anything else. Where the modules are served is
-      question Q4.
+      question Q4. A release also serves the root module at the release version, from the
+      same module source, with a served `go.mod` that names the SDK version and holds no
+      `replace` line, under the same test (ADR-044 decision 23).
     - The release image, the release `aiopsctl` and the release's signed manifest are
       built by the builder from the served modules, never through `replace`, so the pins
       of the signed manifest name the SDK version, and the strict-version check of the
@@ -315,6 +329,8 @@ gaps:
       `GOTOOLCHAIN=local`; `GOFLAGS=-mod=readonly`; and a network that reaches only the
       exit's module proxy and registry. No lookup of the private module path leaves the
       job (`08:1342` L14). `dist build` passes the same settings into the builder image.
+      Until L14 clears, every module source of the builder is a `file://` directory and
+      `dist build` refuses a proxy URL (ADR-044 decision 7).
 22. **The builder** (ADR-044) is a root-module package compiled into `aiopsctl`, run with
     a local toolchain or through the builder image, whose definition lives under `dist/`
     (`08:402`; `08:1201`, assumption 3). It takes the four fields of the site's
@@ -340,7 +356,9 @@ gaps:
     then `dist use` records the image reference in the site files and prints it.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
-    `dist build`, `dist sign`, `dist use`, `profile verify` and `profile init`
+    a command that writes a key pair in the format of ADR-020 decision 4, named by the
+    CLI spec (ADR-020 decision 21), `dist build`, `dist sign`, `dist use`, `profile
+    verify` and `profile init`
     (`00:137`; `02:95`; `08:72` row 30, `:366`, `:694`, `:936`), on an operations library
     that `plugin-manager` later shares, under one profile write lock (`08:369`; `03:71`).
     Whether each command is a row of the `cli` profile or code of `cmd/aiopsctl` is
@@ -615,8 +633,11 @@ gaps:
       (`08:1341`, `:1380`), and what the image itself carries: the Go licence and PATENTS
       texts, the licence of each tool in it, an image SBOM and a source offer for the
       copyleft packages of its base layer (`08:402`); the module cache format; when
-      `--allow-bump` is acceptable; the content of the `init` deny-list; how the licence
-      scan runs the same with a local toolchain; where a self-built distribution lists
+      `--allow-bump` is acceptable; the content of the `init` deny-list, which exempts by
+      package and pinned version the codec registration of
+      `google.golang.org/grpc/encoding/proto` in a build with the tag `grpcnotrace`
+      (ADR-020 decision 27); how the licence scan runs the same with a local toolchain;
+      where a self-built distribution lists
       sealed-hook listeners and raises the required set, since `dist.yaml` has four
       fields and W3 allows a raise (`08:401`, `:403`).
     - ADR-047, its S2a part: the OCI layout and media types; the content layer and its
@@ -1188,8 +1209,9 @@ to a question, the decision here settles it.
 40. **The exit serves the SDK modules from a module proxy inside the job** (Q4 (a)). The
     exit job serves the three SDK modules from a file-based module proxy that exists only
     inside the job, at one pre-release version per run that no tag of the repository
-    carries, with the `go.mod` copies of decision 21, together with the author's echoer
-    module at the version its artifact names. The test release, its signed manifest and
+    carries, with the `go.mod` copies of decision 21, together with the root module at
+    the test release's version (ADR-044 decision 23) and the author's echoer module at
+    the version its artifact names. The test release, its signed manifest and
     its `aiopsctl` are built from those served modules, so the release pins and the
     author's build agree, and both environments get that `aiopsctl`. Nothing is tagged or
     published.
