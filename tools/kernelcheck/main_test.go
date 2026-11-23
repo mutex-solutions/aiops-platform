@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -132,12 +133,19 @@ func TestLines(t *testing.T) {
 		name  string
 		limit int
 		sub   bool
+		args  []string
 		fail  bool
 	}{
-		{"under", 10, false, false},
-		{"exact", 5, false, false},
-		{"over", 4, false, true},
-		{"subdir package", 10, true, true},
+		{"under", 10, false, nil, false},
+		{"exact", 5, false, nil, false},
+		{"over", 4, false, nil, true},
+		{"subdir package", 10, true, nil, true},
+		{"provisional", 10, false, []string{"provisional"}, false},
+		// A definition's fake and suite are packages of their own, each with its own
+		// cap (ADR-060 decision 35): a named subdirectory is not counted.
+		{"named subpackage", 5, true, []string{"sub"}, false},
+		{"named subpackage, provisional", 5, true, []string{"provisional", "sub"}, false},
+		{"other subpackage", 10, true, []string{"other"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()
@@ -145,8 +153,9 @@ func TestLines(t *testing.T) {
 			write(t, d, "a_test.go", strings.Repeat("x\n", 100))
 			if tc.sub {
 				write(t, d, "sub/b.go", "package sub\n")
+				write(t, d, "sub/deep/c.go", "package deep\n")
 			}
-			if err := checkLines(d, tc.limit, false); (err != nil) != tc.fail {
+			if err := run(append([]string{"lines", d, strconv.Itoa(tc.limit)}, tc.args...)); (err != nil) != tc.fail {
 				t.Fatalf("fail=%v, err=%v", tc.fail, err)
 			}
 		})
