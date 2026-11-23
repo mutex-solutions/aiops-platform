@@ -2,8 +2,8 @@
 
 // Package stamper is example-stamper, the toy stamper of the S2a test release: it
 // contributes to stampers and nothing else, so the toy caller has a stamper to call
-// (ADR-060 decision 37). Its stamp is its name and the CRC-32 of the body. It is in
-// no shipped bundle.
+// (ADR-060, the answer Q1 (a)). Its stamp is its name and the CRC-32 of the body. It
+// is in no shipped bundle.
 //
 // Config: name, the name it registers under (default "example").
 package stamper
