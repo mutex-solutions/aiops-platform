@@ -47,6 +47,9 @@ type gateFix struct {
 	bundles map[string]string
 	in      GateInput
 	min     string
+	// disabled composes without the patch that enables the artifacts' rows, as install,
+	// plugin check and plugin gate --against compose.
+	disabled bool
 }
 
 // newGateFix is a clean case: the rows plain, user and prov of in-process plugins of the
@@ -119,7 +122,11 @@ func (fx *gateFix) run(t *testing.T) GateResult {
 	}
 	home["profiles/p/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b, " + strings.Join(ids, ", ") + "]")}
 	patch := File{FS: fstest.MapFS{"enable.yml": {Data: []byte("- {id: pack:e1, enabled: true}\n- {id: echoer:e2, enabled: true}\n")}}, Path: "enable.yml"}
-	c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home, Patches: []File{patch}}, Options{})
+	patches := []File{patch}
+	if fx.disabled {
+		patches = nil
+	}
+	c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home, Patches: patches}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,6 +527,45 @@ func TestGateEntryPoints(t *testing.T) {
 			}
 			if r := g.Result(CheckAttestation, "plain"); slices.Contains(tc.skipped, CheckAttestation) != (r.Status == StatusNotEvaluated) || g.Entry != tc.entry {
 				t.Errorf("Result(10, plain) = %+v at %s", r, g.Entry)
+			}
+		})
+	}
+}
+
+// Install, plugin check and plugin gate --against compose the artifact's rows disabled,
+// and boot holds them disabled until plugin enable: the gate evaluates the artifact on
+// every row its bundle inserted, enabled or not (ADR-060 decision 17). A disabled row
+// that no artifact inserted runs no code, and only check 8, which runs on every row,
+// evaluates it; Result says so for the others.
+func TestGateEvaluatesDisabledArtifactRows(t *testing.T) {
+	for _, tc := range []struct {
+		entry Entry
+		want  []string
+	}{
+		{EntryInstall, []string{"2 pack:e1 unserved-definition stop=false", "5 pack:e1 signer stop=false", "10 pack:e1 attestation stop=false"}},
+		{EntryOffline, []string{"2 pack:e1 unserved-definition stop=false", "10 pack:e1 attestation stop=false"}},
+		{EntryBoot, []string{"2 pack:e1 unserved-definition stop=false", "5 pack:e1 signer stop=false", "10 pack:e1 attestation stop=false"}},
+	} {
+		t.Run(string(tc.entry), func(t *testing.T) {
+			fx := newGateFix()
+			fx.in.Entry, fx.disabled = tc.entry, true
+			fx.bundles["b"] += "    - {id: off, plugin: o/plain, enabled: false}\n"
+			fx.art("acme/pack", func(a *Artifact) {
+				a.Kept.Manifest = []byte(strings.Replace(packManifestText("acme/pack"), `["0.1"]`, `["0.9"]`, 1))
+				a.Record.Signer, a.Record.Attestation = Unsigned, nil
+			})
+			g := fx.run(t)
+			if got := gateLines(g); !equalLines(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(tc.want))) || g.Pass {
+				t.Fatalf("failures %q, pass %v", got, g.Pass)
+			}
+			if r := g.Result(CheckAttestation, "pack:e1"); r.Status != StatusFail {
+				t.Errorf("Result(10, pack:e1) = %+v", r)
+			}
+			if r := g.Result(CheckManifest, "off"); r.Status != StatusNotEvaluated || !strings.Contains(r.Reason, "disabled") {
+				t.Errorf("Result(1, off) = %+v", r)
+			}
+			if r := g.Result(CheckLayerRules, "off"); r.Status != StatusPass {
+				t.Errorf("Result(8, off) = %+v", r)
 			}
 		})
 	}

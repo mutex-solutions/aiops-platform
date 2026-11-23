@@ -262,9 +262,16 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	a := AdmitWith(w, p.input(w), p.roles)
 	// Every denied row is listed, a required one too: its denial is also an error that
 	// rejects the generation, and reload reports either as ErrDenied (ADR-059 decision 15).
+	// A disabled row is detached already, so only check 8 denies it here, as it did before
+	// the gate evaluated an artifact's disabled rows: disabling a row stays possible.
 	var out launch.Admission
 	for _, id := range a.Gate.Rows {
-		if d, ok := a.Gate.Denial(id); ok {
+		d, ok := a.Gate.Denial(id)
+		if r, found := findRow(w, id); found && !r.Enabled {
+			d = a.Gate.Result(CheckLayerRules, id)
+			ok = d.Status == StatusFail
+		}
+		if ok {
 			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
 		}
 	}

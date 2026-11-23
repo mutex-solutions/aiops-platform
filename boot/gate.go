@@ -162,7 +162,8 @@ type RowResult struct {
 }
 
 // Slot is one of the ten checks with its failures. An evaluated slot lists only its
-// failures: a row of GateResult.Rows with no failure passed, unless Open lists it.
+// failures: a row of GateResult.Rows with no failure passed, unless Open or
+// GateResult.Unevaluated lists it.
 // Reason says why the entry point does not evaluate the check at all; Clauses lists
 // the clauses of an evaluated check that it does not evaluate, each with the reason,
 // and Open the rows that a clause it could not evaluate would have judged.
@@ -182,16 +183,19 @@ type Slot struct {
 // when no check failed on any row. Refused is true when boot must stop: a row that is
 // required, or a failure marked Stop. Detached lists the optional rows denied by a
 // check, which the launcher's copy disables, and those artifacts; Inactive lists the
-// optional rows whose plugin is not in the module table.
+// optional rows whose plugin is not in the module table. Unevaluated lists the disabled
+// rows that no installed artifact's bundle inserted: they mount no code, and only check
+// 8, which runs on every row, evaluates them.
 type GateResult struct {
-	Entry      Entry
-	Slots      []Slot
-	Rows       []string
-	Unresolved []RowResult
-	Pass       bool
-	Refused    bool
-	Detached   []string
-	Inactive   []string
+	Entry       Entry
+	Slots       []Slot
+	Rows        []string
+	Unevaluated []string
+	Unresolved  []RowResult
+	Pass        bool
+	Refused     bool
+	Detached    []string
+	Inactive    []string
 }
 
 // Result returns the result of one check on one row: pass or fail with a
@@ -217,6 +221,10 @@ func (g GateResult) Result(check int, row string) RowResult {
 		return r
 	}
 	if i := sort.SearchStrings(g.Rows, row); i == len(g.Rows) || g.Rows[i] != row {
+		return r
+	}
+	if check != CheckLayerRules && slices.Contains(g.Unevaluated, row) {
+		r.Reason = "a disabled row that no installed artifact inserted is not evaluated: it mounts no code"
 		return r
 	}
 	for _, f := range fails {
@@ -321,9 +329,12 @@ func GateWith(c Composition, in GateInput) GateResult {
 			}
 		}
 	}
+	// The rows of an installed artifact are evaluated disabled too: install, plugin check
+	// and plugin gate --against hold them so (ADR-060 decision 17).
 	for _, r := range c.Rows {
 		res.Rows = append(res.Rows, r.ID)
-		if !r.Enabled {
+		if !r.Enabled && installedBundle(r) == "" {
+			res.Unevaluated = append(res.Unevaluated, r.ID)
 			continue
 		}
 		if f, ok := g.resolve(r.Row); !ok {
