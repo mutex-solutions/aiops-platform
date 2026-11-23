@@ -53,3 +53,4 @@ check:
 		$(KC) lines sdk/def/$$d/v0/conformance 800 provisional || exit 1; \
 	done
 	$(KC) lines sdk/def/clock/v0/conformance 800 provisional
+	$(KC) lines sdk/def/composition/v0/conformance 800 provisional
