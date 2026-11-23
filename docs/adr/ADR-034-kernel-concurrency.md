@@ -1555,7 +1555,10 @@ above 1,200 ns) of 10, in ns:
 The gate passes on the merged kernel: one caller stays at 150 ns p50 in every run, and no
 `owner_enter_leave` run of any candidate allocates. The slow mode appears on both commits,
 more often on `8ec2d8c` in this session (27 of 40 windows at 8 and 32 callers, against 14
-of 40 on `e3a72af`), and no window of either exceeds 1,795 ns, so the 2026-11-22 failure
-was the host's slow mode plus one disturbed window (5,548 ns, 3.1 times that), not a
-change of the kernel. The lease cost under contention stays the tracking point for S3 that
-the owner decided.
+of 40 on `e3a72af`), and no `owner_enter_leave` window of either exceeds 1,795 ns, so the
+2026-11-22 failure points to the host's slow mode plus one disturbed window (5,548 ns, 3.1
+times that), not to a change of the kernel. The cause of that window stays inferred: the
+failed run's 120 host-noise samples, now in
+`test/spike/s0/results/callpath-full-merge-commit/report.json`, show no swap pages moved
+and no throttled periods, and its raw records stay on the measurement host. The lease
+cost under contention stays the tracking point for S3 that the owner decided.
