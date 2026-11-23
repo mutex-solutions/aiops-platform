@@ -763,12 +763,16 @@ decision 16 names those of check 8): `00:478`; `07:1318`, `:1386`, `:1816`, `:18
 ADRs accepted on 2026-11-23 in the ADR table of `08` §3: the row of ADR-047. An option
 the owner did not choose edits nothing.
 
-**The lock entry of in-process code is open.** Decision 8 gives in-process code no entry
-in `plugins.lock`, and decision 18 starts its check of that code from the digest that
-install recorded, since the code has no lock entry. ADR-020 decision 10, accepted the
-same day, gives in-process code an entry that pins nothing and through which boot finds
-the record of a row with no origin artifact (ADR-020 decision 12). The owner accepted
-both, and only the owner settles which holds. One question goes to the owner: does
-in-process code get an entry in `plugins.lock`, as ADR-020 decision 10 states, or none,
-as decisions 8 and 18 state? Until the owner answers, `07:1841` and `:1855` state the
-point as open, and decisions 8 and 18 and `00:478` are not edited.
+**In-process code has no entry in `plugins.lock`** (owner, 2026-11-23). Decision 8 gives
+in-process code no entry in `plugins.lock`, and decision 18 starts its check of that code
+from the digest that install recorded, since the code has no lock entry. As accepted,
+ADR-020 decision 10 gave in-process code an entry that pins nothing, through which boot
+found the record of a row with no origin artifact (ADR-020 decision 12). The owner was
+asked which holds and answered on 2026-11-23: in-process code gets no entry, as
+decisions 8 and 18, `07:1841` and `00:478` state, so decisions 8 and 18 stand as written.
+ADR-020 decisions 10 and 12 change: boot finds the record of an in-process row by its
+plugin id in the records install wrote under `$AIOPS_HOME/verified/`, whose
+`record.yaml` carries the plugin id, and not through the lock. `07:1841` and `:1855`, the
+row `Lock` and the relationship from `Install` to `Lock` in `07` §9, say that in-process
+code has no entry; `00:478` locks only a remote plugin or a pack with no code and is not
+edited for this point.
