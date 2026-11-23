@@ -24,7 +24,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 	ID:       "aiops/clock",
 	Provides: []kernel.AnyKey{def.Key},
 	Apply: func(c *kernel.Context, _ any) error {
-		s := &system{wake: make(chan struct{}, 1)}
+		s := &system{act: c, wake: make(chan struct{}, 1)}
 		c.Go("clock timers", s.run)
 		return def.Key.Provide(c, s)
 	},
@@ -34,6 +34,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 // a tracked goroutine of the row fires, so no timer starts a goroutine of its own
 // (plugin vet). A timer belongs to the context it was started from.
 type system struct {
+	act     *kernel.Context // the activation that provides the clock
 	mu      sync.Mutex
 	pending []*timer
 	wake    chan struct{} // one slot: the pending timers changed
@@ -47,7 +48,14 @@ func (*system) Now() time.Time { return time.Now() }
 // fires or is stopped, so the ledger holds the pending timers only. The kernel runs
 // the scope's setup on the fiber's lane after After returns; a fiber that quiesces
 // before that never records the stop, and the row drops its timer at its next pass.
+// Once the row's activation is released, no goroutine fires a timer, so After
+// returns kernel.ErrInactive and records nothing.
 func (s *system) After(c *kernel.Context, d time.Duration) (def.Timer, error) {
+	leave, ok := s.act.Enter()
+	if !ok {
+		return nil, kernel.ErrInactive
+	}
+	defer leave()
 	t := &timer{s: s, at: time.Now().Add(d), ch: make(chan time.Time, 1)}
 	h, err := c.RequestEffectScope("clock timer", func(es *kernel.EffectScope) error {
 		return es.Defer("clock timer", func(context.Context) error { t.Stop(); return nil })
