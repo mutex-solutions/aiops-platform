@@ -16,7 +16,7 @@ import (
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T) (*kernel.Root, *kernel.Fiber) {
 		w := base(t)
-		f := w.root.Plugin(reload.New(), reload.Config{Queue: 8, History: 8})
+		f := w.root.Plugin(reload.New(), map[string]any{"queue": int64(8), "history": int64(8)})
 		active(t, f)
 		return w.root, f
 	})

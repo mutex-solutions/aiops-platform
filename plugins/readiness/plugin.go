@@ -37,6 +37,7 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
 // New returns the readiness row, which has no config. Its activations share whether
@@ -44,15 +45,18 @@ import (
 // binary makes one value, which its module table holds.
 func New() kernel.Plugin {
 	unknown := new(atomic.Bool)
-	return kernel.Define(kernel.Plugin{
+	return plugin.Define(plugin.Spec[Config]{
 		ID: "aiops/readiness",
 		Inject: []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CatalogKey),
 			kernel.Need(launch.ReadyKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
 		Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Applied.Use(kernel.DefaultStage),
 			reload.Operation.Use(kernel.DefaultStage)},
-		Apply: func(c *kernel.Context, _ any) error { return apply(c, unknown) },
+		Apply: func(c *kernel.Context, _ *Config) error { return apply(c, unknown) },
 	})
 }
+
+// Config is the config of the row, which has none.
+type Config struct{}
 
 func apply(c *kernel.Context, unknown *atomic.Bool) error {
 	r := &latch{

@@ -21,7 +21,7 @@ func TestConformance(t *testing.T) {
 		l.Environ = s.Env
 		root := kerneltest.New(t)
 		kerneltest.Mount(root, lp)
-		f := root.Plugin(configrefs.Plugin, configrefs.Config{MaxFileBytes: 1 << 10})
+		f := root.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": int64(1 << 10)})
 		if err := f.Await(t.Context()); err != nil {
 			t.Fatal(err)
 		}

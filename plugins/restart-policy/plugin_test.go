@@ -119,9 +119,10 @@ type world struct {
 	rp     *kernel.Fiber
 }
 
-func conf(max int, window, min, maxd time.Duration, factor int, stable time.Duration) restartpolicy.Config {
-	return restartpolicy.Config{MaxFailures: max, Window: window, BackoffMin: min, BackoffMax: maxd, Factor: factor,
-		Stable: stable, Infrastructure: []string{"sql"}}
+// conf is a row config as the launcher parses it.
+func conf(max int, window, min, maxd time.Duration, factor int, stable time.Duration) map[string]any {
+	return map[string]any{"maxFailures": int64(max), "window": window.String(), "backoffMin": min.String(),
+		"backoffMax": maxd.String(), "factor": int64(factor), "stable": stable.String(), "infrastructure": []any{"sql"}}
 }
 
 func newWorld(t *testing.T, cfg any, opts ...kerneltest.Option) *world {
@@ -1021,7 +1022,7 @@ held:
 
 func TestDecode(t *testing.T) {
 	good := map[string]any{"maxFailures": int64(3), "window": "10m", "backoffMin": "1s", "backoffMax": "1m",
-		"factor": 2.0, "stable": "30s", "infrastructure": []any{"sql", "http"}}
+		"factor": int64(2), "stable": "30s", "infrastructure": []any{"sql", "http"}}
 	with := func(k string, v any) map[string]any {
 		m := map[string]any{}
 		for kk, vv := range good {
@@ -1041,13 +1042,16 @@ func TestDecode(t *testing.T) {
 	}{
 		{"map", good, true},
 		{"map with int and no stable", with("stable", nil), true},
-		{"struct", conf(1, time.Second, time.Second, time.Second, 1, 0), true},
+		{"the parsed form of conf", conf(1, time.Second, time.Second, time.Second, 1, 0), true},
+		{"a Go struct is not a parsed tree", restartpolicy.Config{MaxFailures: 1, Window: time.Second, BackoffMin: time.Second,
+			BackoffMax: time.Second, Factor: 1, Infrastructure: []string{"sql"}}, false},
+		{"a whole float is not an integer", with("factor", 2.0), false},
 		{"nil", nil, false},
 		{"wrong type", 3, false},
 		{"unknown field", with("bogus", 1), false},
 		{"no failures allowed", with("maxFailures", int64(0)), false},
 		{"fractional count", with("maxFailures", 1.5), false},
-		{"count as int", with("maxFailures", 2), true},
+		{"count as a Go int, which the launcher never parses", with("maxFailures", 2), false},
 		{"count as text", with("maxFailures", "2"), false},
 		{"window missing", with("window", nil), false},
 		{"window not a string", with("window", 5), false},

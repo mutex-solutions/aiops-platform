@@ -150,7 +150,7 @@ func newScripted(t *testing.T, s *script, mounts map[string]loader.Mount, prev .
 	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
 		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
 	kerneltest.Mount(w.root, lp, sp)
-	w.fiber = w.root.Plugin(reload.New(), reload.Config{Queue: 4, History: 8})
+	w.fiber = w.root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(8)})
 	active(t, w.fiber)
 	w.svc = submitter(t, w.root, "aiops/submitter")
 	return w
@@ -206,7 +206,7 @@ func TestGenerationThatRestartsTheReloadRowFinishesBeforeTheRestart(t *testing.T
 		for _, op := range ops {
 			order = append(order, op.Entry.ID)
 			if op.Entry.ID == "reload" { // the loader restarts the reload fiber with its new config
-				if err := w.fiber.Update(t.Context(), reload.Config{Queue: 8, History: 8}); err != nil {
+				if err := w.fiber.Update(t.Context(), map[string]any{"queue": int64(8), "history": int64(8)}); err != nil {
 					t.Error(err)
 				}
 			}
@@ -420,7 +420,7 @@ func TestAbandonAfterTheApplyCommitsWhatTheLoaderHolds(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)})
 	active(t, rf)
 	svc := submitter(t, root, "aiops/caller")
 	id, err := svc.Submit(t.Context(), def.Op{})
@@ -545,7 +545,7 @@ func TestGenerationWithNoRequiredSetFailsItsVerdict(t *testing.T) {
 	sp := kernel.Define(kernel.Plugin{ID: "aiops/script-loader", Provides: []kernel.AnyKey{loader.Key},
 		Apply: func(c *kernel.Context, _ any) error { return loader.Key.Provide(c, s) }})
 	kerneltest.Mount(root, lp, sp)
-	active(t, root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4}))
+	active(t, root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)}))
 	r := await(t, submitter(t, root, "aiops/caller"))
 	if got := outcome(r.Report, "required set"); r.Status != def.RollbackFailed || got.Outcome != "fail" || !strings.Contains(got.Detail, errForgotten.Error()) {
 		t.Fatalf("result = %+v", r)
@@ -742,7 +742,7 @@ func TestOperationQueuedBehindARestartOfTheReloadRowRunsAfterIt(t *testing.T) {
 		if queued, err = w.svc.Submit(t.Context(), def.Op{Source: "behind"}); err != nil {
 			t.Error(err)
 		}
-		if err := w.fiber.Update(t.Context(), reload.Config{Queue: 8, History: 8}); err != nil {
+		if err := w.fiber.Update(t.Context(), map[string]any{"queue": int64(8), "history": int64(8)}); err != nil {
 			t.Error(err)
 		}
 		return nil
@@ -820,7 +820,7 @@ func TestAbandonAfterTheApplyLeavesTheStateUnknownAcrossARestart(t *testing.T) {
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
 	events := opEvents(t, root)
-	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)})
 	active(t, rf)
 	svc := submitter(t, root, "aiops/caller")
 	id, err := svc.Submit(t.Context(), def.Op{})
@@ -828,7 +828,7 @@ func TestAbandonAfterTheApplyLeavesTheStateUnknownAcrossARestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-bl.awaiting
-	if err := rf.Update(t.Context(), reload.Config{Queue: 4, History: 4}); err != nil { // the row restarts
+	if err := rf.Update(t.Context(), map[string]any{"queue": int64(4), "history": int64(4)}); err != nil { // the row restarts
 		t.Fatal(err)
 	}
 	r, err := svc.Await(t.Context(), id)

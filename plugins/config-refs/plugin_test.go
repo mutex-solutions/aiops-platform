@@ -97,7 +97,7 @@ func TestResolvesEachScheme(t *testing.T) {
 func TestInwardListenersRunAndTheirResultIsResolved(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	inner := kernel.Define(kernel.Plugin{ID: "aiops/z-inner", Hooks: []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
 			kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[any]) (any, error) {
@@ -125,7 +125,7 @@ func TestInwardListenersRunAndTheirResultIsResolved(t *testing.T) {
 func TestNestedMapsAndListsAreResolvedWithoutChangingTheRaw(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
-	root := mount(t, l, lp, map[string]any{"maxFileBytes": 8})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	raw := map[string]any{
 		"outer": map[string]any{"list": []any{"x", ref("env", "AIOPS_REF_A"), map[string]any{"deep": ref("env", "AIOPS_REF_B")}}},
 		"other": []any{"plain", int64(1)},
@@ -157,7 +157,7 @@ func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
 	if st, _ := user.State(t.Context()); st != kernel.Pending || g.got.Load() != nil {
 		t.Fatalf("before config-refs: %s, applied %v", st, g.got.Load() != nil)
 	}
-	refs := root.Plugin(configrefs.Plugin, configrefs.Config{MaxFileBytes: 8})
+	refs := root.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": int64(8)})
 	if err := errors.Join(refs.Await(t.Context()), user.Await(t.Context())); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
 func TestDryRunChecksWithoutReturningValues(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	got := make(chan refsdef.DryRun, 1)
 	user := kernel.Define(kernel.Plugin{ID: "t/launcher", Inject: []kernel.Dep{kernel.Need(refsdef.Key)},
 		Apply: func(c *kernel.Context, _ any) error { got <- refsdef.Key.Of(c); return nil }})
@@ -218,7 +218,7 @@ func TestDryRunChecksWithoutReturningValues(t *testing.T) {
 
 func TestConfigWithoutReferencesPassesThrough(t *testing.T) {
 	l, lp := fake.New()
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 64})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(64)})
 	for _, raw := range []any{nil, "text", struct{ A int }{1}, map[string]any{"a": []any{"b"}}} {
 		g, err := mountTarget(t, root, raw)
 		if err != nil {
@@ -257,7 +257,7 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
 	l.Flags = map[string]string{"refs-dir": dir}
-	cfg := configrefs.Config{MaxFileBytes: 32}
+	cfg := map[string]any{"maxFileBytes": int64(32)}
 	root := mount(t, l, lp, cfg)
 	unset, unsetLp := fake.New()
 	unsetRoot := mount(t, unset, unsetLp, cfg)
@@ -308,7 +308,7 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 func TestUnreadableFileRootFails(t *testing.T) {
 	l, lp := fake.New()
 	l.Flags = map[string]string{"refs-dir": filepath.Join(t.TempDir(), "absent")}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	_, err := mountTarget(t, root, map[string]any{"a": ref("file", "x")})
 	if !errors.Is(err, refsdef.ErrUnresolved) || !strings.Contains(err.Error(), "file root cannot be opened") {
 		t.Errorf("err = %v", err)
@@ -318,7 +318,7 @@ func TestUnreadableFileRootFails(t *testing.T) {
 func TestUpdateWithUnresolvedReferenceIsRefused(t *testing.T) {
 	l, lp := fake.New()
 	l.Environ = map[string]string{"AIOPS_REF_A": "a"}
-	root := mount(t, l, lp, configrefs.Config{MaxFileBytes: 8})
+	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	g := &target{}
 	f := root.Plugin(g.plugin(), map[string]any{"a": ref("env", "AIOPS_REF_A")})
 	if err := f.Await(t.Context()); err != nil {
@@ -355,18 +355,18 @@ func TestDecode(t *testing.T) {
 		raw  any
 		ok   bool
 	}{
-		{"struct", configrefs.Config{MaxFileBytes: 1}, true},
+		{"a Go struct is not a parsed tree", configrefs.Config{MaxFileBytes: 1}, false},
 		{"map with int64", map[string]any{"maxFileBytes": int64(1)}, true},
-		{"map with int", map[string]any{"maxFileBytes": 1}, true},
-		{"map with a whole float", map[string]any{"maxFileBytes": 2.0}, true},
+		{"a Go int, which the launcher never parses", map[string]any{"maxFileBytes": 1}, false},
+		{"a whole float is not an integer", map[string]any{"maxFileBytes": 2.0}, false},
 		{"nil", nil, false},
 		{"a string", "x", false},
-		{"zero bound", configrefs.Config{}, false},
+		{"zero bound", map[string]any{"maxFileBytes": int64(0)}, false},
 		{"negative bound", map[string]any{"maxFileBytes": int64(-1)}, false},
 		{"fractional bound", map[string]any{"maxFileBytes": 1.5}, false},
 		{"string bound", map[string]any{"maxFileBytes": "1"}, false},
-		{"a file root flag", map[string]any{"maxFileBytes": 1, "fileRootFlag": "refs-dir"}, false},
-		{"unknown field", map[string]any{"maxFileBytes": 1, "bogus": 1}, false},
+		{"a file root flag", map[string]any{"maxFileBytes": int64(1), "fileRootFlag": "refs-dir"}, false},
+		{"unknown field", map[string]any{"maxFileBytes": int64(1), "bogus": 1}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// One root each: a second config-refs in a realm is a second provider of ReadyKey.
@@ -410,7 +410,7 @@ func TestSealedHookNeedsAListenerEntry(t *testing.T) {
 	if err := listed.Plugin(lp, nil).Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if err := listed.Plugin(configrefs.Plugin, configrefs.Config{MaxFileBytes: 1}).Await(t.Context()); err != nil {
+	if err := listed.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": int64(1)}).Await(t.Context()); err != nil {
 		t.Fatalf("listed config-refs: %v", err)
 	}
 
@@ -418,7 +418,7 @@ func TestSealedHookNeedsAListenerEntry(t *testing.T) {
 	if err := unlisted.Plugin(lp, nil).Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	err := unlisted.Plugin(configrefs.Plugin, configrefs.Config{MaxFileBytes: 1}).Await(t.Context())
+	err := unlisted.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": int64(1)}).Await(t.Context())
 	if !errors.Is(err, kernel.ErrSealed) {
 		t.Errorf("unlisted config-refs: err = %v, want ErrSealed", err)
 	}

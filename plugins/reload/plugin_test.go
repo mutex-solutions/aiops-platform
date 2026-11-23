@@ -93,7 +93,7 @@ type world struct {
 func newWorld(t *testing.T, queue, history int) *world {
 	t.Helper()
 	w := base(t)
-	w.fiber = w.root.Plugin(reload.New(), reload.Config{Queue: queue, History: history})
+	w.fiber = w.root.Plugin(reload.New(), map[string]any{"queue": int64(queue), "history": int64(history)})
 	active(t, w.fiber)
 	w.svc = w.consumer("aiops/submitter")
 	return w
@@ -668,7 +668,7 @@ func TestSubmitFromALeasedCallDoesNotWait(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	active(t, root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4}))
+	active(t, root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)}))
 
 	var svc def.Reload
 	var cc *kernel.Context
@@ -743,7 +743,7 @@ func TestDisposalWhileSettlingAbandonsTheOperation(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)})
 	active(t, rf)
 	var svc def.Reload
 	caller := kernel.Define(kernel.Plugin{ID: "aiops/caller", Inject: []kernel.Dep{kernel.Need(def.Key)},
@@ -817,13 +817,13 @@ func TestDecode(t *testing.T) {
 		raw  any
 		ok   bool
 	}{
-		{"struct", reload.Config{Queue: 1, History: 1}, true},
+		{"a Go struct is not a parsed tree", reload.Config{Queue: 1, History: 1}, false},
 		{"map int64", map[string]any{"queue": int64(2), "history": int64(3)}, true},
-		{"map int", map[string]any{"queue": 2, "history": 3}, true},
-		{"map float", map[string]any{"queue": 2.0, "history": 3.0}, true},
+		{"a Go int, which the launcher never parses", map[string]any{"queue": 2, "history": 3}, false},
+		{"a whole float is not an integer", map[string]any{"queue": 2.0, "history": 3.0}, false},
 		{"nil", nil, false},
 		{"wrong type", "x", false},
-		{"zero queue", reload.Config{Queue: 0, History: 1}, false},
+		{"zero queue", map[string]any{"queue": int64(0), "history": int64(1)}, false},
 		{"zero history", map[string]any{"queue": 1}, false},
 		{"fractional", map[string]any{"queue": 1.5, "history": 1}, false},
 		{"huge", map[string]any{"queue": 1e12, "history": 1}, false},
@@ -860,7 +860,7 @@ func TestBindingMaps(t *testing.T) {
 	root := bound(t, providers, consumers)
 	active(t, root.Plugin(lp, nil))
 	active(t, root.Plugin(ldp, nil))
-	active(t, root.Plugin(rl, reload.Config{Queue: 1, History: 1}))
+	active(t, root.Plugin(rl, map[string]any{"queue": int64(1), "history": int64(1)}))
 	active(t, root.Plugin(submitter, nil))
 	if err := failure(t, root.Plugin(stranger, nil)); !errors.Is(err, kernel.ErrBinding) {
 		t.Errorf("an unlisted consumer of reload: err = %v, want ErrBinding", err)
@@ -871,7 +871,7 @@ func TestBindingMaps(t *testing.T) {
 	other := bound(t, providers, kernel.Bindings{loader.Key: nil, def.Key: nil, launch.ProfileContextKey: {rl}, launch.AppExitKey: nil})
 	active(t, other.Plugin(lp, nil))
 	active(t, other.Plugin(ldp, nil))
-	if err := failure(t, other.Plugin(rl, reload.Config{Queue: 1, History: 1})); !errors.Is(err, kernel.ErrBinding) {
+	if err := failure(t, other.Plugin(rl, map[string]any{"queue": int64(1), "history": int64(1)})); !errors.Is(err, kernel.ErrBinding) {
 		t.Errorf("reload not listed for loader: err = %v, want ErrBinding", err)
 	}
 }
@@ -1162,7 +1162,7 @@ func TestRollbackThatEndsWhileSettlingIsAbandoned(t *testing.T) {
 	}
 	l.PlanFn = func(_ context.Context, f, to launch.Composition) (launch.Plan, error) { return diff(f, to), nil }
 	kerneltest.Mount(root, lp, lpl)
-	rf := root.Plugin(reload.New(), reload.Config{Queue: 4, History: 4})
+	rf := root.Plugin(reload.New(), map[string]any{"queue": int64(4), "history": int64(4)})
 	active(t, rf)
 	var svc def.Reload
 	caller := kernel.Define(kernel.Plugin{ID: "aiops/caller", Inject: []kernel.Dep{kernel.Need(def.Key)},

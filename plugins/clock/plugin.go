@@ -16,14 +16,18 @@ import (
 
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
+
+// Config is the config of the row, which has none.
+type Config struct{}
 
 // Plugin is the clock row. Each binary has one value of it: the module table holds
 // it and the binding maps list it.
-var Plugin = kernel.Define(kernel.Plugin{
+var Plugin = plugin.Define(plugin.Spec[Config]{
 	ID:       "aiops/clock",
 	Provides: []kernel.AnyKey{def.Key},
-	Apply: func(c *kernel.Context, _ any) error {
+	Apply: func(c *kernel.Context, _ *Config) error {
 		s := &system{act: c, wake: make(chan struct{}, 1)}
 		c.Go("clock timers", s.run)
 		return def.Key.Provide(c, s)
