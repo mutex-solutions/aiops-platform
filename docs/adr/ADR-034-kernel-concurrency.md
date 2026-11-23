@@ -1415,8 +1415,11 @@ oracle comparison passed at `GOMAXPROCS=8` and at `GOMAXPROCS=2`, 68.5 s and 67.
 package time (`test/spike/s0/results/causal-main-merged/`), and the full property
 workload passed on three backends in a frozen checkout: exit 0, 4,525.13 s in total,
 kernel backend 1,686.34 s, with the same source closure as `7f497a6`
-(`test/spike/s0/results/property-full-main-merged/`). The call-path gate on `fb0a86b`
-failed; see "2026-11-22 call-path gate on the merge commit" below.
+(`test/spike/s0/results/property-full-main-merged/`). The call-path gate failed once on
+`fb0a86b` (`test/spike/s0/results/callpath-full-merge-commit/`) and then passed on the
+merged kernel in a same-session comparison with `8ec2d8c`
+(`test/spike/s0/results/callpath-full-merged-ab/`); see "2026-11-22 call-path gate on
+the merge commit" below.
 
 The kernel is 7,900 physical lines of production Go (cap 8,200): 140 for G1 and
 G2, 24 for G3 and G4, 91 for the events, 19 for the registry lookup, 49 for G6,
@@ -1533,3 +1536,26 @@ No kernel or adapter change is made: removing `act` or padding the handle change
 line that is written, and the shard choice stays as decided above for S3. The gate on the
 merged kernel is to be run again on the measurement host with `8ec2d8c` in the same
 session, alternating by process, and judged against it.
+
+**Same-session comparison on the measurement host, 2026-11-22 and 2026-11-23.** Four full
+gate runs, one process each, alternating `e3a72af` (main after the merge: `sdk/kernel` as
+in `fb0a86b` plus the test-only guard above, and the same gate source closure) and
+`8ec2d8c` (`test/spike/s0/results/callpath-full-merged-ab/`; the failed run on `fb0a86b`
+is in `test/spike/s0/results/callpath-full-merge-commit/`). `kernel` `owner_enter_leave`,
+baseline arm, p50 / p99 over all runs, the highest window p99, and the slow windows (p99
+above 1,200 ns) of 10, in ns:
+
+| Run | Commit | Gate | 8 callers | 32 callers | Highest window p99 | Slow windows, 8 + 32 callers |
+|---|---|---|---|---|---|---|
+| 1 | `e3a72af` | pass | 367 / 1,309 | 368 / 1,304 | 1,636 | 2 + 2 |
+| 2 | `8ec2d8c` | pass | 581 / 1,519 | 549 / 1,513 | 1,795 | 8 + 8 |
+| 3 | `e3a72af` | pass | 401 / 1,406 | 426 / 1,412 | 1,762 | 5 + 5 |
+| 4 | `8ec2d8c` | pass | 455 / 1,466 | 443 / 1,460 | 1,648 | 5 + 6 |
+
+The gate passes on the merged kernel: one caller stays at 150 ns p50 in every run, and no
+`owner_enter_leave` run of any candidate allocates. The slow mode appears on both commits,
+more often on `8ec2d8c` in this session (27 of 40 windows at 8 and 32 callers, against 14
+of 40 on `e3a72af`), and no window of either exceeds 1,795 ns, so the 2026-11-22 failure
+was the host's slow mode plus one disturbed window (5,548 ns, 3.1 times that), not a
+change of the kernel. The lease cost under contention stays the tracking point for S3 that
+the owner decided.
