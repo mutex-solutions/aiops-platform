@@ -119,6 +119,23 @@ gaps:
    - If ADR-020 makes the attestation a layer, its subject cannot be the artifact digest,
      which would contain it; the subject per kind of artifact is ADR-020's.
 
+   **On disk.** `plugin pack` writes the artifact as an OCI image layout
+   (`github.com/opencontainers/image-spec@v1.1.1`, `image-layout.md`): the directory
+   `artifact/` beside `plugin.yaml`, or the one `--out` names, holding `oci-layout`,
+   `blobs/sha256/` with every blob of the table above, and `index.json`, whose descriptor
+   of the image manifest carries `org.opencontainers.image.ref.name` set to the manifest's
+   `version`. `plugin pack` refuses a directory that exists and is not empty, so a layout
+   holds one artifact; `plugin check` step 7 packs into a directory of its own and removes
+   it (`07:1573`). `plugin sign` reads that layout and writes into it what ADR-020 fixes
+   (the signature, and the attestation where it is a referrer). `plugin push` reads it and
+   copies the image manifest, every blob it names and what `sign` added to the registry,
+   and prints the spec by digest (`07:1852`). A local-path spec (`07:1852`) names such a
+   directory: `inspect`, `gate --against`, `install` and `verify` read it as they read a
+   registry, and refuse a layout whose `index.json` does not name exactly one manifest of
+   `artifactType` `application/vnd.aiops.plugin.v1`. The layout is written and read with
+   the store of `oras-go` (decision 4), package `content/oci`, which implements that
+   specification.
+
 2. **What each command fetches.** Every blob is checked against the digest of its
    descriptor before it is used, after the signature over the image manifest is verified
    as ADR-020 fixes.
@@ -357,7 +374,7 @@ gaps:
 ## Consequences
 
 - The S2a code gains, in the operations plugin, the writer and reader of decisions 1 to 3
-  on `oras-go`, and the checks of decisions 3, 6 and 7 at install. `boot` gains the reader
+  on `oras-go`, for a registry and for the local layout of decision 1, and the checks of decisions 3, 6 and 7 at install. `boot` gains the reader
   of `bundles/<plugin id>/`, the group row of decision 5, the clause of decision 11 and
   the lock entries of decision 8; the bundle names of `profile.yaml` admit a plugin id;
   `internal/serve` creates `run/` with mode 0700 and finds it present under a read-only
