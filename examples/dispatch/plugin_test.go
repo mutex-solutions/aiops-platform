@@ -12,6 +12,13 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
+// The dispatcher has no config: plugin.Define refuses any field.
+func TestConfigIsChecked(t *testing.T) {
+	if _, err := dispatch.Plugin.Decode(map[string]any{"color": "red"}); err == nil || err.Error() != "invalid config: config.color: unknown field" {
+		t.Errorf("Decode = %v", err)
+	}
+}
+
 // The dispatcher passes the guard half of the echoers suite.
 func TestEchoersGuard(t *testing.T) {
 	echoconf.Run(t, func(t *testing.T) (echoconf.Subject, *kernel.Root) {

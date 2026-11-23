@@ -9,6 +9,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
@@ -30,10 +31,23 @@ func TestStamp(t *testing.T) {
 	}
 }
 
+// The config follows the decode rules of sdk/plugin (plugin.Define), and the
+// stamper refuses an empty name.
 func TestConfigIsChecked(t *testing.T) {
-	for _, raw := range []any{"text", map[string]any{"name": ""}, map[string]any{"name": 1}, map[string]any{"color": "red"}} {
-		if _, err := stamper.Plugin.Decode(raw); err == nil {
-			t.Errorf("Decode(%v) accepted it", raw)
+	for _, tc := range []struct {
+		raw  any
+		want string
+	}{
+		{"text", `invalid config: config: want a map, got "text"`},
+		{map[string]any{"name": ""}, "invalid config: name is empty"},
+		{map[string]any{"name": 1}, "invalid config: config.name: want a string, got 1"},
+		{map[string]any{"color": "red"}, "invalid config: config.color: unknown field"},
+	} {
+		if _, err := stamper.Plugin.Decode(tc.raw); err == nil || err.Error() != tc.want {
+			t.Errorf("Decode(%v) = %v, want %q", tc.raw, err, tc.want)
 		}
+	}
+	if _, err := plugin.Describe[stamper.Config](); err != nil {
+		t.Error(err)
 	}
 }

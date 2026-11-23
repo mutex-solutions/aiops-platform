@@ -18,6 +18,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/examples/stamper"
 	clockfake "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0/fake"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
@@ -60,11 +61,22 @@ func TestConfigIsChecked(t *testing.T) {
 	if _, err := caller.Plugin.Decode(map[string]any{"dir": "/run", "interval": "1s"}); err != nil {
 		t.Errorf("a good config: %v", err)
 	}
-	for _, raw := range []any{"text", map[string]any{"interval": "soon"}, map[string]any{"interval": "-1s"},
-		map[string]any{"dir": 1}, map[string]any{"color": "red"}} {
-		if _, err := caller.Plugin.Decode(raw); err == nil {
-			t.Errorf("Decode(%v) accepted it", raw)
+	for _, tc := range []struct {
+		raw  any
+		want string
+	}{
+		{"text", `invalid config: config: want a map, got "text"`},
+		{map[string]any{"interval": "soon"}, `invalid config: config.interval: want a duration such as 50ms or 1h30m, got "soon"`},
+		{map[string]any{"interval": "-1s"}, "invalid config: interval is not positive"},
+		{map[string]any{"dir": 1}, "invalid config: config.dir: want a string, got 1"},
+		{map[string]any{"color": "red"}, "invalid config: config.color: unknown field"},
+	} {
+		if _, err := caller.Plugin.Decode(tc.raw); err == nil || err.Error() != tc.want {
+			t.Errorf("Decode(%v) = %v, want %q", tc.raw, err, tc.want)
 		}
+	}
+	if _, err := plugin.Describe[caller.Config](); err != nil {
+		t.Error(err)
 	}
 }
 
