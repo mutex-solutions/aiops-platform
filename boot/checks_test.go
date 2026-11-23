@@ -403,6 +403,16 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 		{"a pack's statement of another digest", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Record.Attestation = art("acme/pack@0.1.0", hexC, echoAttested, "") })
 		}, []string{"10 pack:e1 attestation stop=false"}},
+		// ADR-020 decisions 9 and 10: the signed manifest holds statements for first-party
+		// and test-distribution entries only; the install record of a third-party
+		// in-process artifact is its attestation.
+		{"a third-party in-process entry with no statement in the signed manifest", func(fx *gateFix) {
+			fx.dist.plugins["acme/echoer"] = [2]string{fx.dist.plugins["acme/echoer"][0], "-"}
+		}, nil},
+		{"a third-party in-process entry with no statement anywhere", func(fx *gateFix) {
+			fx.dist.plugins["acme/echoer"] = [2]string{fx.dist.plugins["acme/echoer"][0], "-"}
+			fx.art("acme/echoer", func(a *Artifact) { a.Record.Attestation = nil })
+		}, []string{"10 echoer:e2 attestation stop=false"}},
 		{"an in-process artifact that pins another module than the binary runs", func(fx *gateFix) {
 			fx.in.Tie["acme/echoer"] = Tie{Module: GoModule{Path: testModule, Version: "v0.2.0", Sum: sumA}}
 		}, []string{"10 echoer:e2 attestation stop=false"}},

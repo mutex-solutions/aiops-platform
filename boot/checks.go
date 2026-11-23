@@ -204,6 +204,9 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 		if rank(s.man.Stability) < rank(g.min) {
 			f(CheckStability, RuleStability, "row %q: %s is %s, below the profile's minStability %s", r.ID, what, s.man.Stability, g.min)
 		}
+		if s.art == nil && s.att == nil && art == r.Plugin {
+			continue // the install record of the plugin's artifact is its attestation (ADR-020 decision 10)
+		}
 		out = append(out, g.attested(r, s, what)...)
 	}
 	if subs[0].err == nil {
