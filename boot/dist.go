@@ -1,6 +1,8 @@
 package boot
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,7 +31,7 @@ import (
 //	  module: <Go module path>     version: <v>     sum: <h1:...>
 //	  provides: [<key>]  needs: [<key>]  wants: [<key>]
 //	  volatile: [<config path>]    a path under config, "config." is implied
-//	  hooks: [{hook: <name>, stage: <ordinal>, name: <stage name>}]
+//	  hooks: [{hook: <name>, stage: <ordinal>, name: <stage name>}]   one per hook and stage
 //	  classes: {providerBound: [<key>], consumerBound: [<key>], sealedHooks: [<hook>]}
 
 // ParseDist reads dist.yaml.
@@ -171,7 +173,7 @@ func (p *parser) hooks(n *yaml.Node, row string) ([]HookDecl, error) {
 		return nil, p.err(n, RuleType, row, "hooks must be a list")
 	}
 	var out []HookDecl
-	seen := map[string]bool{}
+	seen := map[HookDecl]bool{} // keyed by hook and stage, as the kernel keys a HookUse
 	for _, c := range n.Content {
 		prs, err := p.pairs(c, row, "a hook")
 		if err != nil {
@@ -208,13 +210,15 @@ func (p *parser) hooks(n *yaml.Node, row string) ([]HookDecl, error) {
 		if !named {
 			return nil, p.err(c, RuleType, row, "a hook states hook")
 		}
-		if seen[h.Hook] {
-			return nil, p.err(c, RuleDuplicateKey, row, "hook %q is listed twice", h.Hook)
+		if seen[h] {
+			return nil, p.err(c, RuleDuplicateKey, row, "hook %q is listed twice at one stage", h.Hook)
 		}
-		seen[h.Hook] = true
+		seen[h] = true
 		out = append(out, h)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Hook < out[j].Hook })
+	slices.SortFunc(out, func(a, b HookDecl) int {
+		return cmp.Or(strings.Compare(a.Hook, b.Hook), cmp.Compare(a.Stage, b.Stage), strings.Compare(a.StageName, b.StageName))
+	})
 	return out, nil
 }
 
