@@ -118,6 +118,15 @@ jobs:
           go run ./tools/kernelcheck lines loader 1300
           go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
           go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
+      - name: Toy definition line caps
+        # ADR-060 decision 35: each toy definition package, its fake and its suite are
+        # packages of their own, 800 lines each, provisional until the S2a exit.
+        run: |
+          for d in echoers stampers; do
+            go run ./tools/kernelcheck lines sdk/def/$d/v0 800 provisional fake conformance
+            go run ./tools/kernelcheck lines sdk/def/$d/v0/fake 800 provisional
+            go run ./tools/kernelcheck lines sdk/def/$d/v0/conformance 800 provisional
+          done
 
   s1-suites:
     name: S1 exit suites on the built binary

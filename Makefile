@@ -45,3 +45,9 @@ check:
 	$(KC) lines loader 1300
 	$(KC) vocab loader tools/kernelcheck/vocabulary.txt
 	$(KC) coverage cover-loader.out $(MOD)/loader
+	@# ADR-060 decision 35: each toy definition package, its fake and its suite, 800 each.
+	for d in echoers stampers; do \
+		$(KC) lines sdk/def/$$d/v0 800 provisional fake conformance && \
+		$(KC) lines sdk/def/$$d/v0/fake 800 provisional && \
+		$(KC) lines sdk/def/$$d/v0/conformance 800 provisional || exit 1; \
+	done
