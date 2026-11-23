@@ -1078,19 +1078,28 @@ to a question, the decision here settles it.
 (`08:996`), and that commit makes the edits that "Edits on acceptance" and the chosen
 options name: `00:137`, `:411` and `:757`; `01:280` and `:381`; `02:204`; `07:75`,
 `:1512`, `:1838`, `:1839`, `:1840`, `:1841`, `:1845`, `:1846`, `:1852`, `:1854`,
-`:1855`, `:1860`, `:1861` and `:1862`; `08:391`, `:402`, `:404`, `:493`, `:895`, `:935`,
+`:1860`, `:1861` and `:1862`; `08:391`, `:402`, `:404`, `:493`, `:895`, `:935`,
 `:1337` (L8) and `:1342` (L13); community:203, :206 and :458; licence:49 and :258; the
 plugin record in §11 and §18; and ADR-060 decisions 19, 23 and 33. The same commit keeps
 the lines that restate them consistent: `00:139` (the site's `aiopsctl`); `02:203` (the
 attestation as a referrer); `07:1543` and plugin record §2 row 12 (the attestation that
 `plugin sign` signs, unsigned only for an id that `allowUnsigned` lists); and plugin
 record §11, step 2 (the codec exemption and the site's `aiopsctl`). Left to later
-commits: the ADR table of `08` §3, which the commit that lists the ADRs accepted on this
-date edits; the parts of ADR-044 and ADR-047 that decision 18 asks of them, which each
-records with its own answers; the lines that state the lock entry of in-process code,
-`00:478`, `01:282`, `02:206` and ADR-047 decision 8, which gives in-process code no
-entry, against decision 10, and ADR-054:234 and :511, which call this ADR open, to the
-same commit as the ADR table; the register entries of
-sigstore-go, cosign and go-digest, to the commit that writes
+commits: the ADR table of `08` §3, and ADR-054:234 and :511, which call this ADR open, to
+the commit that lists the ADRs accepted on this date; the parts of ADR-044 and ADR-047
+that decision 18 asks of them, which each records with its own answers; the register
+entries of sigstore-go, cosign and go-digest, to the commit that writes
 `tools/upstream-components.yaml` (ADR-060 decision 51); and reading 3, to the S2a report.
 An option the owner did not choose edits nothing.
+
+**The lock entry of in-process code is open.** Decision 10 gives in-process code an entry
+in `plugins.lock` that pins nothing, and decision 12 has boot find, through that entry,
+the record of a row with no origin artifact. ADR-047 decision 8, accepted the same day,
+gives in-process code no entry, and ADR-047 decision 18 starts its check of that code
+from the digest that install recorded, since the code has no lock entry. The owner
+accepted both, and only the owner settles which holds. One question goes to the owner:
+does in-process code get an entry in `plugins.lock`, as decision 10 states, or none, as
+ADR-047 decisions 8 and 18 state? Until the owner answers, `07:1841` and `:1855` state
+the point as open, and `:1855` does not gain the entry that "Edits on acceptance" names
+for it. `00:478`, `01:282`, `02:206` and ADR-047 decision 8 wait for the owner's answer
+and do not go to the commit that lists the ADRs accepted on this date.

@@ -761,3 +761,13 @@ text, and the copies of checks 5 and 8 that the commit checks against it (ADR-06
 decision 16 names those of check 8): `00:478`; `07:1318`, `:1386`, `:1816`, `:1866`,
 `:1888` and `:1891`; and `08:143`, `:501` and `:504`. Left to the commit that marks the ADRs accepted on 2026-11-23 in the ADR table
 of `08` §3: the row of ADR-047. An option the owner did not choose edits nothing.
+
+**The lock entry of in-process code is open.** Decision 8 gives in-process code no entry
+in `plugins.lock`, and decision 18 starts its check of that code from the digest that
+install recorded, since the code has no lock entry. ADR-020 decision 10, accepted the
+same day, gives in-process code an entry that pins nothing and through which boot finds
+the record of a row with no origin artifact (ADR-020 decision 12). The owner accepted
+both, and only the owner settles which holds. One question goes to the owner: does
+in-process code get an entry in `plugins.lock`, as ADR-020 decision 10 states, or none,
+as decisions 8 and 18 state? Until the owner answers, `07:1841` and `:1855` state the
+point as open, and decisions 8 and 18 and `00:478` are not edited.
