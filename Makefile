@@ -56,3 +56,4 @@ check:
 	$(KC) lines sdk/def/composition/v0/conformance 800 provisional
 	$(KC) lines sdk/def/configrefs/v0/conformance 800 provisional
 	$(KC) lines sdk/def/reload/v0/conformance 800 provisional
+	$(KC) lines sdk/def/launch/v0/conformance 800 provisional
