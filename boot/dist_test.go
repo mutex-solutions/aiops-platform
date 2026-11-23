@@ -60,6 +60,14 @@ o/a:
 	if e, err := ParseModules("m.yaml", []byte("{}")); err != nil || len(e) != 0 {
 		t.Errorf("empty table: %v %v", e, err)
 	}
+	// Hook entries are keyed by hook and stage, not by hook alone, as the kernel and the
+	// manifest key them (ADR-048 decisions 10 and 18): one hook at two stages is two
+	// entries, sorted by hook and stage.
+	two, err := ParseModules("modules.yaml", []byte("o/b:\n  hooks:\n"+
+		"    - {hook: reload/operation, stage: 1, name: late}\n    - {hook: reload/operation, stage: 0, name: default}\n"))
+	if want := []HookDecl{{"reload/operation", 0, "default"}, {"reload/operation", 1, "late"}}; err != nil || !reflect.DeepEqual(two["o/b"].Hooks, want) {
+		t.Errorf("one hook at two stages: %+v, %v; want %+v", two["o/b"].Hooks, err, want)
+	}
 }
 
 func TestParseDistAndModulesRefusals(t *testing.T) {
