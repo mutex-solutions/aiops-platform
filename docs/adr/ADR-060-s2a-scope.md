@@ -1,8 +1,9 @@
 # ADR-060: Scope and working rules of S2a (the authoring path)
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force until the owner accepts it and answers the questions marked "before any S2a
-  code". No S2a code is written before then (s1-report:29).
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all 22
+  questions on the same date with the recommended option of each; the section "Owner
+  answers of 2026-11-23" records them as decisions 37 to 58. S2a starts with this scope
+  (s1-report:29).
 - Scope: roadmap step S2a (`08-profiles-roadmap-adrs.md` §2.1). It turns the S2a text of
   the roadmap into decidable work and working rules, as ADR-059 did for S1. It changes no
   decision of `00-decisions.md` by itself: every point where an answer would change one
@@ -730,6 +731,7 @@ the control rows of ADR-059 decision 9 are test-only.
 - Recommended: (a). The stricter text stays, with Q2 (a) nothing ships that a release
   would hold, and a call proves that the contribution runs, which a boot alone does not.
   Needed before any S2a code.
+- **Answered 2026-11-23: (a)**, decision 37.
 
 **Q2. What release does the exit build on, and where do the toy rows live?** A pack may
 insert only rows of first-party instantiable plugins (`07:132`), and none exists at S2a.
@@ -751,6 +753,7 @@ decision 31; `plugin-inventory` is S6a, `08:373`). No release exists.
 - Recommended: (a). (b) ships toy code in the image and (c) weakens a written exit; (a)
   proves the same mechanism on a release built by the same steps, and `teststate` is
   the observation channel of step C4. Needed before any S2a code.
+- **Answered 2026-11-23: (a)**, decision 38.
 
 **Q3. Where do the toy definitions live?** `08:1219`, `00:208` and `07:36` put them under
 `examples/` in the root module. `00:206` and `07:28` put every definition under
@@ -765,6 +768,7 @@ decision 31; `plugin-inventory` is S6a, `08:373`). No release exists.
   library in its graph, against `07:51`.
 - Recommended: (a). It keeps the definition rule of `00` §4.1 and the author's dependency
   list of `07:51`, and adds no module. Needed before any S2a code.
+- **Answered 2026-11-23: (a)**, decision 39.
 
 **Q4. How does a repository with no kernel checkout reach the SDK modules and
 `aiopsctl`?** The modules are `v0.0.0` behind `replace` lines in a private repository,
@@ -788,6 +792,7 @@ a public proxy or checksum database would be a disclosure. Decision 21 fixes the
 - Recommended: (a). It proves "no kernel checkout" exactly, with no repository, no
   `replace` line, no credential and no lookup outside the job. Needed before any S2a
   code.
+- **Answered 2026-11-23: (a)**, decision 40.
 
 **Q5. Where do the operations library and the YAML writers live?** ADR-059 decision 6
 allows the one YAML library in `boot/` and `tools/` only. `aiopsctl` must write
@@ -813,6 +818,7 @@ and its own dependencies (`08:1255`), so it cannot import a package of the root 
   (b), option (b), recorded as needing the amendment of `08:1255` at S6a. `boot` keeps
   every read the gate needs either way. Needed before the first file writer of the CLI
   merges.
+- **Answered 2026-11-23: (a), with Q17 (a)**, decision 41.
 
 **Q6. How is the handshake message frozen?** `08:642`, `:892` and `:1212` freeze it at S2a
 in its own package, `aiops.remote.handshake` (`07:1120`). `07:60` (R2) fixes where the
@@ -830,6 +836,7 @@ The root module holds the protobuf runtime from S2a anyway, through sigstore-go
 - Recommended: (a). The wire contract is frozen and tested from S2a, and the module
   choices stay with S2b. Generated Go would have no reader before S2b, and its module
   home is S2b's choice. Needed before S2a closes.
+- **Answered 2026-11-23: (a)**, decision 42.
 
 **Q7. What do the two-tenant tests do at S2a?** `plugingen` writes `zz_tenants_test.go`
 for every process-scope plugin (`07:1435`; `00:298`), a template must pass the generated
@@ -856,6 +863,7 @@ record G10 says "the solo test kit is complete: `kerneltest`, fakes, generated t
   skip is visible, as matrix cells of later steps are (ADR-059 decision 3), and no
   definition lands early. It leaves G10 partly unmet until S4a, which the owner accepts
   or refuses here. Needed before `plugingen` merges.
+- **Answered 2026-11-23: (a)**, decision 43.
 
 **Q8. Is the S1 code brought to the standing rules?** `sdk/def/reload/v0` has no
 `definition.yaml`, only `sdk/def/loader/v0` has a suite, and `clock`, `config-refs`,
@@ -871,6 +879,7 @@ in S1 fields (`needs`, not `uses`).
 - Recommended: (a). The rules say "no definition merges without", and the gate denies a
   row without `requires`; (a) makes S2a's own distribution meet them, at the cost of five
   suites. Needed before gate check 1 merges.
+- **Answered 2026-11-23: (a)**, decision 44.
 
 **Q9. What does the vocabulary rule check?** `00:262` lists the kernel's banned words
 (tenant, role, profile, row, SQL, HTTP, job, approval, audit, model, health, gate) and
@@ -887,6 +896,7 @@ kernel uses role, row, model and gate in other senses, and `boot` uses "incident
 - (c) The S1 check stays and the rest is reviewed by hand.
 - Recommended: (a). It checks every word a grep can decide and records the rest; (b)
   changes the closed kernel for wording. Needed before the first S2a merge into `main`.
+- **Answered 2026-11-23: (a)**, decision 45.
 
 **Q10. How do suites run inside `aiopsctl` without a Go toolchain?** A pack author has
 only `aiopsctl` (`07:51`); `plugin check` runs the suites of the registries a pack's rows
@@ -907,6 +917,7 @@ Suites take a `*testing.T` (ADR-059 decision 32), and `kerneltest.New` needs a
 - Recommended: (a). It uses only stable Go interfaces and keeps the `testing.TB` fence of
   `kerneltest` whole; (c) weakens that fence. Needed before `plugin check` for a pack
   merges.
+- **Answered 2026-11-23: (a)**, decision 46.
 
 **Q11. Which of `enable`, `disable`, `remove` and `purge` are built at S2a?** `00:137`
 lists `plugin enable`, `disable`, `remove` and `purge` among the P0 commands of
@@ -924,6 +935,7 @@ through `durable` (`08:374`), which is S3.
 - Recommended: (a). The install paths run as written, `remove` is the inverse of an
   install that holds no durable state yet, and S6a adds only the service around the same
   operations. Needed before the exit test is written.
+- **Answered 2026-11-23: (a)**, decision 47.
 
 **Q12. How does an enabled row reach the running process at S2a?** Enabling a row whose
 code is present is live (`08:190`, `:386-387`), and every operation is a submission to
@@ -949,6 +961,7 @@ the reload queue (`08:369`). The documents name the path: "`aiopsctl plugin enab
 - Recommended: (c). It is the path `07`, `08` and `03` state, it gives `self-host-full`
   the same live enable as `dev`, and decision 27 then keeps `dev` to `aiops-core` at S2a.
   Needed before the exit test is written.
+- **Answered 2026-11-23: (c)**, decision 48.
 
 **Q13. What scenario does a pack attest at S2a?** Check 10 denies a pack whose attestation
 names no scenario version (`08:506`), community:182 adds "which halves ran", and step 8 of
@@ -964,6 +977,7 @@ incident loop (S8a, S8b).
   S2a pack is admitted without them.
 - Recommended: (a). Check 10 stays whole, and the attestation fields and step 8 exist
   from the first pack. Needed before gate check 10 merges.
+- **Answered 2026-11-23: (a)**, decision 49.
 
 **Q14. How do the first-party rows of a release pass checks 5 and 10?** Check 5 denies a
 Go module absent from a distribution manifest that `dist use` verified and `trust.yaml`
@@ -987,6 +1001,7 @@ first-party module and records the attestations in the release's signed manifest
   `01:292` state, `aiopsctl` can run `trust add` on a fresh machine, and a site that
   wants only its own roots removes the default; (a) needs an exemption for `aiopsctl` to
   work at all. The answer goes into ADR-020. Needed before gate check 5 merges.
+- **Answered 2026-11-23: (b)**, decision 50.
 
 **Q15. Is the upstream register built at S2a?** `08:790` puts the register at S2a (UP-1,
 ADR-054), but the 36-row list that holds UP-1 is pending the owner (`08:752`), and every
@@ -998,6 +1013,7 @@ dependency S2a adds needs an entry (L3, L13).
 - (c) Nothing until the owner decides the 36-row list.
 - Recommended: (a). The licence rule of decision 34 needs the register now, and U7 is
   the check that makes an entry required. Needed before the first new dependency merges.
+- **Answered 2026-11-23: (a)**, decision 51.
 
 **Q16. May S2a add CI jobs?** ADR-057 decision 5 says not to add CI/CD configuration or
 create workflows. `.github/workflows/ci.yml` exists since 2026-11-18, and ADR-059
@@ -1009,6 +1025,7 @@ decisions 11 and 28, which the owner accepted, name it.
 - Recommended: (a). The standing rules are CI checks (`08:1253`, `:1260`), and (a) records
   the authority the existing file already rests on. Needed before the first S2a merge
   into `main`.
+- **Answered 2026-11-23: (a)**, decision 52.
 
 **Q17. Is the S2a CLI built as the `cli` profile?** `00:515` says "`aiopsctl` is a
 profile of the same launcher: commands are rows, and a plugin contributes its own
@@ -1030,6 +1047,7 @@ S2a, S1 built `profile render` as code of `cmd/aiopsctl`, and `08:3` lets `00` w
 - Recommended: (a). It is the stated architecture, dsh row 31 stays carried, P0 lists
   `cli`, and under (b) every command written as code at S2a is rewritten at S6a. Needed
   before the first CLI command merges.
+- **Answered 2026-11-23: (a)**, decision 53.
 
 **Q18. What import path does an author compile against?** `00:262` and plugin record §3
 put the packages `sdk/plugin` and `sdk/gate` in the module `sdk/def`; `07:23` gives the
@@ -1051,6 +1069,7 @@ so that it holds every SDK package except the nested modules.
 - Recommended: (a). It keeps every import path the documents and the code use and is the
   layout R1 describes; its cost is a module rename while nothing outside the repository
   requires the module. Needed before any S2a code.
+- **Answered 2026-11-23: (a)**, decision 54.
 
 **Q19. How does a fault or control row of a test distribution pass check 10?** Decision 28
 signs the test distributions and attests their toy rows. The seven fault plugins and the
@@ -1070,6 +1089,7 @@ suite; a fault plugin such as `panic-apply` fails one by design.
   only to be refused.
 - Recommended: (a). The gate in the test binary is the shipped gate, and nothing
   attests what did not run. Needed before gate check 10 merges.
+- **Answered 2026-11-23: (a)**, decision 55.
 
 **Q20. What does check 10 ask for a definition the plugin only consumes?** `08:506` asks
 the attestation to name, "for a definition the plugin requires, the version and the suite
@@ -1089,6 +1109,7 @@ contributes to, or of the registries a pack's rows feed (`07:1571`). A consumer 
   which no definition has.
 - Recommended: (a). It is what step 5 can run and what an attestation can truthfully
   say. Needed before gate check 10 merges.
+- **Answered 2026-11-23: (a)**, decision 56.
 
 **Q21. What references may the bundle of an installed artifact hold before S3?** The
 secret scope of an instantiated row is the artifact's, "so one pack cannot read another
@@ -1108,6 +1129,7 @@ credential file.
   operator, who owns the credentials, keeps every choice. It adds a clause to check 8,
   which the one gate text of decision 16 carries. Needed before the installed-artifact
   rule of check 8 merges.
+- **Answered 2026-11-23: (a)**, decision 57.
 
 **Q22. Four readings of written text.** Each reading below is what S2a would build, and
 each edits the lines it names in the commit that builds it.
@@ -1131,3 +1153,189 @@ each edits the lines it names in the commit that builds it.
 - (b) Answer each item on its own.
 - Recommended: (a). Each reading is the only one the code can decide, and reading 4
   edits `00` by one word. Needed before the code each reading names merges.
+- **Answered 2026-11-23: (a), all four readings**, decision 58.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option.
+Each decision below names the question it answers. Where a decision above leaves a point
+to a question, the decision here settles it.
+
+37. **The exit calls both plugins, through a toy caller row** (Q1 (a)). A toy caller row
+    of the exit's release calls each echoer through the dispatcher when a control file
+    asks and writes the replies to a file the test reads, as the control rows of ADR-059
+    decision 9 do. `00:571` and `01:290` gain "and calls both".
+
+38. **The exit builds on a test release** (Q2 (a)). CI builds, with the S2a builder and a
+    throwaway release key, a distribution of the release table plus the dispatcher, a toy
+    instantiable echoer that contributes to `echoers` and nothing else, and the toy caller
+    of decision 37, all under `examples/`, plus the control row `teststate` of
+    `test/dist`, and the `aiopsctl` of that distribution. Their rows enter the exit's
+    `dev` composition through the site's profile layer (`08:131`). The shipped `aiops`
+    table gains nothing, the instantiable plugins at `0.1.0` stay the three of `07:132`,
+    and the link guard of decision 28 keeps every `examples/` and `test/` package out of
+    `cmd/aiops` and `cmd/aiopsctl`.
+
+39. **The toy definitions are `sdk/def/echoers/v0` and `sdk/def/stampers/v0`** (Q3 (a)),
+    in the SDK module, at stability `experimental`; `examples/` keeps the toy plugins of
+    decision 38. `00:208` and `08` §4 are edited.
+
+40. **The exit serves the SDK modules from a module proxy inside the job** (Q4 (a)). The
+    exit job serves the three SDK modules from a file-based module proxy that exists only
+    inside the job, at one pre-release version per run that no tag of the repository
+    carries, with the `go.mod` copies of decision 21, together with the author's echoer
+    module at the version its artifact names. The test release, its signed manifest and
+    its `aiopsctl` are built from those served modules, so the release pins and the
+    author's build agree, and both environments get that `aiopsctl`. Nothing is tagged or
+    published.
+
+41. **The operations library is the internal package of one first-party plugin** (Q5 (a),
+    with Q17 (a)). That plugin provides it under a consumer-bound key of a new definition,
+    with a fake and a suite; the command rows of decision 53 consume it from S2a and
+    `plugin-manager` from S6a. Besides `boot/` and `tools/` (decision 6), the YAML library
+    is allowed in that plugin, in `plugingen` and in the builder, and never in `sdk/`,
+    `loader/` or any other plugin. `08:369` and `08:1255` both hold, and `boot` keeps
+    every read the gate needs.
+
+42. **The handshake message is frozen as a proto file** (Q6 (a)). S2a commits
+    `sdk/remote/handshake/handshake.proto` with the three fields of `07:1126-1130` and a
+    test that fails on any change other than an added field. No generated Go is written
+    until S2b. This fixes the directory `sdk/remote`; whether it is a module of its own,
+    and where `sdk/remotehost` lives, stay with S2b.
+
+43. **The generated two-tenant tests skip until S4a** (Q7 (a)). `plugingen` writes
+    `zz_tenants_test.go` from S2a, and its cases skip with "not yet (S4a)" and never
+    count as a pass. Step 4 passes when every case that runs passes, and prints each
+    skipped case; the attestation lists the generated tests that did not run (decision
+    18), which check 10 does not read and the index shows. The toy suites gain their
+    two-tenant and disabled-for-tenant cases at S4a with a raised suite revision
+    (decision 10), so an S2a attestation names a revision that holds no skipped case. At
+    S4a the generated cases assert and `plugin check --write` regenerates the file. The
+    owner accepts that G10 (community:112) is met at the S2a exit except for the
+    two-tenant assertions, and the S2a report records that.
+
+44. **The S1 code meets the standing rules at S2a** (Q8 (a)): the `reload` definition
+    file; suites on `conformance.Run(t, Mount)` for `clock`, `composition`, `configrefs`,
+    `launch` and `reload`; and the five core plugins moved to `plugin.Define` with
+    generated manifests and `plugin check`. The loader's generated half comes from its
+    `kernel.Plugin` value (decision 13).
+
+45. **The vocabulary rule** (Q9 (a)). The kernel's list gains every `00` §4.3 word the
+    kernel does not use; the four it uses in another sense (role, row, model and gate) are
+    listed in the S2a report for review. `boot/` gets a list of domain words (incident,
+    alert, approval, dashboard, pillar, harness, remediation, estate and the upstream
+    names), and the one occurrence of "incident" in `boot` is reworded.
+
+46. **Suites run in `aiopsctl` as embedded test binaries** (Q10 (a)). The release build
+    compiles each suite, with the first-party plugins it runs on, into a test binary that
+    `aiopsctl` embeds and runs as a child process with the pack as input; its JSON output
+    is the report. `plugin verify` of in-process code compiles the pulled module with its
+    suites through the builder image or a local toolchain, as `plugin smoke` does, and
+    fails with that reason where it has neither.
+
+47. **`enable`, `disable` and `remove` are built at S2a, `purge` at S3** (Q11 (a)). The
+    three run on the operations library; `enable` and `disable` write only a departure
+    from the bundle layers into the profile layer, with no `--tenant`. `purge` arrives
+    with `durable`. All four stay in P0, so `00:137` holds with no edit.
+
+48. **An enabled row reaches the running process through the reload queue** (Q12 (c)).
+    `aiopsctl plugin enable` submits one generation to the running process's queue, the
+    path of `07:1848`, `08:446`, `08:240` and `03:75`. The transport before `admin-api`
+    is open. The candidate is that the `reload` row, or a row of `aiops-core` beside it
+    that is a bound consumer of `reload`, accepts a submission from `aiopsctl` on a Unix
+    socket under `<home>/run/` that only the site's user can open; a row beside `reload`
+    is not in the list of `00:275`, so that form edits it. The transport, its plugin vet
+    rule and how it relates to `admin-api` at S4a are written in an ADR before the exit
+    test. Decision 27 keeps `dev` to `aiops-core` at S2a.
+
+49. **A pack attests the echo scenario at S2a** (Q13 (a)). A scenario is a named,
+    versioned script run inside `aiopsctl`, with its halves named. The S2a pack carries
+    the echo scenario, which has one half, the kernel half: replayed from the pack's
+    fixtures, each of its rows is called through the `echoers` dispatcher. The
+    attestation names the scenario, its version and that half. The connector scenario,
+    with its kernel and harness halves (community:302-305), is the second, at S8b.
+
+50. **The release binary carries the release key as a default distribution root** (Q14
+    (b)). The release pipeline attests each first-party module and records the
+    attestations in the release's signed manifest. The release binary carries the release
+    key as a default distribution root and its own signed manifest as recorded with that
+    key; boot prints it at every boot, and a site removes it in `trust.yaml`. Checks 5
+    and 10 run on every row, and the release starts as `08:398` and `01:292` state.
+    `07:1861` and `08:404` gain that default, and the answer goes into ADR-020.
+
+51. **The upstream register starts at S2a** (Q15 (a)). S2a writes
+    `tools/upstream-components.yaml` with an entry for every module, image and tool that
+    S2a links, ships or bakes in, and runs the register check (U7) on it; U1 to U3 start
+    when ADR-054 says.
+
+52. **S2a extends the existing `ci.yml`** (Q16 (a)) with the jobs of decision 36, none of
+    which pushes or publishes. ADR-057 decision 5 still rules out any job that publishes
+    or changes the repository's visibility.
+
+53. **The S2a CLI is built as the `cli` profile** (Q17 (a)). S2a builds the `commands`
+    definition with its fake, suite and `definition.yaml`, the `cli` row as its
+    dispatcher, the `aiops-cli` bundle and the `cli` profile. Every S2a command, `profile
+    render` included, is a contribution row, and `cmd/aiopsctl` becomes the launcher with
+    the module table of the `cli` profile. An ADR proposes the `commands` definition, and
+    how command rows reach the operations library (decision 41), the builder and the
+    gate, before the first command row merges.
+
+54. **The SDK module is rooted at `sdk/`** (Q18 (a)), with module path
+    `github.com/mutex-solutions/aiops-platform/sdk`. The import paths `.../sdk/plugin`,
+    `.../sdk/gate`, `.../sdk/entity` and `.../sdk/def/<name>/v<N>` are then all as
+    written, and no Go import changes; `sdk/kernel` and `sdk/testkit` stay nested
+    modules. `sdk/remote` and `sdk/remotehost` then need a nested module at S2b, since R2
+    keeps them out of the require list. The module's name changes in `00:262`, `07:23`,
+    `07:28-33`, `07:51`, `08:1199` and plugin record §3, with the `go.mod` require and
+    replace lines.
+
+55. **A fault or control row of a test distribution attests suite revision 0** (Q19
+    (a)). `test/dist/def` declares `suite: 0`, "no suite". The attestation of a row that
+    provides only test keys names that definition at its version with suite revision 0,
+    and check 10 admits it as it admits any attestation that names the served revision.
+    No gate clause and no gate code changes. The definition lint keeps every definition
+    under `sdk/def` at a suite revision of 1 or more, and the check of decision 28 fails
+    when a release serves a definition outside `sdk/def`, so no shipped distribution can
+    use revision 0.
+
+56. **Check 10 asks a suite revision only where step 5 runs a suite** (Q20 (a)). The
+    attestation names every definition of `requires` with its version, and the suite
+    revision and the halves that ran for each definition the plugin provides, contributes
+    to or, for a pack, feeds. Check 10 denies when a version is missing or differs from
+    `requires`, or when one of those suite revisions is missing. The one gate text of
+    decision 16 words check 10 so, and `08:506`, `07:1893` and plugin record §12 are
+    edited to it.
+
+57. **Check 8 refuses an `${env:}` or `${file:}` reference in the bundle of an installed
+    artifact** (Q21 (a)). The operator still sets a credential reference for a pack row
+    in the profile or site layer, which the operator writes. `secret:` in the artifact's
+    own scope arrives with S3. The clause is part of check 8 in the one gate text of
+    decision 16.
+
+58. **The four readings of Q22 are accepted** (Q22 (a)):
+    1. **Smoke.** At S2a the test-only profile that `plugin smoke` boots is the release's
+       `aiops-core` bundle plus the plugin's bundle with its rows enabled, and smoke
+       passes when every row is ACTIVE or says what it waits for, the boot rule of `dev`
+       (`08:738`). It edits `07:1576`.
+    2. **Inspect.** `inspect` fetches only the manifest and the bundle, never content,
+       module or image, and runs nothing. It edits `08:373` and `07:1853`.
+    3. **`wasm`.** Check 1 denies it, as a runtime this schema version does not serve,
+       so the denial names one check. It edits the check 1 text of the one gate text
+       (decision 16).
+    4. **"Module graph".** The graph of a server binary in which `00:262`, `07:47` and
+       `08:1258` forbid a `fake` or `sdk/testkit` package is the package graph of the
+       binary (`go list -deps`), which the builder and gate check 7 read. It edits
+       `00:262`, `07:47` and `08:1258`.
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:996`), and that commit makes the edits the chosen options name: `00:208`, `:262` and
+`:571`; `01:290`; `07:23`, `:28-31`, `:47`, `:51`, `:1576`, `:1853`, `:1861` and
+`:1893`; `08:373`, `:404`, `:497` (check 1 of `08` §1.6, which decision 16 makes the one
+gate text), `:506`, `:1199`, `:1219` and `:1258`; and the plugin record in §4 and §5,
+where it names the module that holds `sdk/plugin` and `sdk/gate` (decision 54), and in
+§12. The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
+to later commits: the `go.mod` lines of decision 54, with the code that moves the module
+root; the one exit text of decision 30; and the one gate text of decision 16, which
+carries the check 8 clause of decision 57. An option the owner did not choose edits
+nothing.
