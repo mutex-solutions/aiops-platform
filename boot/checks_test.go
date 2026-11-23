@@ -444,6 +444,20 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 	}
 }
 
+// The denial of check 10 for an in-process artifact that pins other code than the binary
+// runs names both modules with their sums, which the clause compares (ADR-020 decision
+// 12).
+func TestGateNamesBothModulesOfATieDenial(t *testing.T) {
+	fx := newGateFix()
+	other := "h1:" + strings.Repeat("A", 43) + "="
+	fx.art("acme/echoer", func(a *Artifact) { a.Record.Module = &GoModule{Path: testModule, Version: "v0.1.0", Sum: sumA} })
+	fx.in.Tie["acme/echoer"] = Tie{Module: GoModule{Path: testModule, Version: "v0.2.0", Sum: other}}
+	r := fx.run(t).Result(CheckAttestation, "echoer:e2")
+	if r.Status != StatusFail || !strings.Contains(r.Reason, "pins "+testModule+" v0.1.0 "+sumA) || !strings.Contains(r.Reason, "runs "+testModule+" v0.2.0 "+other) {
+		t.Fatalf("Result(10, echoer:e2) = %+v", r)
+	}
+}
+
 // Check 5 denies an artifact with no module whose id is under a reserved owner unless its
 // signer is the release key the binary carries (ADR-048 decision 14). trust.yaml lists no
 // signer for aiops or contrib, so such a pack is still denied by the signer clause until
