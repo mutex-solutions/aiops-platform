@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mutex-solutions/aiops-platform/internal/runfile"
 	clock "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0"
 	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -75,7 +74,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 			if !ok {
 				return errors.New("example-caller: no dir in the config and no --home")
 			}
-			cfg.dir = runfile.Dir(home)
+			cfg.dir = filepath.Join(home, "run")
 		}
 		ec, sc, clk := echoers.Key.Of(c), stampers.Key.Of(c), clock.Key.Of(c)
 		c.Go("example-caller-poll", func(ctx context.Context) error {
@@ -84,7 +83,7 @@ var Plugin = kernel.Define(kernel.Plugin{
 				if msg, err := os.ReadFile(filepath.Join(cfg.dir, Control)); err == nil {
 					if sum := sha256.Sum256(msg); sum != last {
 						last = sum
-						if err := runfile.Write(cfg.dir, Result, call(ctx, ec, sc, sum, string(msg))); err != nil {
+						if err := write(cfg.dir, Result, call(ctx, ec, sc, sum, string(msg))); err != nil {
 							return err
 						}
 					}
@@ -115,6 +114,29 @@ func call(ctx context.Context, ec echoers.Registry, sc stampers.Registry, sum [s
 	}
 	b, _ := json.MarshalIndent(o, "", "  ")
 	return append(b, '\n')
+}
+
+// write puts data in dir/name atomically: it writes a temporary file in dir and
+// renames it, so a reader sees the old file or the whole new one. It creates dir.
+func write(dir, name string, data []byte) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, "."+name+".*")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), filepath.Join(dir, name))
+	}
+	if err != nil {
+		_ = os.Remove(f.Name())
+	}
+	return err
 }
 
 func reply(s string, err error) Reply {

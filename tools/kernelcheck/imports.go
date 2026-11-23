@@ -18,13 +18,14 @@ const modPath = "github.com/mutex-solutions/aiops-platform"
 // Document references cited in every report line (file:line of docs/architecture
 // and docs/adr at the time of writing; the text of the rule is what counts).
 const (
-	docKernel = "07-c4-plugin-sdk.md:27"
-	docDef    = "07-c4-plugin-sdk.md:28"
-	docSDKPkg = "07-c4-plugin-sdk.md:29"
-	docPlugin = "07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255"
-	docBoot   = "07-c4-plugin-sdk.md:37-38; 08-profiles-roadmap-adrs.md:1254"
-	docYAML   = "ADR-059-s1-scope.md:43"
-	docFake   = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
+	docKernel  = "07-c4-plugin-sdk.md:27"
+	docDef     = "07-c4-plugin-sdk.md:28"
+	docSDKPkg  = "07-c4-plugin-sdk.md:29"
+	docPlugin  = "07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255"
+	docExample = "07-c4-plugin-sdk.md:36,42"
+	docBoot    = "07-c4-plugin-sdk.md:37-38; 08-profiles-roadmap-adrs.md:1254"
+	docYAML    = "ADR-059-s1-scope.md:43"
+	docFake    = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
 )
 
 // bootDefs are the only definitions boot/ and loader/ may import.
@@ -116,6 +117,14 @@ func importReasons(rel string, test bool, imp string) []string {
 		}
 		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || hasPath(imp, modPath+"/plugins/"+seg[1]) || third || tk) {
 			add("a plugin imports the SDK, its own packages and allow-listed modules only; never another plugin, boot, loader, cmd, test, dist", docPlugin)
+		}
+	case hasPath(rel, "examples"):
+		// The tests, and the list examples/examples.go that the definition lint reads,
+		// may also import the other examples.
+		own := len(seg) > 2 && hasPath(imp, modPath+"/examples/"+seg[1])
+		all := (test || rel == "examples/examples.go") && hasPath(imp, modPath+"/examples")
+		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || own || all || tk) {
+			add("an example imports the SDK and its own packages only (the other examples too in tests and in examples/examples.go); never internal, a plugin, boot, loader, cmd, test, dist", docExample)
 		}
 	}
 	if !hasPath(rel, "boot") && !hasPath(rel, "tools") {
