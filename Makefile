@@ -43,9 +43,10 @@ check:
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader
 	$(KC) lines boot 6800
+	$(KC) vocab boot tools/kernelcheck/vocabulary-boot.txt
 	$(KC) coverage cover-boot.out $(MOD)/boot
 	$(KC) lines loader 1300
-	$(KC) vocab loader tools/kernelcheck/vocabulary.txt
+	$(KC) vocab loader tools/kernelcheck/vocabulary-loader.txt
 	$(KC) coverage cover-loader.out $(MOD)/loader
 	@# ADR-060 decision 35: each toy definition package, its fake and its suite, 800 each.
 	for d in echoers stampers; do \

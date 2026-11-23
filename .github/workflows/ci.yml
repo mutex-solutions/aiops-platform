@@ -118,15 +118,17 @@ jobs:
           go test -count=1 -coverprofile=cover-loader.out ./loader
       - name: Boot structural checks
         # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 5707 lines + 10%, rounded up to the next 100.
-        # No vocabulary list: boot legitimately handles tenant (a scope class of its closed vocabulary).
+        # Its vocabulary list holds the domain words and upstream names of ADR-060 decision 45
+        # and not tenant, which boot legitimately handles (a scope class of its closed vocabulary).
         run: |
           go run ./tools/kernelcheck lines boot 6800
+          go run ./tools/kernelcheck vocab boot tools/kernelcheck/vocabulary-boot.txt
           go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
       - name: Loader structural checks
         # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 1000 lines + 10%, rounded up to the next 100.
         run: |
           go run ./tools/kernelcheck lines loader 1300
-          go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
+          go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary-loader.txt
           go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
       - name: Toy definition line caps
         # ADR-060 decision 35: each toy definition package, its fake and its suite are
