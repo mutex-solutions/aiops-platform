@@ -97,12 +97,12 @@ jobs:
         # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 5707 lines + 10%, rounded up to the next 100.
         # No vocabulary list: boot legitimately handles tenant (a scope class of its closed vocabulary).
         run: |
-          go run ./tools/kernelcheck lines boot 6300
+          go run ./tools/kernelcheck lines boot 6800
           go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
       - name: Loader structural checks
         # Line cap fixed at the S1 exit (ADR-059 decision 11): measured 1000 lines + 10%, rounded up to the next 100.
         run: |
-          go run ./tools/kernelcheck lines loader 1100
+          go run ./tools/kernelcheck lines loader 1300
           go run ./tools/kernelcheck vocab loader tools/kernelcheck/vocabulary.txt
           go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
 

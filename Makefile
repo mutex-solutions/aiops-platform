@@ -37,8 +37,8 @@ check:
 	$(KC) pluginvet plugins loader boot
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader
-	$(KC) lines boot 6300
+	$(KC) lines boot 6800
 	$(KC) coverage cover-boot.out $(MOD)/boot
-	$(KC) lines loader 1100
+	$(KC) lines loader 1300
 	$(KC) vocab loader tools/kernelcheck/vocabulary.txt
 	$(KC) coverage cover-loader.out $(MOD)/loader

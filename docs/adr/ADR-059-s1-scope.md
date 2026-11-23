@@ -1,6 +1,7 @@
 # ADR-059: Scope and working rules of S1 (loader and launcher)
 
-- Status: **accepted 2026-11-20** by the project owner.
+- Status: **accepted 2026-11-20** by the project owner. S1 closed on 2026-11-23 on the
+  owner's approval of `docs/design/s1-report.md`.
 - Scope: roadmap step S1 (`08-profiles-roadmap-adrs.md` §2.1). It settles what
   the roadmap leaves open for S1 and changes no decision of `00-decisions.md`.
 
@@ -137,6 +138,15 @@ and enforced in CI and in the Makefile; the provisional caps are gone.
 
 Growth of either package past its cap, or a second package under `boot/` or
 `loader/`, needs an ADR.
+
+Decision 28 is applied at the commit that closes S1 (2026-11-23), after the merge of
+the kernel additions, with the same rule; ADR-059, `ci.yml` and the Makefile change
+together. The caps above are history.
+
+| Package | Measured | Files | Cap |
+|---------|----------|-------|-----|
+| `boot` | 6,173 | 18 | 6,800 |
+| `loader` | 1,100 | 3 | 1,300 |
 
 ## Owner decisions of 2026-11-21
 
