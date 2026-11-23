@@ -20,12 +20,12 @@
 // # Config
 //
 // C is the plugin's config type, a struct. Define derives from it a JSON Schema
-// 2020-12 document and the volatile paths (Describe), and at every activation
-// decodes the row's parsed config tree into a new *C. A parsed tree holds nil,
-// bool, int64, float64, string, []any and map[string]any (launch.Row); the
-// launcher keeps integers and floats apart. The rules below are part of the
-// author API, versioned by APIVersion, and the table tests of this package prove
-// them.
+// 2020-12 document and the volatile paths (Describe), and decodes the row's
+// parsed config tree into a new *C at every activation, on every candidate update
+// and at every commit (see Volatile). A parsed tree holds nil, bool, int64,
+// float64, string, []any and map[string]any (launch.Row); the launcher keeps
+// integers and floats apart. The rules below are part of the author API,
+// versioned by APIVersion, and the table tests of this package prove them.
 //
 //   - Keys. Each exported field of a struct is one key: the name in its json tag
 //     when it has one, else the field name with its leading capitals lowered and
@@ -118,7 +118,11 @@ type Spec[C any] struct {
 
 // Define returns the kernel.Plugin of s, defined with kernel.Define, whose
 // Decode turns the parsed config tree into a new *C by the rules of the package
-// documentation and whose Apply calls s.Apply with it. It panics when C breaks
+// documentation and whose Apply calls s.Apply with it. When C has a Volatile
+// field, Decode returns instead a record of this package that holds the *C and
+// the cell of each Volatile field, Apply passes the *C of that record to s.Apply,
+// and the Plugin has a hand-off (kernel.WithCommit) that stores the cells of a
+// committed config into those of the running activation. It panics when C breaks
 // a rule of that documentation, so a wrong config type fails at the package's
 // initialisation, before any row of it mounts.
 func Define[C any](s Spec[C]) kernel.Plugin {
