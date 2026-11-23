@@ -1562,3 +1562,327 @@ failed run's 120 host-noise samples, now in
 `test/spike/s0/results/callpath-full-merge-commit/report.json`, show no swap pages moved
 and no throttled periods, and its raw records stay on the measurement host. The lease
 cost under contention stays the tracking point for S3 that the owner decided.
+
+## 2026-11-23 proposed addition G13: the Volatile hand-off
+
+- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing of it is on `main`
+  or on `s2a/integration`; the code merges only after the owner accepts it (ADR-060
+  decision 3).
+- Citations: `00`, `07` and `08` are the files of `docs/architecture/` with those
+  numbers, at `a3c85ae`. `07:1377` there is `07:1375` at `491a518`, the line that ADR-060
+  decision 3 cites, and `07:1382` on `s2a/integration` (`502a355`), the line that the
+  package documentation of `sdk/plugin` cites. Lines of this ADR are given as "line N".
+  The plugin record, `docs/design/plugin-system-2026-11.md`, is cited by section.
+
+### Requirement
+
+- `07:1377`: when only `Volatile` fields change, a running plugin sees "No call and no
+  restart. The loader commits the value in place ...; the next read of the `Volatile`
+  field, or the next `tenants.ConfigFor` call, returns it". `00:484` and `08:188` state
+  the same commit in place by the loader.
+- `07:475`: "Configuration that may change without a restart is a `plugin.Volatile[T]`
+  field."
+- The reference model: volatile fields "are committed into the running references
+  without a restart and announced via `loader/volatile-update`"
+  (`docs/research/dsh-architecture.md:69`); "Committed into the running object; the fiber
+  gets `loader/volatile-update`; no restart"
+  (`docs/design/plugin-r3/literal-cordis-ts.md:430`).
+  The plugin record carries it as is (§15, row 16; `08:58`) and keeps `Volatile[T]` out
+  of the kernel: it lives in `sdk/plugin`, and the loader commits volatile values (§3).
+- ADR-060 decision 3: a kernel change that hands a value committed in place to a running
+  `plugin.Volatile[T]` field is an ADR-034 addition, proposed before it merges, inside the
+  8,200-line cap, and verified by the differential corpus, the property workload and the
+  call-path gate (ADR-059 decision 2).
+- ADR-059 decisions 10 and 44 stay as they are: S2a derives the volatile paths, the loader
+  decides what is volatile-only (`loaderdef.VolatileOnly`), commits it with `CommitOp` and
+  dispatches `loader/volatile-update` with the payload of decision 44 after that batch
+  returns (`loader/apply.go:104`).
+
+### What the kernel does today
+
+G6 retains a committed config and restarts nothing, and "the running activation keeps the
+value it was applied with" (line 1249). Each activation gets a value of its own:
+`cfgCell.prepare` resolves the retained raw config through `internal/config` and `Decode`,
+the `Apply` of `mountSpec` receives the result, and nothing keeps it. `Fiber.Commit`
+resolves the candidate in `vet` when the fiber has a target and drops the result. On
+`502a355`, `plugin.Volatile[T]` is `struct{ v T }` and `Get` returns the value decoded
+for the activation; its documentation says that a read returning a value committed in
+place needs the ADR-034 addition that ADR-060 decision 3 names.
+
+### Why no change outside the kernel is enough
+
+- `Decode` belongs to the `Plugin` value, which every row of the plugin shares, and it
+  also runs for a candidate before `internal/commit` may veto it. It cannot tell which
+  activation a value is for or whether the commit completes, and it must be pure.
+- `loader/volatile-update` is sealed, so every plugin with a volatile field would need an
+  entry in `Config.Listeners`. It carries the tree before `internal/config`, with every
+  reference replaced by nil (ADR-059 decision 44), so a value that `internal/config`
+  changes would differ from what the next activation reads. Only the loader dispatches
+  it, so a `Fiber.Commit` by any other holder of the fiber would never reach the field.
+- The kernel hooks are sealed and carry no fiber identity.
+- The two values a hand-off needs, the running activation's config and the committed
+  config resolved as `Apply` would receive it, exist only inside the kernel. In the
+  reference model the loader writes into the running object directly; in the Go port that
+  object is made and held by the kernel's config pipeline.
+
+### Decision (proposed)
+
+One optional function on `Plugin` (question Q1):
+
+```go
+type Plugin struct {
+	// ID, Inject, Provides, Hooks, Decode and Apply as before.
+	Commit func(applied, committed any) // Optional (G13).
+}
+```
+
+`plugin.Define` sets it for a config type that has a `Volatile` field. `plugin.Spec` gets
+no such field, so the code of an author is never called on a commit, which keeps "No
+call" of `07:1377`. The kernel knows no `Volatile` field: it hands two opaque values, as it
+hands `Apply` what `Decode` returns (owner decision 9), so `Volatile[T]` stays in
+`sdk/plugin` as the plugin record has it (§3).
+
+1. **When.** After `Fiber.Commit` retains `cfg`, before it returns. After `Root.Batch`
+   admits a batch, before it returns, for each `CommitOp` that is the last operation of
+   the batch to carry a config of its fiber. `Update`, `UpdateOpWith`, `UpdateOp` and a
+   mount hand nothing off: they restart, and a restart that `internal/update` vetoes leaves
+   the running activation as it is (G2).
+2. **What.** `applied` is the value that the running activation's `Apply` received, the
+   same value at every hand-off to that activation. `committed` is `cfg` resolved through
+   `internal/config` and `Decode`, the value an activation started at that moment would
+   receive; `Commit` already resolves it in `vet` when the fiber has a target.
+3. **To whom.** The running activation is the latest whose config was resolved for its
+   `Apply`. An activation whose unload has begun (its `Std` context is done: it is
+   unloading, FAILED or disposed) is handed nothing: its calls in flight finish with the
+   values they have, and the next activation resolves the retained config. A `CommitOp`
+   whose fiber the same batch disposes or restarts hands nothing off once the owner has
+   begun that fiber's unload, which it does for an ACTIVE fiber with no children in the
+   turn that admits the batch, before it replies (`owner.run` runs its work queue before
+   the reply; test 2). Otherwise the ending activation receives the config retained for
+   its own fiber, which changes nothing that outlives it. The loader's check of a config
+   before it disposes the fiber (`loader/apply.go:246`) is such a batch.
+4. **Order, and nothing lost.** The kernel counts the retains of each fiber's config.
+   Hand-offs to an activation follow that count, and an activation is never handed a
+   config older than the one it holds. An activation whose resolve a newer retain
+   overtook resolves again before its `Apply` runs, so no retain falls between an
+   activation's resolve and the hand-offs it receives.
+5. **A fiber with no target when `Commit` began.** `vet` resolves nothing then (G6). When
+   an activation began in that window and holds an older config, `Commit` resolves `cfg`
+   after the retain and hands it off (question Q2). When `cfg` does not resolve then, the
+   kernel restarts the fiber as `UpdateOp` does, so the activation that follows resolves
+   the retained config and fails on the error, as G6 states for a fiber with no target. A
+   panic of `Plugin.Commit`, in any case, is contained and restarts the fiber the same
+   way, and the activation that follows applies the committed config. `Commit` returns
+   the error of such a restart request, as `Update` does after it retains; `Batch` has
+   already admitted its batch and does not.
+6. **A plugin without `Commit`.** Nothing changes for it: no activation is recorded, no
+   config is resolved again and G6 holds as written. Every `Plugin` of the differential
+   corpus, the property workload and the call-path fixture is one.
+
+### Concurrency contract
+
+- **Readers.** The kernel is not on the read path. A read of a `Volatile` field is code of
+  `sdk/plugin` (below): one atomic load, with no lock and no allocation. No path that the
+  call-path gate measures (`owner_enter_leave`, `lookup_view`, `lookup_view_lease_call`,
+  `refused_enter`, `refused_read`) runs new code, and `handle` and its lease shards keep
+  their layout (`TestLeaseShardsOwnTheirCacheLines`).
+- **The committer.** `Plugin.Commit` runs on the goroutine that called `Commit` or `Batch`,
+  never on the owner, concurrently with the goroutines of the activation. It must publish
+  what it writes safely for concurrent readers, must not block and must not change the
+  config of any fiber: it runs under the fiber's config change lock of G7, which orders it
+  with that fiber's other config changes, so a change of the same fiber from inside it
+  would wait for itself. This amends G7's "no other plugin code runs under it" (line
+  1269): `Plugin.Commit` runs under it as well. A panic is contained (point 5).
+- **Locks.** The retain count, the running activation's value, its `Std` context and the
+  retain it holds are fields of `cfgCell`, under the cell's plain lock, which the owner
+  already takes to retain in a batch admission and which never covers plugin code. The
+  order stays the config change lock, then the plain lock. `internal/config` and `Decode`
+  run under no lock, as now.
+- **Allocation.** A hand-off reuses the value that `vet` resolved, and an activation is
+  recorded in fields of its cell: a read allocates nothing, and an activation that no
+  retain overtakes allocates nothing more. The resolves of points 4 and 5 allocate as any
+  resolve does, and a batch that carries a config finds the last `CommitOp` of each fiber
+  in a small map; both are control paths.
+- **Liveness.** An activation resolves again only when a config was retained during its
+  resolve. One that keeps losing to new retains is bounded by the load deadline, as a slow
+  `Apply` is.
+- **Extra resolves.** For a plugin with `Commit`, `internal/config` and `Decode` run once
+  more in two cases: an activation whose resolve a retain overtook (point 4) and the
+  window of point 5.
+
+### What `sdk/plugin` does with it
+
+This is outside the kernel and its cap; the commit that implements G13 on
+`s2a/integration` carries it.
+
+- `Volatile[T]` holds a pointer to an `atomic.Pointer[T]` that `Decode` allocates, so a
+  copy of the config reads the same field. `Get` is one atomic load and a dereference; a
+  zero `Volatile` returns the zero `T`.
+- `Define` sets `Plugin.Commit` to a function that stores, for each `Volatile` field in
+  both values, the field of `committed` into the same field of `applied`. A field that is
+  not `Volatile` keeps the value `Apply` received; a commit that changes one is applied by
+  the next activation (G6). Lists and maps keep their shape, since a change of shape is
+  not volatile-only (`loaderdef.VolatileOnly`).
+- A read returns the value of one retain, and two reads in a row may return values of two
+  commits; fields that must change together go in one `Volatile` of a struct type
+  (question Q3). A `T` that holds a slice or a map shares it with the committed value, and
+  a reader must not modify it.
+- The documentation of `Volatile` drops "stays open until the owner accepts it". Since the
+  exported API of `sdk/kernel` changes, `pluginApi` (`plugin.APIVersion`, `0.2` on
+  `502a355`) takes its next minor (ADR-060 decision 8).
+
+### Cost
+
+Measured on a prototype of this change on `a3c85ae`, which is not committed. Physical lines
+of production Go in `sdk/kernel`:
+
+| Part | Lines |
+|---|---:|
+| `Plugin.Commit` and its comment | 6 |
+| The cell's hand-off fields and the retain count | 9 |
+| The hand-off (`cfgCell.inPlace`, `cfgCell.owes`) | 37 |
+| An activation resolves again after a retain (`cfgCell.prepare`) | 18 |
+| A `CommitOp` hands off once `Batch` admits it (`stageUpdates`) | 21 |
+| `Fiber.Commit`, and the comments of `Commit` and `CommitOp` | 6 |
+| **Total** | **97** |
+
+The kernel goes from 8,043 to 8,140 lines (cap 8,200), or to 8,134 when the helper
+`cfgCell.load`, which only tests then call, is removed and its five test callers read the
+cell under its lock: 60 to 66 lines stay free. Question Q2 (b) costs about 10 lines fewer.
+It stays one package, with no new file and no new import.
+
+On the prototype, the kernel package's tests pass under `-race` together with tests 1 to
+7 below, every production file keeps full statement coverage (`kernelcheck coverage`) and
+`kernelcheck vocab` passes. Built against it, the packages `test/spike/s0/concurrency`,
+`test/spike/s0/composition`, `test/spike/s0/properties` (the short run, 16 seeds × 128
+operations) and `loader` pass under `-race`. This is development evidence, not
+acceptance.
+
+### Tests
+
+In `sdk/kernel`, a new file `s2a_handoff_test.go`:
+
+1. `TestCommitHandsTheConfigToTheRunningActivation`: two commits on an ACTIVE fiber give
+   two hand-offs with the same `applied`, the resolved configs in order and one `Apply`;
+   a `Plugin` without `Commit` is handed nothing.
+2. `TestCommitOpHandsItsConfigOnceTheBatchIsAdmitted`: a `CommitOp` hands off before
+   `Batch` returns; a refused batch hands nothing; a `CommitOp` whose fiber the same batch
+   disposes, restarts with `UpdateOp`, or changes later with `UpdateOpWith` hands nothing.
+3. `TestARetainDuringTheResolveOfAnActivationResolvesAgain`: `internal/config` holds the
+   first resolve of an activation while a `Commit` retains; that activation's `Apply`
+   receives the committed config and nothing is handed off.
+4. `TestCommitResolvesForAnActivationThatBeganWithoutATarget`: a fiber PENDING on a need;
+   `internal/commit` holds a `Commit` while the provider arrives and the fiber becomes
+   ACTIVE; `Commit` resolves and hands off, with no restart.
+5. `TestCommitRestartsWhenTheHandOffCannotBeMade`: in the window of test 4, a config that
+   `Decode` refuses restarts the fiber, which fails with that error; a `Plugin.Commit`
+   that panics, under `Commit` and under a `CommitOp`, restarts the fiber, which applies
+   the committed config.
+6. `TestCommitHandsNothingToAnEndedActivation`: a FAILED fiber takes a commit with no
+   hand-off and no restart.
+7. `TestCommitsAndRestartsRaceToTheLastCommit`, under `-race`: 300 commits against
+   concurrent `UpdateOp` restarts; no hand-off goes back to an older config, and once the
+   fiber settles its activation holds the last commit.
+8. `FuzzOperationSequence` gives its plugins a `Commit` and gains `Commit` and `CommitOp`
+   operations; after each settled step, every ACTIVE fiber's activation holds its retained
+   config.
+9. The tests of G6 and G7 (`commit_test.go`, `serialise_test.go`, `s1_batch_test.go`) stay
+   as they are; they hold G6 for a plugin without `Commit`.
+
+In `sdk/plugin`: `Get` returns a value committed in place, through a copy of the config as
+well; `Get` allocates nothing (`testing.AllocsPerRun`) and has a benchmark; `Get` and a
+commit run concurrently under `-race`; a field that is not `Volatile` keeps the applied
+value.
+
+End to end, in the S1 suites: a live generation that changes only the `note` of the toy
+consumer of `test/dist` commits in place, starts no new activation of the row, and the
+row's next read of `Note` returns the new value.
+
+### Verification plan
+
+ADR-059 decision 2 and ADR-060 decision 3, on the commit that merges G13 into `main`, with
+the evidence under `test/spike/s0/results/` as for G1 to G12:
+
+1. **Kernel and suites.** `make check` (the kernel tests under `-race`, full statement
+   coverage, `kernelcheck lines sdk/kernel 8200`, the vocabulary and the imports) and
+   `make s1-suites`, since the loader commits in place through `CommitOp`.
+2. **Differential corpus.** The live oracle comparison under the causal comparator at
+   `GOMAXPROCS=8` and at `GOMAXPROCS=2`, expected to give the result of
+   `causal-main-merged`: the adapter's plugins have no `Commit`, so every case runs the
+   code of G6 (point 6).
+3. **Property workload.** The full run, 1,000 seeds × 1,000 operations on the three
+   backends under `-race`, in a frozen checkout. It mounts with no config and commits
+   nothing, so it shows that the lifecycle did not move.
+4. **Call-path gate.** A full run on the measurement host, in one session alternating by
+   process with the `main` commit before the merge, judged against it as in the section
+   "2026-11-22 call-path gate on the merge commit". No measured path runs new code, so a
+   difference beyond the spread of the slow mode described there is a finding to explain
+   before the merge.
+5. **The hand-off itself.** Tests 1 to 8, and `FuzzOperationSequence` run for 30 minutes,
+   with its duration and result recorded beside the other runs (question Q4).
+
+### Edits that come with the code
+
+- `07:192`: the field list of `Plugin` gains `Commit`, and "plain data plus two functions"
+  becomes "plain data plus three functions" (question Q1 (a)).
+- The comments of `Fiber.Commit`, `CommitOp` and `cfgCell`, and the package documentation
+  of `sdk/plugin`, say what this section says. G6's "the running activation keeps the
+  value it was applied with" (line 1249) then holds for a plugin without `Commit`.
+- This section records the shape as merged and the measured line count, as the section
+  "S1 additions to the kernel API (ADR-059)" does for G1 to G12.
+
+### Questions for the owner
+
+Each question gives its options, the recommended one, why, and when the answer is needed.
+
+**Q1. What shape does the hand-off take in the kernel API?** `07:192` lists the fields of
+`Plugin` as "plain data plus two functions", and `07:68` (R10) leaves the accessors of
+`plugin.Volatile[T]` as sketches.
+- (a) An exported optional field `Plugin.Commit func(applied, committed any)`, set by
+  `plugin.Define`; `07:192` lists it.
+- (b) An exported function `kernel.WithCommit(p Plugin, fn func(applied, committed any))
+  Plugin` that stamps an unexported field, as `Define` stamps the entry token (owner
+  decision 7). `07:192` stays as written; the API gains a function instead of a field.
+- (c) A method `Context.OnCommit(fn func(committed any))` that the `Apply` of
+  `plugin.Define` calls in each activation. `Plugin` stays as it is, but the `Apply` of an
+  author can call it too, so an author is called on a commit, against "No call" of
+  `07:1377`, and the kernel must hand over what was retained before the registration,
+  which costs more lines.
+- Recommended: (a). `Decode` set the precedent of an optional function on `Plugin` (owner
+  decision 9), the kernel already reads the plugin's functions at the mount, and the field
+  is visible where an author reads `Plugin`. Needed before the G13 code merges into
+  `main`.
+
+**Q2. What does `Commit` do for an activation that began while it ran, on a fiber that had
+no target when it began?** G6 resolves nothing for a fiber with no target, and such an
+activation applied the older config.
+- (a) Resolve `cfg` after the retain and hand it off; restart the fiber only when `cfg`
+  does not resolve or `Plugin.Commit` panics.
+- (b) Restart the fiber in that window, without resolving; about 10 lines fewer.
+- Recommended: (a). A valid volatile change then never restarts a row, as `07:1377`
+  states, and the restart is kept for a config that the next activation must fail on,
+  which G6 already states. Needed before the G13 code merges into `main`.
+
+**Q3. What does a read return when one commit changes several `Volatile` fields?**
+`07:1377` speaks of "the next read of the `Volatile` field".
+- (a) Per field: each read returns the value of one retain, and fields that must change
+  together go in one `Volatile` of a struct type. One atomic load per read.
+- (b) Per config: all `Volatile` fields of an activation change together through one
+  shared pointer, and `sdk/plugin` gains an accessor that reads several fields from one
+  commit. Two dependent loads per read, and a new author API.
+- Recommended: (a). It is what `07:1377` states, it costs least on a hot path, and a
+  struct type gives a plugin an atomic group where it needs one. Needed before the
+  `sdk/plugin` part of G13 merges into `main`.
+
+**Q4. Do the S0 harnesses check the hand-off itself?** The corpus and the property
+workload commit nothing in place: the adapter never calls `Fiber.Commit` or `CommitOp`,
+the workload mounts with no config, and the two prototype cores have no such operation.
+- (a) Run the three gates unchanged as evidence that nothing else moved, and check the
+  hand-off in the kernel package: tests 1 to 8 and a recorded 30-minute run of
+  `FuzzOperationSequence`.
+- (b) Also add a commit-in-place operation to the property workload for the `kernel`
+  backend alone, with the retained configs in its independent model, which changes the
+  workload's frozen source digest.
+- Recommended: (a). The oracle and the two prototypes give nothing to compare a hand-off
+  with, and (b) changes frozen S0 evidence for a check that a fuzz target of the kernel
+  package makes directly. Needed before the G13 code merges into `main`.
