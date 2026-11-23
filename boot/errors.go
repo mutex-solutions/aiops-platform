@@ -73,6 +73,11 @@ const (
 	// RuleRecord: a record under verified/ breaks its format or vouches for another
 	// digest (ADR-020 decision 10).
 	RuleRecord Rule = "record"
+	// RuleLock: plugins.lock breaks its format (ADR-047 decision 8).
+	RuleLock Rule = "lock"
+	// RuleKept: a file that install kept is not the one whose digest install verified;
+	// check 5 denies every row of the artifact (ADR-047 decision 18).
+	RuleKept Rule = "kept"
 )
 
 // Error is a composition error. It names the file, the line when the YAML
