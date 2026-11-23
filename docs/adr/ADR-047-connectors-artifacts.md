@@ -98,7 +98,7 @@ gaps:
    | The module | `module.json` | `application/vnd.aiops.plugin.module.v1+json` | In-process code |
    | The content | `content.tar` | `application/vnd.aiops.plugin.content.v1.tar` | An artifact with a `content/` directory |
    | The fixtures | `fixtures.tar` | `application/vnd.aiops.plugin.fixtures.v1.tar` | A pack |
-   | The SBOM | `sbom.json` | The registered type of the SBOM format that ADR-044 picks for images | Every artifact |
+   | The SBOM | `sbom.spdx.json` | `application/spdx+json` | Every artifact |
    | The attestation | as ADR-020 fixes | as ADR-020 fixes | Every artifact, as a layer or an OCI referrer (ADR-060 decision 18) |
 
    - The title annotation is `org.opencontainers.image.title`, so a generic OCI client
@@ -114,8 +114,19 @@ gaps:
      from it.
    - The image reference of a remote plugin arrives at S2b with the remote runtime
      (ADR-060 decision 29), as one more layer type under the same `artifactType`.
+   - The SBOM is an SPDX 2.3 document in its JSON form, which `aiopsctl` writes itself
+     with the standard library's `encoding/json`: `plugin pack` of a pack runs where
+     `aiopsctl` is alone, with no builder image and no container runtime (ADR-060
+     decision 30, P1), and the SBOM of the builder's images is ADR-044's, not this one.
+     Writing it adds no linked module, so ADR-060 decision 34 asks nothing more. SPDX
+     matches the SPDX expression of the manifest's `license` (`08:1345`) and the SPDX list
+     data that `aiopsctl` embeds (ADR-060 decision 23).
    - A pack's SBOM lists the files of its content and fixtures layers with their digests
-     and the pack's `license`; that of in-process code lists the build list of its module.
+     and the pack's `license`. That of in-process code lists the build list of its module,
+     each module with its path, version and sum, read with `go list -m -json all` from the
+     author's toolchain, which code needs for `plugin check` (`07:1529`); it states no
+     licence of those modules (`NOASSERTION`), since the licence scan of a build list is
+     the builder's (`08:1345`; check 6).
    - If ADR-020 makes the attestation a layer, its subject cannot be the artifact digest,
      which would contain it; the subject per kind of artifact is ADR-020's.
 
