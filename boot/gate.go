@@ -12,8 +12,8 @@ import (
 )
 
 // The gate: admission of a composition (03-c3-kernel.md:357, "Admit"). It has
-// ten named slots in the order of the table at
-// 08-profiles-roadmap-adrs.md:495-506 (ADR-059 decision 4), and runs at each entry
+// one slot per check of the one gate text, named and ordered as its table is
+// (08-profiles-roadmap-adrs.md:493-506; ADR-060 decision 16), and runs at each entry
 // point of ADR-060 decision 17 on what that entry point holds (GateInput): the
 // composition, the module table, the signed distribution manifest, trust.yaml and
 // what install recorded, plus the keys the root provides and the classes of keys and
@@ -43,8 +43,8 @@ const (
 	StatusNotEvaluated Status = "not-evaluated"
 )
 
-// Check numbers of the gate, as in the table at
-// 08-profiles-roadmap-adrs.md:497-506.
+// Check numbers of the gate, as in the one gate text
+// (08-profiles-roadmap-adrs.md:497-506).
 const (
 	CheckManifest      = 1
 	CheckDefinitions   = 2
@@ -63,8 +63,8 @@ const (
 )
 
 // CheckInfo names one slot. Until is the roadmap step that builds the check, empty
-// once it is built. Partial lists the clauses of a built check that a later step
-// adds.
+// once it is built. Partial lists the clauses of a built check that the one gate text
+// marks with a later step.
 type CheckInfo struct {
 	N       int
 	Name    string
@@ -84,7 +84,7 @@ func GateChecks() []CheckInfo {
 		{CheckTrust, "Trust", "", "the index clause is S6a"},
 		{CheckLicence, "Licence", "", ""},
 		{CheckKeyHookClass, "Key and hook classes", "", ""},
-		{CheckLayerRules, "Layer rules", "", "the tenant overlay is S4b"},
+		{CheckLayerRules, "Layer rules", "", "the tenant overlay is S4b, the scope: tenant clause S4a"},
 		{CheckRemoteScope, "Remote scope", untilS2b, ""},
 		{CheckAttestation, "Attestation", "", ""},
 	}
@@ -464,9 +464,9 @@ func (g *gate) fail(check int, r Row, rule Rule, stop bool, format string, a ...
 }
 
 // resolve looks the plugin of an enabled row up in the module table. The two
-// core plugins are built into the loader (plugin-system-2026-11.md §6).
-// Remote plugins and plugins.lock are not read before S2a, so such a row is
-// refused here with that reason (03-c3-kernel.md:357).
+// core plugins are built into the loader (plugin-system-2026-11.md §6). A
+// remote plugin is not read before S2b, so such a row is refused here with that
+// reason (03-c3-kernel.md:357).
 func (g *gate) resolve(r Row) (RowResult, bool) {
 	if r.Plugin == pluginGroup || r.Plugin == pluginInclude {
 		return RowResult{}, true
@@ -475,7 +475,7 @@ func (g *gate) resolve(r Row) (RowResult, bool) {
 		return RowResult{}, true
 	}
 	f := g.fail(checkResolve, r, RuleModuleMissing, false,
-		"plugin %q is not in the module table (a remote plugin and plugins.lock are not read before S2a)", r.Plugin)
+		"plugin %q is not in the module table (a remote plugin is not read before S2b)", r.Plugin)
 	return f, false
 }
 

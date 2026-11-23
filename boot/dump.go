@@ -147,8 +147,17 @@ func writeRow(b *strings.Builder, r ComposedRow, gate GateResult) {
 		if f.Stop {
 			verb = "denied, stops boot"
 		}
-		fmt.Fprintf(b, "  # gate: %s: check %d, rule %s: %s\n", verb, f.Check, f.Rule, f.Reason)
+		fmt.Fprintf(b, "  # gate: %s: %s, rule %s: %s\n", verb, gateCheck(f.Check), f.Rule, f.Reason)
 	}
+}
+
+// gateCheck names the check of a denial by its number and its name in the one gate
+// text, or the module table lookup that runs before the ten checks.
+func gateCheck(n int) string {
+	if n == checkResolve {
+		return "module table lookup"
+	}
+	return fmt.Sprintf("gate check %d (%s)", n, GateChecks()[n-1].Name)
 }
 
 // ShowValue renders a config value on one line, deterministically: a map is

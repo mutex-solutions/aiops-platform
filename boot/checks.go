@@ -473,8 +473,8 @@ func (g *gate) attested(r ComposedRow, s *subject, what string) []RowResult {
 		f("the attestation of a pack names no scenario version")
 	}
 	if t, ok := g.in.Tie[r.Plugin]; s.art != nil && s.art.Record.Module != nil && ok && *s.art.Record.Module != t.Module {
-		f("the artifact pins %s %s and the binary runs %s %s, so its attestation covers another subject (ADR-020 decision 12)",
-			s.art.Record.Module.Path, s.art.Record.Module.Version, t.Module.Path, t.Module.Version)
+		f("the artifact pins %s and the binary runs %s, so its attestation names another subject (ADR-020 decision 12)",
+			showModule(DistModule{GoModule: *s.art.Record.Module}), showModule(DistModule{GoModule: t.Module}))
 	}
 	return out
 }

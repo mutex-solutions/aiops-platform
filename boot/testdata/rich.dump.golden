@@ -33,16 +33,16 @@ row same2 plugin=o/same enabled=true required=false group=false roles=-
 
 row rogue plugin=o/other enabled=true required=false group=false roles=-
   config {}
-  # gate: detached as disabled: check 7, rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
+  # gate: detached as disabled: gate check 7 (Key and hook classes), rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
 
 row missing plugin=x/none enabled=true required=false group=false roles=-
   config {}
-  # gate: detached as disabled: check 0, rule module-missing: plugin "x/none" is not in the module table (a remote plugin and plugins.lock are not read before S2a)
+  # gate: detached as disabled: module table lookup, rule module-missing: plugin "x/none" is not in the module table (a remote plugin is not read before S2b)
 
 row iso plugin=o/open enabled=true required=false group=false roles=-
   config {}
   isolate pk
-  # gate: denied, stops boot: check 7, rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
+  # gate: denied, stops boot: gate check 7 (Key and hook classes), rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
 
 ## required set
 rows prov
@@ -62,12 +62,12 @@ check 4 Stability: not evaluated at profile render: no signed distribution manif
 check 5 Trust: not evaluated at profile render: no signed distribution manifest is given
 check 6 Licence: not evaluated at profile render: no signed distribution manifest is given
 check 7 Key and hook classes: 2 failed (not evaluated: fake: no signed distribution manifest is given; signed: no signed distribution manifest is given)
-check 8 Layer rules: pass (not evaluated: installed: no signed distribution manifest is given; later: the tenant overlay is S4b)
+check 8 Layer rules: pass (not evaluated: installed: no signed distribution manifest is given; later: the tenant overlay is S4b, the scope: tenant clause S4a)
 check 9 Remote scope: not evaluated until S2b
 check 10 Attestation: not evaluated at profile render: no signed distribution manifest is given
 
 ## diagnostics
-warning: row "missing" is inactive: plugin "x/none" is not in the module table (a remote plugin and plugins.lock are not read before S2a)
+warning: row "missing" is inactive: plugin "x/none" is not in the module table (a remote plugin is not read before S2b)
 error: static graph: gate check 7 (Key and hook classes), rule isolate-bound: row "iso" isolates provider-bound key "pk" and plugin "o/open" is not its bound provider
 warning: row "rogue" detached as disabled: gate check 7 (Key and hook classes), rule provider-binding: row "rogue" provides provider-bound key "pk" and plugin "o/other" is not in its binding ["o/prov"]
 error: static graph: two-providers: rows "grp:c1", "grp:c2" all provide key "ok" in the realm of row "grp"; one provider per key per realm

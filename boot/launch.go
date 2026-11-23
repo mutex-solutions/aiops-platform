@@ -68,7 +68,7 @@ func refsInject(r ComposedRow) []string {
 // again, so it sees a file that changed since boot; Admit and Plan work on
 // compositions that this launcher composed, which it remembers by digest: the
 // definition's Composition holds plain values and has no provenance, which gate
-// check 8 reads (08-profiles-roadmap-adrs.md:507). A composition it never made is
+// check 8 reads (08-profiles-roadmap-adrs.md:504). A composition it never made is
 // refused.
 type profileContext struct {
 	profile, role string
@@ -388,6 +388,8 @@ func decodes(decode func(any) (any, error), raw any) (err error) {
 	return err
 }
 
+// checkName names check n by its number and its name in the one gate text, or the
+// module table lookup that runs before the ten checks.
 func checkName(n int) string {
 	if n == checkResolve {
 		return "module table"

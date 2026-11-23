@@ -28,7 +28,7 @@ row tools plugin=aiops/tool-search enabled=true required=false group=false roles
 row runbook plugin=aiops/tool-runbook enabled=true required=false group=false roles=worker
   config {}
   # enabled set by layer 2 (profile:demo) profiles/demo/aiops.patch.yml:2
-  # gate: detached as disabled: check 7, rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]
+  # gate: detached as disabled: gate check 7 (Key and hook classes), rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]
 
 row metrics plugin=aiops/metrics-query-http enabled=true required=false group=false roles=api,edge
   config {endpoint: "http://prom2.example.test"}
@@ -57,7 +57,7 @@ check 4 Stability: pass (later: exemptions (compatibility.yaml) are S6b)
 check 5 Trust: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12); later: the index clause is S6a)
 check 6 Licence: pass
 check 7 Key and hook classes: 1 failed
-check 8 Layer rules: pass (later: the tenant overlay is S4b)
+check 8 Layer rules: pass (later: the tenant overlay is S4b, the scope: tenant clause S4a)
 check 9 Remote scope: not evaluated until S2b
 check 10 Attestation: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12))
 

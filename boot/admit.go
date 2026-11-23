@@ -93,11 +93,11 @@ func (a Admission) Diagnostics() []string {
 			switch {
 			case f.Rule == RuleIsolateBound:
 				// Static graph errors stop boot whatever the row (08:469).
-				out = append(out, fmt.Sprintf("error: static graph: gate check %d (%s), rule %s: %s", s.N, s.Name, f.Rule, f.Reason))
+				out = append(out, fmt.Sprintf("error: static graph: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
 			case f.Stop:
-				out = append(out, fmt.Sprintf("error: denied: gate check %d (%s), rule %s: %s", s.N, s.Name, f.Rule, f.Reason))
+				out = append(out, fmt.Sprintf("error: denied: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
 			default:
-				out = append(out, fmt.Sprintf("warning: row %q detached as disabled: gate check %d (%s), rule %s: %s", f.Row, s.N, s.Name, f.Rule, f.Reason))
+				out = append(out, fmt.Sprintf("warning: row %q detached as disabled: %s, rule %s: %s", f.Row, gateCheck(s.N), f.Rule, f.Reason))
 			}
 		}
 	}
