@@ -95,17 +95,11 @@ func Generate(dir string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	var fakes []Definition
-	for _, d := range defs {
-		if slices.ContainsFunc(g.Uses, func(u plugin.Use) bool { _, ok := d.Classes[u.Key]; return ok }) {
-			fakes = append(fakes, d)
-		}
-	}
 	var registers []string
 	for _, k := range g.Registers {
 		registers = append(registers, k.Key)
 	}
-	if r.Files[CycleFile], err = cycleTest(t, fakes, registers, config); err != nil {
+	if r.Files[CycleFile], err = cycleTest(t, injected(defs, g.Uses), registers, config); err != nil {
 		return Result{}, err
 	}
 	if slices.Contains(m.Scope, "process") {
@@ -291,6 +285,18 @@ func definitions(t target) ([]Definition, error) {
 		defs = append(defs, d)
 	}
 	return defs, nil
+}
+
+// injected returns the definitions of defs that declare a key of uses at its major:
+// the definitions whose fakes the cycle test mounts (ADR-060 decision 12).
+func injected(defs []Definition, uses []plugin.Use) []Definition {
+	var out []Definition
+	for _, d := range defs {
+		if slices.ContainsFunc(uses, func(u plugin.Use) bool { _, ok := d.Classes[u.Key]; return ok && u.Major == d.Major }) {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // cycleConfig returns the Go literal of testdata/cycle.yaml in dir, or "nil".

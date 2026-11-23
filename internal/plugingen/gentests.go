@@ -27,11 +27,11 @@ func cycleTest(t target, fakes []Definition, registers []string, config string) 
 	fmt.Fprintf(&b, "package %s_test\n\nimport (\n\t\"testing\"\n\n", t.Name)
 	fmt.Fprintf(&b, "\t%s %q\n", t.Name, t.ImportPath)
 	for _, d := range fakes {
-		fmt.Fprintf(&b, "\t%sfake %q\n", d.Name, d.Path+"/fake")
+		fmt.Fprintf(&b, "\t%sfake %q\n", ident(d), d.Path+"/fake")
 	}
 	fmt.Fprintf(&b, "\t%q\n)\n\nfunc TestCycle(t *testing.T) {\n", modPath+"/sdk/testkit/cycle")
 	for _, d := range fakes {
-		fmt.Fprintf(&b, "\t%[1]sFake, %[1]sPlugin := %[1]sfake.New()\n", d.Name)
+		fmt.Fprintf(&b, "\t%[1]sFake, %[1]sPlugin := %[1]sfake.New()\n", ident(d))
 	}
 	reg := "nil"
 	if len(registers) > 0 {
@@ -39,10 +39,19 @@ func cycleTest(t target, fakes []Definition, registers []string, config string) 
 	}
 	fmt.Fprintf(&b, "\tcycle.Run(t, %s.%s, %s, %s,\n", t.Name, t.Accessor, config, reg)
 	for _, d := range fakes {
-		fmt.Fprintf(&b, "\t\tcycle.Fake{Plugin: %[1]sPlugin, Inventory: %[1]sFake.Inventory},\n", d.Name)
+		fmt.Fprintf(&b, "\t\tcycle.Fake{Plugin: %[1]sPlugin, Inventory: %[1]sFake.Inventory},\n", ident(d))
 	}
 	b.WriteString("\t)\n}\n")
 	return format.Source([]byte(b.String()))
+}
+
+// ident names the fake of d in a cycle test: the definition's name, with its major
+// above 0, so that two majors of one definition get two names.
+func ident(d Definition) string {
+	if d.Major == 0 {
+		return d.Name
+	}
+	return d.Name + "v" + strconv.Itoa(d.Major)
 }
 
 // tenantsTest writes zz_tenants_test.go for a plugin whose scope holds process. Its

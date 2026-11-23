@@ -173,16 +173,16 @@ func majorOf(v string) int {
 
 // Requires fills g.Requires.Definitions from defs, the definitions in the package
 // graph of the plugin (ADR-060 decision 9): each key and hook of g maps to the
-// definition whose definition.yaml declares it. The kernel's keys and hooks belong
-// to pluginApi and are left out, and so is a key the plugin provides that no
-// definition declares, which is the plugin's own. A used or registered key and a
-// hook that no definition declares fail, and so does a key at another major than
-// its definition's.
+// definition whose definition.yaml declares it at the key's major. The kernel's keys
+// and hooks belong to pluginApi and are left out, and so is a key the plugin
+// provides that no definition declares, which is the plugin's own. A used or
+// registered key and a hook that no definition declares fail, and so does a key
+// that its definitions declare at other majors only.
 func Requires(g *plugin.Generated, defs []Definition) error {
-	byKey, byHook := map[string]Definition{}, map[string]Definition{}
+	byKey, byHook := map[string][]Definition{}, map[string]Definition{}
 	for _, d := range defs {
 		for k := range d.Classes {
-			byKey[k] = d
+			byKey[k] = append(byKey[k], d)
 		}
 		for h := range d.Hooks {
 			byHook[h] = d
@@ -195,17 +195,19 @@ func Requires(g *plugin.Generated, defs []Definition) error {
 		if slices.ContainsFunc(builtinKeys, func(k kernel.AnyKey) bool { return k.Name() == key }) {
 			return
 		}
-		d, ok := byKey[key]
+		ds := byKey[key]
+		i := slices.IndexFunc(ds, func(d Definition) bool { return d.Major == major })
 		switch {
-		case !ok && own:
+		case len(ds) == 0 && own:
 			return
-		case !ok:
+		case len(ds) == 0:
 			errs = append(errs, fmt.Errorf("%s: key %s is declared by no definition in the plugin's package graph", field, key))
 			return
-		case d.Major != major:
-			errs = append(errs, fmt.Errorf("%s: key %s at major %d, its definition %s is at %s", field, key, major, d.Name, d.Version))
+		case i < 0:
+			errs = append(errs, fmt.Errorf("%s: key %s at major %d, its definition %s is at %s", field, key, major, ds[0].Name, ds[0].Version))
 			return
 		}
+		d := ds[i]
 		if need[d.Name] == nil {
 			need[d.Name] = map[string]bool{}
 		}
