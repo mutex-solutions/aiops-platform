@@ -1,7 +1,6 @@
 # Words the kernel must not contain (whole word, case-insensitive): every word of
 # vocabulary-loader.txt, and the product words of 00-decisions.md §4.3 the kernel does not
-# use (ADR-060 decision 45; TestVocabularyLists). The upstream names are the register's,
-# which the name lint U1 reads (ADR-054 decision 14).
+# use (ADR-060 decision 45; TestVocabularyLists).
 #
 # Not listed: four §4.3 words the kernel uses in other senses, listed in the S2a report for
 # review. role: the worker role of an observer goroutine (observe.go). row: a row of the
@@ -26,3 +25,21 @@ pillar
 harness
 remediation
 estate
+
+# Upstream names, as in vocabulary-boot.txt.
+envoy
+seaweedfs
+mimir
+alertmanager
+loki
+tempo
+pyroscope
+kafka
+grafana
+holmesgpt
+goalert
+tetragon
+nats
+jetstream
+krr
+chromium

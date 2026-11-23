@@ -136,9 +136,10 @@ jobs:
         # Line cap: 9,000, provisional during S2a (ADR-060 decision 35), in place of the
         # 6,800 fixed at the S1 exit (ADR-059 decision 11); the manifest reader adds to it
         # (ADR-048 decision 18).
-        # Its vocabulary list holds the domain words of ADR-060 decision 45 and not tenant,
-        # which boot legitimately handles (a scope class of its closed vocabulary). The
-        # upstream names are the register's, which the name lint U1 reads (ADR-054 decision 14).
+        # Its vocabulary list holds the domain words and upstream names of ADR-060 decision 45
+        # and not tenant, which boot legitimately handles (a scope class of its closed
+        # vocabulary). An upstream name leaves it in the commit that adds the register entry
+        # carrying it, from which the name lint U1 reads it (ADR-054 decisions 14 and 20).
         run: |
           go run ./tools/kernelcheck lines boot 9000 provisional
           go run ./tools/kernelcheck vocab boot tools/kernelcheck/vocabulary-boot.txt
