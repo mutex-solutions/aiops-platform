@@ -131,10 +131,14 @@
    the least and greatest number of its positional arguments; and its flags, each with a
    name, a kind (bool, string, or a list that the flag repeats), a default and a usage
    line. `help` belongs to the dispatcher, and no path starts with it. An `Invocation`
-   holds the positional arguments, the flag values by name, the three streams, and the
-   home that the launcher resolved (decision 25), empty when there is none. `Run` returns
-   `nil` on success, an error that matches `ErrUsage` for a usage error, and any other
-   error for a denial, a failed step or `rebuild-required`. It returns when `ctx` ends.
+   holds the positional arguments, the flag values by name, the three streams, the
+   working directory `Dir` and a lookup of the environment `Env`, both from `cmdline`
+   (decision 13), and the home that the launcher resolved (decision 25), empty when there
+   is none. A command resolves a relative path against `Dir`, as S1 resolved it against
+   `$PWD` (`cmd/aiopsctl/run.go`), and reads the environment only through `Env`, so it
+   mounts alone in a test with the values the test gives (`03:81`). `Run` returns `nil`
+   on success, an error that matches `ErrUsage` for a usage error, and any other error
+   for a denial, a failed step or `rebuild-required`. It returns when `ctx` ends.
 
 3. **The registry** is what the key serves.
 
@@ -173,20 +177,54 @@
    (ADR-059 decision 32), with an obligations half for a command and a guard half for a
    dispatcher (`07:514`; ADR-060 decision 5). Each case has an id, which `plugin check`
    prints for a failed obligation (ADR-060 decision 5).
-   - Obligations: a registered path keeps the word rule; `Run` writes only to the streams
-     of its invocation, returns when `ctx` ends, and returns `ErrUsage` only for a usage
-     error.
+   - **Obligations.** What a command owes cannot be decided for an arbitrary command
+     without cases of its own, so each obligation reads its cases from the
+     contribution's fixtures, at `fixtures/commands/<name>.json` for the obligation
+     `commands/<name>`, as a pack reads its cases (ADR-047 decision 12). A missing file
+     fails the obligation with its id and the path it read. The suite dispatches each
+     case's argv through the recording fake (decision 4).
+     - `commands/paths`: the file lists the paths the contribution registers, each with
+       its summary. The registered paths equal that list and each keeps the word rule.
+       The name lint of `plugin check` step 1 reads the same file (decision 21), so every
+       word of a registered path passes the deny-list of T1, which names "CLI command"
+       (`08:1358`).
+     - `commands/run`: each case gives an argv, an optional stdin, the expected outcome
+       (`ok`, `usage` or `error`), the exact stdout and a text that stderr contains. The
+       outcome is `usage` exactly when `Run` returned an error that matches `ErrUsage`,
+       so `ErrUsage` is returned only for a usage error on the paths the cases run.
+       Each registered path has at least one `ok` case. While a case runs, the suite
+       holds the process's own stdout and stderr and fails when anything reaches them,
+       so `Run` writes only to the streams of its invocation on those paths.
+     - `commands/cancel`: each case gives an argv and a delay. The context of the
+       invocation ends after the delay, and `Run` returns within 5 seconds of that with
+       an error that matches the context's error: the bound in which the `cli` row
+       returns at a signal (decision 17).
+
+     A stub that returns "not implemented" fails `commands/run` and `commands/cancel`
+     once their cases exist, since neither outcome matches, and fails every obligation
+     while no case exists.
    - Guard: each parsing and help rule of decisions 8 and 9; each row of the exit table
      of decision 10; a taken or overlapping path refused; a late registration refused
      with `ErrInactiveEffect`; a call into a command whose fiber is quiescing refused with
      `ErrInactive`; every method of a released registry refused; and `Inventory()` back
      at its baseline after a contributor is disposed. The guard half runs against the
      `cli` row and against the fake (`07:514`).
+   - The two-tenant and disabled-for-tenant cases that both halves carry (`07:1465`)
+     join at S4a with a raised suite revision, as for the toy registries (ADR-060
+     decision 43), once S4a decides what `admin-api` may dispatch (decision 32).
+     `commands` holds no tenant data, and the S2a revision holds no skipped case.
 
 6. **A template.** S2a writes the Go template of `commands` in `templates/`, and `plugin
-   new commands --lang go` writes it, because CI generates a plugin from the template of
-   every registry and holds it to the state of `07:1551` (`08:1265`). ADR-060 decision 24
-   gains it.
+   new commands <id> --lang go` writes it, because CI generates a plugin from the
+   template of every registry and holds it to the state of `07:1563`: it compiles,
+   passes T0 and the generated tests, and fails conformance with exactly one line per
+   obligation (`08:1265`; ADR-060 decision 24). Its `Apply` registers one path,
+   `example`, whose `Run` returns "not implemented", and its `fixtures/` holds a README
+   that names the three case files of decision 5 and no case, so each obligation fails
+   on its missing file (`07:1541`). ADR-060 decision 24 gains it. The template serves the
+   authors of first-party and `contrib/` command rows, which reach the `cli` profile
+   through `aiops-cli` (decision 29), and the author of any other plugin as far as
+   question Q8 lets its rows reach that profile.
 
 ### The `cli` row, the dispatcher
 
@@ -256,7 +294,12 @@
 13. **What the `cli` row reads** (question Q2 (a)):
     - `Cmdline` gains `Stdin()`, `Stdout()` and `Stderr()`: the process's streams in every
       binary, and a test's buffers under the launch fake, so the `cli` row and each
-      command row mount alone in a test (`03:81`).
+      command row mount alone in a test (`03:81`). It also gains `Dir()` and
+      `Environ()`, the working directory and the environment of the process, which the
+      `cli` row copies into each `Invocation` (decision 2). Only the launcher of
+      `aiopsctl` fills them; in `aiops` both are empty, so no server row reads the
+      environment through `cmdline`, and the `${env:}` reference still reads `Env`
+      alone (`08:162`).
     - `Ready` gains `Booted()`, a channel that the launcher closes once the tree has
       settled and the run-time required audit has passed, the point where `boot` prints
       its boot line today (`boot/run.go`). dsh's launcher marks the app ready when the
@@ -290,33 +333,88 @@
     ```
 
 16. **Method set.** One method per operation. Each takes `ctx` first and returns an error
-    that matches `kernel.ErrInactive` once the provider is released (`07:520`); the
-    request and the result of each are types of the definition package. `Render` is
-    added to the list of ADR-060 decision 23 so that the operations plugin is the one
-    consumer of the toolbox (decision 20), and `Submit` carries every write to the
-    reload queue (`08:369`).
+    that matches `kernel.ErrInactive` once the provider is released (`07:520`). `Render`
+    is added to the list of ADR-060 decision 23 so that the operations plugin is the one
+    consumer of the toolbox among the command paths (decision 20), and `Home` lets the
+    suite observe every write through the definition (decision 18). The submission to
+    the reload queue is a step of each method that writes the home (decision 17), not a
+    method of its own.
+
+    ```go
+    // sdk/def/operations/v0. launch is sdk/def/launch/v0 at 0.2 (decision 21).
+    type Operations interface {
+        Home(ctx context.Context, r HomeRequest) (Home, error)
+        Render(ctx context.Context, r RenderRequest) (launch.Rendered, error)
+        VerifyProfile(ctx context.Context, r RenderRequest) (launch.Rendered, error)
+        InitProfile(ctx context.Context, r ProfileRequest) (Change, error)
+        SanitizeProfile(ctx context.Context, r ProfileRequest) (Change, error)
+        New(ctx context.Context, r NewRequest) (Written, error)
+        Check(ctx context.Context, r CheckRequest) (CheckReport, error)
+        Smoke(ctx context.Context, r SmokeRequest) (SmokeReport, error)
+        Pack(ctx context.Context, r PackRequest) (Written, error)
+        Sign(ctx context.Context, r SignRequest) (Written, error)
+        Push(ctx context.Context, r PushRequest) (Pushed, error)
+        Inspect(ctx context.Context, r SpecRequest) (Inspected, error)
+        Verify(ctx context.Context, r SpecRequest) (Verified, error)
+        Gate(ctx context.Context, r GateRequest) (launch.Verdict, error)
+        Install(ctx context.Context, r InstallRequest) (Change, error)
+        Enable(ctx context.Context, r RowRequest) (Change, error)
+        Disable(ctx context.Context, r RowRequest) (Change, error)
+        Remove(ctx context.Context, r RemoveRequest) (Change, error)
+        AddTrust(ctx context.Context, r TrustRequest) (Change, error)
+        GenerateKey(ctx context.Context, r KeyRequest) (Written, error)
+        Build(ctx context.Context, r BuildRequest) (launch.Built, error)
+        SignDist(ctx context.Context, r SignDistRequest) (Written, error)
+        UseDist(ctx context.Context, r UseRequest) (Change, error)
+    }
+    ```
+
+    The request and result types are types of the definition package, and those that
+    the toolbox already defines are the types of `launch` (decision 21):
+
+    | Type | Fields |
+    |---|---|
+    | `Caller`, embedded in every request | `Env`, the invocation's lookup of the environment (decision 2), the only way the library reads it; `Progress`, the writer of progress lines, stderr in `aiopsctl`. Every path in a request is absolute: a command row resolves it against `Invocation.Dir` |
+    | `HomeRequest`, `ProfileRequest` | `Home`, `Profile` |
+    | `Home` | `Profiles`; for the profile asked, `Bundles` (its bundle list), `Enabled` (the `enabled` departures of its profile layer by row id) and `Locked` (id, digest and content digest of each entry of its `plugins.lock`); for the site, `Signers` (key id, ids, runtimes, signed), `Distributions` (key ids, and `release` for the default root), `AllowUnsigned`, `Records` (digest, kind, signer, plugin id), `Current` and `Image`; and `Snapshot`, whether an interrupted write left one (decision 17) |
+    | `RenderRequest` | `launch.RenderRequest` with `Caller` |
+    | `NewRequest` | `Registry` (a registry or `connector`), `ID`, `Lang`, `Contrib`, `Against`, `Plugins`, `Dir` |
+    | `CheckRequest`, `CheckReport` | `Dir`, `Write`, `Against`; per step of `07:1565`-`1576` its number, `pass`, `fail`, `not applicable` or `skipped`, and its `launch.Diagnostic`s, and the attestation it would sign |
+    | `SmokeRequest`, `SmokeReport` | `Dir`, `Against`, `Builder` (`image` or `local`); each row of the test-only profile with its state and what it waits for, and whether smoke passed (ADR-060 decision 58, reading 1) |
+    | `PackRequest`, `SignRequest`, `PushRequest`, `Pushed` | `Dir`, `Out`; `Out`, `Key`; `Out`, `Registry`; the spec by digest (ADR-047 decision 1) |
+    | `SpecRequest`, `GateRequest` | `Spec`, and `Builder` for `Verify`; `Spec`, `Against` |
+    | `Inspected` | The digest; id, version and runtimes; each row with its config and content paths; that no signer was verified (ADR-047 decision 2) |
+    | `Verified` | The digest, the verified signer, each suite that ran with its result, and the verdict |
+    | `InstallRequest`, `RowRequest`, `RemoveRequest` | `Home`, `Profile` and `Spec`, `Row` or `ID` |
+    | `TrustRequest` | `Home`, `KeyFile`, `IDs`, `Runtimes`, `Signed`, `Distribution` (ADR-020 decision 5) |
+    | `KeyRequest`, `SignDistRequest`, `UseRequest` | `Prefix`; `Image`, `Key`; `Home`, `Image` |
+    | `BuildRequest` | `launch.BuildRequest` with `Caller` |
+    | `Written` | The paths written outside the home |
+    | `Change` | `Written`, the home paths written or removed; `Notes`, what the operator is told (a profile copied from the shipped template, an item kept, a snapshot restored); `Outcome` and `Reason` (decision 17); `DistLines`, the `dist.yaml` lines of `rebuild-required` (`08:397`); `Verdict`, the clauses evaluated |
 
     | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
     |---|---|---|---|---|---|
+    | `Home` | None at S2a; `plugin list` reads it from S6a | No | None | None | `08:371`; decision 18 |
     | `Render` | `profile render` | No | Boot | `Render` | `08:359`; `03:63` |
     | `VerifyProfile` | `profile verify` | No | Boot | `Render` | `08:366` |
     | `InitProfile` | `profile init <p>` | Yes | None | `Shipped` | `08:72` row 30; ADR-060 decision 27 |
-    | `New` | `plugin new <registry>`, `plugin new connector` | No; writes the author's directory | None | `Template`, `Release` | `07:1551`; ADR-060 decision 24; ADR-047 decision 12 |
-    | `Check` | `plugin check <dir>` | No; with `--write`, the author's directory | `plugin check` step 7 | `ReadManifest`, `Generate`, `Vet`, `Suite`, `Gate`, `Release` | `07:1565`-`1576`; ADR-060 decision 23 |
-    | `Smoke` | `plugin smoke <dir> --against <release>` | No | None | `Build` | `07:1578`; ADR-060 decision 58 |
-    | `Pack`, `Sign`, `Push` | `plugin pack`, `plugin sign`, `plugin push` | No | `plugin pack` | `Suite`, `Gate` (for `Pack`) | `07:1859`; ADR-060 decision 18; ADR-020 decision 1 |
+    | `SanitizeProfile` | `profile sanitize [<p>]` | Yes | None | None | `08:72` row 30; dsh §3.4; question Q9 |
+    | `New` | `plugin new <registry>`, `plugin new connector` | No; writes the author's directory | None | `Template`; `Release` for a connector | `07:1551`; ADR-060 decision 24; ADR-047 decision 12 |
+    | `Check` | `plugin check <dir>` | No; with `--write`, the author's directory | `plugin check` step 7 | `ReadManifest`, `Generate`, `Vet`, `Suite`, `Scenario`, `Gate` | `07:1565`-`1576`; ADR-060 decision 23 |
+    | `Smoke` | `plugin smoke <dir> --against <release>` | No | `dist build`, run by the builder; boot, of the test-only profile | `Build` | `07:1578`; ADR-060 decision 58 |
+    | `Pack` | `plugin pack` | No; writes the layout | `plugin pack` | `ReadManifest`, `Suite`, `Scenario`, `Gate` | `07:1859`; ADR-060 decisions 18 and 49 |
+    | `Sign`, `Push` | `plugin sign`, `plugin push` | No | None | None | `07:1859`; ADR-020 decision 1; ADR-047 decision 1 |
     | `Inspect` | `plugin inspect <spec>` | No | None | None | `08:373`; ADR-060 decision 58 |
-    | `Verify` | `plugin verify <spec>` | No | None | `Suite`, `Build` | ADR-060 decisions 31 and 46 |
+    | `Verify` | `plugin verify <spec>` | No | None | `Build`, `Suite` | ADR-060 decisions 31 and 46 |
     | `Gate` | `plugin gate <spec> --against <dist.yaml>` | No | `plugin gate --against` | `Gate` | `08:493` |
-    | `Install` | `plugin install <spec> --profile <p>` | Yes | Both `plugin install` rows | `Gate` | `08:374`, `:395`-`397`; ADR-047 decisions 5 to 10 |
+    | `Install` | `plugin install <spec> --profile <p>` | Yes | Both `plugin install` rows | `Gate`, `Render` | `08:374`, `:395`-`397`; ADR-047 decisions 5 to 10 and 17 |
     | `Enable`, `Disable` | `plugin enable <row>`, `plugin disable <row>` | Yes | Boot, on the changed profile | `Render` | `08:375`; ADR-060 decision 47 |
-    | `Remove` | `plugin remove <id> --profile <p>` | Yes | None | None | ADR-047 decision 10 |
-    | `AddTrust` | `trust add <signer> --ids <pattern>` | Yes | None | None | `07:1861`; ADR-020 decisions 5 and 6 |
-    | `GenerateKey` | `key generate <prefix>` | No | None | None | ADR-020 decisions 4 and 21 |
+    | `Remove` | `plugin remove <id> --profile <p>` | Yes | Boot, on the changed profile | `Render` | ADR-047 decision 10 |
+    | `AddTrust` | Both forms of `trust add` | Yes | None | None | `07:1861`; ADR-020 decisions 5, 6 and 13 |
+    | `GenerateKey` | `key generate <prefix>` | No; writes `<prefix>.key` and `<prefix>.pub` | None | None | ADR-020 decisions 4 and 21 |
     | `Build` | `dist build` | No | `dist build`, run by the builder | `Build` | `08:402`; ADR-060 decision 22 |
     | `SignDist` | `dist sign` | No | None | None | `07:1868`; ADR-020 decision 1 |
     | `UseDist` | `dist use <image>` | Yes | None | None | `07:1869`; ADR-020 decision 12; ADR-047 decision 13 |
-    | `Submit` | After each write that changes a profile | No | The running process's, at its recomposition | None | `08:369`, `:446`; ADR-060 decision 48 |
 
     `Purge` joins at S3 with `durable` (ADR-060 decision 47).
 
@@ -343,15 +441,37 @@
       it. An operator who wants that change edits the file.
     - Every write that changes a profile ends with `Submit` (`08:369`, `:446`; `07:1855`).
 
-18. **Fake and suite.** The fake, `sdk/def/operations/v0/fake`, works on a home directory
-    in the layout of ADR-047 decision 13. It takes each signature verdict and each gate
-    verdict from its config instead of computing them, writes the same files under the
-    same lock, records its calls, and reports nothing from `Inventory()`, since the
-    definition takes no registration (ADR-060 decision 12). A command row mounts alone
-    with it (`03:81`). The suite, `sdk/def/operations/v0/conformance`, runs on
-    `conformance.Run(t, Mount)` against the plugin and the fake on a temporary home, with
-    a case for each rule of decisions 17 and 19 and for `ErrInactive` after release; the
-    fake passes it (`07:512`, `:520`).
+18. **Fake and suite.** Neither may import the YAML library, which is never in `sdk/`
+    (ADR-060 decision 41), nor any upstream module (`07:522`, U3; ADR-054 decision 17),
+    and the SDK module requires `sdk/kernel` and pgx only (`00:262`; ADR-060 decision 4).
+    - The fake, `sdk/def/operations/v0/fake`, is an in-memory engine (`07:496`): it holds
+      a home in memory, the content that `Home` reports, and writes no file. It takes
+      from its config what it cannot compute without the plugin's libraries: each
+      signature verdict, each gate verdict, the `Rendered` of each profile, the id,
+      digest, runtimes and bundle rows that a spec names, and the outcome of each
+      submission. On that model it keeps the rules of decisions 17 and 19 that do not
+      concern files: the refusals, the copy of a shipped profile, the forms and
+      refusals of `trust add`, the restore on a failure, the outcomes of a submission
+      and a lock with its wait. It records its calls and reports nothing from
+      `Inventory()`, since the definition takes no registration (ADR-060 decision 12). A
+      command row mounts alone with it (`03:81`).
+    - The suite, `sdk/def/operations/v0/conformance`, runs on `conformance.Run(t, Mount)`
+      against the plugin and the fake. Its cases set up and observe a home only through
+      the methods of the definition and their result types, `Home` above all, so they
+      read no file. One table configures both subjects: the fake through its config, and
+      the plugin through the launch fake's toolbox (decision 21), a fixture artifact in
+      an OCI layout (ADR-047 decision 1) and a temporary home. It has a case for each
+      rule of decisions 17 and 19 that the methods can show: a denial writes nothing;
+      `rebuild-required` changes nothing; a group clash is refused; each refusal of what
+      the manager cannot disable; the copy of a shipped profile; each form and refusal
+      of `trust add`; each outcome of a submission, with the files kept or restored; a
+      write after an interrupted one restores first; a second writer waits and fails
+      after its bound; and `ErrInactive` after release (`07:512`, `:520`). The fake
+      passes it.
+    - The cases that need the files are T1 tests of `plugins/operations`, which may
+      import the YAML library (ADR-060 decision 41): the rename order, the content of
+      the snapshot and the restore after a kill (decision 17), the modes and the owner
+      of decision 17, and the record in `write.lock` (decision 19).
 
 ### The profile write lock
 
@@ -390,25 +510,75 @@
     ```
 
 21. **The toolbox** is what `ProfileContext.Toolbox()` returns, an interface of launch
-    0.2.
+    0.2. The launch package holds every type the toolbox takes and returns, so `boot`
+    implements and hands on the parts without importing anything beyond its three
+    definitions (`08:1256`), and the operations plugin uses them without importing
+    `boot` (`08:1257`).
+
+    ```go
+    // sdk/def/launch/v0, minor 0.2.
+    type Toolbox interface {
+        // Implemented by boot.
+        Render(ctx context.Context, r RenderRequest) (Rendered, error)
+        Gate(ctx context.Context, r GateRequest) (Verdict, error)
+        ReadManifest(ctx context.Context, r ManifestRequest) (ManifestSummary, []Diagnostic, error)
+        Shipped(ctx context.Context) (map[string][]byte, error)
+        Release(ctx context.Context, against string) (Release, error)
+        Tools // implemented by cmd/aiopsctl and handed to boot
+    }
+
+    // Tools are the parts that only aiopsctl links. In aiops each returns an error
+    // that matches ErrNotCarried.
+    type Tools interface {
+        Build(ctx context.Context, r BuildRequest) (Built, error)
+        Generate(ctx context.Context, r GenerateRequest) ([]Diagnostic, error)
+        Vet(ctx context.Context, dir string) ([]Diagnostic, error)
+        Suite(ctx context.Context, r SuiteRequest) (SuiteReport, error)
+        Template(ctx context.Context, r TemplateRequest) (map[string][]byte, error)
+        Scenario(ctx context.Context, r ScenarioRequest) (ScenarioReport, error)
+    }
+    ```
+
+    | Type | Fields |
+    |---|---|
+    | `Diagnostic` | `Check` (a gate check, a step of `plugin check` or an obligation id), `File`, `Line`, `Text`, `Warning` |
+    | `Clause`, `Verdict` | `Check` (1 to 10), `Clause`, `Outcome` (`pass`, `deny` or `not-evaluated`) and `Reason`; `Entry`, the entry point of ADR-060 decision 17, its `Clauses`, and `RebuildRequired` |
+    | `RenderRequest` | `Home`, `Profile`, `Bundles`, `Patches`, `Roles`, `Server` and `Dumps`, the flags of `profile render` (decision 27); `Append`, the bundle of an artifact appended as install would append it (ADR-047 decision 17) |
+    | `Rendered` | `Composition`, `Admission` and `Required`, the types of launch 0.1; `Keys`, each key with its class and the enabled rows that provide it; `Departures` from the release bindings (`08:366`); `Dumps` by flag; `Diagnostics`; `Distribution`, the digest of the manifest it admitted with (decision 26) |
+    | `GateRequest` | `Entry`; the artifact's `Manifest`, `Bundle` and `Attestation` bytes and its `Digest`; `Signer`, the key id that the caller verified, `unsigned`, or empty where the entry point verifies none; `Home` and `Profile` for install; `Against`, the bytes of a published signed manifest |
+    | `ManifestRequest`, `ManifestSummary` | `Dir`, `Against`; `ID`, `Version`, `Runtimes`, `Provides`, `Registers` and `Definitions` (`requires.definitions`) |
+    | `Release` | `Digest`; `Manifest`, the signed bytes; per instantiable plugin its id and the first entry of its `configSchema` examples (ADR-047 decision 12) |
+    | `BuildRequest`, `Built` | `DistYAML`, `ModCache`, `Mirrors`, `AllowBump`, `Builder` (`image` or `local`), and for smoke and verify the plugin directory, or the module path, version and sum, with `Against`; the image, the signed manifest's bytes, the site's `aiopsctl`, the verdict, and for smoke each row's state and what it waits for |
+    | `GenerateRequest` | `Dir`, `Write` |
+    | `SuiteRequest`, `SuiteReport` | `Dir`, the definitions with their versions, the halves and the fixtures directory; per definition its suite revision, the halves that ran and each failed obligation by id |
+    | `TemplateRequest` | `Registry`, `ID`, `Lang`, `Contrib` |
+    | `ScenarioRequest`, `ScenarioReport` | `Dir`, `Name`; the scenario's name and version, the halves that ran and each failure (ADR-060 decision 49) |
+
+    `launch` gains no type of the manifest schema. `ManifestSummary` holds six fields
+    copied from boot's own reading, so the reader stays boot's and there is no second
+    copy (ADR-048 decision 15). A test of `boot` holds the summary of every manifest of
+    the repository equal to the same fields of `plugingen`'s output, beside the test of
+    ADR-060 decision 14 that holds boot's reading equal to `plugingen`'s.
 
     | Part | What it does | Implemented by | Called by (decision 16) | Source |
     |---|---|---|---|---|
-    | `Render` | Composes a named profile from a home, bundles and patch files, admits it with this binary's module table and the manifest that boot trusts, and returns the dumps asked for, the diagnostics and the verdict | `boot` | `Render`, `VerifyProfile`, `Enable`, `Disable` | `08:359`, `:366`; ADR-060 decision 17 |
-    | `Gate` | Evaluates the clauses of one entry point of ADR-060 decision 17 on an artifact's manifest, bundle, attestation and digest and the signer verified in the same call, against a profile of a home or a published signed manifest. Each clause passes, is denied with its reason, or is not evaluated with its reason | `boot` | `Install`, `Check`, `Pack`, `Gate` | `08:493`; ADR-060 decision 17 |
-    | `ReadManifest` | Boot's reader in strict mode, with the lints of step 1 and the SPDX list data | `boot`, with the list data that `cmd/aiopsctl` embeds | `Check`, `Pack`, `New` | `07:1569`; ADR-048 decisions 15 and 19 |
-    | `Shipped`, `Release` | The bundles and profiles that the binary embeds; the signed manifest that it embeds | `boot`, from what `dist` hands it | `InitProfile`; `Check`, `New`, `Gate` | ADR-060 decisions 17, 24 and 27 |
-    | `Build` | The builder | `cmd/aiopsctl` | `Build`, `Smoke`, `Verify` | ADR-060 decision 22; ADR-044 |
+    | `Render` | Composes a named profile from a home, bundles and patch files, admits it with this binary's module table and the manifest that boot trusts, and returns the dumps asked for, the diagnostics and the verdict. Given a home, it first applies decision 26 | `boot` | `Render`, `VerifyProfile`, `Install`, `Enable`, `Disable`, `Remove` | `08:359`, `:366`; ADR-060 decision 17 |
+    | `Gate` | Evaluates the clauses of one entry point of ADR-060 decision 17 on an artifact's manifest, bundle, attestation and digest and the signer verified in the same call, against a profile of a home or a published signed manifest. Each clause passes, is denied with its reason, or is not evaluated with its reason. Given a home, it first applies decision 26 | `boot` | `Check`, `Pack`, `Gate`, `Install` | `08:493`; ADR-060 decision 17 |
+    | `ReadManifest` | Boot's reader in strict mode, with the lints of step 1 on data that `cmd/aiopsctl` hands in: the SPDX list data, the marks of `00` §8.1 and the forms of T7. The mark and T7 data name upstreams, which `boot`'s word list forbids there (ADR-060 decision 45; `07:1507`, U1), so `boot` holds none of it. For a plugin with `fixtures/commands/paths.json`, the mark lint runs on each word of each path (decision 5) | `boot`, with that data | `Check`, `Pack` | `07:1569`; ADR-048 decisions 15 and 19; `08:1358`, `:1364` |
+    | `Shipped` | The bundles and profiles that the binary embeds, by path | `boot`, from what `dist` hands it | `InitProfile` | ADR-060 decision 27 |
+    | `Release` | The signed manifest that the binary embeds, or the one that `--against` names, with its instantiable plugins | `boot` | `New` | ADR-060 decisions 17 and 24; ADR-047 decision 12 |
+    | `Build` | The builder, on the image path or the local path (ADR-044 decision 1); for smoke it also boots the test-only profile and reads its row states | `cmd/aiopsctl` | `Build`, `Smoke`, `Verify` | ADR-060 decision 22; ADR-044 |
     | `Generate` | `plugingen` | `cmd/aiopsctl` | `Check` | ADR-060 decision 11 |
     | `Vet` | The import analyzer and plugin vet | `cmd/aiopsctl` | `Check` | ADR-060 decision 23 |
     | `Suite` | Runs a suite: an embedded test binary, or a module compiled with the toolchain | `cmd/aiopsctl` | `Check`, `Pack`, `Verify` | ADR-060 decision 46 |
     | `Template` | The templates | `cmd/aiopsctl` | `New` | ADR-060 decision 24 |
+    | `Scenario` | Runs a named, versioned scenario, the echo scenario at S2a, on a pack's rows replayed from its fixtures | `cmd/aiopsctl` | `Check`, as step 8; `Pack`, for the attestation | ADR-060 decision 49; `07:1576` |
 
-    `cmd/aiopsctl` passes the last five to `boot` as values of the launch types in its
-    run options, and `boot` hands them on without importing them (`08:1256`). In `aiops`
-    they are absent and each answers `ErrNotCarried`, so no server binary links the
-    builder or what it links (ADR-044, Consequences), and `plugin-manager` at S6a, which
-    builds nothing, needs none of them.
+    `cmd/aiopsctl` passes one value of `Tools` to `boot` in its run options, and `boot`
+    hands it on without importing what implements it (`08:1256`). In `aiops` it is
+    absent and each of its methods answers `ErrNotCarried`, so no server binary links
+    the builder or what it links (ADR-044, Consequences), and `plugin-manager` at S6a,
+    which builds nothing, needs none of them.
 
 22. **One reader.** `ReadManifest` is boot's reader, the one that `plugingen` already
     reads with (`internal/plugingen/plugingen.go`). `plugin check` and the gate therefore
@@ -573,8 +743,8 @@ Made in the commit that records the owner's answers (`08:997`):
 - `00` §4.1: a row for `operations` after `00:222`: "The operations library of the CLI
   and the plugin manager: profiles, plugins, trust, distributions and authoring, under
   one write lock | `-`; `C` | | `operations` | no". Plugin record §5 gains the same row,
-  with the command rows and, from S6a, `plugin-manager` as consumers and a fake that
-  writes a home.
+  with the command rows and, from S6a, `plugin-manager` as consumers and an in-memory
+  fake.
 - `00:245`, `07:559` and plugin record §7 (M4): `operations` among the consumer-bound
   keys, now 13.
 - `00:276`: `aiops-cli` holds `cli`, `operations` and the rows that contribute to
