@@ -429,6 +429,8 @@ gaps:
     | `trust.yaml` | `aiopsctl` `trust add` | Read-only | `07:1840`; ADR-060 decision 26 |
     | The records of `dist use` and of install: the verified signer and the digest | `aiopsctl` `dist use`, `install` | Read-only; their names and form are ADR-020's, under the home and outside `run/` | ADR-060 decisions 26 and 33 |
     | `image.yaml`: one field, `image`, the reference by digest of the image that `dist use` verified | `aiopsctl` `dist use` | Read-only, and the kernel does not read it: the host starts the container from it (decision 15) | ADR-060 decision 22 |
+    | `write.lock`, the one write lock of the home | `aiopsctl`: every method of the operations library that writes the home holds it | Read-only; the kernel takes no lock and does not read it at S2a | ADR-061 decision 19 |
+    | `snapshot/`: a copy of every file a write replaces or deletes and the list of the paths it creates | `aiopsctl`: every method of the operations library that writes the home, which removes it after the submission or restores it | Read-only; the kernel does not read it at S2a | ADR-061 decisions 17 and 19 |
     | `run/` | The kernel: `status.json`, the files of the test control rows, and the submission socket if the transport ADR of ADR-060 decision 48 takes the candidate | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
 
     At S2a the kernel writes nothing outside `run/`. Later paths join the table with their
@@ -438,7 +440,9 @@ gaps:
 
 14. **Ownership.** One user of the host, the site user, owns the home and everything in
     it. `aiopsctl` creates the home and `run/` with mode 0700, writes each file with mode
-    0600 and replaces it by a rename in its directory, and refuses to write into a home
+    0600 and replaces it by a rename in its directory, except `write.lock`, which it
+    creates once with mode 0600 and never renames or deletes, since the lock binds to one
+    inode (ADR-061 decision 19), and refuses to write into a home
     whose owner is not its effective user, so a run as another user cannot leave a file
     that the kernel cannot read. The kernel, as a binary or as a container, runs with the
     uid and gid of the home's owner as the host sees them. For a container that is a

@@ -508,7 +508,7 @@ A definition is a key, an interface and a version, in `sdk/def/<name>/v<N>` with
 | `Dispatcher` | `Table` | Every registry stores contributions in `tenants.Table`. A tenant lookup first calls `tenantTrees.Ensure(ctx)` and never falls through to a process-scope contribution of the same name for a (tenant, row) pair present in that tenant's generation. |
 | `Consumer` | `Dispatcher` | The consumer declares `Need` on the registry key and calls the dispatcher. Without an ACTIVE dispatcher the consumer is PENDING. |
 | `Dispatcher` | `PolicyKeys` | Required inject (M1): a dispatcher that injects `pii` or `approval` does not exist without them, so absence is closed (§4.2). |
-| `Dispatcher` | `Contribution` | The owner-side guard (M2): a deadline, a concurrency cap and a breaker per (tenant, row), an `Enter` lease on the contribution's fiber, the invariant, then the call. |
+| `Dispatcher` | `Contribution` | The owner-side guard (M2): a deadline, a concurrency cap and a breaker per (tenant, row), an `Enter` lease on the contribution's fiber, the invariant, then the call. The `commands` dispatcher applies the lease and the invariant from S2a; its deadline, cap and breaker per (tenant, row) arrive with the first caller that dispatches more than once in a process, `admin-api` at S4a, whose step builds them with their guard cases (ADR-061 decision 39). |
 | `Suite` | `Fake` | The fake passes the same suite as every real provider, in every commit. |
 | `Suite` | `Contribution` | `conformance.Run(t, mount)` runs the obligations half against a contribution in each runtime its manifest lists. |
 | `Suite` | `Dispatcher` | The guard half runs against the real dispatcher and against the recording fake (section 8.2). |
@@ -556,7 +556,7 @@ Each key has a provider class and a consumer class (§4.2). The kernel module ch
 | Class | Mark in §4.1 | What the SDK does | Count |
 |---|---|---|---|
 | Provider-bound | `P` | `Provide` succeeds only for a module-table entry in the allowed set. One provider; `Isolate` is refused except by the bound provider; `Want` is refused | 37 keys: 6 launch keys, 24 named keys (`harnesses` among them, bound to `agent-runs`), 7 `.Bound` keys |
-| Consumer-bound | `C` | The key resolves only for the entries the manifest lists | 12 keys: `platformSql`, `sqlDriver`, `tokens`, `kek`, `loader`, `reload`, `pluginManager`, `tenantMint`, `credentials`, `durablePurge`, `profileContext`, `appExit` |
+| Consumer-bound | `C` | The key resolves only for the entries the manifest lists | 13 keys: `platformSql`, `sqlDriver`, `tokens`, `kek`, `loader`, `reload`, `pluginManager`, `tenantMint`, `credentials`, `durablePurge`, `profileContext`, `appExit`, `operations` |
 | Signed | `s` | Injected only by first-party plugins, or by an in-process plugin whose signer `trust.yaml` trusts for that key | 3 keys: `identities`, `approval`, `gateway` |
 | Open | `-` | Any plugin may provide it, isolate it in a subtree or inject it | every other key |
 
@@ -1341,7 +1341,7 @@ A `rules` plugin and `rule-pack-<name>` rows wait for their §7.3 trigger; until
 | Id | Name | Technology | Responsibility |
 |---|---|---|---|
 | `Operator` | Operator | systemd, compose or Kubernetes | Starts the binary with a profile and a role |
-| `boot` | Launcher | Go library `boot/`, called from `aiops` main | Parses flags, composes layers, runs admission and the required audit, owns signals, bounded shutdown and exit codes |
+| `boot` | Launcher | Go library `boot/`, called from the `main` of `aiops` and of `aiopsctl` (ADR-061) | Parses flags, composes layers, runs admission and the required audit, owns signals, bounded shutdown and exit codes |
 | `Generation` | Committed process-scope generation | Layer files on disk in self-host; the mounted generation object in hosted, from S4b | What `boot` composes from. It is readable before any row starts, so it is never in a table a row of the same generation serves |
 | `ModuleTable` | Module table | Generated Go in `dist/`, built by the distribution builder | Maps each plugin id to its `kernel.Plugin` value and manifest. There is no `init()` registry |
 | `Gate` | Compatibility gate | `boot` library code | Ten checks that read manifests and the distribution manifest only (section 9) |
@@ -1397,7 +1397,7 @@ No fake host exists. The kernel module ships in the SDK, so a Go plugin is teste
 
 | Tier | For a plugin author | Runs |
 |---|---|---|
-| T0 Static | The import analyzer, plugin vet (which also refuses a dial or an HTTP client outside `dialer`; harness record §2.3), manifest parity (Go and Python), schema examples under `testdata/config/`. In this repository also the upstream name lint, the import boundary and suite neutrality (U1 to U3, section 1.1) | Every commit |
+| T0 Static | The import analyzer, plugin vet (which also refuses a dial or an HTTP client outside `dialer`, from the step that builds `dialer`; harness record §2.3; ADR-061 decision 38), manifest parity (Go and Python), schema examples under `testdata/config/`. In this repository also the upstream name lint, the import boundary and suite neutrality (U1 to U3, section 1.1) | Every commit |
 | T1 Alone | The plugin on `kerneltest.New(t)` with fakes. Two tests generated by `plugingen`. A `scope: tenant` plugin is also mounted in two trees on the test-only profile, so it is proven tenant-correct although the first community release deploys one tenant. Always `-race` | Every commit |
 | T2 Conformance | `conformance.Run(t, mount)` of every definition the plugin provides or contributes to, in every runtime its manifest lists | Every commit |
 | T3 Real composition | `loader-smoke` on a test-only profile of the built artifact; only the model (replay), outbound HTTP (strict fixtures) and the clock are mocked. In this repository also the leave-one-out render of every shipped profile (U4) and evaluation tier V0, the first-party loop on recorded transcripts | Every pull request |

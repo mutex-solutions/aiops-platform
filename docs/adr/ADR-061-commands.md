@@ -1,9 +1,11 @@
 # ADR-061: The `commands` definition, the `cli` profile and the operations plugin
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. ADR-060 decision 53 has it proposed before the first command row merges, and
-  ADR-060 decision 2 has it accepted before that code merges into `main`; each question
-  below names the code its answer is needed before.
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all nine
+  questions on the same date with the recommended option of each: (a) for Q1 to Q7 and
+  Q9, (b) for Q8. The section "Owner answers of 2026-11-23" records them as decisions 33
+  to 41, with the boot changes this ADR names. ADR-060 decision 53 had it proposed before
+  the first command row merges, and ADR-060 decision 2 required this acceptance before
+  that code merges into `main`.
 - Scope: ADR-060 decision 53 (its question Q17 (a)) and decision 41 (its question Q5
   (a)): the `commands` definition; the `cli` row, its dispatcher; the `aiops-cli` bundle
   and the `cli` profile; `cmd/aiopsctl` as the launcher of the `cli` profile, with
@@ -1086,6 +1088,7 @@ the launch keys stay six (ADR-059 decision 35).
   `Commit` and the reach of the toolbox from `loader`, `reload` and `readiness`; (b)
   removes both at the price of a seventh key. Needed before the first command row
   merges.
+- **Answered 2026-11-23: (a)**, decision 33.
 
 **Q2. Where does the `cli` row get its streams, its working directory and environment,
 the end of boot and its exit code?** `cmdline` serves argv only, `appExit` carries no
@@ -1104,6 +1107,7 @@ code, and no launch service says when boot has finished (`00:212`;
   (`07:1344`), and (a) hands each to the row as a launch service, as dsh's launcher
   provides argv, the exit and readiness before any row mounts (dsh §7). Needed before the
   `cli` row merges.
+- **Answered 2026-11-23: (a)**, decision 34.
 
 **Q3. What is the operations definition called?** The naming rule reads "A singular key
 is one engine or policy. A plural key is a registry of contributions" (`00:206`) and
@@ -1128,6 +1132,7 @@ of one engine that `00` already holds (`00:216`, `:218`, `:224`, `:226`).
 - Recommended: (a). It is the word every document and dsh use, and the departure it
   needs is one that `00` already makes four times; (c) keeps the naming rule whole at
   the cost of a second name for one thing. Needed before the definition merges.
+- **Answered 2026-11-23: (a)**, decision 35.
 
 **Q4. How many command rows?**
 - (a) One per command group: five at S2a (decision 30). A group is one row that an
@@ -1138,6 +1143,7 @@ of one engine that `00` already holds (`00:216`, `:218`, `:224`, `:226`).
   command row (ADR-060 decision 35).
 - Recommended: (a). It is the fewest rows that keep each plugin under its cap. Needed
   before the first command row merges.
+- **Answered 2026-11-23: (a)**, decision 36.
 
 **Q5. What does the write lock cover?** `08:369` names "one profile write lock", and dsh
 calls its lock "a profile write lock shared with the CLI" without stating its scope (dsh
@@ -1153,6 +1159,7 @@ calls its lock "a profile write lock shared with the CLI" without stating its sc
   it exclusive with one lock and no order to get wrong; its cost, serial writes to one
   home, is nothing for one site. Row 34 of the dsh checklist records it with its reason
   (Edits on acceptance). Needed before the first method that writes the home merges.
+- **Answered 2026-11-23: (a)**, decision 37.
 
 **Q6. How does the operations plugin dial once plugin vet refuses a dial outside
 `dialer`?** The vet gains "no dial and no HTTP client outside `dialer`" for every plugin
@@ -1182,6 +1189,7 @@ orchestrator and `aiopsctl`, never the kernel" (`00:412`; `00:183`).
   server process, and (c) keeps the rule whole at S2a at the price of a definition that
   S2a does not plan. Needed before the vet rule of harness:58 merges, or before S2a
   closes if the owner reads that rule as in force at S2a.
+- **Answered 2026-11-23: (a)**, decision 38.
 
 **Q7. What of the owner-side guard does the `commands` dispatcher apply?** `07:511` (M2)
 has a dispatcher apply "a deadline, a concurrency cap and a breaker per (tenant, row), an
@@ -1205,6 +1213,7 @@ dispatches one command per process; that command runs as long as its work, minut
   command, and S4a builds them where they act, with tests that can fail. (b) keeps
   `07:511` whole at S2a at the cost of code that never acts in `aiopsctl` and a deadline
   guessed per command. Needed before the `cli` row merges.
+- **Answered 2026-11-23: (a)**, decision 39.
 
 **Q8. How does a command of a row outside `aiops-cli` reach the `cli` profile?**
 `00:137` makes `slack manifest` "a `commands` contribution of the optional Slack bundle
@@ -1237,6 +1246,7 @@ command. dsh installs a plugin into any profile (dsh §4.2).
   17). (a) removes a written extension point, and (c) leaves the template of decision 6
   with no third-party author until P1. Needed before the profile rule of `Install`
   merges.
+- **Answered 2026-11-23: (b)**, decision 40.
 
 **Q9. How does `aiopsctl` recover when a layer file of the home stops its own boot?** A
 malformed or empty layer stops boot (`08:465`), and the site layer applies to every
@@ -1262,3 +1272,114 @@ carry "`aiopsctl profile init` and `sanitize`" with no step named.
 - Recommended: (a). It carries row 30 at S2a, keeps `08:465` for every boot, and keeps
   every command a row; (b) leaves a broken site layer to be found by hand, and (c) breaks
   an accepted decision. Needed before `command-profile` merges.
+- **Answered 2026-11-23: (a)**, decision 41.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option:
+(a) for every question but Q8, and (b) for Q8. The boot changes that the ADR names are
+accepted with it: `boot.RunOptions.Command` and the launcher code 8, `ExitInterrupted`,
+which ADR-059 decision 29 gains (decision 13), and the field `rows` of `run/status.json`,
+which ADR-059 decision 31 gains (decision 21). Each decision below names the question it
+answers. Where a decision above leaves a point to a question, the decision here settles
+it.
+
+33. **The operations plugin reaches the code beside the module table through
+    `profileContext`** (Q1 (a)). `ProfileContext` gains `Toolbox()` in launch 0.2, which
+    returns the toolbox of decision 21, and the release manifest lists `aiops/operations`
+    among the consumers of `profileContext` (decision 20). The launch keys stay six
+    (ADR-059 decision 35). Two costs are accepted with it: the operations plugin can call
+    `Commit`, and `loader`, `reload` and `readiness` can call every part of the toolbox,
+    so the operations plugin is its one consumer by review, not by binding; in `aiops`
+    the parts of `Tools` answer `ErrNotCarried`. `00:212` and plugin record §5 name the
+    toolbox in the contract of `launch`.
+
+34. **Launch 0.2 hands the `cli` row its streams, its working directory and environment,
+    the end of boot and its exit code** (Q2 (a)), as decision 13 states. `Cmdline` gains
+    `Stdin()`, `Stdout()`, `Stderr()`, `Dir()` and `Environ()`, the last two filled by
+    the launcher of `aiopsctl` only; `Ready` gains `Booted()`, closed once the tree has
+    settled and the run-time required audit has passed; and `ExitRequest` gains `Code`,
+    read only with the reason `ExitCommand`. The `cli` row and each command row mount
+    alone with the launch fake and a test's buffers, directory and environment
+    (`03:81`). `00:212` and plugin record §5 name the three in the contract of `launch`.
+
+35. **The operations definition is `operations`** (Q3 (a)): definition
+    `sdk/def/operations/v0`, key `operations`, plugin `aiops/operations` in
+    `plugins/operations/`, row `operations` of `aiops-cli` (decision 14). The plural key
+    of one engine departs from `00:206` and `:656`, as `jobs`, `secrets`, `tokens` and
+    `credentials` do, and `00:656` names it beside its examples.
+
+36. **One command row per command group** (Q4 (a)): `command-profile`, `command-plugin`,
+    `command-trust`, `command-dist` and `command-key` at S2a (decision 30), each under the
+    cap of 1,500 lines of ADR-060 decision 35.
+
+37. **One write lock per home** (Q5 (a)): `$AIOPS_HOME/write.lock`, held for the whole of
+    each method that writes the home, as decision 19 states. Every write excludes every
+    other, and two profiles of one home are never written at once. Row 34 of the dsh
+    checklist records it with its reason.
+
+38. **The dial clause of plugin vet waits for `dialer`** (Q6 (a)). The rule "no dial and
+    no HTTP client outside `dialer`" of `07:1400` and harness:58 binds from the step that
+    builds `dialer`, and at S2a the operations plugin dials directly. Before that rule
+    merges, the step that builds `dialer` says how the operations plugin dials in the
+    `cli` profile and in a server profile, and the ADR of S6a says how `plugin-manager`
+    pulls without registry credentials in the kernel (`00:183`, `:412`).
+
+39. **At S2a `Dispatch` applies the `Enter` lease and the invariants of decisions 8 to 10,
+    and recovers a panic** (Q7 (a)), with no deadline, concurrency cap or breaker. The
+    deadline, the cap and the breaker per (tenant, row) of `07:511` (M2) arrive with the
+    first caller that dispatches more than once in a process, `admin-api` at S4a, whose
+    step builds them with their guard cases. This defers those three parts of `07:511`
+    for `commands` until S4a, and `07:511` says so.
+
+40. **A command of a row outside `aiops-cli` reaches the `cli` profile in a companion
+    bundle** (Q8 (b)). A bundle that holds a command ships it in a companion bundle of
+    command rows that need only what the `cli` profile serves: `aiops-chatops-slack-cli`
+    for `slack manifest`, which the `cli` column of the table of `08:265` lists as
+    optional, with the command row of the Slack module in it, `command-slack` by the rule
+    of decision 30, which `06:312` names. An installed in-process artifact may be
+    installed into the profile `cli` after `dist use` there, its rows disabled, and the
+    operator enables its command row there; `Install` refuses a pack and remote code into
+    that profile, since a pack's rows contribute no command and `commands` takes no
+    remote contribution (decision 17; `00:222`). The `cli` cell of `08:269` becomes
+    "last", and `00:137` and `00:515` hold. A third-party command row then runs in
+    `aiopsctl` and sees the invocation's environment, registry credentials and key
+    password included (decision 17), though not `operations`, which is consumer-bound
+    (decision 15); its signer is trusted for that as for any in-process code it installs.
+    The template of decision 6 serves its author.
+
+41. **S2a builds `profile sanitize [<p>]` as a command of `command-profile`** (Q9 (a)).
+    Under the write lock it renames each layer file of the home that is malformed or
+    empty, the site layer and the profile layer of `<p>`, to `<name>.bak-<timestamp>`,
+    parsing it and loading no plugin (dsh §3.4). When the boot of the `cli` profile stops
+    on such a file, `cmd/aiopsctl` boots once more with the shipped `cli` profile alone
+    and the home still passed, prints which file stopped the first boot, and dispatches.
+    The first boot stops as `08:465` says; the second composes no layer of the home, so a
+    command in it does not see the site's patches of the `cli` profile, and stderr says
+    so. ADR-060 decision 23 gains the command.
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:997`), and that commit makes the edits that "Edits on acceptance" names for the
+options chosen: in `00`, the row of `operations` after `:222`, with the class `C` of
+decision 15, `operations` among the consumer-bound keys of `:245`, the bundle
+`aiops-cli` of `:276`, `key generate` in `:137`, the contract of `launch` in `:212` in
+the wording of Q1 (a) and Q2 (a), and the example of `:656` (decision 35); `03:71`;
+`06:312` (decision 40); `07:511` (decision 39), `:559`, `:1344` and `:1400` (decision
+38); `08:34`-`35`, rows 31, 32 and 34 of the dsh checklist, a row of
+`aiops-chatops-slack-cli` after `08:265` and the `cli` cell of `:269` (decision 40), and
+`:369`; harness:58 (decision 38); plugin record §5, in the contract of `launch` and with
+the row of `operations`, §7 (M4) and §15, in its head and rows 31, 32 and 34; ADR-059
+decisions 29 and 31; ADR-060 decisions 23, 24 and 35; and ADR-047 decisions 13 and 14.
+Lines that restate edited text are edited with them: the row `operations` among the
+consumers of `launch` in plugin record §5 (decision 33); plugin record §12, which
+restates `08:369`; a row of `aiops-chatops-slack-cli` in `00` §4.4, whose row counts the
+table of `08` §1.4 carries; `08:271`, which names the companion bundle and says that
+install into the profile `cli` takes in-process code only (decision 40); and the name
+`key generate` in ADR-060 decision 23, which restates `00:137`. Left to later commits: the ADR table of `08` §3 and
+the next free number of `08:997`, which the commit that updates that table for the ADRs
+accepted on 2026-11-23 edits; `06:764`, where the built-in on-call provider registers
+`oncall override` with `commands`, and the lists of optional bundles in `01:254`,
+`02:178`, `07:1880` and `08:399`, which the steps that build `oncall override` and
+`slack manifest` (P1, `00:137`) edit when they build their command rows by decision 40
+(decision 32). An option the owner did not choose edits nothing.

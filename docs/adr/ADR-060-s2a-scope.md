@@ -355,9 +355,10 @@ gaps:
     then `dist use` records the image reference in the site files and prints it.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
-    a command that writes a key pair in the format of ADR-020 decision 4, named by the
-    CLI spec (ADR-020 decision 21), `dist build`, `dist sign`, `dist use`, `profile
-    verify` and `profile init`
+    a command that writes a key pair in the format of ADR-020 decision 4, which the CLI
+    spec (ADR-020 decision 21) names `key generate` (ADR-061 decision 30), `dist build`,
+    `dist sign`, `dist use`, `profile verify`, `profile init` and `profile sanitize`
+    (ADR-061 decision 41)
     (`00:137`; `02:95`; `08:72` row 30, `:366`, `:694`, `:936`), on an operations library
     that `plugin-manager` later shares, under one profile write lock (`08:369`; `03:71`).
     Whether each command is a row of the `cli` profile or code of `cmd/aiopsctl` is
@@ -396,13 +397,13 @@ gaps:
       test-only profile (`07:1576`); what that profile holds at S2a and when smoke passes
       is a reading of question Q22. It needs a container runtime (`07:1530`).
     - The exit codes stay the three of ADR-059 decision 29: a denial, a failed step and
-      `rebuild-required` exit 1, with the reason on stderr. The usage text and the table
-      in `cmd/aiopsctl/run.go` say so.
+      `rebuild-required` exit 1, with the reason on stderr. The help of the `cli` row and
+      the exit mapping of `cmd/aiopsctl` say so (ADR-061 decision 10).
 24. **Templates** live in `templates/`, embedded in `aiopsctl` through a Go package; the
     template files carry names the Go tool does not build (`07:1549`; `08:1218`). S2a
-    writes a Go template for each registry that exists, `echoers` and `stampers`, with
-    the files of `07:1551-1559`, and the connector-pack template with `runtimes: []`
-    (`08:897`, `:1263`). The connector template names no plugin id: `plugin new
+    writes a Go template for each registry that exists, `echoers`, `stampers` and
+    `commands` (ADR-061 decision 6), with the files of `07:1551-1559`, and the
+    connector-pack template with `runtimes: []` (`08:897`, `:1263`). The connector template names no plugin id: `plugin new
     connector` writes rows of an instantiable plugin of the release it runs against
     (`--against`, by default the release this `aiopsctl` was built from), with a config
     taken from the examples of that plugin's `configSchema`. At S2a the template job and
@@ -701,8 +702,9 @@ gaps:
 | the `plugin` package | new | 2,500, provisional |
 | each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |
 | `cmd/aiopsctl` | 210 (s1-report:75) | 2,500, provisional |
-| each command row's plugin, with question Q17 (a) | new | 1,500 each, provisional |
-| the operations library | new | 3,500, provisional |
+| each command row's plugin, with question Q17 (a), and `plugins/cli` (ADR-061) | new | 1,500 each, provisional |
+| `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional |
+| the operations library, `plugins/operations` (ADR-061) | new | 3,500, provisional |
 | the builder | new | 3,000, provisional |
 | `plugingen` | new | 1,500, provisional |
 

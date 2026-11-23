@@ -363,7 +363,15 @@ a sentence above says otherwise, these decisions win.
     5 `restart-policy` gave up on an infrastructure provider, 6 launcher failure, 7
     restore failed. Code 2 is also the exit code of a Go panic. `aiopsctl` uses 0, 1 and
     2. They are recorded in the launcher documentation: the usage texts of `aiops` and
-    `aiopsctl`, and the tables in `boot/run.go` and `cmd/aiopsctl/run.go`.
+    `aiopsctl`, and the tables in `boot/run.go` and `cmd/aiopsctl/run.go`. From ADR-061
+    (decision 13), `boot.RunOptions` gains `Command`, which `cmd/aiopsctl` sets and
+    `cmd/aiops` does not, and under it the launcher gains code 8, `ExitInterrupted`: a
+    stop that a signal or the end of `ctx` began returns 8; a stop that an `ExitCommand`
+    request began returns the request's code, 0, 1 or 2, when the tree disposed within
+    the shutdown bound with no leak, and 4 otherwise; and where boot would return 2 it
+    returns 6, so a launcher code of 0 or 2 is always a command's. The codes of `aiops` do
+    not change. From then the table of `aiopsctl` is recorded in the help of the `cli`
+    row and in the exit mapping of `cmd/aiopsctl` (ADR-061 decision 10).
 
 30. **The default limits are the release defaults for now** (item 8): 10 s each for
     load, drain and dispose; a shutdown bound of 30 s; a settle bound of their sum; a
@@ -373,7 +381,9 @@ a sentence above says otherwise, these decisions win.
 
 31. **`<home>/run/status.json` is the readiness channel of one process at S1** (item 9).
     It is written atomically and carries phase, ready, profile, role, digest, exit and
-    detail. The probe that an orchestrator reads is decided when the `http` definition
+    detail. From ADR-061 (decision 21) it also carries `rows`, each row's state and what
+    it waits for, written at settle and at every committed generation; the field is
+    additive. The probe that an orchestrator reads is decided when the `http` definition
     exists.
 
 32. **`conformance.Run(t, Mount)` is the pattern of every definition suite from S2a**

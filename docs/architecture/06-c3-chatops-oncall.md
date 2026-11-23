@@ -309,7 +309,7 @@ Facts in this table: gap-slack-chatops-tenancy-and-runtime.md §2.1, §2.6, §3,
 
 ### 5.2 Manifest essentials (`aiopsctl slack manifest`)
 
-The command is a `commands` contribution of the row `chat-surface-slack`, so it exists only where the optional bundle `aiops-chatops-slack` is enabled; without the bundle `aiopsctl` has no `slack` command group (00-decisions §3.1).
+The command is a `commands` contribution of `command-slack`, the command row of the Slack module. It sits in `aiops-chatops-slack-cli`, an optional companion bundle of `aiops-chatops-slack` that holds command rows needing only what the `cli` profile serves (ADR-061 decision 40). It exists only where that bundle is enabled in the profile `cli`; without it `aiopsctl` has no `slack` command group (00-decisions §3.1).
 
 | Field | Value |
 |---|---|
