@@ -25,7 +25,7 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 		s, ok := tree.(string)
 		v, err := time.ParseDuration(s)
 		if !ok || err != nil {
-			return pathErr(path, "want %s, got %s", wantDuration, show(tree))
+			return pathErr(path, "want %s, got %s", wantDuration, showValue(tree))
 		}
 		out.SetInt(int64(v))
 		return nil
@@ -34,25 +34,25 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 	case k == reflect.Bool:
 		b, ok := tree.(bool)
 		if !ok {
-			return pathErr(path, "want true or false, got %s", show(tree))
+			return pathErr(path, "want true or false, got %s", showValue(tree))
 		}
 		out.SetBool(b)
 	case k == reflect.String:
 		s, ok := tree.(string)
 		if !ok {
-			return pathErr(path, "want a string, got %s", show(tree))
+			return pathErr(path, "want a string, got %s", showValue(tree))
 		}
 		out.SetString(s)
 	case k >= reflect.Int && k <= reflect.Int64:
 		n, ok := tree.(int64)
 		if !ok || out.OverflowInt(n) {
-			return pathErr(path, "want an integer that %s holds, got %s", t, show(tree))
+			return pathErr(path, "want an integer that %s holds, got %s", t, showValue(tree))
 		}
 		out.SetInt(n)
 	case k >= reflect.Uint && k <= reflect.Uint64:
 		n, ok := tree.(int64)
 		if !ok || n < 0 || out.OverflowUint(uint64(n)) {
-			return pathErr(path, "want an integer that %s holds, got %s", t, show(tree))
+			return pathErr(path, "want an integer that %s holds, got %s", t, showValue(tree))
 		}
 		out.SetUint(uint64(n))
 	case k == reflect.Float32 || k == reflect.Float64:
@@ -61,13 +61,13 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 			f, ok = float64(n), true
 		}
 		if !ok || out.OverflowFloat(f) {
-			return pathErr(path, "want a number that %s holds, got %s", t, show(tree))
+			return pathErr(path, "want a number that %s holds, got %s", t, showValue(tree))
 		}
 		out.SetFloat(f)
 	case k == reflect.Slice:
 		l, ok := tree.([]any)
 		if !ok {
-			return pathErr(path, "want a list, got %s", show(tree))
+			return pathErr(path, "want a list, got %s", showValue(tree))
 		}
 		s := reflect.MakeSlice(t, len(l), len(l))
 		for i, e := range l {
@@ -79,7 +79,7 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 	case k == reflect.Map:
 		m, ok := tree.(map[string]any)
 		if !ok {
-			return pathErr(path, "want a map, got %s", show(tree))
+			return pathErr(path, "want a map, got %s", showValue(tree))
 		}
 		mv := reflect.MakeMapWithSize(t, len(m))
 		for _, key := range slices.Sorted(maps.Keys(m)) {
@@ -101,7 +101,7 @@ func (d *described) decode(path []string, tree any, out reflect.Value) error {
 func (d *described) decodeStruct(path []string, tree any, out reflect.Value) error {
 	m, ok := tree.(map[string]any)
 	if !ok {
-		return pathErr(path, "want a map, got %s", show(tree))
+		return pathErr(path, "want a map, got %s", showValue(tree))
 	}
 	fields := d.fields[out.Type()]
 	for _, key := range slices.Sorted(maps.Keys(m)) {
@@ -136,7 +136,16 @@ func pathErr(path []string, format string, a ...any) error {
 
 func with(path []string, seg string) []string { return append(slices.Clone(path), seg) }
 
-// show names a tree value in an error.
+// showValue names a value of a config tree in an error. A string is never echoed: it
+// may come from a resolved reference such as ${secret:name}.
+func showValue(v any) string {
+	if _, ok := v.(string); ok {
+		return "a string"
+	}
+	return show(v)
+}
+
+// show names a value of a schema document in an error.
 func show(v any) string {
 	switch x := v.(type) {
 	case nil:

@@ -75,7 +75,9 @@
 //     fails with it.
 //
 // A reference such as ${secret:name} is resolved before Decode runs; an
-// unresolved one is not a string, and decoding it into any field is an error.
+// unresolved one is not a string, and decoding it into any field is an error. A
+// resolved one may be a secret, so an error names the field and what it wants and
+// never echoes a string value.
 package plugin
 
 import (

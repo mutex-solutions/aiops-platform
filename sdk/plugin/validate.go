@@ -131,7 +131,7 @@ func (n *node) Validate(tree any) error {
 func (n *node) check(path []string, v any, errs *[]error) {
 	fail := func(path []string, format string, a ...any) { *errs = append(*errs, pathErr(path, format, a...)) }
 	if !n.admits(v) {
-		fail(path, "want %s, got %s", n.want(), show(v))
+		fail(path, "want %s, got %s", n.want(), showValue(v))
 		return
 	}
 	switch x := v.(type) {
@@ -141,7 +141,7 @@ func (n *node) check(path []string, v any, errs *[]error) {
 		n.bounds(path, x, x, fail)
 	case string:
 		if n.pattern != nil && !n.pattern.MatchString(x) {
-			fail(path, "want %s, got %s", n.want(), show(x))
+			fail(path, "want %s, got %s", n.want(), showValue(x))
 		}
 	case []any:
 		for i, e := range x {

@@ -199,9 +199,9 @@ func TestValidatorOnHandWrittenSchemas(t *testing.T) {
 		{map[string]any{"n": 1.5, "s": "aa", "any": nil, "l": []any{true}, "extra": int64(3)}, ""},
 		{map[string]any{"any": map[string]any{"x": []any{"y"}}}, ""},
 		{map[string]any{"n": 0.25, "s": "b", "l": []any{true, "x"}, "extra": "e"},
-			"config.extra: want an integer, got \"e\"\nconfig.l.1: want true or false, got \"x\"\nconfig.n: 0.25 is below the minimum 0.5\nconfig.s: want a string that matches ^a+$, got \"b\""},
+			"config.extra: want an integer, got a string\nconfig.l.1: want true or false, got a string\nconfig.n: 0.25 is below the minimum 0.5\nconfig.s: want a string that matches ^a+$, got a string"},
 		{map[string]any{"n": int64(3)}, "config.n: 3 is above the maximum 2"},
-		{"x", `config: want a map, got "x"`},
+		{"x", `config: want a map, got a string`},
 		{map[string]any{"any": struct{}{}}, "config.any: want a tree value, got {} of type struct {}"},
 	} {
 		err := v.Validate(tc.tree)

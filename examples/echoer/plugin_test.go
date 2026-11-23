@@ -51,7 +51,7 @@ func TestConfigIsChecked(t *testing.T) {
 		raw  any
 		want string
 	}{
-		{"text", `invalid config: config: want a map, got "text"`},
+		{"text", `invalid config: config: want a map, got a string`},
 		{map[string]any{"name": ""}, "invalid config: name is empty"},
 		{map[string]any{"name": int64(1)}, "invalid config: config.name: want a string, got 1"},
 		{map[string]any{"color": "red"}, "invalid config: config.color: unknown field"},

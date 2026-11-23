@@ -81,8 +81,8 @@ func TestDefineFailsTheRowOnAnInvalidConfig(t *testing.T) {
 	})
 	r := kerneltest.New(t)
 	for want, tree := range map[string]any{
-		"invalid config: config.limit: want an integer, got \"x\"": map[string]any{"limit": "x"},
-		"invalid config: limit must not be negative":               map[string]any{"limit": int64(-1)},
+		"invalid config: config.limit: want an integer, got a string": map[string]any{"limit": "x"},
+		"invalid config: limit must not be negative":                  map[string]any{"limit": int64(-1)},
 	} {
 		s, err := await(t, r.Plugin(p, tree))
 		if s != kernel.Failed || err == nil || !strings.Contains(err.Error(), want) {
