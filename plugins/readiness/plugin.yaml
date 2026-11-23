@@ -34,5 +34,5 @@ requires:
   pluginApi: "0.2"
   definitions:
     composition: ["0.1"]
-    launch: ["0.1"]
+    launch: ["0.2"]
     reload: ["0.1"]

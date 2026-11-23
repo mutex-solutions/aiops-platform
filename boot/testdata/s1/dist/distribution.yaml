@@ -1,0 +1,47 @@
+distVersion: 1
+plugins:
+  aiops/approval:
+    package: example.test/aiops/approval
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/approval\nversion: 0.1.0\ntitle: Approval\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses:\n  - {key: sql, major: 0, as: need}\nprovides:\n  - {key: approval, major: 0}\nregisters: []\nhooks:\n  - {hook: approval/gates, stage: policy}\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {approval: [\"0.1\"]}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/approval@0.1.0\", \"digest\": {\"sha256\": \"6eeba817b0644b97ef936ec36934e51c6f7259bd8fe2e9254d0daa119e253764\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {\"approval\": {\"version\": \"0.1\", \"suite\": 1}}}}"
+  aiops/kek-kms:
+    package: example.test/aiops/kek-kms
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/kek-kms\nversion: 0.1.0\ntitle: Key management key encryption key\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides:\n  - {key: kek, major: 0}\nregisters: []\nhooks: []\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/kek-kms@0.1.0\", \"digest\": {\"sha256\": \"8b26e6c3fd02ecf3b913bc1eaf34caf64ae62b6775143eb5ced9d5963629e658\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/kek-local:
+    package: example.test/aiops/kek-local
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/kek-local\nversion: 0.1.0\ntitle: Local key encryption key\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides:\n  - {key: kek, major: 0}\nregisters: []\nhooks: []\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/kek-local@0.1.0\", \"digest\": {\"sha256\": \"c7a242c0c19331f3697c481890d82edf983f15cede2adbdf9f0e1f33e59f1936\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/loader:
+    package: example.test/aiops/loader
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/loader\nversion: 0.1.0\ntitle: Loader\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides:\n  - {key: loader, major: 0}\nregisters: []\nhooks: []\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/loader@0.1.0\", \"digest\": {\"sha256\": \"1d1417dd7fb81cf180fa16eaa40e66440f9c9b22906e468f5d796427b5231d36\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/metrics-query-http:
+    package: example.test/aiops/metrics-query-http
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/metrics-query-http\nversion: 0.1.0\ntitle: Metrics query over HTTP\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides:\n  - {key: metricsQuery, major: 0}\nregisters: []\nhooks: []\nconfigSchema:\n  $schema: https://json-schema.org/draft/2020-12/schema\n  type: object\n  additionalProperties: false\n  properties:\n    endpoint: {type: string, format: uri, x-aiops-volatile: true}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/metrics-query-http@0.1.0\", \"digest\": {\"sha256\": \"282c66a6f09285d4d68c875bd9672a90ae8588f218cc8a502abe5b2cb2b09852\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/secrets:
+    package: example.test/aiops/secrets
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/secrets\nversion: 0.1.0\ntitle: Secrets\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses:\n  - {key: kek, major: 0, as: need}\n  - {key: sql, major: 0, as: need}\nprovides:\n  - {key: secrets, major: 0}\nregisters: []\nhooks: []\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/secrets@0.1.0\", \"digest\": {\"sha256\": \"807a02657d16d75159da1b4a13f1250ea3c1ff39940907d81360eeb058e675e2\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/sql-pg:
+    package: example.test/aiops/sql-pg
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/sql-pg\nversion: 0.1.0\ntitle: SQL\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides:\n  - {key: sql, major: 0}\nregisters: []\nhooks: []\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/sql-pg@0.1.0\", \"digest\": {\"sha256\": \"ecf6d7b74747f5f06e35af05a8396959074234ee033a887a16f9a5c11a369931\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {}}}"
+  aiops/tool-runbook:
+    package: example.test/aiops/tool-runbook
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/tool-runbook\nversion: 0.1.0\ntitle: Runbook tool\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses:\n  - {key: tools, major: 0, as: need}\nprovides: []\nregisters: []\nhooks:\n  - {hook: approval/gates, stage: early}\n  - {hook: tool/call, stage: default}\nconfigSchema: {}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {approval: [\"0.1\"], tool: [\"0.1\"]}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/tool-runbook@0.1.0\", \"digest\": {\"sha256\": \"fa91b66e080137d61d9d4cdb0364e64fd478cab0758e58c4e8be69a0b5b52dd4\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {\"approval\": {\"version\": \"0.1\", \"suite\": 1}, \"tool\": {\"version\": \"0.1\", \"suite\": 1}}}}"
+  aiops/tool-search:
+    package: example.test/aiops/tool-search
+    manifest: "manifestVersion: \"1.0\"\nid: aiops/tool-search\nversion: 0.1.0\ntitle: Search tool\nlicense: Apache-2.0\npublisher: {id: aiops}\nstability: preview\nscope: [process]\nruntimes: [inproc]\nuses:\n  - {key: approval, major: 0, as: need}\n  - {key: metricsQuery, major: 0, as: want}\nprovides:\n  - {key: tools, major: 0}\nregisters: []\nhooks:\n  - {hook: approval/gates, stage: early}\nconfigSchema:\n  $schema: https://json-schema.org/draft/2020-12/schema\n  type: object\n  additionalProperties: false\n  properties:\n    timeout: {type: integer, x-aiops-volatile: true}\n    auth:\n      type: object\n      properties:\n        token: {type: string, x-aiops-volatile: true}\n        url: {type: string}\ndurable: []\nrequires: {pluginApi: \"0.1\", definitions: {approval: [\"0.1\"], tool: [\"0.1\"]}}\n"
+    attestation: "{\"_type\": \"https://in-toto.io/Statement/v1\", \"subject\": [{\"name\": \"aiops/tool-search@0.1.0\", \"digest\": {\"sha256\": \"b831fc797f626441981fd106210789c1edbcc65ec46f9059eb6f03275feb8d35\"}}], \"predicateType\": \"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1\", \"predicate\": {\"definitions\": {\"approval\": {\"version\": \"0.1\", \"suite\": 1}, \"tool\": {\"version\": \"0.1\", \"suite\": 1}}}}"
+modules: [{path: example.test, licence: Apache-2.0}]
+packages: []
+pins: []
+bindings: {providers: {approval: [aiops/approval], kek: [aiops/kek-kms, aiops/kek-local]}, consumers: {kek: [aiops/secrets]}, sealedHooks: {approval/gates: [aiops/approval, aiops/tool-search]}, required: {keys: [approval, kek, secrets, sql], rows: [loader]}}
+acceptLicenses: []
+serves: {pluginApi: "0.1", kernel: {keys: {}, hooks: {}}, definitions: {approval: [{version: "0.1", suite: 1, classes: {approval: {provider: bound, consumer: open}},
+    hooks: {approval/gates: {stages: [early, policy], access: sealed, remote: "no"}}}],
+  tool: [{version: "0.1", suite: 1, classes: {tools: {provider: open, consumer: open}},
+    hooks: {tool/call: {stages: [default], access: open, remote: "no"}}}]}}

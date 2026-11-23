@@ -145,3 +145,24 @@ func TestLoaderFailsWhenAKeyIsTaken(t *testing.T) {
 		})
 	}
 }
+
+// The loader records the origin artifact of each entry, as the launcher gives it, at a
+// create and at an update that changes nothing else, so the row's secret scope and
+// purge key can be the artifact's (03-c3-kernel.md:64; ADR-060 decision 19).
+func TestTheLoaderRecordsTheOriginArtifact(t *testing.T) {
+	p := newProbe()
+	e := row("e", "t/e")
+	e.Origin = "acme/pack"
+	x := newFx(t, fxOpt{plugins: plugins(p.plugin("t/e", nil)), rows: []def.EntrySpec{e}})
+	x.want("e", kernel.Active)
+	if got, _ := x.ld.Locate("e"); got.Spec.Origin != "acme/pack" {
+		t.Errorf("origin %q", got.Spec.Origin)
+	}
+	e.Origin = "acme/other"
+	if res := x.apply(update(e)); len(res) != 1 || res[0].Outcome != def.Unchanged {
+		t.Errorf("an update of the origin alone: %+v", res)
+	}
+	if got, _ := x.ld.Locate("e"); got.Spec.Origin != "acme/other" {
+		t.Errorf("origin after the update %q", got.Spec.Origin)
+	}
+}

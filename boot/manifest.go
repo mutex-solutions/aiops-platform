@@ -251,13 +251,13 @@ func ReadManifest(file string, data []byte, mode ManifestMode) (Manifest, error)
 
 // Entry returns the module entry that m declares (ADR-048 decision 18): Provides from
 // provides, Needs and Wants from uses by as, Hooks from hooks, one per hook and stage,
-// and Volatile, the path of each subschema of configSchema marked x-aiops-volatile,
-// written from the row as "config.<key>" with "*" for a list item or a map value
-// (ADR-048 decision 9). The ordinal of a stage is served data, which boot reads with
-// the signed distribution manifest, so Stage is 0 until then. Module, Version, Sum
-// and Plugin are the module table's.
+// Schema from configSchema and Volatile, the path of each subschema of it marked
+// x-aiops-volatile, written from the row as "config.<key>" with "*" for a list item or
+// a map value (ADR-048 decision 9). The ordinal of a stage is served data, which the
+// signed distribution manifest places (Distribution.Table), so Stage is 0 here.
+// Module, Version, Sum and Plugin are the module table's.
 func (m Manifest) Entry() ModuleEntry {
-	e := ModuleEntry{ID: m.ID}
+	e := ModuleEntry{ID: m.ID, Schema: m.ConfigSchema}
 	for _, k := range m.Provides {
 		e.Provides = append(e.Provides, k.Key)
 	}

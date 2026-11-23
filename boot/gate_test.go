@@ -192,10 +192,6 @@ func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 	for _, e := range []ModuleEntry{
 		listener("o/sealed-listener", sealedEv.Use(kernel.DefaultStage)),
 		listener("o/open-listener", openEv.Use(kernel.DefaultStage)),
-		// Entries read from modules.yaml carry the classes of the definitions instead.
-		{ID: "o/yaml-bound", Provides: []string{"ypk"}, Needs: []string{"ycb"}, Hooks: []HookDecl{{Hook: "y/sealed"}},
-			Classes: &ModuleClasses{ProviderBound: []string{"ypk"}, ConsumerBound: []string{"ycb"}, SealedHooks: []string{"y/sealed"}}},
-		{ID: "o/yaml-open", Provides: []string{"yok"}, Hooks: []HookDecl{{Hook: "y/open"}}, Classes: &ModuleClasses{}},
 		toy(toySpec{id: "o/policy", provides: []kernel.AnyKey{policyKey}}),
 		toy(toySpec{id: "o/cbprov", provides: []kernel.AnyKey{cbKey}}),
 		toy(toySpec{id: "o/cbuser", needs: []kernel.AnyKey{cbKey}}),
@@ -228,10 +224,6 @@ func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 			[]string{"7 a sealed-hook stop=false"}},
 		{"sealed by its definition, listed", rows("id: a, plugin: o/sealed-listener"), "sealedHooks: {d20/sealed: [o/sealed-listener]}", nil},
 		{"open by its definition, listed for another plugin", rows("id: a, plugin: o/open-listener"), "sealedHooks: {d20/open: [o/plain]}", nil},
-		{"bound and sealed by the classes of modules.yaml, not listed", rows("id: a, plugin: o/yaml-bound"), "",
-			[]string{"7 a provider-binding stop=false", "7 a consumer-binding stop=false", "7 a sealed-hook stop=false"}},
-		{"open by the classes of modules.yaml, listed", rows("id: a, plugin: o/yaml-open"),
-			"providers: {yok: [o/plain]}\nsealedHooks: {y/open: [o/plain]}", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var patches []string
@@ -253,7 +245,7 @@ func TestGateSlotsAndResult(t *testing.T) {
 	if len(infos) != NumChecks || len(g.Slots) != NumChecks {
 		t.Fatalf("want ten slots, got %d and %d", len(infos), len(g.Slots))
 	}
-	// Checks 3 and 9 are S2b everywhere; the S1 form of profile render evaluates 7 and 8
+	// Checks 3 and 9 are S2b everywhere; given no signed distribution manifest the gate evaluates 7 and 8
 	// only, and says why for each other check and each clause it leaves out.
 	wantUntil := []string{"", "", "S2b", "", "", "", "", "", "S2b", ""}
 	for i, s := range g.Slots {
@@ -288,7 +280,7 @@ func TestGateSlotsAndResult(t *testing.T) {
 			t.Errorf("Result(%d, %q) = %+v", tc.check, tc.row, r)
 		}
 		if tc.status == StatusNotEvaluated && tc.until != "" && !strings.HasPrefix(r.Reason, "not evaluated until ") ||
-			tc.check == CheckManifest && !strings.Contains(r.Reason, "stand-ins") {
+			tc.check == CheckManifest && !strings.Contains(r.Reason, "no signed distribution manifest") {
 			t.Errorf("reason %q", r.Reason)
 		}
 	}

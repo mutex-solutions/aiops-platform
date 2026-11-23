@@ -432,8 +432,8 @@ requires:
 	want := ModuleEntry{ID: "aiops/example", Provides: []string{"own"}, Needs: []string{"logger", "store"}, Wants: []string{"store"},
 		Hooks: []HookDecl{{Hook: "internal/status", StageName: "default"}, {Hook: "reload/operation", StageName: "default"},
 			{Hook: "reload/operation", StageName: "late"}},
-		Volatile: []string{"config.note", "config.rules.*.url", "config.windows.*"}}
-	if got := m.Entry(); !reflect.DeepEqual(got, want) {
+		Volatile: []string{"config.note", "config.rules.*.url", "config.windows.*"}, Schema: m.ConfigSchema}
+	if got := m.Entry(); !reflect.DeepEqual(got, want) || got.Schema["additionalProperties"] != false {
 		t.Fatalf("entry\n got %+v\nwant %+v", got, want)
 	}
 	if got := volatilePaths(m.Entry().Volatile); !reflect.DeepEqual(got, []string{"note", "rules.*.url", "windows.*"}) {

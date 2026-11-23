@@ -38,5 +38,5 @@ requires:
   definitions:
     clock: ["0.1"]
     echoers: ["0.1"]
-    launch: ["0.1"]
+    launch: ["0.2"]
     stampers: ["0.1"]

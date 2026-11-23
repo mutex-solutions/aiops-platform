@@ -33,6 +33,6 @@ durable: []
 requires:
   pluginApi: "0.2"
   definitions:
-    launch: ["0.1"]
-    loader: ["0.1"]
+    launch: ["0.2"]
+    loader: ["0.2"]
     reload: ["0.1"]

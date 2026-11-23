@@ -30,6 +30,16 @@ func tryComp(bundle string, patches ...string) (Composition, error) {
 	return c, err
 }
 
+// Gate and Admit run the gate, and admit, given no signed distribution manifest: on a
+// module table and bindings alone, which is what the layer and class rules read.
+func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
+	return GateWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist})
+}
+
+func Admit(c Composition, mods ModuleTable, dist DistManifest, roles []Role) Admission {
+	return AdmitWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist}, roles)
+}
+
 func mustMods(t *testing.T, y string) ModuleTable {
 	t.Helper()
 	m, err := ParseModules("modules.yaml", []byte(y))

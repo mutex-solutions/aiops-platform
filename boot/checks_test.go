@@ -377,7 +377,7 @@ func TestGateEntryPoints(t *testing.T) {
 		{EntryInstall, []int{6}, []string{"5 module"}, nil},
 		{EntryInstallUsed, nil, nil, nil},
 		{EntryBoot, nil, nil, nil},
-		{EntryRender, []int{1, 2, 4, 5, 6, 10}, []string{"7 fake", "7 signed", "8 installed"}, []string{"7 user signed-class open"}},
+		{EntryRender, nil, []string{"5 tie", "10 tie"}, nil},
 	} {
 		t.Run(string(tc.entry), func(t *testing.T) {
 			fx := newGateFix()
@@ -407,7 +407,7 @@ func TestGateEntryPoints(t *testing.T) {
 				if p := partial(g.Slots[CheckKeyHookClass-1]); !strings.Contains(p, "1 row results not evaluated") {
 					t.Errorf("dump of check 7: %q", p)
 				}
-				if r := g.Result(CheckKeyHookClass, "user"); r.Status != StatusNotEvaluated || !strings.Contains(r.Reason, "reading 3") && tc.entry != EntryRender {
+				if r := g.Result(CheckKeyHookClass, "user"); r.Status != StatusNotEvaluated || !strings.Contains(r.Reason, "reading 3") {
 					t.Errorf("Result(7, user) = %+v", r)
 				}
 			}

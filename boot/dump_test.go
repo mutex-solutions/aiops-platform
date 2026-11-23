@@ -2,43 +2,92 @@ package boot
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
-// loadS1 composes the fixture distribution under testdata/s1 and admits it as boot
-// does, with the row of the loader that boot mounts.
+// s1Served is serves.definitions of the fixture distribution under testdata/s1: the
+// definitions that own the hooks of its plugins, with the stages of each hook in chain
+// order (ADR-060 decision 7). A key they do not declare is bound where dist.yaml lists
+// who may hold it.
+const s1Served = `{approval: [{version: "0.1", suite: 1, classes: {approval: {provider: bound, consumer: open}},
+    hooks: {approval/gates: {stages: [early, policy], access: sealed, remote: "no"}}}],
+  tool: [{version: "0.1", suite: 1, classes: {tools: {provider: open, consumer: open}},
+    hooks: {tool/call: {stages: [default], access: open, remote: "no"}}}]}`
+
+// s1Signed assembles the signed distribution manifest of the fixture, which go test
+// -update writes to testdata/s1/dist/distribution.yaml for aiopsctl's tests: the
+// manifests of dist/plugins, each attested at suite revision 1 for every definition its
+// requires names, the bindings of dist/dist.yaml and s1Served.
+func s1Signed(t *testing.T) string {
+	t.Helper()
+	d := newTestDist()
+	d.definitions = s1Served
+	dy, err := os.ReadFile("testdata/s1/dist/dist.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.bindings = bindingsText(mustDist(t, string(dy)))
+	files, _ := filepath.Glob("testdata/s1/dist/plugins/*.yaml")
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := ReadManifest(f, src, ManifestStrict)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var defs []string
+		for _, n := range slices.Sorted(maps.Keys(m.Requires.Definitions)) {
+			defs = append(defs, fmt.Sprintf(`%q: {"version": %q, "suite": 1}`, n, m.Requires.Definitions[n][0]))
+		}
+		d.add(string(src), "{"+strings.Join(defs, ", ")+"}")
+	}
+	return string(d.text())
+}
+
+// loadS1 renders the fixture distribution under testdata/s1 as aiopsctl profile render
+// does, on a home that trusts its signed manifest.
 func loadS1(t *testing.T, roles ...Role) Admission {
 	t.Helper()
-	root := os.DirFS("testdata/s1")
-	home, _ := fs.Sub(root, "home")
-	dd, _ := fs.Sub(root, "dist")
-	md, err := fs.ReadFile(dd, "modules.yaml")
+	signed, err := os.ReadFile("testdata/s1/dist/distribution.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dy, err := fs.ReadFile(dd, "dist.yaml")
+	d, err := ReadDistribution("distribution.yaml", signed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mods, err := ParseModules("modules.yaml", md)
+	home, _ := trustedHome(signed)
+	root := os.DirFS("testdata/s1/home")
+	err = fs.WalkDir(root, ".", func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			var data []byte
+			data, err = fs.ReadFile(root, p)
+			home[p] = &fstest.MapFile{Data: data}
+		}
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dist, err := ParseDist("dist.yaml", dy)
+	a, _, err := Render(Sources{Profile: "demo", Home: home, Bundles: home}, true, d, roles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, _, err := Compose(Sources{Profile: "demo", Home: home, Bundles: home}, Options{Server: true, Modules: mods})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return Admit(WithLoader(c), mods, dist, roles)
+	return a
 }
 
 func TestDumpGoldenS1(t *testing.T) {
+	golden(t, "s1/dist/distribution.yaml", s1Signed(t))
 	for _, tc := range []struct {
 		name  string
 		roles []Role
@@ -121,7 +170,7 @@ func TestSchemaIsJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(RenderConfigSchema(loadS1(t))), &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc["$schema"] == nil || doc["x-aiops-limit"] == nil {
+	if doc["$schema"] == nil || doc["properties"] == nil {
 		t.Errorf("document: %v", doc)
 	}
 }
@@ -164,5 +213,38 @@ func TestDumpGateLineWithoutPartial(t *testing.T) {
 	a.Gate.Slots[CheckKeyHookClass-1].Fails = nil
 	if d := RenderDump(a); !strings.Contains(d, "check 7 Key and hook classes: pass\n") {
 		t.Errorf("dump:\n%s", d)
+	}
+}
+
+// Render refuses what boot refuses before the gate: a profile that does not compose and
+// a row with the loader's id. A row that the bundle of an installed artifact inserted
+// shows the artifact as its origin in --dump, and boot hands the origin to the loader,
+// which records it with the entry, at boot and in every live generation (ADR-060
+// decisions 14 and 19).
+func TestRenderRefusalsAndOrigin(t *testing.T) {
+	d, err := ReadDistribution("d", newTestDist().text())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := fstest.MapFS{
+		"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}, "bundles/b/bundle.yaml": {Data: []byte(rows("id: loader, plugin: o/x"))},
+		"profiles/q/profile.yaml": {Data: []byte("bundles: [acme/pack]")}, "bundles/acme/pack/bundle.yaml": {Data: []byte(rows("id: e, plugin: acme/pack"))},
+	}
+	if _, _, err := Render(Sources{Profile: "nope", Home: home, Bundles: home}, false, d, nil); err == nil {
+		t.Error("a profile that does not exist renders")
+	}
+	if _, _, err := Render(Sources{Profile: "p", Home: home, Bundles: home}, false, d, nil); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("the loader's id: %v", err)
+	}
+	a, _, err := Render(Sources{Profile: "q", Home: home, Bundles: home}, false, d, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dump := RenderDump(a); !strings.Contains(dump, "\nrow e plugin=acme/pack enabled=true required=false group=false roles=- origin=acme/pack\n") {
+		t.Errorf("dump:\n%s", dump)
+	}
+	r, _ := findRow(a.Comp, "e")
+	if s := entrySpecs(a.Comp); len(s) != 1 || s[0].Origin != "acme/pack" || launchRow(r).Origin != "acme/pack" {
+		t.Errorf("entry specs %+v, launch row %+v", s, launchRow(r))
 	}
 }

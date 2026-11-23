@@ -198,8 +198,11 @@ func TestGenerationIsComposedAdmittedPlannedAppliedJudgedAndPublished(t *testing
 	from := []launch.Row{row("a", loader.GroupPlugin, nil), child("a", "k", "aiops/p"), row("u", "aiops/p", "old"),
 		row("keep", "aiops/p", nil), row("db", "aiops/sqlp", nil)}
 	w.seed(from...)
+	// The row an installed artifact's bundle inserted keeps its origin into the loader.
+	n := row("n", loader.GroupPlugin, nil)
+	n.Origin = "acme/pack"
 	w.next = launch.Composition{Digest: launch.Digest{2}, Rows: []launch.Row{row("u", "aiops/p", "new"), row("keep", "aiops/p", nil),
-		row("db", "aiops/sqlp", nil), row("n", loader.GroupPlugin, nil), child("n", "k", "aiops/p")}}
+		row("db", "aiops/sqlp", nil), n, child("n", "k", "aiops/p")}}
 	var heard composition.Applied
 	w.listen(nil, func(_ context.Context, a composition.Applied) { heard = a })
 
@@ -221,6 +224,9 @@ func TestGenerationIsComposedAdmittedPlannedAppliedJudgedAndPublished(t *testing
 	}
 	if !r.Report.Pass {
 		t.Errorf("report = %+v", r.Report)
+	}
+	if e, _ := w.ld.Locate("n"); e.Spec.Origin != "acme/pack" {
+		t.Errorf("the loader records origin %q for n", e.Spec.Origin)
 	}
 	if heard.Generation != 1 || heard.Digest != (composition.Digest{2}) || !heard.Report.Pass || len(heard.Report.Rows) == 0 {
 		t.Errorf("composition/applied = %+v", heard)

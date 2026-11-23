@@ -74,7 +74,7 @@ func TestBootInputTrust(t *testing.T) {
 		err   string
 		first string
 	}{
-		{"the current record", nil, nil, "", "carries no release key"},
+		{"the current record", nil, nil, "", "no release key and no built-in record"},
 		{"another current distribution", func(h fstest.MapFS, _ *Distribution) {
 			h["verified/current"] = &fstest.MapFile{Data: []byte("sha256:" + hexC + "\n")}
 		}, nil, "run aiopsctl dist use", ""},

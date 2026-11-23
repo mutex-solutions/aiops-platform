@@ -68,7 +68,7 @@ func launchRow(r ComposedRow) launch.Row {
 	return launch.Row{
 		ID: r.ID, Plugin: r.Plugin, Parent: r.Parent, Config: plain(r.Config), Enabled: r.Enabled,
 		Required: r.Required, Group: r.Group, Roles: roleNames(r.Roles), Inject: refsInject(r),
-		Isolate: slices.Clone(r.Isolate), Intercept: plainFields(r.Intercept),
+		Isolate: slices.Clone(r.Isolate), Intercept: plainFields(r.Intercept), Origin: installedBundle(r),
 	}
 }
 
@@ -96,7 +96,7 @@ func entrySpecs(c Composition) []loaderdef.EntrySpec {
 		out = append(out, loaderdef.EntrySpec{
 			ID: r.ID, Parent: r.Parent, Plugin: r.Plugin, Config: cfg, Enabled: r.Enabled,
 			Roles: roleNames(r.Roles), Inject: refsInject(r), Isolate: slices.Clone(r.Isolate),
-			Intercept: plainFields(r.Intercept),
+			Intercept: plainFields(r.Intercept), Origin: installedBundle(r),
 		})
 	}
 	return out

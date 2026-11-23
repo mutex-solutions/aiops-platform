@@ -1,5 +1,5 @@
 # aiopsctl profile render --dump
-digest sha256:33ba62e6cebeac64414be5e3ad129218aa536573af75cd18b10fd964269d7747
+digest sha256:4c6174c37ece7aa8d3ac2d85479f3e1b237897151ce801d339c83bb03492f6ee
 roles api
 
 ##  (layer 0)
@@ -48,17 +48,20 @@ key secrets: secrets
 key sql: sql
 key tools: tools
 
+## distribution
+trust: no release key and no built-in record: the distribution that dist use made current is trusted (ADR-020 decision 13)
+
 ## gate
-check 1 Manifest schema and author API: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
-check 2 Definition versions: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 1 Manifest schema and author API: pass (later: exemptions (compatibility.yaml) are S6b)
+check 2 Definition versions: pass (later: exemptions (compatibility.yaml) are S6b)
 check 3 Remote protocol: not evaluated until S2b
-check 4 Stability: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
-check 5 Trust: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
-check 6 Licence: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
-check 7 Key and hook classes: 1 failed (not evaluated: fake: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20); signed: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20))
-check 8 Layer rules: pass (not evaluated: installed: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20); later: the tenant overlay is S4b)
+check 4 Stability: pass (later: exemptions (compatibility.yaml) are S6b)
+check 5 Trust: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12); later: the index clause is S6a)
+check 6 Licence: pass
+check 7 Key and hook classes: 1 failed
+check 8 Layer rules: pass (later: the tenant overlay is S4b)
 check 9 Remote scope: not evaluated until S2b
-check 10 Attestation: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 10 Attestation: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12))
 
 ## diagnostics
 warning: row "runbook" detached as disabled: gate check 7 (Key and hook classes), rule sealed-hook: row "runbook" listens on sealed hook "approval/gates" and plugin "aiops/tool-runbook" is not in its listener list ["aiops/approval", "aiops/tool-search"]

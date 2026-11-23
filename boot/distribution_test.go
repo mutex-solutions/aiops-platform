@@ -215,3 +215,36 @@ func TestReadDistribution(t *testing.T) {
 		}
 	}
 }
+
+// Table reads the module table from the signed manifest as profile render does: each
+// entry from its manifest, with the module that holds its package and the ordinal of
+// each declared stage in its hook's chain; a manifest that does not read leaves the id
+// alone, which check 1 denies (ADR-060 decisions 7 and 14).
+func TestDistributionTable(t *testing.T) {
+	d := newTestDist()
+	d.modules = "[{path: " + testModule + ", licence: Apache-2.0}, {path: " + testModule + "/sub, version: v1.2.0, sum: \"" + sumA + "\", licence: MIT}]"
+	d.packageOf = func(id string) string { return testModule + "/sub/" + id }
+	d.definitions = `{h: [{version: "0.1", suite: 1, classes: {}, hooks: {h/x: {stages: [early, late], access: open, remote: "no"}}}]}`
+	d.add(manifestText("o/a", "hooks: [{hook: h/x, stage: late}, {hook: h/y, stage: default}]",
+		`configSchema: {$schema: "https://json-schema.org/draft/2020-12/schema", properties: {n: {type: string, x-aiops-volatile: true}}}`), "")
+	d.plugins["o/bad"] = [2]string{"id: o/bad\n", "-"}
+	dist, err := ReadDistribution("d", d.text())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab := dist.Table()
+	a := tab["o/a"]
+	want := []HookDecl{{Hook: "h/x", Stage: 1, StageName: "late"}, {Hook: "h/y", Stage: -1, StageName: "default"}}
+	if a.ID != "o/a" || a.Module != testModule+"/sub" || a.Version != "v1.2.0" || a.Sum != sumA || !reflect.DeepEqual(a.Hooks, want) ||
+		!reflect.DeepEqual(a.Volatile, []string{"config.n"}) || a.Schema["properties"] == nil {
+		t.Errorf("o/a: %+v", a)
+	}
+	if b := tab["o/bad"]; b.ID != "o/bad" || b.Module != testModule+"/sub" || b.Provides != nil || b.Hooks != nil || b.Schema != nil {
+		t.Errorf("o/bad: %+v", b)
+	}
+	// Placing a table of Go values leaves a plugin the manifest does not list as it is.
+	other := ModuleEntry{ID: "o/other", Module: "m", Version: "v1"}
+	if got := dist.place(ModuleTable{"o/other": other}); !reflect.DeepEqual(got["o/other"], other) {
+		t.Errorf("o/other: %+v", got["o/other"])
+	}
+}

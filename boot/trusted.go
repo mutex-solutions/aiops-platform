@@ -163,7 +163,7 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	if in.Trusted != nil {
 		in.Trusted = fmt.Errorf("%w (to recover: `- key: release` under distributions restores the default root of a release binary, and an aiopsctl built from the current distribution boots on its record, ADR-020 decision 13)", in.Trusted)
 	}
-	lines := []string{"trust: this binary carries no release key and no built-in record, and boots on the distribution that dist use made current (ADR-020 decision 13)"}
+	lines := []string{"trust: no release key and no built-in record: the distribution that dist use made current is trusted (ADR-020 decision 13)"}
 	if rel != nil {
 		state, use := "removed in trust.yaml", "not in use"
 		if slices.Contains(trust.Distributions, ReleaseRoot) {

@@ -53,7 +53,9 @@ type Ref struct{ Scheme, Name string }
 // and map[string]any; nothing else survives parsing (ADR-059 decision 6). Roles,
 // Inject and Isolate are sorted sets, Intercept maps a key name to the intercept
 // config of that key. A child of a group is a row of its own with the composed id
-// "<group>:<id>" and Parent set (08-profiles-roadmap-adrs.md:159).
+// "<group>:<id>" and Parent set (08-profiles-roadmap-adrs.md:159). Origin is the
+// plugin id of the installed artifact whose bundle inserted the row, "" for none
+// (ADR-060 decision 19); added at 0.2.
 type Row struct {
 	ID        string
 	Plugin    string // "<owner>/<name>", "core:group" or "core:include"
@@ -66,6 +68,7 @@ type Row struct {
 	Inject    []string
 	Isolate   []string
 	Intercept map[string]any
+	Origin    string
 }
 
 // Composition is one immutable composed tree: rows in final order, parents before

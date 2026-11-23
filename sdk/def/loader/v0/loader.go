@@ -63,6 +63,9 @@ var (
 // row's inject, intercept and isolate are applied to the entry's context
 // (07-c4-plugin-sdk.md:1347, :1375). Only an entry that is Enabled and whose Roles
 // include the process role is mounted (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:1360).
+// Origin is the plugin id of the installed artifact whose bundle inserted the row, ""
+// for none: the loader records it with the entry, so the row's secret scope and purge
+// key are the artifact's (03-c3-kernel.md:64; ADR-060 decision 19); added at 0.2.
 type EntrySpec struct {
 	ID        string // the composed id, "<group>:<id>" for a child
 	Parent    string // composed id of the enclosing group, or ""
@@ -73,6 +76,7 @@ type EntrySpec struct {
 	Inject    []string
 	Isolate   []string
 	Intercept map[string]any // key name -> intercept config
+	Origin    string
 }
 
 // Mount says whether an entry has a fiber, and if not why.

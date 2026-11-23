@@ -80,7 +80,7 @@ func TestGateDetachesARowOutsideTheReleaseBindings(t *testing.T) {
 		{Row: boot.Row{ID: "needreload", Plugin: "x/needreload", Enabled: true}},
 		{Row: boot.Row{ID: "entryinit", Plugin: "x/entryinit", Enabled: true}},
 	}}
-	g := boot.Gate(c, reg.Modules, man)
+	g := boot.GateWith(c, boot.GateInput{Entry: boot.EntryBoot, Mods: reg.Modules, Bindings: man})
 	if !slices.Equal(g.Detached, []string{"entryinit", "needreload"}) || g.Refused {
 		t.Fatalf("detached %v, refused %v: %+v", g.Detached, g.Refused, g.Slots[boot.CheckKeyHookClass-1].Fails)
 	}
@@ -114,7 +114,7 @@ func admitRelease(t *testing.T, home fstest.MapFS) boot.Admission {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return boot.Admit(boot.WithLoader(c), reg.Modules, man, nil)
+	return boot.AdmitWith(boot.WithLoader(c), boot.GateInput{Entry: boot.EntryBoot, Mods: reg.Modules, Bindings: man}, nil)
 }
 
 // A required row of the release set that holds a reference pulls config-refs into the
@@ -265,7 +265,7 @@ func TestEntryReadsTheManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.Module != ModulePath || e.Version != Version || e.ID != "aiops/loader" || e.Volatile != nil || e.Plugin == nil {
+	if e.Module != "" || e.ID != "aiops/loader" || e.Volatile != nil || e.Plugin == nil {
 		t.Fatalf("entry %+v", e)
 	}
 	if !slices.Equal(e.Needs, []string{"catalog", "profileContext"}) || !slices.Equal(e.Provides, []string{"composition", "loader"}) {

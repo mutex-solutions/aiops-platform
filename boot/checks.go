@@ -22,10 +22,11 @@ type GateInput struct {
 	// links it.
 	Mods ModuleTable
 	// Bindings are the binding maps and the required set: the release's with the
-	// site's entries (Distribution.Bindings), or the S1 dist.yaml.
+	// site's entries (Distribution.Bindings).
 	Bindings DistManifest
 	// Dist is the signed distribution manifest: the module table's manifests and
-	// statements, its modules, packages, licences and serves. Nil for EntryRender.
+	// statements, its modules, packages, licences and serves. Nil where none is given,
+	// and the clauses that read it are then not evaluated (notEvaluated).
 	Dist *Distribution
 	// Trusted is nil when boot trusts Dist, and otherwise says why not; check 5 then
 	// denies every Go module (ADR-020 decision 12). BuiltIn is true when Dist is the

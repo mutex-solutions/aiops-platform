@@ -25,5 +25,5 @@ durable: []
 requires:
   pluginApi: "0.2"
   definitions:
-    launch: ["0.1"]
+    launch: ["0.2"]
     spine: ["0.1"]

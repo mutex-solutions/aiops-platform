@@ -2,8 +2,9 @@
 # Contract: 03-c3-kernel.md:63 (six keys, `P`, `profileContext` and `appExit` are
 # `PC`), 07-c4-plugin-sdk.md:556-557. One definition holds the six launch keys
 # (07-c4-plugin-sdk.md:1345), so `key` names the definition and `class` lists each key.
+# 0.2 adds the optional Row.Origin, so a plugin built for 0.1 is admitted.
 key: launch
-version: "0.1"
+version: "0.2"
 stability: preview
 class:
   profileContext: {provider: bound, consumer: bound}
@@ -13,4 +14,5 @@ class:
   killSwitches: {provider: bound, consumer: open}
   appExit: {provider: bound, consumer: bound}
 remote: "no"
+compatibleFrom: "0.1"
 suite: 1

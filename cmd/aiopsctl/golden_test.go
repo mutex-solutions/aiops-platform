@@ -6,14 +6,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
-	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // The golden dumps of the S1 exit (08-profiles-roadmap-adrs.md:693): the three dumps of
@@ -21,94 +20,38 @@ import (
 // process that runs every role and for the role api, which is where every row of the
 // profile runs. The files are in testdata/test-dist and `go test -update` rewrites them.
 //
-// The data is the one the test binary links. dist.yaml, the profile and the bundle are
-// the files it embeds. The test distribution has no modules.yaml, since its module
-// table is Go values (test/dist.Modules), so modulesYAML writes one from that table:
-// the declared data (provides, needs, wants, hooks, volatile) is read from the
-// manifests the test binary embeds and is not written a second time by hand. aiopsctl
-// itself is run, as it runs in main, on a file system that holds those files.
+// The data is the one the test binary links: the signed distribution manifest it
+// embeds, test/dist/distribution.yaml, with the manifest of each plugin and served
+// data, and the profile and the bundle it embeds. The home trusts the manifest as dist
+// use records it (test/trusted; ADR-060 decision 28), so the gate part is the
+// evaluated checks. aiopsctl itself is run, as it runs in main, on a file system that
+// holds those files.
 //
-// Not covered by golden files, and said so: a stage number of a hook (a manifest names
-// the stage and not its ordinal, which is served data that boot reads with the signed
-// distribution manifest, so the dump shows stage 0 for every listener) and the rows of
-// the roles edge and worker, which the profile does not have. The volatile path
-// config.note of aiops-test/toy-consumer is the mark of its plugin.Volatile field in
-// the configSchema of its manifest (ADR-048 decision 9).
+// Not covered by golden files, and said so: the rows of the roles edge and worker,
+// which the profile does not have. The volatile path config.note of
+// aiops-test/toy-consumer is the mark of its plugin.Volatile field in the configSchema
+// of its manifest (ADR-048 decision 9), and the stage of each hook listener is its
+// ordinal in the stages that serves holds (ADR-060 decision 7).
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
-// modulesYAML renders a module table as modules.yaml.
-func modulesYAML(mods boot.ModuleTable) []byte {
-	var b strings.Builder
-	ids := make([]string, 0, len(mods))
-	for id := range mods {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	list := func(name string, v []string) {
-		if len(v) > 0 {
-			fmt.Fprintf(&b, "  %s: [%s]\n", name, strings.Join(v, ", "))
-		}
-	}
-	for _, id := range ids {
-		e := mods[id]
-		fmt.Fprintf(&b, "%s:\n  module: %s\n  version: %s\n", id, e.Module, e.Version)
-		list("provides", e.Provides)
-		list("needs", e.Needs)
-		list("wants", e.Wants)
-		var vol []string
-		for _, v := range e.Volatile {
-			vol = append(vol, strings.TrimPrefix(v, "config."))
-		}
-		list("volatile", vol)
-		if len(e.Hooks) > 0 {
-			b.WriteString("  hooks:\n")
-			for _, h := range e.Hooks {
-				fmt.Fprintf(&b, "    - {hook: %s, stage: %d, name: %s}\n", h.Hook, h.Stage, h.StageName)
-			}
-		}
-		// The classes, which the server reads from the Go values (ADR-059 decision 20).
-		p := e.Plugin.(kernel.Plugin)
-		keys := slices.Clone(p.Provides)
-		for _, d := range p.Inject {
-			keys = append(keys, d.Key())
-		}
-		var pb, cb, sh []string
-		for _, k := range keys {
-			bp, bc, _ := kernel.KeyClasses(k)
-			if bp && !slices.Contains(pb, k.Name()) {
-				pb = append(pb, k.Name())
-			}
-			if bc && !slices.Contains(cb, k.Name()) {
-				cb = append(cb, k.Name())
-			}
-		}
-		for _, u := range p.Hooks {
-			if u.Sealed() {
-				sh = append(sh, u.Hook())
-			}
-		}
-		fmt.Fprintf(&b, "  classes: {providerBound: [%s], consumerBound: [%s], sealedHooks: [%s]}\n",
-			strings.Join(pb, ", "), strings.Join(cb, ", "), strings.Join(sh, ", "))
-	}
-	return []byte(b.String())
-}
-
-// testDistFS is a file system with the test distribution as aiopsctl reads it: dist/ with
-// dist.yaml and modules.yaml, and home/ with the profile and the bundle.
-func testDistFS(t *testing.T) fstest.MapFS {
+// testDistFS is a file system with the test distribution as aiopsctl reads it, with
+// signed as its signed manifest: dist/ with distribution.yaml, and home/ with the
+// profile, the bundle and the records by which the home trusts signed.
+func testDistFS(t *testing.T, signed []byte) fstest.MapFS {
 	t.Helper()
 	d, err := testdist.Distribution()
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := fstest.MapFS{}
-	dd, err := os.ReadFile("../../test/dist/dist.yaml")
+	m := fstest.MapFS{"dist/distribution.yaml": {Data: signed}}
+	files, err := trusted.Files(signed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m["dist/dist.yaml"] = &fstest.MapFile{Data: dd}
-	m["dist/modules.yaml"] = &fstest.MapFile{Data: modulesYAML(d.Registry.Modules)}
+	for name, data := range files {
+		m["home/"+name] = &fstest.MapFile{Data: data}
+	}
 	for _, dir := range []string{"bundles", "profiles"} {
 		err := fs.WalkDir(d.Shipped, dir, func(p string, e fs.DirEntry, err error) error {
 			if err != nil || e.IsDir() {
@@ -126,7 +69,7 @@ func testDistFS(t *testing.T) fstest.MapFS {
 }
 
 func TestGoldenDumpsOfTheTestDistribution(t *testing.T) {
-	w := testDistFS(t)
+	w := testDistFS(t, testdist.Signed)
 	env := map[string]string{"PWD": "/"}
 	for _, role := range []string{"", "api"} {
 		for _, dump := range []struct{ flag, ext string }{
@@ -184,32 +127,32 @@ func firstDiff(want, got string) string {
 }
 
 // A render reports the rows that the server's gate check 7 detaches (08 §1.4, "exactly
-// what the server would compose"), though modules.yaml holds no Go value: it carries
-// the classes of the definitions, as the server reads them from the Go values (ADR-059
-// decision 20). The dist.yaml variants drop a binding of a key that a definition binds,
-// so only the definition says that the key is bound.
+// what the server would compose"), though render holds no Go value: it reads the
+// classes of the definitions from serves of the signed manifest, as the server reads
+// them from the Go values (ADR-059 decision 20; ADR-060 decision 14). The variants of
+// the manifest drop a binding of a key that a definition binds, so only the definition
+// says that the key is bound.
 func TestRenderDetachesWhatTheServerDetaches(t *testing.T) {
 	d, err := testdist.Distribution()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, drop := range [][]string{
-		{"  reload: [aiops-test/test-submit, aiops-test/test-state]\n"},
-		{"  reload: [aiops-test/test-submit, aiops-test/test-state]\n", "  toy.policy: [aiops-test/toy-provider]\n"},
+		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n"},
+		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n", "    toy.policy:\n      - aiops-test/toy-provider\n"},
 	} {
-		w := testDistFS(t)
-		dd := string(w["dist/dist.yaml"].Data)
-		for _, line := range drop {
-			if !strings.Contains(dd, line) {
-				t.Fatalf("dist.yaml has no line %q", line)
+		signed := string(testdist.Signed)
+		for _, b := range drop {
+			if !strings.Contains(signed, b) {
+				t.Fatalf("the signed manifest has no binding %q", b)
 			}
-			dd = strings.Replace(dd, line, "", 1)
+			signed = strings.Replace(signed, b, "", 1)
 		}
-		w["dist/dist.yaml"] = &fstest.MapFile{Data: []byte(dd)}
-		man, err := boot.ParseDist("dist.yaml", []byte(dd))
+		man, err := boot.ReadDistribution("distribution.yaml", []byte(signed))
 		if err != nil {
 			t.Fatal(err)
 		}
+		w := testDistFS(t, []byte(signed))
 		home, err := fs.Sub(w, "home")
 		if err != nil {
 			t.Fatal(err)
@@ -219,7 +162,9 @@ func TestRenderDetachesWhatTheServerDetaches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		srv := boot.Admit(boot.WithLoader(comp), d.Registry.Modules, man, nil).Gate.Detached
+		// The server's class rules on the Go values, given no manifest to read classes from.
+		in := boot.GateInput{Entry: boot.EntryBoot, Mods: d.Registry.Modules, Bindings: man.Bindings()}
+		srv := boot.AdmitWith(boot.WithLoader(comp), in, nil).Gate.Detached
 		if len(srv) == 0 {
 			t.Fatalf("dropping %q detaches no row on the server", drop)
 		}

@@ -3,14 +3,18 @@ package main
 import (
 	"bytes"
 	"io/fs"
+	"maps"
 	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // world is the S1 fixture distribution of the boot package, under /work of an
-// in-memory file system, plus a rogue row and a patch for the refusal cases.
+// in-memory file system, with a home that trusts its signed manifest, plus a rogue row
+// and a patch for the refusal cases.
 func world(t *testing.T) fstest.MapFS {
 	t.Helper()
 	m := fstest.MapFS{}
@@ -25,6 +29,13 @@ func world(t *testing.T) fstest.MapFS {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	files, err := trusted.Files(m["work/dist/distribution.yaml"].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range files {
+		m["work/home/"+name] = &fstest.MapFile{Data: data}
 	}
 	m["work/p/ok.yml"] = &fstest.MapFile{Data: []byte("- {id: metrics, config: {endpoint: 'http://p3.example.test'}}\n- {id: ghost, enabled: false}\n")}
 	m["work/p/bad.yml"] = &fstest.MapFile{Data: []byte("- {id: metrics, plugin: aiops/x}\n")}
@@ -143,7 +154,7 @@ func TestRunRefusals(t *testing.T) {
 		{"isolate on a bound key", with("--patch", "/abs/iso.yml", "--dump"), "static graph"},
 		// boot mounts the loader itself, so it refuses a composition that holds the row; render must too.
 		{"a row with the reserved id of the loader", with("--patch", "p/loader.yml", "--dump"), `the row id "loader" is reserved`},
-		{"no dist directory", []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "none"}, "modules.yaml"},
+		{"no dist directory", []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "none"}, "distribution.yaml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := do(t, w, env, tc.args...)
@@ -152,24 +163,19 @@ func TestRunRefusals(t *testing.T) {
 			}
 		})
 	}
-	// A dist file that is read but malformed, in each of the two files.
-	for _, file := range []string{"modules.yaml", "dist.yaml"} {
-		bad := fstest.MapFS{}
-		for k, v := range w {
-			bad[k] = v
-		}
-		bad["work/dist/"+file] = &fstest.MapFile{Data: []byte("x: [")}
-		if r := do(t, bad, env, with()...); r.code != 1 || !strings.Contains(r.errOut, file) {
-			t.Errorf("%s: %+v", file, r)
-		}
+	// A signed manifest that is read but malformed.
+	bad := maps.Clone(w)
+	bad["work/dist/distribution.yaml"] = &fstest.MapFile{Data: []byte("x: [")}
+	if r := do(t, bad, env, with()...); r.code != 1 || !strings.Contains(r.errOut, "distribution.yaml") {
+		t.Errorf("a malformed manifest: %+v", r)
 	}
-	missing := fstest.MapFS{}
-	for k, v := range w {
-		missing[k] = v
-	}
-	delete(missing, "work/dist/dist.yaml")
-	if r := do(t, missing, env, with()...); r.code != 1 || !strings.Contains(r.errOut, "dist.yaml") {
-		t.Errorf("no dist.yaml: %+v", r)
+	// A home whose trust.yaml does not list the key that signed the manifest: render
+	// denies every row, as boot does (ADR-020 decision 12), and says how to recover.
+	untrusted := maps.Clone(w)
+	delete(untrusted, "work/home/trust.yaml")
+	if r := do(t, untrusted, env, with("--dump")...); r.code != 1 || !strings.Contains(r.errOut, "distributions of trust.yaml does not list") ||
+		!strings.Contains(r.errOut, "to recover") || !strings.Contains(r.out, "check 5 Trust: ") {
+		t.Errorf("an untrusted manifest: %+v", r)
 	}
 }
 

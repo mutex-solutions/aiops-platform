@@ -1,6 +1,6 @@
 # aiopsctl profile render --dump-hooks
-digest sha256:33ba62e6cebeac64414be5e3ad129218aa536573af75cd18b10fd964269d7747
+digest sha256:4c6174c37ece7aa8d3ac2d85479f3e1b237897151ce801d339c83bb03492f6ee
 roles worker
 
 hook approval/gates sealed to aiops/approval, aiops/tool-search
-  1. stage 10 (early) plugin aiops/tool-search row tools
+  1. stage 0 (early) plugin aiops/tool-search row tools

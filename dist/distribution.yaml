@@ -70,8 +70,8 @@ plugins:
         pluginApi: "0.2"
         definitions:
           configrefs: ["0.1"]
-          launch: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"configrefs":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"5087ce4defb95b405bf45b70160583e08cefd9b97ba1c803e18ab48a9f1e260d"},"name":"aiops/config-refs@0.1.0"}]}'
+          launch: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"configrefs":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"4338f681766cc664cf021ec0251bbfb679dfc9eb541668d32455cb3d8adc7aa6"},"name":"aiops/config-refs@0.1.0"}]}'
   aiops/loader:
     package: github.com/mutex-solutions/aiops-platform/loader
     manifest: |
@@ -105,9 +105,9 @@ plugins:
         pluginApi: "0.2"
         definitions:
           composition: ["0.1"]
-          launch: ["0.1"]
-          loader: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.1"},"loader":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"b2aff4f7c0f4b00e984208e99f62e3747d34521be663f3e7cdacd127afb7cbb2"},"name":"aiops/loader@0.1.0"}]}'
+          launch: ["0.2"]
+          loader: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"},"loader":{"version":"0.2","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"8356dadb407bc01cd638cfdc0e97c679b29cf785ca4a7a31a06c67afd22a3354"},"name":"aiops/loader@0.1.0"}]}'
   aiops/readiness:
     package: github.com/mutex-solutions/aiops-platform/plugins/readiness
     manifest: |
@@ -147,9 +147,9 @@ plugins:
         pluginApi: "0.2"
         definitions:
           composition: ["0.1"]
-          launch: ["0.1"]
+          launch: ["0.2"]
           reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.1"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"8e8234d6d96b9e0c8eca6c264240fd7f3b76eff1d411f15a959389f26982e601"},"name":"aiops/readiness@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"d1ba88db6cabf426b251beb507113dfd0cc7c0889b6cb268b9ddcbaeb432d579"},"name":"aiops/readiness@0.1.0"}]}'
   aiops/reload:
     package: github.com/mutex-solutions/aiops-platform/plugins/reload
     manifest: |
@@ -188,10 +188,10 @@ plugins:
       requires:
         pluginApi: "0.2"
         definitions:
-          launch: ["0.1"]
-          loader: ["0.1"]
+          launch: ["0.2"]
+          loader: ["0.2"]
           reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.1"},"loader":{"version":"0.1"},"reload":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"7ee8382ee28313c9216fce11c88007636169075fd02636f6e92f6fcd18aa16cf"},"name":"aiops/reload@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"f78268dc1c965cf1b3c9f9aa56ea379e56dc0047731e3f2862b31b62132d2af1"},"name":"aiops/reload@0.1.0"}]}'
   aiops/restart-policy:
     package: github.com/mutex-solutions/aiops-platform/plugins/restart-policy
     manifest: |
@@ -252,9 +252,9 @@ plugins:
         definitions:
           clock: ["0.1"]
           composition: ["0.1"]
-          launch: ["0.1"]
+          launch: ["0.2"]
           reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.1"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"8e201015daee5a969bab6db8eac02bed4cf1216a852aa249ae431086a521bb8e"},"name":"aiops/restart-policy@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9940eb1bb1ae58832431be34643791b9df0615916d6d1e9e9bec3d80bacd0c23"},"name":"aiops/restart-policy@0.1.0"}]}'
 modules:
   - path: github.com/mutex-solutions/aiops-platform
     licence: Apache-2.0
@@ -391,7 +391,8 @@ serves:
             provider: bound
             consumer: open
     launch:
-      - version: "0.1"
+      - version: "0.2"
+        compatibleFrom: "0.1"
         suite: 1
         classes:
           appExit:
@@ -413,7 +414,8 @@ serves:
             provider: bound
             consumer: open
     loader:
-      - version: "0.1"
+      - version: "0.2"
+        compatibleFrom: "0.1"
         suite: 1
         classes:
           loader:

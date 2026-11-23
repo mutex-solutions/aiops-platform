@@ -16,9 +16,10 @@ const MaxDistBytes = 16 << 20
 
 // Distribution is a signed distribution manifest as read (ADR-060 decision 20): what
 // the builder writes for a release or a site, the binary embeds, dist sign signs and
-// dist use records by Digest, the SHA-256 of its bytes (ADR-020 decision 12). It
-// gives way to the S1 stand-ins dist.yaml and modules.yaml (dist.go). One YAML
-// document, every field required but site, each set written sorted:
+// dist use records by Digest, the SHA-256 of its bytes (ADR-020 decision 12). Boot and
+// profile render read the module table and the bindings from it, in place of the S1
+// stand-ins dist.yaml and modules.yaml; dist.yaml is the builder's input (dist.go). One
+// YAML document, every field required but site, each set written sorted:
 //
 //	distVersion: 1
 //	plugins:                  the module table (07-c4-plugin-sdk.md:1344)
@@ -163,6 +164,52 @@ func ReadDistribution(file string, data []byte) (Distribution, error) {
 		return Distribution{}, r.err
 	}
 	return d, nil
+}
+
+// Table returns the module table that d lists, with no Go value, as profile render
+// reads it: each plugin's entry as its manifest declares it (Manifest.Entry), placed
+// (place). A plugin whose manifest does not read keeps its id alone, and gate check 1
+// denies its rows.
+func (d Distribution) Table() ModuleTable {
+	t := ModuleTable{}
+	for id, p := range d.Plugins {
+		m, _ := ReadManifest("plugin.yaml of "+id, p.Manifest, ManifestLenient)
+		e := m.Entry()
+		e.ID = id
+		t[id] = e
+	}
+	return d.place(t)
+}
+
+// place returns a copy of t in which each plugin that d lists has the module of d that
+// holds its package, the longest path that is the package or a prefix of it, which
+// enters the digest; and each declared stage its ordinal in the chain of its hook,
+// which serves holds, -1 for a stage that serves does not (ADR-060 decision 7).
+func (d Distribution) place(t ModuleTable) ModuleTable {
+	stages := map[string][]string{}
+	for _, sd := range servedDefinitions(&d) {
+		for h, sv := range sd.Hooks {
+			stages[h] = sv.Stages
+		}
+	}
+	out := ModuleTable{}
+	for id, e := range t {
+		if p, ok := d.Plugins[id]; ok {
+			var m GoModule
+			for _, x := range d.Modules {
+				if (p.Package == x.Path || strings.HasPrefix(p.Package, x.Path+"/")) && len(x.Path) > len(m.Path) {
+					m = x.GoModule
+				}
+			}
+			e.Module, e.Version, e.Sum = m.Path, m.Version, m.Sum
+		}
+		e.Hooks = slices.Clone(e.Hooks)
+		for i, h := range e.Hooks {
+			e.Hooks[i].Stage = slices.Index(stages[h.Hook], h.StageName)
+		}
+		out[id] = e
+	}
+	return out
 }
 
 // distBindings reads bindings or site; each field is optional.

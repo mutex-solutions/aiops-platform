@@ -27,5 +27,5 @@ requires:
   pluginApi: "0.2"
   definitions:
     clock: ["0.1"]
-    launch: ["0.1"]
+    launch: ["0.2"]
     reload: ["0.1"]

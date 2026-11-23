@@ -1,0 +1,17 @@
+manifestVersion: "1.0"
+id: aiops/kek-local
+version: 0.1.0
+title: Local key encryption key
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses: []
+provides:
+  - {key: kek, major: 0}
+registers: []
+hooks: []
+configSchema: {}
+durable: []
+requires: {pluginApi: "0.1", definitions: {}}

@@ -1,38 +1,22 @@
 package boot
 
 import (
-	"cmp"
-	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
 
-// The S1 readers of the two distribution files. The documents do not say
-// where the CLI gets the module table and the distribution manifest before
-// the builder of S2a generates them (08-profiles-roadmap-adrs.md:402), so S1
-// reads two small YAML files through the same strict reader as the layers
-// (ADR-059 decision 6). They are an S1 stand-in, not the signed manifest.
-//
-// dist.yaml, the part of the distribution manifest the launcher reads
-// (08-profiles-roadmap-adrs.md:451; 07-c4-plugin-sdk.md:1340):
+// dist.yaml is the builder's input: the bindings and the required set of a
+// distribution, from which the builder writes them into the signed distribution
+// manifest (ADR-060 decision 20; Distribution). It is read through the same strict
+// reader as the layers (ADR-059 decision 6):
 //
 //	providers:     {<key>: [<plugin id>, ...]}   provider-bound keys
 //	consumers:     {<key>: [<plugin id>, ...]}   consumer-bound keys
 //	sealedHooks:   {<hook>: [<plugin id>, ...]}  who may listen on a sealed hook
 //	requiredKeys:  [<key>, ...]
 //	requiredRows:  [<row id>, ...]
-//
-// modules.yaml, one entry per plugin of the module table:
-//
-//	<plugin id>:
-//	  module: <Go module path>     version: <v>     sum: <h1:...>
-//	  provides: [<key>]  needs: [<key>]  wants: [<key>]
-//	  volatile: [<config path>]    a path under config, "config." is implied
-//	  hooks: [{hook: <name>, stage: <ordinal>, name: <stage name>}]   one per hook and stage
-//	  classes: {providerBound: [<key>], consumerBound: [<key>], sealedHooks: [<hook>]}
 
 // ParseDist reads dist.yaml.
 func ParseDist(file string, data []byte) (DistManifest, error) {
@@ -70,156 +54,6 @@ func ParseDist(file string, data []byte) (DistManifest, error) {
 		}
 	}
 	return d, nil
-}
-
-// ParseModules reads modules.yaml.
-func ParseModules(file string, data []byte) (ModuleTable, error) {
-	root, err := parseDocument(file, data)
-	if err != nil {
-		return nil, err
-	}
-	p := &parser{file: file}
-	prs, err := p.pairs(root, "", "modules.yaml")
-	if err != nil {
-		return nil, err
-	}
-	t := make(ModuleTable, len(prs))
-	for _, pr := range prs {
-		if !okPlugin(pr.key) || strings.HasPrefix(pr.key, "core:") {
-			return nil, p.err(pr.k, RuleSyntaxID, pr.key, "plugin id %q is not <owner>/<name>", pr.key)
-		}
-		e, err := p.module(pr)
-		if err != nil {
-			return nil, err
-		}
-		t[pr.key] = e
-	}
-	return t, nil
-}
-
-func (p *parser) module(pr pair) (ModuleEntry, error) {
-	fields, err := p.pairs(pr.v, pr.key, "a module entry")
-	if err != nil {
-		return ModuleEntry{}, err
-	}
-	e := ModuleEntry{ID: pr.key}
-	for _, f := range fields {
-		switch f.key {
-		case "module":
-			e.Module, err = p.text(f.v, pr.key, "module")
-		case "version":
-			e.Version, err = p.text(f.v, pr.key, "version")
-		case "sum":
-			e.Sum, err = p.text(f.v, pr.key, "sum")
-		case "provides":
-			e.Provides, err = p.set(f.v, pr.key, "provides", okIdent)
-		case "needs":
-			e.Needs, err = p.set(f.v, pr.key, "needs", okIdent)
-		case "wants":
-			e.Wants, err = p.set(f.v, pr.key, "wants", okIdent)
-		case "volatile":
-			e.Volatile, err = p.set(f.v, pr.key, "volatile", okPath)
-			for i, v := range e.Volatile {
-				if v != "config" && !strings.HasPrefix(v, "config.") && !strings.HasPrefix(v, "config[") {
-					e.Volatile[i] = "config." + v
-				}
-			}
-			sort.Strings(e.Volatile)
-		case "hooks":
-			e.Hooks, err = p.hooks(f.v, pr.key)
-		case "classes":
-			e.Classes, err = p.classes(f.v, pr.key)
-		default:
-			err = p.err(f.k, RuleUnknownField, pr.key, "unknown field %q in a module entry", f.key)
-		}
-		if err != nil {
-			return ModuleEntry{}, err
-		}
-	}
-	return e, nil
-}
-
-// classes reads the classes of a module entry: the keys and hooks of it whose
-// definitions bind or seal them.
-func (p *parser) classes(n *yaml.Node, row string) (*ModuleClasses, error) {
-	fields, err := p.pairs(n, row, "classes")
-	if err != nil {
-		return nil, err
-	}
-	c := &ModuleClasses{}
-	for _, f := range fields {
-		switch f.key {
-		case "providerBound":
-			c.ProviderBound, err = p.set(f.v, row, "providerBound", okIdent)
-		case "consumerBound":
-			c.ConsumerBound, err = p.set(f.v, row, "consumerBound", okIdent)
-		case "sealedHooks":
-			c.SealedHooks, err = p.set(f.v, row, "sealedHooks", okHook)
-		default:
-			err = p.err(f.k, RuleUnknownField, row, "unknown field %q in classes", f.key)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	return c, nil
-}
-
-func (p *parser) hooks(n *yaml.Node, row string) ([]HookDecl, error) {
-	if err := p.guard(n, row); err != nil {
-		return nil, err
-	}
-	if n.Kind != yaml.SequenceNode {
-		return nil, p.err(n, RuleType, row, "hooks must be a list")
-	}
-	var out []HookDecl
-	seen := map[HookDecl]bool{} // keyed by hook and stage, as the kernel keys a HookUse
-	for _, c := range n.Content {
-		prs, err := p.pairs(c, row, "a hook")
-		if err != nil {
-			return nil, err
-		}
-		var h HookDecl
-		named := false
-		for _, f := range prs {
-			switch f.key {
-			case "hook":
-				h.Hook, err = p.text(f.v, row, "hook")
-				if err == nil && !okHook(h.Hook) {
-					err = p.err(f.v, RuleSyntaxID, row, "hook %q is not a hook name", h.Hook)
-				}
-				named = err == nil
-			case "stage":
-				var s string
-				if s, err = p.plain(f.v, row, "stage"); err == nil {
-					var i int64
-					if i, err = strconv.ParseInt(s, 10, 32); err != nil || i < 0 {
-						err = p.err(f.v, RuleType, row, "stage %q is not a non-negative integer", s)
-					}
-					h.Stage = int(i)
-				}
-			case "name":
-				h.StageName, err = p.text(f.v, row, "name")
-			default:
-				err = p.err(f.k, RuleUnknownField, row, "unknown field %q in a hook", f.key)
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-		if !named {
-			return nil, p.err(c, RuleType, row, "a hook states hook")
-		}
-		if seen[h] {
-			return nil, p.err(c, RuleDuplicateKey, row, "hook %q is listed twice at one stage", h.Hook)
-		}
-		seen[h] = true
-		out = append(out, h)
-	}
-	slices.SortFunc(out, func(a, b HookDecl) int {
-		return cmp.Or(strings.Compare(a.Hook, b.Hook), cmp.Compare(a.Stage, b.Stage), strings.Compare(a.StageName, b.StageName))
-	})
-	return out, nil
 }
 
 // set reads a list of strings that satisfy valid, as a sorted set.

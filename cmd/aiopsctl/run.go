@@ -22,9 +22,9 @@ const (
 const usage = `usage: aiopsctl profile render --profile <name> --dist <dir> [flags]
 
   --profile <name>        profile to compose (required)
-  --home <dir>            home with profiles/<name>/ (default $AIOPS_HOME)
+  --home <dir>            home with profiles/<name>/, trust.yaml and verified/ (default $AIOPS_HOME)
   --bundles <dir>         directory with bundles/<name>/bundle.yaml (default: the home)
-  --dist <dir>            directory with dist.yaml and modules.yaml (required)
+  --dist <dir>            directory with distribution.yaml, the signed distribution manifest (required)
   --patch <file>          layer 4 overlay; repeat for several
   --role <role>           edge, api or worker; repeat or comma-separate (default: all)
   --server                every inserted row must state roles
@@ -79,7 +79,7 @@ func run(args []string, _ io.Reader, stdout, stderr io.Writer, fsys fs.FS, env f
 		*bundles = *home
 	}
 	c := &cli{fsys: fsys, pwd: strings.TrimPrefix(path.Clean("/"+env("PWD")), "/")}
-	mods, d, err := c.readDist(*dist)
+	d, err := c.readDist(*dist)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitRefused
@@ -88,22 +88,17 @@ func run(args []string, _ io.Reader, stdout, stderr io.Writer, fsys fs.FS, env f
 	for _, p := range patches {
 		src.Patches = append(src.Patches, c.file(p))
 	}
-	comp, warns, err := boot.Compose(src, boot.Options{Server: *server, Modules: mods})
+	// Render composes and admits as boot does, with the loader's row, whose id no row of
+	// a profile may take (03-c3-kernel.md:64), on what the home holds.
+	a, warns, err := boot.Render(src, *server, d, rs)
+	for _, w := range warns {
+		fmt.Fprintf(stderr, "warning: %s\n", w)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return exitRefused
 	}
-	for _, w := range warns {
-		fmt.Fprintf(stderr, "warning: %s\n", w)
-	}
-	// boot mounts the loader itself and admits the composition with the loader's row,
-	// whose id no row of a profile may take (03-c3-kernel.md:64): render does the same.
-	if err := boot.CheckReserved(comp); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return exitRefused
-	}
-	a := boot.Admit(boot.WithLoader(comp), mods, d, rs)
-	for _, line := range a.Diagnostics() {
+	for _, line := range append(a.Prints, a.Diagnostics()...) {
 		fmt.Fprintln(stderr, line)
 	}
 	var out []section
@@ -181,21 +176,11 @@ func (c *cli) file(p string) boot.File {
 	return boot.File{FS: c.fsys, Path: c.rooted(p)}
 }
 
-// readDist reads dist.yaml and modules.yaml from a directory.
-func (c *cli) readDist(dir string) (boot.ModuleTable, boot.DistManifest, error) {
-	d := c.sub(dir)
-	md, err := fs.ReadFile(d, "modules.yaml")
+// readDist reads distribution.yaml, the signed distribution manifest, from a directory.
+func (c *cli) readDist(dir string) (boot.Distribution, error) {
+	data, err := fs.ReadFile(c.sub(dir), "distribution.yaml")
 	if err != nil {
-		return nil, boot.DistManifest{}, err
+		return boot.Distribution{}, err
 	}
-	mods, err := boot.ParseModules("modules.yaml", md)
-	if err != nil {
-		return nil, boot.DistManifest{}, err
-	}
-	dd, err := fs.ReadFile(d, "dist.yaml")
-	if err != nil {
-		return nil, boot.DistManifest{}, err
-	}
-	dist, err := boot.ParseDist("dist.yaml", dd)
-	return mods, dist, err
+	return boot.ReadDistribution("distribution.yaml", data)
 }

@@ -52,15 +52,15 @@ type Module struct {
 // Entry returns the boot.ModuleEntry of the module, read from its manifest with the
 // gate's lenient reader (ADR-048 decisions 15 and 18): what it provides, uses and
 // listens on, and the volatile paths of its configSchema, so no list of them is
-// written by hand (ADR-060 decision 4). The module path and version are those of the
-// repository's own root module. Run checks the entry against the plugin.
+// written by hand (ADR-060 decision 4). Boot takes the module of each entry from the
+// signed distribution manifest. Run checks the entry against the plugin.
 func (m Module) Entry() (boot.ModuleEntry, error) {
 	man, err := boot.ReadManifest("plugin.yaml of "+m.Plugin.ID, m.Manifest, boot.ManifestLenient)
 	if err != nil {
 		return boot.ModuleEntry{}, err
 	}
 	e := man.Entry()
-	e.Module, e.Version, e.Plugin = ModulePath, Version, m.Plugin
+	e.Plugin = m.Plugin
 	return e, nil
 }
 
@@ -70,12 +70,8 @@ func Manifest(fsys fs.FS, dir string) []byte {
 	return b
 }
 
-// ModulePath and Version stand in for the module data that the builder will read from
-// go.mod and the lock file.
-const (
-	ModulePath = "github.com/mutex-solutions/aiops-platform"
-	Version    = "v0.0.0-s1"
-)
+// ModulePath is the path of the repository's root module.
+const ModulePath = "github.com/mutex-solutions/aiops-platform"
 
 // Table builds the module table and the registry around it from a list of modules,
 // each entry under the id of its manifest. The test distribution calls it with this

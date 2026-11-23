@@ -270,11 +270,11 @@ func (r *run) run(ctx context.Context) int {
 	if !ok || o.Registry.LoaderConfig == nil {
 		return r.fail(ExitRefused, "distribution: the module table has no %s or no LoaderConfig", LoaderID)
 	}
-	mods := o.Registry.Modules
 	signed, err := ReadDistribution("the embedded distribution manifest", o.Signed)
 	if err != nil {
 		return r.fail(ExitRefused, "distribution: %v", err)
 	}
+	mods := signed.place(o.Registry.Modules)
 	dist := signed.Bindings()
 	tie, tied := tieModules(signed, o.BuildInfo)
 

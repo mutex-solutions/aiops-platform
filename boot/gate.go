@@ -96,8 +96,8 @@ type Entry string
 
 // The entry points. EntryInstall is install of in-process code before the rebuild
 // and of every pack, EntryInstallUsed install after dist use. EntryBoot is boot and
-// every live generation (profileContext.Admit). EntryRender is the S1 form of
-// profile render, which reads the stand-ins dist.yaml and modules.yaml.
+// every live generation (profileContext.Admit). EntryRender is aiopsctl profile render,
+// which reads what boot reads with no binary that runs the module table (Render).
 const (
 	EntryBuild       Entry = "dist build"
 	EntryCheck       Entry = "plugin check"
@@ -108,16 +108,23 @@ const (
 	EntryRender      Entry = "profile render"
 )
 
-// notEvaluated returns the clauses that entry e does not evaluate, each with the
-// reason, keyed by the check number, alone for the whole check or with the clause's
-// name (ADR-060 decision 17; ADR-020 decision 30, reading 3).
-func notEvaluated(e Entry) map[string]string {
+// notEvaluated returns the clauses that the entry point of in does not evaluate, each
+// with the reason, keyed by the check number, alone for the whole check or with the
+// clause's name (ADR-060 decision 17; ADR-020 decision 30, reading 3). Given no signed
+// distribution manifest, the gate evaluates what the module table and the bindings
+// decide only.
+func notEvaluated(in GateInput) map[string]string {
 	const (
 		noProfile = "no profile is composed"
 		noSigner  = "no signer is recorded for what it reads: a first-party row passes, any other is not evaluated (ADR-020 decision 30, reading 3)"
-		standIn   = "the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)"
+		noDist    = "no signed distribution manifest is given"
+		noBinary  = "no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12)"
 	)
-	switch e {
+	if in.Dist == nil {
+		return map[string]string{"1": noDist, "2": noDist, "4": noDist, "5": noDist, "6": noDist, "7 signed": noDist, "7 fake": noDist,
+			"8 installed": noDist, "10": noDist}
+	}
+	switch in.Entry {
 	case EntryBuild:
 		return map[string]string{"4": noProfile, "8": noProfile, "7 signed": noSigner,
 			"5":  "the manifest it would read is the build's output, and dist use records its signer",
@@ -131,8 +138,7 @@ func notEvaluated(e Entry) map[string]string {
 		return map[string]string{"6": "in-process code has no build list yet",
 			"5 module": "in-process code: when every evaluated clause passes, install answers rebuild-required"}
 	case EntryRender:
-		return map[string]string{"1": standIn, "2": standIn, "4": standIn, "5": standIn, "6": standIn, "7 signed": standIn, "7 fake": standIn,
-			"8 installed": standIn, "10": standIn}
+		return map[string]string{"5 tie": noBinary, "10 tie": noBinary}
 	}
 	return nil
 }
@@ -245,12 +251,6 @@ func (g GateResult) Admitted(c Composition) Composition {
 	return out
 }
 
-// Gate runs the ten checks on a composition as the S1 form of profile render does,
-// on the stand-ins dist.yaml and modules.yaml (EntryRender).
-func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
-	return GateWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist})
-}
-
 // GateWith runs the ten checks on a composition at the entry point in.Entry, on what
 // that entry point holds. See the file comment.
 func GateWith(c Composition, in GateInput) GateResult {
@@ -285,7 +285,7 @@ func GateWith(c Composition, in GateInput) GateResult {
 			g.feeds[a] = append(g.feeds[a], r.Plugin)
 		}
 	}
-	open := notEvaluated(in.Entry)
+	open := notEvaluated(in)
 	res := GateResult{Entry: in.Entry, Slots: make([]Slot, NumChecks)}
 	for i, info := range GateChecks() {
 		n := strconv.Itoa(info.N)
@@ -393,16 +393,14 @@ type gate struct {
 // HookUse.Sealed; ADR-059 decision 20): the keys of the root and of the definitions boot
 // imports, the hooks of the kernel and the loader, and the keys and hooks that the
 // plugins of the module table provide, inject and listen on. Where the module table
-// holds no Go value, the classes come from the definition data that serves of the
-// signed distribution manifest carries (ADR-060 decision 14), a signed key counting as
-// consumer-bound as kernel.KeyClasses reports it, or from an entry read from
-// modules.yaml (ModuleClasses). The definition test holds the two equal. dist.yaml
-// lists only who is allowed.
+// holds no Go value, as at profile render, the classes come from the definition data
+// that serves of the signed distribution manifest carries (ADR-060 decision 14), a
+// signed key counting as consumer-bound as kernel.KeyClasses reports it. The definition
+// test holds the two equal. The bindings list only who is allowed.
 //
-// ponytail: a key or hook that no definition names, or that only an entry of
-// modules.yaml with no classes names, is bound or sealed when dist.yaml lists who may
-// hold it, as the kernel takes a binding of a bound key and a listener list of a sealed
-// hook only; the signed manifest carries every class.
+// ponytail: a key or hook that no definition names is bound or sealed when the
+// bindings list who may hold it, as the kernel takes a binding of a bound key and a
+// listener list of a sealed hook only; the signed manifest carries every class.
 func classesOf(mods ModuleTable, dist DistManifest, d *Distribution) (pb, cb, sh map[string]bool) {
 	pb, cb, sh = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, b := range dist.Providers {
@@ -431,22 +429,13 @@ func classesOf(mods ModuleTable, dist DistManifest, d *Distribution) (pb, cb, sh
 	}
 	keys := knownKeys()
 	for _, e := range mods {
-		p, ok := e.Plugin.(kernel.Plugin)
-		switch {
-		case ok:
+		if p, ok := e.Plugin.(kernel.Plugin); ok {
 			keys = append(keys, p.Provides...)
 			for _, d := range p.Inject {
 				keys = append(keys, d.Key())
 			}
 			for _, u := range p.Hooks {
 				sh[u.Hook()] = u.Sealed()
-			}
-		case e.Classes != nil:
-			for _, n := range slices.Concat(e.Provides, e.Needs, e.Wants) {
-				key(n, slices.Contains(e.Classes.ProviderBound, n), slices.Contains(e.Classes.ConsumerBound, n))
-			}
-			for _, h := range e.Hooks {
-				sh[h.Hook] = slices.Contains(e.Classes.SealedHooks, h.Hook)
 			}
 		}
 	}

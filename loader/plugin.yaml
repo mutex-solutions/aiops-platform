@@ -28,5 +28,5 @@ requires:
   pluginApi: "0.2"
   definitions:
     composition: ["0.1"]
-    launch: ["0.1"]
-    loader: ["0.1"]
+    launch: ["0.2"]
+    loader: ["0.2"]

@@ -18,12 +18,30 @@ type Admission struct {
 	Required RequiredSet
 	Errors   []StaticError
 	Warnings []StaticWarning
+	// Prints are the lines that boot prints at every boot (bootInput), set by Render.
+	Prints []string
 }
 
-// Admit admits as the S1 form of profile render does, on the stand-ins dist.yaml and
-// modules.yaml (EntryRender).
-func Admit(c Composition, mods ModuleTable, dist DistManifest, roles []Role) Admission {
-	return AdmitWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist}, roles)
+// Render composes and admits a profile as boot does, for aiopsctl profile render
+// (08-profiles-roadmap-adrs.md:357): on the module table that the signed distribution
+// manifest d lists (Distribution.Table) and on what the home of src holds, trust.yaml,
+// the records of dist use, plugins.lock and what install kept (bootInput), at
+// EntryRender. It returns the admission and the warnings of Compose.
+func Render(src Sources, server bool, d Distribution, roles []Role) (Admission, []Warning, error) {
+	mods := d.Table()
+	c, warns, err := Compose(src, Options{Server: server, Modules: mods, Locks: lockDigests(src.Home, src.Profile)})
+	if err == nil {
+		err = CheckReserved(c)
+	}
+	if err != nil {
+		return Admission{}, warns, err
+	}
+	w := WithLoader(c)
+	in, prints := bootInput(src.Home, src.Profile, w, mods, d, nil, nil)
+	in.Entry = EntryRender
+	a := AdmitWith(w, in, roles)
+	a.Prints = prints
+	return a, warns, nil
 }
 
 // AdmitWith runs the gate on the composition at the entry point of in, builds the
