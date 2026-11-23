@@ -1328,6 +1328,11 @@ to a question, the decision here settles it.
        binary (`go list -deps`), which the builder and gate check 7 read. It edits
        `00:262`, `07:47` and `08:1258`.
 
+    Option (a) placed each edit with the code that builds it. The edits of the four
+    readings are made with this record instead, because reading 4 edits `00` and `00` is
+    edited in the commit that records the answer (`08:996`); readings 1 to 3 are made
+    with it.
+
 **Edits made with this record.** `00` is edited in the commit that records the answer
 (`08:996`), and that commit makes the edits the chosen options name: `00:208`, `:262` and
 `:571`; `01:290`; `07:23`, `:28-31`, `:47`, `:51`, `:1576`, `:1853`, `:1861` and
@@ -1342,8 +1347,8 @@ name of their date. The lines that placed the toy definitions under `examples/` 
 edited to decision 39: `00:571`, `07:19` and `:36`, `08:694`, and the plugin record in
 §5 (the catalogue row) and §16. Readings 2 and 4 of decision 58 also edit the lines
 that restate them: `inspect` in plugin record §12, and the package graph in `02:207` and
-in plugin record §5 ("Modules and import boundary"). The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
-to later commits: the `go.mod` lines of decision 54, with the code that moves the module
-root; the one exit text of decision 30; and the one gate text of decision 16, which
-carries the check 8 clause of decision 57. An option the owner did not choose edits
-nothing.
+in plugin record §5 ("Modules and import boundary"). The ADR table of `08` §3 lists
+this ADR, and the next free number is ADR-061. Left to later commits: the `go.mod` lines
+of decision 54, with the code that moves the module root; the one exit text of decision
+30; and the one gate text of decision 16, which carries the check 8 clause of decision
+57. An option the owner did not choose edits nothing.
