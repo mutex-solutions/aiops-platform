@@ -444,22 +444,21 @@ gaps:
     it. `aiopsctl` creates the home and `run/` with mode 0700, writes each file with mode
     0600 and replaces it by a rename in its directory, except `write.lock`, which it
     creates once with mode 0600 and never renames or deletes, since the lock binds to one
-    inode (ADR-061 decision 19), and refuses to write into a home
-    whose owner is not its effective user, so a run as another user cannot leave a file
-    that the kernel cannot read. The kernel, as a binary or as a container, runs with the
-    uid and gid of the home's owner as the host sees them. For a container that is a
-    property of the runtime's user mapping, not of the image: the container runtime of the
-    exit's clean machine (ADR-060 decision 30) is rootful Docker, run with `--user
-    <uid>:<gid>` of the owner, and any other runtime and mode qualifies whose mapping
-    gives the same, such as rootless Podman with
-    `--userns=keep-id`. A mapping to a subordinate uid of the host cannot read a 0600 file
-    of the home, and boot then fails on the first file it reads. On a host with SELinux
-    enforcing, each bind of decision 15 also needs a label the container may read (the
-    `z` option of the bind in Docker and Podman), which the exit does not test. Only the
-    site user can then open `run/reload.sock`, the socket of ADR-062, and no other
-    unprivileged user of the host reads or changes a
-    file of the home between install and boot. Any protection of the records of install
-    and `dist use` beyond that is ADR-020's (`07:75` R17).
+    inode (ADR-061 decision 19), and refuses to write into a home whose owner is not its
+    effective user, so a run as another user cannot leave a file that the kernel cannot
+    read. The kernel, as a binary or as a container, runs with the uid and gid of the
+    home's owner as the host sees them. For a container that is a property of the
+    runtime's user mapping, not of the image: the container runtime of the exit's clean
+    machine (ADR-060 decision 30) is rootful Docker, run with `--user <uid>:<gid>` of the
+    owner, and any other runtime and mode qualifies whose mapping gives the same, such as
+    rootless Podman with `--userns=keep-id`. A mapping to a subordinate uid of the host
+    cannot read a 0600 file of the home, and boot then fails on the first file it reads.
+    On a host with SELinux enforcing, each bind of decision 15 also needs a label the
+    container may read (the `z` option of the bind in Docker and Podman), which the exit
+    does not test. Only the site user can then open `run/reload.sock`, the socket of
+    ADR-062, and no other unprivileged user of the host reads or changes a file of the
+    home between install and boot. Any protection of the records of install and `dist use`
+    beyond that is ADR-020's (`07:75` R17).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
     has on the host, read-only; `run/` bound over it at the same path, read-write; the

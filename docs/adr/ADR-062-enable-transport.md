@@ -881,8 +881,8 @@ options name: `00:275`; the text under the figure `02-plugin-distribution`
 harness:58; plugin record §15, its row 64 and its counts; ADR-047 decisions 10, 13 and
 14; ADR-059 decision 52; and ADR-060 decisions 30 (step C4), 36 and 48. The same commit
 keeps the lines that restate them consistent: the counts of the dsh table at `00:91`;
-the lists of vet's rules at `00:297` and in plugin record §14, which restate
-`08:1258`; `enable` and `disable` in plugin record §12, which restates `08:375`; and reading 1 of
+the lists of vet's rules at `00:297` and in plugin record §14, which restate `08:1258`;
+`enable` and `disable` in plugin record §12, which restates `08:375`; and reading 1 of
 ADR-060 decision 58, which `07:1578` restates. Left to later commits: the row of this
 ADR in the ADR table of `08` §3, and the next free number at `08:997`, to the commit
 that brings that table to the ADRs accepted on 2026-11-23; and the lines of ADR-061 that

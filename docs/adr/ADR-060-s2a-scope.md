@@ -403,17 +403,17 @@ gaps:
     template files carry names the Go tool does not build (`07:1549`; `08:1218`). S2a
     writes a Go template for each registry that exists, `echoers`, `stampers` and
     `commands` (ADR-061 decision 6), with the files of `07:1551-1559`, and the
-    connector-pack template with `runtimes: []` (`08:897`, `:1263`). The connector template names no plugin id: `plugin new
-    connector` writes rows of an instantiable plugin of the release it runs against
-    (`--against`, by default the release this `aiopsctl` was built from), with a config
-    taken from the examples of that plugin's `configSchema`. At S2a the template job and
-    step P1 run it against the exit's test release, whose one instantiable plugin is the
-    toy echoer of question Q2; from S8a the release table holds `tool-mcp` and the job
-    runs it against the release too. No shipped binary depends on a test-only id.
-    `--contrib` writes the `contrib` owner (`08:407`). The CI template job generates a
-    plugin from each template and asserts that it compiles, passes T0 and the generated
-    tests, and fails conformance with exactly one line per obligation (`08:1263`;
-    `07:1561`).
+    connector-pack template with `runtimes: []` (`08:897`, `:1263`). The connector
+    template names no plugin id: `plugin new connector` writes rows of an instantiable
+    plugin of the release it runs against (`--against`, by default the release this
+    `aiopsctl` was built from), with a config taken from the examples of that plugin's
+    `configSchema`. At S2a the template job and step P1 run it against the exit's test
+    release, whose one instantiable plugin is the toy echoer of question Q2; from S8a the
+    release table holds `tool-mcp` and the job runs it against the release too. No shipped
+    binary depends on a test-only id. `--contrib` writes the `contrib` owner (`08:407`).
+    The CI template job generates a plugin from each template and asserts that it
+    compiles, passes T0 and the generated tests, and fails conformance with exactly one
+    line per obligation (`08:1263`; `07:1561`).
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
