@@ -203,20 +203,44 @@ gaps:
    modules, and its packages import only these, each read in that module at that version:
    - `github.com/opencontainers/image-spec@v1.1.1`, the packages `specs-go` and
      `specs-go/v1`: `LICENSE` is the Apache License 2.0 with "Copyright 2016 The Linux
-     Foundation". Its `go.mod` also requires `github.com/russross/blackfriday@v1.6.0` and
-     `github.com/santhosh-tekuri/jsonschema/v5@v5.3.1`, which only its `schema` package
-     imports. No package of `oras-go` imports `schema`, so neither module is in the package
-     graph that the licence scan reads (licence:204); their licences are not read here.
+     Foundation". Its `go.mod` also requires two modules that only its `schema` package
+     imports, and no package of `oras-go` imports `schema`. They enter the module graph
+     and `go.sum` but not the package graph. Both licences are on the L7 allow-list
+     (`08:1336`), so the scan passes whether it reads the package graph (L7; licence:204)
+     or the build list (L16, `08:1345`):
+     - `github.com/russross/blackfriday@v1.6.0`: `LICENSE.txt` is the Simplified BSD
+       License (BSD-2-Clause) with "Copyright © 2011 Russ Ross"; its `go.mod` requires
+       nothing.
+     - `github.com/santhosh-tekuri/jsonschema/v5@v5.3.1`: `LICENSE` is the text of the
+       Apache License 2.0, sections 1 to 9, with no copyright line, and the module has no
+       `NOTICE` file; its `go.mod` requires nothing.
    - `github.com/opencontainers/go-digest@v1.0.0`: `LICENSE` is the Apache License 2.0
      with "Copyright 2019, 2020 OCI Contributors" and "Copyright 2016 Docker, Inc.". Beside
-     it, `LICENSE.docs` is Creative Commons Attribution-ShareAlike 4.0 International, for
-     the module's documentation. CC-BY-SA is denied in process until reviewed and recorded
-     by name (licence:203), and the scan reads each directory (licence:204). No
-     documentation of the module enters a binary, so its register entry records that file
-     by name as documentation only; accepting this ADR accepts that record.
+     it, in the directory of the package `digest`, `LICENSE.docs` is the text of Creative
+     Commons Attribution-ShareAlike 4.0 International, and the module's `README.md` says
+     that `README.md` and `CONTRIBUTING.md` are under "the Creative Commons Attribution
+     4.0 International License" set forth in that file. How the licence scan treats that
+     file is question Q6.
    - `golang.org/x/sync@v0.24.0`, the packages `errgroup` and `semaphore`: `LICENSE` is
      BSD-3-Clause with "Copyright 2009 The Go Authors", with the Go `PATENTS` grant. The
      root module already requires it at that version.
+
+   **The exit's registry.** The layout needs from a registry what the image specification
+   1.1 adds to a manifest: `artifactType`, an empty config blob, and layer types outside
+   the image layer types, all stored byte for byte. It needs the referrers API only if
+   ADR-020 makes the signature or the attestation an OCI referrer, and `oras-go` falls
+   back to the referrers tag schema where a registry has none (`registry/remote`,
+   `SetReferrersCapability`). The exit runs the registry program of
+   `github.com/distribution/distribution/v3@v3.1.2` (tag `v3.1.2`, published 2026-09-24),
+   read at that version: `LICENSE` is the Apache License 2.0 with its appendix left as the
+   template, so it carries no copyright line of its own, and the module has no `NOTICE`
+   file. Its handler of an OCI manifest keeps the pushed bytes and checks only that the
+   blob of each descriptor exists, whatever its media type (`manifest/ocischema`,
+   `registry/storage/ocimanifesthandler.go`), and the module has no referrers API, so the
+   exit reaches a referrer form, if ADR-020 picks one, through the tag schema. The image
+   that runs it is pinned by digest, with its register entry and the licences of its
+   layers, in the commit that adds the `s2a-exit` job, before S2a ends (ADR-060 decision
+   34).
 
 ### The install
 
@@ -404,9 +428,11 @@ gaps:
 - The layout, the media types and the annotation key are documented in the repository for
   third parties with the attestation type (ADR-060 decision 18). They become
   frozen-additive at their first publication, which waits for L14 (`08:1343`).
-- The root module gains `oras-go` and two modules through it; `golang.org/x/sync` is
-  already in its graph. The licence report of both binaries lists them (ADR-060 decision
-  36).
+- The root module gains `oras-go` and two modules through it, and two more in its module
+  graph and `go.sum` only; `golang.org/x/sync` is already in its graph. The licence report
+  of both binaries lists them (ADR-060 decision 36). The release builds pass only once
+  question Q6 is answered and the scanner follows the answer.
+- The exit runs a registry of Distribution v3.1.2, whose image is pinned with the job.
 - At S6a the read-only mount changes for the paths `plugin-manager` writes (decision 13).
 
 ## Edits on acceptance
@@ -427,6 +453,7 @@ in the same change:
 - The one gate text of ADR-060 decision 16: the clause of decision 11, and the clauses
   that the answers to questions Q3 and Q4 add.
 - The lines that an option of question Q2 other than (a) names.
+- The lines that the chosen option of question Q6 names.
 
 ## Questions for the owner
 
@@ -514,3 +541,28 @@ every artifact and become frozen-additive at their first publication.
 - Recommended: (a). It matches every other id of the platform. Neither prefix is
   registered, and nothing is published before L14 (`08:1343`), so the answer can change at
   no cost until then. Needed before `plugin pack` merges.
+
+**Q6. How does the licence scan treat `LICENSE.docs` of
+`github.com/opencontainers/go-digest@v1.0.0`?** The directory of the package `digest`,
+which `oras-go` links, holds `LICENSE` (Apache-2.0) and `LICENSE.docs`, a
+Creative Commons Attribution-ShareAlike 4.0 text for two documentation files (decision 4).
+No file under that text is compiled into a binary. L7 denies CC-BY-SA "until reviewed and
+recorded by name" and runs per directory (`08:1336`; licence:203, :204); check 6 and L16
+deny on the licence the scan detects, and the release distributions `aiops` and
+`aiops-contrib` take no acceptance (`08:502`, `:1345`). ADR-044 picks the scanner
+(`08:1381`), so what it reports for that directory is not read yet; if it reports
+CC-BY-SA-4.0, both release binaries fail their build, and no register entry can pass them.
+- (a) Record it by name in L7 among the licences allowed with a recorded condition:
+  CC-BY-SA-4.0 in `LICENSE.docs` of `github.com/opencontainers/go-digest`, for
+  documentation that enters no artifact. The record is an entry of the allow-list, as the
+  MCP composite is, and not an acceptance of a distribution; the scanner honours it, and
+  check 6 and L16 cite it. A case of the scanner's tests under ADR-044 scans that module.
+  Edits `08:1336` and licence:202.
+- (b) A general rule: per directory, the scan reads the licence files that cover the files
+  compiled into the binary, and records without scanning a licence file that the module's
+  own `LICENSE` or `README.md` limits to documentation. Edits `08:1336`, `:1345` and
+  licence:204. It covers the next module laid out the same way, and it narrows the
+  per-directory scan that exists to catch a second licence beside code.
+- Recommended: (a). The per-directory scan stays whole and admits one named file, so any
+  other CC-BY-SA file still fails the build. Needed before the first commit that links
+  `oras-go` merges (ADR-060 decision 34).
