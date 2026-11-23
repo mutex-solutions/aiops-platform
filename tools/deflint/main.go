@@ -90,7 +90,10 @@ func lint(root string, plugins []plugin) ([]string, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	var out []string
+	out, err := strays(root)
+	if err != nil {
+		return nil, 0, err
+	}
 	var typed []*definition // the definitions with a Go package to type-check
 	for _, d := range defs {
 		out = append(out, prefix(d, files(d))...)
@@ -203,6 +206,33 @@ func find(root string) ([]*definition, error) {
 		return nil, errors.New("no definition under sdk/def")
 	}
 	return out, nil
+}
+
+// strays names every Go package under sdk/def that the lint would not read: one that
+// is not a definition sdk/def/<name>/v<N>, its fake/ or its conformance/, and is not
+// under internal/. The Go tool builds nothing under testdata/.
+func strays(root string) ([]string, error) {
+	base := filepath.Join(root, "sdk", "def")
+	var out []string
+	err := filepath.WalkDir(base, func(p string, e os.DirEntry, err error) error {
+		if err != nil || !e.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(base, p)
+		seg := strings.Split(filepath.ToSlash(rel), "/")
+		switch {
+		case e.Name() == "testdata" || seg[0] == "internal":
+			return filepath.SkipDir
+		case len(goFiles(p, false))+len(goFiles(p, true)) == 0,
+			len(seg) == 2 && majorDir.MatchString(seg[1]),
+			len(seg) == 3 && majorDir.MatchString(seg[1]) && (seg[2] == "fake" || seg[2] == "conformance"):
+			return nil
+		}
+		out = append(out, filepath.ToSlash(filepath.Join("sdk", "def", rel))+": a Go package under sdk/def that is no definition "+
+			"sdk/def/<name>/v<N>, its fake/ or its conformance/, so the lint reads nothing of it ("+docRule+")")
+		return nil
+	})
+	return out, err
 }
 
 // goFiles returns the names of the .go files directly in dir, tests or not.
