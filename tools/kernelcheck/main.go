@@ -208,15 +208,15 @@ func sourceFiles(dir string) ([]string, error) {
 
 var wordToken = regexp.MustCompile(`[A-Za-z0-9]+`)
 
-// splitCamel splits "tenantID" into "tenant", "ID" and "HTTPServer" into
-// "HTTP", "Server".
+// splitCamel splits "tenantID" into "tenant", "ID", "HTTPServer" into "HTTP",
+// "Server" and "Kafka3" into "Kafka", "3".
 func splitCamel(s string) []string {
 	r := []rune(s)
 	var parts []string
 	start := 0
 	for i := 1; i < len(r); i++ {
 		prev, cur := r[i-1], r[i]
-		boundary := (unicode.IsLower(prev) || unicode.IsDigit(prev)) && unicode.IsUpper(cur) ||
+		boundary := unicode.IsLower(prev) && unicode.IsUpper(cur) || unicode.IsDigit(prev) != unicode.IsDigit(cur) ||
 			unicode.IsUpper(prev) && unicode.IsUpper(cur) && i+1 < len(r) && unicode.IsLower(r[i+1])
 		if boundary {
 			parts = append(parts, string(r[start:i]))
@@ -245,8 +245,27 @@ func readWords(wordlist string) (map[string]bool, error) {
 	return words, nil
 }
 
+// citations are the document names that the checked code cites. A citation names a
+// document, not a concept of the code, so its words are not checked.
+var citations = []string{"08-profiles-roadmap-adrs.md"}
+
+// inflections are the endings a banned word may carry and still be the word:
+// "tenants", "aliases", "tenanted", "tenanting".
+var inflections = []string{"", "s", "es", "ed", "ing"}
+
+// banned reports whether the lower-cased part w is a word of the list, as it is or
+// with one of the inflections.
+func banned(words map[string]bool, w string) bool {
+	for _, end := range inflections {
+		if stem, ok := strings.CutSuffix(w, end); ok && words[stem] {
+			return true
+		}
+	}
+	return false
+}
+
 func checkVocab(dir, wordlist string) error {
-	banned, err := readWords(wordlist)
+	words, err := readWords(wordlist)
 	if err != nil {
 		return err
 	}
@@ -261,10 +280,13 @@ func checkVocab(dir, wordlist string) error {
 			return err
 		}
 		for n, line := range strings.Split(string(src), "\n") {
+			for _, c := range citations {
+				line = strings.ReplaceAll(line, c, "")
+			}
 			// Underscores are not token characters, so they split too.
 			for _, tok := range wordToken.FindAllString(line, -1) {
 				for _, part := range splitCamel(tok) {
-					if w := strings.ToLower(part); banned[w] {
+					if w := strings.ToLower(part); banned(words, w) {
 						bad = append(bad, fmt.Sprintf("%s:%d: forbidden word %q", p, n+1, w))
 					}
 				}
