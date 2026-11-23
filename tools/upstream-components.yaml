@@ -1,0 +1,312 @@
+# The upstream register (ADR-054; 08-profiles-roadmap-adrs.md §5.1 L3; licence record
+# §7.2). One entry per upstream and per content source, with the keys of ADR-054
+# decision 3 and the values of decision 4; `exceptions`, the stated exceptions of
+# 00-decisions.md:267 (decision 9); `baseProviders`, the base provider allow-list
+# (decision 10). The register check U7 is `go run ./tools/register .` (decision 12).
+#
+# A dependency lands in one commit with its entry, its reading at the pinned version
+# and the row of the licence record (decisions 7 and 16). A version bump reads the
+# licence again in the same commit (decision 6). The entries at S2a are those of
+# decision 8 and the five items refused by name of decision 20.
+entries:
+  - id: go
+    names: [go, golang]
+    form: library
+    behind: none
+    pin: go1.26.8
+    licence: BSD-3-Clause
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64 LICENSE and PATENTS, read: "2026-11-23", version: go1.26.8}
+    mark: needs-approval
+    default: true
+
+  - id: go-toolchain
+    names: [go, golang]
+    form: process
+    behind: none
+    pin: go1.26.8
+    # Per directory (ADR-054 decision 8): BSD-3-Clause in LICENSE and in the vendored
+    # golang.org/x modules; Apache-2.0 in src/cmd/vendor/github.com/google/pprof; the
+    # OpenSSL and SSLeay licences, ISC and an Intel BSD-3-Clause text in
+    # src/crypto/internal/boring/LICENSE.
+    licence: BSD-3-Clause AND Apache-2.0 AND OpenSSL AND ISC
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "No binary links the BoringSSL objects: they need GOEXPERIMENT=boringcrypto and cgo, and every build runs with cgo off", row: L7}
+      - {condition: "The builder image that ships the toolchain carries every licence text of it, with the acknowledgments the OpenSSL and SSLeay licences ask", row: L7}
+    evidence:
+      - {source: "golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64 LICENSE, PATENTS and the licence files under src/", read: "2026-11-23", version: go1.26.8}
+    mark: needs-approval
+    default: false
+
+  - id: cordis
+    names: [cordis, deepseek, dsh]
+    form: port
+    behind: none
+    pin: fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159
+    licence: MIT
+    verdict: ok-with-conditions
+    modes: [copy]
+    conditions:
+      - {condition: "NOTICE, sdk/kernel, loader/ and the oracle carry both MIT notices, of the upstream author and of the repository that holds the modifications", row: L12}
+    evidence:
+      - {source: test/differential/oracle/vendor/cordis/LICENSE and test/differential/oracle/notices/DeepSeek-MIT.txt, read: "2026-11-23", version: "@deepseek-ai/cordis 4.1.0 at fcc0ad4621"}
+      - {source: test/differential/oracle/vendor/loader/LICENSE, read: "2026-11-23", version: "@deepseek-ai/cordis-plugin-loader 1.1.0 at fcc0ad4621"}
+    mark: never
+    contains:
+      - {package: "@deepseek-ai/cosmokit", version: 1.9.0, licence: MIT}
+      - {package: "@deepseek-ai/schemastery", version: 3.19.0, licence: MIT}
+      - {package: "@standard-schema/spec", version: 1.1.0, licence: MIT}
+    default: true
+
+  - id: go-yaml
+    names: [go-yaml]
+    form: library
+    behind: none
+    modules: [go.yaml.in/yaml/v3]
+    pin: v3.0.6
+    # LICENSE puts eight files ported from libyaml under MIT and the rest under
+    # Apache-2.0; the module carries a NOTICE.
+    licence: Apache-2.0 AND MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: go.yaml.in/yaml/v3@v3.0.6 LICENSE and NOTICE, read: "2026-11-23", version: v3.0.6}
+    mark: needs-approval
+    importers:
+      - {dir: boot, decision: ADR-059 decision 6}
+      - {dir: tools, decision: ADR-059 decision 6}
+    default: true
+
+  - id: river
+    names: [river, riverqueue]
+    form: library
+    behind: jobs
+    modules:
+      - github.com/riverqueue/river
+      - github.com/riverqueue/river/riverdriver
+      - github.com/riverqueue/river/riverdriver/riverpgxv5
+      - github.com/riverqueue/river/rivershared
+      - github.com/riverqueue/river/rivertype
+    pin: v0.51.2
+    # MPL-2.0 in the LICENSE of each of the five; MIT in rivershared/levenshtein.
+    licence: MPL-2.0 AND MIT
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked unmodified, with one NOTICE line per module that names its source URL and exact version in every artifact that links it", row: L8}
+    evidence:
+      - {source: "github.com/riverqueue/river{,/riverdriver,/riverdriver/riverpgxv5,/rivershared,/rivertype}@v0.51.2 LICENSE and rivershared@v0.51.2/levenshtein/License.txt", read: "2026-11-23", version: v0.51.2}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/jobs-river, decision: "07-c4-plugin-sdk.md:70, the S0 probes"}
+    contains:
+      - {module: github.com/tidwall/gjson, version: v1.20.0, licence: MIT}
+      - {module: github.com/tidwall/match, version: v1.2.0, licence: MIT}
+      - {module: github.com/tidwall/pretty, version: v1.2.1, licence: MIT}
+      - {module: github.com/tidwall/sjson, version: v1.2.5, licence: MIT}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+    default: false
+
+  - id: pgx
+    names: [pgx]
+    form: library
+    behind: sql
+    modules: [github.com/jackc/pgx/v5]
+    pin: v5.11.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: github.com/jackc/pgx/v5@v5.11.0 LICENSE, read: "2026-11-23", version: v5.11.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/jobs-river, decision: "07-c4-plugin-sdk.md:70, the S0 probes"}
+    contains:
+      - {module: github.com/jackc/pgpassfile, version: v1.0.0, licence: MIT}
+      - {module: github.com/jackc/pgservicefile, version: v0.0.0-20240606120523-5a60cdf6a761, licence: MIT}
+      - {module: github.com/jackc/puddle/v2, version: v2.2.3, licence: MIT}
+      - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
+    default: false
+
+  - id: nodejs
+    names: [nodejs, node.js]
+    form: process
+    behind: none
+    pin: v24.22.1
+    # The complete licence file: Node.js under MIT, and the bundled components, each
+    # under its own terms in the same file (s0-reference-pins.md).
+    licence: MIT AND LicenseRef-Node.js-bundled-components
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Fetched by checksum for the oracle job only and never shipped; the complete licence file is kept, not an MIT summary", row: L5}
+    evidence:
+      - {source: "https://raw.githubusercontent.com/nodejs/node/ce7aaf1cee78b8cf0ce17364260535c418d3ed26/LICENSE, SHA-256 5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace, equal to the LICENSE of the linux-x64 archive", read: "2026-11-23", version: v24.22.1}
+    mark: needs-approval
+    default: false
+
+  - id: gitleaks
+    names: [gitleaks]
+    form: process
+    behind: none
+    pin: v8.18.4
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: github.com/zricethezav/gitleaks/v8@v8.18.4 LICENSE, read: "2026-11-23", version: v8.18.4}
+    mark: needs-approval
+    default: false
+
+  - id: postgresql
+    names: [postgres, postgresql]
+    form: process
+    behind: none
+    images:
+      - {ref: "postgres:16.15-trixie@sha256:43f9275df91e012c3da3d86bea5d7bb5e67a473296cc906c5f9e80b8176b1a37", key: the postgres service of the CI jobs}
+    pin: 16.15-trixie
+    # The PostgreSQL licence in the core COPYRIGHT and MIT for the packaging of the
+    # Docker Official Image; its base layers are not read, so the image never ships.
+    licence: PostgreSQL AND MIT
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Pulled by digest in CI only, never shipped or mirrored, since its base layers are not read", row: L5}
+    evidence:
+      - {source: "s0-reference-pins.md:92-97, the core COPYRIGHT and the packaging LICENSE, each recorded by its hash", read: "2026-11-23", version: 16.15-trixie}
+    mark: needs-approval
+    default: false
+
+  - id: actions-checkout
+    names: [checkout]
+    form: process
+    behind: none
+    pin: 11d5960a326750d5838078e36cf38b85af677262
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/checkout/11d5960a326750d5838078e36cf38b85af677262/LICENSE, read: "2026-11-23", version: 11d5960a326750d5838078e36cf38b85af677262}
+    mark: needs-approval
+    default: false
+
+  - id: actions-setup-go
+    names: [setup-go]
+    form: process
+    behind: none
+    pin: 40f1582b2485089dde7abd97c1529aa768e1baff
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/setup-go/40f1582b2485089dde7abd97c1529aa768e1baff/LICENSE, read: "2026-11-23", version: 40f1582b2485089dde7abd97c1529aa768e1baff}
+    mark: needs-approval
+    default: false
+
+  - id: actions-upload-artifact
+    names: [upload-artifact]
+    form: process
+    behind: none
+    pin: ea165f8d65b6e75b540449e92b4886f43607fa02
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/upload-artifact/ea165f8d65b6e75b540449e92b4886f43607fa02/LICENSE, read: "2026-11-23", version: ea165f8d65b6e75b540449e92b4886f43607fa02}
+    mark: needs-approval
+    default: false
+
+  # Refused by name (ADR-054 decision 20; 08 §5.1 L9): no artifact holds them.
+  - id: river-pro
+    names: [river-pro]
+    form: library
+    behind: jobs
+    licence: LicenseRef-River-Pro-EULA
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.1 (licence-audit-kernel-infra.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: seaweedfs-enterprise
+    names: [seaweedfs-enterprise]
+    form: process
+    behind: none
+    licence: LicenseRef-SeaweedFS-Enterprise-EULA
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: "licence record §2.1 (licence-audit-kernel-infra.md), the EULA updated 2025-11-19", read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: minio
+    names: [minio]
+    form: process
+    behind: none
+    licence: AGPL-3.0
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.1 (licence-audit-kernel-infra.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: litellm-enterprise
+    names: [litellm]
+    form: library
+    behind: none
+    licence: LicenseRef-LiteLLM-Enterprise
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.2 (licence-audit-agent-ai.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: langgraph-platform
+    names: [langgraph]
+    form: process
+    behind: none
+    licence: Elastic-2.0
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.2 (licence-audit-agent-ai.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+# The stated exceptions of 00-decisions.md:267 (ADR-054 decisions 9, 19 and 21).
+exceptions:
+  - item: The PostgreSQL dialect behind sql, sql.Bound, platformSql and sqlDriver
+    tokens: [postgres, postgresql, pgx]
+    places: [those definitions and their suites, the sql fake and sdk/testkit/sqlfake, an import of pgx v5 in sdk/def/sql, the participants of sqlDriver, the suffix of a row on the allow-list that wraps it]
+    source: 00-decisions.md:267; ADR-054 decision 23
+  - item: The two query dialect keys, metricsQuery and logsQuery
+    tokens: [promql, prometheus, logql, loki]
+    places: [the definition of its key, its fake and its suite, in prose, doc comments and query text; logql and loki in prose only]
+    source: 00-decisions.md:267
+  - item: The protocols with several implementations
+    tokens: [s3, openai, oidc, smtp, oci, otlp, kubernetes, k8s, mcp]
+    places: [the definitions, fakes and suites that declare the protocol, ids]
+    source: 00-decisions.md:267; ADR-054 decision 19
+  - item: The Cordis semantics of the kernel port
+    tokens: [cordis, deepseek, dsh]
+    places: [sdk/kernel/, loader/, test/differential/, test/spike/s0/, their notices included]
+    source: 00-decisions.md:267; 08 §5.1 L12
+  - item: The default stack bundle (aiops-stack, agent-base and the agent bundles)
+    tokens: [the names of every entry whose plugins sit in one of those bundles]
+    places: [the code and content of those plugins and their config in the golden dumps, never an id]
+    source: 00-decisions.md:267
+  - item: The Go language and SPDX identifiers
+    tokens: [go, golang, spdx]
+    places: [every place]
+    source: ADR-054 decision 21
+
+# The base provider allow-list (ADR-054 decision 10).
+baseProviders: [sql-postgres, sql-platform, kv-postgres, blob-s3, llm-provider-openai-compatible, identity-oidc, notifier-email, jobs-river]

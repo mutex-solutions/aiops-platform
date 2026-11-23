@@ -112,6 +112,11 @@ jobs:
         # definition under sdk/def has its files, a provider and a consumer among the
         # plugins of the distributions, and keeps the static rules of 07-c4-plugin-sdk.md:514-520.
         run: go run ./tools/deflint .
+      - name: Register check (U7)
+        # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package
+        # graphs has an entry of tools/upstream-components.yaml at its pin, and no entry
+        # breaks the schema or a clause of decision 12. Reads the module cache only.
+        run: go run ./tools/register .
       - name: Boot and loader statement coverage profiles
         run: |
           go test -count=1 -coverprofile=cover-boot.out ./boot
