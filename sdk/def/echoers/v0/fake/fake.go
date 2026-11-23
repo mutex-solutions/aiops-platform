@@ -35,7 +35,9 @@ var _ echoers.Registry = (*Registry)(nil)
 
 // New returns an empty registry and the plugin that provides it under echoers.Key.
 // Each call returns a new plugin value, a new entry of its own. Every activation of
-// the plugin starts with no registration.
+// the plugin starts with no registration. The plugin provides the methods of
+// echoers.Registry only: Calls and Contribution are the test's (no side door,
+// 07-c4-plugin-sdk.md §4.3).
 func New() (*Registry, kernel.Plugin) {
 	f := &Registry{}
 	return f, kernel.Define(kernel.Plugin{ID: "aiops/echoers-fake", Provides: []kernel.AnyKey{echoers.Key},
@@ -43,7 +45,7 @@ func New() (*Registry, kernel.Plugin) {
 			f.mu.Lock()
 			f.act, f.table = c, map[string]*registered{}
 			f.mu.Unlock()
-			return echoers.Key.Provide(c, f)
+			return echoers.Key.Provide(c, struct{ echoers.Registry }{f})
 		}})
 }
 

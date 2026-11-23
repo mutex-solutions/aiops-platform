@@ -35,7 +35,9 @@ var _ stampers.Registry = (*Registry)(nil)
 
 // New returns an empty registry and the plugin that provides it under stampers.Key.
 // Each call returns a new plugin value, a new entry of its own. Every activation of
-// the plugin starts with no registration.
+// the plugin starts with no registration. The plugin provides the methods of
+// stampers.Registry only: Calls and Contribution are the test's (no side door,
+// 07-c4-plugin-sdk.md §4.3).
 func New() (*Registry, kernel.Plugin) {
 	f := &Registry{}
 	return f, kernel.Define(kernel.Plugin{ID: "aiops/stampers-fake", Provides: []kernel.AnyKey{stampers.Key},
@@ -43,7 +45,7 @@ func New() (*Registry, kernel.Plugin) {
 			f.mu.Lock()
 			f.act, f.table = c, map[string]*registered{}
 			f.mu.Unlock()
-			return stampers.Key.Provide(c, f)
+			return stampers.Key.Provide(c, struct{ stampers.Registry }{f})
 		}})
 }
 
