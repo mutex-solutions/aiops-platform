@@ -244,6 +244,9 @@ const Unsigned = "unsigned"
 //	runtimes: [inproc, remote]    a set, empty for a pack
 //	module: {path, version, sum}  exactly when runtimes holds inproc
 //
+// A module states version and sum, or neither for a module of a build inside the
+// repository, which the signed manifest lists by its path (ADR-020 decision 28).
+//
 // Attestation is attestation.json beside the record of an artifact, the statement
 // aiopsctl verified, and nil when there is none; ReadAttestation reads it.
 type Record struct {
@@ -289,7 +292,7 @@ func ReadRecord(home fs.FS, digest string) (Record, error) {
 		r.fail(f["signer"], "a record of a distribution names the key that signed it")
 	}
 	if n := f["module"]; n != nil {
-		m := r.gomod(r.fields(n, "module", []string{"path", "version", "sum"}, "path", "version"), "module")
+		m := r.gomod(r.fields(n, "module", []string{"path", "version", "sum"}, "path"), "module")
 		rec.Module = &m
 	}
 	if r.err != nil {

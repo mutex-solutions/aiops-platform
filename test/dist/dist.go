@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package testdist is the test distribution: the release module table of dist plus
-// the toy plugins, the seven fault plugins and the two test-only control rows, with
+// the toy plugins, the ten fault plugins and the two test-only control rows, with
 // the bundles, profiles and layer 4 patches that the loader smoke test and the
 // failure matrix run on. test/dist/cmd/aiops-test is its binary.
 //
@@ -23,6 +23,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
 	badconfig "github.com/mutex-solutions/aiops-platform/test/dist/plugins/bad-config"
 	failapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/fail-apply"
+	foreignattestation "github.com/mutex-solutions/aiops-platform/test/dist/plugins/foreign-attestation"
 	leakygoroutine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/leaky-goroutine"
 	panicapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/panic-apply"
 	rogueprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/rogue-provider"
@@ -33,6 +34,8 @@ import (
 	toyconsumer "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-consumer"
 	toyprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-provider"
 	toyspine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-spine"
+	unservedversion "github.com/mutex-solutions/aiops-platform/test/dist/plugins/unserved-version"
+	unsignedrow "github.com/mutex-solutions/aiops-platform/test/dist/plugins/unsigned-row"
 )
 
 // Shipped is what the test binary carries: limits.yaml and the bundles and profiles of
@@ -75,6 +78,9 @@ func Modules() []dist.Module {
 		m(rogueprovider.New(), "rogue-provider"),
 		m(leakygoroutine.New(), "leaky-goroutine"),
 		m(slowdispose.New(), "slow-dispose"),
+		m(unservedversion.New(), "unserved-version"),
+		m(unsignedrow.New(), "unsigned-row"),
+		m(foreignattestation.New(), "foreign-attestation"),
 		m(teststate.New(), "teststate"),
 		m(testsubmit.New(), "testsubmit"),
 	)

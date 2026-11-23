@@ -20,10 +20,11 @@ import (
 //	column:   the header of the column, verbatim
 //	outcome:  the text of the cell, verbatim (what the parity test compares)
 //	fault:    the fault plugins to run, one run each: fail-apply, panic-apply,
-//	          slow-apply, bad-config, rogue-provider, leaky-goroutine,
-//	          slow-dispose, the stub remote images stub-remote-hang and
-//	          stub-remote-ignore-deactivate, or none when the fault is in the
-//	          files of the profile
+//	          slow-apply, bad-config, rogue-provider, the installed artifacts
+//	          unserved-version, unsigned-row and foreign-attestation,
+//	          leaky-goroutine, slow-dispose, the stub remote images
+//	          stub-remote-hang and stub-remote-ignore-deactivate, or none when
+//	          the fault is in the files of the profile
 //	expect:   exit (nonzero: the process ends non-zero; running: it does not
 //	          end), ready (true or false), states (row id to fiber state in
 //	          capitals) and diagnostic (a substring of the diagnostic output)
@@ -191,8 +192,8 @@ func (p *parser) faults(n *yaml.Node) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !inSet(s, "none", "fail-apply", "panic-apply", "slow-apply", "bad-config", "rogue-provider",
-			"leaky-goroutine", "slow-dispose", "stub-remote-hang", "stub-remote-ignore-deactivate") {
+		if !inSet(s, "none", "fail-apply", "panic-apply", "slow-apply", "bad-config", "rogue-provider", "unserved-version", "unsigned-row",
+			"foreign-attestation", "leaky-goroutine", "slow-dispose", "stub-remote-hang", "stub-remote-ignore-deactivate") {
 			return nil, p.err(c, RuleMatrix, "", "fault %q is not a fault plugin or stub image", s)
 		}
 		out = append(out, s)

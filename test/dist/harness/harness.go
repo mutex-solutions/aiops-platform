@@ -119,6 +119,9 @@ type Options struct {
 	Limits  string          // content of the --limits file; default Limits
 	RefsDir string          // --refs-dir, the directory of ${file:} references; default: not passed
 	Context context.Context // ends the process when done (a test timeout); default Background
+	// Install writes more into the fresh home once it trusts the signed manifest and
+	// before the process starts: what plugin install keeps (trusted.Install). Optional.
+	Install func(home string) error
 }
 
 // syncBuf is the combined output of the process.
@@ -153,6 +156,11 @@ func Start(bin string, o Options) (*Proc, error) {
 	}
 	if err := trusted.Write(home, Signed); err != nil {
 		return nil, err
+	}
+	if o.Install != nil {
+		if err := o.Install(home); err != nil {
+			return nil, err
+		}
 	}
 	limFile := filepath.Join(home, "limits.yaml")
 	if err := os.WriteFile(limFile, []byte(lim), 0o644); err != nil {

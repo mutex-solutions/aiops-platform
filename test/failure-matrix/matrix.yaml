@@ -78,21 +78,21 @@
 - failure: "Gate or signature denies"
   column: "Optional row at boot"
   outcome: "Detached as disabled; listed"
-  fault: [rogue-provider]
+  fault: [rogue-provider, unserved-version, unsigned-row, foreign-attestation]
   expect: {exit: running, ready: true, states: {}, diagnostic: "detached"}
   since: S1
 
 - failure: "Gate or signature denies"
   column: "Required at boot"
   outcome: "Stop"
-  fault: [rogue-provider]
+  fault: [rogue-provider, unserved-version, unsigned-row, foreign-attestation]
   expect: {exit: nonzero, ready: false, states: {}, diagnostic: "denied"}
   since: S1
 
 - failure: "Gate or signature denies"
   column: "Live recomposition"
   outcome: "Rejected"
-  fault: [rogue-provider]
+  fault: [rogue-provider, unserved-version, unsigned-row, foreign-attestation]
   expect: {exit: running, ready: true, states: {}, diagnostic: "rejected"}
   since: S1
 

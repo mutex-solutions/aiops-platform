@@ -2,6 +2,7 @@ package boot
 
 import (
 	"errors"
+	"maps"
 	"reflect"
 	"strings"
 	"testing"
@@ -235,6 +236,13 @@ func TestReadRecord(t *testing.T) {
 		}
 	}
 	recA, recC := "verified/sha256-"+hexA+"/record.yaml", "verified/sha256-"+hexC+"/record.yaml"
+	// A module of a build inside the repository is pinned by its path alone, as the signed
+	// manifest lists it (ADR-020 decision 28).
+	inRepo := maps.Clone(home)
+	inRepo[recA] = &fstest.MapFile{Data: []byte(strings.Replace(string(home[recA].Data), `, version: v0.1.0, sum: "`+sumA+`"`, "", 1))}
+	if got, err := ReadRecord(inRepo, "sha256:"+hexA); err != nil || got.Module == nil || *got.Module != (GoModule{Path: "example.com/acme/echoer"}) {
+		t.Errorf("a module by its path: %+v %v", got, err)
+	}
 	for _, c := range []struct {
 		name, file string
 		edits      []string
@@ -253,7 +261,7 @@ func TestReadRecord(t *testing.T) {
 		{"wasm", recA, []string{"[inproc]", "[inproc, wasm]"}, RuleRecord, `runtimes entry "wasm"`},
 		{"code with no module", recA, []string{"runtimes: [inproc]", "runtimes: [remote]"}, RuleRecord, "module exactly when"},
 		{"a module with no sum", recA, []string{`, sum: "` + sumA + `"`, ""}, RuleRecord, "both or neither"},
-		{"a module with no version", recA, []string{"version: v0.1.0, ", ""}, RuleRecord, "module states version"},
+		{"a module with no version", recA, []string{"version: v0.1.0, ", ""}, RuleRecord, "both or neither"},
 		{"a module version", recA, []string{"version: v0.1.0", "version: 0.1.0"}, RuleRecord, `module version "0.1.0"`},
 		{"a module sum", recA, []string{sumA, "h1:abc"}, RuleRecord, "module sum"},
 		{"a module path", recA, []string{"path: example.com/acme/echoer", `path: "a b"`}, RuleRecord, "module path"},
