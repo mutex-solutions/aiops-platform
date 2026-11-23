@@ -458,22 +458,25 @@ func (fx *gateFix) signedEchoer() {
 // Each entry point evaluates the clauses its inputs decide and reports each other as
 // not evaluated, with the reason (ADR-060 decision 17): the whole check, a clause of
 // it, or, for the signed clause where no signer is recorded, the row it would judge
-// (ADR-020 decision 30, reading 3). Checks 3 and 9 are S2b everywhere.
+// (ADR-020 decision 30, reading 3). Checks 3 and 9 are S2b everywhere. An entry point
+// given no module tie reports the tie clauses of checks 5 and 10 as not evaluated.
 func TestGateEntryPoints(t *testing.T) {
 	for _, tc := range []struct {
 		entry   Entry
+		noTie   bool
 		skipped []int    // checks not evaluated at all, besides 3 and 9
 		clauses []string // "<check> <clause>" not evaluated
 		open    []string
 	}{
-		{EntryBuild, []int{4, 5, 8, 10}, []string{"7 signed"}, []string{"7 user signed-class open"}},
-		{EntryCheck, []int{4, 6}, []string{"5 module", "5 signer", "7 signed"},
+		{EntryBuild, true, []int{4, 5, 8, 10}, []string{"7 signed"}, []string{"7 user signed-class open"}},
+		{EntryCheck, false, []int{4, 6}, []string{"5 module", "5 signer", "7 signed"},
 			[]string{"5 echoer:e2 signer open", "5 pack:e1 signer open", "7 user signed-class open"}},
-		{EntryOffline, []int{4, 5, 6}, []string{"7 signed"}, []string{"7 user signed-class open"}},
-		{EntryInstall, []int{6}, []string{"5 module"}, nil},
-		{EntryInstallUsed, nil, nil, nil},
-		{EntryBoot, nil, nil, nil},
-		{EntryRender, nil, []string{"5 tie", "10 tie"}, nil},
+		{EntryOffline, false, []int{4, 5, 6}, []string{"7 signed"}, []string{"7 user signed-class open"}},
+		{EntryInstall, false, []int{6}, []string{"5 module"}, nil},
+		{EntryInstallUsed, false, nil, nil, nil},
+		{EntryInstallUsed, true, nil, []string{"5 tie", "10 tie"}, nil},
+		{EntryBoot, false, nil, nil, nil},
+		{EntryRender, true, nil, []string{"5 tie", "10 tie"}, nil},
 	} {
 		t.Run(string(tc.entry), func(t *testing.T) {
 			fx := newGateFix()
@@ -481,6 +484,9 @@ func TestGateEntryPoints(t *testing.T) {
 				`{"toy": {"version": "0.1"}}`)
 			fx.dist.bindings = "{consumers: {toy.secret: [o/user]}}"
 			fx.in.Entry = tc.entry
+			if tc.noTie {
+				fx.in.Tie = nil
+			}
 			g := fx.run(t)
 			var clauses []string
 			for _, s := range g.Slots {

@@ -124,23 +124,29 @@ func notEvaluated(in GateInput) map[string]string {
 		return map[string]string{"1": noDist, "2": noDist, "4": noDist, "5": noDist, "6": noDist, "7 signed": noDist, "7 fake": noDist,
 			"8 installed": noDist, "10": noDist}
 	}
+	out := map[string]string{}
 	switch in.Entry {
 	case EntryBuild:
-		return map[string]string{"4": noProfile, "8": noProfile, "7 signed": noSigner,
+		out = map[string]string{"4": noProfile, "8": noProfile, "7 signed": noSigner,
 			"5":  "the manifest it would read is the build's output, and dist use records its signer",
 			"10": "dist.yaml lists {module, version, sum} and no artifact, so no attestation reaches the builder"}
 	case EntryCheck:
-		return map[string]string{"4": "no profile", "5 signer": "no trust.yaml", "5 module": "no site distribution",
+		out = map[string]string{"4": "no profile", "5 signer": "no trust.yaml", "5 module": "no site distribution",
 			"6": "detected licences belong to a build list (08-profiles-roadmap-adrs.md:1344)", "7 signed": noSigner}
 	case EntryOffline:
-		return map[string]string{"4": "no profile", "5": "no trust.yaml", "6": "no module source and no build list", "7 signed": noSigner}
+		out = map[string]string{"4": "no profile", "5": "no trust.yaml", "6": "no module source and no build list", "7 signed": noSigner}
 	case EntryInstall:
-		return map[string]string{"6": "in-process code has no build list yet",
+		out = map[string]string{"6": "in-process code has no build list yet",
 			"5 module": "in-process code: when every evaluated clause passes, install answers rebuild-required"}
-	case EntryRender:
-		return map[string]string{"5 tie": noBinary, "10 tie": noBinary}
 	}
-	return nil
+	// The module tie of checks 5 and 10 reads the binary's build information, which an
+	// entry point that gives no Tie, profile render among them, does not hold.
+	for _, n := range []string{"5", "10"} {
+		if in.Tie == nil && out[n] == "" {
+			out[n+" tie"] = noBinary
+		}
+	}
+	return out
 }
 
 // RowResult is the result of one check on one row. Check is 0 for the module
