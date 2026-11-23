@@ -2,6 +2,8 @@ package boot
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -141,15 +143,53 @@ func TestBootInputPrints(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := fstest.MapFS{"trust.yaml": {Data: []byte("allowUnsigned: [acme/x]\n")}}
-	c := Composition{Rows: []ComposedRow{{Row: Row{ID: "a", Plugin: "o/p", Enabled: true}}, {Row: Row{ID: "b", Plugin: "o/p"}}}}
+	// A pack states its credential class in integrates, and an in-process artifact is
+	// warned on once (08-profiles-roadmap-adrs.md:391).
+	installHome(home, packManifestText("acme/pack")+"integrates: [{system: ex, versions: \">=1\", tested: [\"1.0\"], credential: broader}]\n", "[]\n", "")
+	installHome(home, td.plugins["o/p"][0], "[]\n", "")
+	c := Composition{Rows: []ComposedRow{{Row: Row{ID: "a", Plugin: "o/p", Enabled: true}}, {Row: Row{ID: "b", Plugin: "o/p"}},
+		instRow("pack:e1", "o/plain", "acme/pack"), instRow("p:x", "o/p", "o/p")}}
 	_, lines := bootInput(home, "p", c, nil, d, nil, nil)
+	broader := func(row, id string) string {
+		return fmt.Sprintf("warning: row %q: plugin %s declares credential: broader for ex (08-profiles-roadmap-adrs.md:391)", row, id)
+	}
 	want := []string{"trust: allowUnsigned lists acme/x", "licence: the distribution accepts GPL-3.0-only",
 		"bindings: the site adds providers of k: o/p", "bindings: the site adds consumers of c: o/p",
 		"bindings: the site adds listeners of the sealed hook h: o/p", "bindings: the site raises the required set by k, r",
-		`warning: row "a": plugin o/p declares credential: broader for ex (08-profiles-roadmap-adrs.md:391)`}
+		broader("a", "o/p"), broader("pack:e1", "acme/pack"), broader("p:x", "o/p")}
 	if !slices.Equal(lines[1:], want) {
 		t.Fatalf("lines\n%s", strings.Join(lines, "\n"))
 	}
+}
+
+// installHome writes into home what install keeps and records of the artifact of
+// manifest with bundle: bundles/<id>/ with artifact.json, plugin.yaml and bundle.yaml,
+// and the record of its digest, signed by keyP256ID with the statement attestation.
+// A pack, which in-process code is not, gets the lock entry of the profile p. It
+// returns the digest.
+func installHome(home fstest.MapFS, manifest, bundle, attestation string) string {
+	m, err := ReadManifest("t", []byte(manifest), ManifestLenient)
+	if err != nil {
+		panic(err)
+	}
+	layer := func(typ, data string) map[string]any {
+		return map[string]any{"mediaType": typ, "digest": digestOf([]byte(data))}
+	}
+	art, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ociManifest, "artifactType": artifactType,
+		"config": map[string]any{"mediaType": ociEmpty}, "layers": []any{layer(layerManifest, manifest), layer(layerBundle, bundle)}})
+	d, dir := digestOf(art), "bundles/"+m.ID+"/"
+	rec := fmt.Sprintf("kind: artifact\ndigest: %s\nsigner: %s\nid: %s\nversion: %s\nruntimes: [%s]\n", d, keyP256ID, m.ID, m.Version, strings.Join(m.Runtimes, ", "))
+	if slices.Contains(m.Runtimes, "inproc") {
+		rec += "module: {path: " + testModule + "}\n"
+	} else {
+		home["profiles/p/plugins.lock"] = &fstest.MapFile{Data: []byte("lockVersion: 1\nartifacts:\n  - {id: " + m.ID + ", digest: " + d + "}\n")}
+	}
+	rdir := "verified/" + strings.Replace(d, ":", "-", 1) + "/"
+	for name, data := range map[string]string{dir + "artifact.json": string(art), dir + "plugin.yaml": manifest, dir + "bundle.yaml": bundle,
+		rdir + "record.yaml": rec, rdir + "attestation.json": attestation} {
+		home[name] = &fstest.MapFile{Data: []byte(data)}
+	}
+	return d
 }
 
 // instRow is a row that the bundle of the installed artifact id inserted.

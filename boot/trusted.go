@@ -209,11 +209,16 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 				in.Artifacts[id] = installedArtifact(home, id, lock, lerr)
 			}
 		}
-		p, ok := d.Plugins[r.Plugin]
-		if man, err := ReadManifest("plugin.yaml of "+r.Plugin, p.Manifest, ManifestLenient); ok && err == nil && r.Enabled {
+		// A pack states its credential class in its own manifest (08-profiles-roadmap-adrs.md:391).
+		raws := [][]byte{d.Plugins[r.Plugin].Manifest}
+		if id := installedBundle(r); id != r.Plugin {
+			raws = append(raws, in.Artifacts[id].Kept.Manifest)
+		}
+		for _, raw := range raws {
+			man, err := ReadManifest("plugin.yaml", raw, ManifestLenient)
 			for _, i := range man.Integrates {
-				if i.Credential == "broader" {
-					lines = append(lines, fmt.Sprintf("warning: row %q: plugin %s declares credential: broader for %s (08-profiles-roadmap-adrs.md:391)", r.ID, r.Plugin, i.System))
+				if err == nil && r.Enabled && i.Credential == "broader" {
+					lines = append(lines, fmt.Sprintf("warning: row %q: plugin %s declares credential: broader for %s (08-profiles-roadmap-adrs.md:391)", r.ID, man.ID, i.System))
 				}
 			}
 		}
