@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,23 +21,84 @@ func write(t *testing.T, dir, name, content string) {
 }
 
 func TestModfile(t *testing.T) {
+	ab := []string{"a", "b"}
 	for _, tc := range []struct {
 		name, mod string
+		allowed   []string
 		fail      bool
 	}{
-		{"clean", "module m\n\ngo 1.26.0\n", false},
-		{"require", "module m\n\nrequire x v1.0.0\n", true},
-		{"require block", "module m\nrequire (\n\tx v1.0.0\n)\n", true},
-		{"replace", "module m\nreplace x => ../x\n", true},
-		{"exclude", "module m\nexclude x v1.0.0\n", true},
+		{"clean", "module m\n\ngo 1.26.0\n", nil, false},
+		{"require", "module m\n\nrequire x v1.0.0\n", nil, true},
+		{"require block", "module m\nrequire (\n\tx v1.0.0\n)\n", nil, true},
+		{"replace", "module m\nreplace x => ../x\n", nil, true},
+		{"exclude", "module m\nexclude x v1.0.0\n", nil, true},
+		{"allowed", "module m\n\n// c\nrequire a v0.0.0\n\nrequire (\n\tb v0.0.0 // indirect\n)\n\nreplace (\n\ta => ../a\n\tb => ../b\n)\n", ab, false},
+		{"other require", "module m\nrequire (\n\ta v0.0.0\n\tx v1.0.0\n)\n", ab, true},
+		{"other replace", "module m\nrequire a v0.0.0\nreplace x => ../x\n", ab, true},
+		{"allowed exclude", "module m\nexclude a v1.0.0\n", ab, true},
+		{"unparsable", "module m\nrequire\n", ab, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()
 			write(t, d, "go.mod", tc.mod)
-			if err := checkModfile(d); (err != nil) != tc.fail {
+			if err := run(append([]string{"modfile", d}, tc.allowed...)); (err != nil) != tc.fail {
 				t.Fatalf("fail=%v, err=%v", tc.fail, err)
 			}
 		})
+	}
+	if run([]string{"modfile", t.TempDir()}) == nil {
+		t.Fatal("missing go.mod accepted")
+	}
+}
+
+// TestRepositoryModules holds the module layout of ADR-060 decision 54 on the
+// repository itself. The import path of every package of every module is its
+// directory below the repository root, so moving a module root changes no import
+// path; every package under sdk/def belongs to the SDK module rooted at sdk/; and
+// the SDK module requires only sdk/kernel and sdk/testkit (00-decisions.md §4.3;
+// pgx v5 joins at S3, ADR-060 decision 4).
+func TestRepositoryModules(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}\t{{.Dir}}\t{{.Module.Path}}\t{{.Module.Dir}}", "./...", mp+"/sdk/...")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list: %v", err)
+	}
+	want := func(dir string) string {
+		rel, err := filepath.Rel(root, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return path.Join(mp, filepath.ToSlash(rel))
+	}
+	def := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) != 4 {
+			t.Fatalf("go list line %q", line)
+		}
+		if f[0] != want(f[1]) {
+			t.Errorf("package %s is in directory %s", f[0], f[1])
+		}
+		if f[2] != want(f[3]) {
+			t.Errorf("module %s is rooted at %s", f[2], f[3])
+		}
+		if hasPath(f[0], mp+"/sdk/def") {
+			def++
+			if f[2] != mp+"/sdk" {
+				t.Errorf("package %s is in module %s, not %s/sdk", f[0], f[2], mp)
+			}
+		}
+	}
+	if def == 0 {
+		t.Error("go list printed no package under sdk/def")
+	}
+	if err := run([]string{"modfile", filepath.Join(root, "sdk"), mp + "/sdk/kernel", mp + "/sdk/testkit"}); err != nil {
+		t.Error(err)
 	}
 }
 
