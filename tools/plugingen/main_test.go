@@ -10,9 +10,9 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/examples"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
+	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 )
 
 // The driver takes -write and --write, as the Go flag syntax does, and refuses a
@@ -29,30 +29,43 @@ func TestFlags(t *testing.T) {
 	}
 }
 
-// dirs maps each plugin of the release table and of the test release to its
-// directory.
+// dirs maps each plugin of the release table, of the test distribution and of the
+// test release to its directory: one plugin per directory (ADR-048 decision 18).
 var dirs = map[string]string{
-	"aiops/loader":           "loader",
-	"aiops/clock":            "plugins/clock",
-	"aiops/config-refs":      "plugins/config-refs",
-	"aiops/readiness":        "plugins/readiness",
-	"aiops/reload":           "plugins/reload",
-	"aiops/restart-policy":   "plugins/restart-policy",
-	"aiops/example-dispatch": "examples/dispatch",
-	"aiops/example-echoer":   "examples/echoer",
-	"aiops/example-stamper":  "examples/stamper",
-	"aiops/example-caller":   "examples/caller",
+	"aiops/loader":               "loader",
+	"aiops/clock":                "plugins/clock",
+	"aiops/config-refs":          "plugins/config-refs",
+	"aiops/readiness":            "plugins/readiness",
+	"aiops/reload":               "plugins/reload",
+	"aiops/restart-policy":       "plugins/restart-policy",
+	"aiops-test/toy-provider":    "test/dist/plugins/toy-provider",
+	"aiops-test/toy-consumer":    "test/dist/plugins/toy-consumer",
+	"aiops-test/toy-spine":       "test/dist/plugins/toy-spine",
+	"aiops-test/fail-apply":      "test/dist/plugins/fail-apply",
+	"aiops-test/panic-apply":     "test/dist/plugins/panic-apply",
+	"aiops-test/slow-apply":      "test/dist/plugins/slow-apply",
+	"aiops-test/bad-config":      "test/dist/plugins/bad-config",
+	"aiops-test/rogue-provider":  "test/dist/plugins/rogue-provider",
+	"aiops-test/leaky-goroutine": "test/dist/plugins/leaky-goroutine",
+	"aiops-test/slow-dispose":    "test/dist/plugins/slow-dispose",
+	"aiops-test/test-state":      "test/dist/plugins/teststate",
+	"aiops-test/test-submit":     "test/dist/plugins/testsubmit",
+	"aiops/example-dispatch":     "examples/dispatch",
+	"aiops/example-echoer":       "examples/echoer",
+	"aiops/example-stamper":      "examples/stamper",
+	"aiops/example-caller":       "examples/caller",
 }
 
-// Every plugin of the module tables, the release table of dist and the toy plugins
-// of the test release, has a plugin.yaml beside its package with its id, the seven
-// generated fields and no S1 field, and the generated cycle test beside it (ADR-060
-// decisions 11, 13 and 44). The parity step of make check and of CI, which this
-// command runs, holds their content to what plugingen writes.
+// Every plugin of the module tables, the release table of dist, the test plugins of
+// test/dist and the toy plugins of the test release, has a plugin.yaml beside its
+// package with its id, the seven generated fields and no S1 field, and the generated
+// cycle test beside it (ADR-060 decisions 11, 13, 28 and 44). The parity step of make
+// check and of CI, which this command runs, holds their content to what plugingen
+// writes.
 func TestEveryPluginOfTheModuleTablesHasAGeneratedManifest(t *testing.T) {
 	root := filepath.Join("..", "..")
 	var ids []string
-	for _, m := range dist.Modules() {
+	for _, m := range testdist.Modules() { // the release table and the test plugins
 		ids = append(ids, m.Plugin.ID)
 	}
 	for _, p := range examples.Plugins() {
