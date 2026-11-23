@@ -201,10 +201,10 @@ Format 1.0: `indexVersion`, `name`, `serial` (a client refuses a lower one than 
 | Need | What we publish | From |
 |---|---|---|
 | The index format | The format 1.0 schema and `aiopsctl index compose`, `sign` and `verify`, the commands our own CI uses | S6a |
-| The artifact and attestation formats | The OCI layout of `plugin pack`; the attestation type. Whether cosign attaches a type of our own is UNVERIFIED (ADR-020) | S2a |
+| The artifact and attestation formats | The OCI layout of `plugin pack`, with the signature and the attestation as OCI referrers; the attestation type, an in-toto Statement v1 of predicate type `https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1`, which `aiopsctl` writes; `cosign attest` writes a Statement v0.1 for a type it does not know (ADR-020) | S2a |
 | Compatibility offline | Each release publishes its `dist.yaml` with `serves`; `aiopsctl plugin gate <spec> --against <dist.yaml>` runs the gate with no kernel | S2a |
 | A way to prove conformance | The suites inside `aiopsctl`, and `plugin verify` | S2a, S2b |
-| Trust roots | `trust.yaml` keeps `signers` (key, id patterns, runtimes), `distributions` and `allowUnsigned`, and gains `indexes` (name, URL, key, the id patterns it may list) and `requireAttestations` per signer or index. An index cannot list an id outside its patterns, so it cannot shadow `aiops/*` or `contrib/*`; with two indexes listing one id, `install` needs `--index` | S2a, S6a |
+| Trust roots | `trust.yaml` keeps `signers` (key, id patterns, runtimes, and the `signed` list of the signed keys and hooks it is trusted for), `distributions` and `allowUnsigned`, and gains at S6a `indexes` (name, URL, key, the id patterns it may list) and `requireAttestations` per signer or index (ADR-020). An index cannot list an id outside its patterns, so it cannot shadow `aiops/*` or `contrib/*`; with two indexes listing one id, `install` needs `--index` | S2a, S6a |
 | A name to use | Open: the project's mark policy (O8) | |
 
 A third party does not get our signing keys, a place in our index without a pull request, or a code path in the kernel that calls its service. The kernel contacts an index only on an operator's manager command.
@@ -456,6 +456,6 @@ Read on 2026-11-11 by the two designs or the reviews; not re-read for this recor
 | The Terraform plugin protocol keeps majors 5 and 6 in service, with additive minors | `https://developer.hashicorp.com/terraform/plugin/terraform-plugin-protocol` | Protocol 5.10 and 6.10 |
 | Elastic's marks may not be part of a product name; referring uses are allowed | `https://www.elastic.co/legal/trademarks` | Current page |
 
-UNVERIFIED and to settle with the first pack of each kind: scoped application keys, real query rate limits and Kubernetes tag names at Datadog; whether SigNoz or a ClickHouse-based stack can be bound through a database toolset; the OpenSearch product-name clause; naming rules of Datadog and VictoriaMetrics; the CNCF charter wording on sign-off; whether cosign attaches an attestation type of our own.
+UNVERIFIED and to settle with the first pack of each kind: scoped application keys, real query rate limits and Kubernetes tag names at Datadog; whether SigNoz or a ClickHouse-based stack can be bound through a database toolset; the OpenSearch product-name clause; naming rules of Datadog and VictoriaMetrics; the CNCF charter wording on sign-off. Whether cosign attaches an attestation type of our own is settled by ADR-020: `cosign attest` accepts the type but writes a Statement v0.1, so only `aiopsctl` writes the attestation.
 
 The Grafana Labs Marks are trademarks of Grafana Labs, and are used with Grafana Labs' permission. We are not affiliated with, endorsed or sponsored by Grafana Labs or its affiliates.

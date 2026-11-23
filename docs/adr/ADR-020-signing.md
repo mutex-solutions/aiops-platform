@@ -1,10 +1,10 @@
 # ADR-020: Signing and trust of plugin artifacts and distributions
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. ADR-060 decision 2 has it proposed before the first commit that implements it
-  and accepted before that code merges into `main`; each question below names the code
-  its answer is needed before. `00-decisions.md` is unchanged and wins until the owner
-  accepts this ADR, and the lines it edits are listed in "Edits on acceptance" (`08:996`).
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all 12
+  questions on the same date with the recommended option of each; the section "Owner
+  answers of 2026-11-23" records them as decisions 19 to 30. The commit that records the
+  answers edits `00-decisions.md` and the other lines they name (`08:996`), as that
+  section lists.
 - Scope: the S2a part of ADR-020 (`08:1151`), as ADR-060 decision 33 lists it: the
   signing library of `plugin sign` and `dist sign`; the signature format that cosign
   verifies in key mode; keyless signing; the key format and the id patterns of `trust
@@ -721,6 +721,7 @@ decision 21). v1.3.0 declares `go 1.25.8`, and cosign v3.1.4 requires it (Contex
 - Recommended: (a). It builds on the repository's toolchain, cosign v3.1.4 requires the
   same version (decision 1), and every fact of decision 16 was read at it. Needed before
   sigstore-go merges.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q2. Does signing import sigstore-go's `pkg/sign`?** It adds 11 modules to `aiopsctl` and
 the server image, two of them MPL-2.0, and code key mode never calls: the OIDC browser
@@ -737,6 +738,7 @@ flow, the Fulcio and Rekor clients and a command library (decision 16; Context i
   Fulcio client out of both binaries, signing in key mode is a few dozen lines on library
   primitives, and no verification is written by hand (`08:404`). Needed before `plugin
   sign` merges.
+- **Answered 2026-11-23: (b)**, decision 20.
 
 **Q3. How does an author with only `aiopsctl` get a key pair?** A pack author needs
 `aiopsctl` alone (`07:51`), publishing needs a signing key (`07:1531`), and no command of
@@ -751,6 +753,7 @@ ADR-060 decision 23 or `00:137` makes one. The exit's pack author machine holds 
   every artifact then has a new signer, which no `trust.yaml` entry can follow.
 - Recommended: (a). It keeps `07:51` whole with one small command, and the key format is
   cosign's either way. Needed before the exit test is written.
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q4. Is keyless signing offered at S2a?** Plugin record §11 says "keyless where it works";
 `08:404`, `07:1852` and `01:280` call keyless verification at an air-gapped site
@@ -771,6 +774,7 @@ job.
 - Recommended: (a). Nothing at S2a can use keyless signing without the public instances,
   whose terms are unread and to which L14 forbids an upload, or a private instance that no
   site has, and (a) changes no format. Needed before `plugin sign` merges.
+- **Answered 2026-11-23: (a)**, decision 22.
 
 **Q5. What protects the records of install and `dist use` until boot?** Boot verifies no
 signature and imports neither cosign nor sigstore-go (`08:404`), and the records sit in
@@ -790,6 +794,7 @@ signature and imports neither cosign nor sigstore-go (`08:404`), and the records
 - Recommended: (a). It keeps `08:404` whole, and (b) and (c) protect nothing that
   `trust.yaml` itself does not leave open. Needed before the record writer of install or
   `dist use` merges.
+- **Answered 2026-11-23: (a)**, decision 23.
 
 **Q6. Is the attestation an OCI referrer or a layer of the artifact?** ADR-060 decision 18
 leaves the choice here. `08:391`, `07:1838` and ADR-060 decision 19 describe one OCI
@@ -807,6 +812,7 @@ artifact that holds the signed attestation.
 - Recommended: (a). One digest binds the statement and the code, the gate's comparison is
   one digest, and `plugin sign` works after `plugin pack` without changing the digest.
   Needed before `plugin pack` merges.
+- **Answered 2026-11-23: (a)**, decision 24.
 
 **Q7. What is the predicate type URI?** A type URI is a frozen name that SHOULD carry a
 version and MAY be unresolvable (Context item 8); the project has no public domain, and
@@ -818,6 +824,7 @@ nothing is published before L14 (`08:1343`).
 - Recommended: (a). It adds no name the project does not already carry, and it needs no
   resolver. Needed before `plugin pack` merges; it can change without a migration until
   the first artifact is published.
+- **Answered 2026-11-23: (a)**, decision 25.
 
 **Q8. Is `requireAttestations` per signer built at S2a?** `08:404` lets a signer or an index
 require named attestations, and ADR-060 decision 26 puts the per-index field at S6a and
@@ -831,6 +838,7 @@ of every row.
 - Recommended: (b). At S2a the field could name only a type every row must carry anyway,
   and both forms then land with their first use. Needed before the `trust.yaml` reader
   merges.
+- **Answered 2026-11-23: (b)**, decision 26.
 
 **Q9. How does sigstore-go meet the builder's `init` deny-list?** Through gRPC it links an
 `init` that registers two default-mux handlers and an `init` that registers a codec
@@ -859,6 +867,7 @@ decision 33).
   default codec, registered by gRPC itself and by no plugin. It costs one
   build tag and one recorded exemption. Needed before sigstore-go or the deny-list
   merges, whichever is first.
+- **Answered 2026-11-23: (a)**, decision 27.
 
 **Q10. What does boot's module tie compare for a module with no recorded sum?** `07:1861`
 and plugin record §11 state check 5 for a Go module as "path, version and sum equal an
@@ -889,6 +898,7 @@ has no such module (decision 12).
   each place where it does not hold. This narrows `07:1861` for builds inside the
   repository, which is why it is asked. Needed before the module clause of gate check 5
   merges.
+- **Answered 2026-11-23: (b)**, decision 28.
 
 **Q11. What `aiopsctl` does a site run once it removes the default root?** A site removes
 `release` in `trust.yaml` (ADR-060 decision 50). The release `aiopsctl` boots the rows of
@@ -906,6 +916,7 @@ the items of ADR-044.
   module table, so a site whose in-process plugins contribute commands needs its own
   `aiopsctl` in any case, and (a) lets a site remove the default without losing the CLI.
   Needed before `dist build` merges.
+- **Answered 2026-11-23: (a)**, decision 29.
 
 **Q12. Five readings of written text.** Each reading below is what S2a would build, and
 each edits the lines it names in the commit that records the answer.
@@ -953,3 +964,133 @@ each edits the lines it names in the commit that records the answer.
   the test release's `aiopsctl` in the exit's step C2, which runs `plugin install` again
   after `dist use` (ADR-060 decision 30). Needed before the code each reading names
   merges.
+- **Answered 2026-11-23: (a), all five readings**, decision 30.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option.
+Each decision below names the question it answers. Where a decision above leaves a point
+to a question, the decision here settles it.
+
+19. **sigstore-go is pinned at v1.3.0** (Q1 (a)). It builds on the repository's
+    toolchain, go1.26.8 under `GOTOOLCHAIN=local`, and cosign v3.1.4 requires the same
+    version (decision 1). Decision 16 is the licence read at this pin.
+
+20. **Signing does not import sigstore-go's `pkg/sign`** (Q2 (b)). The signing function
+    builds the bundle from sigstore-go's `bundle` types, the protobuf-specs messages,
+    go-securesystemslib's `dsse.PAE` and sigstore's `signature` package, none of which
+    adds a module to what verification links. It verifies every bundle it builds with
+    sigstore-go against the public key before it writes it, and the CI case of ADR-060
+    decision 36 has cosign verify the same bytes. The 11 modules that `pkg/sign` adds
+    (decision 16), the two MPL-2.0 modules among them, are linked by neither `aiopsctl`
+    nor the server image.
+
+21. **`aiopsctl` writes a key pair** (Q3 (a)). A command of `aiopsctl`, named by the CLI
+    spec (`00:137`), writes a key pair in the format of decision 4, so the pair works with
+    cosign too, and `07:51` holds whole. ADR-060 decision 23 and `00:137` gain it.
+
+22. **Keyless signing is not offered at S2a** (Q4 (a)). `aiopsctl` signs and verifies in
+    key mode only and refuses a bundle that holds a certificate, naming keyless as not
+    offered (decision 3). Keyless is taken up when a public release is planned after L14
+    clears, and decision 3 keeps it additive. Whether keyless verification works at an
+    air-gapped site stays unconfirmed until then. `01:280`, `01:381`, `07:1852` and
+    `08:404` say that keyless is not offered at S2a.
+
+23. **The records of install and `dist use` are protected as decision 11 states** (Q5
+    (a)): written only by `aiopsctl` under the profile write lock, named by the digest
+    they vouch for, holding the verified bundles, and read against the current
+    `trust.yaml` at every boot. ADR-047's table mounts `trust.yaml` and `verified/`
+    read-only into a kernel that runs as a container (decision 18). A process running as
+    the site's user is not stopped, as it is not stopped from editing `trust.yaml`
+    (`08:508`). Boot verifies no signature (`08:404`).
+
+24. **The attestation is an OCI referrer** (Q6 (a)), beside the signature referrer of
+    decision 2, with the digest of the artifact's OCI manifest as its one subject, where
+    `cosign attest` places its own. One digest binds the statement and the code, check 10
+    compares one digest, and `plugin sign` works after `plugin pack` without changing the
+    digest. `08:391`, `07:1838` and ADR-060 decision 19 read "one OCI artifact with its
+    signature and attestation as referrers". The exit's registry (ADR-060 decision 34) is
+    read for the OCI 1.1 referrers API or the tag fallback of the distribution spec.
+
+25. **The predicate type URI is
+    `https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1`** (Q7
+    (a)), under the module prefix ADR-057 approved. It adds no name the project does not
+    already carry and needs no resolver; it can change without a migration until the
+    first artifact is published.
+
+26. **`requireAttestations` per signer is built at S6a** (Q8 (b)), with the per-index
+    field of ADR-060 decision 26, when a second attestation type can exist. The
+    `trust.yaml` reader refuses the field until then.
+
+27. **The builder builds with the tag `grpcnotrace` and exempts gRPC's own codec** (Q9
+    (a)). The tag drops `golang.org/x/net/trace` and its default-mux handlers from the
+    graph, and ADR-044's `init` deny-list exempts, by package and pinned version, the codec
+    registration of `google.golang.org/grpc/encoding/proto`, which fills only gRPC's own
+    codec table. The register entry records the exemption, and it is read again at every
+    version bump. The deny-list stays whole for every other package. `08:402` and
+    `07:1860`, with the deny-list content that ADR-060 decision 33 gives ADR-044, gain
+    the exemption by package and version.
+
+28. **Boot ties a module with no recorded sum by path** (Q10 (b)). For the main module
+    and a replaced module the manifest records the path, and for a replaced module its
+    replacement as build information records it, with no version and no sum. Boot
+    compares those, accepts a missing sum only where build information records none, and
+    prints at every boot each module it tied without a sum, as it prints `allowUnsigned`
+    (`08:404`). Such a module's code is bound only by the digest of the embedded manifest
+    and its signer. The builder never writes such an entry (decision 18), so every image
+    a site runs is compared on path, version and sum. `07:1861` and plugin record §11
+    gain "and sum, where the toolchain records one", which narrows `07:1861` for builds
+    inside the repository.
+
+29. **`dist build` also writes the site's `aiopsctl`** (Q11 (a)) for the host's platform,
+    the `cli` profile of the same module table (`08:359`), embedding the same manifest,
+    so after `dist use` it boots on `current` (decision 12) and a site can remove the
+    default root without losing the CLI. ADR-044 gains that output (decision 18), and
+    `08:402` and the `Builder` row of `07:1845` name it.
+
+30. **The five readings of Q12 are accepted** (Q12 (a)):
+    1. **Key lifetime.** No bundle carries a trusted time (decision 2), so no key expires
+       at S2a; a key is valid while `trust.yaml` lists it, and its publisher rotates it as
+       decision 15 says. It edits `00:411`.
+    2. **An unsigned attestation.** For an id that `allowUnsigned` lists, check 10 reads
+       the statement that `plugin pack` recorded, unsigned, and every other clause of
+       check 10 applies (decision 8). It edits `08:493`, `08:895` and `07:1512`.
+    3. **The signed clause where no signer is known.** At `dist build`, step 7 of `plugin
+       check` and `plugin gate --against`, the signed clause of check 7 passes a
+       first-party row and reports "not evaluated", with that reason, for any other row
+       that provides or injects a `signed` key or listens on a `signed` hook; install and
+       boot evaluate it (decision 7). It edits no line; the S2a report records the
+       reading beside ADR-060 decision 17.
+    4. **go-digest's documentation licence.** The licence record names CC-BY-SA-4.0 for
+       `README.md` and `CONTRIBUTING.md` of `github.com/opencontainers/go-digest@v1.0.0`
+       only, and the per-directory scan of L16, whose content is ADR-044's, honours that
+       record by module, version and file (decision 18). It edits licence:49 and the
+       register entry of go-digest.
+    5. **The built-in record beside `dist use`.** The built-in record is a record of its
+       own, so a release binary boots while `release` is trusted, and the denial of
+       ADR-060 decision 31 applies to every other binary whose manifest is not `current`
+       (decision 12); a site that wants release binaries refused removes `release`
+       (decision 29). It edits `07:1861` and `08:404`, which gain "or, for a binary with
+       no built-in record, the distribution that `dist use` made current".
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:996`), and that commit makes the edits that "Edits on acceptance" and the chosen
+options name: `00:137`, `:411` and `:757`; `01:280` and `:381`; `02:204`; `07:75`,
+`:1512`, `:1838`, `:1839`, `:1840`, `:1841`, `:1845`, `:1846`, `:1852`, `:1854`,
+`:1855`, `:1860`, `:1861` and `:1862`; `08:391`, `:402`, `:404`, `:493`, `:895`, `:935`,
+`:1337` (L8) and `:1342` (L13); community:203, :206 and :458; licence:49 and :258; the
+plugin record in §11 and §18; and ADR-060 decisions 19, 23 and 33. The same commit keeps
+the lines that restate them consistent: `00:139` (the site's `aiopsctl`); `02:203` (the
+attestation as a referrer); `07:1543` and plugin record §2 row 12 (the attestation that
+`plugin sign` signs, unsigned only for an id that `allowUnsigned` lists); and plugin
+record §11, step 2 (the codec exemption and the site's `aiopsctl`). Left to later
+commits: the ADR table of `08` §3, which the commit that lists the ADRs accepted on this
+date edits; the parts of ADR-044 and ADR-047 that decision 18 asks of them, which each
+records with its own answers; the lines that state the lock entry of in-process code,
+`00:478`, `01:282`, `02:206` and ADR-047 decision 8, which gives in-process code no
+entry, against decision 10, and ADR-054:234 and :511, which call this ADR open, to the
+same commit as the ADR table; the register entries of
+sigstore-go, cosign and go-digest, to the commit that writes
+`tools/upstream-components.yaml` (ADR-060 decision 51); and reading 3, to the S2a report.
+An option the owner did not choose edits nothing.

@@ -273,11 +273,12 @@ gaps:
     the statement is a layer of the artifact or an OCI referrer. The attestation type and
     the OCI layout of decision 19 are documented in the repository for third parties
     (`08:935`); making them public waits for L14 (`08:1342`).
-19. **The artifact form** (ADR-047): one OCI artifact with the module path, version and
-    sum of in-process code, or nothing for a pack; `plugin.yaml`; a bundle of rows, all
-    disabled; for a pack its content and fixtures; the signed attestation; an SBOM
-    (`08:391`; `07:1838`). Check 8 reads `instantiable: true` from the manifest of a
-    first-party plugin of the module table; no list of ids is written in code
+19. **The artifact form** (ADR-047): one OCI artifact with its signature and attestation
+    as referrers (ADR-020 decision 24), holding the module path, version and sum of
+    in-process code, or nothing for a pack; `plugin.yaml`; a bundle of rows, all
+    disabled; for a pack its content and fixtures; an SBOM (`08:391`; `07:1838`). Check
+    8 reads `instantiable: true` from the manifest of a first-party plugin of the module
+    table; no list of ids is written in code
     (`07:132`). The rows of an installed artifact mount under one group named by the
     artifact, so a row id is `<pack name>:<row>` (`08:391`; community:298; `03:64`), and
     the loader records each row's origin artifact. A profile names an artifact's bundle
@@ -343,7 +344,9 @@ gaps:
     then `dist use` records the image reference in the site files and prints it.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
-    `dist build`, `dist sign`, `dist use`, `profile verify` and `profile init`
+    a command that writes a key pair in the format of ADR-020 decision 4, named by the
+    CLI spec (ADR-020 decision 21), `dist build`, `dist sign`, `dist use`, `profile
+    verify` and `profile init`
     (`00:137`; `02:95`; `08:72` row 30, `:366`, `:694`, `:936`), on an operations library
     that `plugin-manager` later shares, under one profile write lock (`08:369`; `03:71`).
     Whether each command is a row of the `cli` profile or code of `cmd/aiopsctl` is
@@ -618,8 +621,11 @@ gaps:
       (`08:1341`, `:1380`), and what the image itself carries: the Go licence and PATENTS
       texts, the licence of each tool in it, an image SBOM and a source offer for the
       copyleft packages of its base layer (`08:402`); the module cache format; when
-      `--allow-bump` is acceptable; the content of the `init` deny-list; how the licence
-      scan runs the same with a local toolchain; where a self-built distribution lists
+      `--allow-bump` is acceptable; the content of the `init` deny-list, which exempts by
+      package and pinned version the codec registration of
+      `google.golang.org/grpc/encoding/proto` in a build with the tag `grpcnotrace`
+      (ADR-020 decision 27); how the licence scan runs the same with a local toolchain;
+      where a self-built distribution lists
       sealed-hook listeners and raises the required set, since `dist.yaml` has four
       fields and W3 allows a raise (`08:401`, `:403`).
     - ADR-047, its S2a part: the OCI layout and media types; the content layer and its
