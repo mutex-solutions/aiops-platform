@@ -77,6 +77,29 @@ func TestFiles(t *testing.T) {
 	want(t, files(fixture(t, "x", noRun)), "the suite has no Run")
 }
 
+// A Go package under sdk/def is a definition sdk/def/<name>/v<N>, its fake/ or its
+// conformance/, or under internal/; the lint names any other, which it would skip.
+func TestStrays(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"sdk/def/x/v0/x.go", "sdk/def/x/v0/fake/fake.go", "sdk/def/x/v0/conformance/c.go",
+		"sdk/def/internal/deftest/d.go", "sdk/def/x/v0/testdata/t.go", "sdk/def/x/v0/fake/notes.txt",
+		"sdk/def/widgets/widgets.go", "sdk/def/widgets/V1/widgets.go", "sdk/def/x/v0/fake/sub/sub.go", "sdk/def/x/v01/x.go"} {
+		write := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(write), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(write, []byte("package p\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := strays(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, got, "sdk/def/widgets: a Go package under sdk/def", "sdk/def/widgets/V1: a Go package under sdk/def",
+		"sdk/def/x/v0/fake/sub: a Go package under sdk/def", "sdk/def/x/v01: a Go package under sdk/def")
+}
+
 func TestLayout(t *testing.T) {
 	const head = "key: x\nversion: \"0.2\"\nstability: preview\nclass: {provider: open, consumer: bound}\nremote: \"no\"\n"
 	good := fixture(t, "x", map[string]string{"definition.yaml": head + "compatibleFrom: \"0.1\"\n" +
