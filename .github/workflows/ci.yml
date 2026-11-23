@@ -120,7 +120,8 @@ jobs:
       - name: Manifest parity
         # ADR-060 decisions 11 and 36 (08-profiles-roadmap-adrs.md:1257): the generated half
         # of every plugin.yaml, read as data, and the generated tests beside it are what
-        # plugingen writes from the plugin's value.
+        # plugingen writes from the plugin's value; so is the signed distribution manifest
+        # of each binary built in the repository (ADR-060 decisions 20 and 28).
         run: go run ./tools/plugingen .
       - name: Register check (U7), name lint (U1) and suite neutrality (U3)
         # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package

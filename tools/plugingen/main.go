@@ -1,15 +1,18 @@
 // Command plugingen runs internal/plugingen in this repository: the manifest parity
 // check of CI (ADR-060 decisions 11 and 36), and with -write the generator. Each
 // argument is a directory searched for plugin.yaml files, outside testdata and
-// hidden directories; each directory that holds one is a Go plugin.
+// hidden directories; each directory that holds one is a Go plugin. An argument that
+// holds dist/dist.yaml is the repository root: the signed distribution manifest of
+// each binary built in it (distributions) is checked, or written, too.
 //
-//	go run ./tools/plugingen .                        # parity of every plugin
+//	go run ./tools/plugingen .                        # parity of every plugin and manifest
 //	go run ./tools/plugingen --write plugins/clock     # write one plugin's files
 //
 // aiopsctl plugin check --write runs the same package for an author.
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -47,10 +50,50 @@ func run(args []string, stdout io.Writer) error {
 			errs = append(errs, plugingen.Check(d))
 		}
 	}
+	n := 0
+	for _, root := range flags.Args() {
+		if _, err := os.Stat(filepath.Join(root, "dist", "dist.yaml")); err == nil {
+			for _, d := range distributions() {
+				n++
+				errs = append(errs, distribution(root, d[0], d[1], *write))
+			}
+		}
+	}
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "plugingen: %d plugins, every generated half and generated test as plugingen writes it\n", len(dirs))
+	fmt.Fprintf(stdout, "plugingen: %d plugins and %d distribution manifests, each as plugingen writes it\n", len(dirs), n)
+	return nil
+}
+
+// distributions are the binaries built inside the repository, each main package with
+// the directory of the builder's input dist.yaml and of the signed distribution
+// manifest it embeds (ADR-060 decisions 20 and 28).
+func distributions() [][2]string {
+	return [][2]string{{"./cmd/aiops", "dist"}, {"./test/dist/cmd/aiops-test", "test/dist"}}
+}
+
+// distribution checks, or writes, dir/distribution.yaml, the manifest of main.
+func distribution(root, main, dir string, write bool) error {
+	input, err := os.ReadFile(filepath.Join(root, dir, "dist.yaml"))
+	if err != nil {
+		return err
+	}
+	register, err := os.ReadFile(filepath.Join(root, "tools", "upstream-components.yaml"))
+	if err != nil {
+		return err
+	}
+	want, err := plugingen.Distribution(root, main, input, register)
+	if err != nil {
+		return fmt.Errorf("%s: %w", main, err)
+	}
+	file := filepath.Join(root, dir, "distribution.yaml")
+	if write {
+		return os.WriteFile(file, want, 0o644)
+	}
+	if got, err := os.ReadFile(file); err != nil || !bytes.Equal(got, want) {
+		return fmt.Errorf("%s differs from what plugingen writes for %s; run go run ./tools/plugingen --write . (%v)", file, main, err)
+	}
 	return nil
 }
 

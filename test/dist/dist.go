@@ -43,6 +43,14 @@ import (
 //go:embed dist.yaml limits.yaml all:bundles all:profiles
 var shipped embed.FS
 
+// Signed is the signed distribution manifest of the test binary:
+// go run ./tools/plugingen --write . writes it from dist.yaml, the bindings and the
+// required set of the test distribution, and from the binary's package graph (ADR-060
+// decisions 20 and 28).
+//
+//go:embed distribution.yaml
+var Signed []byte
+
 // manifests holds the plugin.yaml of each test plugin, which the table reads
 // (ADR-048 decision 18).
 //
