@@ -98,7 +98,7 @@ func importReasons(rel string, test bool, imp string) []string {
 			add("sdk/def imports the standard library and sdk/kernel only (sdk/testkit too in tests)", docDef)
 		}
 	case hasPath(rel, "sdk/plugin"):
-		if !(std || isKernel(imp) || isDef(imp) || tk) {
+		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || tk) {
 			add("sdk/plugin imports the standard library, sdk/kernel and sdk/def only (sdk/testkit too in tests)", docSDKPkg)
 		}
 	case hasPath(rel, "boot"):
