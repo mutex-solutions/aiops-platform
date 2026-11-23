@@ -1,5 +1,6 @@
 # Words loader/ must not contain (whole word, case-insensitive): every word of
-# vocabulary-boot.txt, and tenant as at S1 (TestVocabularyLists).
+# vocabulary-boot.txt, and tenant as at S1 (TestVocabularyLists). The upstream names are
+# the register's, which the name lint U1 reads (ADR-054 decision 14).
 tenant
 
 # Domain words.
@@ -11,26 +12,3 @@ pillar
 harness
 remediation
 estate
-
-# Upstream names, as in vocabulary-boot.txt.
-envoy
-postgres
-postgresql
-seaweedfs
-minio
-mimir
-alertmanager
-loki
-tempo
-pyroscope
-kafka
-grafana
-holmesgpt
-goalert
-tetragon
-nats
-jetstream
-krr
-chromium
-river
-pgx
