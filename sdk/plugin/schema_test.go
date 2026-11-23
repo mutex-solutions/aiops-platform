@@ -4,6 +4,7 @@ package plugin_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -91,6 +92,61 @@ func TestDescribeVolatilePaths(t *testing.T) {
 	}
 }
 
+// An example tag gives the field's examples, the JSON Schema 2020-12 annotation from
+// which a template takes a row config (ADR-060 decision 24). A config made of the
+// first example of each field validates and decodes, read as the launcher reads a
+// row: an integer is an int64.
+func TestDescribeExamples(t *testing.T) {
+	type row struct {
+		Name    string                         `default:"example" example:"loud"`
+		Prefix  string                         `example:"LOUD "`
+		Every   plugin.Volatile[time.Duration] `example:"1s"`
+		Retries uint8                          `example:"3"`
+		Ratio   float64                        `example:"0.5"`
+		Quiet   bool                           `example:"true"`
+		Plain   string
+	}
+	info, err := plugin.Describe[row]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Properties map[string]struct{ Examples []json.Number }
+	}
+	dec := json.NewDecoder(bytes.NewReader(info.Schema))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatalf("%v: %s", err, info.Schema)
+	}
+	cfg := map[string]any{}
+	for k, p := range doc.Properties {
+		if len(p.Examples) == 0 {
+			continue
+		}
+		var v any = p.Examples[0].String()
+		if n, err := p.Examples[0].Int64(); err == nil {
+			v = n
+		} else if f, err := p.Examples[0].Float64(); err == nil {
+			v = f
+		}
+		cfg[k] = v
+	}
+	if len(cfg) != 6 {
+		t.Fatalf("the schema carries examples for %v, want six fields: %s", cfg, info.Schema)
+	}
+	v, err := plugin.NewValidator(info.Schema)
+	if err == nil {
+		err = v.Validate(cfg)
+	}
+	if err != nil {
+		t.Fatalf("the config of the examples %v: %v", cfg, err)
+	}
+	got, err := plugin.Define(plugin.Spec[row]{ID: "t/examples"}).Decode(cfg)
+	if r, _ := got.(*row); err != nil || r.Name != "loud" || r.Every.Get() != time.Second || r.Retries != 3 || !r.Quiet {
+		t.Fatalf("Decode(%v) = %+v, %v", cfg, got, err)
+	}
+}
+
 // The validator reads exactly the keywords the derivation emits and refuses any
 // other, so it never passes what an unread constraint would refuse.
 func TestNewValidatorRefusesWhatItDoesNotRead(t *testing.T) {
@@ -107,6 +163,7 @@ func TestNewValidatorRefusesWhatItDoesNotRead(t *testing.T) {
 		`{"maximum": null}`:            "maximum null is not a number",
 		`{"pattern": "("}`:             "is not a regular expression",
 		`{"pattern": 1}`:               "is not a regular expression",
+		`{"examples": "a"}`:            `examples "a" is not a list`,
 		`{"items": {"$schema": "x"}}`:  "at the root only",
 		`{"$schema": "http://json-schema.org/draft-07/schema#"}`: "at the root only",
 		`{"additionalProperties": {"const": 1}}`:                 `keyword "const"`,
@@ -126,7 +183,7 @@ func TestValidatorOnHandWrittenSchemas(t *testing.T) {
 		"type": "object",
 		"properties": {
 			"n": {"type": "number", "minimum": 0.5, "maximum": 2, "default": 1},
-			"s": {"type": "string", "pattern": "^a+$", "x-aiops-tenant": true},
+			"s": {"type": "string", "pattern": "^a+$", "x-aiops-tenant": true, "examples": ["aa", 1]},
 			"any": {},
 			"l": {"type": "array", "items": {"type": "boolean"}}
 		},

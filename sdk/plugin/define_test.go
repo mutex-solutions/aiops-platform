@@ -221,6 +221,16 @@ func TestDefineRefusesABadConfigType(t *testing.T) {
 				B bool `default:"1"`
 			}]{ID: "t/x"})
 		}, "a bool default is true or false"},
+		{"example not an integer", func() {
+			plugin.Define(plugin.Spec[struct {
+				N int `example:"x"`
+			}]{ID: "t/x"})
+		}, `example:"x"`},
+		{"example on a list", func() {
+			plugin.Define(plugin.Spec[struct {
+				L []string `example:"a"`
+			}]{ID: "t/x"})
+		}, "only a scalar field has an example"},
 		{"default float", func() {
 			plugin.Define(plugin.Spec[struct {
 				F float64 `default:"x"`
