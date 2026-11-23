@@ -111,13 +111,14 @@ type Waterfall[A, R any] struct{ /* On(c, stage, fn(ctx, a, next)); Bind(c) retu
 
 package plugin // module sdk, rooted at sdk/ (ADR-060 decision 54): what an author writes
 type Spec[C any] struct {
-	ID       string              // "<owner>/<name>", equal to the manifest id
-	Inject   []kernel.Dep        // data: the composer reads it without running code
-	Provides []kernel.AnyKey     // Provide of an undeclared key fails
-	Hooks    []kernel.HookUse    // every hook Apply may listen on, with its stage; an undeclared On fails
-	Durable  []durable.Namespace // schema and version, key prefix, job kinds, secret scope, sidecar instance, external steps
-	Validate func(cfg *C) error  // pure
-	Apply    func(c *kernel.Context, cfg *C) error // the only entry point; everything it registers is an effect
+	ID        string              // "<owner>/<name>", equal to the manifest id
+	Inject    []kernel.Dep        // data: the composer reads it without running code
+	Provides  []kernel.AnyKey     // Provide of an undeclared key fails
+	Registers []kernel.AnyKey     // every registry Apply contributes to; the generated cycle test fails on an unlisted one
+	Hooks     []kernel.HookUse    // every hook Apply may listen on, with its stage; an undeclared On fails
+	Durable   []durable.Namespace // schema and version, key prefix, job kinds, secret scope, sidecar instance, external steps
+	Validate  func(cfg *C) error  // pure
+	Apply     func(c *kernel.Context, cfg *C) error // the only entry point; everything it registers is an effect
 }
 func Define[C any](s Spec[C]) kernel.Plugin // JSON Schema 2020-12 from C behind a validator interface; Volatile[T] fields
 func FromManifest(m Manifest, apply func(*kernel.Context, Manifest, any) error) kernel.Plugin // declarations as data
@@ -148,8 +149,9 @@ type Config struct { // URL is tenant-writable: a literal, or ${secret:name} res
 	URL     plugin.Volatile[string] `aiops:"tenant"`
 }
 var Plugin = plugin.Define(plugin.Spec[Config]{
-	ID:     "aiops/notifier-webhook",
-	Inject: []kernel.Dep{kernel.Need(notifiers.Key), kernel.Need(tenants.Key), kernel.Need(dialer.Key)},
+	ID:        "aiops/notifier-webhook",
+	Inject:    []kernel.Dep{kernel.Need(notifiers.Key), kernel.Need(tenants.Key), kernel.Need(dialer.Key)},
+	Registers: []kernel.AnyKey{notifiers.Key},
 	Apply: func(c *kernel.Context, cfg *Config) error {
 		s := &sender{cfg: tenants.ConfigFor[Config](c), dial: dialer.Key.Of(c)} // cfg: func(context.Context) (*Config, error)
 		return notifiers.Key.Of(c).Register(c, "webhook", s) // Send calls s.cfg(ctx): this tenant's config, from the handle
@@ -478,7 +480,7 @@ A Go limit, stated in the matrix: a goroutine cannot be killed. An `Apply` past 
 | Tier | Proves | How | Runs |
 |---|---|---|---|
 | T0 Static | Boundaries hold | Import analyzer (no `plugins/B`, no `fake` outside tests); plugin vet (no bare `go`, no package-level mutable variable, no `init`, no default Prometheus registry, no `http.DefaultServeMux`, no `signal.Notify`, no `os.Setenv`); manifest and declaration parity in Go and Python; schema examples validate | Every commit |
-| T1 Alone | The plugin alone, on the real kernel with fakes | Go: `kerneltest.New(t)` (it requires a `testing.TB`, constructs the kernel with both bindings off, and is the only constructor that can). The generated cycle test: mount, dispose and remount three times, every fake's `Inventory()` back to baseline, empty effect ledger, `goleak`, late registration returns `ErrInactiveEffect`. The generated two-tenant test for every process-scope plugin: act as tenant A, then assert tenant B sees nothing and no fake was called under B. Always `-race`. A stateful plugin needs PostgreSQL (embedded download or a container) | Every commit |
+| T1 Alone | The plugin alone, on the real kernel with fakes | Go: `kerneltest.New(t)` (it requires a `testing.TB`, constructs the kernel with both bindings off, and is the only constructor that can). The generated cycle test: mount, dispose and remount three times, every fake's `Inventory()` back to baseline, empty effect ledger, `goleak`, late registration returns `ErrInactiveEffect`, no registration of the plugin's fiber in a registry that `Spec.Registers` does not list. The generated two-tenant test for every process-scope plugin: act as tenant A, then assert tenant B sees nothing and no fake was called under B. Always `-race`. A stateful plugin needs PostgreSQL (embedded download or a container) | Every commit |
 | T2 Conformance | Every provider and the fake behave the same | `conformance.Run(t, mount)` per runtime; a registry suite has an obligations half (contribution) and a guard half (dispatcher), the dispose test, the `ErrInactive` test, the two-tenant hook and lookup test, the disabled-for-tenant test; `jobs` and `events` assert that a delivery carries the handle of the writing transaction; the uninstall residue test for durable effects | Every commit |
 | T3 Real composition | The built artifact with real rows | `loader-smoke` on a test-only profile; only the model (replay), outbound HTTP (strict fixtures) and the clock are mocked; assertions re-read the world. Also the failure matrix, `test/policy-bypass/`, the recomposition suite, golden dumps and hook dumps per shipped profile and role | Every pull request |
 | T4 Record and replay; T5 Live | Upstream contracts; the 00 §7.1 demo and the lab | Cassettes, `AIOPS_SNAPSHOT=replay` enforced; real backends and model | Every pull request; release |
@@ -499,7 +501,7 @@ Status: **as is** (semantics unchanged), **adapted** (how, and what is lost), **
 | 3 | `ctx.extend`; `ctx.isolate(name, label)` with joining labels. `ctx.intercept(name, config)`: the `inject` map form, the entry field, ancestors first, read by the provider through the caller-bound proxy | As is | For open keys; bound keys have their own row below. `NeedWith`, the row field `intercept`, `kernel.Intercepts` inside a `ProvideFor` view |
 | 4 | Root installs `reflect`, `registry`, `events`, `logger`; root fiber uid 0 | Adapted | `events` is named `hooks` |
 | 5 | `provide`, owned by the fiber, with an availability check bound to the consumer; one provider per name per realm | As is | `Available(fn(caller))`: used for schema versions and instance readiness |
-| 6 | `provide` metadata optional; a plugin is a function, a class or an object | Adapted | `Provides` is mandatory so the composer analyses the graph without running code; one value shape, `kernel.Plugin` |
+| 6 | `provide` metadata optional; a plugin is a function, a class or an object | Adapted | `Provides` is mandatory so the composer analyses the graph without running code; contributions are declared in `Spec.Registers`, so the gate and the tenant-toggleable test read them without running code; one value shape, `kernel.Plugin` |
 | 7 | `ctx.set`, accessors, mixins, callable services, class plugins | Not carried | Proxy sugar; an in-place overwrite is unsafe across goroutines |
 | 8 | `inject` as a list or a map; `ctx.inject(deps, callback)` as a child fiber. Access without inject is an error; children inherit within a realm | As is, with one recorded departure (owner decision 2026-11-19): a child in a private realm that reads a value retained from an ancestor gets the undeclared-key error, where Cordis returns the retained value (scenario D06). The Go port is stricter on purpose | `Need`, `NeedWith`, `c.When` |
 | 9 | `ctx.get(name)`: optional read without a declaration | Not carried | In Go a provider can dispose between the read and the call, and a registration made through the value is lost when the provider is replaced. `When` is the only optional form: a real dependant |

@@ -96,9 +96,10 @@ gaps:
    definitions (`07:29`; `00:262`). Its directory, and so the import path every author
    compiles against, is question Q18. `sdk/gate` and `sdk/entity` follow the same answer
    when their consumers create them. The package holds:
-   - `Spec[C]` with `ID`, `Inject`, `Provides`, `Hooks`, `Validate` and `Apply`, and
-     `Define[C](Spec[C]) kernel.Plugin` (`07:212-226`; `00:207`). `Durable` is added to
-     `Spec` at S3 with the `durable` definition (decision 29).
+   - `Spec[C]` with `ID`, `Inject`, `Provides`, `Registers` (ADR-048 decision 21),
+     `Hooks`, `Validate` and `Apply`, and `Define[C](Spec[C]) kernel.Plugin`
+     (`07:212-226`; `00:207`). `Durable` is added to `Spec` at S3 with the `durable`
+     definition (decision 29).
    - `Volatile[T]`. The volatile paths are derived from `C` and carried in the generated
      manifest, so the hand lists in `dist.Module.Volatile` and `boot.ModuleEntry.Volatile`
      go (ADR-059 decision 10). A path is a list of keys, as in `VolatileUpdateArgs.Paths`
@@ -162,7 +163,10 @@ gaps:
    `deprecated` and the classes and stages of decision 7, so check 2, the deprecation
    warning and the offline gate need no `definition.yaml` (`08:498`, `:936`; `07:538`,
    `:1895`). It lists every definition the binary links, at the version linked; whether
-   a provider row is composed is the static graph's question, not check 2's. A pack's
+   a provider row is composed is the static graph's question, not check 2's. `serves`
+   also carries a kernel part for the `pluginApi` the binary serves: the four built-in
+   keys with their classes and the six hooks of the kernel with their stage and seal,
+   written by the builder from `sdk/kernel` (ADR-048 decision 12). A pack's
    `requires.definitions` is derived by `plugin check --write` from the registries its
    rows feed (`07:139`; community:134).
 10. **The suite revision** is the integer `suite` of `definition.yaml`, raised when a
@@ -173,15 +177,18 @@ gaps:
     `as: need|want`), `provides`, `registers`, `hooks` with their stages,
     `configSchema`, `durable` and `requires` (`07:102-115`), and the tests of decision
     12. It reads the `Spec` without a kernel change, without an `init` registry and
-    without running a plugin's `Apply`. Where `registers` comes from is fixed in ADR-048:
-    the `Spec` of `07:215-223` has no field for it, a `Need` on a registry key reads the
-    same for a consumer and a contributor, and the gate and the tenant-toggleable rule
-    read it without running code (`07:135`, `:141`). A CI parity check fails when a
-    committed manifest differs from what `plugingen` writes (`08:1257`).
+    without running a plugin's `Apply`. Where `registers` comes from is fixed in ADR-048,
+    as the field `Spec.Registers` (ADR-048 decision 21): the `Spec` of `07:215-223` had
+    no field for it, a `Need` on a registry key reads the same for a consumer and a
+    contributor, and the gate and the tenant-toggleable rule read it without running
+    code (`07:135`, `:141`). A CI parity check fails when a committed manifest differs
+    from what `plugingen` writes (`08:1257`).
 12. **The generated tests.** `zz_cycle_test.go` mounts, disposes and remounts three
     times and asserts that every fake's `Inventory()` is back at its baseline, that the
-    effect ledger is empty, that no goroutine leaked and that a late registration returns
-    `ErrInactiveEffect`. It imports the fake of each definition `Spec.Inject` names, so
+    effect ledger is empty, that no goroutine leaked, that a late registration returns
+    `ErrInactiveEffect` and that no fake's `Inventory()` holds a registration of the
+    plugin's fiber in a registry that `Spec.Registers` does not list (ADR-048 decision
+    21). It imports the fake of each definition `Spec.Inject` names, so
     `kerneltest` imports no definition (`07:1430-1434`). Every fake exposes
     `Inventory()`; a fake of a definition that takes no registration reports what its
     callers left behind, timers for `clock`, or nothing. `sdk/testkit` gains goleak for

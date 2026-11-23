@@ -1,9 +1,11 @@
 # ADR-048: Manifest schema 1.0 (the S2a part)
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. It changes no line of `00-decisions.md` by itself: where an answer would change
-  one, the question names the line, and `00` is edited in the commit that records the
-  answer (`08:996`).
+- Status: **accepted 2026-11-23 by the project owner, for the S2a part.** The owner
+  answered the four questions on the same date with the recommended option of each; the
+  section "Owner answers of 2026-11-23" records them as decisions 21 to 24. The S6a part
+  (Scope) and the other points of decision 20 stay open for their later steps. Where an
+  answer changes a line of `00-decisions.md`, the question names the line, and `00` is
+  edited in the commit that records the answer (`08:996`).
 - Scope: the S2a part of ADR-048 (`08:1179`; `00:782`), manifest schema 1.0, which S2a
   delivers (`08:694`). The S6a part of the same ADR, index format 1.0 with the trust roots
   for indexes, `renamedTo`, the `compat` statuses and the re-certification job and its
@@ -600,6 +602,7 @@ by schedule (`08:39`).
   which ADR-060 decision 3 plans for. The cycle test catches an omission on the paths it
   runs, and the proxy refuses one from S2b. Needed before `plugin.Define` and `plugingen`
   merge.
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q2. Is `scope` a list or one value, and what is "both"?** `00:207`, `07:128` and plugin
 record §4 say "`process`, `tenant` or both". `07:94`, `07:153`, `07:1673` and the five S1
@@ -624,6 +627,7 @@ tenant scope (plugin record §10; `00:329`) and lands at S4a (`08:697`).
   written. A required field also spares the gate a default it would have to know. The row
   rule is needed only when a second scope exists. Needed before the manifest type of the
   `plugin` package merges.
+- **Answered 2026-11-23: (a)**, decision 22.
 
 **Q3. How does step 1 of `plugin check` tell the release pipeline from anyone else?**
 Step 1 fails on "a reserved owner outside the release pipeline" (`07:1567`). CI runs the
@@ -650,6 +654,7 @@ an artifact with no module (decision 14).
   reservation stays where a signature or the release build decides it: the builder for a
   Go module, the release-pipeline signer of check 5 for a pack or remote code. Needed
   before step 1 of `plugin check` merges.
+- **Answered 2026-11-23: (a)**, decision 23.
 
 **Q4. What does the gate do with an unknown field at a minor it knows, and with a known
 field that is absent or breaks a rule of decision 3?** A reader ignores unknown fields of
@@ -677,3 +682,69 @@ of exit step D1 is (ADR-060 decision 30).
   admitted on a guess. It also gives install its reading of `publisher.id` (`07:125`;
   community:167). Exit step D1 is unaffected, since its copy is well formed and check 2
   alone denies it. Needed before gate check 1 merges.
+- **Answered 2026-11-23: (a)**, decision 24.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted the S2a part of this ADR on 2026-11-23 and answered every
+question of the section "Questions for the owner" on the same date, each with its
+recommended option. Each decision below names the question it answers. Where a decision
+above leaves a point to a question, the decision here settles it.
+
+21. **`registers` comes from a `Spec` field, `Registers []kernel.AnyKey`** (Q1 (a)),
+    which the author fills as `Provides` is filled; `plugingen` writes `registers` from
+    it (decision 8). The generated cycle test fails when a fake's `Inventory()` holds a
+    registration of the plugin's fiber in a registry the field does not list (`07:519`).
+    It sees a registration made under the config and on the paths that the test runs,
+    not one made under another config, in a `When` body the test does not reach or later
+    from a listener. From S2b the proxy row refuses a remote `Register` outside the list.
+    In process nothing refuses an undeclared `Register` at run time, since the field is
+    `Spec` data that `kernel.Plugin` does not carry. The kernel does not change. Row 6 of
+    the dsh checklist stays adapted and gains "contributions are declared in
+    `Spec.Registers`, so the gate and the tenant-toggleable test read them without
+    running code", a reason forced by tenants (`07:141`) and by remote contributions
+    (check 9).
+
+22. **`scope` is a set** (Q2 (a)): `[process]`, `[tenant]` or `[process, tenant]`, the
+    last being "both", a plugin written to run at either scope. It is required in every
+    manifest, and the templates write `[process]`, the default of `07:477`. A prose
+    `scope: tenant` reads as a scope that holds `tenant`. How a row of a "both" plugin
+    takes one scope is settled by the scope ADR of S4a, with `tenant-trees` (decision
+    20); until then such a row mounts at process scope, the only scope that exists. `00`
+    is not edited, and the comment of `07:94` becomes "a set of process and tenant".
+
+23. **Step 1 of `plugin check` decides a reserved owner by where the code is** (Q3 (a)).
+    An `aiops` id passes only in a module whose path is the root module path of this
+    repository, which admits `plugins/`, `loader/` and `examples/`. A `contrib` id passes
+    only in a module whose path is under its `contrib/` path or, for a pack with no code,
+    in a directory under `contrib/` below the root module's `go.mod`. `plugin check`
+    reads both from the `go.mod` files it already reads. A copy that claims those paths
+    passes the lint and is stopped where the reservation is enforced: the builder
+    (ADR-060 decision 22) and check 5 (decision 14). The clause of `07:1567` stays as
+    written.
+
+24. **Check 1 denies a malformed manifest** (Q4 (a)). At a minor the reader knows, an
+    unknown field makes the manifest malformed. Malformed means a required field absent,
+    a known field of the wrong type or value, a rule of decision 3 broken, or an unknown
+    field at a known minor. Unknown fields are ignored at a higher minor only, as
+    `07:120` says. Check 1 of the one gate text (`08:497`; ADR-060 decision 16) gains
+    that clause.
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:996`), and that commit makes the edits the chosen options name: for decision 21,
+`00:44` and `:207`, `07:215-223`, `:235` and `:1434`, the `Spec` of plugin record §4,
+the fields of `Spec` in ADR-060 decision 4, and row 6 of the dsh checklist in plugin
+record §15 and in `08:48`; for decision 22, the comment of `07:94`; for decision 24,
+check 1 in `08:497`, the check of `08` §1.6 that ADR-060 decision 16 makes the one gate
+text. Decision 23 edits no line. On acceptance ADR-060 decision 9 gains the kernel part
+of `serves` (decision 12). The lines that restate an edited text are edited with it: the
+declared needs and provisions of a plugin in `00:684` and in DR-01 of `08` §3
+(`08:1001`); the assertions of the cycle test in plugin record §14 and in ADR-060
+decision 12; ADR-060 decision 11, which said that the `Spec` has no field for
+`registers`; and the worked contributions, which now list their registry in
+`Registers`: `07:309-316` and `:1747-1753`, the example of plugin record §4, and the
+`plugin.go` row of the Go template in `07:1553`. Left to later commits: check 1 in
+`07:1884` and in plugin record §12, to the commit that builds the one gate text (ADR-060
+decision 16); the sketches and lines that the Consequences give to the commit that
+builds the reader; and the row of ADR-048 in the ADR table of `08` §3, to the commit
+that updates that table. An option the owner did not choose edits nothing.
