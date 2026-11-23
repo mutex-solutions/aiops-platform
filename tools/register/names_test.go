@@ -75,6 +75,9 @@ func TestNameLint(t *testing.T) {
 		{"an id in its importer", place{"plugins/jobs-river/plugin.yaml: id", "ids", "aiops/jobs-river"}, "plugins/jobs-river/plugin.yaml: id: U1: \"river\""},
 		{"an id an item gives the name", place{"x", "ids", "aiops/blob-s3"}, ""},
 		{"a name an item gives ids only", place{"x", def, "an S3 bucket"}, "\"s3\""},
+		{"a schema of a core row", place{"plugins/clock/plugin.yaml: configSchema", "schemas", `{"properties":{"riverJob":{"type":"string"}}}`},
+			"plugins/clock/plugin.yaml: configSchema: U1: \"river\""},
+		{"a schema, though an item gives ids", place{"x", "schemas", `{"properties":{"s3":{}}}`}, "\"s3\""},
 	} {
 		got := lint(r, []place{c.p})
 		switch {
@@ -143,13 +146,17 @@ func TestRepositoryNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"sdk/kernel/builtin.go", "sdk/def/clock/v0/fake/fake.go", "boot/admit.go", "loader/apply.go", "ids", "00 §2.1 row 9", "00 §5.4", "00 §5.6"} {
+	for _, key := range []string{"sdk/kernel/builtin.go", "sdk/def/clock/v0/fake/fake.go", "boot/admit.go", "loader/apply.go", "ids", "schemas", "00 §2.1 row 9", "00 §5.4", "00 §5.6"} {
 		if !slices.ContainsFunc(ps, func(p place) bool { return p.key == key }) {
 			t.Errorf("no place has the key %s", key)
 		}
 	}
 	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "ids" && p.text == "aiops/clock" }) {
 		t.Error("the id of plugins/clock is no place")
+	}
+	// U1 reads the schema of a row of aiops-core as it reads its id (decision 14).
+	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "schemas" && strings.Contains(p.text, "maxFailures") }) {
+		t.Error("the configSchema of plugins/restart-policy is no place")
 	}
 	if bad := lint(r, ps); len(bad) > 0 {
 		t.Errorf("U1 or U3 finds names in the repository:\n%s", strings.Join(bad, "\n"))
