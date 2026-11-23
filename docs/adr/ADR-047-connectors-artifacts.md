@@ -759,8 +759,9 @@ the one gate text of ADR-060 decision 16: the clause of decision 11 with the fie
 decision 19, the boot rule of decision 6 and the check 5 clause of decision 18 in that
 text, and the copies of checks 5 and 8 that the commit checks against it (ADR-060
 decision 16 names those of check 8): `00:478`; `07:1318`, `:1386`, `:1816`, `:1866`,
-`:1888` and `:1891`; and `08:143`, `:501` and `:504`. Left to the commit that marks the ADRs accepted on 2026-11-23 in the ADR table
-of `08` §3: the row of ADR-047. An option the owner did not choose edits nothing.
+`:1888` and `:1891`; and `08:143`, `:501` and `:504`. Left to the commit that marks the
+ADRs accepted on 2026-11-23 in the ADR table of `08` §3: the row of ADR-047. An option
+the owner did not choose edits nothing.
 
 **The lock entry of in-process code is open.** Decision 8 gives in-process code no entry
 in `plugins.lock`, and decision 18 starts its check of that code from the digest that
