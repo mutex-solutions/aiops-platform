@@ -31,8 +31,8 @@ The founding requirement is the dsh architecture: everything is a plugin behind 
 
 | Status | Rows | Meaning |
 |---|---|---|
-| carried | 21 | The semantics are unchanged |
-| adapted | 23 | The property holds in another form; the row says how and what is lost |
+| carried | 20 | The semantics are unchanged |
+| adapted | 24 | The property holds in another form; the row says how and what is lost |
 | not carried | 11 | The property is absent; the row says why |
 | added | 8 | Not a dsh property; the row says what forces it |
 
@@ -55,7 +55,7 @@ No adaptation is argued from schedule. Each one is forced by a Go server with se
 | 13 | Providers keep implementations until dependants finish unloading. A failed fiber recovers only through `update()`; a superseded load cannot fail the new target; a fiber may dispose itself from its own load | carried | Plus a quiesce step for in-flight calls. Retry is the `restart-policy` plugin; self-dispose must pass at S0 |
 | 14 | `ctx.effect` returns a disposer, a promise or an iterable; disposers run in reverse and top-level asynchronous ones may overlap. Long stack traces that splice the loader entry | adapted | `Effect(label, setup)`; strict last in, first out, one at a time. Errors wrapped with the row id chain and the defining layer |
 | 15 | Effect on a disposed fiber throws `INACTIVE_EFFECT`; `getEffects()` tree | carried | `ErrInactiveEffect`; `aiopsctl tree --effects` |
-| 16 | `fiber.update`, `internal/config`, `internal/update`, `internal/commit`; raw and effective config. Volatile config committed without a restart, by the loader | carried | `plugin.Volatile[T]`; `loader/volatile-update` |
+| 16 | `fiber.update`, `internal/config`, `internal/update`, `internal/commit`; raw and effective config. Volatile config committed without a restart, by the loader | adapted | `plugin.Volatile[T]`; `loader/volatile-update`. The loader decides and commits; the kernel stores the committed values in the running activation's `Volatile` fields at that commit (ADR-034 G13). Lost: one commit is not stored in one turn, so two reads may straddle it; a value outside the `Volatile` fields that resolves anew applies at the next activation instead of restarting the fiber (plugin record §15 row 16) |
 | 17 | Config validated through Standard Schema, an external validator | adapted | JSON Schema 2020-12 derived in `sdk/plugin` behind a validator interface, plus `Validate` |
 | 18 | `emit`, `parallel`, `serial`, `bail`, `waterfall`; a waterfall runs outermost first, no `next` vetoes, twice throws. `internal/plugin`, `internal/status`, `internal/service` events | carried | `Event` carries four modes, `Waterfall` the fifth |
 | 19 | Listener order by registration, with `prepend`; any plugin may dispatch or listen on any event. `internal/get`, `set`, `listener`, `dispatch` | not carried | Registration order is not deterministic under parallel activation: order is by declared stage, then plugin id; ownership and declared listeners are an added row (61). The four internal events hook the proxy and the untyped bus |
