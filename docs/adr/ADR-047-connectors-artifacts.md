@@ -392,14 +392,15 @@ gaps:
     | Path under `$AIOPS_HOME` | Written by | The kernel mounts it | Source |
     |---|---|---|---|
     | `profiles/<p>/profile.yaml`, the bundle list | `aiopsctl` `profile init`, `install`, `remove` | Read-only | `08:121`; ADR-060 decision 27 |
-    | `profiles/<p>/aiops.patch.yml`, layer 2 | `aiopsctl` `enable`, `disable`, `remove` | Read-only | `08:122`, `:375` |
+    | `profiles/<p>/aiops.patch.yml`, layer 2 | The operator; `aiopsctl` `enable`, `disable`, `remove` (decision 10) | Read-only | `08:122`, `:375`; ADR-060 decision 57 |
     | `aiops.patch.yml`, layer 3 | The operator | Read-only | `08:123` |
     | `plugins.lock`, where question Q1 puts it | `aiopsctl` `install`, `remove` | Read-only | `07:1841` |
     | `bundles/<plugin id>/` | `aiopsctl` `install`, `remove` | Read-only | Decision 5 |
     | `content/<plugin id>/` | `aiopsctl` `install`, `remove` | Read-only | `07:1843`; `02:313` |
     | `trust.yaml` | `aiopsctl` `trust add` | Read-only | `07:1840`; ADR-060 decision 26 |
-    | The records of `dist use` and of install: signer and digest, the image reference | `aiopsctl` `dist use`, `install` | Read-only; their names and form are ADR-020's, under the home and outside `run/` | ADR-060 decisions 22 and 33 |
-    | `run/` | The kernel: `status.json`, the files of the test control rows, and the submission socket of ADR-060 decision 48 | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
+    | The records of `dist use` and of install: the verified signer and the digest | `aiopsctl` `dist use`, `install` | Read-only; their names and form are ADR-020's, under the home and outside `run/` | ADR-060 decisions 26 and 33 |
+    | `image.yaml`: one field, `image`, the reference by digest of the image that `dist use` verified | `aiopsctl` `dist use` | Read-only, and the kernel does not read it: the host starts the container from it (decision 15) | ADR-060 decision 22 |
+    | `run/` | The kernel: `status.json`, the files of the test control rows, and the submission socket if the transport ADR of ADR-060 decision 48 takes the candidate | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
 
     At S2a the kernel writes nothing outside `run/`. Later paths join the table with their
     step: `tenants/` at S4b and `profiles/<p>/compatibility.yaml` at S6b (`08:508`). From
@@ -411,24 +412,39 @@ gaps:
     0600 and replaces it by a rename in its directory, and refuses to write into a home
     whose owner is not its effective user, so a run as another user cannot leave a file
     that the kernel cannot read. The kernel, as a binary or as a container, runs with the
-    uid and gid of the home's owner. Only the site user can then open the socket in `run/`
-    that ADR-060 decision 48 names as the candidate transport, and no other unprivileged
-    user of the host reads or changes a file of the home between install and boot. Any
-    protection of the records of install and `dist use` beyond that is ADR-020's (`07:75`
-    R17).
+    uid and gid of the home's owner as the host sees them. For a container that is a
+    property of the runtime's user mapping, not of the image: the exit runs rootful Docker
+    with `--user <uid>:<gid>` of the owner (ADR-060 decision 30), and any other runtime
+    and mode qualifies whose mapping gives the same, such as rootless Podman with
+    `--userns=keep-id`. A mapping to a subordinate uid of the host cannot read a 0600 file
+    of the home, and boot then fails on the first file it reads. On a host with SELinux
+    enforcing, each bind of decision 15 also needs a label the container may read (the
+    `z` option of the bind in Docker and Podman), which the exit does not test. Only the
+    site user can then open the socket in `run/` that ADR-060 decision 48 names as the
+    candidate transport, and no other unprivileged user of the host reads or changes a
+    file of the home between install and boot. Any protection of the records of install
+    and `dist use` beyond that is ADR-020's (`07:75` R17).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
-    has on the host, read-only; `run/` bound over it at the same path, read-write;
-    `AIOPS_HOME` set to that path; and the user of decision 14. `run/` exists before the
-    container starts, since `aiopsctl` creates it with the home. The same path on both
-    sides lets every dump, status and message name one path, and it is the Helm form of
-    `02:313` ("mounted into `kernel` at the same path"). Directories are bound and never
-    single files, because `aiopsctl` replaces a file by a rename, which a bind of one file
-    does not follow. The directory of `--refs-dir` (`internal/serve/serve.go`) is bound
-    read-only at its own path, outside the home. On the exit's clean machine the test
-    starts the image that `dist use` recorded in this form (ADR-060 decisions 22 and 30).
-    How a chart delivers the home to a cluster, and to several replicas, stays with
-    `deploy/helm` and ADR-038 (`02:479`, item 22).
+    has on the host, read-only; `run/` bound over it at the same path, read-write; the
+    user of decision 14; and these variables of the environment that starts it:
+    `AIOPS_HOME` set to that path; every `AIOPS_REF_*` variable, which `${env:}` reads
+    (`08:162`) and which an operator's profile or site layer may name for a pack row
+    (ADR-060 decision 57); and `AIOPS_AGENTS_PAUSED` and `AIOPS_TELEMETRY_DISABLED` where
+    they are set, which boot reads (`08:126`). The form needs no other variable. `run/`
+    exists before the container starts, since `aiopsctl` creates it with the home. The
+    same path on both sides lets every dump, status and message name one path, and it is
+    the Helm form of `02:313` ("mounted into `kernel` at the same path"). Directories are
+    bound and never single files, because `aiopsctl` replaces a file by a rename, which a
+    bind of one file does not follow. The directory of `--refs-dir`, and the directory of
+    each file that `--patch` or `--limits` names, given by an absolute path, are bound
+    read-only at their own paths, outside the home (`internal/serve/serve.go`). On the
+    exit's clean machine the test starts the image that `image.yaml` names in this form
+    (decision 13; ADR-060 decisions 22 and 30), on the home of step C3, whose files are
+    0600, and step C4 passes only when the kernel has composed `dev` from those files and
+    written `run/status.json`, which the host sees owned by the home's owner. How a chart
+    delivers the home to a cluster, and to several replicas, stays with `deploy/helm` and
+    ADR-038 (`02:479`, item 22).
 
 ## Consequences
 
