@@ -1,0 +1,11 @@
+# The hand-written half of the manifest of a plugin of plugingen's tests. Its scope
+# holds no process, so plugingen writes no two-tenant test for it.
+manifestVersion: "1.0"
+id: test/legacy
+version: 0.1.0
+title: Legacy
+license: Apache-2.0
+publisher: {id: test}
+stability: experimental
+scope: [tenant]
+runtimes: [inproc]
