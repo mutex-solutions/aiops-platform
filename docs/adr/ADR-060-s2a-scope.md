@@ -128,7 +128,10 @@ gaps:
    recording fake that exposes `Inventory()` (`07:494`); and a suite with an obligations
    half and a guard half, both on `conformance.Run(t, Mount)` (`07:1463`). Each
    obligation has an id, so `plugin check` and a fresh template print one line per
-   failed obligation with its id (`07:1561`, `:1563`). Both definitions are `remote:
+   failed obligation with its id (`07:1561`, `:1563`). `Inventory()` of a toy registry
+   returns the registered names, and the owning fiber of each is read from the kernel
+   ledger, as the fiber whose ledger holds `Label(name)`; no kernel accessor is added
+   (owner, 2026-11-23). Both definitions are `remote:
    "no"` at S2a; S2b marks them `contrib` with the adapter generator, as a minor of each
    (plugin record §5; `08:643`, `:695`). The dispatcher `example-dispatch` provides both
    registries and the toy caller of question Q1 consumes both; these and the other toy
@@ -425,7 +428,10 @@ gaps:
     the rows of the S1 core plugins (`clock`, `config-refs`, `restart-policy`, `reload`,
     `readiness`) and any row that question Q12 adds, and `profiles/dev/profile.yaml`
     (`08:1222`, `:1226`); with question Q17 (a) also `bundles/aiops-cli/bundle.yaml` and
-    `profiles/cli/profile.yaml`. They are embedded through `dist` into `cmd/aiops` as
+    `profiles/cli/profile.yaml`. The row of the operations plugin of decision 41 is in
+    `aiops-cli`, not in `aiops-core`, so ADR-054 decision 23 holds unchanged; where
+    `plugin-manager` sits from S6a is decided by the ADR of S6a (owner, 2026-11-23).
+    They are embedded through `dist` into `cmd/aiops` as
     `serve.Distribution.Shipped`, which `cmd/aiops` leaves nil at `491a518`, and into the
     test release; a file of the home wins over a shipped one (`internal/serve`). `install`,
     `enable`, `disable` and `remove` change a profile only under `$AIOPS_HOME`: when the
@@ -632,8 +638,14 @@ gaps:
       `--allow-bump` is acceptable; the content of the `init` deny-list, which exempts by
       package and pinned version the codec registration of
       `google.golang.org/grpc/encoding/proto` in a build with the tag `grpcnotrace`
-      (ADR-020 decision 27); how the licence scan runs the same with a local toolchain;
-      where a self-built distribution lists
+      (ADR-020 decision 27); the release build in two phases, where the builder writes
+      the distribution manifest, the release pipeline signs it outside the builder and
+      the builder then links the release binaries with the manifest, its bundle and the
+      release public key embedded, while `dist build` for a site links in one phase
+      (ADR-020 decision 13); the site's `aiopsctl` as an output of `dist build`, for the
+      host's platform, the `cli` profile of the same module table, embedding the same
+      manifest (ADR-020 decision 29); how the licence scan runs the same with a local
+      toolchain; where a self-built distribution lists
       sealed-hook listeners and raises the required set, since `dist.yaml` has four
       fields and W3 allows a raise (`08:401`, `:403`).
     - ADR-047, its S2a part: the OCI layout and media types; the content layer and its
@@ -1218,7 +1230,11 @@ to a question, the decision here settles it.
     `plugin-manager` from S6a. Besides `boot/` and `tools/` (decision 6), the YAML library
     is allowed in that plugin, in `plugingen` and in the builder, and never in `sdk/`,
     `loader/` or any other plugin. `08:369` and `08:1255` both hold, and `boot` keeps
-    every read the gate needs.
+    every read the gate needs. That plugin, the library of the CLI, imports the signature
+    library, the OCI client and the YAML library, and is a row of the `aiops-cli` bundle
+    of the `cli` profile at S2a, not of `aiops-core`, so ADR-054 decision 23 ("no
+    row of `aiops-core` imports an upstream module") holds unchanged; where
+    `plugin-manager` sits from S6a is decided by the ADR of S6a (owner, 2026-11-23).
 
 42. **The handshake message is frozen as a proto file** (Q6 (a)). S2a commits
     `sdk/remote/handshake/handshake.proto` with the three fields of `07:1126-1130` and a

@@ -170,7 +170,11 @@
    `trust.yaml` fixtures with a key from `crypto/ecdsa`. This answers R17 for signing
    (`07:75`) and keeps the homes of verification that `08:404` and `07:1839` state:
    `aiopsctl`, and from S6a the `plugin-manager` side, which consumes the same plugin.
-   `boot/` imports neither cosign
+   The operations plugin, which imports the signature library, the OCI client and the
+   YAML library, is a row of the `aiops-cli` bundle of the `cli` profile at S2a, not of
+   `aiops-core`, so ADR-054 decision 23 ("no row of `aiops-core` imports an upstream
+   module") holds unchanged; where `plugin-manager` sits from S6a is decided by the ADR
+   of S6a (owner, 2026-11-23). `boot/` imports neither cosign
    nor sigstore-go and verifies no signature (`08:404`; `07:1880`). Which sigstore-go
    packages the signing half imports is question Q2; how its `init` registrations meet the
    builder's deny-list is question Q9. cosign is never linked and never baked into an
