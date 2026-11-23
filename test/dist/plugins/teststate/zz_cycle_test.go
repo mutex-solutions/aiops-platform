@@ -21,7 +21,7 @@ func TestCycle(t *testing.T) {
 	launchFake, launchPlugin := launchfake.New()
 	loaderFake, loaderPlugin := loaderfake.New()
 	reloadFake, reloadPlugin := reloadfake.New()
-	cycle.Run(t, zzplugin.New(), map[string]any{"dir": "testdata/run"}, nil,
+	cycle.Run(t, zzplugin.New(), nil, nil,
 		cycle.Fake{Plugin: clockPlugin, Inventory: clockFake.Inventory},
 		cycle.Fake{Plugin: compositionPlugin, Inventory: compositionFake.Inventory},
 		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},

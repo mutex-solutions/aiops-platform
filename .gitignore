@@ -7,6 +7,3 @@ docs/architecture/diagrams/html/
 # Coverage profiles of the structural checks.
 cover.out
 cover-*.out
-
-# The state file that the generated cycle test of the test-state control row writes.
-test/dist/plugins/teststate/testdata/run/

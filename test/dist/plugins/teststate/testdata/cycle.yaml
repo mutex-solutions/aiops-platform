@@ -1,3 +1,0 @@
-# The row config the generated cycle test mounts the row with. The row writes its state
-# file into this directory, which .gitignore leaves out.
-dir: testdata/run
