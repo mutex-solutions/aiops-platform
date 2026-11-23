@@ -114,6 +114,9 @@ func TestDefineValidatesTheDecodedValue(t *testing.T) {
 	}
 }
 
+// secret is defined over Volatile, which keeps none of its methods.
+type secret plugin.Volatile[string]
+
 // Define refuses a config type that breaks a rule, at once.
 func TestDefineRefusesABadConfigType(t *testing.T) {
 	type inner struct{ X int }
@@ -178,6 +181,10 @@ func TestDefineRefusesABadConfigType(t *testing.T) {
 				}
 			}]{ID: "t/x"})
 		}, `json:"x.b": a key is not "*" and holds no "."`},
+		{"struct with no config field", func() { plugin.Define(plugin.Spec[struct{ Since time.Time }]{ID: "t/x"}) }, "time.Time has no config field"},
+		{"empty struct field", func() { plugin.Define(plugin.Spec[struct{ A struct{} }]{ID: "t/x"}) }, "struct {} has no config field"},
+		{"type defined over Volatile", func() { plugin.Define(plugin.Spec[struct{ Token secret }]{ID: "t/x"}) }, "plugin_test.secret is defined over plugin.Volatile"},
+		{"list of a type defined over Volatile", func() { plugin.Define(plugin.Spec[struct{ L []secret }]{ID: "t/x"}) }, "is defined over plugin.Volatile"},
 		{"json tag with no name", func() {
 			plugin.Define(plugin.Spec[struct {
 				A string `json:""`
