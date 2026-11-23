@@ -439,7 +439,8 @@ gaps:
   `internal/serve` creates `run/` with mode 0700 and finds it present under a read-only
   home.
 - A site cannot hold two digests of one plugin id, and, with question Q2 (a), two
-  artifacts of one name in one profile.
+  artifacts of one name in one profile, so two publishers' packs for one system never
+  share a profile.
 - The exit's pack fixture of step P1 carries at least one content file, so that step C1
   prints a content path and step C3 unpacks one (ADR-060 decision 30).
 - The layout, the media types and the annotation key are documented in the repository for
@@ -469,7 +470,7 @@ in the same change:
   `$AIOPS_HOME/bundles/<plugin id>/bundle.yaml`.
 - The one gate text of ADR-060 decision 16: the clause of decision 11, the boot rule of
   decision 6, and the clauses that the answers to questions Q3 and Q4 add.
-- The lines that an option of question Q2 other than (a) names.
+- The lines that the chosen option of question Q2 names.
 - The lines that the chosen option of question Q6 names.
 
 ## Questions for the owner
@@ -495,21 +496,35 @@ rollback that changes a lock digest is bound by that rule (decision 7).
 
 **Q2. What does install do when an artifact of the same name under another owner enters
 a profile?** The group of `acme/connector-x` and that of `beta/connector-x` are both
-`connector-x` (`08:391`; `00:657`).
+`connector-x` (`08:391`; `00:657`). The naming rule makes this the common case for packs:
+every third-party pack for one system is named `connector-<system>` or `<contribution
+noun>-<system>` (`00:657`; T7, `08:1363`), so two publishers' packs for VictoriaLogs are
+both `connector-victorialogs`. dsh names a bundle by its scoped package name
+(`@deepseek-ai/dsh-base`; dsh-architecture §3.1, §3.2), so two owners' bundles of one
+short name coexist there as packages, and a profile here names a bundle by its plugin id
+under every option (community:296). dsh mounts no group per bundle (§3.2), so the group,
+and a clash of its id, are ours under every option.
 - (a) Install composes the target profile with the artifact's bundle appended, as boot
   would, and refuses when the group id equals the id of any row of that composition, the
   group of the other artifact included. It names both, writes nothing and exits 1 with the
-  reason (ADR-060 decision 23). The operator removes one artifact or installs the other
-  into another profile. dsh likewise refuses to install a bundle that is already installed
-  (dsh-architecture §4.4).
+  reason (ADR-060 decision 23). "Two packs cannot collide" then reads "two artifacts of
+  one name never compose together: the second install is refused", so two publishers'
+  packs for one system never share a profile; the operator removes one or installs the
+  other into another profile. A first-party row that a later release adds under a group's
+  id is caught at boot by decision 6, which leaves the artifact's rows out and names the
+  clash, and the operator then removes the artifact. Edits `08:391`, `07:1817` and
+  community:298 to that reading.
 - (b) The group carries the owner, with a separator outside kebab-case so that no two ids
-  meet, for example `acme.connector-x:logs`. Edits `00:657` (a row id is kebab-case),
-  `08:391`, `07:1737`, `07:1817` and community:298.
+  meet, for example `acme.connector-x:logs`. Two publishers' packs for one system share a
+  profile, and no first-party row id, which is kebab-case, can take a group's id. Edits
+  `00:657` (a row id is kebab-case), `08:391`, `07:1737`, `07:1817` and community:298.
 - (c) `install --as <group>` names the group when the default is taken, and the profile
   records the alias. Departs from "one group named by the artifact" (`00:478`).
-- Recommended: (a). It keeps the written row id and "two packs cannot collide", adds no
-  name form and no flag, and also covers a group that meets a first-party row id. Needed
-  before `install` merges.
+- Recommended: (a). It keeps the written row id `<pack name>:<row>` and the `plugin enable
+  <name>:<row>` lines of the worked pack (`07:1737`), and adds no name form and no flag.
+  Its cost is the one stated above: two packs for one system never share a profile, and a
+  release that takes a group's id leaves that artifact's rows out until the operator
+  acts. (b) removes both costs and edits `00:657`. Needed before `install` merges.
 
 **Q3. Does boot check what install kept against the locked digest?** Install verifies
 every blob it pulls against its descriptor, and the signature over the image manifest. The
