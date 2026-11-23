@@ -18,6 +18,6 @@ hooks: []
 configSchema: {}
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     launch: ["0.1"]

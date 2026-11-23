@@ -40,7 +40,7 @@ configSchema:
   type: object
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     spine: ["0.1"]
     toy: ["0.1"]

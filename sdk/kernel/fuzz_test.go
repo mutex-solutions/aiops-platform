@@ -442,6 +442,23 @@ type fuzzFiber struct {
 	needs    []int
 	provides []int
 	ctx      atomic.Pointer[Context] // The context of its latest activation, the parent of a child mount.
+	applied  atomic.Pointer[box]     // What the Apply of its latest activation received.
+	retains  []fuzzRetain            // Its retained configs in order.
+}
+
+// fuzzCfg is a config of the operation fuzzer. Each change of a config gives a new
+// one, so a value names the change that retained it. Decode refuses a bad one, and
+// the internal/update listener of the run vetoes the restart of a veto one.
+type fuzzCfg struct {
+	n         int
+	bad, veto bool
+}
+
+// fuzzRetain is one retained config; commit marks one that a hand-off may carry: a
+// Commit, or the last CommitOp of the fiber in its batch (ADR-034 G13).
+type fuzzRetain struct {
+	cfg    fuzzCfg
+	commit bool
 }
 
 type fuzzRun struct {
@@ -455,8 +472,25 @@ type fuzzRun struct {
 	fibers []*fuzzFiber
 	byID   map[string]*fuzzFiber
 	// admitted lists the operations of each admitted batch, comma-separated: mount,
-	// update, child (under a fiber's context), root-child, update-cfg or dispose.
+	// update, child (under a fiber's context), root-child, update-cfg, commit-cfg or
+	// dispose.
 	admitted []string
+	nextCfg  int
+	handed   int // Activations that checkHandOffs found reading a handed-off config.
+}
+
+// cfg returns a new config of the kind byte b: a multiple of four is bad, two more
+// than one is a veto.
+func (run *fuzzRun) cfg(b byte) fuzzCfg {
+	run.nextCfg++
+	return fuzzCfg{n: run.nextCfg, bad: b%4 == 0, veto: b%4 == 2}
+}
+
+// change records cfg as retained by ff when the fiber's cell holds it.
+func (run *fuzzRun) change(ff *fuzzFiber, cfg fuzzCfg, commit bool) {
+	if ff.fiber.cell.load() == any(cfg) {
+		ff.retains = append(ff.retains, fuzzRetain{cfg: cfg, commit: commit})
+	}
 }
 
 type reader struct {
@@ -504,16 +538,18 @@ func (run *fuzzRun) spec(rd *reader) (Plugin, *fuzzFiber) {
 		run.hangs++
 	}
 	gate := run.gate
-	// Decode refuses a config whose first byte is a multiple of four, so an
-	// update with a config can be refused whole.
+	// Decode refuses a bad config, so an update with a config can be refused whole,
+	// and returns a box into which the hand-off stores the committed config.
 	decode := func(raw any) (any, error) {
-		if n, ok := raw.(uint8); ok && n%4 == 0 {
+		if cfg, _ := raw.(fuzzCfg); cfg.bad {
 			return nil, errors.New("decode refused")
 		}
-		return raw, nil
+		return &box{cfg: raw}, nil
 	}
-	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Decode: decode, Apply: func(c *Context, _ any) error {
+	ff.retains = []fuzzRetain{{cfg: run.cfg(1)}}
+	plugin := Define(Plugin{ID: ff.id, Inject: inject, Provides: declared, Decode: decode, Apply: func(c *Context, cfg any) error {
 		ff.ctx.Store(c)
+		ff.applied.Store(cfg.(*box))
 		provide := func() error {
 			for _, i := range ff.provides {
 				if err := run.keys[i].Provide(c, i); err != nil {
@@ -562,12 +598,12 @@ func (run *fuzzRun) spec(rd *reader) (Plugin, *fuzzFiber) {
 		}
 		return provide()
 	}})
-	return plugin, ff
+	return WithCommit(plugin, func(applied, committed any) { applied.(*box).held.Store(committed.(*box)) }), ff
 }
 
 func (run *fuzzRun) mount(rd *reader) {
 	p, ff := run.spec(rd)
-	ff.fiber = run.root.Plugin(p, nil)
+	ff.fiber = run.root.Plugin(p, ff.retains[0].cfg)
 	run.fibers = append(run.fibers, ff)
 	run.byID[ff.id] = ff
 }
@@ -581,12 +617,12 @@ func (run *fuzzRun) pick(rd *reader) *fuzzFiber {
 }
 
 func (run *fuzzRun) step(rd *reader) {
-	switch op := rd.next() % 8; op {
+	switch op := rd.next() % 9; op {
 	case 0, 1:
 		run.mount(rd)
 	case 2:
 		if ff := run.pick(rd); ff != nil {
-			_ = ff.fiber.Update(run.ctx, nil)
+			run.update(ff)
 		}
 	case 3:
 		if ff := run.pick(rd); ff != nil {
@@ -596,12 +632,18 @@ func (run *fuzzRun) step(rd *reader) {
 		var ops []BatchOp
 		var added []*fuzzFiber
 		var shape []string
+		type change struct {
+			ff     *fuzzFiber
+			cfg    fuzzCfg
+			commit bool
+		}
+		var changes []change
 		for n := int(rd.next()%3) + 1; n > 0; n-- {
-			switch rd.next() % 5 {
+			switch rd.next() % 6 {
 			case 0:
 				p, ff := run.spec(rd)
 				added = append(added, ff)
-				ops, shape = append(ops, MountOp(p, nil)), append(shape, "mount")
+				ops, shape = append(ops, MountOp(p, ff.retains[0].cfg)), append(shape, "mount")
 			case 1:
 				if ff := run.pick(rd); ff != nil {
 					ops, shape = append(ops, UpdateOp(ff.fiber)), append(shape, "update")
@@ -613,14 +655,22 @@ func (run *fuzzRun) step(rd *reader) {
 				}
 				p, ff := run.spec(rd)
 				added = append(added, ff)
-				ops, shape = append(ops, parent.MountOp(p, nil)), append(shape, kind)
+				ops, shape = append(ops, parent.MountOp(p, ff.retains[0].cfg)), append(shape, kind)
 			case 3: // An update that carries a config.
 				if ff := run.pick(rd); ff != nil {
-					ops, shape = append(ops, UpdateOpWith(ff.fiber, rd.next())), append(shape, "update-cfg")
+					cfg := run.cfg(rd.next())
+					changes = append(changes, change{ff, cfg, false})
+					ops, shape = append(ops, UpdateOpWith(ff.fiber, cfg)), append(shape, "update-cfg")
 				}
-			default:
+			case 4:
 				if ff := run.pick(rd); ff != nil {
 					ops, shape = append(ops, DisposeOp(ff.fiber)), append(shape, "dispose")
+				}
+			default: // A commit, which may hand its config off.
+				if ff := run.pick(rd); ff != nil {
+					cfg := run.cfg(rd.next())
+					changes = append(changes, change{ff, cfg, true})
+					ops, shape = append(ops, CommitOp(ff.fiber, cfg)), append(shape, "commit-cfg")
 				}
 			}
 		}
@@ -641,6 +691,10 @@ func (run *fuzzRun) step(rd *reader) {
 		}
 		if err == nil {
 			run.admitted = append(run.admitted, strings.Join(shape, ","))
+			for i, c := range changes { // Every config of an admitted batch is retained, in order.
+				last := !slices.ContainsFunc(changes[i+1:], func(d change) bool { return d.ff == c.ff })
+				c.ff.retains = append(c.ff.retains, fuzzRetain{cfg: c.cfg, commit: c.commit && last})
+			}
 			mounted := 0
 			for i, op := range ops {
 				if op.kind == batchMount {
@@ -663,14 +717,70 @@ func (run *fuzzRun) step(rd *reader) {
 			run.t.Fatalf("Notify: %v", err)
 		}
 	case 6:
-		run.settle()
-		run.checkGraph()
-	default:
+		run.settleAndCheck()
+	case 7:
 		// A fiber that disposes another's key space: restart a provider's consumers
 		// by updating a random fiber twice in a row.
 		if ff := run.pick(rd); ff != nil {
-			_ = ff.fiber.Update(run.ctx, nil)
-			_ = ff.fiber.Update(run.ctx, nil)
+			run.update(ff)
+			run.update(ff)
+		}
+	default:
+		if ff := run.pick(rd); ff != nil {
+			cfg := run.cfg(rd.next())
+			_ = ff.fiber.Commit(run.ctx, cfg)
+			run.change(ff, cfg, true)
+		}
+	}
+}
+
+// update restarts ff's fiber with a new config.
+func (run *fuzzRun) update(ff *fuzzFiber) {
+	cfg := run.cfg(1)
+	_ = ff.fiber.Update(run.ctx, cfg)
+	run.change(ff, cfg, false)
+}
+
+// settleAndCheck settles and checks the graph, and the hand-offs when nothing is
+// blocked: a blocked unwind leaves an activation running that its batch ended.
+func (run *fuzzRun) settleAndCheck() {
+	err := run.settle()
+	run.checkGraph()
+	if err == nil {
+		run.checkHandOffs()
+	}
+}
+
+// checkHandOffs asserts what the activation of each ACTIVE fiber reads (ADR-034 G13):
+// the config of the last commit that a hand-off may carry, retained after the
+// config the activation applied, that resolves; else the config it applied.
+func (run *fuzzRun) checkHandOffs() {
+	run.t.Helper()
+	view, err := run.root.Inspect(run.ctx)
+	if err != nil {
+		run.t.Fatalf("Inspect: %v", err)
+	}
+	for _, s := range view.Fibers {
+		ff := run.byID[s.Plugin]
+		if s.State != Active || ff == nil {
+			continue
+		}
+		b := ff.applied.Load()
+		k := slices.IndexFunc(ff.retains, func(r fuzzRetain) bool { return any(r.cfg) == b.cfg })
+		if k < 0 {
+			run.t.Fatalf("fiber %d (%s) applied %v, which it never retained: %v", s.ID, s.Plugin, b.cfg, ff.retains)
+		}
+		want := b.cfg
+		for _, r := range ff.retains[k+1:] {
+			if r.commit && !r.cfg.bad {
+				want = r.cfg
+			}
+		}
+		if got := b.now(); got != want {
+			run.t.Fatalf("fiber %d (%s) applied %v and reads %v, want %v: %v", s.ID, s.Plugin, b.cfg, got, want, ff.retains)
+		}
+		if want != b.cfg {
+			run.handed++
 		}
 	}
 }
@@ -738,7 +848,21 @@ func FuzzOperationSequence(f *testing.F) {
 	f.Add([]byte{0, 0, 1, 0, 4, 0, 3, 0, 4, 6})                         // batch: update with a refused config
 	f.Add(seedChildOfFiber)
 	f.Add(seedChildUpdateDispose)
+	f.Add(seedCommits)
 	f.Fuzz(func(t *testing.T, data []byte) { runSequence(t, data) })
+}
+
+// Mount p0 providing k0, settle, Commit p0, settle; batch: a CommitOp of p0 and an
+// UpdateOpWith of p0 whose restart is vetoed, settle; batch: a CommitOp of p0,
+// settle; a Commit of p0 with a config that Decode refuses, settle.
+var seedCommits = []byte{0, 0, 1, 0, 6, 8, 0, 1, 6, 4, 1, 5, 0, 1, 3, 0, 2, 6, 4, 0, 5, 0, 3, 6, 8, 0, 4, 6}
+
+// The commit seed is handed configs off, which checkHandOffs finds.
+func TestFuzzSeedHandsConfigsOff(t *testing.T) {
+	run := runSequence(t, seedCommits)
+	if run.handed < 2 || !slices.Contains(run.admitted, "commit-cfg,update-cfg") {
+		t.Fatalf("%d hand-offs found, batches %q", run.handed, run.admitted)
+	}
 }
 
 // A child mount under a fiber needs the fiber's context, which its Apply stores: each
@@ -778,6 +902,12 @@ func runSequence(t *testing.T, data []byte) *fuzzRun {
 	for i := range run.keys {
 		run.keys[i] = NewKey[int](fmt.Sprintf("k%d", i), 1)
 	}
+	InternalUpdate.On(root.Context(), DefaultStage, func(_ context.Context, a any, next Next[any]) (any, error) {
+		if b, ok := a.(*box); ok && b.cfg.(fuzzCfg).veto {
+			return nil, nil
+		}
+		return next()
+	})
 	rd := &reader{data: data}
 	for n := 0; n < fuzzMaxOps && rd.more(); n++ {
 		run.step(rd)
@@ -785,11 +915,9 @@ func runSequence(t *testing.T, data []byte) *fuzzRun {
 	var once sync.Once
 	release := func() { once.Do(func() { close(run.gate) }) }
 	defer release()
-	run.settle()
-	run.checkGraph()
+	run.settleAndCheck()
 	release()
-	run.settle()
-	run.checkGraph()
+	run.settleAndCheck()
 	closeErr := closeKernel(t, root)
 	_ = closeErr // A failed or blocked fiber is reported by Close, not a defect.
 

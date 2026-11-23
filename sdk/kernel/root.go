@@ -26,7 +26,8 @@ type Plugin struct {
 	Decode   func(raw any) (any, error)      // Optional (07-c4-plugin-sdk.md:192; ADR-034 owner decision 9): turns the raw config into what Apply receives. It must be pure: it also runs on an update of a fiber that has a desired target, before the restart, and again at the activation.
 	Apply    func(c *Context, cfg any) error // Everything it registers is an effect.
 
-	entry entryID // Minted by Define; nil for a Plugin with no entry of its own.
+	entry  entryID                      // Minted by Define; nil for a Plugin with no entry of its own.
+	commit func(applied, committed any) // Stamped by WithCommit; nil for no hand-off.
 }
 
 // Config is every number the kernel needs, plus the three binding maps. The kernel
@@ -229,7 +230,11 @@ func UpdateOpWith(f *Fiber, cfg any) BatchOp {
 // target, committed through internal/commit, and retained only when the core admits
 // the whole batch; a refused batch, such as one that disposes f before this
 // operation, retains nothing. It runs no
-// internal/update and does not restart f. The Fiber at this position is f.
+// internal/update and does not restart f. With a hand-off (WithCommit), once the
+// batch is admitted and before Batch returns, the last operation of the batch that
+// carries a config of f, when it is a CommitOp, hands it off as Commit does, unless
+// the batch ends f's activation as Context.MountOp counts it, whatever the order;
+// Batch returns no error of the hand-off. The Fiber at this position is f.
 func CommitOp(f *Fiber, cfg any) BatchOp {
 	return BatchOp{kind: batchKeep, fiber: f, cfg: cfg, hasCfg: true}
 }
@@ -278,7 +283,7 @@ func (r *Root) Batch(ctx context.Context, ops ...BatchOp) ([]*Fiber, error) {
 		return nil, err
 	}
 	ids, err := r.core.batch(ctx, native)
-	done()
+	done(ids)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +346,7 @@ func (c *Context) When(deps []Dep, body func(*Context) error) *Fiber {
 // keeps the config for later updates. Apply gets what the config pipeline makes of
 // the cell's raw value at each activation (config.go).
 func (c *Context) mountSpec(p Plugin, cfg any) (pluginSpec, *cfgCell) {
-	cell := &cfgCell{root: c.root, raw: cfg, decode: p.Decode}
+	cell := &cfgCell{root: c.root, raw: cfg, decode: p.Decode, commit: p.commit}
 	var apply func(*Context) error
 	if p.Apply != nil {
 		apply = func(cc *Context) error {

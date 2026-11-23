@@ -290,6 +290,8 @@ func TestPluginVet(t *testing.T) {
 		{"embedded WaitGroup.Go", "plugins/a/internal/x/x.go", pk("import \"sync\"\n", "type T struct{ sync.WaitGroup }\nfunc f(t *T) { g := t.Go; g(nil) }\n"), "(*sync.WaitGroup).Go starts"},
 		{"WaitGroup wait fine", "plugins/a/plugin.go", pk("import \"sync\"\n", "func f() { var wg sync.WaitGroup; wg.Add(1); wg.Done(); wg.Wait() }\n"), ""},
 		{"kernel Go fine", "plugins/a/plugin.go", pk(kimp, "func f(c *kernel.Context) { c.Go(\"x\", nil) }\n"), ""},
+		{"kernel.WithCommit", "plugins/a/plugin.go", pk(kimp, "func f(p kernel.Plugin) kernel.Plugin { return kernel.WithCommit(p, nil) }\n"), "plugin.go:3: kernel.WithCommit is forbidden"},
+		{"kernel.WithCommit renamed import", "loader/a.go", pk("import k \""+mp+"/sdk/kernel\"\n", "var w = k.WithCommit\n"), "k.WithCommit is forbidden"},
 		{"ListenAndServe nil", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServe(\":0\", nil) }\n"), "http.ListenAndServe with a nil handler serves http.DefaultServeMux"},
 		{"ListenAndServeTLS nil", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServeTLS(\":0\", \"c\", \"k\", nil) }\n"), "http.ListenAndServeTLS with a nil handler"},
 		{"Serve nil", "plugins/a/plugin.go", pk("import h \"net/http\"\n", "func f() { h.Serve(nil, nil) }\n"), "h.Serve with a nil handler"},

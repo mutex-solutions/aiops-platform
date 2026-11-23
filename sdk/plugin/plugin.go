@@ -93,7 +93,7 @@ import (
 // While it is 0.y a minor may break, and gate check 1 needs the exact minor.
 // tools/pluginapi fails when the exported API of either package changed and this
 // constant did not.
-const APIVersion = "0.2"
+const APIVersion = "0.3"
 
 // Spec is what an author writes (07-c4-plugin-sdk.md:215-223). Durable joins at
 // S3 with the durable definition (ADR-060 decision 29).

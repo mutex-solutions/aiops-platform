@@ -1,6 +1,6 @@
 # The exported API of sdk/kernel and sdk/plugin (ADR-060 decision 8), written by
 # go run ./tools/pluginapi -write .; raise plugin.APIVersion before recording a change.
-pluginApi 0.2
+pluginApi 0.3
 pkg kernel, const Active State = "ACTIVE"
 pkg kernel, const DefaultStage untyped string = "default"
 pkg kernel, const Disposed State = "DISPOSED"
@@ -45,6 +45,7 @@ pkg kernel, func Stages(...string) HookOption
 pkg kernel, func UpdateOp(*Fiber) BatchOp
 pkg kernel, func UpdateOpWith(*Fiber, any) BatchOp
 pkg kernel, func Want[T any](Key[T]) Dep
+pkg kernel, func WithCommit(Plugin, func(any, any)) Plugin
 pkg kernel, method (*Context) Defer(string, Disposer)
 pkg kernel, method (*Context) Dispose() error
 pkg kernel, method (*Context) Effect(string, func() (Disposer, error)) error
@@ -320,7 +321,7 @@ pkg kernel, var LoggerKey Key[Logger]
 pkg kernel, var ReflectKey Key[*reflectService]
 pkg kernel, var RegistryKey Key[*registry]
 pkg kernel, var Unscoped Audience
-pkg plugin, const APIVersion untyped string = "0.2"
+pkg plugin, const APIVersion untyped string = "0.3"
 pkg plugin, func Define[C any](Spec[C]) kernel.Plugin
 pkg plugin, func Describe[C any]() (ConfigInfo, error)
 pkg plugin, func Generate(kernel.Plugin) (Generated, error)

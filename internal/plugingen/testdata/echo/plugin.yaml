@@ -28,6 +28,6 @@ configSchema:
   type: object
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     echoers: ["0.1"]

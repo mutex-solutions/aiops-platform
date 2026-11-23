@@ -22,6 +22,6 @@ hooks: []
 configSchema: {}
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     toy: ["0.1"]

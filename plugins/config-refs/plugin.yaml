@@ -29,7 +29,7 @@ configSchema:
   type: object
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     configrefs: ["0.1"]
     launch: ["0.2"]

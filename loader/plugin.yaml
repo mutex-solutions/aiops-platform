@@ -25,7 +25,7 @@ hooks: []
 configSchema: {}
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     composition: ["0.1"]
     launch: ["0.2"]

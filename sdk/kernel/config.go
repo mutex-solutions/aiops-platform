@@ -29,8 +29,17 @@ var ErrCommitVetoed = errors.New("config commit vetoed")
 type cfgCell struct {
 	root   *Root
 	decode func(raw any) (any, error)
+	commit func(applied, committed any) // The hand-off of WithCommit (G13); nil for none.
 	mu     sync.Mutex
 	raw    any
+	seq    uint64 // Counts the retains of raw.
+	// cur is the running activation of a fiber with a hand-off: what its Apply
+	// received, its Std context and the retain it resolved.
+	cur struct {
+		v   any
+		ctx context.Context
+		seq uint64
+	}
 	// cmu serialises the changes of raw after the mount. Invariant: a value is
 	// retained only by change, which takes cmu, or by the owner in the turn that
 	// admits a batch (batchOp.cell), whose caller holds cmu from before the first
@@ -38,27 +47,65 @@ type cfgCell struct {
 	// refused batch retains nothing, no activation reads a config its batch then
 	// loses, and a newer Update or Commit waits and retains after the admission.
 	// cmu is held across nothing but the internal/update hooks, the core's
-	// admission and plain assignments, and a batch takes it in ascending fiber id.
+	// admission, a hand-off and plain assignments, and a batch takes it in
+	// ascending fiber id.
 	cmu sync.Mutex
 }
 
-func (c *cfgCell) load() any {
+// retain makes raw the config of every later activation and returns its count.
+func (c *cfgCell) retain(raw any) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.raw
-}
-
-func (c *cfgCell) retain(raw any) {
-	c.mu.Lock()
 	c.raw = raw
-	c.mu.Unlock()
+	c.seq++
+	return c.seq
 }
 
-// change retains raw as the config of every later activation.
-func (c *cfgCell) change(raw any) {
+// change retains raw under the config lock.
+func (c *cfgCell) change(raw any) uint64 {
 	c.cmu.Lock()
-	c.retain(raw)
-	c.cmu.Unlock()
+	defer c.cmu.Unlock()
+	return c.retain(raw)
+}
+
+// handOff gives the running activation the config of retain s (G13): committed,
+// resolved by vet or stageUpdates, or cfg resolved now, under no lock, when the
+// fiber had no target then (loaded is false). It hands nothing when the activation
+// ended or holds s already, or once a newer retain passed s, and returns the error
+// of that resolve or a panic of the hand-off as a *PanicError.
+func (c *cfgCell) handOff(ctx context.Context, s uint64, cfg, committed any, loaded bool) (err error) {
+	if c.commit == nil {
+		return nil
+	}
+	if _, ok := c.running(s); !ok {
+		return nil
+	}
+	if !loaded {
+		if committed, err = c.resolve(ctx, cfg); err != nil {
+			return err
+		}
+	}
+	c.cmu.Lock()
+	defer c.cmu.Unlock()
+	applied, ok := c.running(s)
+	if !ok {
+		return nil
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			err = &PanicError{Value: p}
+		}
+	}()
+	c.commit(applied, committed)
+	return nil
+}
+
+// running returns the value of the running activation when s is the latest retain
+// and the activation, whose unload has not begun, resolved an older one.
+func (c *cfgCell) running(s uint64) (any, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cur.v, c.seq == s && c.cur.ctx != nil && c.cur.ctx.Err() == nil && c.cur.seq < s
 }
 
 // resolve turns raw into what Apply receives: internal/config, then Decode. A
@@ -77,9 +124,28 @@ func (c *cfgCell) resolve(ctx context.Context, raw any) (v any, err error) {
 }
 
 // prepare is the config of one activation. An error fails the fiber like an error
-// of Apply.
+// of Apply. With a hand-off it records the activation as the running one, and
+// resolves again when a retain overtook its resolve, so that no retain falls
+// between its resolve and the hand-offs it receives.
 func (c *cfgCell) prepare(ctx context.Context) (any, error) {
-	return c.resolve(ctx, c.load())
+	for {
+		c.mu.Lock()
+		raw, s := c.raw, c.seq
+		c.mu.Unlock()
+		v, err := c.resolve(ctx, raw)
+		if err != nil || c.commit == nil {
+			return v, err
+		}
+		c.mu.Lock()
+		ok := c.seq == s
+		if ok {
+			c.cur.v, c.cur.ctx, c.cur.seq = v, ctx, s
+		}
+		c.mu.Unlock()
+		if ok {
+			return v, nil
+		}
+	}
 }
 
 // runInner runs w with the kernel's own behaviour innermost (07-c4-plugin-sdk.md:209,
@@ -96,11 +162,14 @@ func runInner[A, R any](ctx context.Context, w *Waterfall[A, R], r *Root, a A, i
 // UpdateOpWith). It marks native[i] as batchKeep where internal/update vetoed the
 // restart, and gives native[i] the cell and the config that the owner retains in the
 // turn that admits the batch: nothing is retained before, so an activation cannot
-// apply the config of a batch the core then refuses. It returns done, which the
-// caller must call once the core has admitted or refused the batch, to release the
-// config locks of cell.cmu. A listener of internal/update runs with those locks
-// held, so it must not change the config of a fiber of its own batch.
-func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(), err error) {
+// apply the config of a batch the core then refuses. It marks for a hand-off
+// (G13) the last operation of each fiber that carries a config when it is a
+// CommitOp. It returns done, which the caller must call with the ids of the core's
+// batch once the core has admitted it (nil once refused): done releases the config
+// locks of cell.cmu, then hands off each CommitOp at whose position the core put
+// its fiber's id. A listener of internal/update runs with those locks held, so it
+// must not change the config of a fiber of its own batch.
+func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp) (done func(ids []uint64), err error) {
 	type staged struct {
 		i             int
 		id            uint64
@@ -160,10 +229,29 @@ func (r *Root) stageUpdates(ctx context.Context, ops []BatchOp, native []batchOp
 			native[s.i].Kind = batchKeep
 		}
 	}
+	last := make(map[*cfgCell]int, len(list))
+	for _, s := range list {
+		last[s.cell] = s.i
+	}
 	for _, s := range list {
 		native[s.i].cell, native[s.i].cfg = s.cell, s.cfg
+		native[s.i].handOff = ops[s.i].kind == batchKeep && s.cell.commit != nil && last[s.cell] == s.i
 	}
-	return unlock, nil
+	return func(ids []uint64) {
+		var offs []func()
+		for _, s := range list {
+			if s.i < len(ids) && ids[s.i] != 0 {
+				s.cell.mu.Lock()
+				seq := s.cell.seq // The batch's retain: the batch still holds the lock.
+				s.cell.mu.Unlock()
+				offs = append(offs, func() { _ = s.cell.handOff(ctx, seq, s.cfg, s.resolved, s.loaded) })
+			}
+		}
+		unlock()
+		for _, off := range offs {
+			off()
+		}
+	}, nil
 }
 
 // vet is the half of Update and Commit that comes before anything is retained:
@@ -196,12 +284,19 @@ func (f *Fiber) vet(ctx context.Context, cfg any) (resolved any, loaded bool, er
 // internal/config and Decode, then it runs the waterfall internal/commit, which
 // fails closed. An error, or a veto (ErrCommitVetoed), retains nothing. Only a
 // commit that completes retains cfg. Then no internal/update runs, the fiber is not
-// restarted and the running activation keeps the value it was applied with. Its
-// Apply is not called again: a plugin learns the new value from whoever commits it
-// (the loader dispatches loader/volatile-update), and the next activation of the
-// fiber, whatever starts it, resolves the retained cfg. A fiber mounted with When
-// takes no config and Commit ignores cfg. Changes of one fiber's config are
-// serialised with those of Update and Batch (see cfgCell.cmu). Decode must be pure.
+// restarted and its Apply is not called again: a plugin learns the new value from
+// whoever commits it (the loader dispatches loader/volatile-update) and, with a
+// hand-off (WithCommit), from its Volatile fields; without one the running
+// activation keeps the value it was applied with. The next activation of the
+// fiber, whatever starts it, resolves the retained cfg. With a hand-off, Commit
+// hands cfg off before it returns (ADR-034 G13): to the running activation, the
+// latest whose config was resolved for its Apply, unless its unload has begun or
+// it resolved this cfg itself. When the fiber had no target at the vet, cfg is
+// resolved now for such an activation; an error of it, or a panic of the hand-off
+// as a *PanicError, hands nothing more, restarts nothing and is returned. A fiber
+// mounted with When takes no config and Commit ignores cfg. Changes of one fiber's
+// config, and hand-offs, are serialised with those of Update and Batch (see
+// cfgCell.cmu). Decode must be pure.
 func (f *Fiber) Commit(ctx context.Context, cfg any) error {
 	if f.cell == registryCell {
 		return errRegistryConfig
@@ -209,11 +304,11 @@ func (f *Fiber) Commit(ctx context.Context, cfg any) error {
 	if f.cell == nil {
 		return nil
 	}
-	if _, _, err := f.vet(ctx, cfg); err != nil {
+	resolved, loaded, err := f.vet(ctx, cfg)
+	if err != nil {
 		return err
 	}
-	f.cell.change(cfg)
-	return nil
+	return f.cell.handOff(ctx, f.cell.change(cfg), cfg, resolved, loaded)
 }
 
 // Update replaces the fiber's config with cfg and restarts it, and returns once

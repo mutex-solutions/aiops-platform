@@ -31,7 +31,9 @@ var vetSkip = []string{
 }
 
 // forbiddenCalls maps an import path to the selectors that may not be used.
-// A "!" entry names the only permitted selector of the package.
+// A "!" entry names the only permitted selector of the package. kernel.WithCommit
+// gives a Plugin the hand-off that runs at every commit, which only sdk/plugin may
+// give (ADR-034 G13).
 var forbiddenCalls = map[string][]string{
 	"time":      {"Sleep"},
 	"os/signal": {"Notify", "NotifyContext"},
@@ -41,6 +43,7 @@ var forbiddenCalls = map[string][]string{
 	"github.com/prometheus/client_golang/prometheus":          {"DefaultRegisterer", "DefaultGatherer", "MustRegister", "Register", "Unregister"},
 	"github.com/prometheus/client_golang/prometheus/promhttp": {"Handler"},
 	"github.com/prometheus/client_golang/prometheus/promauto": {"!With"},
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel":    {"WithCommit"},
 }
 
 // goFuncs start an untracked goroutine like a bare go statement does. Plugin

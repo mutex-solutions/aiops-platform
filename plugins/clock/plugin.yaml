@@ -24,6 +24,6 @@ configSchema:
   type: object
 durable: []
 requires:
-  pluginApi: "0.2"
+  pluginApi: "0.3"
   definitions:
     clock: ["0.1"]
