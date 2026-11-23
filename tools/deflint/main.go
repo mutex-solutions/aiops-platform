@@ -46,11 +46,6 @@ const (
 	docRules  = "07-c4-plugin-sdk.md:514-520"
 )
 
-// pendingSuites are the S1 definitions whose suites land with ADR-060 decision 44. The
-// lint fails when one of them has its suite, so the entry leaves with the change that
-// adds the suite and no definition keeps an exemption it no longer needs.
-var pendingSuites = []string{"clock", "composition", "configrefs", "launch", "reload"}
-
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: deflint <repo-root>")
@@ -215,14 +210,10 @@ func files(d *definition) []string {
 	if len(goFiles(filepath.Join(d.dir, "fake"), false)) == 0 {
 		out = append(out, "no fake: fake/ holds no Go file ("+docRule+")")
 	}
-	suite := goFiles(filepath.Join(d.dir, "conformance"), false)
-	pending := slices.Contains(pendingSuites, d.name)
-	switch {
-	case len(suite) > 0 && pending:
-		out = append(out, "its suite exists: remove it from pendingSuites in tools/deflint")
-	case len(suite) == 0 && !pending:
+	switch suite := goFiles(filepath.Join(d.dir, "conformance"), false); {
+	case len(suite) == 0:
 		out = append(out, "no suite: conformance/ holds no Go file ("+docRule+")")
-	case !pending && !anyContains(suite, "func Run("):
+	case !anyContains(suite, "func Run("):
 		out = append(out, "the suite has no Run (ADR-059 decision 32)")
 	}
 	return out

@@ -74,10 +74,6 @@ func TestFiles(t *testing.T) {
 	}
 	noRun["conformance/conformance.go"] = "package conformance\n"
 	want(t, files(fixture(t, "x", noRun)), "the suite has no Run")
-	// A definition whose suite is pending passes without one, and fails once it has one.
-	want(t, files(fixture(t, pendingSuites[0], complete)), "remove it from pendingSuites")
-	delete(noRun, "conformance/conformance.go")
-	want(t, files(fixture(t, pendingSuites[0], noRun)))
 }
 
 func TestLayout(t *testing.T) {
