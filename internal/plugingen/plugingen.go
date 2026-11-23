@@ -254,11 +254,37 @@ func main() {
 		ID        string
 		Generated plugin.Generated
 	}
-	if err := json.Unmarshal(out, &res); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(out))
+	dec.UseNumber()
+	if err := dec.Decode(&res); err != nil {
 		return plugin.Generated{}, fmt.Errorf("%s: the driver printed %q: %w", t.ImportPath, out, err)
 	}
+	exact(res.Generated.ConfigSchema)
 	t.ID = res.ID
 	return res.Generated, nil
+}
+
+// exact turns each json.Number in v into an int64 when it is one and a float64
+// otherwise, in place, as plugin.Generate does, so that an integer of configSchema
+// keeps every digit on its way through the driver's output.
+func exact(v any) any {
+	switch x := v.(type) {
+	case json.Number:
+		if i, err := x.Int64(); err == nil {
+			return i
+		}
+		f, _ := x.Float64()
+		return f
+	case map[string]any:
+		for k, e := range x {
+			x[k] = exact(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = exact(e)
+		}
+	}
+	return v
 }
 
 // definitions reads the definition.yaml of each package in t's package graph that

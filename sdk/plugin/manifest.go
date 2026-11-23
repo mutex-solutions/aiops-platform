@@ -3,6 +3,7 @@
 package plugin
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -75,7 +76,7 @@ type Generated struct {
 	Provides     []KeyRef       `yaml:"provides"`
 	Registers    []KeyRef       `yaml:"registers"`
 	Hooks        []HookRef      `yaml:"hooks"`
-	ConfigSchema map[string]any `yaml:"configSchema"` // JSON Schema 2020-12, inline
+	ConfigSchema map[string]any `yaml:"configSchema"` // JSON Schema 2020-12, inline; an integer is an int64
 	Durable      []any          `yaml:"durable"`      // [] until S3 fixes its entry shape
 	Requires     Requires       `yaml:"requires"`
 }
@@ -140,7 +141,8 @@ func declaredOf(p kernel.Plugin) (d *declared) {
 // Generate returns the generated half of p's manifest that p decides (ADR-048
 // decisions 6 to 12): uses, provides, registers, hooks, configSchema, durable, and
 // requires.pluginApi, the APIVersion the code is built against. It runs no Apply and
-// decodes no config. requires.definitions is left empty: which definition declares a
+// decodes no config. A number of configSchema is an int64 when it is an integer,
+// with every digit, and a float64 otherwise. requires.definitions is left empty: which definition declares a
 // key or a hook is in its definition.yaml, which plugingen reads.
 //
 // For a value made by kernel.Define, which has no Spec, registers is empty and
@@ -167,9 +169,12 @@ func Generate(p kernel.Plugin) (Generated, error) {
 	var registers []kernel.AnyKey
 	if d != nil {
 		registers = d.registers
-		if err := json.Unmarshal(d.schema, &g.ConfigSchema); err != nil {
+		dec := json.NewDecoder(bytes.NewReader(d.schema))
+		dec.UseNumber()
+		if err := dec.Decode(&g.ConfigSchema); err != nil {
 			errs = append(errs, err) // unreachable: the derivation writes JSON
 		}
+		exact(g.ConfigSchema)
 	}
 	g.Provides, errs = keyRefs("provides", p.Provides, errs)
 	g.Registers, errs = keyRefs("registers", registers, errs)
@@ -196,6 +201,30 @@ func Generate(p kernel.Plugin) (Generated, error) {
 		return Generated{}, fmt.Errorf("plugin %s: %w", p.ID, err)
 	}
 	return g, nil
+}
+
+// exact turns each json.Number in v, a tree decoded with json.Decoder.UseNumber, into
+// an int64 when it is one and a float64 otherwise, in place, so that an integer of the
+// schema keeps every digit, a default above 2^53 included, and the manifest writes it
+// as an integer.
+func exact(v any) any {
+	switch x := v.(type) {
+	case json.Number:
+		if i, err := x.Int64(); err == nil {
+			return i
+		}
+		f, _ := x.Float64()
+		return f
+	case map[string]any:
+		for k, e := range x {
+			x[k] = exact(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = exact(e)
+		}
+	}
+	return v
 }
 
 // keyRefs returns the sorted set of keys, adding an error for a zero key or a key
