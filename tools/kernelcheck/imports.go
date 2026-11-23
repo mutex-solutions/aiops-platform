@@ -20,6 +20,7 @@ const modPath = "github.com/mutex-solutions/aiops-platform"
 const (
 	docKernel = "07-c4-plugin-sdk.md:27"
 	docDef    = "07-c4-plugin-sdk.md:28"
+	docSDKPkg = "07-c4-plugin-sdk.md:29"
 	docPlugin = "07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255"
 	docBoot   = "07-c4-plugin-sdk.md:37-38; 08-profiles-roadmap-adrs.md:1254"
 	docYAML   = "ADR-059-s1-scope.md:43"
@@ -50,8 +51,9 @@ func isStd(p string) bool { return !strings.Contains(strings.SplitN(p, "/", 2)[0
 
 func hasPath(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 
-func isKernel(p string) bool  { return hasPath(p, modPath+"/sdk/kernel") }
-func isTestkit(p string) bool { return hasPath(p, modPath+"/sdk/testkit") }
+func isKernel(p string) bool    { return hasPath(p, modPath+"/sdk/kernel") }
+func isTestkit(p string) bool   { return hasPath(p, modPath+"/sdk/testkit") }
+func isSDKPlugin(p string) bool { return hasPath(p, modPath+"/sdk/plugin") }
 
 func isFakePath(p string) bool {
 	if isTestkit(p) {
@@ -95,6 +97,10 @@ func importReasons(rel string, test bool, imp string) []string {
 		if !(std || isKernel(imp) || isDef(imp) || tk) {
 			add("sdk/def imports the standard library and sdk/kernel only (sdk/testkit too in tests)", docDef)
 		}
+	case hasPath(rel, "sdk/plugin"):
+		if !(std || isKernel(imp) || isDef(imp) || tk) {
+			add("sdk/plugin imports the standard library, sdk/kernel and sdk/def only (sdk/testkit too in tests)", docSDKPkg)
+		}
 	case hasPath(rel, "boot"):
 		if !(std || isKernel(imp) || isDef(imp, bootDefs...) || hasPath(imp, "go.yaml.in/yaml/v3") || tk) {
 			add("boot imports the standard library, go.yaml.in/yaml/v3, sdk/kernel and sdk/def/{launch,loader,composition} only; nothing from plugins, loader, cmd, test, dist", docBoot)
@@ -108,7 +114,7 @@ func importReasons(rel string, test bool, imp string) []string {
 		for _, p := range pluginThirdParty[seg[1]] {
 			third = third || hasPath(imp, p)
 		}
-		if !(std || isKernel(imp) || isDef(imp) || hasPath(imp, modPath+"/plugins/"+seg[1]) || third || tk) {
+		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || hasPath(imp, modPath+"/plugins/"+seg[1]) || third || tk) {
 			add("a plugin imports the SDK, its own packages and allow-listed modules only; never another plugin, boot, loader, cmd, test, dist", docPlugin)
 		}
 	}

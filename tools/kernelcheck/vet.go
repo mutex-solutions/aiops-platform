@@ -184,8 +184,8 @@ func hasMarker(g *ast.CommentGroup, marker string) (string, bool) {
 }
 
 // allowedVarCall reports whether a package-level initializer is one of the
-// permitted forms: kernel.Define, kernel.New*, errors.New, fmt.Errorf, or any
-// function of a definition package.
+// permitted forms: kernel.Define, kernel.New*, plugin.Define of sdk/plugin,
+// errors.New, fmt.Errorf, or any function of a definition package.
 func allowedVarCall(e ast.Expr, imports map[string]string) bool {
 	call, ok := e.(*ast.CallExpr)
 	if !ok {
@@ -213,6 +213,8 @@ func allowedVarCall(e ast.Expr, imports map[string]string) bool {
 		return sel.Sel.Name == "Errorf"
 	case isKernel(p):
 		return sel.Sel.Name == "Define" || strings.HasPrefix(sel.Sel.Name, "New")
+	case isSDKPlugin(p):
+		return sel.Sel.Name == "Define"
 	case isDef(p):
 		return true
 	}
@@ -286,7 +288,7 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 				case ok:
 					bad(vs.Pos(), "kernelcheck:allow-var needs a reason", docVet)
 				default:
-					bad(vs.Pos(), "package-level var "+vs.Names[0].Name+" is mutable state; allowed: Plugin = kernel.Define, errors.New, fmt.Errorf, var _ I, definition constructors", docVet)
+					bad(vs.Pos(), "package-level var "+vs.Names[0].Name+" is mutable state; allowed: Plugin = kernel.Define or plugin.Define, errors.New, fmt.Errorf, var _ I, definition constructors", docVet)
 				}
 			}
 		}
