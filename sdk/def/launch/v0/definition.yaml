@@ -1,7 +1,7 @@
-# Layout: 07-c4-plugin-sdk.md:529-537 (R13).
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
 # Contract: 03-c3-kernel.md:63 (six keys, `P`, `profileContext` and `appExit` are
 # `PC`), 07-c4-plugin-sdk.md:556-557. One definition holds the six launch keys
-# (07-c4-plugin-sdk.md:1345); `class` lists each.
+# (07-c4-plugin-sdk.md:1345), so `key` names the definition and `class` lists each key.
 key: launch
 version: "0.1"
 stability: preview
@@ -13,3 +13,4 @@ class:
   killSwitches: {provider: bound, consumer: open}
   appExit: {provider: bound, consumer: bound}
 remote: "no"
+suite: 1

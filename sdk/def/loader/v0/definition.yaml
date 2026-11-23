@@ -1,7 +1,14 @@
-# Layout: 07-c4-plugin-sdk.md:529-537 (R13).
-# Contract: 03-c3-kernel.md:64 (`loader` is class `C`), 07-c4-plugin-sdk.md:557.
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: 03-c3-kernel.md:64 (`loader` is class `C`), 07-c4-plugin-sdk.md:557. The
+# three hooks of the loader are sealed to the distribution and declare no stage
+# (07-c4-plugin-sdk.md:463), so each has the one stage `default`.
 key: loader
 version: "0.1"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
+suite: 1
+hooks:
+  loader/patch-context: {stages: [default], access: sealed, remote: "no"}
+  loader/entry-init: {stages: [default], access: sealed, remote: "no"}
+  loader/volatile-update: {stages: [default], access: sealed, remote: "no"}
