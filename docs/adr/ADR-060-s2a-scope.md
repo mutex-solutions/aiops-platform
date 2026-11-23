@@ -1340,7 +1340,9 @@ line 16 of `docs/architecture/README.md`; and row 5 of plugin record §2. Dated
 proposals, audits and reports, and the amendment list of plugin record §17, keep the
 name of their date. The lines that placed the toy definitions under `examples/` are
 edited to decision 39: `00:571`, `07:19` and `:36`, `08:694`, and the plugin record in
-§5 (the catalogue row) and §16. The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
+§5 (the catalogue row) and §16. Readings 2 and 4 of decision 58 also edit the lines
+that restate them: `inspect` in plugin record §12, and the package graph in `02:207` and
+in plugin record §5 ("Modules and import boundary"). The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
 to later commits: the `go.mod` lines of decision 54, with the code that moves the module
 root; the one exit text of decision 30; and the one gate text of decision 16, which
 carries the check 8 clause of decision 57. An option the owner did not choose edits
