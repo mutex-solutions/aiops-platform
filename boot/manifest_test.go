@@ -348,3 +348,70 @@ func TestManifestForms(t *testing.T) {
 		}
 	}
 }
+
+// A module entry is filled from the manifest (ADR-048 decision 18): provides, uses by
+// as, hooks by hook and stage, and the volatile paths of configSchema, the subschemas
+// marked x-aiops-volatile, with "*" for a list item or a map value (ADR-048 decision
+// 9). The ordinal of a stage is served data, so it is 0.
+func TestManifestEntry(t *testing.T) {
+	const src = `manifestVersion: "1.0"
+id: aiops/example
+version: 0.1.0
+title: Example
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+uses:
+  - {key: logger, major: 0, as: need}
+  - {key: store, major: 0, as: need}
+  - {key: store, major: 1, as: want}
+provides:
+  - {key: own, major: 0}
+registers: []
+hooks:
+  - {hook: internal/status, stage: default}
+  - {hook: reload/operation, stage: default}
+  - {hook: reload/operation, stage: late}
+configSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  additionalProperties: false
+  properties:
+    note: {type: string, x-aiops-volatile: true}
+    plain: {type: integer}
+    off: {type: string, x-aiops-volatile: false}
+    rules:
+      type: array
+      items:
+        type: object
+        properties:
+          url: {type: string, x-aiops-volatile: true, x-aiops-tenant: true}
+    windows:
+      type: object
+      additionalProperties: {type: string, x-aiops-volatile: true}
+durable: []
+requires:
+  pluginApi: "0.2"
+  definitions: {}
+`
+	m, err := ReadManifest("plugin.yaml", []byte(src), ManifestLenient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ModuleEntry{ID: "aiops/example", Provides: []string{"own"}, Needs: []string{"logger", "store"}, Wants: []string{"store"},
+		Hooks: []HookDecl{{Hook: "internal/status", StageName: "default"}, {Hook: "reload/operation", StageName: "default"},
+			{Hook: "reload/operation", StageName: "late"}},
+		Volatile: []string{"config.note", "config.rules.*.url", "config.windows.*"}}
+	if got := m.Entry(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("entry\n got %+v\nwant %+v", got, want)
+	}
+	if got := volatilePaths(m.Entry().Volatile); !reflect.DeepEqual(got, []string{"note", "rules.*.url", "windows.*"}) {
+		t.Fatalf("catalog paths %q", got)
+	}
+	// A plugin written with kernel.Define has the schema {} and no volatile path.
+	if e := (Manifest{ID: "aiops/loader", ConfigSchema: map[string]any{}}).Entry(); e.Volatile != nil || e.ID != "aiops/loader" {
+		t.Fatalf("entry of {} %+v", e)
+	}
+}

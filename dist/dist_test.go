@@ -230,22 +230,37 @@ func TestReleaseProfileWithAReferenceInAProviderOfARequiredKeyNeedsConfigRefs(t 
 	}
 }
 
-func TestEntryReadsTheDeclarationsOfThePlugin(t *testing.T) {
+// An entry of the module table is boot's lenient reading of the plugin's manifest,
+// the gate's (ADR-048 decisions 15 and 18): what it provides, uses and listens on, and
+// the volatile paths of its configSchema, so no list of it is written by hand (ADR-060
+// decision 4). The loader is written with kernel.Define, so its schema is {} and it
+// has no volatile path.
+func TestEntryReadsTheManifest(t *testing.T) {
 	m := Modules()[0]
-	m.Volatile = []string{"config.x"}
-	e := m.Entry()
-	if e.Module != ModulePath || e.Version != Version || e.ID != "aiops/loader" || !slices.Equal(e.Volatile, []string{"config.x"}) {
+	e, err := m.Entry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Module != ModulePath || e.Version != Version || e.ID != "aiops/loader" || e.Volatile != nil || e.Plugin == nil {
 		t.Fatalf("entry %+v", e)
 	}
-	if !slices.Contains(e.Needs, "profileContext") || !slices.Contains(e.Needs, "catalog") {
-		t.Fatalf("needs %v", e.Needs)
+	if !slices.Equal(e.Needs, []string{"catalog", "profileContext"}) || !slices.Equal(e.Provides, []string{"composition", "loader"}) {
+		t.Fatalf("needs %v, provides %v", e.Needs, e.Provides)
 	}
 	reg, _, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[0].Hook != "internal/status" || h[0].StageName != "default" {
+	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[1].Hook != "internal/status" || h[1].StageName != "default" {
 		t.Fatalf("hooks %+v", h)
+	}
+	// A manifest that the reader refuses fails the entry and the table, naming the plugin.
+	m.Manifest = []byte("id: aiops/loader\n")
+	if _, err := m.Entry(); err == nil || !strings.Contains(err.Error(), "aiops/loader") {
+		t.Fatalf("Entry of a broken manifest: %v", err)
+	}
+	if _, err := Table(m); err == nil {
+		t.Fatal("Table took a broken manifest")
 	}
 }
 

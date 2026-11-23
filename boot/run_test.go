@@ -351,6 +351,12 @@ func TestRunRefusals(t *testing.T) {
 			e.Needs = []string{"cache"}
 			f.reg.Modules["t/user"] = e
 		}, code: ExitRefused, want: "differ"},
+		// The entry's hooks are read from the manifest, the kernel reads the plugin's.
+		{name: "entry and plugin hooks disagree", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/user"]
+			e.Hooks = []HookDecl{{Hook: "internal/status", StageName: "default"}}
+			f.reg.Modules["t/user"] = e
+		}, code: ExitRefused, want: "the plugin hooks [] and the module entry hooks [internal/status@default] differ"},
 		{name: "key not in the table", bundle: happyBundle, tweak: func(f *fixture) {
 			e := f.reg.Modules["t/user"]
 			e.Wants = []string{"ghost"}
