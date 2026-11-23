@@ -43,28 +43,41 @@ import (
 //go:embed dist.yaml limits.yaml all:bundles all:profiles
 var shipped embed.FS
 
+// manifests holds the plugin.yaml of each test plugin, which the table reads
+// (ADR-048 decision 18).
+//
+//go:embed plugins/*/plugin.yaml
+var manifests embed.FS
+
 // Modules is the test table: the modules of the release distribution, then the test
-// ones. The count of FailApply is per plugin value, so each call makes new values.
+// ones, each with the manifest beside its package. The count of fail-apply is per
+// plugin value, so each call makes new values.
 func Modules() []dist.Module {
+	m := func(p kernel.Plugin, dir string) dist.Module {
+		return dist.Module{Plugin: p, Manifest: dist.Manifest(manifests, "plugins/"+dir)}
+	}
 	return append(dist.Modules(),
-		dist.Module{Plugin: toyprovider.New()},
-		dist.Module{Plugin: toyconsumer.New(), Volatile: []string{"config.note"}},
-		dist.Module{Plugin: toyspine.New()},
-		dist.Module{Plugin: failapply.New()},
-		dist.Module{Plugin: panicapply.New()},
-		dist.Module{Plugin: slowapply.New()},
-		dist.Module{Plugin: badconfig.New()},
-		dist.Module{Plugin: rogueprovider.New()},
-		dist.Module{Plugin: leakygoroutine.New()},
-		dist.Module{Plugin: slowdispose.New()},
-		dist.Module{Plugin: teststate.New()},
-		dist.Module{Plugin: testsubmit.New()},
+		m(toyprovider.New(), "toy-provider"),
+		m(toyconsumer.New(), "toy-consumer"),
+		m(toyspine.New(), "toy-spine"),
+		m(failapply.New(), "fail-apply"),
+		m(panicapply.New(), "panic-apply"),
+		m(slowapply.New(), "slow-apply"),
+		m(badconfig.New(), "bad-config"),
+		m(rogueprovider.New(), "rogue-provider"),
+		m(leakygoroutine.New(), "leaky-goroutine"),
+		m(slowdispose.New(), "slow-dispose"),
+		m(teststate.New(), "teststate"),
+		m(testsubmit.New(), "testsubmit"),
 	)
 }
 
 // Distribution returns what the test binary links.
 func Distribution() (serve.Distribution, error) {
-	reg := dist.Table(Modules()...)
+	reg, err := dist.Table(Modules()...)
+	if err != nil {
+		return serve.Distribution{}, fmt.Errorf("testdist: %w", err)
+	}
 	reg.Keys = map[string]kernel.AnyKey{}
 	for _, k := range def.Keys() {
 		reg.Keys[k.Name()] = k

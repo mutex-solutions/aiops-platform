@@ -24,14 +24,16 @@ import (
 // The data is the one the test binary links. dist.yaml, the profile and the bundle are
 // the files it embeds. The test distribution has no modules.yaml, since its module
 // table is Go values (test/dist.Modules), so modulesYAML writes one from that table:
-// the declared data (provides, needs, wants, hooks, volatile) is read from the linked
-// plugins and is not written a second time by hand. aiopsctl itself is run, as it runs
-// in main, on a file system that holds those files.
+// the declared data (provides, needs, wants, hooks, volatile) is read from the
+// manifests the test binary embeds and is not written a second time by hand. aiopsctl
+// itself is run, as it runs in main, on a file system that holds those files.
 //
-// Not covered by golden files, and said so: a stage number of a hook (the plugin value
-// carries the name of its stage and not its ordinal until S2a generates the table, so
-// the dump shows stage 0 for every listener) and the rows of the roles edge and worker,
-// which the profile does not have.
+// Not covered by golden files, and said so: a stage number of a hook (a manifest names
+// the stage and not its ordinal, which is served data that boot reads with the signed
+// distribution manifest, so the dump shows stage 0 for every listener); a volatile
+// path (sdk/plugin marks no Volatile field in configSchema until the kernel can hand a
+// value committed in place to a running field, so no plugin of the test distribution
+// has one); and the rows of the roles edge and worker, which the profile does not have.
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 

@@ -244,6 +244,53 @@ func ReadManifest(file string, data []byte, mode ManifestMode) (Manifest, error)
 	return m, nil
 }
 
+// Entry returns the module entry that m declares (ADR-048 decision 18): Provides from
+// provides, Needs and Wants from uses by as, Hooks from hooks, one per hook and stage,
+// and Volatile, the path of each subschema of configSchema marked x-aiops-volatile,
+// written from the row as "config.<key>" with "*" for a list item or a map value
+// (ADR-048 decision 9). The ordinal of a stage is served data, which boot reads with
+// the signed distribution manifest, so Stage is 0 until then. Module, Version, Sum
+// and Plugin are the module table's.
+func (m Manifest) Entry() ModuleEntry {
+	e := ModuleEntry{ID: m.ID}
+	for _, k := range m.Provides {
+		e.Provides = append(e.Provides, k.Key)
+	}
+	for _, u := range m.Uses {
+		if u.As == "want" {
+			e.Wants = append(e.Wants, u.Key)
+		} else {
+			e.Needs = append(e.Needs, u.Key)
+		}
+	}
+	for _, h := range m.Hooks {
+		e.Hooks = append(e.Hooks, HookDecl{Hook: h.Hook, StageName: h.Stage})
+	}
+	e.Volatile = volatileOf(m.ConfigSchema, "config")
+	slices.Sort(e.Volatile)
+	return e
+}
+
+// volatileOf lists the path of s, when it is marked volatile, and of each subschema
+// below it that is.
+func volatileOf(s map[string]any, path string) []string {
+	var out []string
+	if s["x-aiops-volatile"] == true {
+		out = append(out, path)
+	}
+	props, _ := s["properties"].(map[string]any)
+	for k, sub := range props {
+		sub, _ := sub.(map[string]any)
+		out = append(out, volatileOf(sub, path+"."+k)...)
+	}
+	for _, kw := range []string{"items", "additionalProperties"} {
+		if sub, ok := s[kw].(map[string]any); ok {
+			out = append(out, volatileOf(sub, path+".*")...)
+		}
+	}
+	return out
+}
+
 // mreader reads one manifest. It keeps the first error, after which every read is a
 // no-op that returns a zero value.
 type mreader struct {

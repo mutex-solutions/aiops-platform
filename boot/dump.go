@@ -162,8 +162,9 @@ func ShowValue(v Value) string {
 // (07-c4-plugin-sdk.md:438; plugin-system-2026-11.md §8). Never by
 // registration order. Rows of one plugin on one stage are ordered by row id.
 // A chain whose hook is sealed to the distribution is marked, with its
-// listener list. A stage is its ordinal in the definition that owns the hook;
-// until S2a derives it from the manifest, the module table entry states it.
+// listener list. A stage is its ordinal in the definition that owns the hook,
+// which is served data; until boot reads it with the signed distribution
+// manifest, the module table entry states it.
 func RenderHooks(a Admission) string {
 	type link struct {
 		stage int

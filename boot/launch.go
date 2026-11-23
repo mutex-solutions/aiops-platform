@@ -437,11 +437,12 @@ func (c *catalog) Key(name string) (kernel.AnyKey, bool) {
 }
 
 // newCatalog builds the catalog from a registry. It checks that every entry of the
-// module table carries a defined kernel.Plugin whose own declarations agree with
-// the entry's (the static graph reads the entry and the kernel reads the plugin, so
-// a disagreement would be silent), and builds the key table from the keys the
-// plugins declare, the launch keys, the keys of the loader and composition
-// definitions, the built-in keys of the kernel and Registry.Keys.
+// module table carries a defined kernel.Plugin whose own declarations, its keys and
+// its hooks with their stages, agree with the entry's, which are read from its
+// manifest (the static graph, the gate and the dumps read the entry and the kernel
+// reads the plugin, so a disagreement would be silent), and builds the key table
+// from the keys the plugins declare, the launch keys, the keys of the loader and
+// composition definitions, the built-in keys of the kernel and Registry.Keys.
 func newCatalog(reg Registry) (*catalog, error) {
 	c := &catalog{byID: map[string]launch.CatalogEntry{}, plugins: map[string]kernel.Plugin{}, keys: map[string]kernel.AnyKey{}}
 	var errs []error
@@ -483,10 +484,17 @@ func newCatalog(reg Registry) (*catalog, error) {
 				needs = append(needs, d.Key().Name())
 			}
 		}
+		var hooks, declared []string
+		for _, u := range p.Hooks {
+			hooks = append(hooks, u.Hook()+"@"+u.Stage())
+		}
+		for _, h := range e.Hooks {
+			declared = append(declared, h.Hook+"@"+h.StageName)
+		}
 		for _, f := range []struct {
 			what       string
 			plugin, ds []string
-		}{{"provides", provides, e.Provides}, {"needs", needs, withoutRoot(e.Needs)}, {"wants", wants, e.Wants}} {
+		}{{"provides", provides, e.Provides}, {"needs", needs, withoutRoot(e.Needs)}, {"wants", wants, e.Wants}, {"hooks", hooks, declared}} {
 			if !sameSet(f.plugin, f.ds) {
 				errs = append(errs, fmt.Errorf("module %q: the plugin %s %v and the module entry %s %v differ", id, f.what, sorted(f.plugin), f.what, sorted(f.ds)))
 			}

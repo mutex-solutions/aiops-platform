@@ -23,6 +23,29 @@ import (
 // final, so the rollback restarts it with the restored provider: the rollback passes, the
 // state of the tree stays known and the next generation is taken (08-profiles-roadmap-
 // adrs.md §1.6: a live Apply error is rolled back, not left in a failed rollback).
+// flipManifest is the manifest of the plugin flip, which the table reads.
+const flipManifest = `manifestVersion: "1.0"
+id: aiops-test/flip
+version: 0.1.0
+title: Flip
+license: Apache-2.0
+publisher: {id: aiops-test}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+uses:
+  - {key: toy.store, major: 0, as: need}
+provides: []
+registers: []
+hooks: []
+configSchema: {}
+durable: []
+requires:
+  pluginApi: "0.2"
+  definitions:
+    toy: ["0.1"]
+`
+
 func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 	var failNext atomic.Bool
 	flip := kernel.Define(kernel.Plugin{ID: "aiops-test/flip", Inject: []kernel.Dep{kernel.Need(toy.StoreKey)},
@@ -38,7 +61,9 @@ func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := d.Registry.Keys
-	d.Registry = dist.Table(append(Modules(), dist.Module{Plugin: flip})...)
+	if d.Registry, err = dist.Table(append(Modules(), dist.Module{Plugin: flip, Manifest: []byte(flipManifest)})...); err != nil {
+		t.Fatal(err)
+	}
 	d.Registry.Keys = keys
 
 	live := filepath.Join(t.TempDir(), "live.yml")

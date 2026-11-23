@@ -232,11 +232,12 @@ type Composition struct {
 	Digest Digest
 }
 
-// ModuleEntry is what the launcher knows of one plugin of the module table.
-// Plugin holds the kernel.Plugin value that kernel.Define returned. Run checks its
-// declarations against this entry, and gate check 7 reads the classes of the keys it
-// provides and injects (classesOf); it takes no part in the digest, and an entry read
-// from modules.yaml has none.
+// ModuleEntry is what the launcher knows of one plugin of the module table. A
+// distribution fills Provides, Needs, Wants, Hooks and Volatile from the plugin's
+// manifest (Manifest.Entry; ADR-048 decision 18). Plugin holds the kernel.Plugin value
+// that kernel.Define returned. Run checks its declarations against this entry, and
+// gate check 7 reads the classes of the keys it provides and injects (classesOf); it
+// takes no part in the digest, and an entry read from modules.yaml has none.
 type ModuleEntry struct {
 	ID       string // manifest id "<owner>/<name>"
 	Module   string // Go module path
@@ -254,8 +255,9 @@ type ModuleEntry struct {
 	// hook part of gate check 7.
 	Hooks []HookDecl
 	// Volatile lists the config field paths that can change without a
-	// restart, until S2a derives them (ADR-059 decision 10). A path is
-	// dotted, as in RefUse.Path.
+	// restart, derived from the configSchema of the manifest (ADR-060 decision
+	// 4); modules.yaml, the S1 stand-in, lists them until the signed
+	// distribution manifest replaces it. A path is dotted, as in RefUse.Path.
 	Volatile []string
 	// Classes are the classes that the definitions declare for the keys and hooks the
 	// entry names. An entry read from modules.yaml holds no Go value, so it carries
