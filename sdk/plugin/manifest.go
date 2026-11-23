@@ -15,7 +15,10 @@ import (
 // Manifest is manifest schema 1.0, plugin.yaml, both halves (ADR-048). The package
 // holds no YAML code (ADR-060 decision 4): the yaml tags name each field as the
 // schema does, for the generator that writes it. An optional string that is empty
-// reads as absent.
+// reads as absent. The owners aiops and contrib are reserved to the release
+// pipeline (ADR-048 decision 14). boot reads the file into types of its own, in a
+// strict and a lenient mode, and holds every rule of the schema; a test of plugingen
+// holds its reading equal to this type.
 type Manifest struct {
 	ManifestVersion string        `yaml:"manifestVersion"` // "1.0"
 	ID              string        `yaml:"id"`              // <owner>/<name>, equal to Spec.ID
