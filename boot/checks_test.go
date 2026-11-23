@@ -265,6 +265,13 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.dist.add(manifestText("o/user", "uses: [{key: toy.secret, major: 0, as: need}]", `requires: {pluginApi: "0.1", definitions: {toy: ["0.1"]}}`),
 				`{"toy": {"version": "0.1"}}`)
 		}, []string{"7 user signed-class stop=false"}},
+		// An entry is the plugin of its key, never the id its manifest declares
+		// (07-c4-plugin-sdk.md:571), so a manifest of another id is malformed.
+		{"a signed key of a module-table entry whose manifest names a first-party id", func(fx *gateFix) {
+			fx.dist.bindings = "{consumers: {toy.secret: [o/user]}}"
+			m := manifestText("aiops/user", "uses: [{key: toy.secret, major: 0, as: need}]", `requires: {pluginApi: "0.1", definitions: {toy: ["0.1"]}}`)
+			fx.dist.plugins["o/user"] = [2]string{m, attest(m, `{"toy": {"version": "0.1"}}`)}
+		}, []string{"1 user manifest stop=false"}},
 		{"a signed key of a first-party plugin", func(fx *gateFix) {
 			fx.dist.bindings = "{consumers: {toy.secret: [aiops/user]}}"
 			fx.dist.add(manifestText("aiops/user", "uses: [{key: toy.secret, major: 0, as: need}]", `requires: {pluginApi: "0.1", definitions: {toy: ["0.1"]}}`),

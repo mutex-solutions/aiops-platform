@@ -152,6 +152,9 @@ func (g *gate) subject(id string, artifact bool) *subject {
 	if s.err == nil {
 		s.man, s.err = ReadManifest("plugin.yaml of "+id, s.raw, ManifestLenient)
 	}
+	if s.err == nil && s.man.ID != id { // an entry is the plugin of its key (07-c4-plugin-sdk.md:571)
+		s.err = fmt.Errorf("it declares the id %s", s.man.ID)
+	}
 	g.subjects[key] = s
 	return s
 }
@@ -346,18 +349,18 @@ func (g *gate) signedUse(r ComposedRow, m Manifest, subs []*subject) []RowResult
 	}
 	var out []RowResult
 	for i, n := range names {
-		if !g.signed[n] || strings.HasPrefix(m.ID, "aiops/") {
+		if !g.signed[n] || strings.HasPrefix(r.Plugin, "aiops/") {
 			continue
 		}
 		trusted := false
-		if len(subs) > 1 && subs[1].art.Err == nil && subs[1].id == m.ID {
-			for _, s := range g.covering(m.ID, subs[1].art.Record.Signer, subs[1].man.Runtimes) {
+		if len(subs) > 1 && subs[1].art.Err == nil && subs[1].id == r.Plugin {
+			for _, s := range g.covering(r.Plugin, subs[1].art.Record.Signer, subs[1].man.Runtimes) {
 				trusted = trusted || slices.Contains(s.Signed, n) && (i >= key || slices.Contains(subs[1].man.Runtimes, "inproc"))
 			}
 		}
 		if !trusted {
 			out = append(out, g.fail(CheckKeyHookClass, r.Row, RuleSignedClass, false,
-				"row %q uses %s of the signed class, and plugin %s is neither first-party nor of an installed artifact whose signer trust.yaml trusts for it", r.ID, n, m.ID))
+				"row %q uses %s of the signed class, and plugin %s is neither first-party nor of an installed artifact whose signer trust.yaml trusts for it", r.ID, n, r.Plugin))
 		}
 	}
 	return out
