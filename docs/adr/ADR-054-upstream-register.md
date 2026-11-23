@@ -1,9 +1,8 @@
 # ADR-054: The upstream rule: register, checks, exception list and base providers
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. ADR-060 decision 2 has it proposed before the first commit that implements it
-  and accepted before that code merges into `main`; each question below names the code
-  its answer is needed before.
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all nine
+  questions on the same date with the recommended option of each; the section "Owner
+  answers of 2026-11-23" records them as decisions 17 to 25.
 - Scope: ADR-054 of `00` §9 (`00:788`) and of the open ADR index (`08:1185`), due at S2a
   (`08:694`): the register schema of `tools/upstream-components.yaml`, which of the
   checks U1 to U8 run from S2a and which before the first community release, the
@@ -11,7 +10,7 @@
   home rule is decided (W8, `00:112`) and is not reopened. This ADR changes no decision
   of `00` by itself: where an answer edits `00`, the question names the lines, and `00`
   is edited in the commit that records the answer (`08:996`).
-- Citations: `00`, `01`, `03`, `04`, `06`, `07` and `08` are the files of
+- Citations: `00`, `01`, `03`, `04`, `05`, `06`, `07`, `08` and `09` are the files of
   `docs/architecture/` with those numbers, `README` is `docs/architecture/README.md`,
   and `00:267` is line 267 of `00` at commit `8e1f7b9`. "harness", "licence" and
   "s0-pins" are `docs/design/harness-and-upstreams-2026-11.md`,
@@ -530,6 +529,7 @@ participants of `sqlDriver` and the telemetry rows are question Q7.
   still fail on a placement no decision made, and no code moves. (b) undoes accepted work
   for a rule those decisions already departed from; (c) leaves part of the rule unchecked.
   Needed before U1 or U2 merges.
+- **Answered 2026-11-23: (a)**, decision 17.
 
 **Q2. Is every module of the package graph an entry of its own?** L3 fails the release
 when a "linked module ... has no entry", and the register holds "one entry per upstream"
@@ -556,6 +556,7 @@ directory (decision 8).
   hand before they merge, and the rest of the graph is scanned. (a) multiplies entries that
   no check reads more closely than (b); (c) drops L3's clause for every transitive module.
   Needed before U7 merges.
+- **Answered 2026-11-23: (b)**, decision 18.
 
 **Q3. Which list of exceptions governs ids?** `00:267` lists the stated exceptions: the
 PostgreSQL dialect, the two query dialect keys, eight protocols (the S3 API, the
@@ -573,6 +574,7 @@ protocols after "such as", which reads as an open list. The row
 - Recommended: (a). Both restatements open with "outside the stated exceptions of §4.3",
   so their parentheses read as restatements, and (b) renames for a list that no decision
   chose to shorten. Needed before U1 merges, which then reads one list.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q4. Which entries does the register hold at S2a?** ADR-060 decision 51 asks for every
 module, image and tool that S2a links, ships or bakes in. `00:651` reads the `suffix-ok`
@@ -603,6 +605,7 @@ the LangGraph Platform server (licence:79).
   release (`00:267`). (b) transcribes an entry for every row of the licence record and
   narrows L3; (c) keeps two lists of one rule until S3. Needed before the register merges,
   which is before the first new dependency of S2a (ADR-060 Q15).
+- **Answered 2026-11-23: (a)**, decision 20.
 
 **Q5. Are the Go language and SPDX identifiers stated exceptions?** Decision 3 keeps every
 project name of an upstream in its `names`. Go's project name is the word `go`, which 79
@@ -626,6 +629,7 @@ L16); the SPDX list data enters at S2a (ADR-060 decision 23). `00:267` excepts n
   (b) drops a project name by choice, which decision 3 forbids for every other upstream;
   (c) parses three syntaxes for two words and still trips on prose. Needed before U1
   merges.
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q6. Does U1 read the documentation places of harness record 7.2?** Harness record 7.2
 writes decision sentences, credential classes, saga stages and acceptance scripts by role,
@@ -649,6 +653,7 @@ out "the Mimir ingester flush" (`00:432`). Acceptance scripts enter U1 with
   rewording grows with each entry instead of landing in one batch before the release. (b)
   leaves the places unchecked while names are added; (c) narrows a written check. Needed
   before U1 merges.
+- **Answered 2026-11-23: (a)**, decision 22.
 
 **Q7. Where do pgx and the telemetry libraries sit?** `sqlDriver` hands
 `Pgx(tx) pgx.Tx` and a role switch to the providers of `jobs`, `events`, `audit` and `kv`
@@ -682,6 +687,7 @@ S3 (`08:696`).
   (b) rewrites a transaction contract the owner decided on 2026-11-19. Whatever the answer,
   no client-library type other than pgx v5 enters `sdk/def` (decision 13). Needed before
   the first S3 row of `sql`, `jobs`, `events`, `audit` or telemetry merges.
+- **Answered 2026-11-23: (c)**, decision 23.
 
 **Q8. Does a row on the allow-list need its entry to be `suffix-ok`?** `00:267` gives the
 wrapping row the upstream's name "when its register entry allows it (§8.1)". `00:651`
@@ -702,6 +708,7 @@ River's name, whose mark policy the licence record does not read (licence:41).
 - Recommended: (a). It keeps both sentences of `00` as decision 14 reads them, and costs
   one reading of a mark policy before S3. (b) puts a library's name in a core id with no
   reading of its owner's terms. Needed before the `jobs-river` row merges (S3).
+- **Answered 2026-11-23: (a)**, decision 24.
 
 **Q9. Where are the Alertmanager and dashboard-alerting payload families parsed?**
 `signal-ingest-alert-webhook` is a row of `aiops-base` (`00:277`) that parses the
@@ -725,3 +732,102 @@ profile lists the default connector pack `aiops-datasources` (`08:255`), which h
   `01:192` already puts every other payload family, in a composed pack; every server
   profile keeps the intake. (a) adds a vendor's format to the core's exceptions. Needed
   before the `signal-ingest-alert-webhook` row merges (S8b, `08:728`).
+- **Answered 2026-11-23: (b)**, decision 25.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option.
+Each decision below names the question it answers. Where a decision above leaves a point
+to a question, the decision here settles it.
+
+17. **An entry may list its importers** (Q1 (a)). An entry may list `importers`:
+    directories outside its plugins where its modules may be imported and its names may
+    appear, each with the accepted decision that put them there. At S2a: the YAML library
+    in `boot/`, `tools/`, the operations plugin, `plugingen` and the builder; goleak in
+    `sdk/testkit`; the OCI client where ADR-047 places it; the signature library where
+    ADR-020 places it, once accepted. U1 and U2 fail on any other place, and any importer
+    other than the entry's own plugins needs an accepted decision. `sdk/kernel`, `loader/`
+    and the definitions with their fakes and suites never appear, the pgx import of W2
+    apart. `00:267`, `07:37`, `07:50` and harness:210 gain "or where its register entry
+    lists it by an accepted decision", for the name and for the import.
+
+18. **A module of another project is listed in the `contains` of the entry that brings
+    it in** (Q2 (b)). An entry's `modules` holds the modules its upstream publishes; each
+    module of another project that they bring into the package graph is listed in that
+    entry's `contains`, with its version and the licence the scan detects, and a module
+    that a package of the repository imports has an entry of its own. A contained module
+    is read by hand at its pin, and the reading recorded in `evidence`, where a decision
+    names it (the three of ADR-060 decision 34) or where its detected licence is unknown
+    or outside L7. U7 fails when a module of the graph is in neither or its version moved
+    (decision 6).
+
+19. **The list of `00:267` governs every place, ids included** (Q3 (a)), as decision 9
+    records it. `00:651` and `08:1365` cite it instead of restating it, and `07:520` drops
+    "such as".
+
+20. **The register at S2a holds the upstreams in use and five items refused by name** (Q4
+    (a)). At S2a the register holds the entries of decision 8, and River Pro, the SeaweedFS
+    Enterprise Edition, MinIO, LiteLLM `enterprise/` and the LangGraph Platform server
+    with mode `none` and the licence the licence record reads, a `LicenseRef-` id for a
+    proprietary EULA, which the clause of U7 on `dist/*.yaml` reads. The other items L9
+    and L15 name, the pattern "any other `ee/` or `enterprise/` directory" and the
+    `-enterprise` images, stay rules of the release checks of L9 and L15 and of the
+    per-directory scan of L7, not entries. Every other upstream enters with the commit
+    that first uses, wraps or names it, and U1 learns its names then; until that commit, a
+    new name is caught by review. L3's clause on `unverified` stands as written.
+
+21. **The Go language and SPDX identifiers are a stated exception** (Q5 (a)). `00:267`
+    gains one stated exception: the Go language, in which definitions are declared, and
+    SPDX identifiers, which L1 and L16 require. Decision 9 records it with the tokens `go`,
+    `golang` and `spdx`, allowed in every place, and the entries keep those names.
+
+22. **U1 reads the documentation places of harness record 7.2 from S2a** (Q6 (a)). U1
+    reads the Decision column of `00` §2.1, the classes of the credential table of §5.4
+    and the stages of §5.6, outside the text after "default:" and the Rationale and
+    Technology columns, with the names the register holds. An item of decision 9 also lets
+    its tokens stand there where they name its contract, as W2 names PostgreSQL and row 1
+    of §2.1 the Cordis semantics. Each finding is reworded in the commit that adds U1, and
+    later names fail as their entries land.
+
+23. **pgx sits in the participants of `sqlDriver`, and the telemetry libraries outside
+    `aiops-core`** (Q7 (c)). The PostgreSQL item of decision 9 covers the four
+    participants of `sqlDriver`, and `00:267`, `07:50` and harness:210 name them beside
+    `sdk/def/sql`. No row of `aiops-core` imports an upstream module: `metrics` and
+    `tracer` hand out neutral types of `sdk/def`, and the Prometheus client and the OTel
+    SDK sit only in a row outside `aiops-core` that wraps them, on the allow-list as an
+    OTLP provider or by an ADR that edits `00:267`. `03:69` and `:343` are edited. No
+    client-library type other than pgx v5 enters `sdk/def` (decision 13).
+
+24. **A row on the allow-list carries its suffix only when its entry is `suffix-ok`**
+    (Q8 (a)), as `00:267` and the third sentence of `00:651` say; the allow-list exception
+    lifts only the ban on names in a listed bundle. River's mark policy is read before the
+    `jobs-river` row merges at S3; until then River's entry is `needs-approval`, and U1
+    fails on the id `jobs-river`, which merges only once cleared or under a role id.
+
+25. **The Alertmanager and dashboard-alerting payload families are parsed in
+    `aiops-datasources`** (Q9 (b)). Their parsing moves into a `signals` contribution of
+    `aiops-datasources`: the row `signal-ingest-alert-webhook` moves there, and
+    `aiops-base` keeps `signal-core` and `signal-ingest-generic-json`. `00:277` and
+    `:278`, `03:252`, `06:38`, `08:283` and `:306` move the row.
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:996`), and that commit makes the edits the chosen options name: `00:267` (decisions
+17, 21 and 23), `:277` and `:278` (decision 25) and `:651` (decision 19); `03:69` and
+`:343` (decision 23) and `:252` (decision 25); `06:38` (decision 25); `07:37` and `:50`
+(decisions 17 and 23) and `:520` (decision 19); `08:283` and `:306` (decision 25) and
+`:1365` (decision 19); and harness:210 (decisions 17 and 23). On acceptance licence:210
+and `08:1332` (L3) gain the keys and values of decisions 3 and 4, and the row of
+`00:788` records this ADR as decided. The lines that restate an edited rule are edited
+with it: the import rule of decisions 17 and 23 in `03:93` and `07:34`, and the U2 text
+in `07:1505`, `08:1266` and harness:228; the stated exception of decision 21 in `07:520`
+and harness:217; and the move of decision 25 in `01:156`, `05:80`, `:81`, `:87` and
+`:223`, `08:254`, `:255` and `:271`, and `09:103`, with the scope line `08:301` and the
+relationship row `08:321` of the figure whose element table holds `08:306`. Left to
+later commits: the row of `08:1185`, with the commit that brings the ADR table of `08`
+to the ADRs accepted on 2026-11-23; the findings of U1 in `00` §2.1, §5.4 and §5.6
+(decision 22), with the commit that adds U1; and the mode table at licence:19, which
+rates the five modes of licence:210 only, with the commit that writes the register
+(decision 7). The amendment entry at `00:93` and the dated designs under `docs/design/`
+other than the harness and licence records keep the text of their date. An option the
+owner did not choose edits nothing.

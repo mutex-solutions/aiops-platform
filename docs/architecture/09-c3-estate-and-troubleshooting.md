@@ -100,7 +100,7 @@ The figure draws every row of the two tables below. Green arrows are the smalles
 
 | From | To | Why it matters |
 |---|---|---|
-| `other-pack` | `signal-core` | Alert intake. Nothing to write where the system sends through Alertmanager: `signal-ingest-alert-webhook` of `aiops-base` receives it. Otherwise a `signals` contribution parses the payload family, and its route entry states the busy reply (429, or 503 for a sender that retries only 5xx) and a default label map (§3.1) |
+| `other-pack` | `signal-core` | Alert intake. Nothing to write where the system sends through Alertmanager: `signal-ingest-alert-webhook` of `aiops-datasources` receives it. Otherwise a `signals` contribution parses the payload family, and its route entry states the busy reply (429, or 503 for a sender that retries only 5xx) and a default label map (§3.1) |
 | `default-pack`, `other-pack` | `tools` | The reads of a run. There is no binding registry: a tool is a contribution, and the tool set of a run is the pillar group's defaults plus the enabled tool rows that name the pillar. Each allow-listed tool of a `tool-mcp` row becomes one contribution |
 | `other-pack` | `ext-mcp-server` | Through `dialer`, never over stdio, with the MCP server credential kept in tenant secrets under the pack's scope and read per call. The pack carries a digest of the recorded tool list, and the row fails when the live list hashes differently. The effects class of such a tool is asserted by the pack, not proven, and boot says so (00 §6.2) |
 | `default-pack`, `other-pack` | `change-hub` | P2. `evidence-source-logs` holds the LogQL; a pack for a logs store outside that dialect contributes its own evidence source |

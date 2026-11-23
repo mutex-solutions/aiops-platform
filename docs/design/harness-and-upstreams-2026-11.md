@@ -207,14 +207,14 @@ A third party that sells a wrapper of an upstream harness ships the upstream ins
 
 | Place | Rule |
 |---|---|
-| Definitions, hooks, protos, fakes, suites, `sdk/`, `boot/`, `loader/`, dispatchers, policy rows, `aiops-core` | Never an upstream's name; no upstream module imported (pgx in `sdk/def/sql` is the one exception, W2) |
+| Definitions, hooks, protos, fakes, suites, `sdk/`, `boot/`, `loader/`, dispatchers, policy rows, `aiops-core` | Never an upstream's name; no upstream module imported (pgx in `sdk/def/sql` and in the four participants of `sqlDriver` is the one exception, W2). Either may stand where its register entry lists it by an accepted decision, never in `sdk/kernel`, `loader/` or a definition with its fake and suite (ADR-054) |
 | The row that wraps an upstream, and a bundle whose rows all wrap it | The lowercase technical name once, as the suffix, when the register says `suffix-ok` (licence record §7.5). Rows of the stack bundle keep role names, because 00 §8.1 forbids those marks in any name |
 | Container ids, compose services, chart keys, image keys, databases, metrics | Role-named, always |
 | Decision sentences, credential classes, saga stages, acceptance scripts | By role; an upstream appears after "default:" or in the Technology and Rationale columns. Scripts take a provider map |
 
 ### 7.3 Stated exceptions: contracts, not defaults
 
-The PostgreSQL dialect behind `sql` (W2); the two query dialect keys; protocols with several implementations (the S3 API, the OpenAI-compatible API, OIDC, SMTP, OCI, OTLP, the Kubernetes API, MCP); the Cordis semantics of the kernel port; the default stack bundle. `aiops-base` may wrap an upstream only in a row on the base provider allow-list (the protocol providers and `jobs-river`), and an entry joins that list only with verdict `ok` or `ok-with-conditions`.
+The PostgreSQL dialect behind `sql` (W2); the two query dialect keys; protocols with several implementations (the S3 API, the OpenAI-compatible API, OIDC, SMTP, OCI, OTLP, the Kubernetes API, MCP); the Cordis semantics of the kernel port; the default stack bundle; the Go language, in which definitions are declared, and SPDX identifiers (ADR-054). `aiops-base` may wrap an upstream only in a row on the base provider allow-list (the protocol providers and `jobs-river`), and an entry joins that list only with verdict `ok` or `ok-with-conditions`.
 
 Kept as defaults with no second real implementation, each already behind a definition or the stack bundle: the tenant gateway proxy, the jobs library, the dashboard server, the agent. Two fixes: the jobs library is imported only under `plugins/jobs-river/`, so every leader takes leadership through `jobs` or `sql`; decision texts name the role.
 
@@ -225,7 +225,7 @@ The register is `tools/upstream-components.yaml` with the schema of licence reco
 | Check | Fails when | When |
 |---|---|---|
 | U1 name lint | An upstream token appears where 7.2 forbids it, including the golden dumps of the shipped profiles | Before 0.1.0 |
-| U2 import boundary | A module of a register entry is imported outside that entry's plugin directories | Before 0.1.0 |
+| U2 import boundary | A module of a register entry is imported outside that entry's plugin directories and the places it lists by an accepted decision (ADR-054) | Before 0.1.0 |
 | U3 suite neutrality | A fake or suite imports or names an upstream; upstream cassettes live with the plugin | Before 0.1.0 |
 | U4 leave-one-out render | A shipped profile without one upstream bundle fails to render, loses a required key, or leaves a row PENDING that its golden file does not list | Before 0.1.0 |
 | U7 register and verdicts | Licence record §7.2 | Before 0.1.0 (it replaces 08 §5.1 L3) |
