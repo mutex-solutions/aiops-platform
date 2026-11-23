@@ -136,9 +136,18 @@ func ReadManifest(file string, data []byte, mode ManifestMode) (Manifest, error)
 		return Manifest{}, err
 	}
 	// manifestVersion says whether an unknown field is ignored, so it is read first.
-	r := &mreader{parser: parser{file: file, literal: true}, ignore: true}
+	r := &mreader{parser: parser{file: file, literal: true}}
 	var m Manifest
-	vn := r.fields(root, "a manifest", []string{"manifestVersion"}, "manifestVersion")["manifestVersion"]
+	var vn *yaml.Node
+	prs, err := r.pairs(root, "", "a manifest")
+	for _, pr := range prs {
+		if pr.key == "manifestVersion" {
+			vn = pr.v
+		}
+	}
+	if r.keep(err) && vn == nil {
+		r.fail(root, "a manifest states manifestVersion")
+	}
 	m.ManifestVersion = r.str(vn, "manifestVersion")
 	major, minor, ok := majorMinor(m.ManifestVersion)
 	if !ok {
@@ -313,7 +322,9 @@ func (r *mreader) fail(n *yaml.Node, format string, a ...any) {
 }
 
 // fields returns the values of the mapping n by key. A key that is not in known
-// fails unless r.ignore, and a key of required that is absent fails.
+// fails unless r.ignore, and a key of required that is absent fails. The value of an
+// ignored key is read and dropped, so the YAML rules hold in it too (ADR-048
+// decision 3).
 func (r *mreader) fields(n *yaml.Node, what string, known []string, required ...string) map[string]*yaml.Node {
 	if n == nil || r.err != nil {
 		return nil
@@ -324,10 +335,14 @@ func (r *mreader) fields(n *yaml.Node, what string, known []string, required ...
 	}
 	out := make(map[string]*yaml.Node, len(prs))
 	for _, pr := range prs {
-		if slices.Contains(known, pr.key) {
+		switch {
+		case slices.Contains(known, pr.key):
 			out[pr.key] = pr.v
-		} else if !r.ignore {
+		case !r.ignore:
 			r.keep(r.parser.err(pr.k, RuleUnknownField, "", "unknown field %q in %s", pr.key, what))
+		default:
+			_, err := r.value(pr.v, "", 1)
+			r.keep(err)
 		}
 	}
 	for _, k := range required {
