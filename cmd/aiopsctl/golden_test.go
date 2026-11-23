@@ -103,7 +103,7 @@ func testDistFS(t *testing.T) fstest.MapFS {
 		t.Fatal(err)
 	}
 	m := fstest.MapFS{}
-	dd, err := fs.ReadFile(d.Shipped, "dist.yaml")
+	dd, err := os.ReadFile("../../test/dist/dist.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

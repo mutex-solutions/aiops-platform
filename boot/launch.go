@@ -78,6 +78,9 @@ type profileContext struct {
 	dist          DistManifest
 	roles         []Role
 	root          *kernel.Root // read for config-refs's dry run; set before the services are provided
+	signed        Distribution
+	release       *Release
+	tie           map[string]Tie
 
 	mu        sync.Mutex
 	committed Composition
@@ -165,9 +168,16 @@ func sameEnabled(lc launch.Composition, c Composition) bool {
 // denies is disabled (GateResult.Admitted). The loader's row is not in it.
 func (p *profileContext) admitted(c Composition) Composition {
 	w := WithLoader(c)
-	a := Gate(w, p.mods, p.dist).Admitted(w)
+	a := GateWith(w, p.input(w)).Admitted(w)
 	a.Rows = a.Rows[1:]
 	return a
+}
+
+// input is what the gate reads at a live generation: the home is read again, so that
+// trust.yaml, plugins.lock and the records count as they are now (ADR-060 decision 17).
+func (p *profileContext) input(c Composition) GateInput {
+	in, _ := bootInput(p.src.Home, p.profile, c, p.mods, p.signed, p.release, p.tie)
+	return in
 }
 
 // Committed is the composition the process runs: the one it booted until reload commits
@@ -227,7 +237,9 @@ func (p *profileContext) Compose(ctx context.Context) (launch.Composition, error
 	if err := cmp.Or(ctx.Err(), p.released()); err != nil {
 		return launch.Composition{}, err
 	}
-	c, _, err := Compose(p.src, p.opt)
+	opt := p.opt
+	opt.Locks = lockDigests(p.src.Home, p.profile)
+	c, _, err := Compose(p.src, opt)
 	if err == nil {
 		err = CheckReserved(c)
 	}
@@ -246,7 +258,8 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	if err != nil {
 		return launch.Admission{}, err
 	}
-	a := Admit(WithLoader(c), p.mods, p.dist, p.roles)
+	w := WithLoader(c)
+	a := AdmitWith(w, p.input(w), p.roles)
 	// Every denied row is listed, a required one too: its denial is also an error that
 	// rejects the generation, and reload reports either as ErrDenied (ADR-059 decision 15).
 	var out launch.Admission
@@ -406,7 +419,7 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 		return launch.Plan{}, err
 	}
 	f, t = WithLoader(f), WithLoader(t)
-	fa, ta := Gate(f, p.mods, p.dist).Admitted(f), Gate(t, p.mods, p.dist).Admitted(t)
+	fa, ta := GateWith(f, p.input(f)).Admitted(f), GateWith(t, p.input(t)).Admitted(t)
 	g, _, _ := BuildGraph(ta, p.mods, p.dist, p.roles)
 	return launchPlan(Diff(fa, ta, g)), nil
 }

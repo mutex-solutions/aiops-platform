@@ -268,7 +268,7 @@ func startRefsRun(t *testing.T, bundle string, extra ...ModuleEntry) *refsRun {
 	}})
 	f := refsFixture(t, bundle, append([]ModuleEntry{fakeRefs(entered, gate), reader}, extra...)...)
 	f.dist.Consumers = append(f.dist.Consumers, Binding{Key: "registry", Plugins: []string{"t/registry"}})
-	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	f.sign()
 	rr := &refsRun{f: f, r: newRun(f.opt), done: make(chan int, 1), held: make(chan struct{}), release: make(chan struct{}), gate: gate}
 	t.Cleanup(rr.unhold)
 	roots := make(chan *kernel.Root, 1)

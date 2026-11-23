@@ -727,49 +727,59 @@ func ParseConfig(file string, data []byte) (any, error) {
 	return plain(v), nil
 }
 
-// parseProfile reads profile.yaml: {bundles: [name, ...]} in bundle order.
-func parseProfile(file string, data []byte) ([]string, error) {
+// parseProfile reads profile.yaml: {bundles: [name, ...], minStability: <stability>},
+// the bundles in bundle order and minStability optional (ADR-060 decision 14).
+func parseProfile(file string, data []byte) ([]string, string, error) {
 	root, err := parseDocument(file, data)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	p := &parser{file: file}
 	prs, err := p.pairs(root, "", "profile.yaml")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var bundles []string
-	found := false
+	found, min := false, ""
 	for _, pr := range prs {
+		if pr.key == "minStability" {
+			if min, err = p.text(pr.v, "", "minStability"); err == nil && rank(min) < 1 {
+				err = p.err(pr.v, RuleType, "", "minStability %q is not experimental, preview or ga", min)
+			}
+			if err != nil {
+				return nil, "", err
+			}
+			continue
+		}
 		if pr.key != "bundles" {
-			return nil, p.err(pr.k, RuleUnknownField, "", "unknown field %q in profile.yaml", pr.key)
+			return nil, "", p.err(pr.k, RuleUnknownField, "", "unknown field %q in profile.yaml", pr.key)
 		}
 		if err := p.guard(pr.v, ""); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if pr.v.Kind != yaml.SequenceNode {
-			return nil, p.err(pr.v, RuleType, "", "bundles must be a list")
+			return nil, "", p.err(pr.v, RuleType, "", "bundles must be a list")
 		}
 		found = true
 		seen := map[string]bool{}
 		for _, c := range pr.v.Content {
 			s, err := p.text(c, "", "bundle name")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			owner, name, two := strings.Cut(s, "/")
 			if !okIdent(owner) || two && !okIdent(name) {
-				return nil, p.err(c, RuleSyntaxID, "", "bundle name %q is not a name", s)
+				return nil, "", p.err(c, RuleSyntaxID, "", "bundle name %q is not a name", s)
 			}
 			if seen[s] {
-				return nil, p.err(c, RuleSyntaxID, "", "bundle %q is listed twice", s)
+				return nil, "", p.err(c, RuleSyntaxID, "", "bundle %q is listed twice", s)
 			}
 			seen[s] = true
 			bundles = append(bundles, s)
 		}
 	}
 	if !found {
-		return nil, p.err(root, RuleType, "", "profile.yaml states bundles")
+		return nil, "", p.err(root, RuleType, "", "profile.yaml states bundles")
 	}
-	return bundles, nil
+	return bundles, min, nil
 }

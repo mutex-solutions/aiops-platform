@@ -18,6 +18,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // These tests run the launcher in this process, with the real loader, the real kernel
@@ -78,6 +79,9 @@ func startEnv(t *testing.T, environ map[string]string, profile string, patches .
 func startDist(t *testing.T, d serve.Distribution, environ map[string]string, profile string, patches ...string) *proc {
 	t.Helper()
 	home := t.TempDir()
+	if err := trusted.Write(home, d.Signed); err != nil {
+		t.Fatal(err)
+	}
 	limits := filepath.Join(t.TempDir(), "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)
@@ -276,6 +280,9 @@ func TestSpineHasASlowButBoundedUnload(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
+	if err := trusted.Write(home, d.Signed); err != nil {
+		t.Fatal(err)
+	}
 	limits := filepath.Join(dir, "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)
@@ -346,7 +353,9 @@ func TestRequiredReferenceBootsOnTheReleaseRequiredSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.Manifest.RequiredKeys = slices.DeleteFunc(slices.Clone(d.Manifest.RequiredKeys), func(k string) bool { return k == "configRefsReady" })
+	if m, err := boot.ReadDistribution("distribution.yaml", d.Signed); err != nil || slices.Contains(m.Bindings().RequiredKeys, "configRefsReady") {
+		t.Fatalf("the test manifest requires configRefsReady, which hides what the release requires (%v)", err)
+	}
 	p := startDist(t, d, map[string]string{"AIOPS_REF_NOTE": "from-env"}, "smoke", "refs.required")
 	p.ready()
 	waitState(t, p, func(s teststate.State) bool { return s.Ready })

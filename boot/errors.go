@@ -80,6 +80,31 @@ const (
 	RuleKept Rule = "kept"
 	// RuleDist: a signed distribution manifest breaks its format (ADR-060 decision 20).
 	RuleDist Rule = "distribution"
+	// RuleAuthorAPI: gate check 1, requires.pluginApi is not the author API the
+	// distribution serves, or runtimes lists wasm (ADR-060 decisions 8 and 58).
+	RuleAuthorAPI Rule = "author-api"
+	// RuleUnserved: gate check 2, a definition version of requires is not served.
+	RuleUnserved Rule = "unserved-definition"
+	// RuleStability: gate check 4, a manifest below the profile's minStability.
+	RuleStability Rule = "stability"
+	// RuleModule: gate check 5, a Go module absent from a trusted distribution
+	// manifest or not the one it lists (ADR-020 decision 12).
+	RuleModule Rule = "module"
+	// RuleSigner: gate check 5, no verified signer recorded beside the digest, or one
+	// that trust.yaml does not list for the id and runtimes (ADR-020 decisions 6 to 8).
+	RuleSigner Rule = "signer"
+	// RuleLicence: gate check 6, a module under a licence outside the L7 allow-list and
+	// not accepted, or an acceptance in the release (08-profiles-roadmap-adrs.md:1346).
+	RuleLicence Rule = "licence"
+	// RuleSignedClass: gate check 7, a signed key or hook used by an untrusted signer
+	// (ADR-020 decision 7).
+	RuleSignedClass Rule = "signed-class"
+	// RuleFake: gate check 7, a fake or sdk/testkit package in the package graph of a
+	// server binary (ADR-060 decision 58).
+	RuleFake Rule = "fake"
+	// RuleInstalled: gate check 8, the bundle of an installed artifact breaks the
+	// insert-only rule (ADR-047 decisions 11 and 19; ADR-060 decision 57).
+	RuleInstalled Rule = "installed-artifact"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

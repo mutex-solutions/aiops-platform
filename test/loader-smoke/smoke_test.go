@@ -23,8 +23,10 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
+	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 type syncBuf struct {
@@ -68,6 +70,9 @@ func patch(name string) string {
 func start(t *testing.T, bin string, env []string, patches ...string) *process {
 	t.Helper()
 	home := t.TempDir()
+	if err := trusted.Write(home, testdist.Signed); err != nil {
+		t.Fatal(err)
+	}
 	args := []string{"--profile", "smoke", "--home", home}
 	for _, p := range patches {
 		args = append(args, "--patch", p)

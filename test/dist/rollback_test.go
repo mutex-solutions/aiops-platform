@@ -16,6 +16,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	toy "github.com/mutex-solutions/aiops-platform/test/dist/def/toy/v0"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // flipHand is the hand-written half of the manifest of the plugin flip, which the
@@ -81,11 +82,17 @@ func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := d.Registry.Keys
-	if d.Registry, err = dist.Table(append(Modules(), dist.Module{Plugin: flip, Manifest: flipManifest(t, flip)})...); err != nil {
+	keys, man := d.Registry.Keys, flipManifest(t, flip)
+	if d.Registry, err = dist.Table(append(Modules(), dist.Module{Plugin: flip, Manifest: man})...); err != nil {
 		t.Fatal(err)
 	}
 	d.Registry.Keys = keys
+	// The signed manifest lists flip in its module table as the builder would, its
+	// statement naming toy at suite revision 0, as the test plugins' do (ADR-060
+	// decision 55).
+	if d.Signed, err = trusted.With(d.Signed, dist.ModulePath+"/test/dist", man, `{"toy": {"version": "0.1", "suite": 0}}`); err != nil {
+		t.Fatal(err)
+	}
 
 	live := filepath.Join(t.TempDir(), "live.yml")
 	write := func(body string) {

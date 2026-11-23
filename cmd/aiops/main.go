@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	reg, man, lim, err := dist.Load()
+	reg, signed, lim, err := dist.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(boot.ExitInternal)
@@ -27,5 +27,5 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	os.Exit(serve.Run(context.Background(), "aiops", serve.Env{
 		Args: os.Args[1:], Getenv: os.Getenv, Stdout: os.Stdout, Stderr: os.Stderr, Signals: sigs,
-	}, serve.Distribution{Registry: reg, Manifest: man, Limits: lim}))
+	}, serve.Distribution{Registry: reg, Signed: signed, Limits: lim}))
 }

@@ -55,16 +55,16 @@ key ok (realm of grp): grp:c1, grp:c2
 key pk: prov
 
 ## gate
-check 1 Manifest schema and author API: not evaluated until S2a
-check 2 Definition versions: not evaluated until S2a
+check 1 Manifest schema and author API: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 2 Definition versions: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
 check 3 Remote protocol: not evaluated until S2b
-check 4 Stability: not evaluated until S2a
-check 5 Trust: not evaluated until S2a
-check 6 Licence: not evaluated until S2a
-check 7 Key and hook classes: 2 failed (not read yet: signed keys and hooks and fakes in a server graph need trust data (S2a))
-check 8 Layer rules: pass (not read yet: the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b)
+check 4 Stability: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 5 Trust: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 6 Licence: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
+check 7 Key and hook classes: 2 failed (not evaluated: fake: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20); signed: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20))
+check 8 Layer rules: pass (not evaluated: installed: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20); later: the tenant overlay is S4b)
 check 9 Remote scope: not evaluated until S2b
-check 10 Attestation: not evaluated until S2a
+check 10 Attestation: not evaluated at profile render: the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)
 
 ## diagnostics
 warning: row "missing" is inactive: plugin "x/none" is not in the module table (a remote plugin and plugins.lock are not read before S2a)

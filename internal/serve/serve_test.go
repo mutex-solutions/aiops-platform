@@ -19,6 +19,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // readyWriter is a stdout that tells the test when the launcher says it is ready.
@@ -51,14 +52,14 @@ func (s *safeBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(
 // and has nothing to wait for. The release distribution is run by test/loader-smoke.
 func distribution(t *testing.T) Distribution {
 	t.Helper()
-	reg, _, lim, err := dist.Load()
+	reg, signed, lim, err := dist.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.Modules = boot.ModuleTable{boot.LoaderID: reg.Modules[boot.LoaderID]}
 	// The loader reads the role from profileContext, which is consumer-bound.
-	man := boot.DistManifest{Consumers: []boot.Binding{{Key: "profileContext", Plugins: []string{boot.LoaderID}}}}
-	return Distribution{Registry: reg, Manifest: man, Limits: lim}
+	signed = trusted.Rebind(signed, "{consumers: {profileContext: [aiops/loader]}}")
+	return Distribution{Registry: reg, Signed: signed, Limits: lim}
 }
 
 func env(args ...string) (Env, *safeBuf, chan os.Signal) {
@@ -67,9 +68,13 @@ func env(args ...string) (Env, *safeBuf, chan os.Signal) {
 	return Env{Args: args, Getenv: func(string) string { return "" }, Stdout: &safeBuf{}, Stderr: &stderr, Signals: sig}, &stderr, sig
 }
 
+// home is a home that trusts the signed manifest of distribution (test/trusted).
 func home(t *testing.T, bundle string) string {
 	t.Helper()
 	h := t.TempDir()
+	if err := trusted.Write(h, distribution(t).Signed); err != nil {
+		t.Fatal(err)
+	}
 	for name, data := range map[string]string{"profiles/p/profile.yaml": "bundles: [b]", "bundles/b/bundle.yaml": bundle} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(h, name)), 0o755); err != nil {
 			t.Fatal(err)
@@ -123,6 +128,9 @@ func TestRunUsesTheHomeFromTheEnvironmentAndShippedFiles(t *testing.T) {
 	shipped := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}, "bundles/b/bundle.yaml": {Data: []byte("[]")}}
 	d := distribution(t)
 	d.Shipped = shipped
+	if err := trusted.Write(h, d.Signed); err != nil {
+		t.Fatal(err)
+	}
 	e, stderr, _ := env("--profile", "p", "--role", "bogus")
 	e.Getenv = func(n string) string {
 		if n == "AIOPS_HOME" {

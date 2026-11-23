@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package dist is the distribution of the production server binary cmd/aiops: the
-// module table as Go values, the part of the distribution manifest the launcher
-// reads (dist.yaml) and the launcher's limits (limits.yaml)
-// (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233).
+// module table as Go values, the signed distribution manifest the binary embeds
+// (distribution.yaml), and the launcher's limits (limits.yaml)
+// (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233). dist.yaml is
+// the builder's input: the bindings and the required set of the release (ADR-060
+// decision 20); go run ./tools/plugingen --write . writes distribution.yaml from it
+// and from the binary's package graph, and make check fails when they differ.
 //
 // The module table is written by hand, each plugin with its manifest, which the root
 // package embeds; the distribution builder of S2a generates it once it lands
@@ -16,7 +19,7 @@
 package dist
 
 import (
-	_ "embed" // dist.yaml and limits.yaml are embedded
+	_ "embed" // distribution.yaml and limits.yaml are embedded
 	"errors"
 	"fmt"
 	"io/fs"
@@ -33,8 +36,8 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
-//go:embed dist.yaml
-var distYAML []byte
+//go:embed distribution.yaml
+var signed []byte
 
 //go:embed limits.yaml
 var limitsYAML []byte
@@ -102,8 +105,9 @@ func Table(mods ...Module) (boot.Registry, error) {
 
 // Modules is the compiled-in list of plugins of the release distribution. ADD A
 // PLUGIN HERE: one Module per plugin, with the manifest beside its package, which the
-// root package embeds, and its bindings in dist.yaml. The list holds the loader and
-// the five core rows of S1; the others arrive with their own steps.
+// root package embeds, and its bindings in dist.yaml; then go run ./tools/plugingen
+// --write . writes distribution.yaml again. The list holds the loader and the five
+// core rows of S1; the others arrive with their own steps.
 func Modules() []Module {
 	m := func(p kernel.Plugin, dir string) Module {
 		return Module{Plugin: p, Manifest: Manifest(aiops.Manifests, dir)}
@@ -118,20 +122,16 @@ func Modules() []Module {
 	}
 }
 
-// Load returns the registry, the distribution manifest and the limits of the
+// Load returns the registry, the signed distribution manifest and the limits of the
 // release distribution.
-func Load() (boot.Registry, boot.DistManifest, boot.Limits, error) {
-	man, err := boot.ParseDist("dist.yaml", distYAML)
-	if err != nil {
-		return boot.Registry{}, boot.DistManifest{}, boot.Limits{}, fmt.Errorf("dist: %w", err)
-	}
+func Load() (boot.Registry, []byte, boot.Limits, error) {
 	lim, err := boot.ParseLimits("limits.yaml", limitsYAML)
 	if err != nil {
-		return boot.Registry{}, boot.DistManifest{}, boot.Limits{}, fmt.Errorf("dist: %w", err)
+		return boot.Registry{}, nil, boot.Limits{}, fmt.Errorf("dist: %w", err)
 	}
 	reg, err := Table(Modules()...)
 	if err != nil {
-		return boot.Registry{}, boot.DistManifest{}, boot.Limits{}, fmt.Errorf("dist: %w", err)
+		return boot.Registry{}, nil, boot.Limits{}, fmt.Errorf("dist: %w", err)
 	}
-	return reg, man, lim, nil
+	return reg, signed, lim, nil
 }

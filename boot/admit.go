@@ -20,13 +20,20 @@ type Admission struct {
 	Warnings []StaticWarning
 }
 
-// Admit runs the gate on the composition, builds the graph of the admitted
-// copy for the roles and audits the static part of the required set. Rows the
-// gate denies are disabled in the copy before the graph is built, so one fault
-// is reported once, by the gate.
+// Admit admits as the S1 form of profile render does, on the stand-ins dist.yaml and
+// modules.yaml (EntryRender).
 func Admit(c Composition, mods ModuleTable, dist DistManifest, roles []Role) Admission {
+	return AdmitWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist}, roles)
+}
+
+// AdmitWith runs the gate on the composition at the entry point of in, builds the
+// graph of the admitted copy for the roles and audits the static part of the required
+// set. Rows the gate denies are disabled in the copy before the graph is built, so one
+// fault is reported once, by the gate.
+func AdmitWith(c Composition, in GateInput, roles []Role) Admission {
+	mods, dist := in.Mods, in.Bindings
 	a := Admission{Comp: c, Modules: mods, Dist: dist, Roles: append([]Role(nil), roles...)}
-	a.Gate = Gate(c, mods, dist)
+	a.Gate = GateWith(c, in)
 	a.Admitted = a.Gate.Admitted(c)
 	a.Graph, a.Errors, a.Warnings = BuildGraph(a.Admitted, mods, dist, roles)
 	a.Required = RequiredFor(a.Admitted, mods, dist, roles)

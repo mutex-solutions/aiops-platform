@@ -47,8 +47,10 @@ func RenderDump(a Admission) string {
 	b.WriteString("\n## gate\n")
 	for _, s := range a.Gate.Slots {
 		switch {
-		case !s.Evaluated:
+		case s.Until != "":
 			fmt.Fprintf(&b, "check %d %s: not evaluated until %s\n", s.N, s.Name, s.Until)
+		case !s.Evaluated:
+			fmt.Fprintf(&b, "check %d %s: not evaluated at %s: %s\n", s.N, s.Name, a.Gate.Entry, s.Reason)
 		case len(s.Fails) == 0:
 			fmt.Fprintf(&b, "check %d %s: pass%s\n", s.N, s.Name, partial(s))
 		default:
@@ -66,11 +68,23 @@ func RenderDump(a Admission) string {
 	return b.String()
 }
 
+// partial says what an evaluated check left out: the clauses its entry point does not
+// evaluate, the rows they would have judged, and the clauses of a later step.
 func partial(s Slot) string {
-	if s.Partial == "" {
+	var parts []string
+	if len(s.Clauses) > 0 {
+		parts = append(parts, "not evaluated: "+strings.Join(s.Clauses, "; "))
+	}
+	if len(s.Open) > 0 {
+		parts = append(parts, fmt.Sprintf("%d row results not evaluated", len(s.Open)))
+	}
+	if s.Partial != "" {
+		parts = append(parts, "later: "+s.Partial)
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return " (not read yet: " + s.Partial + ")"
+	return " (" + strings.Join(parts, "; ") + ")"
 }
 
 func roleList(roles []Role, none string) string {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -22,13 +23,25 @@ import (
 	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
-func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
-	reg, man, lim, err := Load()
+// bindings returns the bindings and the required set of the signed manifest.
+func bindings(t *testing.T, signed []byte) boot.DistManifest {
+	t.Helper()
+	d, err := boot.ReadDistribution("distribution.yaml", signed)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return d.Bindings()
+}
+
+func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
+	reg, signed, lim, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	man := bindings(t, signed)
 	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy"} {
 		if _, ok := reg.Modules[id]; !ok {
 			t.Errorf("%s is missing from the module table", id)
@@ -56,10 +69,11 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 // refuse with ErrBinding or ErrSealed, instead of letting it fail and be given up on:
 // reload has no consumer yet, and the loader's hooks are sealed by their definition.
 func TestGateDetachesARowOutsideTheReleaseBindings(t *testing.T) {
-	reg, man, _, err := Load()
+	reg, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	man := bindings(t, signed)
 	reg.Modules["x/needreload"] = boot.ModuleEntry{ID: "x/needreload", Needs: []string{"reload"}}
 	reg.Modules["x/entryinit"] = boot.ModuleEntry{ID: "x/entryinit", Hooks: []boot.HookDecl{{Hook: "loader/entry-init"}}}
 	c := boot.Composition{Rows: []boot.ComposedRow{
@@ -91,10 +105,11 @@ func releaseHome(refs, window string) fstest.MapFS {
 
 func admitRelease(t *testing.T, home fstest.MapFS) boot.Admission {
 	t.Helper()
-	reg, man, _, err := Load()
+	reg, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	man := bindings(t, signed)
 	c, _, err := boot.Compose(boot.Sources{Profile: "p", Home: home, Bundles: home}, boot.Options{Server: true, Modules: reg.Modules})
 	if err != nil {
 		t.Fatal(err)
@@ -113,11 +128,19 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 	if !slices.Contains(a.Required.Keys, "configRefsReady") || !slices.Contains(a.Required.Rows, "refs") {
 		t.Fatalf("required set %+v", a.Required)
 	}
-	reg, man, lim, err := Load()
+	reg, signed, lim, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	home := releaseHome("", "${env:AIOPS_REF_WINDOW}")
+	files, err := trusted.Files(signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range files {
+		home[name] = &fstest.MapFile{Data: data}
+	}
+	bi, _ := debug.ReadBuildInfo()
 	sig, ready := make(chan os.Signal, 1), make(chan struct{})
 	var once sync.Once
 	var stderr strings.Builder
@@ -132,7 +155,7 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 				return ""
 			},
 			Stdout: io.Discard, Stderr: writerFunc(func(p []byte) (int, error) { mu.Lock(); defer mu.Unlock(); return stderr.Write(p) }),
-			Registry: reg, Dist: man, Limits: lim, Clock: boot.SystemClock(),
+			Registry: reg, Signed: signed, BuildInfo: bi, Limits: lim, Clock: boot.SystemClock(),
 			Publish: func(s boot.ProcessStatus) {
 				if s.Ready {
 					once.Do(func() { close(ready) })
@@ -158,10 +181,11 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 // every binding, listener list and required key or row of the release is in it as it
 // is, so no suite runs with a release entry changed or dropped (ADR-059 decision 18).
 func TestTestManifestHoldsTheReleaseManifest(t *testing.T) {
-	_, rel, _, err := Load()
+	_, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	rel := bindings(t, signed)
 	data, err := os.ReadFile("../test/dist/dist.yaml")
 	if err != nil {
 		t.Fatal(err)

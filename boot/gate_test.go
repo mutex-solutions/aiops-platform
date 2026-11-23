@@ -253,11 +253,17 @@ func TestGateSlotsAndResult(t *testing.T) {
 	if len(infos) != NumChecks || len(g.Slots) != NumChecks {
 		t.Fatalf("want ten slots, got %d and %d", len(infos), len(g.Slots))
 	}
-	wantUntil := []string{"S2a", "S2a", "S2b", "S2a", "S2a", "S2a", "", "", "S2b", "S2a"}
+	// Checks 3 and 9 are S2b everywhere; the S1 form of profile render evaluates 7 and 8
+	// only, and says why for each other check and each clause it leaves out.
+	wantUntil := []string{"", "", "S2b", "", "", "", "", "", "S2b", ""}
 	for i, s := range g.Slots {
-		if s.N != i+1 || s.Until != wantUntil[i] || s.Evaluated != (wantUntil[i] == "") {
-			t.Errorf("slot %d: %+v", i+1, s.CheckInfo)
+		evaluated := i+1 == CheckKeyHookClass || i+1 == CheckLayerRules
+		if s.N != i+1 || s.Until != wantUntil[i] || s.Evaluated != evaluated || !evaluated && s.Until == "" && s.Reason == "" {
+			t.Errorf("slot %d: %+v", i+1, s)
 		}
+	}
+	if c := g.Slots[CheckKeyHookClass-1].Clauses; len(c) != 2 || !strings.HasPrefix(c[0], "fake: ") || !strings.HasPrefix(c[1], "signed: ") {
+		t.Errorf("clauses of check 7: %q", c)
 	}
 	for _, tc := range []struct {
 		check  int
@@ -269,7 +275,7 @@ func TestGateSlotsAndResult(t *testing.T) {
 		{CheckKeyHookClass, "a", StatusFail, RuleProviderBinding, ""},
 		{CheckKeyHookClass, "b", StatusPass, "", ""},
 		{CheckLayerRules, "a", StatusPass, "", ""},
-		{CheckManifest, "a", StatusNotEvaluated, "", "S2a"},
+		{CheckManifest, "a", StatusNotEvaluated, "", ""},
 		{CheckRemoteProto, "b", StatusNotEvaluated, "", "S2b"},
 		{0, "m", StatusFail, RuleModuleMissing, ""},
 		{0, "a", StatusPass, "", ""},
@@ -281,7 +287,8 @@ func TestGateSlotsAndResult(t *testing.T) {
 		if r.Status != tc.status || r.Rule != tc.rule || r.Until != tc.until {
 			t.Errorf("Result(%d, %q) = %+v", tc.check, tc.row, r)
 		}
-		if tc.status == StatusNotEvaluated && tc.until != "" && !strings.HasPrefix(r.Reason, "not evaluated until ") {
+		if tc.status == StatusNotEvaluated && tc.until != "" && !strings.HasPrefix(r.Reason, "not evaluated until ") ||
+			tc.check == CheckManifest && !strings.Contains(r.Reason, "stand-ins") {
 			t.Errorf("reason %q", r.Reason)
 		}
 	}

@@ -35,18 +35,18 @@ import (
 	toyspine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-spine"
 )
 
-// Shipped is what the test binary carries: dist.yaml and limits.yaml and the bundles
-// and profiles of the test distribution, so that the binary and its fixtures cannot
-// drift. The layer 4 patches in patches/ are not embedded: --patch reads a file by
-// path, and the harness names the files of this directory.
+// Shipped is what the test binary carries: limits.yaml and the bundles and profiles of
+// the test distribution, so that the binary and its fixtures cannot drift. The layer 4
+// patches in patches/ are not embedded: --patch reads a file by path, and the harness
+// names the files of this directory.
 //
-//go:embed dist.yaml limits.yaml all:bundles all:profiles
+//go:embed limits.yaml all:bundles all:profiles
 var shipped embed.FS
 
-// Signed is the signed distribution manifest of the test binary:
+// Signed is the signed distribution manifest that the test binary embeds:
 // go run ./tools/plugingen --write . writes it from dist.yaml, the bindings and the
 // required set of the test distribution, and from the binary's package graph (ADR-060
-// decisions 20 and 28).
+// decisions 20 and 28). The suites trust it with a throwaway key (test/trusted).
 //
 //go:embed distribution.yaml
 var Signed []byte
@@ -90,14 +90,6 @@ func Distribution() (serve.Distribution, error) {
 	for _, k := range def.Keys() {
 		reg.Keys[k.Name()] = k
 	}
-	dd, err := fs.ReadFile(shipped, "dist.yaml")
-	if err != nil {
-		return serve.Distribution{}, err
-	}
-	man, err := boot.ParseDist("dist.yaml", dd)
-	if err != nil {
-		return serve.Distribution{}, fmt.Errorf("testdist: %w", err)
-	}
 	ld, err := fs.ReadFile(shipped, "limits.yaml")
 	if err != nil {
 		return serve.Distribution{}, err
@@ -106,5 +98,5 @@ func Distribution() (serve.Distribution, error) {
 	if err != nil {
 		return serve.Distribution{}, fmt.Errorf("testdist: %w", err)
 	}
-	return serve.Distribution{Registry: reg, Manifest: man, Limits: lim, Shipped: shipped, Kernel: teststate.RecordKernel}, nil
+	return serve.Distribution{Registry: reg, Signed: Signed, Limits: lim, Shipped: shipped, Kernel: teststate.RecordKernel}, nil
 }

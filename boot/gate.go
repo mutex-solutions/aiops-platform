@@ -2,8 +2,10 @@ package boot
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -11,15 +13,17 @@ import (
 
 // The gate: admission of a composition (03-c3-kernel.md:357, "Admit"). It has
 // ten named slots in the order of the table at
-// 08-profiles-roadmap-adrs.md:495-506 (ADR-059 decision 4). It reads the
-// composition, the module table and the distribution manifest, plus the keys
-// the root provides and the classes of keys and hooks that their definitions
-// declare (classesOf), which no distribution changes, and runs no plugin code. Before the ten checks it resolves each
-// enabled row's plugin (03-c3-kernel.md:357).
+// 08-profiles-roadmap-adrs.md:495-506 (ADR-059 decision 4), and runs at each entry
+// point of ADR-060 decision 17 on what that entry point holds (GateInput): the
+// composition, the module table, the signed distribution manifest, trust.yaml and
+// what install recorded, plus the keys the root provides and the classes of keys and
+// hooks that their definitions declare (classesOf). It runs no plugin code. Before the
+// ten checks it resolves each enabled row's plugin (03-c3-kernel.md:357).
 //
-// A result is data. Per check and per row it is pass, fail with a reason, or
-// not evaluated until the step that builds the check. What a failure means
-// follows the failure matrix (08-profiles-roadmap-adrs.md:466-471):
+// A result is data. Per check and per row it is pass, fail with a reason, or not
+// evaluated, with the reason: the entry point does not hold the input the clause
+// reads, or the step that builds the check is later. What a failure means follows the
+// failure matrix (08-profiles-roadmap-adrs.md:466-471):
 //
 //   - a row whose plugin is not in the module table is inactive when optional
 //     and stops boot when required;
@@ -54,15 +58,13 @@ const (
 	CheckAttestation   = 10
 	NumChecks          = 10
 	checkResolve       = 0 // the module table lookup that runs before the ten checks
-	untilS1            = ""
-	untilS2a           = "S2a"
 	untilS2b           = "S2b"
 	reasonNotEvaluated = "not evaluated until "
 )
 
-// CheckInfo names one slot. Until is the roadmap step that builds the check,
-// empty when the slot reads S1 data. Partial lists what an implemented slot
-// does not read yet.
+// CheckInfo names one slot. Until is the roadmap step that builds the check, empty
+// once it is built. Partial lists the clauses of a built check that a later step
+// adds.
 type CheckInfo struct {
 	N       int
 	Name    string
@@ -70,22 +72,69 @@ type CheckInfo struct {
 	Partial string
 }
 
-// GateChecks returns the ten slots in order.
+// GateChecks returns the ten slots in order. Checks 3 and 9 are S2b everywhere, and
+// exemptions S6b (ADR-060 decision 17).
 func GateChecks() []CheckInfo {
+	const exempt = "exemptions (compatibility.yaml) are S6b"
 	return []CheckInfo{
-		{CheckManifest, "Manifest schema and author API", untilS2a, ""},
-		{CheckDefinitions, "Definition versions", untilS2a, ""},
+		{CheckManifest, "Manifest schema and author API", "", exempt},
+		{CheckDefinitions, "Definition versions", "", exempt},
 		{CheckRemoteProto, "Remote protocol", untilS2b, ""},
-		{CheckStability, "Stability", untilS2a, ""},
-		{CheckTrust, "Trust", untilS2a, ""},
-		{CheckLicence, "Licence", untilS2a, ""},
-		{CheckKeyHookClass, "Key and hook classes", untilS1,
-			"signed keys and hooks and fakes in a server graph need trust data (S2a)"},
-		{CheckLayerRules, "Layer rules", untilS1,
-			"the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b"},
+		{CheckStability, "Stability", "", exempt},
+		{CheckTrust, "Trust", "", "the index clause is S6a"},
+		{CheckLicence, "Licence", "", ""},
+		{CheckKeyHookClass, "Key and hook classes", "", ""},
+		{CheckLayerRules, "Layer rules", "", "the tenant overlay is S4b"},
 		{CheckRemoteScope, "Remote scope", untilS2b, ""},
-		{CheckAttestation, "Attestation", untilS2a, ""},
+		{CheckAttestation, "Attestation", "", ""},
 	}
+}
+
+// Entry is an entry point of the gate (08-profiles-roadmap-adrs.md:493; ADR-060
+// decision 17). Each evaluates the clauses its inputs decide.
+type Entry string
+
+// The entry points. EntryInstall is install of in-process code before the rebuild
+// and of every pack, EntryInstallUsed install after dist use. EntryBoot is boot and
+// every live generation (profileContext.Admit). EntryRender is the S1 form of
+// profile render, which reads the stand-ins dist.yaml and modules.yaml.
+const (
+	EntryBuild       Entry = "dist build"
+	EntryCheck       Entry = "plugin check"
+	EntryOffline     Entry = "plugin gate --against"
+	EntryInstall     Entry = "plugin install"
+	EntryInstallUsed Entry = "plugin install after dist use"
+	EntryBoot        Entry = "boot"
+	EntryRender      Entry = "profile render"
+)
+
+// notEvaluated returns the clauses that entry e does not evaluate, each with the
+// reason, keyed by the check number, alone for the whole check or with the clause's
+// name (ADR-060 decision 17; ADR-020 decision 30, reading 3).
+func notEvaluated(e Entry) map[string]string {
+	const (
+		noProfile = "no profile is composed"
+		noSigner  = "no signer is recorded for what it reads: a first-party row passes, any other is not evaluated (ADR-020 decision 30, reading 3)"
+		standIn   = "the S1 stand-ins dist.yaml and modules.yaml carry no signed distribution manifest (ADR-060 decision 20)"
+	)
+	switch e {
+	case EntryBuild:
+		return map[string]string{"4": noProfile, "8": noProfile, "7 signed": noSigner,
+			"5":  "the manifest it would read is the build's output, and dist use records its signer",
+			"10": "dist.yaml lists {module, version, sum} and no artifact, so no attestation reaches the builder"}
+	case EntryCheck:
+		return map[string]string{"4": "no profile", "5 signer": "no trust.yaml", "5 module": "no site distribution",
+			"6": "detected licences belong to a build list (08-profiles-roadmap-adrs.md:1344)", "7 signed": noSigner}
+	case EntryOffline:
+		return map[string]string{"4": "no profile", "5": "no trust.yaml", "6": "no module source and no build list", "7 signed": noSigner}
+	case EntryInstall:
+		return map[string]string{"6": "in-process code has no build list yet",
+			"5 module": "in-process code: when every evaluated clause passes, install answers rebuild-required"}
+	case EntryRender:
+		return map[string]string{"1": standIn, "2": standIn, "4": standIn, "5": standIn, "6": standIn, "7 signed": standIn, "7 fake": standIn,
+			"8 installed": standIn, "10": standIn}
+	}
+	return nil
 }
 
 // RowResult is the result of one check on one row. Check is 0 for the module
@@ -100,12 +149,18 @@ type RowResult struct {
 	Until  string
 }
 
-// Slot is one of the ten checks with its failures. An evaluated slot lists
-// only its failures: a row of GateResult.Rows with no failure passed.
+// Slot is one of the ten checks with its failures. An evaluated slot lists only its
+// failures: a row of GateResult.Rows with no failure passed, unless Open lists it.
+// Reason says why the entry point does not evaluate the check at all; Clauses lists
+// the clauses of an evaluated check that it does not evaluate, each with the reason,
+// and Open the rows that a clause it could not evaluate would have judged.
 type Slot struct {
 	CheckInfo
 	Evaluated bool
+	Reason    string
+	Clauses   []string
 	Fails     []RowResult
+	Open      []RowResult
 }
 
 // GateResult is the data the gate returns.
@@ -115,6 +170,7 @@ type Slot struct {
 // the optional rows denied by a check, which the launcher's copy disables;
 // Inactive lists the optional rows whose plugin is not in the module table.
 type GateResult struct {
+	Entry      Entry
 	Slots      []Slot
 	Rows       []string
 	Unresolved []RowResult
@@ -125,8 +181,8 @@ type GateResult struct {
 }
 
 // Result returns the result of one check on one row: pass or fail with a
-// reason for an evaluated slot, not evaluated for the others. Check 0 is the
-// module table lookup. An unknown row or check is not evaluated.
+// reason for an evaluated slot, not evaluated with the reason for the others. Check
+// 0 is the module table lookup. An unknown row or check is not evaluated.
 func (g GateResult) Result(check int, row string) RowResult {
 	r := RowResult{Check: check, Row: row, Status: StatusNotEvaluated}
 	var fails []RowResult
@@ -136,11 +192,13 @@ func (g GateResult) Result(check int, row string) RowResult {
 	case check >= 1 && check <= NumChecks:
 		s := g.Slots[check-1]
 		if !s.Evaluated {
-			r.Until = s.Until
-			r.Reason = reasonNotEvaluated + s.Until
+			r.Until, r.Reason = s.Until, s.Reason
+			if s.Until != "" {
+				r.Reason = reasonNotEvaluated + s.Until
+			}
 			return r
 		}
-		fails = s.Fails
+		fails = slices.Concat(s.Fails, s.Open)
 	default:
 		return r
 	}
@@ -177,7 +235,8 @@ func (g GateResult) Denial(row string) (RowResult, bool) {
 // failure is disabled, whatever it is. No file is rewritten and the digest is
 // that of the composed tree (08-profiles-roadmap-adrs.md:508).
 func (g GateResult) Admitted(c Composition) Composition {
-	out := Composition{Rows: append([]ComposedRow(nil), c.Rows...), Digest: c.Digest}
+	out := c
+	out.Rows = slices.Clone(c.Rows)
 	for i, r := range out.Rows {
 		if _, denied := g.Denial(r.ID); denied {
 			out.Rows[i].Enabled = false
@@ -186,18 +245,31 @@ func (g GateResult) Admitted(c Composition) Composition {
 	return out
 }
 
-// Gate runs the ten checks on a composition. See the file comment.
+// Gate runs the ten checks on a composition as the S1 form of profile render does,
+// on the stand-ins dist.yaml and modules.yaml (EntryRender).
 func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
+	return GateWith(c, GateInput{Entry: EntryRender, Mods: mods, Bindings: dist})
+}
+
+// GateWith runs the ten checks on a composition at the entry point in.Entry, on what
+// that entry point holds. See the file comment.
+func GateWith(c Composition, in GateInput) GateResult {
+	dist := in.Bindings
 	g := &gate{
-		mods:     mods,
+		in:       in,
+		mods:     in.Mods,
 		provider: bindingSet(dist.Providers),
 		consumer: bindingSet(dist.Consumers),
 		sealed:   map[string][]string{},
 		required: map[string]bool{},
 		rows:     map[string]ComposedRow{},
 		mounted:  ActiveRows(c, nil),
+		subjects: map[string]*subject{},
+		feeds:    map[string][]string{},
+		min:      c.MinStability,
 	}
-	g.pb, g.cb, g.sh = classesOf(mods, dist)
+	g.pb, g.cb, g.sh = classesOf(in.Mods, dist, in.Dist)
+	g.signed, g.faults = signedOf(in.Dist), g.binaryFaults()
 	for _, h := range dist.SealedHooks {
 		g.sealed[h.Hook] = h.Plugins
 	}
@@ -209,10 +281,37 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 		if r.Required {
 			g.required[r.ID] = true
 		}
+		if a := installedBundle(r); a != "" {
+			g.feeds[a] = append(g.feeds[a], r.Plugin)
+		}
 	}
-	res := GateResult{Slots: make([]Slot, NumChecks)}
+	open := notEvaluated(in.Entry)
+	res := GateResult{Entry: in.Entry, Slots: make([]Slot, NumChecks)}
 	for i, info := range GateChecks() {
-		res.Slots[i] = Slot{CheckInfo: info, Evaluated: info.Until == untilS1}
+		n := strconv.Itoa(info.N)
+		s := Slot{CheckInfo: info, Reason: open[n]}
+		s.Evaluated = info.Until == "" && s.Reason == ""
+		for _, k := range slices.Sorted(maps.Keys(open)) {
+			if clause, ok := strings.CutPrefix(k, n+" "); ok {
+				s.Clauses = append(s.Clauses, clause+": "+open[k])
+			}
+		}
+		res.Slots[i] = s
+	}
+	// A failure of a clause that the entry point does not evaluate is not evaluated
+	// for that row, with the reason (ADR-020 decision 30, reading 3).
+	add := func(fs []RowResult) {
+		for _, f := range fs {
+			s := &res.Slots[f.Check-1]
+			switch why := open[clauseOf(f)]; {
+			case !s.Evaluated:
+			case why != "":
+				f.Status, f.Reason, f.Stop = StatusNotEvaluated, why, false
+				s.Open = append(s.Open, f)
+			default:
+				s.Fails = append(s.Fails, f)
+			}
+		}
 	}
 	for _, r := range c.Rows {
 		res.Rows = append(res.Rows, r.ID)
@@ -223,12 +322,16 @@ func Gate(c Composition, mods ModuleTable, dist DistManifest) GateResult {
 			res.Unresolved = append(res.Unresolved, f)
 			continue
 		}
-		res.Slots[CheckKeyHookClass-1].Fails = append(res.Slots[CheckKeyHookClass-1].Fails, g.classes(r.Row)...)
+		add(g.classes(r.Row))
+		if r.Plugin != pluginGroup && r.Plugin != pluginInclude {
+			add(g.checks(r))
+		}
 	}
 	for _, r := range c.Rows {
-		res.Slots[CheckLayerRules-1].Fails = append(res.Slots[CheckLayerRules-1].Fails, g.layers(r)...)
+		add(g.layers(r))
 	}
-	res.Slots[CheckLayerRules-1].Fails = append(res.Slots[CheckLayerRules-1].Fails, g.lastProvider(c, dist)...)
+	add(g.lastProvider(c, dist))
+	add(g.installed(c))
 	sort.Strings(res.Rows)
 	res.finish()
 	return res
@@ -268,6 +371,7 @@ func sortedKeys(m map[string]bool) []string {
 }
 
 type gate struct {
+	in       GateInput
 	mods     ModuleTable
 	provider map[string][]string // who dist.yaml allows, by key or hook
 	consumer map[string][]string
@@ -276,22 +380,30 @@ type gate struct {
 	sh       map[string]bool // sealed hooks
 	required map[string]bool
 	rows     map[string]ComposedRow
-	mounted  map[string]bool // enabled with every group above it, in any role (ActiveRows)
+	mounted  map[string]bool     // enabled with every group above it, in any role (ActiveRows)
+	subjects map[string]*subject // by plugin id, or by "artifact " and the artifact's id
+	feeds    map[string][]string // the plugins of the rows of each installed artifact
+	signed   map[string]bool     // the keys and hooks that served data puts in the signed class
+	faults   []binaryFault       // the denials of every row that the signed manifest decides (binaryFaults)
+	min      string              // the profile's minStability
 }
 
 // classesOf returns, by name, the provider-bound and the consumer-bound keys and the
 // sealed hooks, from their definitions (kernel.KeyClasses, kernel.HookSealed and
 // HookUse.Sealed; ADR-059 decision 20): the keys of the root and of the definitions boot
 // imports, the hooks of the kernel and the loader, and the keys and hooks that the
-// plugins of the module table provide, inject and listen on. An entry read from
-// modules.yaml has no Go value and carries the classes of what it names
-// (ModuleClasses). dist.yaml lists only who is allowed.
+// plugins of the module table provide, inject and listen on. Where the module table
+// holds no Go value, the classes come from the definition data that serves of the
+// signed distribution manifest carries (ADR-060 decision 14), a signed key counting as
+// consumer-bound as kernel.KeyClasses reports it, or from an entry read from
+// modules.yaml (ModuleClasses). The definition test holds the two equal. dist.yaml
+// lists only who is allowed.
 //
 // ponytail: a key or hook that no definition names, or that only an entry of
 // modules.yaml with no classes names, is bound or sealed when dist.yaml lists who may
 // hold it, as the kernel takes a binding of a bound key and a listener list of a sealed
-// hook only; the module table that S2a generates carries every class.
-func classesOf(mods ModuleTable, dist DistManifest) (pb, cb, sh map[string]bool) {
+// hook only; the signed manifest carries every class.
+func classesOf(mods ModuleTable, dist DistManifest, d *Distribution) (pb, cb, sh map[string]bool) {
 	pb, cb, sh = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, b := range dist.Providers {
 		pb[b.Key] = true
@@ -308,6 +420,14 @@ func classesOf(mods ModuleTable, dist DistManifest) (pb, cb, sh map[string]bool)
 			defined[n], pb[n], cb[n] = true, false, false
 		}
 		pb[n], cb[n] = pb[n] || p, cb[n] || c
+	}
+	for _, sd := range servedDefinitions(d) {
+		for n, kc := range sd.Classes {
+			key(n, kc.Provider == "bound", kc.Consumer != "open")
+		}
+		for h, sv := range sd.Hooks {
+			sh[h] = sv.Access == "sealed"
+		}
 	}
 	keys := knownKeys()
 	for _, e := range mods {

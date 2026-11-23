@@ -157,7 +157,7 @@ func TestShowValue(t *testing.T) {
 
 func TestDumpGateLineWithoutPartial(t *testing.T) {
 	a := loadS1(t)
-	a.Gate.Slots[CheckKeyHookClass-1].Partial = ""
+	a.Gate.Slots[CheckKeyHookClass-1].Partial, a.Gate.Slots[CheckKeyHookClass-1].Clauses = "", nil
 	if d := RenderDump(a); !strings.Contains(d, "check 7 Key and hook classes: 1 failed\n") {
 		t.Errorf("dump:\n%s", d)
 	}

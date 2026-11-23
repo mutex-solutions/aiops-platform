@@ -226,10 +226,12 @@ type Digest [32]byte
 // Composition is one immutable composed tree: the rows of layers 0 to 4 in
 // final order (parents before their children, inserts in layer order) and the
 // digest of 08-profiles-roadmap-adrs.md:184. The encoding behind Digest is
-// described at EncodeDigest.
+// described at EncodeDigest. MinStability is minStability of profile.yaml, ""
+// when absent, which sets no minimum; gate check 4 reads it (ADR-060 decision 14).
 type Composition struct {
-	Rows   []ComposedRow
-	Digest Digest
+	Rows         []ComposedRow
+	Digest       Digest
+	MinStability string
 }
 
 // ModuleEntry is what the launcher knows of one plugin of the module table. A

@@ -304,6 +304,15 @@ func TestLaunchServices(t *testing.T) {
 	if _, err := l.profile.Admit(ctx, c); err != nil {
 		t.Fatalf("the committed composition is kept: %v", err)
 	}
+	// A live generation reads the home again (ADR-060 decision 17): with verified/current
+	// gone, every Go module is absent from a trusted manifest, so check 5 denies every row.
+	cur := f.files["verified/current"]
+	delete(f.files, "verified/current")
+	adm, err = l.profile.Admit(ctx, c)
+	if err == nil || len(adm.Denied) == 0 || slices.ContainsFunc(adm.Denied, func(d launch.Denial) bool { return d.Check != "5 Trust" }) {
+		t.Fatalf("admit with no current distribution: %v %+v", err, adm)
+	}
+	f.files["verified/current"] = cur
 
 	if code := stopAndWait(t, f, done); code != ExitOK {
 		t.Fatalf("exit %d", code)
@@ -388,7 +397,7 @@ func TestRunRefusals(t *testing.T) {
 			}
 			var code int
 			if tc.name == "prepare fails" {
-				f.opt.Registry, f.opt.Dist = f.reg, f.dist
+				f.sign()
 				r := newRun(f.opt)
 				r.o.Kernel = func(root *kernel.Root) { _ = root.Close(context.Background()) }
 				code = r.main(t.Context())
@@ -1070,7 +1079,7 @@ func TestRunActsOnALeakAfterItsObserverOverflowed(t *testing.T) {
 	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
 	f.opt.Limits.LeakGrace = 7 * time.Millisecond
 	f.opt.Clock = f.clock
-	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	f.sign()
 	r := newRun(f.opt)
 	// boot's observer stalls on the first event after the trigger while the test appends
 	// more events than the queue holds, so that the kernel detaches it; an observer of the

@@ -29,6 +29,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
@@ -37,14 +38,16 @@ import (
 )
 
 // Distribution is what a server binary links: the module table as Go values, the
-// part of the distribution manifest the launcher reads, the limits, and the bundles
+// signed distribution manifest it embeds (ADR-060 decision 20), with the release key
+// of a release binary (ADR-020 decision 13), the limits, and the bundles
 // and profiles shipped inside the binary ("bundles/<bundle>/bundle.yaml ... embedded
 // in the binary", 08-profiles-roadmap-adrs.md:1233; "profiles/<profile>/ shipped
 // profile.yaml templates"). Shipped may be nil. A file of the home or of --bundles
 // wins over a shipped one of the same path.
 type Distribution struct {
 	Registry boot.Registry
-	Manifest boot.DistManifest
+	Signed   []byte
+	Release  *boot.Release
 	Limits   boot.Limits
 	Shipped  fs.FS
 	// Kernel is boot.RunOptions.Kernel with the runtime directory of the home: a seam
@@ -146,9 +149,10 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Flags: map[string]string{"profile": *profile, "home": *home, "bundles": *bundles, "role": *role, "refs-dir": *refsDir},
 		Home:  overlay{os.DirFS(*home), d.Shipped}, Bundles: overlay{os.DirFS(*bundles), d.Shipped},
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
-		Registry: d.Registry, Dist: d.Manifest, Limits: lim, Clock: boot.SystemClock(),
+		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: lim, Clock: boot.SystemClock(),
 		Publish: publish,
 	}
+	opts.BuildInfo, _ = debug.ReadBuildInfo()
 	if d.Kernel != nil {
 		opts.Kernel = func(root *kernel.Root) { d.Kernel(root, runDir) }
 	}

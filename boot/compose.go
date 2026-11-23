@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // File names a file inside a file system. The Path is also the name used in
@@ -80,12 +81,18 @@ func Compose(src Sources, opt Options) (Composition, []Warning, error) {
 	if err != nil {
 		return Composition{}, nil, fileError(profile.Path, err)
 	}
-	bundles, err := parseProfile(profile.Path, data)
+	bundles, min, err := parseProfile(profile.Path, data)
 	if err != nil {
 		return Composition{}, nil, err
 	}
+	c.min = min
 	for _, name := range bundles {
+		// The bundle of an installed artifact, named by its plugin id, is read from the
+		// home only (ADR-047 decision 5).
 		f := File{FS: src.Bundles, Path: path.Join("bundles", name, "bundle.yaml")}
+		if strings.Contains(name, "/") {
+			f.FS = src.Home
+		}
 		if err := c.layer(f, 1, "bundle:"+name, false); err != nil {
 			return Composition{}, nil, err
 		}
@@ -146,7 +153,8 @@ type composer struct {
 	rows  []*crow
 	index map[string]int
 	warns []Warning
-	read  int // bytes of the layer files and of each include mount, against MaxComposeBytes
+	read  int    // bytes of the layer files and of each include mount, against MaxComposeBytes
+	min   string // minStability of profile.yaml
 }
 
 // The ten fields in canonical order, as indexes of crow.origin.
@@ -379,7 +387,7 @@ func (c *composer) finish() Composition {
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
 		plain[i] = cr.row
 	}
-	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks)}
+	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min}
 }
 
 // collectRefs appends the references of a value, in document order for lists

@@ -29,6 +29,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // PollInterval is the period of every poll of the process's files.
@@ -98,6 +99,17 @@ var Limits = func() string {
 	return string(b)
 }()
 
+// Signed is the signed distribution manifest that the binary embeds,
+// test/dist/distribution.yaml, read from disk as Limits is. Start writes the records
+// by which a fresh home trusts it (test/trusted).
+var Signed = func() []byte {
+	b, err := os.ReadFile(filepath.Join(distDir(), "distribution.yaml"))
+	if err != nil {
+		panic(err) // the suites run from a checkout, where the file is beside this one
+	}
+	return b
+}()
+
 // Options is how a process is started.
 type Options struct {
 	Profile string          // default "smoke"
@@ -138,6 +150,9 @@ func Start(bin string, o Options) (*Proc, error) {
 	lim := o.Limits
 	if lim == "" {
 		lim = Limits
+	}
+	if err := trusted.Write(home, Signed); err != nil {
+		return nil, err
 	}
 	limFile := filepath.Join(home, "limits.yaml")
 	if err := os.WriteFile(limFile, []byte(lim), 0o644); err != nil {

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -57,7 +58,8 @@ const (
 // the loader or composition key has no provider.
 func WithLoader(c Composition) Composition {
 	row := ComposedRow{Row: Row{ID: LoaderRowID, Plugin: LoaderID, Enabled: true, Required: true}}
-	return Composition{Rows: append([]ComposedRow{row}, c.Rows...), Digest: c.Digest}
+	c.Rows = append([]ComposedRow{row}, c.Rows...)
+	return c
 }
 
 // BatchFunc is (*kernel.Root).Batch, the one function the loader gets to commit
@@ -177,9 +179,15 @@ type RunOptions struct {
 	Stdout, Stderr io.Writer
 
 	Registry Registry
-	Dist     DistManifest
-	Limits   Limits
-	Clock    Clock
+	// Signed is the signed distribution manifest the binary embeds (ADR-060 decision
+	// 20), and BuildInfo the build information of the binary, which ties the module
+	// table to it (ADR-020 decision 12). Release is the release key of a release
+	// binary, nil for any other (ADR-020 decision 13).
+	Signed    []byte
+	BuildInfo *debug.BuildInfo
+	Release   *Release
+	Limits    Limits
+	Clock     Clock
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)
@@ -263,10 +271,15 @@ func (r *run) run(ctx context.Context) int {
 		return r.fail(ExitRefused, "distribution: the module table has no %s or no LoaderConfig", LoaderID)
 	}
 	mods := o.Registry.Modules
-	dist := o.Dist
+	signed, err := ReadDistribution("the embedded distribution manifest", o.Signed)
+	if err != nil {
+		return r.fail(ExitRefused, "distribution: %v", err)
+	}
+	dist := signed.Bindings()
+	tie, tied := tieModules(signed, o.BuildInfo)
 
 	// 1. Compose layers 0 to 4 (03-c3-kernel.md:355).
-	opt := Options{Server: true, Modules: mods}
+	opt := Options{Server: true, Modules: mods, Locks: lockDigests(o.Home, o.Profile)}
 	src := Sources{Profile: o.Profile, Home: o.Home, Bundles: o.Bundles, Patches: o.Patches}
 	comp, warns, err := Compose(src, opt)
 	if err != nil {
@@ -281,8 +294,13 @@ func (r *run) run(ctx context.Context) int {
 	// 2 and 3. Admit, then the static graph and the static required audit
 	// (03-c3-kernel.md:357-359). The admitted tree holds the loader as a row, so that
 	// the graph sees what it provides and the required row "loader"
-	// (08-profiles-roadmap-adrs.md:455) is satisfied by boot's own mount.
-	a := Admit(WithLoader(comp), mods, dist, roles)
+	// (08-profiles-roadmap-adrs.md:455) is satisfied by boot's own mount. The gate
+	// reads what boot holds (bootInput), whose trust state boot prints at every boot.
+	in, lines := bootInput(o.Home, o.Profile, WithLoader(comp), mods, signed, o.Release, tie)
+	for _, l := range append(lines, tied...) {
+		fmt.Fprintln(r.errw, l)
+	}
+	a := AdmitWith(WithLoader(comp), in, roles)
 	for _, l := range a.Diagnostics() {
 		fmt.Fprintln(r.errw, l)
 	}
@@ -297,8 +315,10 @@ func (r *run) run(ctx context.Context) int {
 	// 4. Build the kernel and prepare (03-c3-kernel.md:360).
 	// The committed composition is what the loader mounts: the admitted copy, without
 	// the loader's own row.
+	committed := a.Admitted
+	committed.Rows = committed.Rows[1:]
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
-		committed: Composition{Rows: a.Admitted.Rows[1:], Digest: comp.Digest}, known: map[Digest]Composition{}}
+		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}}
 	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {
