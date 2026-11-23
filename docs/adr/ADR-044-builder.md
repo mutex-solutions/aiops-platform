@@ -856,6 +856,27 @@ register entry records and which is read again at every version bump, and the ta
 `grpcnotrace` applies to every binary the builder writes, `aiopsctl` included. This is
 ADR-020's decision; no option of this ADR changes.
 
+**What ADR-020 asks of the builder.** ADR-020, accepted the same day, decides the
+following of this ADR (ADR-020 decision 18), and this record carries it as decided there:
+- *The release build runs in two phases* (ADR-020 decision 13). It takes the release
+  public key as an input. The builder writes the distribution manifest and stops, the
+  release pipeline signs it outside the builder with `cosign sign-blob`, and the builder
+  then links the release binaries, the server of the release image and the release
+  `aiopsctl`, with the manifest, its bundle and the release public key embedded. `dist
+  build` for a site takes no release key and links in one phase.
+- *`dist build` also writes the site's `aiopsctl`* (ADR-020 decision 29, its question Q11
+  (a)) for the host's platform: the `cli` profile of the same module table (`08:359`),
+  embedding the same manifest, so that after `dist use` it boots on the current
+  distribution record.
+- *The scratch main module* (ADR-020 decision 12) holds the module table and no plugin,
+  its `go.mod` holds no `replace` line, and every module of the table, the root module
+  included, is reached at a version, so that build information records a sum for each.
+- *The one exemption of the `init` deny-list* is that of ADR-020 decision 27, as the
+  paragraph above states.
+- *The licence scan* honours the record of ADR-020 decision 30, reading 4: CC-BY-SA-4.0
+  for `README.md` and `CONTRIBUTING.md` of `github.com/opencontainers/go-digest@v1.0.0`
+  only, by module, version and file.
+
 **Edits made with this record.** The commit that records these answers makes the edits
 that "Edits on acceptance" names for the options chosen: `00:778` (status); `07:1874`;
 `08:401`, `:402`, `:403`, `:1284`, `:1342` (L13), `:1381` and `:1407`; plugin record
