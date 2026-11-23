@@ -437,8 +437,15 @@ func TestLoaderSmoke(t *testing.T) {
 	// The loader checks a child's new config on its fiber before the batch disposes the
 	// group, with a CommitOp: the child's running activation is handed nothing, and the
 	// activation that replaces it, mounted only once the old one is disposed, applies it.
-	// How long the child runs after the batch is the kernel's to order; the kernel test
-	// TestCommitOpHandsItsConfigOnceTheBatchIsAdmitted holds that window open.
+	//
+	// This case does not guard the closure of G13 point 3, which hands that CommitOp
+	// nothing because its batch ends the child's activation. The group registers no
+	// effect after its children's mounts, and a child's disposal is requested without
+	// waiting, so the owner has cancelled the old child's Std context before Batch
+	// returns, and the hand-off is refused for that alone. No delay of a disposer, of the
+	// child or of a sibling, holds that context open. The kernel test
+	// TestCommitOpHandsItsConfigOnceTheBatchIsAdmitted, whose parent holds its unwind
+	// with a later disposer, is the only check of the closure.
 	t.Run("a child of a replaced group does not take its new note in place", func(t *testing.T) {
 		dir := t.TempDir()
 		group, live := filepath.Join(dir, "group.yml"), filepath.Join(dir, "live.yml")
