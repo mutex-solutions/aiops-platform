@@ -161,7 +161,7 @@ func TestReadManifest(t *testing.T) {
 // mode fails (ADR-048 decisions 15 and 24; 07-c4-plugin-sdk.md:120).
 func TestReadManifestUnknownFields(t *testing.T) {
 	higher := strings.NewReplacer(`manifestVersion: "1.0"`, "manifestVersion: \"1.3\"\nflavour: x",
-		"publisher: {id: aiops,", "publisher: {id: aiops, badge: y,",
+		"publisher: {id: aiops,", "publisher: {id: aiops, badge: z,",
 		"{key: dialer, major: 0, as: need}", "{key: dialer, major: 0, as: need, why: x}",
 		"  pluginApi:", "  extra: [1]\n  pluginApi:").Replace(fullManifest)
 	m, err := ReadManifest("plugin.yaml", []byte(higher), ManifestLenient)
@@ -182,6 +182,31 @@ func TestReadManifestUnknownFields(t *testing.T) {
 	}
 	if _, err := ReadManifest("plugin.yaml", []byte(strings.Replace(fullManifest, `"1.0"`, `"1.3"`, 1)), ManifestStrict); err != nil {
 		t.Errorf("strict at 1.3 with known fields only: %v", err)
+	}
+	// An unknown field that the lenient mode ignores at a higher minor still holds the
+	// YAML rules of every reading (ADR-048 decision 3), at any depth.
+	at11 := strings.Replace(minimalManifest, `"1.0"`, `"1.1"`, 1)
+	for _, c := range []struct {
+		future string
+		rule   Rule
+	}{
+		{"future: &a {x: 1}\nfuture2: *a\n", RuleAlias},
+		{"future: [1, &b {x: 1}]\n", RuleAlias},
+		{"future: !!binary aGVsbG8=\n", RuleTag},
+		{"future: {<<: {a: 1}, b: 2}\n", RuleAlias},
+		{"future: {a: 1, a: 2}\n", RuleDuplicateKey},
+		{"future: {a: yes}\n", RuleType},
+		{"future: 0x1F\n", RuleType},
+		{"future: " + strings.Repeat("[", MaxDepth+1) + strings.Repeat("]", MaxDepth+1) + "\n", RuleLimit},
+	} {
+		var e *Error
+		_, err := ReadManifest("plugin.yaml", []byte(at11+c.future), ManifestLenient)
+		if !errors.As(err, &e) || e.Rule != c.rule {
+			t.Errorf("lenient at 1.1 with %q: %v, want rule %s", c.future, err, c.rule)
+		}
+	}
+	if _, err := ReadManifest("plugin.yaml", []byte(at11+"future: {a: [1, x], b: \"${x}\"}\n"), ManifestLenient); err != nil {
+		t.Errorf("lenient at 1.1 with a well-formed unknown field: %v", err)
 	}
 }
 
