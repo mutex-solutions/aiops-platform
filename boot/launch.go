@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -125,6 +126,9 @@ func (p *profileContext) rememberLocked(c Composition) {
 // composition that is looked up again is the newest, so the one that reload plans from
 // is not forgotten while it is in use.
 func (p *profileContext) lookup(lc launch.Composition, newest bool) (Composition, error) {
+	if err := p.released(); err != nil {
+		return Composition{}, err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	d := Digest(lc.Digest)
@@ -139,6 +143,16 @@ func (p *profileContext) lookup(lc launch.Composition, newest bool) (Composition
 		return k, nil
 	}
 	return Composition{}, fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", d[:6])
+}
+
+// released is kernel.ErrInactive once the root that the services are provided from is
+// closing, which is the launcher's release, and nil before: Compose, and Admit, Plan,
+// Commit and RequiredOf through lookup, then refuse (07-c4-plugin-sdk.md:518).
+func (p *profileContext) released() error {
+	if p.root.Context().Std().Err() != nil {
+		return kernel.ErrInactive
+	}
+	return nil
 }
 
 // sameEnabled reports whether lc has the rows of c, each enabled as in c: the launcher's
@@ -210,7 +224,7 @@ func (p *profileContext) requiredOf(c Composition) launch.RequiredSet {
 }
 
 func (p *profileContext) Compose(ctx context.Context) (launch.Composition, error) {
-	if err := ctx.Err(); err != nil {
+	if err := cmp.Or(ctx.Err(), p.released()); err != nil {
 		return launch.Composition{}, err
 	}
 	c, _, err := Compose(p.src, p.opt)

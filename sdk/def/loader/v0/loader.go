@@ -157,6 +157,9 @@ type Result struct {
 // itself first, whose Isolate names the key, or the root, as in the launcher's static
 // graph. A fiber restarted in place keeps its plugin and its realm, so it is not held:
 // the launcher admits no composition with two providers of one key in one realm.
+//
+// Once the activation that provides the loader is released, every method with an
+// error result returns kernel.ErrInactive (07-c4-plugin-sdk.md:518).
 type Loader interface {
 	// Apply applies the operations in order against the tree as the earlier ones
 	// leave it. It validates everything first: a refused operation refuses the whole

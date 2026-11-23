@@ -346,10 +346,17 @@ func (f *Loader) Remove(ctx context.Context, id string) error {
 	return f.one(ctx, loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}})
 }
 
-// Await returns the scripted state of a mounted entry at once.
+// Await returns the scripted state of a mounted entry at once, and
+// kernel.ErrInactive once the plugin's activation is released.
 func (f *Loader) Await(ctx context.Context, id string) (kernel.State, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
+	}
+	f.mu.Lock()
+	released := f.lc == nil
+	f.mu.Unlock()
+	if released {
+		return "", kernel.ErrInactive
 	}
 	e, ok := f.Locate(id)
 	switch {

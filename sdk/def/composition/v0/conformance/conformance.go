@@ -7,7 +7,10 @@
 // suite sets up. The guard half holds it to its release and its method set: after
 // the provider's release the consumer it served is released, and a read of the key
 // fails with kernel.ErrInactive; the provided value has no method outside the
-// interface. Each obligation has an id, the first word of its case's name. The
+// interface. composition.Reader has no error result, so a call on a Reader kept from
+// before the release cannot return kernel.ErrInactive as 07-c4-plugin-sdk.md:518
+// asks, and G1 proves only the read of the key; the rule waits for the definition's
+// next minor. Each obligation has an id, the first word of its case's name. The
 // package imports the standard library, sdk/kernel and definitions only.
 package conformance
 

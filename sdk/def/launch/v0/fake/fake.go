@@ -63,7 +63,9 @@ var (
 // New returns an empty launcher and the plugin that provides the six launch keys.
 // Each call returns a new plugin value, which a test lists in the provider binding
 // map to stand for the launcher. Each key serves a value with the methods of its own
-// interface only: Exits is the test's (no side door, 07-c4-plugin-sdk.md §4.3).
+// interface only: Exits is the test's (no side door, 07-c4-plugin-sdk.md §4.3). The
+// profileContext of an activation refuses its calls once that activation is
+// released, as served.
 func New() (*Launcher, kernel.Plugin) {
 	f := &Launcher{known: map[launch.Digest]bool{}}
 	return f, kernel.Define(kernel.Plugin{
@@ -72,7 +74,7 @@ func New() (*Launcher, kernel.Plugin) {
 			launch.ReadyKey, launch.KillSwitchesKey, launch.AppExitKey},
 		Apply: func(c *kernel.Context, _ any) error {
 			for _, err := range []error{
-				launch.ProfileContextKey.Provide(c, struct{ launch.ProfileContext }{f}),
+				launch.ProfileContextKey.Provide(c, served{f, c.Std()}),
 				launch.CatalogKey.Provide(c, struct{ launch.Catalog }{f}),
 				launch.CmdlineKey.Provide(c, struct{ launch.Cmdline }{f}),
 				launch.ReadyKey.Provide(c, struct{ launch.Ready }{f}),
@@ -86,6 +88,49 @@ func New() (*Launcher, kernel.Plugin) {
 			return nil
 		},
 	})
+}
+
+// served is what an activation provides under profileContext: the profileContext,
+// whose methods with an error result return kernel.ErrInactive once that activation
+// is released, as the launcher's do (07-c4-plugin-sdk.md:518).
+type served struct {
+	launch.ProfileContext
+	std context.Context
+}
+
+func (s served) Compose(ctx context.Context) (launch.Composition, error) {
+	if s.std.Err() != nil {
+		return launch.Composition{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Compose(ctx)
+}
+
+func (s served) Admit(ctx context.Context, c launch.Composition) (launch.Admission, error) {
+	if s.std.Err() != nil {
+		return launch.Admission{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Admit(ctx, c)
+}
+
+func (s served) Plan(ctx context.Context, from, to launch.Composition) (launch.Plan, error) {
+	if s.std.Err() != nil {
+		return launch.Plan{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Plan(ctx, from, to)
+}
+
+func (s served) Commit(c launch.Composition) error {
+	if s.std.Err() != nil {
+		return kernel.ErrInactive
+	}
+	return s.ProfileContext.Commit(c)
+}
+
+func (s served) RequiredOf(c launch.Composition) (launch.RequiredSet, error) {
+	if s.std.Err() != nil {
+		return launch.RequiredSet{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.RequiredOf(c)
 }
 
 // Exits returns the exit requests received so far, oldest first.
