@@ -4,8 +4,12 @@
 // The obligations half is what an echoer owes; it runs on a contribution, with the
 // recording fake as its dispatcher. The guard half is what a dispatcher owes; it runs
 // on the real dispatcher and on the fake. Both halves carry the dispose case and the
-// ErrInactive case; the two-tenant cases arrive with the tenants definition under a
-// raised suite revision (ADR-060 decision 43).
+// ErrInactive case. The guard half also holds a call in flight while its echoer's fiber
+// is disposed, which the dispatcher's lease on that fiber must delay (guard-lease;
+// 07-c4-plugin-sdk.md:503, M2), and keeps a registry kept from a released activation
+// at ErrInactive after the next activation starts (guard-remount). The two-tenant
+// cases arrive with the tenants definition under a raised suite revision (ADR-060
+// decision 43).
 //
 // Every case has an id. A failed case prints one line, which starts with its id, so
 // plugin check and a fresh template print one line per failed obligation
@@ -21,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/fake"
@@ -207,6 +212,41 @@ var guards = []check{
 				errCall, errReg, e.reg.Inventory())
 		}
 	}},
+	{"echoers/guard-lease", func(e *env) {
+		x := &slow{entered: make(chan struct{}), release: make(chan struct{}), disposed: make(chan struct{})}
+		f := e.mount(x.plugin())
+		reply := make(chan string, 1)
+		go func() {
+			r, err := e.reg.Echo(e.t.Context(), "slow", "hi")
+			if err != nil {
+				r = "error: " + err.Error()
+			}
+			reply <- r
+		}()
+		select {
+		case <-x.entered:
+		case r := <-reply:
+			e.fail("Echo(slow) answered %q without calling the echoer", r)
+		}
+		if err := f.Dispose(e.t.Context()); err != nil {
+			close(x.release)
+			e.fail("dispose: %v", err)
+		}
+		select {
+		case <-x.disposed:
+			close(x.release)
+			e.fail("the echoer's fiber was disposed while a call to it was in flight: the dispatcher holds no lease on it")
+		case <-time.After(leaseWait):
+		}
+		close(x.release)
+		if r := <-reply; r != "slow:hi" {
+			e.fail("the call in flight while the echoer's fiber was disposed answered %q, want slow:hi", r)
+		}
+		_ = f.Await(e.t.Context())
+		if st, _ := f.State(e.t.Context()); st != kernel.Disposed {
+			e.fail("after the call returned the echoer's fiber is %s, want DISPOSED", st)
+		}
+	}},
 	{"echoers/guard-remount", func(e *env) {
 		old := e.reg
 		_, live := e.hold()
@@ -331,6 +371,33 @@ func (e *env) dispose(f *kernel.Fiber) {
 		e.fail("dispose: %v", err)
 	}
 	_ = f.Await(e.t.Context())
+}
+
+// leaseWait is how long guard-lease waits, with a call in flight, for the
+// echoer's fiber to be disposed. Without a lease the kernel disposes it at once; with
+// one it waits for the call, so a dispatcher that holds the lease always passes.
+const leaseWait = 500 * time.Millisecond
+
+// slow is the echoer of guard-lease: its Echo blocks until release is closed, and
+// its fiber closes disposed when its effects are disposed.
+type slow struct{ entered, release, disposed chan struct{} }
+
+func (x *slow) plugin() kernel.Plugin {
+	return kernel.Define(kernel.Plugin{ID: "conformance/echoer-slow", Inject: []kernel.Dep{kernel.Need(echoers.Key)},
+		Apply: func(c *kernel.Context, _ any) error {
+			c.Defer("conformance/disposed", func(context.Context) error { close(x.disposed); return nil })
+			return echoers.Key.Of(c).Register(c, "slow", x)
+		}})
+}
+
+func (x *slow) Echo(ctx context.Context, msg string) (string, error) {
+	close(x.entered)
+	select {
+	case <-x.release:
+		return "slow:" + msg, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 // echoer is a contribution of the guard half.
