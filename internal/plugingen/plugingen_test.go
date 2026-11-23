@@ -6,6 +6,7 @@ import (
 	goparser "go/parser"
 	"go/token"
 	"math"
+	"os"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -400,6 +401,34 @@ func TestGenerate(t *testing.T) {
 	if len(l.Generated.ConfigSchema) != 0 || len(l.Generated.Registers) != 0 || l.Files[TenantsFile] != nil ||
 		!strings.Contains(string(l.Files[CycleFile]), "zzplugin.New()") {
 		t.Errorf("legacy = %+v\n%s", l.Generated, l.Files[CycleFile])
+	}
+}
+
+// testdata/cycle.yaml is read as a layer reads a row config, so the cycle test
+// mounts only a config that the launcher would hand the plugin: the layer parser's
+// typing of plain scalars, no anchor or alias, and no reference, which nothing
+// resolves in the cycle test (ADR-059 decision 6).
+func TestCycleConfigReadsTheLayerRules(t *testing.T) {
+	read := func(src string) (string, error) {
+		dir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(dir, "testdata"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "testdata", "cycle.yaml"), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return cycleConfig(dir)
+	}
+	got, err := read("# a comment\nn: 10\nname: \"yes\"\nr: 0.5\nl: [a]\nm: {k: v}\nd: 2001-12-14\n")
+	want := `map[string]any{"d": "2001-12-14", "l": []any{"a"}, "m": map[string]any{"k": "v"}, "n": int64(10), "name": "yes", "r": float64(0.5)}`
+	if err != nil || got != want {
+		t.Errorf("cycleConfig = %s, %v; want %s", got, err, want)
+	}
+	for _, src := range []string{"n: 012\n", "hex: 0x1F\n", "name: yes\n", "n: &v 1\nm: *v\n", "a: !!str x\n",
+		"a: 1\na: 2\n", "url: ${env:URL}\n", "- a\n", "a: 1\n---\nb: 2\n"} {
+		if got, err := read(src); err == nil {
+			t.Errorf("cycleConfig(%q) = %s, want an error", src, got)
+		}
 	}
 }
 
