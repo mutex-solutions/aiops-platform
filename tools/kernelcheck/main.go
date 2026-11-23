@@ -226,19 +226,29 @@ func splitCamel(s string) []string {
 	return append(parts, string(r[start:]))
 }
 
-func checkVocab(dir, wordlist string) error {
+// readWords returns the words of a word list, one per line and lower-cased; "#"
+// starts a comment.
+func readWords(wordlist string) (map[string]bool, error) {
 	data, err := os.ReadFile(wordlist)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	banned := map[string]bool{}
+	words := map[string]bool{}
 	for _, l := range strings.Split(string(data), "\n") {
 		if i := strings.Index(l, "#"); i >= 0 {
 			l = l[:i]
 		}
 		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
-			banned[l] = true
+			words[l] = true
 		}
+	}
+	return words, nil
+}
+
+func checkVocab(dir, wordlist string) error {
+	banned, err := readWords(wordlist)
+	if err != nil {
+		return err
 	}
 	files, err := sourceFiles(dir)
 	if err != nil {
