@@ -85,6 +85,41 @@ func TestRequires(t *testing.T) {
 	}
 }
 
+// The major is in the import path and the key (00-decisions.md:266), so a key maps
+// to the definition that declares it at its major. An adapter row that serves v1
+// over v0 names both majors in requires (ADR-048 decision 12), and its cycle test
+// mounts the fake of the major it injects, each major under a name of its own.
+func TestTwoMajorsOfOneDefinition(t *testing.T) {
+	v1 := mustDef(t, mod+"/sdk/def/echoers/v1", "key: echoers\nversion: \"1.0\"\nstability: experimental\nclass: {provider: open, consumer: open}\nremote: \"no\"\nsuite: 1\n")
+	ds := append(defs(t), v1)
+	g := plugin.Generated{Uses: []plugin.Use{{Key: "echoers", Major: 0, As: "need"}}, Provides: []plugin.KeyRef{{Key: "echoers", Major: 1}}}
+	if err := Requires(&g, ds); err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string][]string{"echoers": {"0.1", "1.0"}}; !reflect.DeepEqual(g.Requires.Definitions, want) {
+		t.Errorf("definitions = %v, want %v", g.Requires.Definitions, want)
+	}
+	g = plugin.Generated{Provides: []plugin.KeyRef{{Key: "echoers", Major: 2}}}
+	if err := Requires(&g, ds); err == nil || !strings.Contains(err.Error(), "key echoers at major 2") {
+		t.Errorf("a provided key at a major no definition declares: Requires = %v", err)
+	}
+	if got := injected(ds, []plugin.Use{{Key: "echoers", Major: 1, As: "need"}}); len(got) != 1 || got[0].Path != v1.Path {
+		t.Errorf("the fakes of echoers@1 = %+v, want the fake of %s alone", got, v1.Path)
+	}
+	src, err := cycleTest(target{ID: "aiops/adapter", Name: "adapter", ImportPath: mod + "/examples/adapter", Accessor: "Plugin"},
+		[]Definition{ds[0], v1}, nil, "nil")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{`echoersfake "` + mod + `/sdk/def/echoers/v0/fake"`, `echoersv1fake "` + mod + `/sdk/def/echoers/v1/fake"`,
+		"echoersFake, echoersPlugin := echoersfake.New()", "echoersv1Fake, echoersv1Plugin := echoersv1fake.New()",
+		"cycle.Fake{Plugin: echoersv1Plugin, Inventory: echoersv1Fake.Inventory}"} {
+		if !strings.Contains(string(src), s) {
+			t.Errorf("%s lacks %q:\n%s", CycleFile, s, src)
+		}
+	}
+}
+
 const s1Manifest = `# The hand-written half (07-c4-plugin-sdk.md section 2).
 manifestVersion: "1.0"
 id: aiops/example
