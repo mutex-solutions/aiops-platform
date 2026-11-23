@@ -54,8 +54,10 @@
 //     the field could not take, and one on a list, a map or a struct. The schema
 //     carries it as the field's default.
 //   - Volatile. A Volatile[T] field is decoded as T. Its path is one of the
-//     volatile paths: a change of volatile values alone commits in place, with no
-//     restart of the row (07-c4-plugin-sdk.md:1375).
+//     volatile paths: a change of volatile values alone is to commit in place,
+//     with no restart of the row (07-c4-plugin-sdk.md:1375). Until the kernel can
+//     hand such a value to a running field, Describe reports no volatile path and
+//     the change restarts the row (see Volatile).
 //   - Tenant. aiops:"tenant" marks a field tenant-writable, and such a field
 //     must be a Volatile[T] (07-c4-plugin-sdk.md:137, :473). The schema marks it
 //     with "x-aiops-tenant": true. The overlay that writes it arrives at S4b. No
@@ -130,13 +132,13 @@ func Define[C any](s Spec[C]) kernel.Plugin {
 	return kernel.Define(p)
 }
 
-// Volatile is a config field whose change alone commits in place, with no
+// Volatile is a config field whose change alone is to commit in place, with no
 // restart of the row (07-c4-plugin-sdk.md:473, :1375). Every tenant-writable field
-// is one. Its path is derived from the config type (Describe), so no list is
-// written by hand. Until the kernel can hand a value committed in place to a
-// running field, which ADR-060 decision 3 leaves to an ADR-034 addition, Get
-// returns the value of the activation and a committed value reaches Apply at the
-// row's next activation.
+// is one. Its path is derived from the config type, so no list is written by hand.
+// Get returns the value of the activation: the kernel cannot hand a value committed
+// in place to a running field until the ADR-034 addition that ADR-060 decision 3
+// asks for, so until then Describe reports no volatile path, the loader restarts
+// the row on a change of the field, and the new value reaches Apply.
 type Volatile[T any] struct{ v T }
 
 // Get returns the value.
@@ -149,18 +151,23 @@ func (v *Volatile[T]) ptr() any { return &v.v }
 type ConfigInfo struct {
 	// Schema is the JSON Schema 2020-12 document of the type: configSchema.
 	Schema []byte
-	// Volatile lists the path of every Volatile field, sorted, each as its list
-	// of keys, the shape of loader.VolatileUpdateArgs.Paths (ADR-059 decision
-	// 44). The segment "*" stands for any list index or map key.
+	// Volatile lists the paths whose change alone commits in place, sorted, each
+	// as its list of keys, the shape of loader.VolatileUpdateArgs.Paths (ADR-059
+	// decision 44). The segment "*" stands for any list index or map key. It is
+	// empty until the kernel can hand a value committed in place to a running
+	// Volatile field (see Volatile).
 	Volatile [][]string
 }
 
 // Describe derives the schema and the volatile paths of C, or says which rule of
-// the package documentation C breaks.
+// the package documentation C breaks. The paths of the Volatile fields are derived
+// and checked, and Describe reports none of them until the kernel can hand a value
+// committed in place to a running field: a change of one restarts the row and
+// reaches Apply.
 func Describe[C any]() (ConfigInfo, error) {
 	d, err := describe(reflect.TypeFor[C]())
 	if err != nil {
 		return ConfigInfo{}, err
 	}
-	return ConfigInfo{Schema: d.schema, Volatile: d.volatile}, nil
+	return ConfigInfo{Schema: d.schema}, nil
 }

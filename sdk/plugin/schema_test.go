@@ -57,8 +57,14 @@ func TestDescribeSchemaGolden(t *testing.T) {
 
 // The volatile paths are derived from the type, sorted, each a list of keys with
 // "*" for a list index or a map key; a Volatile inside a Volatile is listed too.
+// Describe reports none of them until the kernel can hand a value committed in place
+// to a running field (see plugin.Volatile).
 func TestDescribeVolatilePaths(t *testing.T) {
 	info, err := plugin.Describe[webhook]()
+	if err != nil || info.Volatile != nil {
+		t.Fatalf("Describe reports the volatile paths %q, %v; want none", info.Volatile, err)
+	}
+	derived, err := plugin.DerivedVolatile[webhook]()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,15 +76,18 @@ func TestDescribeVolatilePaths(t *testing.T) {
 		{"windows"},
 		{"windows", "*", "until"},
 	}
-	if !reflect.DeepEqual(info.Volatile, want) {
-		t.Fatalf("volatile paths %q, want %q", info.Volatile, want)
+	if !reflect.DeepEqual(derived, want) {
+		t.Fatalf("volatile paths %q, want %q", derived, want)
 	}
-	none, err := plugin.Describe[struct{ A int }]()
-	if err != nil || none.Volatile != nil {
-		t.Fatalf("a type with no Volatile field: %q, %v", none.Volatile, err)
+	none, err := plugin.DerivedVolatile[struct{ A int }]()
+	if err != nil || none != nil {
+		t.Fatalf("a type with no Volatile field: %q, %v", none, err)
 	}
 	if _, err := plugin.Describe[int](); err == nil || !strings.Contains(err.Error(), "must be a struct") {
 		t.Fatalf("Describe[int]: %v", err)
+	}
+	if _, err := plugin.DerivedVolatile[int](); err == nil {
+		t.Fatal("DerivedVolatile[int] took a type that is not a struct")
 	}
 }
 
