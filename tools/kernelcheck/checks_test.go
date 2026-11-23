@@ -86,6 +86,8 @@ func TestImports(t *testing.T) {
 		{"yaml in tools", "tools/x/x.go", imp("go.yaml.in/yaml/v3"), ""},
 		{"yaml in test", "test/x/x_test.go", imp("gopkg.in/yaml.v3"), "YAML package"},
 		{"yaml in plugingen", "internal/plugingen/x.go", imp("go.yaml.in/yaml/v3"), ""},
+		{"loader test of its own package", "loader/zz_cycle_test.go", imp(mp+"/loader", mp+"/sdk/testkit/cycle", mp+"/sdk/def/launch/v0/fake"), ""},
+		{"loader source of its own package", "loader/a.go", imp(mp + "/loader"), "loader imports"},
 		{"yaml in another internal package", "internal/serve/x.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
 		{"fake in test tree", "test/x/x.go", imp(mp + "/sdk/def/clock/v0/fake"), ""},
 		{"fake in aiopsctl", "cmd/aiopsctl/x.go", imp(mp + "/sdk/def/clock/v0/fake"), ""},
