@@ -173,6 +173,18 @@ func TestParity(t *testing.T) {
 			t.Errorf("%s: Parity = %v", field, err)
 		}
 	}
+	// Parity reads with boot's strict mode, as plugin check does (ADR-048 decision 15):
+	// an unknown field at any minor and a broken rule of the schema fail it.
+	for want, edit := range map[string][]string{
+		`unknown field "flavour"`:    {"stability: experimental", "stability: experimental\nflavour: x"},
+		`unknown field "badge"`:      {`manifestVersion: "1.0"`, `manifestVersion: "1.4"`, "publisher: {id: aiops}", "publisher: {id: aiops, badge: x}"},
+		`publisher.id "acme" is not`: {"publisher: {id: aiops}", "publisher: {id: acme}"},
+	} {
+		changed := strings.NewReplacer(edit...).Replace(string(out))
+		if err := Parity([]byte(changed), generated()); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: Parity = %v", want, err)
+		}
+	}
 }
 
 // The kernel part of serves equals what sdk/kernel reports of its four built-in
