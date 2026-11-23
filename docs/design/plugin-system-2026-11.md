@@ -541,7 +541,7 @@ Status: **as is** (semantics unchanged), **adapted** (how, and what is lost), **
 | 42 | A global required list of consumer entries; providers arrive through the inject closure; a disabled required entry is ignored | Adapted | Keys that must have an ACTIVE provider plus named rows; absent or disabled stops boot |
 | 43 | Definition, provider, consumer; depend on definitions only, with a constraints check; singular keys for engines, plural for registries | As is | The Go import graph |
 | 44 | Any provider can be swapped by composition and any service isolated in a subtree | Adapted | As is for open keys. For the 36 provider-bound keys (6 launch keys, 23 named keys and 7 `.Bound` realm keys): layers 1 to 4 choose within the allowed set, isolate is refused, and a new provider enters by distribution manifest. Hosted never allows that |
-| 45 | Any plugin may inject any service | Adapted | 12 consumer-bound keys resolve only for listed entries; 3 are `signed` |
+| 45 | Any plugin may inject any service | Adapted | 13 consumer-bound keys resolve only for listed entries; 3 are `signed` (amended 2026-11-23, ADR-061) |
 | 46 | Monotonic guards after the extensible hook, as an owner-side service | Adapted | `sdk/gate`, owner-side as in dsh; adds the static expected set, so an absent listener denies |
 | 47 | Approval answerers are waterfall listeners that may answer without `next` | Not carried | A decision that grants is never a waterfall |
 | 48 | Approval fails closed when absent | As is, stronger | Consumers inject it, so they do not exist without it |

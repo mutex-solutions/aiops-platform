@@ -1373,7 +1373,8 @@ the row of `operations`, §7 (M4) and §15, in its head and rows 31, 32 and 34; 
 decisions 29 and 31; ADR-060 decisions 23, 24 and 35; and ADR-047 decisions 13 and 14.
 Lines that restate edited text are edited with them: the row `operations` among the
 consumers of `launch` in plugin record §5 (decision 33); plugin record §12, which
-restates `08:369`; a row of `aiops-chatops-slack-cli` in `00` §4.4, whose row counts the
+restates `08:369`; row 45 of the dsh checklist in `08` §1.1 and in plugin record §15,
+which restates the count of consumer-bound keys of `07:559`; a row of `aiops-chatops-slack-cli` in `00` §4.4, whose row counts the
 table of `08` §1.4 carries; `08:271`, which names the companion bundle and says that
 install into the profile `cli` takes in-process code only (decision 40); and the name
 `key generate` in ADR-060 decision 23, which restates `00:137`. Left to later commits: the ADR table of `08` §3 and
