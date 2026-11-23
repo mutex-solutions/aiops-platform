@@ -166,9 +166,17 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 	f := func(check int, rule Rule, format string, a ...any) {
 		out = append(out, g.fail(check, r.Row, rule, false, format, a...))
 	}
-	subs := []*subject{g.subject(r.Plugin, false)}
-	if a := installedBundle(r); a != "" {
-		subs = append(subs, g.subject(a, true))
+	// Before the rebuild a row of the artifact's own in-process plugin has the artifact
+	// as its one subject, and check 5 finds no module in the table (ADR-060 decision 17).
+	art := installedBundle(r)
+	var subs []*subject
+	if _, built := g.in.Mods[r.Plugin]; built || art != r.Plugin {
+		subs = append(subs, g.subject(r.Plugin, false))
+	} else {
+		f(CheckTrust, RuleModule, "row %q: plugin %s is not in the module table the binary runs: its module takes a rebuild", r.ID, r.Plugin)
+	}
+	if art != "" {
+		subs = append(subs, g.subject(art, true))
 	}
 	for _, s := range subs {
 		what := "plugin " + s.id
@@ -195,8 +203,8 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 		}
 		out = append(out, g.attested(r, s, what)...)
 	}
-	if s := subs[0]; s.err == nil {
-		out = append(out, g.signedUse(r, s.man, subs)...)
+	if subs[0].err == nil {
+		out = append(out, g.signedUse(r, subs)...)
 	}
 	for _, b := range g.faults {
 		f(b.check, b.rule, "row %q: %s", r.ID, b.why)
@@ -335,7 +343,8 @@ func (g *gate) covering(id, key string, runtimes []string) []TrustSigner {
 // uses a key, or listens on a hook, of the signed class passes when its plugin is
 // first-party, or belongs to an installed artifact whose signer has a covering entry
 // that names the key, for in-process code only, or the hook.
-func (g *gate) signedUse(r ComposedRow, m Manifest, subs []*subject) []RowResult {
+func (g *gate) signedUse(r ComposedRow, subs []*subject) []RowResult {
+	m, a := subs[0].man, subs[len(subs)-1] // the row's plugin, and its installed artifact
 	var names []string
 	for _, k := range m.Provides {
 		names = append(names, k.Key)
@@ -353,9 +362,9 @@ func (g *gate) signedUse(r ComposedRow, m Manifest, subs []*subject) []RowResult
 			continue
 		}
 		trusted := false
-		if len(subs) > 1 && subs[1].art.Err == nil && subs[1].id == r.Plugin {
-			for _, s := range g.covering(r.Plugin, subs[1].art.Record.Signer, subs[1].man.Runtimes) {
-				trusted = trusted || slices.Contains(s.Signed, n) && (i >= key || slices.Contains(subs[1].man.Runtimes, "inproc"))
+		if a.art != nil && a.art.Err == nil && a.id == r.Plugin {
+			for _, s := range g.covering(r.Plugin, a.art.Record.Signer, a.man.Runtimes) {
+				trusted = trusted || slices.Contains(s.Signed, n) && (i >= key || slices.Contains(a.man.Runtimes, "inproc"))
 			}
 		}
 		if !trusted {

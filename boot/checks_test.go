@@ -50,6 +50,9 @@ type gateFix struct {
 	// disabled composes without the patch that enables the artifacts' rows, as install,
 	// plugin check and plugin gate --against compose.
 	disabled bool
+	// unbuilt is an installed in-process plugin that the module table does not hold yet;
+	// the signed manifest does not list it either.
+	unbuilt string
 }
 
 // newGateFix is a clean case: the rows plain, user and prov of in-process plugins of the
@@ -142,6 +145,9 @@ func (fx *gateFix) run(t *testing.T) GateResult {
 	}
 	// The module table holds a Go value of each plugin whatever the signed manifest lists.
 	for _, id := range []string{"o/plain", "o/user", "o/prov", "aiops/echo", "aiops/user", "acme/echoer"} {
+		if id == fx.unbuilt {
+			continue
+		}
 		in.Mods[id] = ModuleEntry{ID: id}
 		if m, err := ReadManifest(id, d.Plugins[id].Manifest, ManifestLenient); err == nil {
 			in.Mods[id] = m.Entry()
@@ -566,6 +572,54 @@ func TestGateEvaluatesDisabledArtifactRows(t *testing.T) {
 			}
 			if r := g.Result(CheckLayerRules, "off"); r.Status != StatusPass {
 				t.Errorf("Result(8, off) = %+v", r)
+			}
+		})
+	}
+}
+
+// Install of in-process code before the rebuild evaluates the artifact: its rows are
+// judged on its own manifest, check 7 included, and the module clause of check 5 is not
+// evaluated, so a valid artifact passes and install answers rebuild-required (ADR-060
+// decision 17). After dist use, and at boot, a plugin the module table does not hold
+// fails that clause.
+func TestGateInstallBeforeTheRebuild(t *testing.T) {
+	secret := func(fx *gateFix) {
+		m := manifestText("acme/echoer", echoRegisters, "uses: [{key: toy.secret, major: 0, as: need}]",
+			`requires: {pluginApi: "0.1", definitions: {echoers: ["0.1"], toy: ["0.2"]}}`)
+		fx.dist.bindings = "{consumers: {toy.secret: [o/user]}}"
+		fx.art("acme/echoer", func(a *Artifact) {
+			a.Kept.Manifest = []byte(m)
+			a.Record.Attestation = []byte(statementOf("acme/echoer@0.1.0", hexB,
+				`{"echoers": {"version": "0.1", "suite": 1, "halves": ["obligations", "guard"]}, "toy": {"version": "0.2"}}`, ""))
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		entry Entry
+		edit  func(fx *gateFix)
+		want  []string
+		open  []string
+	}{
+		{"a valid artifact", EntryInstall, nil, nil, []string{"5 echoer:e2 module open"}},
+		{"an artifact outside a consumer binding", EntryInstall, secret,
+			[]string{"7 echoer:e2 consumer-binding stop=false", "7 echoer:e2 signed-class stop=false"}, []string{"5 echoer:e2 module open"}},
+		{"after dist use", EntryInstallUsed, nil, []string{"5 echoer:e2 module stop=false"}, nil},
+		{"at boot", EntryBoot, nil, []string{"5 echoer:e2 module stop=false"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newGateFix()
+			fx.in.Entry, fx.disabled, fx.unbuilt = tc.entry, true, "acme/echoer"
+			delete(fx.dist.plugins, fx.unbuilt)
+			if tc.edit != nil {
+				tc.edit(fx)
+			}
+			g := fx.run(t)
+			got := slices.Sorted(slices.Values(gateLines(g)))
+			if !equalLines(got, tc.want) || !equalLines(openLines(g), tc.open) || g.Pass != (len(tc.want) == 0) {
+				t.Fatalf("failures %q, open %q, pass %v", got, openLines(g), g.Pass)
+			}
+			if r := g.Result(CheckTrust, "echoer:e2"); tc.open != nil && (r.Status != StatusNotEvaluated || !strings.Contains(r.Reason, "rebuild-required")) {
+				t.Errorf("Result(5, echoer:e2) = %+v", r)
 			}
 		})
 	}

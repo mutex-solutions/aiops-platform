@@ -273,7 +273,7 @@ func GateWith(c Composition, in GateInput) GateResult {
 	dist := in.Bindings
 	g := &gate{
 		in:       in,
-		mods:     in.Mods,
+		mods:     ModuleTable{},
 		provider: bindingSet(dist.Providers),
 		consumer: bindingSet(dist.Consumers),
 		sealed:   map[string][]string{},
@@ -299,6 +299,15 @@ func GateWith(c Composition, in GateInput) GateResult {
 		}
 		if a := installedBundle(r); a != "" {
 			g.feeds[a] = append(g.feeds[a], r.Plugin)
+		}
+	}
+	// Before the rebuild the module table holds no entry of an installed in-process
+	// plugin, and the rows of its bundle are judged on its own manifest (ADR-060 decision
+	// 17); resolve still reads the module table the binary runs.
+	maps.Copy(g.mods, in.Mods)
+	for id := range g.feeds {
+		if _, built := in.Mods[id]; !built && g.subject(id, true).err == nil {
+			g.mods[id] = g.subject(id, true).man.Entry()
 		}
 	}
 	open := notEvaluated(in)
@@ -337,7 +346,7 @@ func GateWith(c Composition, in GateInput) GateResult {
 			res.Unevaluated = append(res.Unevaluated, r.ID)
 			continue
 		}
-		if f, ok := g.resolve(r.Row); !ok {
+		if f, ok := g.resolve(r.Row); !ok && r.Enabled {
 			res.Unresolved = append(res.Unresolved, f)
 			continue
 		}
@@ -392,7 +401,7 @@ func sortedKeys(m map[string]bool) []string {
 
 type gate struct {
 	in       GateInput
-	mods     ModuleTable
+	mods     ModuleTable         // the module table, and each installed in-process plugin it does not hold yet
 	provider map[string][]string // who dist.yaml allows, by key or hook
 	consumer map[string][]string
 	sealed   map[string][]string
@@ -491,7 +500,7 @@ func (g *gate) resolve(r Row) (RowResult, bool) {
 	if r.Plugin == pluginGroup || r.Plugin == pluginInclude {
 		return RowResult{}, true
 	}
-	if _, ok := g.mods[r.Plugin]; ok {
+	if _, ok := g.in.Mods[r.Plugin]; ok {
 		return RowResult{}, true
 	}
 	f := g.fail(checkResolve, r, RuleModuleMissing, false,
