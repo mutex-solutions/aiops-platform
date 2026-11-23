@@ -42,6 +42,7 @@ const modPath = "github.com/mutex-solutions/aiops-platform"
 // target is the plugin package plugingen reads.
 type target struct {
 	Dir, ImportPath, Name string
+	Module                string // the path of the module that holds the package
 	Accessor              string // "Plugin" or "New()"
 	ID                    string
 }
@@ -92,6 +93,9 @@ func Generate(dir string) (Result, error) {
 	}
 	if m.ID != t.ID {
 		return Result{}, fmt.Errorf("%s/plugin.yaml: id %q is not the ID %q of the plugin's value", dir, m.ID, t.ID)
+	}
+	if err := reservedOwner(m.ID, t.Module); err != nil {
+		return Result{}, fmt.Errorf("%s/plugin.yaml: %w", dir, err)
 	}
 	config, err := cycleConfig(dir)
 	if err != nil {
@@ -176,11 +180,12 @@ func readTarget(dir string) (target, error) {
 	var p struct {
 		Dir, ImportPath, Name string
 		GoFiles               []string
+		Module                struct{ Path string }
 	}
 	if err := json.Unmarshal(out, &p); err != nil {
 		return target{}, err
 	}
-	t := target{Dir: p.Dir, ImportPath: p.ImportPath, Name: p.Name}
+	t := target{Dir: p.Dir, ImportPath: p.ImportPath, Name: p.Name, Module: p.Module.Path}
 	fset := token.NewFileSet()
 	for _, f := range p.GoFiles {
 		file, err := parser.ParseFile(fset, filepath.Join(p.Dir, f), nil, parser.SkipObjectResolution)
@@ -206,6 +211,21 @@ func readTarget(dir string) (target, error) {
 		return target{}, fmt.Errorf("%s: the package declares neither var Plugin nor func New() kernel.Plugin", t.ImportPath)
 	}
 	return t, nil
+}
+
+// reservedOwner is the clause of step 1 of plugin check on the reserved owners,
+// decided by where the code is (ADR-048 decisions 14 and 23): an aiops id passes only
+// in a module whose path is the root module path of this repository, and a contrib id
+// only in a module under its contrib/ path. A copy that claims those paths passes
+// here and is stopped by the builder and gate check 5.
+func reservedOwner(id, module string) error {
+	switch owner, _, _ := strings.Cut(id, "/"); {
+	case owner == "aiops" && module != modPath:
+		return fmt.Errorf("id %s: the owner aiops is reserved to the release pipeline and passes only in the module %s, not in %s", id, modPath, module)
+	case owner == "contrib" && !strings.HasPrefix(module, modPath+"/contrib/"):
+		return fmt.Errorf("id %s: the owner contrib is reserved to the release pipeline and passes only in a module under %s/contrib/, not in %s", id, modPath, module)
+	}
+	return nil
 }
 
 // runDriver builds and runs the driver of t in an overlay and returns what

@@ -170,6 +170,35 @@ func TestTwoKeysOfOneDefinition(t *testing.T) {
 	}
 }
 
+// Step 1 of plugin check decides a reserved owner by where the code is (ADR-048
+// decision 23): aiops only in the root module of this repository, contrib only in a
+// module under its contrib/ path; any other owner anywhere. readTarget reads the
+// module path with go list.
+func TestReservedOwners(t *testing.T) {
+	for _, c := range []struct {
+		id, module string
+		ok         bool
+	}{
+		{"aiops/clock", mod, true},
+		{"aiops/nested-echo", "example.com/acme/nested", false},
+		{"aiops/x", mod + "/contrib/x", false},
+		{"contrib/x", mod + "/contrib/x", true},
+		{"contrib/x", mod, false},
+		{"contrib/x", mod + "/contribx", false},
+		{"contrib/x", "example.com/acme/contrib/x", false},
+		{"acme/x", "example.com/acme/nested", true},
+		{"aiops-test/x", "example.com/acme/nested", true},
+	} {
+		if err := reservedOwner(c.id, c.module); (err == nil) != c.ok {
+			t.Errorf("reservedOwner(%s, %s) = %v, want ok %v", c.id, c.module, err, c.ok)
+		}
+	}
+	tg, err := readTarget(filepath.Join("testdata", "echo"))
+	if err != nil || tg.Module != mod {
+		t.Errorf("readTarget(testdata/echo).Module = %q, %v; want %s", tg.Module, err, mod)
+	}
+}
+
 const s1Manifest = `# The hand-written half (07-c4-plugin-sdk.md section 2).
 manifestVersion: "1.0"
 id: aiops/example
