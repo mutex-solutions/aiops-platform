@@ -68,7 +68,7 @@ func TestConfigIsChecked(t *testing.T) {
 		{"text", `invalid config: config: want a map, got "text"`},
 		{map[string]any{"interval": "soon"}, `invalid config: config.interval: want a duration such as 50ms or 1h30m, got "soon"`},
 		{map[string]any{"interval": "-1s"}, "invalid config: interval is not positive"},
-		{map[string]any{"dir": 1}, "invalid config: config.dir: want a string, got 1"},
+		{map[string]any{"dir": int64(1)}, "invalid config: config.dir: want a string, got 1"},
 		{map[string]any{"color": "red"}, "invalid config: config.color: unknown field"},
 	} {
 		if _, err := caller.Plugin.Decode(tc.raw); err == nil || err.Error() != tc.want {

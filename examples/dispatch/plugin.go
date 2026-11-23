@@ -20,16 +20,17 @@ import (
 	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
 	stampers "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
 // ID is the plugin id.
 const ID = "aiops/example-dispatch"
 
 // Plugin is the dispatcher. It has no config.
-var Plugin = kernel.Define(kernel.Plugin{
+var Plugin = plugin.Define(plugin.Spec[struct{}]{
 	ID:       ID,
 	Provides: []kernel.AnyKey{echoers.Key, stampers.Key},
-	Apply: func(c *kernel.Context, _ any) error {
+	Apply: func(c *kernel.Context, _ *struct{}) error {
 		return errors.Join(
 			echoers.Key.Provide(c, echoRegistry{newTable[echoers.Echoer](c, echoers.Label, echoers.ErrName, echoers.ErrUnknown)}),
 			stampers.Key.Provide(c, stampRegistry{newTable[stampers.Stamper](c, stampers.Label, stampers.ErrName, stampers.ErrUnknown)}))

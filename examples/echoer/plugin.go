@@ -5,38 +5,53 @@
 // config fixes its reply, so a pack with no code instantiates it by rows
 // (08-profiles-roadmap-adrs.md:391). It is in no shipped bundle.
 //
-// Config: name, the name it registers under (default "example"), and prefix, what its
-// reply puts before the message (default "<name>: ").
+// Its config is Config, decoded by the rules of sdk/plugin.
 package echoer
 
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
 // ID is the plugin id.
 const ID = "aiops/example-echoer"
 
+// Config is the row config. Its examples make the row of a connector pack
+// (ADR-060 decision 24).
+type Config struct {
+	// Name is the name the echoer registers under, not empty.
+	Name string `default:"example" example:"loud"`
+	// Prefix is what the reply puts before the message; empty, it is "<name>: ".
+	Prefix string `example:"LOUD "`
+}
+
 // Plugin is the echoer.
-var Plugin = kernel.Define(kernel.Plugin{
+var Plugin = plugin.Define(plugin.Spec[Config]{
 	ID:     ID,
 	Inject: []kernel.Dep{kernel.Need(echoers.Key)},
-	Decode: decode,
-	Apply: func(c *kernel.Context, raw any) error {
-		e := raw.(echo)
-		e.c = c
-		return echoers.Key.Of(c).Register(c, e.name, e)
+	Validate: func(cfg *Config) error {
+		if cfg.Name == "" {
+			return errors.New("name is empty")
+		}
+		return nil
+	},
+	Apply: func(c *kernel.Context, cfg *Config) error {
+		e := echo{c: c, prefix: cfg.Prefix}
+		if e.prefix == "" {
+			e.prefix = cfg.Name + ": "
+		}
+		return echoers.Key.Of(c).Register(c, cfg.Name, e)
 	},
 })
 
 // echo answers prefix+msg while its fiber is live.
 type echo struct {
-	c            *kernel.Context
-	name, prefix string
+	c      *kernel.Context
+	prefix string
 }
 
 func (e echo) Echo(ctx context.Context, msg string) (string, error) {
@@ -49,31 +64,4 @@ func (e echo) Echo(ctx context.Context, msg string) (string, error) {
 		return "", err
 	}
 	return e.prefix + msg, nil
-}
-
-func decode(raw any) (any, error) {
-	m, ok := raw.(map[string]any)
-	if raw != nil && !ok {
-		return nil, errors.New("invalid config: want a map")
-	}
-	e := echo{name: "example"}
-	prefix, hasPrefix := "", false
-	for k, v := range m {
-		s, isString := v.(string)
-		switch {
-		case k != "name" && k != "prefix":
-			return nil, fmt.Errorf("invalid config: unknown field %q", k)
-		case !isString || k == "name" && s == "":
-			return nil, fmt.Errorf("invalid config: %s must be a string, and a name not empty", k)
-		case k == "name":
-			e.name = s
-		default:
-			prefix, hasPrefix = s, true
-		}
-	}
-	e.prefix = e.name + ": "
-	if hasPrefix {
-		e.prefix = prefix
-	}
-	return e, nil
 }

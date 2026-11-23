@@ -53,7 +53,7 @@ func TestConfigIsChecked(t *testing.T) {
 	}{
 		{"text", `invalid config: config: want a map, got "text"`},
 		{map[string]any{"name": ""}, "invalid config: name is empty"},
-		{map[string]any{"name": 1}, "invalid config: config.name: want a string, got 1"},
+		{map[string]any{"name": int64(1)}, "invalid config: config.name: want a string, got 1"},
 		{map[string]any{"color": "red"}, "invalid config: config.color: unknown field"},
 	} {
 		if _, err := echoer.Plugin.Decode(tc.raw); err == nil || err.Error() != tc.want {
