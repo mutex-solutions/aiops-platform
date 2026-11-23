@@ -1,9 +1,9 @@
 # ADR-047: Vendor-neutral connectors, S2a part (the artifact, the install and the home)
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force until the owner accepts it and answers its questions. It is proposed before the
-  first commit that implements it and is accepted before that code merges into `main`
-  (ADR-060 decision 2).
+- Status: **accepted 2026-11-23 by the project owner, for the S2a part.** The owner
+  answered all seven questions on the same date with the recommended option of each; the
+  section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
+  ADR-047 stays for S8a start, as the scope below says.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -547,6 +547,7 @@ rollback that changes a lock digest is bound by that rule (decision 7).
   one profile's three files, and a lock has the scope of the generation digest it feeds;
   the cost is one edited line of `07` and a read of the other locks at install and
   remove. Needed before the first commit that writes `plugins.lock` merges.
+- **Answered 2026-11-23: (b)**, decision 16.
 
 **Q2. What does install do when an artifact of the same name under another owner enters
 a profile?** The group of `acme/connector-x` and that of `beta/connector-x` are both
@@ -579,6 +580,7 @@ and a clash of its id, depart from dsh under every option (`00:478`).
   Its cost is the one stated above: two packs for one system never share a profile, and a
   release that takes a group's id leaves that artifact's rows out until the operator
   acts. (b) removes both costs and edits `00:657`. Needed before `install` merges.
+- **Answered 2026-11-23: (a)**, decision 17.
 
 **Q3. Does boot check what install kept against the locked digest?** Install verifies
 every blob it pulls against its descriptor, and the signature over the image manifest. The
@@ -600,6 +602,7 @@ and the content digest "is part of the generation digest" (`08:1288`).
   generation digest, so `08:184` holds for what runs and not only for what was installed.
   The cost is hashing a few small files per artifact at each composition. Needed before
   the boot reader of `plugins.lock` merges.
+- **Answered 2026-11-23: (a)**, decision 18.
 
 **Q4. Which fields may a row of an installed artifact's bundle set?** Check 8 restricts
 `enabled`, `plugin` and references (decision 11). A bundle layer may also raise
@@ -615,6 +618,7 @@ a provider-bound key (`08:148`).
   change what another row's needs resolve to, and the clause sits in the check that holds
   the insert-only rule. The rows of a data pack set none of these fields (`07:1690-1708`).
   Needed before the installed-artifact clause of check 8 merges.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q5. Which prefix do the media types and the annotation key take?** They are written into
 every artifact, and question Q7 asks whether they then stay frozen. The image
@@ -633,6 +637,7 @@ and reserves the prefix `org.opencontainers` (`github.com/opencontainers/image-s
 - Recommended: (a). It matches every other id of the platform. Neither prefix is
   registered, and nothing is published before L14 (`08:1343`), so the answer can change at
   no cost until then. Needed before `plugin pack` merges.
+- **Answered 2026-11-23: (a)**, decision 20.
 
 **Q6. How does the licence scan treat `LICENSE.docs` of
 `github.com/opencontainers/go-digest@v1.0.0`?** The directory of the package `digest`,
@@ -658,6 +663,7 @@ CC-BY-SA-4.0, both release binaries fail their build, and no register entry can 
 - Recommended: (a). The per-directory scan stays whole and admits one named file, so any
   other CC-BY-SA file still fails the build. Needed before the first commit that links
   `oras-go` merges (ADR-060 decision 34).
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q7. Is the artifact layout a frozen-additive contract?** Decision 1 has a reader ignore
 a layer type it does not know and `plugin check` refuse one, and changes the `v1` of a
@@ -675,3 +681,83 @@ publishes it for third parties at S2a.
   layout as fixed as the manifest it carries; the readers of decision 1 already behave so,
   and the edit is one clause of `00` and one row of `08`. Needed before `plugin pack`
   merges.
+- **Answered 2026-11-23: (a)**, decision 22.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR, the S2a part of ADR-047, on 2026-11-23 and answered
+every question of the section "Questions for the owner" on the same date, each with its
+recommended option. Each decision below names the question it answers. Where a decision
+above leaves a point to a question, the decision here settles it.
+
+16. **`plugins.lock` is one file per profile** (Q1 (b)):
+    `$AIOPS_HOME/profiles/<p>/plugins.lock`, beside the profile definition and the profile
+    patch, the two files it is restored with, so the snapshot of `08:374` is one
+    profile's three files. In the table of decision 13 its path is
+    `profiles/<p>/plugins.lock`. A profile's generation digest takes its own file whole.
+    Install reads the other profiles' locks for the rule of decision 7. `07:1841` reads
+    "Profile file".
+
+17. **Two artifacts of one name never compose together** (Q2 (a)). Install composes the
+    target profile with the artifact's bundle appended, as boot would, and refuses when
+    the group id equals the id of any row of that composition, the group of the other
+    artifact included. It names both, writes nothing and exits 1 with the reason (ADR-060
+    decision 23). Two publishers' packs for one system never share a profile; the
+    operator removes one or installs the other into another profile. A first-party row
+    that a later release adds under a group's id is caught at boot by decision 6, which
+    leaves the artifact's rows out and names the clash, and the operator then removes the
+    artifact. "Two packs cannot collide" reads "two artifacts of one name never compose
+    together: the second install is refused" in `08:391`, `07:1817` and community:298.
+
+18. **Boot checks what install kept against the locked digest** (Q3 (a)). At every
+    composition, boot hashes `bundles/<plugin id>/artifact.json` and compares it with the
+    digest in `plugins.lock`, then hashes `plugin.yaml`, `bundle.yaml` and the content
+    tree in the form of decision 3 and compares each with its descriptor in that manifest.
+    A mismatch detaches every row of the artifact as disabled and names check 5, since the
+    files are not those whose signer install verified; the clause enters check 5 of the
+    one gate text (ADR-060 decision 16). For in-process code, which has no lock entry, the
+    same check starts from the digest that install recorded (ADR-020). ADR-020 then has
+    only `plugins.lock` and the records of install to protect until boot.
+
+19. **A row of an installed artifact's bundle sets only `id`, `plugin`, `roles`,
+    `enabled: false` and `config`** (Q4 (a)). Check 8 denies `required`, `inject`,
+    `intercept`, `isolate` and `group` on such a row, in the clause of decision 11; an
+    operator who wants one sets it in the profile or site layer, which the operator
+    writes.
+
+20. **The media types and the annotation key take the prefix `aiops`** (Q5 (a)): the
+    `artifactType` `application/vnd.aiops.plugin.v1` and the layer types
+    `application/vnd.aiops.plugin.*` of decision 1, and the annotation key
+    `aiops.plugin.content.paths` of decision 2. The key departs from the reverse domain
+    notation that the image specification says annotation keys SHOULD use, since the
+    documents name no domain of the project and only `aiopsctl` reads the key.
+
+21. **`LICENSE.docs` of `go-digest` is recorded by name in L7** (Q6 (a)). CC-BY-SA-4.0 in
+    `LICENSE.docs` of `github.com/opencontainers/go-digest`, for documentation that enters
+    no artifact, is among the licences allowed with a recorded condition. The record is
+    an entry of the allow-list, as the MCP composite is, and not an acceptance of a
+    distribution; the scanner honours it, and check 6 and L16 cite it. A case of the
+    scanner's tests under ADR-044 scans that module. `08:1336` and licence:202 hold the
+    record.
+
+22. **The artifact layout is frozen-additive from its first publication** (Q7 (a)), after
+    L14 (`08:1343`). A later release may add a layer type, a media type or an annotation,
+    and changes the layout otherwise only under a new `artifactType`, which a reader of
+    `v1` refuses. `00:266` names it among the frozen-additive contracts, and the
+    table of `08:912-920` gains the row "Artifact layout".
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:996`), and that commit makes the edits that the chosen options and the section
+"Edits on acceptance" name: `00:266`; `02:313`, and `02:483` (item 26), settled by
+decisions 13 to 15; `07:72` (R14), `:1650-1660` (the layout of decisions 1 and 3),
+`:1690-1708` (a bundle with no `${env:}` reference, whose endpoint the operator sets in
+the profile layer), `:1817` and `:1841`; `08:121`, `:391`, `:430`, `:1336` and the table
+of `:912-920`; community:298; and licence:202. Two texts restate an edited one and are
+edited with it: `07:546`, which restates `00:266`, and the table of community:146-154,
+which restates that of `08:912-920`. Left to the commit that builds the gate and writes
+the one gate text of ADR-060 decision 16: the clause of decision 11 with the fields of
+decision 19, the boot rule of decision 6 and the check 5 clause of decision 18 in that
+text, and the copies of checks 5 and 8 that the commit checks against it (ADR-060
+decision 16 names those of check 8): `00:478`; `07:1318`, `:1386`, `:1816`, `:1866`,
+`:1888` and `:1891`; and `08:143`, `:501` and `:504`. Left to the commit that marks the ADRs accepted on 2026-11-23 in the ADR table
+of `08` §3: the row of ADR-047. An option the owner did not choose edits nothing.

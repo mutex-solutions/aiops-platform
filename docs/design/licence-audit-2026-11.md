@@ -199,7 +199,7 @@ Never in the core, a shipped profile, a default bundle, a conformance suite or a
 | Class | Rule |
 |---|---|
 | Allowed | Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, PostgreSQL, Unicode-DFS-2016, Unicode-3.0, BlueOak-1.0.0 |
-| Allowed with a recorded condition | MPL-2.0 (unmodified or modifications published; one source line per module). CC0-1.0 for data only. The MCP composite, by name |
+| Allowed with a recorded condition | MPL-2.0 (unmodified or modifications published; one source line per module). CC0-1.0 for data only. The MCP composite, by name. CC-BY-SA-4.0 in `LICENSE.docs` of `github.com/opencontainers/go-digest`, by name, for documentation that enters no artifact (ADR-047) |
 | Denied until reviewed and recorded by name | GPL, LGPL, AGPL; EPL, CDDL, EUPL; SSPL, BUSL, FSL, Elastic-2.0, RSAL, PolyForm, Commons Clause; BSD-4-Clause; CC-BY-SA, -NC, -ND; any custom text; no licence |
 | How it is checked | On the package graph of the built binary and on the app bundle, per directory (an open-core module keeps a second licence under `ee/` or `enterprise/`). `A OR B` passes when one side is allowed and the side taken is recorded; `A AND B` needs both |
 | Enterprise builds | The same list. A closed in-process plugin carries a `LicenseRef-` id only outside `aiops`, `aiops-contrib` and the project index, with an entry in `acceptLicenses`; boot prints that the distribution cannot be passed on without the owner's permission |
