@@ -78,6 +78,8 @@ const (
 	// RuleKept: a file that install kept is not the one whose digest install verified;
 	// check 5 denies every row of the artifact (ADR-047 decision 18).
 	RuleKept Rule = "kept"
+	// RuleDist: a signed distribution manifest breaks its format (ADR-060 decision 20).
+	RuleDist Rule = "distribution"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

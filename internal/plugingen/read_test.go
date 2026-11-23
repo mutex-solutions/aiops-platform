@@ -201,3 +201,45 @@ func TestBootReadsEveryManifestOfTheRepositoryAsThePluginType(t *testing.T) {
 		t.Fatalf("found %d manifests; the module tables and this package's testdata hold at least 12", n)
 	}
 }
+
+// boot reads serves as Serves writes it into the signed distribution manifest
+// (ADR-060 decisions 9 and 20): the kernel part, and each served major with its
+// compatibleFrom, deprecated, suite revision, classes and hooks.
+func TestBootReadsServesAsServesWritesIt(t *testing.T) {
+	ds := append(defs(t), Definition{Name: "notifiers", Major: 0, Version: "0.3", Suite: 2,
+		Deprecated: map[string]string{"since": "0.4.0", "removeNotBefore": "2027-11-23", "successor": "v1"},
+		Classes:    map[string]Class{"notifiers": {Provider: "bound", Consumer: "signed"}}})
+	want := Serves(ds)
+	out, err := yaml.Marshal(map[string]any{"distVersion": 1, "plugins": map[string]any{}, "modules": []any{}, "packages": []any{},
+		"pins": []any{}, "bindings": map[string]any{}, "acceptLicenses": []any{}, "serves": want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := boot.ReadDistribution("dist.yaml", out)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	conv := func(sd boot.ServedDefinition) Served {
+		s := Served{Version: sd.Version, CompatibleFrom: sd.CompatibleFrom, Deprecated: sd.Deprecated, Suite: sd.Suite, Classes: map[string]Class{}}
+		for k, c := range sd.Classes {
+			s.Classes[k] = Class(c)
+		}
+		for k, h := range sd.Hooks {
+			if s.Hooks == nil {
+				s.Hooks = map[string]Hook{}
+			}
+			s.Hooks[k] = Hook(h)
+		}
+		return s
+	}
+	kernel := conv(d.Serves.Kernel)
+	got := ServesData{PluginAPI: d.Serves.PluginAPI, Kernel: KernelPart{Keys: kernel.Classes, Hooks: kernel.Hooks}, Definitions: map[string][]Served{}}
+	for name, list := range d.Serves.Definitions {
+		for _, sd := range list {
+			got.Definitions[name] = append(got.Definitions[name], conv(sd))
+		}
+	}
+	if !reflect.DeepEqual(got, want) || len(want.Definitions) != 4 {
+		t.Errorf("boot reads\n%+v\nServes writes\n%+v", got, want)
+	}
+}

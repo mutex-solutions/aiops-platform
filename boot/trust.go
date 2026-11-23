@@ -326,7 +326,7 @@ func ReadCurrent(home fs.FS) (string, error) {
 // neither.
 func (r *mreader) gomod(f map[string]*yaml.Node, what string) GoModule {
 	m := GoModule{Path: r.word(f["path"], what+" path", okPath), Version: r.word(f["version"], what+" version", okGoVersion),
-		Sum: r.word(f["sum"], what+" sum", func(s string) bool { h, ok := strings.CutPrefix(s, "h1:"); return ok && okHash32(h) })}
+		Sum: r.word(f["sum"], what+" sum", okSum)}
 	if (m.Version == "") != (m.Sum == "") {
 		r.fail(f["path"], "%s %s states version and sum, both or neither", what, m.Path)
 	}
