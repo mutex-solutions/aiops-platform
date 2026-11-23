@@ -36,7 +36,9 @@ type Reload struct {
 var _ reload.Reload = (*Reload)(nil)
 
 // New returns an empty reload and the plugin that provides it under reload.Key.
-// Each call returns a new plugin value, a new entry of its own.
+// Each call returns a new plugin value, a new entry of its own. Each activation
+// provides the methods of reload.Reload only, as served: Publish, Progress and
+// Submissions are the test's (no side door, 07-c4-plugin-sdk.md §4.3).
 func New() (*Reload, kernel.Plugin) {
 	f := &Reload{results: map[reload.ID]reload.Result{}}
 	return f, kernel.Define(kernel.Plugin{
@@ -45,9 +47,23 @@ func New() (*Reload, kernel.Plugin) {
 		Apply: func(c *kernel.Context, _ any) error {
 			f.applied = reload.Applied.Bind(c)
 			f.operation = reload.Operation.Bind(c)
-			return reload.Key.Provide(c, f)
+			return reload.Key.Provide(c, served{f, c.Std()})
 		},
 	})
+}
+
+// served is what an activation provides: the reload, whose Submit is refused with
+// reload.ErrClosed once that activation unloads, as the reload row refuses it.
+type served struct {
+	reload.Reload
+	std context.Context
+}
+
+func (s served) Submit(ctx context.Context, op reload.Op) (reload.ID, error) {
+	if s.std.Err() != nil {
+		return 0, reload.ErrClosed
+	}
+	return s.Reload.Submit(ctx, op)
 }
 
 // Submit records op and gives it the next result.
