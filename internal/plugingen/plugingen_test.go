@@ -3,6 +3,7 @@
 package plugingen
 
 import (
+	"math"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -299,6 +300,13 @@ func TestGenerate(t *testing.T) {
 	}
 	if err := Parity(r.Manifest, r.Generated); err != nil {
 		t.Errorf("Parity of the generated manifest: %v", err)
+	}
+	// An int64 default above 2^53 keeps every digit through the driver, the manifest
+	// and boot's reading (ADR-048 decision 9).
+	props, _ := r.Generated.ConfigSchema["properties"].(map[string]any)
+	if max, _ := props["max"].(map[string]any); max["default"] != int64(math.MaxInt64) ||
+		!strings.Contains(string(r.Manifest), "default: 9223372036854775807\n") {
+		t.Errorf("max = %#v in\n%s", max, r.Manifest)
 	}
 	if err := Check(filepath.Join("testdata", "echo")); err != nil {
 		t.Errorf("Check of the committed files: %v", err)

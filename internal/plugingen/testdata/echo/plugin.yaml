@@ -19,6 +19,9 @@ configSchema:
   $schema: https://json-schema.org/draft/2020-12/schema
   additionalProperties: false
   properties:
+    max:
+      default: 9223372036854775807
+      type: integer
     name:
       default: echo
       type: string

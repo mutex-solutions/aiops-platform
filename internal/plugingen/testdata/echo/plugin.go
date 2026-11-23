@@ -12,9 +12,11 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
-// Config is the row config.
+// Config is the row config. Max has a default above 2^53, which the manifest writes
+// with every digit.
 type Config struct {
 	Name string `default:"echo"`
+	Max  int64  `default:"9223372036854775807"`
 }
 
 // Plugin registers one echoer.

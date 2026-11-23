@@ -3,7 +3,9 @@
 package plugin_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -75,14 +77,50 @@ func TestGenerateReadsTheSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(info.Schema, &want.ConfigSchema); err != nil {
+	var schema bytes.Buffer
+	if err := json.Compact(&schema, info.Schema); err != nil {
 		t.Fatal(err)
 	}
+	if got, err := json.Marshal(g.ConfigSchema); err != nil || string(got) != schema.String() {
+		t.Fatalf("configSchema %s, want the derived schema %s", got, schema.Bytes())
+	}
+	g.ConfigSchema = nil
 	if !reflect.DeepEqual(g, want) {
 		t.Fatalf("Generate\n got %+v\nwant %+v", g, want)
 	}
 	if applied || decoded {
 		t.Fatal("Generate ran Apply or decoded a config")
+	}
+}
+
+// configSchema is the derived schema as data: an integer of it is an int64 that keeps
+// every digit, above 2^53 too, so the manifest writes the value the derivation holds,
+// and a number that is not an integer is a float64 (ADR-048 decision 9).
+func TestGenerateKeepsEveryDigitOfAnInteger(t *testing.T) {
+	type big struct {
+		Big   int64   `default:"9007199254740993"`
+		Max   int64   `default:"9223372036854775807"`
+		Ratio float64 `default:"0.5"`
+		Small int8
+	}
+	g, err := plugin.Generate(plugin.Define(plugin.Spec[big]{ID: "test/big"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	props, _ := g.ConfigSchema["properties"].(map[string]any)
+	for _, c := range []struct {
+		field, keyword string
+		want           any
+	}{
+		{"big", "default", int64(9007199254740993)},
+		{"max", "default", int64(math.MaxInt64)},
+		{"ratio", "default", 0.5},
+		{"small", "minimum", int64(-128)},
+	} {
+		f, _ := props[c.field].(map[string]any)
+		if got := f[c.keyword]; got != c.want {
+			t.Errorf("%s %s = %v (%T), want %v (%T)", c.field, c.keyword, got, got, c.want, c.want)
+		}
 	}
 }
 
