@@ -1,0 +1,148 @@
+{
+ "classification": "PASS on both commits: four full callpath runs, protocol amendment 2, three candidates; the gate passes on the merged kernel",
+ "protocol": "one session on the measurement host, one process per run, alternating by process: A then B twice (e3a72af, 8ec2d8c, e3a72af, 8ec2d8c), started back to back from 2026-11-22T17:27Z to 2026-11-23T05:33Z; each process ran the unchanged full gate with the argv and environment below",
+ "commits": {
+  "A": "e3a72af: main after the merge; sdk/kernel equals fb0a86b's plus the test-only guard TestLeaseShardsOwnTheirCacheLines, and the gate's source closure equals that of the failed fb0a86b run (sha256 97b061daea2396632d0ea99d61d2d15e86e045123a8562ae53fbbb04074112ce, ../callpath-full-merge-commit/)",
+  "B": "8ec2d8c: the final S0 port; the gate's source closure equals that of ../callpath-full-final-port/ (sha256 61dfd334670aec5589ed9f9daa63b46ec311b19e3277c9a33107ed628fcc5d57)"
+ },
+ "protocolAmendment": 2,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "8h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "S0_CALLPATH_OUT": "<out>/result",
+  "S0_CALLPATH_IDENTITY": "<out>/identity.json",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local",
+  "GOFLAGS": "-mod=readonly"
+ },
+ "host": "dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job; load average 0.06 to 0.19 at the start and the end of every run (host-before.txt, host-after.txt)",
+ "kernelOwnerEnterLeaveKey": "baseline arm; p50NS and p99NS over all 10 runs; worstRunP99NS the highest single-run p99; runsWithP99Above1200NS the slow-mode windows of ADR-034, of 10",
+ "runs": [
+  {
+   "order": 1,
+   "commit": "e3a72af",
+   "directory": "1-e3a72af/",
+   "classification": "PASS: 9 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-22T17:27:28Z",
+   "elapsedSeconds": 10835.8,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 338,
+     "worstRunP99NS": 379,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 367,
+     "p99NS": 1309,
+     "worstRunP99NS": 1636,
+     "runsWithP99Above1200NS": 2
+    },
+    "c32": {
+     "p50NS": 368,
+     "p99NS": 1304,
+     "worstRunP99NS": 1635,
+     "runsWithP99Above1200NS": 2
+    }
+   }
+  },
+  {
+   "order": 2,
+   "commit": "8ec2d8c",
+   "directory": "2-8ec2d8c/",
+   "classification": "PASS: 12 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-22T20:29:10Z",
+   "elapsedSeconds": 10837.4,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 348,
+     "worstRunP99NS": 389,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 581,
+     "p99NS": 1519,
+     "worstRunP99NS": 1642,
+     "runsWithP99Above1200NS": 8
+    },
+    "c32": {
+     "p50NS": 549,
+     "p99NS": 1513,
+     "worstRunP99NS": 1795,
+     "runsWithP99Above1200NS": 8
+    }
+   }
+  },
+  {
+   "order": 3,
+   "commit": "e3a72af",
+   "directory": "3-e3a72af/",
+   "classification": "PASS: 10 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-22T23:30:49Z",
+   "elapsedSeconds": 10836.73,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 327,
+     "worstRunP99NS": 375,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 401,
+     "p99NS": 1406,
+     "worstRunP99NS": 1762,
+     "runsWithP99Above1200NS": 5
+    },
+    "c32": {
+     "p50NS": 426,
+     "p99NS": 1412,
+     "worstRunP99NS": 1697,
+     "runsWithP99Above1200NS": 5
+    }
+   }
+  },
+  {
+   "order": 4,
+   "commit": "8ec2d8c",
+   "directory": "4-8ec2d8c/",
+   "classification": "PASS: 15 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-23T02:32:27Z",
+   "elapsedSeconds": 10837.53,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 375,
+     "worstRunP99NS": 381,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 455,
+     "p99NS": 1466,
+     "worstRunP99NS": 1620,
+     "runsWithP99Above1200NS": 5
+    },
+    "c32": {
+     "p50NS": 443,
+     "p99NS": 1460,
+     "worstRunP99NS": 1648,
+     "runsWithP99Above1200NS": 6
+    }
+   }
+  }
+ ],
+ "allocationBound": "owner Enter+Leave: zero allocations in every run of every aggregate, all three candidates, both commits",
+ "hostNoise": "no swap pages moved and no throttled periods in any of the 120 samples of any run",
+ "conclusion": "The gate passes on the merged kernel. The slow mode of the contended lease appears on both commits, more often on 8ec2d8c in this session: 14 of 40 kernel windows at 8 and 32 callers on e3a72af, 27 of 40 on 8ec2d8c. The highest window p99 is 1,762 ns on e3a72af and 1,795 ns on 8ec2d8c; the failing window on fb0a86b, 5,548 ns, is 3.1 times the highest of these four runs. The 2026-11-22 failure was the host's slow mode plus one disturbed window, not a change of the kernel.",
+ "note": "the report label (\"candidate evidence, not final-port evidence\") is fixed text in the harness. Raw per-run records stay on the measurement host."
+}

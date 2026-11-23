@@ -1,0 +1,53 @@
+{
+ "classification": "FAIL: full callpath run on the S1 merge commit, protocol amendment 2, three candidates (reconciler, graph-lock and the sdk/kernel backend); one window of kernel owner Enter+Leave at 8 callers above the 2,000 ns p99 bound",
+ "commit": "fb0a86b",
+ "protocolAmendment": 2,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "8h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "S0_CALLPATH_OUT": "<out>/result",
+  "S0_CALLPATH_IDENTITY": "<out>/identity.json",
+  "GOMAXPROCS": "8",
+  "GOTOOLCHAIN": "local",
+  "GOFLAGS": "-mod=readonly"
+ },
+ "host": "dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job",
+ "elapsedSeconds": 10836.44,
+ "reasons": [
+  "FAIL: baseline kernel/owner_enter_leave/c8: run 9 p99 5548ns > 2000ns"
+ ],
+ "latencyBound": "owner Enter+Leave p99 <= 2000 ns: failed in one run, kernel at 8 callers, run 9, 5548 ns; every other run of every candidate at most 1595 ns",
+ "allocationBound": "owner Enter+Leave: zero allocations in every run of every aggregate, all three candidates, the kernel included",
+ "kernelOwnerEnterLeave": {
+  "c1": {
+   "p50NS": 150,
+   "p99NS": 333,
+   "worstRunP99NS": 375,
+   "runsWithP99Above1200NS": 0
+  },
+  "c8": {
+   "p50NS": 433,
+   "p99NS": 1464,
+   "worstRunP99NS": 5548,
+   "runsWithP99Above1200NS": 6
+  },
+  "c32": {
+   "p50NS": 464,
+   "p99NS": 1447,
+   "worstRunP99NS": 1595,
+   "runsWithP99Above1200NS": 7
+  }
+ },
+ "hostNoise": "120 samples: 0 swap pages moved, 0 throttled periods",
+ "note": "6 observations of candidate variation above 10% with a clean control, none invalidating. The report label (\"candidate evidence, not final-port evidence\") is fixed text in the harness. Raw per-run records stay on the measurement host. The same-session comparison with 8ec2d8c is in ../callpath-full-merged-ab/."
+}
