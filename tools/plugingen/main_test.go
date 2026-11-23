@@ -1,9 +1,11 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v3"
@@ -12,6 +14,20 @@ import (
 	"github.com/mutex-solutions/aiops-platform/examples"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 )
+
+// The driver takes -write and --write, as the Go flag syntax does, and refuses a
+// call with no directory.
+func TestFlags(t *testing.T) {
+	for _, flag := range []string{"-write", "--write"} {
+		var out strings.Builder
+		if err := run([]string{flag, t.TempDir()}, &out); err != nil || !strings.HasPrefix(out.String(), "plugingen: 0 plugins") {
+			t.Errorf("%s on a directory with no plugin: %v, %q", flag, err, out.String())
+		}
+	}
+	if err := run([]string{"--write"}, io.Discard); err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Errorf("no directory: %v", err)
+	}
+}
 
 // dirs maps each plugin of the release table and of the test release to its
 // directory.
