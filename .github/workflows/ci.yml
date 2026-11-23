@@ -138,6 +138,7 @@ jobs:
         run: |
           go run ./tools/kernelcheck lines sdk/def/clock/v0/conformance 800 provisional
           go run ./tools/kernelcheck lines sdk/def/composition/v0/conformance 800 provisional
+          go run ./tools/kernelcheck lines sdk/def/configrefs/v0/conformance 800 provisional
 
   s1-suites:
     name: S1 exit suites on the built binary

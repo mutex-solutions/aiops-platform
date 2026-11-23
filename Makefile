@@ -54,3 +54,4 @@ check:
 	done
 	$(KC) lines sdk/def/clock/v0/conformance 800 provisional
 	$(KC) lines sdk/def/composition/v0/conformance 800 provisional
+	$(KC) lines sdk/def/configrefs/v0/conformance 800 provisional
