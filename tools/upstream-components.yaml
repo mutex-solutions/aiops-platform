@@ -132,6 +132,22 @@ entries:
       - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
     default: false
 
+  - id: goleak
+    names: [goleak]
+    form: library
+    behind: none
+    modules: [go.uber.org/goleak]
+    pin: v1.3.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: go.uber.org/goleak@v1.3.0 LICENSE, read: "2026-11-23", version: v1.3.0}
+    mark: needs-approval
+    importers:
+      - {dir: sdk/testkit, decision: "ADR-060 decision 12; ADR-054 decision 17"}
+    default: false
+
   - id: nodejs
     names: [nodejs, node.js]
     form: process
