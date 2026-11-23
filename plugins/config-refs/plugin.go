@@ -61,10 +61,18 @@ var Plugin = kernel.Define(kernel.Plugin{
 })
 
 // dryRun resolves a config with the listener's resolver, hands the resolved tree to
-// decode, the row's own Decode, and drops it.
-type dryRun struct{ r *refs.Resolver }
+// decode, the row's own Decode, and drops it. Once the activation that provided it
+// unloads, it resolves nothing and returns an error that matches kernel.ErrInactive
+// ("No use after release", 07-c4-plugin-sdk.md §4.3).
+type dryRun struct {
+	r   *refs.Resolver
+	std context.Context // of the activation that provided it
+}
 
 func (d dryRun) Check(_ context.Context, config any, decode func(any) error) error {
+	if d.std.Err() != nil {
+		return fmt.Errorf("config-refs: dry run after release: %w", kernel.ErrInactive)
+	}
 	out, _, err := d.r.Resolve(config)
 	if err != nil || decode == nil {
 		return err
@@ -85,7 +93,7 @@ func apply(c *kernel.Context, cfg any) error {
 		}
 		return v, err
 	})
-	return errors.Join(refsdef.Key.Provide(c, dryRun{r}), ReadyKey.Provide(c, struct{}{}))
+	return errors.Join(refsdef.Key.Provide(c, dryRun{r, c.Std()}), ReadyKey.Provide(c, struct{}{}))
 }
 
 func decode(raw any) (any, error) {
