@@ -54,9 +54,11 @@
   The command rows consume it from S2a and `plugin-manager` from S6a. It imports the
   signature library, the OCI client and the YAML library, and it is a row of `aiops-cli`
   (ADR-060 decision 41; ADR-020 decision 1). The CLI and the service share it and one
-  profile write lock, and every operation is a submission to the reload queue (`08:369`;
-  `03:71`; plugin record §12). dsh's plugin manager and CLI share `operations.ts` and a
-  profile write lock, and restore a snapshot on a failure (dsh §4.2).
+  profile write lock, and every operation is a submission to the reload queue, is
+  audited and emits `plugin-manager/changed` (`08:369`; `03:71`; plugin record §12). In
+  dsh the CLI is "a thin pnpm forwarder", the in-process `ctx.pluginManager` "does the
+  same through `operations.ts`", the two share "a profile write lock", and a failure
+  restores the package files from a snapshot taken before pnpm ran (dsh §4.2).
 - **Import boundaries.** A plugin imports the SDK and its own dependencies only (`07:34`,
   `:46`; `08:1257`), and `boot` imports the kernel and three definitions (`08:1256`). The
   gate is `boot` code that `plugin-manager` and the launcher call (`08:493`). `reload`
@@ -93,9 +95,9 @@
 7. The required set of the signed manifest is written for server profiles (`08:455`), and
    the `cli` profile is not one.
 8. Plugin vet is to refuse a dial or an HTTP client outside `dialer` in every plugin
-   (`07:1400`; harness:58). The operations plugin reaches OCI registries, and `dialer`
-   arrives at S3 (`08:696`) as a row of `aiops-base` (`00:277`), which the `cli` profile
-   does not list (`08:253`).
+   (`07:1400`; harness:58). The operations plugin reaches OCI registries. `dialer` is
+   grouped with `http` (`00:217`), which arrives at S3 (`08:696`), and its provider is a
+   row of `aiops-base` (`00:277`), which the `cli` profile does not list (`08:253`).
 
 ## Decision
 
@@ -234,7 +236,7 @@
 
 7. **`aiops/cli`** lives in `plugins/cli/` and is the row `cli` of `aiops-cli`. The bundle
    marks it required, so a `cli` that is not ACTIVE stops the boot of `aiopsctl` with a
-   reason instead of leaving the process waiting (`08:451`). It provides `commands` and
+   reason instead of leaving the process waiting (`08:459`). It provides `commands` and
    injects `cmdline`, `ready`, `appExit`, `composition` and `catalog`; `appExit` is
    consumer-bound, so the release manifest lists `aiops/cli` beside
    `aiops/restart-policy` (`00:245`; `dist/dist.yaml`). Its `Apply` provides the registry
@@ -908,8 +910,9 @@
 ### What this ADR does not settle
 
 32. Each item names its trigger.
-    - The transport of `Submit` before `admin-api`, its plugin vet rule, and how it
-      relates to `admin-api`: the ADR of ADR-060 decision 48, before the exit test. That
+    - The transport of the submission before `admin-api`, its plugin vet rule, its bound,
+      and how it relates to `admin-api`: the ADR of ADR-060 decision 48, before the exit
+      test. Until it merges every submission answers `no-transport` (decision 17). That
       ADR also keeps the `cli` profile's own `reload` row, which `aiopsctl` composes with
       `aiops-core`, from serving the transport.
     - Commands of rows outside `aiops-cli`: `slack manifest` (`00:137`; `06:312`) and
@@ -960,21 +963,29 @@
   the pull request that changes the definition (ADR-060 decision 32, rule 4).
 - Two definitions with their fakes and suites, one template, and seven plugins: `cli`,
   `operations` and five command rows. The consumer-bound keys go from 12 to 13.
-- `boot` grows by the launch 0.2 services and the toolbox plumbing, under its provisional
-  cap of 9,000 lines (ADR-060 decision 35). The kernel does not change, so ADR-060
-  decision 3 holds and this ADR proposes no addition to ADR-034.
-- No dependency is added: the parser and the lock use the standard library (ADR-060
-  decision 34).
+- `boot` grows by the launch 0.2 services, the toolbox plumbing, `RunOptions.Command`
+  with the launcher code 8 (decision 13), the distribution rule of decision 26 and the
+  field `rows` of the status (decision 21), under its provisional cap of 9,000 lines
+  (ADR-060 decision 35). The kernel does not change, so ADR-060 decision 3 holds and this
+  ADR proposes no addition to ADR-034.
+- No dependency is added: the parser, the lock and the snapshot use the standard
+  library, and the registry credentials are read through the OCI client that ADR-047
+  decision 4 already links (ADR-060 decision 34).
 - Provisional caps for the new packages, under the rule of ADR-060 decision 35:
   `sdk/def/commands/v0` and `sdk/def/operations/v0`, and the fake and the suite of each,
   800 lines each; `plugins/cli`, 1,500, as a command row's plugin; `plugins/operations`,
   the 3,500 of the operations library.
 - The commit that adds `command-profile` removes the S1 code of `cmd/aiopsctl/run.go`,
   `profile render` with `--dist`.
-- The design follows dsh as `08` §1.1 carries it: one launcher with typed launch services
-  (rows 31 and 32), a startup row that parses the leftover argv (dsh §7), and one
-  operations library and one write lock that the CLI and the manager share, with a
-  snapshot restored on a failure (dsh §4.2; row 34).
+- The design follows dsh as `08` §1.1 carries it: typed launch services (row 31), a
+  startup row that parses the leftover argv (dsh §7; row 32), and one write lock that the
+  CLI and the manager share, with a snapshot restored on a failure (dsh §4.2; row 34).
+  It departs in four places, each recorded in the checklist with its reason or deferred
+  with its trigger (Edits on acceptance; decision 32): the two binaries of one launcher
+  differ by the toolbox and by what their `main` passes to `boot` (row 31); the lock is
+  one per home and has no idle timeout (row 34); `plugin-manager/changed` is emitted from
+  S6a (decision 17); and the CLI's commands are rows that reach their tools through a
+  launch service, where dsh's CLI forwards to pnpm (row 31).
 
 ## Edits on acceptance
 
@@ -992,12 +1003,37 @@ Made in the commit that records the owner's answers (`08:997`):
 - `00:137`: the key-pair command is `key generate` (ADR-020 decision 21).
 - `00:212` and plugin record §5, the contract of `launch`: with question Q1 (a) it gains
   "and, through `profileContext`, the launcher's toolbox"; with question Q2 (a) it reads
-  "argv and the standard streams", "the readiness latch and the end of boot" and "request
-  a process exit, with the code of a command"; with question Q2 (b) only the last.
+  "argv, the working directory, the environment of `aiopsctl` and the standard
+  streams", "the readiness latch and the end of boot" and "request a process exit, with
+  the code of a command"; with question Q2 (b) only the last.
+- The dsh checklist, `08` §1.1 and plugin record §15, each with its reason (`08:39`):
+  - Row 31 becomes adapted, so the counts of `08:32`-`37` and of the head of plugin
+    record §15 read 20 carried and 24 adapted. It gains: "One launcher library, `boot`,
+    in two binaries. `aiopsctl` alone carries the toolbox (the builder, `plugingen`, the
+    analyzer, the templates, the suites and the scenarios), which its command rows reach
+    through `profileContext`, and its `main` turns off the server rule and the status
+    file, keeps stdout for commands and maps exit codes. What is lost: one binary for
+    every app. Reason: Go links statically (row 35), and what the builder links enters
+    no server binary (ADR-044, Consequences), so a server image cannot carry the CLI's
+    tools as dsh's one launcher reaches pnpm (ADR-061)."
+  - Row 32 gains: "In `aiopsctl` the startup row is `cli`, which parses the leftover argv
+    once boot has finished (ADR-061)."
+  - Row 34 gains, with question Q5 (a): "One write lock per home, not per profile: a site
+    holds one digest per plugin id and the site files that an install writes (ADR-047
+    decision 7), since a remote plugin has one shared instance per site (`08:386`). It
+    is the system's advisory lock, held only through bounded steps and released when its
+    holder exits, so it has no idle timeout; what is lost is that a waiter cannot break
+    the lock of a live holder that hangs. The snapshot also covers the verified records
+    and stays on disk, so the next writer restores a killed write (ADR-061)."
+- ADR-059 decision 29: the launcher code 8, `ExitInterrupted`, under `Command`, and the
+  codes that `Command` changes (decision 13). ADR-059 decision 31: `run/status.json`
+  gains `rows` (decision 21).
 - `07:1344`: `boot` is called from the `main` of `aiops` and of `aiopsctl`.
 - `08:369` and `03:71`: the operations library is the plugin `aiops/operations` under the
   key `operations`, and the write lock is `$AIOPS_HOME/write.lock`.
-- ADR-047 decision 13: the row of `write.lock`. ADR-060 decision 24: the template of
+- ADR-047 decision 13: the rows of `write.lock` and `snapshot/`. ADR-047 decision 14:
+  `write.lock` is the one file not replaced by a rename (decision 19). ADR-060 decision
+  24: the template of
   `commands`. ADR-060 decision 35: the caps of the Consequences. ADR-059 decision 29 and
   ADR-060 decision 23: the exit table is recorded in the help of the `cli` row and in the
   exit mapping of `cmd/aiopsctl`.
@@ -1017,23 +1053,30 @@ the launch keys stay six (ADR-059 decision 35).
 - (a) `profileContext` gains `Toolbox()` in launch 0.2 (decision 21), and the release
   manifest lists `aiops/operations` among its consumers. The six keys stay, and the
   toolbox sits beside compose, admit and plan, which the owner placed in
-  `profileContext` for `reload`. Cost: the operations plugin can also call `Commit`,
-  which only `reload` calls today. In the `cli` process that is its own composition; in
-  a server profile from S6a it is a power the manager's path does not need. `00:212` and
-  plugin record §5 name the toolbox in the contract of `launch`.
+  `profileContext` for `reload`. Costs: the operations plugin can also call `Commit`,
+  which only `reload` calls today, which in the `cli` process is its own composition and
+  in a server profile from S6a a power the manager's path does not need; and every other
+  consumer of `profileContext`, `loader`, `reload` and `readiness` (`dist/dist.yaml`),
+  can call `Build`, `Suite` and every other part, so the operations plugin is the one
+  consumer of the toolbox by review only, not by binding. In `aiops` the parts of
+  `Tools` answer `ErrNotCarried`, so there that reach covers `boot`'s parts alone. `00:212` and plugin record §5 name the toolbox
+  in the contract of `launch`.
 - (b) A seventh launch key, `toolbox`, class `PC`, consumer-bound to `aiops/operations`
   and provided by every launcher, with the parts that only `aiopsctl` carries absent in
-  `aiops`. The operations plugin gets nothing else of `profileContext`. "Six" changes to
-  "seven" in `00:212`, `03:63`, `07:1348`, plugin record §5 and
+  `aiops`. The operations plugin gets nothing else of `profileContext`, and no other row
+  reaches the toolbox. "Six" changes to "seven" in `00:212`, `03:63`, `07:1348`,
+  ADR-059 decision 35 ("the launch keys stay six"), plugin record §5, plugin record §15
+  row 44 ("6 launch keys", and the 36 provider-bound keys it counts) and
   `sdk/def/launch/v0/doc.go`, and the consumer-bound keys go to 14.
 - (c) The builder, `plugingen`, the analyzer, the templates and the suite runner become
   internal packages of the operations plugin, and only `boot`'s parts go through
   `profileContext`, as in (a). The server image then links them, against ADR-044's
   Consequences, and ADR-060 decisions 11 and 22 change their homes.
 - Recommended: (a). It keeps every written count and boundary and follows the placement
-  the owner chose for `reload` (ADR-059 decision 35). Its cost is the reach of `Commit`;
-  (b) removes that cost at the price of a seventh key. Needed before the first command
-  row merges.
+  the owner chose for `reload` (ADR-059 decision 35). Its costs are the reach of
+  `Commit` and the reach of the toolbox from `loader`, `reload` and `readiness`; (b)
+  removes both at the price of a seventh key. Needed before the first command row
+  merges.
 
 **Q2. Where does the `cli` row get its streams, the end of boot and its exit code?**
 `cmdline` serves argv only, `appExit` carries no code, and no launch service says when
@@ -1050,15 +1093,29 @@ boot has finished (`00:212`; `sdk/def/launch/v0/launch.go`).
   provides argv, the exit and readiness before any row mounts (dsh §7). Needed before the
   `cli` row merges.
 
-**Q3. What is the operations definition called?**
+**Q3. What is the operations definition called?** The naming rule reads "A singular key
+is one engine or policy. A plural key is a registry of contributions" (`00:206`) and
+"singular for one engine or policy, plural for a registry" (`00:656`). The operations
+definition is one engine and takes no registration (decision 18), so a plural key
+departs from both lines; `jobs`, `secrets`, `tokens` and `credentials` are plural keys
+of one engine that `00` already holds (`00:216`, `:218`, `:224`, `:226`).
 - (a) `operations`: definition `sdk/def/operations/v0`, key `operations`, plugin
-  `aiops/operations`, row `operations`. It is the documents' word (`08:369`; `07:1846`;
-  plugin record §12) and dsh's (dsh §4.2), and keys with a plural name for one engine
-  exist (`00:216`, `:218`, `:224`, `:226`).
+  `aiops/operations`, row `operations`. It is the documents' word for the library
+  (`08:369`; `07:1846`; plugin record §12) and dsh's file name (dsh §4.2). It departs
+  from `00:206` and `:656`, and `00:656` gains "`operations`, the one operations library
+  of `08:369`" beside its examples, as the four keys above already depart.
 - (b) `siteOperations`, plugin `aiops/site-operations`, row `site-operations`. It names
-  the scope, the site's home, and reads apart from the hook `reload/operation`, at the
-  cost of a name the documents do not use.
-- Recommended: (a). Needed before the definition merges.
+  the scope, the site's home, and reads apart from the hook `reload/operation`. It is
+  plural too, departs from the same two lines with the same edit, and is a name the
+  documents do not use.
+- (c) `siteManager`, definition `sdk/def/sitemanager/v0`, plugin `aiops/site-manager`,
+  row `site-manager`: a singular key for one engine, as `00:206` and `:656` ask, in the
+  form of `pluginManager` (`00:222`). The library keeps the documents' name, "the
+  operations library", and only the key and the plugin take the new name; `08:369`,
+  `03:71` and plugin record §12 name the plugin.
+- Recommended: (a). It is the word every document and dsh use, and the departure it
+  needs is one that `00` already makes four times; (c) keeps the naming rule whole at
+  the cost of a second name for one thing. Needed before the definition merges.
 
 **Q4. How many command rows?**
 - (a) One per command group: five at S2a (decision 30). A group is one row that an
@@ -1070,9 +1127,10 @@ boot has finished (`00:212`; `sdk/def/launch/v0/launch.go`).
   before the first command row merges.
 
 **Q5. What does the write lock cover?** `08:369` names "one profile write lock", and dsh
-holds one per profile directory (dsh §4.2). Install and `dist use` also write files of
-the site: `trust.yaml`, `verified/`, `bundles/` and `content/` (ADR-047 decision 13;
-ADR-020 decision 10).
+calls its lock "a profile write lock shared with the CLI" without stating its scope (dsh
+§4.2). Install also writes files of the site, `verified/`, `bundles/` and `content/`;
+`dist use` writes `verified/` and `image.yaml`; and `trust add` writes `trust.yaml`
+(ADR-047 decision 13; ADR-020 decision 10).
 - (a) One lock per home (decision 19). Every write excludes every other, and two profiles
   of one home are never written at once.
 - (b) One lock per profile, `profiles/<p>/write.lock`, and one for the site files, taken
@@ -1080,26 +1138,37 @@ ADR-020 decision 10).
   it takes.
 - Recommended: (a). An install writes files of both kinds in one operation, and (a) makes
   it exclusive with one lock and no order to get wrong; its cost, serial writes to one
-  home, is nothing for one site. Needed before the first method that writes the home
-  merges.
+  home, is nothing for one site. Row 34 of the dsh checklist records it with its reason
+  (Edits on acceptance). Needed before the first method that writes the home merges.
 
 **Q6. How does the operations plugin dial once plugin vet refuses a dial outside
 `dialer`?** The vet gains "no dial and no HTTP client outside `dialer`" for every plugin
-(harness:58; `07:1400`). The operations plugin pulls and pushes OCI artifacts (ADR-060
-decision 41; ADR-047). `dialer` arrives at S3 (`08:696`); its one provider,
-`dialer-guarded`, is a row of `aiops-base` (`00:277`), which the `cli` profile does not
-list; and from S6a `plugin-manager` would pull artifacts in a server process, where the
-cell egress fence of `00` §5.7 applies.
-- (a) The vet rule binds from the step that builds `dialer`. At S2a the operations plugin
-  dials directly, and before the vet rule merges, the step that builds `dialer` says how
-  the operations plugin dials in the `cli` profile and in a server profile.
+(harness:58), and T0 runs plugin vet on every commit (`07:1400`). The operations plugin
+pulls and pushes OCI artifacts (ADR-060 decision 41; ADR-047). `dialer` is grouped with
+`http` (`00:217`), which arrives at S3 (`08:696`); its one provider, `dialer-guarded`, is
+a row of `aiops-base` (`00:277`), which the `cli` profile does not list. From S6a
+`plugin-manager` would pull artifacts in a server process, where the cell egress fence of
+`00` §5.7 applies, and where registry pull credentials may not be: they belong to "the
+orchestrator and `aiopsctl`, never the kernel" (`00:412`; `00:183`).
+- (a) A deferral of the dial clause of `07:1400` and harness:58 until `dialer` exists:
+  the vet rule binds from the step that builds `dialer`. At S2a the operations plugin
+  dials directly, and before the rule merges, the step that builds `dialer` says how the
+  operations plugin dials in the `cli` profile and in a server profile, and the ADR of
+  S6a says how `plugin-manager` pulls without credentials in the kernel.
 - (b) The vet rule gains a recorded exception for the operations plugin in every profile,
   as the upstream register lists an importer by an accepted decision (ADR-054). A pull by
-  `plugin-manager` in a server process then bypasses the cell egress fence.
-- Recommended: (a). The rule stays whole and cannot be met before `dialer` exists, while
-  (b) opens the egress fence of a server process. Needed before the vet rule of
-  harness:58 merges, or before S2a closes if the owner reads that rule as in force at
-  S2a.
+  `plugin-manager` in a server process then bypasses the cell egress fence, and the
+  credential conflict with `00:412` stays for S6a.
+- (c) S2a brings `sdk/def/dialer/v0` forward, with its fake, its suite and a provider row
+  that the `cli` profile composes, `dialer-guarded` in `aiops-cli` or a row of its own
+  there, and the operations plugin dials through it; the vet rule then binds from S2a
+  with no exception. It adds a definition, a provider and its cell-range rule to S2a,
+  which ADR-060 does not list, and the credential conflict with `00:412` stays for S6a.
+- Recommended: (a). It defers a rule that cannot be met before `dialer` exists without
+  growing S2a, and names the step that ends the deferral; (b) opens the egress fence of a
+  server process, and (c) keeps the rule whole at S2a at the price of a definition that
+  S2a does not plan. Needed before the vet rule of harness:58 merges, or before S2a
+  closes if the owner reads that rule as in force at S2a.
 
 **Q7. What of the owner-side guard does the `commands` dispatcher apply?** `07:511` (M2)
 has a dispatcher apply "a deadline, a concurrency cap and a breaker per (tenant, row), an
