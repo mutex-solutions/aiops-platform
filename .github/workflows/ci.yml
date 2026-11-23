@@ -102,10 +102,11 @@ jobs:
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
         # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.
         run: go run ./tools/pluginapi .
-      - name: Import boundaries
-        # docs/architecture/07-c4-plugin-sdk.md:27-48, ADR-059 decision 6; skips the
-        # server-closure part until cmd/aiops exists.
-        run: go run ./tools/kernelcheck imports .
+      - name: Import boundaries (U2)
+        # docs/architecture/07-c4-plugin-sdk.md:27-48; the import boundary U2 of ADR-054
+        # decision 13 reads the modules, plugins and importers of the upstream register.
+        # Skips the server-closure part until cmd/aiops exists.
+        run: go run ./tools/kernelcheck imports . tools/upstream-components.yaml
       - name: Plugin vet
         # plugin-system-2026-11.md §14 (T0 Static); allow-var and allow-go exemptions are counted in the output.
         run: go run ./tools/kernelcheck pluginvet plugins loader boot

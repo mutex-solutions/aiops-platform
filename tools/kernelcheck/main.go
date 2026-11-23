@@ -28,7 +28,7 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> <register> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
@@ -38,7 +38,7 @@ func run(args []string) error {
 		}
 		return checkPluginVet(args[1:])
 	}
-	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 2}
+	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 3}
 	n, ok := need[args[0]]
 	if (args[0] == "lines" || args[0] == "modfile") && len(args) > n {
 		n = len(args)
@@ -65,7 +65,11 @@ func run(args []string) error {
 	case "testctor":
 		return checkTestCtor(args[1])
 	case "imports":
-		return checkImports(args[1], goListDeps)
+		reg, err := readRegister(args[2])
+		if err != nil {
+			return err
+		}
+		return checkImports(args[1], reg, goListDeps)
 	default:
 		return checkCoverage(args[1], args[2])
 	}

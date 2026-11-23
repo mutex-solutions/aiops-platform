@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 const modPath = "github.com/mutex-solutions/aiops-platform"
@@ -25,23 +27,70 @@ const (
 	docPlugin  = "07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255"
 	docExample = "07-c4-plugin-sdk.md:36,42"
 	docBoot    = "07-c4-plugin-sdk.md:37-38; 08-profiles-roadmap-adrs.md:1254"
-	docYAML    = "ADR-059-s1-scope.md:43; ADR-060 decision 41"
+	docU2      = "ADR-054 decision 13"
 	docFake    = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
 )
 
 // bootDefs are the only definitions boot/ and loader/ may import.
 var bootDefs = []string{"launch", "loader", "composition"}
 
-// pluginThirdParty grandfathers third-party imports per plugin. A new plugin
-// gets no third-party import without an entry here (07-c4-plugin-sdk.md:34).
-var pluginThirdParty = map[string][]string{
-	// The S0 spike probes under plugins/jobs-river/internal use pgx and River;
-	// "River only under plugins/jobs-river/" is the documented exception
-	// (07-c4-plugin-sdk.md:70).
-	"jobs-river": {"github.com/jackc/pgx/v5", "github.com/riverqueue/river"},
+// upstream is what the import boundary U2 reads of an entry of the upstream register
+// tools/upstream-components.yaml (ADR-054 decisions 3 and 13): the modules the upstream
+// publishes, and where they may be imported, the directories of its plugins and its
+// importers. The other clause of U2, the require lists of the SDK modules, is the
+// modfile check.
+type upstream struct {
+	ID        string
+	Modules   []string
+	Plugins   []string
+	Importers []importDir
 }
 
-var yamlPrefixes = []string{"go.yaml.in/yaml", "gopkg.in/yaml", "sigs.k8s.io/yaml", "github.com/goccy/go-yaml"}
+type importDir struct{ Dir string }
+
+// readRegister reads the entries of the upstream register at path.
+func readRegister(path string) ([]upstream, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var r struct{ Entries []upstream }
+	if err := yaml.Unmarshal(b, &r); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return r.Entries, nil
+}
+
+// upstreamReason is U2 for the import imp, from outside the repository, of the file
+// rel: the entry whose modules hold imp, by the longest module path, lists the
+// directory of rel among its plugins or its importers. A module in no entry fails, so
+// a module of another project that an entry brings in is imported only once it has an
+// entry of its own (ADR-054 decision 18).
+func upstreamReason(reg []upstream, rel, imp string) string {
+	var e *upstream
+	n := 0
+	for i := range reg {
+		for _, m := range reg[i].Modules {
+			if hasPath(imp, m) && len(m) > n {
+				e, n = &reg[i], len(m)
+			}
+		}
+	}
+	if e == nil {
+		return "U2: its module is in no entry's modules of the upstream register (" + docU2 + ")"
+	}
+	for _, p := range e.Plugins {
+		if hasPath(rel, "plugins/"+path.Base(p)) {
+			return ""
+		}
+	}
+	for _, i := range e.Importers {
+		if hasPath(rel, i.Dir) {
+			return ""
+		}
+	}
+	return "U2: imported outside the plugins and importers of its register entry " + e.ID + " (" + docU2 + ")"
+}
 
 // fakeHomes may import a fake or testkit package from non-test files: the fakes
 // and suites themselves, the testkit, test trees, and the aiopsctl check runner,
@@ -83,10 +132,13 @@ func isDef(p string, names ...string) bool {
 }
 
 // importReasons returns one reason per rule that the import breaks. rel is the
-// slash path of the file below the repository root.
-func importReasons(rel string, test bool, imp string) []string {
+// slash path of the file below the repository root. An import from outside the
+// repository is U2's to judge in boot/ and in a plugin; the other rules refuse it
+// whatever the register lists.
+func importReasons(rel string, test bool, imp string, reg []upstream) []string {
 	var out []string
 	std := isStd(imp)
+	third := !std && !hasPath(imp, modPath)
 	add := func(rule, doc string) { out = append(out, rule+" ("+doc+")") }
 	seg := strings.Split(rel, "/")
 	tk := test && isTestkit(imp)
@@ -107,20 +159,16 @@ func importReasons(rel string, test bool, imp string) []string {
 			add("sdk/plugin imports the standard library, sdk/kernel and sdk/def only (sdk/testkit too in tests)", docSDKPkg)
 		}
 	case hasPath(rel, "boot"):
-		if !(std || isKernel(imp) || isDef(imp, bootDefs...) || hasPath(imp, "go.yaml.in/yaml/v3") || tk) {
-			add("boot imports the standard library, go.yaml.in/yaml/v3, sdk/kernel and sdk/def/{launch,loader,composition} only; nothing from plugins, loader, cmd, test, dist", docBoot)
+		if !(std || isKernel(imp) || isDef(imp, bootDefs...) || third || tk) {
+			add("boot imports the standard library, sdk/kernel, sdk/def/{launch,loader,composition} and the upstream modules the register lists it for only; nothing from plugins, loader, cmd, test, dist", docBoot)
 		}
 	case hasPath(rel, "loader"):
 		if !(std || isKernel(imp) || isDef(imp, bootDefs...) || tk) {
 			add("loader imports the standard library, sdk/kernel and sdk/def/{launch,loader,composition} only; nothing from plugins, boot, cmd, test, dist", docBoot)
 		}
 	case hasPath(rel, "plugins") && len(seg) > 2:
-		third := false
-		for _, p := range pluginThirdParty[seg[1]] {
-			third = third || hasPath(imp, p)
-		}
 		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || hasPath(imp, modPath+"/plugins/"+seg[1]) || third || tk) {
-			add("a plugin imports the SDK, its own packages and allow-listed modules only; never another plugin, boot, loader, cmd, test, dist", docPlugin)
+			add("a plugin imports the SDK, its own packages and the upstream modules the register lists it for only; never another plugin, boot, loader, cmd, test, dist", docPlugin)
 		}
 	case hasPath(rel, "examples"):
 		// The tests, and the list examples/examples.go that the definition lint reads,
@@ -131,12 +179,9 @@ func importReasons(rel string, test bool, imp string) []string {
 			add("an example imports the SDK and its own packages only (the other examples too in tests and in examples/examples.go); never internal, a plugin, boot, loader, cmd, test, dist", docExample)
 		}
 	}
-	if !hasPath(rel, "boot") && !hasPath(rel, "tools") && !hasPath(rel, "internal/plugingen") {
-		for _, y := range yamlPrefixes {
-			if strings.HasPrefix(imp, y) {
-				add("the YAML package is imported in boot/, tools/ and internal/plugingen only", docYAML)
-				break
-			}
+	if third {
+		if r := upstreamReason(reg, rel, imp); r != "" {
+			out = append(out, r)
 		}
 	}
 	if !test && isFakePath(imp) {
@@ -196,9 +241,10 @@ func goListDeps(root, pkg string) ([]string, error) {
 	return strings.Fields(string(out)), nil
 }
 
-// checkImports applies the import boundary table to every Go file under root
-// and, when cmd/aiops exists, to the dependency closure of the server binary.
-func checkImports(root string, list listDeps) error {
+// checkImports applies the import boundary table and U2, with the entries reg of the
+// upstream register, to every Go file under root and, when cmd/aiops exists, the
+// fake rule to the dependency closure of the server binary.
+func checkImports(root string, reg []upstream, list listDeps) error {
 	var bad []string
 	err := walkGo(root, func(p, rel string, test bool) error {
 		fset := token.NewFileSet()
@@ -211,7 +257,7 @@ func checkImports(root string, list listDeps) error {
 		}
 		for _, im := range f.Imports {
 			path, _ := strconv.Unquote(im.Path.Value)
-			for _, r := range importReasons(rel, test, path) {
+			for _, r := range importReasons(rel, test, path, reg) {
 				bad = append(bad, fmt.Sprintf("%s:%d: imports %s: %s", rel, fset.Position(im.Pos()).Line, path, r))
 			}
 		}

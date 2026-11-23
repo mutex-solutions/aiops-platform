@@ -38,7 +38,8 @@ check:
 	$(KC) lines sdk/kernel 8200
 	$(KC) testctor .
 	$(KC) coverage sdk/kernel/cover.out $(MOD)/sdk/kernel
-	$(KC) imports .
+	@# ADR-054 decision 13: the import boundary U2 reads the upstream register.
+	$(KC) imports . tools/upstream-components.yaml
 	$(KC) pluginvet plugins loader boot
 	go run ./tools/deflint .
 	@# ADR-060 decisions 11 and 36: manifest parity of every plugin.yaml and its generated tests.
