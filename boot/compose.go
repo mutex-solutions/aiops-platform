@@ -149,12 +149,13 @@ func fileError(file string, err error) error {
 }
 
 type composer struct {
-	opt   Options
-	rows  []*crow
-	index map[string]int
-	warns []Warning
-	read  int    // bytes of the layer files and of each include mount, against MaxComposeBytes
-	min   string // minStability of profile.yaml
+	opt     Options
+	rows    []*crow
+	index   map[string]int
+	warns   []Warning
+	read    int      // bytes of the layer files and of each include mount, against MaxComposeBytes
+	min     string   // minStability of profile.yaml
+	clashes []string // the installed artifacts whose group id was taken (artifact)
 }
 
 // The ten fields in canonical order, as indexes of crow.origin.
@@ -199,6 +200,9 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 	if err != nil {
 		return err
 	}
+	if id, ok := strings.CutPrefix(source, "bundle:"); ok && strings.Contains(id, "/") {
+		items = c.artifact(id, items)
+	}
 	l := Layer{Number: number, Source: source, File: f.Path, Items: items}
 	for _, it := range l.Items {
 		for _, r := range it.Insert {
@@ -213,6 +217,36 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 		}
 	}
 	return nil
+}
+
+// artifact mounts the rows that the bundle of the installed artifact id inserts under one
+// core:group row named by the <name> segment of id, enabled, with every role that one of
+// them states, or none when one states none, so it mounts wherever a row does (ADR-047
+// decision 5). The bundle places no row outside the group, so its other items change
+// nothing, and gate check 8 denies the artifact for them. When a row composed before it
+// holds the group's id, it inserts nothing and records the clash (ADR-047 decision 6).
+func (c *composer) artifact(id string, items []Item) []Item {
+	_, name, _ := strings.Cut(id, "/")
+	if _, clash := c.index[name]; clash {
+		c.clashes = append(c.clashes, id)
+		return nil
+	}
+	g := ParsedRow{Row: Row{ID: name, Plugin: pluginGroup, Enabled: true, Config: Value{Kind: KindList}}}
+	every := false
+	for _, it := range items {
+		for _, r := range it.Insert {
+			g.Children, every = append(g.Children, r), every || len(r.Roles) == 0
+			for _, role := range r.Roles {
+				if !slices.Contains(g.Roles, role) {
+					g.Roles = append(g.Roles, role)
+				}
+			}
+		}
+	}
+	if slices.Sort(g.Roles); every {
+		g.Roles = nil
+	}
+	return []Item{{Insert: []ParsedRow{g}}}
 }
 
 // parseItems parses a layer file or a mount of an included one. Each counts
@@ -387,7 +421,7 @@ func (c *composer) finish() Composition {
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
 		plain[i] = cr.row
 	}
-	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min}
+	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min, Clashes: c.clashes}
 }
 
 // collectRefs appends the references of a value, in document order for lists

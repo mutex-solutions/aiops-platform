@@ -511,11 +511,13 @@ func (g *gate) suites(s *subject) []string {
 	return out
 }
 
-// installed is the installed-artifact clause of check 8 (ADR-047 decisions 11 and 19;
-// ADR-060 decision 57), on the bundle that install kept: it holds insert items only;
+// installed is the installed-artifact clause of check 8 (ADR-047 decisions 6, 11 and
+// 19; ADR-060 decision 57), on the bundle that install kept: it holds insert items only;
 // each row is of the artifact's own plugin or of a first-party plugin whose manifest
 // says instantiable, sets only id, plugin, roles, enabled: false and config, and holds
-// no ${env:} or ${file:} reference. A breach denies every row of the artifact.
+// no ${env:} or ${file:} reference. A breach denies every row the bundle inserted, under
+// the group that Compose adds. An artifact whose group id was taken (Composition.Clashes)
+// is denied by its plugin id, since none of its rows was inserted.
 func (g *gate) installed(c Composition) []RowResult {
 	var out []RowResult
 	for _, id := range slices.Sorted(maps.Keys(g.feeds)) {
@@ -525,10 +527,15 @@ func (g *gate) installed(c Composition) []RowResult {
 		}
 		why := g.bundleRule(id, a.Kept.Bundle)
 		for _, r := range c.Rows {
-			if why != "" && installedBundle(r) == id {
+			if _, name, _ := strings.Cut(id, "/"); why != "" && installedBundle(r) == id && r.ID != name {
 				out = append(out, g.fail(CheckLayerRules, r.Row, RuleInstalled, false, "row %q: the bundle of the installed artifact %s %s", r.ID, id, why))
 			}
 		}
+	}
+	for _, id := range c.Clashes {
+		_, name, _ := strings.Cut(id, "/")
+		out = append(out, g.fail(CheckLayerRules, Row{ID: id}, RuleGroupClash, false,
+			"the group %q of the installed artifact %s takes the id of the row %q composed before it, so none of its rows is inserted (ADR-047 decision 6)", name, id, name))
 	}
 	return out
 }

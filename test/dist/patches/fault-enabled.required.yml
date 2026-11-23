@@ -1,3 +1,0 @@
-# Layer 4 patch: the disabled row "fault", which the bundle of an installed artifact
-# inserted, is enabled and required.
-- {id: fault, enabled: true, required: true}

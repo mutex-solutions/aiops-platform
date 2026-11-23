@@ -107,6 +107,9 @@ const (
 	// RuleInstalled: gate check 8, the bundle of an installed artifact breaks the
 	// insert-only rule (ADR-047 decisions 11 and 19; ADR-060 decision 57).
 	RuleInstalled Rule = "installed-artifact"
+	// RuleGroupClash: gate check 8, the group of an installed artifact takes the id of a
+	// row composed before it, so none of its rows is inserted (ADR-047 decision 6).
+	RuleGroupClash Rule = "group-clash"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

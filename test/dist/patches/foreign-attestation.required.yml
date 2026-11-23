@@ -1,0 +1,4 @@
+# Layer 4 patch: the disabled row "fault" that the bundle of the installed artifact
+# aiops-test/foreign-attestation inserted under its group (ADR-047 decision 5) is
+# enabled and required. The artifact has a statement that names another digest (check 10).
+- {id: foreign-attestation:fault, enabled: true, required: true}

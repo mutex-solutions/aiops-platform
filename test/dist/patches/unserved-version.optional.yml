@@ -1,0 +1,5 @@
+# Layer 4 patch: the disabled row "fault" that the bundle of the installed artifact
+# aiops-test/unserved-version inserted under its group (ADR-047 decision 5) is
+# enabled. The artifact requires a version of toy that the test distribution does not
+# serve (check 2).
+- {id: unserved-version:fault, enabled: true}

@@ -729,3 +729,44 @@ func TestYamlLine(t *testing.T) {
 		}
 	}
 }
+
+// Boot mounts the rows of an installed artifact's bundle under one core:group row it
+// adds, named by the <name> segment of the plugin id, enabled, with every role a row
+// states (ADR-047 decision 5). The bundle places no row outside it, so a patch item
+// changes nothing (check 8 denies the artifact). A group whose id a row composed before
+// it holds inserts none of the artifact's rows, and the rest composes (decision 6).
+func TestComposeMountsAnInstalledArtifact(t *testing.T) {
+	compose := func(base, pack string) Composition {
+		t.Helper()
+		home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b, acme/pack]")},
+			"bundles/b/bundle.yaml": {Data: []byte(base)}, "bundles/acme/pack/bundle.yaml": {Data: []byte(pack)}}
+		c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home}, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	line := func(c Composition) string {
+		var out []string
+		for _, r := range c.Rows {
+			out = append(out, fmt.Sprintf("%s %s parent=%s enabled=%v roles=%v origin=%s", r.ID, r.Plugin, r.Parent, r.Enabled, r.Roles, installedBundle(r)))
+		}
+		return strings.Join(out, "; ") + fmt.Sprintf("; clashes %v", c.Clashes)
+	}
+	pack := rows("id: e, plugin: aiops/echo, roles: [api], enabled: false", "id: f, plugin: aiops/echo, roles: [worker], enabled: false") +
+		"- {id: x, enabled: false}\n"
+	for _, tc := range []struct{ base, pack, want string }{
+		{rows("id: x, plugin: o/x"), pack, "x o/x parent= enabled=true roles=[] origin=; " +
+			"pack core:group parent= enabled=true roles=[api worker] origin=acme/pack; " +
+			"pack:e aiops/echo parent=pack enabled=false roles=[api] origin=acme/pack; " +
+			"pack:f aiops/echo parent=pack enabled=false roles=[worker] origin=acme/pack; clashes []"},
+		{rows("id: x, plugin: o/x"), rows("id: e, plugin: aiops/echo, roles: [api], enabled: false", "id: f, plugin: aiops/echo, enabled: false"),
+			"x o/x parent= enabled=true roles=[] origin=; pack core:group parent= enabled=true roles=[] origin=acme/pack; " +
+				"pack:e aiops/echo parent=pack enabled=false roles=[api] origin=acme/pack; pack:f aiops/echo parent=pack enabled=false roles=[] origin=acme/pack; clashes []"},
+		{rows("id: pack, plugin: o/x"), pack, "pack o/x parent= enabled=true roles=[] origin=; clashes [acme/pack]"},
+	} {
+		if got := line(compose(tc.base, tc.pack)); got != tc.want {
+			t.Errorf("got  %s\nwant %s", got, tc.want)
+		}
+	}
+}

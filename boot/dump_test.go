@@ -240,11 +240,11 @@ func TestRenderRefusalsAndOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dump := RenderDump(a); !strings.Contains(dump, "\nrow e plugin=acme/pack enabled=true required=false group=false roles=- origin=acme/pack\n") {
+	if dump := RenderDump(a); !strings.Contains(dump, "\nrow pack:e plugin=acme/pack enabled=true required=false group=false roles=- parent=pack origin=acme/pack\n") {
 		t.Errorf("dump:\n%s", dump)
 	}
-	r, _ := findRow(a.Comp, "e")
-	if s := entrySpecs(a.Comp); len(s) != 1 || s[0].Origin != "acme/pack" || launchRow(r).Origin != "acme/pack" {
+	r, _ := findRow(a.Comp, "pack:e")
+	if s := entrySpecs(a.Comp); len(s) != 2 || s[1].Origin != "acme/pack" || launchRow(r).Origin != "acme/pack" {
 		t.Errorf("entry specs %+v, launch row %+v", s, launchRow(r))
 	}
 }

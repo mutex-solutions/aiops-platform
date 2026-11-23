@@ -25,8 +25,9 @@ var faultDenial = map[string]string{"unserved-version": "requires toy 0.2, and t
 // plugin install keeps an in-process artifact, with the one defect of the fault in its
 // generated manifest, signature or attestation (ADR-060 decision 31), and makes the
 // profile smoke name its bundle last, as install appends it (ADR-047 decision 5). The
-// bundle inserts the row "fault" disabled, and a patch of the cell enables it, as
-// plugin enable writes it:
+// bundle inserts the row "fault" disabled, which boot mounts under the artifact's group
+// as "<fault>:fault", and a patch of the cell, <fault>.optional.yml or
+// <fault>.required.yml, enables it:
 //   - unserved-version: the artifact was built against toy 0.2, which the test
 //     distribution does not serve (check 2);
 //   - unsigned-row: no verified signer is recorded beside its digest, and allowUnsigned

@@ -96,6 +96,8 @@ func (a Admission) Diagnostics() []string {
 				out = append(out, fmt.Sprintf("error: static graph: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
 			case f.Stop:
 				out = append(out, fmt.Sprintf("error: denied: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
+			case f.Rule == RuleGroupClash:
+				out = append(out, fmt.Sprintf("warning: the installed artifact %s is left out: %s, rule %s: %s", f.Row, gateCheck(s.N), f.Rule, f.Reason))
 			default:
 				out = append(out, fmt.Sprintf("warning: row %q detached as disabled: %s, rule %s: %s", f.Row, gateCheck(s.N), f.Rule, f.Reason))
 			}

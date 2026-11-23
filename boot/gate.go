@@ -171,10 +171,12 @@ type Slot struct {
 
 // GateResult is the data the gate returns.
 //
-// Pass is true when no check failed on any row. Refused is true when boot
-// must stop: a row that is required, or a failure marked Stop. Detached lists
-// the optional rows denied by a check, which the launcher's copy disables;
-// Inactive lists the optional rows whose plugin is not in the module table.
+// Rows lists the ids of the composed rows and, as rows of their own, the plugin ids of
+// the installed artifacts whose group id was taken (Composition.Clashes). Pass is true
+// when no check failed on any row. Refused is true when boot must stop: a row that is
+// required, or a failure marked Stop. Detached lists the optional rows denied by a
+// check, which the launcher's copy disables, and those artifacts; Inactive lists the
+// optional rows whose plugin is not in the module table.
 type GateResult struct {
 	Entry      Entry
 	Slots      []Slot
@@ -332,6 +334,7 @@ func GateWith(c Composition, in GateInput) GateResult {
 	}
 	add(g.lastProvider(c, dist))
 	add(g.installed(c))
+	res.Rows = append(res.Rows, c.Clashes...)
 	sort.Strings(res.Rows)
 	res.finish()
 	return res

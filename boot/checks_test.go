@@ -52,7 +52,8 @@ type gateFix struct {
 // newGateFix is a clean case: the rows plain, user and prov of in-process plugins of the
 // module table, e1 of the pack acme/pack, which inserts a row of the first-party
 // instantiable aiops/echo, and e2 of the in-process artifact acme/echoer, both enabled
-// by the profile layer, as plugin enable writes it.
+// by the profile layer, as plugin enable writes it. Each artifact's rows mount under its
+// group, so they compose as pack:e1 and echoer:e2 (ADR-047 decision 5).
 func newGateFix() *gateFix {
 	d := newTestDist()
 	d.definitions = servedDefs
@@ -117,7 +118,7 @@ func (fx *gateFix) run(t *testing.T) GateResult {
 		home["bundles/"+id+"/bundle.yaml"] = &fstest.MapFile{Data: []byte(data)}
 	}
 	home["profiles/p/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b, " + strings.Join(ids, ", ") + "]")}
-	patch := File{FS: fstest.MapFS{"enable.yml": {Data: []byte("- {id: e1, enabled: true}\n- {id: e2, enabled: true}\n")}}, Path: "enable.yml"}
+	patch := File{FS: fstest.MapFS{"enable.yml": {Data: []byte("- {id: pack:e1, enabled: true}\n- {id: echoer:e2, enabled: true}\n")}}, Path: "enable.yml"}
 	c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home, Patches: []File{patch}}, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +158,7 @@ func openLines(g GateResult) []string {
 func TestGateS2aChecksAtBoot(t *testing.T) {
 	every := func(check int, rule Rule) []string {
 		var out []string
-		for _, r := range []string{"e1", "e2", "plain", "prov", "user"} {
+		for _, r := range []string{"pack:e1", "echoer:e2", "plain", "prov", "user"} {
 			out = append(out, fmt.Sprintf("%d %s %s stop=false", check, r, rule))
 		}
 		return out
@@ -211,28 +212,28 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			[]string{"5 plain module stop=false"}},
 		{"kept files that differ", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Err = &Error{Rule: RuleKept, Msg: "x"} })
-		}, []string{"5 e1 kept stop=false"}},
+		}, []string{"5 pack:e1 kept stop=false"}},
 		{"a broken record", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Err = &Error{Rule: RuleRecord, Msg: "x"} })
-		}, []string{"5 e1 record stop=false"}},
+		}, []string{"5 pack:e1 record stop=false"}},
 		{"no record", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Err = &Error{Rule: RuleMissing, Msg: "x"} })
-		}, []string{"5 e1 signer stop=false"}},
+		}, []string{"5 pack:e1 signer stop=false"}},
 		{"not installed", func(fx *gateFix) {
 			fx.bundles["acme/pack"] = string(fx.arts["acme/pack"].Kept.Bundle)
 			delete(fx.arts, "acme/pack")
-		}, []string{"5 e1 signer stop=false"}},
+		}, []string{"5 pack:e1 signer stop=false"}},
 		{"content that differs from the lock", func(fx *gateFix) { fx.art("acme/pack", func(a *Artifact) { a.Content = "sha256:" + hexC }) },
-			[]string{"5 e1 kept stop=false"}},
+			[]string{"5 pack:e1 kept stop=false"}},
 		{"a record of another id", func(fx *gateFix) { fx.art("acme/pack", func(a *Artifact) { a.Record.ID = "acme/other" }) },
-			[]string{"5 e1 record stop=false"}},
+			[]string{"5 pack:e1 record stop=false"}},
 		{"a signer that trust.yaml does not list", func(fx *gateFix) { fx.trust.Signers[0].IDs = []string{"beta/*"} },
-			[]string{"5 e1 signer stop=false", "5 e2 signer stop=false"}},
+			[]string{"5 pack:e1 signer stop=false", "5 echoer:e2 signer stop=false"}},
 		{"a signer not listed for the runtime", func(fx *gateFix) { fx.trust.Signers[0].Runtimes = nil },
-			[]string{"5 e2 signer stop=false"}},
+			[]string{"5 echoer:e2 signer stop=false"}},
 		{"an exact id", func(fx *gateFix) { fx.trust.Signers[0].IDs = []string{"acme/echoer", "acme/pack"} }, nil},
 		{"unsigned", func(fx *gateFix) { fx.art("acme/pack", func(a *Artifact) { a.Record.Signer = Unsigned }) },
-			[]string{"5 e1 signer stop=false"}},
+			[]string{"5 pack:e1 signer stop=false"}},
 		{"unsigned and allowed", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Record.Signer = Unsigned })
 			fx.trust.AllowUnsigned = []string{"acme/pack"}
@@ -241,10 +242,10 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.reserve("contrib/pack")
 			fx.art("contrib/pack", func(a *Artifact) { a.Record.Signer = Unsigned })
 			fx.trust.AllowUnsigned = []string{"contrib/pack"}
-		}, []string{"5 e1 signer stop=false"}},
+		}, []string{"5 pack:e1 signer stop=false"}},
 		{"a module the trusted manifest does not list", func(fx *gateFix) {
 			fx.art("acme/echoer", func(a *Artifact) { a.Record.Module = &GoModule{Path: "example.com/acme", Version: "v0.1.0", Sum: sumA} })
-		}, []string{"5 e2 module stop=false", "10 e2 attestation stop=false"}},
+		}, []string{"5 echoer:e2 module stop=false", "10 echoer:e2 attestation stop=false"}},
 		// Check 6.
 		{"a licence outside the allow-list", func(fx *gateFix) {
 			fx.dist.modules = "[{path: " + testModule + ", licence: Apache-2.0}, {path: x.test/gpl, version: v1.0.0, sum: \"" + sumA + "\", licence: GPL-3.0-only OR (MIT AND BUSL-1.1)}]"
@@ -274,48 +275,51 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 		{"a signed hook of an installed artifact whose signer is not trusted for it", func(fx *gateFix) {
 			fx.signedEchoer()
 			fx.trust.Signers[0].Signed = nil
-		}, []string{"7 e2 signed-class stop=false"}},
+		}, []string{"7 echoer:e2 signed-class stop=false"}},
 		// Check 8.
 		{"a patch in an installed bundle", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = append(a.Kept.Bundle, "- {id: e1, config: {reply: ho}}\n"...)
 			})
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row inserted enabled", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo}\n") })
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row of a plugin that is neither its own nor instantiable", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: o/plain, enabled: false}\n")
 			})
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row of a first-party plugin that is not instantiable", func(fx *gateFix) {
 			fx.dist.add(manifestText("aiops/echo", echoRegisters, echoRequires), echoAttested)
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row that sets required", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, required: true}\n")
 			})
-		}, []string{"8 e1 installed-artifact stop=true"}},
+		}, []string{"8 pack:e1 installed-artifact stop=true"}},
 		{"an installed row with an env reference", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {k: \"${env:AIOPS_REF_K}\"}}\n")
 			})
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row with a file reference", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {k: \"${file:k}\"}}\n")
 			})
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row with a secret reference", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {k: \"${secret:k}\"}}\n")
 			})
 		}, nil},
+		{"a group that takes the id of a row composed before it", func(fx *gateFix) {
+			fx.bundles["b"] = rows("id: plain, plugin: o/plain", "id: user, plugin: o/user", "id: prov, plugin: o/prov", "id: pack, plugin: o/plain")
+		}, []string{"8 acme/pack group-clash stop=false"}},
 		{"an installed bundle that does not parse", func(fx *gateFix) {
 			fx.bundles["acme/pack"] = string(fx.arts["acme/pack"].Kept.Bundle)
 			fx.art("acme/pack", func(a *Artifact) { a.Kept.Bundle = []byte("{}") })
-		}, []string{"8 e1 installed-artifact stop=false"}},
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		// Check 10.
 		{"no statement", func(fx *gateFix) { fx.dist.plugins["o/plain"] = [2]string{manifestText("o/plain"), "-"} },
 			[]string{"10 plain attestation stop=false"}},
@@ -343,16 +347,16 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Record.Attestation = art("acme/pack@0.1.0", hexA, `{"echoers": {"version": "0.1"}}`, `, "scenario": {"name": "echo", "version": 1, "halves": ["kernel"]}`)
 			})
-		}, []string{"10 e1 attestation stop=false"}},
+		}, []string{"10 pack:e1 attestation stop=false"}},
 		{"a pack's statement with no scenario", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Record.Attestation = art("acme/pack@0.1.0", hexA, echoAttested, "") })
-		}, []string{"10 e1 attestation stop=false"}},
+		}, []string{"10 pack:e1 attestation stop=false"}},
 		{"a pack's statement of another digest", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) { a.Record.Attestation = art("acme/pack@0.1.0", hexC, echoAttested, "") })
-		}, []string{"10 e1 attestation stop=false"}},
+		}, []string{"10 pack:e1 attestation stop=false"}},
 		{"an in-process artifact that pins another module than the binary runs", func(fx *gateFix) {
 			fx.in.Tie["acme/echoer"] = Tie{Module: GoModule{Path: testModule, Version: "v0.2.0", Sum: sumA}}
-		}, []string{"10 e2 attestation stop=false"}},
+		}, []string{"10 echoer:e2 attestation stop=false"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newGateFix()
@@ -388,10 +392,24 @@ func TestGateReservedOwners(t *testing.T) {
 		fx := newGateFix()
 		fx.reserve(tc.id)
 		fx.in.ReleaseKey = tc.release
-		f, denied := fx.run(t).Denial("e1")
+		f, denied := fx.run(t).Denial("pack:e1")
 		if got := strings.Contains(f.Reason, "ADR-048 decision 14"); got != tc.reserved || denied != (tc.id != "acme/pack") || denied && f.Check != CheckTrust {
 			t.Errorf("%s with the release key %q: denied %v by %+v", tc.id, tc.release, denied, f)
 		}
+	}
+}
+
+// A group clash leaves the artifact out, names it, the group's id and check 8, and keeps
+// the row composed before it (ADR-047 decision 6). The artifact is a row of the result,
+// so a live generation lists it among the denied rows.
+func TestGateGroupClashIsNamed(t *testing.T) {
+	fx := newGateFix()
+	fx.bundles["b"] = rows("id: pack, plugin: o/plain")
+	g := fx.run(t)
+	want := `warning: the installed artifact acme/pack is left out: gate check 8 (Layer rules), rule group-clash: the group "pack" of the installed artifact acme/pack takes the id of the row "pack" composed before it, so none of its rows is inserted (ADR-047 decision 6)`
+	if d := (Admission{Gate: g}).Diagnostics(); !slices.Contains(d, want) || g.Result(CheckLayerRules, "acme/pack").Status != StatusFail ||
+		g.Result(CheckLayerRules, "pack").Status != StatusPass {
+		t.Fatalf("%q", d)
 	}
 }
 
@@ -419,7 +437,7 @@ func TestGateEntryPoints(t *testing.T) {
 	}{
 		{EntryBuild, []int{4, 5, 8, 10}, []string{"7 signed"}, []string{"7 user signed-class open"}},
 		{EntryCheck, []int{4, 6}, []string{"5 module", "5 signer", "7 signed"},
-			[]string{"5 e1 signer open", "5 e2 signer open", "7 user signed-class open"}},
+			[]string{"5 echoer:e2 signer open", "5 pack:e1 signer open", "7 user signed-class open"}},
 		{EntryOffline, []int{4, 5, 6}, []string{"7 signed"}, []string{"7 user signed-class open"}},
 		{EntryInstall, []int{6}, []string{"5 module"}, nil},
 		{EntryInstallUsed, nil, nil, nil},

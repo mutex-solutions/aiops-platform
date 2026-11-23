@@ -18,7 +18,8 @@ package failurematrix
 //	|                      | layer failure, a missing --patch file. Run until it exits or     |
 //	|                      | the launcher says it is running. A fault that is an installed    |
 //	|                      | artifact is in the home before boot (installFault), and a patch  |
-//	|                      | enables the row "fault" that its bundle inserted disabled.       |
+//	|                      | enables the row "fault" that its bundle inserted disabled, which |
+//	|                      | mounts under the artifact's group as "<fault>:fault".            |
 //	| Required at boot     | the same with "required: true" on the row; for a layer failure   |
 //	|                      | a profile that names a bundle that does not exist.               |
 //	| Live recomposition   | the process boots healthy with a live layer file as the last     |
@@ -216,10 +217,10 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{base: []string{"unknown-plugin.required.yml"}, code: boot.ExitRefused},
 			plan{live: "unknown-plugin.optional.yml"}, plan{}), true
 	case "gate":
-		if fault != "rogue-provider" { // an installed artifact, whose row a patch enables
-			return byColumn(col, plan{install: fault, base: []string{"fault-enabled.yml"}},
-				plan{install: fault, base: []string{"fault-enabled.required.yml"}, code: boot.ExitRefused},
-				plan{install: fault, live: "fault-enabled.yml"}, plan{}), true
+		if fault != "rogue-provider" { // an installed artifact, whose row under its group a patch enables
+			return byColumn(col, plan{install: fault, base: []string{opt + ".yml"}},
+				plan{install: fault, base: []string{req + ".yml"}, code: boot.ExitRefused},
+				plan{install: fault, live: opt + ".yml"}, plan{}), true
 		}
 		return byColumn(col, plan{base: []string{"rogue-provider.optional.yml"}},
 			plan{base: []string{"rogue-provider.required.yml"}, code: boot.ExitRefused},
