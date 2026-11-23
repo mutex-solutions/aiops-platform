@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 func write(t *testing.T, dir, name, content string) {
@@ -145,10 +147,11 @@ func TestVocab(t *testing.T) {
 // goroutine, observe.go), row (a row of the plugin record, config.go), model (the
 // Cordis lifecycle model, every file header) and gate (the Needs gate
 // activation, root.go and seam.go). The boot list holds the domain words of
-// decision 45; the loader list adds tenant, as at S1; the kernel list holds both,
-// so no layer below boot holds a word boot may not. No list holds an upstream
-// name: those are the names of the upstream register, which the name lint U1 reads
-// over sdk/, boot/ and loader/ (ADR-054 decision 14).
+// decision 45 and the upstream names; the loader list adds tenant, as at S1; the
+// kernel list holds both, so no layer below boot holds a word boot may not. An
+// upstream name leaves the lists in the commit that adds a register entry carrying
+// it, from which the name lint U1 reads it over sdk/, boot/ and loader/ (ADR-054
+// decisions 14 and 20), and not before.
 func TestVocabularyLists(t *testing.T) {
 	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "architecture", "00-decisions.md"))
 	if err != nil {
@@ -161,6 +164,25 @@ func TestVocabularyLists(t *testing.T) {
 	boot := map[string]bool{}
 	for _, w := range []string{"incident", "alert", "approval", "dashboard", "pillar", "harness", "remediation", "estate"} {
 		boot[w] = true
+	}
+	reg, err := os.ReadFile(filepath.Join("..", "upstream-components.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r struct{ Entries []struct{ Names []string } }
+	if err := yaml.Unmarshal(reg, &r); err != nil {
+		t.Fatal(err)
+	}
+	named := map[string]bool{}
+	for _, e := range r.Entries {
+		for _, n := range e.Names {
+			named[n] = true
+		}
+	}
+	for _, n := range upstreamNames {
+		if !named[n] {
+			boot[n] = true
+		}
 	}
 	loader := maps.Clone(boot)
 	loader["tenant"] = true
@@ -183,6 +205,13 @@ func TestVocabularyLists(t *testing.T) {
 		}
 	}
 }
+
+// upstreamNames are the upstream names of 00-decisions.md §3.2 and §4.3, as lowercase
+// technical names, that ADR-060 decision 45 puts in the word lists. Words split at
+// case changes, so PostgreSQL reads as Postgre and SQL.
+var upstreamNames = []string{"envoy", "postgres", "postgresql", "seaweedfs", "minio", "mimir", "alertmanager", "loki",
+	"tempo", "pyroscope", "kafka", "grafana", "holmesgpt", "goalert", "tetragon", "nats", "jetstream", "krr", "chromium",
+	"river", "pgx"}
 
 func TestLines(t *testing.T) {
 	for _, tc := range []struct {
