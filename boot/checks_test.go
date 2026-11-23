@@ -298,6 +298,17 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, required: true}\n")
 			})
 		}, []string{"8 pack:e1 installed-artifact stop=true"}},
+		// ADR-047 decision 19: the field is denied whatever value it holds.
+		{"an installed row that sets required: false", func(fx *gateFix) {
+			fx.art("acme/pack", func(a *Artifact) {
+				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, required: false}\n")
+			})
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
+		{"an installed row that sets empty inject, intercept and isolate and group: false", func(fx *gateFix) {
+			fx.art("acme/pack", func(a *Artifact) {
+				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, inject: [], intercept: {}, isolate: [], group: false}\n")
+			})
+		}, []string{"8 pack:e1 installed-artifact stop=false"}},
 		{"an installed row with an env reference", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Kept.Bundle = []byte("- insert:\n    - {id: e1, plugin: aiops/echo, enabled: false, config: {k: \"${env:AIOPS_REF_K}\"}}\n")

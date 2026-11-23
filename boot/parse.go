@@ -53,6 +53,10 @@ type parser struct {
 	server bool
 	// literal reads ${ as text: a manifest holds no reference (ADR-048 decision 3).
 	literal bool
+	// installed refuses a field of an inserted row other than id, plugin, roles, enabled
+	// and config, whatever its value: the bundle of an installed artifact (ADR-047
+	// decision 19).
+	installed bool
 }
 
 func (p *parser) err(n *yaml.Node, rule Rule, row, format string, a ...any) *Error {
@@ -529,6 +533,9 @@ func (p *parser) insertRow(n *yaml.Node, depth int) (ParsedRow, error) {
 	}
 	if b.id == nil || b.plugin == nil {
 		return ParsedRow{}, p.err(n, RuleType, row, "a row states id and plugin")
+	}
+	if p.installed && (b.required != nil || b.inject != nil || b.intercept != nil || b.isolate != nil || b.group != nil) {
+		return ParsedRow{}, p.err(n, RuleInstalled, row, "a row sets a field other than id, plugin, roles, enabled and config (ADR-047 decision 19)")
 	}
 	if !okID(*b.id, false) {
 		return ParsedRow{}, p.err(n, RuleSyntaxID, row, "id %q must be one name, with no \":\"", *b.id)

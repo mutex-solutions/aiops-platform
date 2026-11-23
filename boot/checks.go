@@ -548,7 +548,7 @@ func (g *gate) bundleRule(id string, data []byte) string {
 	root, err := parseDocument(file, data)
 	var items []Item
 	if err == nil {
-		items, err = (&parser{file: file}).layerItems(root)
+		items, err = (&parser{file: file, installed: true}).layerItems(root)
 	}
 	if err != nil {
 		return err.Error()
@@ -564,9 +564,6 @@ func (g *gate) bundleRule(id string, data []byte) string {
 			}
 			if r.Enabled {
 				return fmt.Sprintf("inserts row %q enabled: it inserts each row with enabled: false", r.ID)
-			}
-			if r.Required || r.Group || len(r.Inject)+len(r.Intercept)+len(r.Isolate) > 0 {
-				return fmt.Sprintf("sets on row %q a field other than id, plugin, roles, enabled and config (ADR-047 decision 19)", r.ID)
 			}
 			for _, u := range collectRefs(r.Config, "config", nil) {
 				if u.Ref.Scheme == RefEnv || u.Ref.Scheme == RefFile {
