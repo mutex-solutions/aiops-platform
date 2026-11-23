@@ -165,6 +165,19 @@ func TestDefineRefusesABadConfigType(t *testing.T) {
 				A string `json:"a,omitempty"`
 			}]{ID: "t/x"})
 		}, `json:"a,omitempty": give a name and no option`},
+		{"key that is the wildcard", func() {
+			plugin.Define(plugin.Spec[struct {
+				Star plugin.Volatile[string] `json:"*"`
+				Mode string
+			}]{ID: "t/x"})
+		}, `json:"*": a key is not "*" and holds no "."`},
+		{"key with a dot", func() {
+			plugin.Define(plugin.Spec[struct {
+				A struct {
+					B plugin.Volatile[string] `json:"x.b"`
+				}
+			}]{ID: "t/x"})
+		}, `json:"x.b": a key is not "*" and holds no "."`},
 		{"json tag with no name", func() {
 			plugin.Define(plugin.Spec[struct {
 				A string `json:""`
