@@ -56,8 +56,8 @@ Contract changes live in `00-decisions.md`. The readings below only settle detai
 
 | # | Open detail | Reading taken here |
 |---|---|---|
-| R1 | The record names three Go modules and puts `sdk/plugin` and `sdk/gate` in `sdk/def` | The `sdk/def` module is rooted so that it holds every SDK package except the nested modules `sdk/kernel` and `sdk/testkit`. `sdk/entity` is one of its packages. 08 §4 owns the layout |
-| R2 | The record names `sdk/remote` and `sdk/remotehost` and says `sdk/def` requires only `sdk/kernel` and pgx v5 | The two remote packages do not widen the require list of `sdk/def`. Where they live is fixed at S2b with the protocol (ADR-041) |
+| R1 | The record names three Go modules and puts `sdk/plugin` and `sdk/gate` in `sdk` | The `sdk` module is rooted at `sdk/` (ADR-060 decision 54), so that it holds every SDK package except the nested modules `sdk/kernel` and `sdk/testkit`. `sdk/entity` is one of its packages. 08 §4 owns the layout |
+| R2 | The record names `sdk/remote` and `sdk/remotehost` and says `sdk` requires only `sdk/kernel` and pgx v5 | The two remote packages do not widen the require list of `sdk`. Where they live is fixed at S2b with the protocol (ADR-041) |
 | R3 | The record gives each product definition a one-line contract, and a full Go sketch only for `notifiers` | The Go sketches of section 4.3 are those contracts with the tenant argument removed, because the tenant travels in the call's context (§5.1). Each interface is fixed when its definition lands with its first consumer, at major 0, and stays `0.y` until a release review promotes it (§4.3). Every sketch in this file therefore shows major 0: the package path `sdk/def/<name>/v0` and the key major 0. Promotion changes the import path to `v1` and nothing else |
 | R4 | `credentials` is consumer-bound to `remediation`, and the contribution obligation is "take credentials only through the lease" (§2.2) | An executor never injects `credentials`. `remediation` calls `credentials.Write(token)` and the request of `Apply` and `Rollback` carries the lease accessor; for a remote executor the same accessor is the `credentials` callback, answered through `remediation` (section 5). `Plan` and `Verify` carry no token and get no write credential. What read access they use is not stated: it is open under ADR-019, which also fixes the form of a lease per target type |
 | R5 | §2.1 row 15 says every estate answer is advisory; the record lists `estate` as an open key | `casefile` and `change-hub` declare `Want(estate)` and carry on with "not known" while it has no provider. `tool-estate-lookup` declares `Need(estate)`, so without an ACTIVE `estate` row the tool is PENDING, says what it waits for, and is in no tool set |
@@ -210,7 +210,7 @@ type Waterfall[A, R any] struct{ /* On(c, stage, fn(ctx, a, next)); Bind(c) retu
 ```
 
 ```go
-package plugin // module sdk/def: what an author writes
+package plugin // module sdk, rooted at sdk/ (ADR-060 decision 54): what an author writes
 
 type Spec[C any] struct {
 	ID       string              // "<owner>/<name>", equal to the manifest id

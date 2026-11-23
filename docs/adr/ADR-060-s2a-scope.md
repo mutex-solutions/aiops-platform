@@ -1334,7 +1334,11 @@ to a question, the decision here settles it.
 `:1893`; `08:373`, `:404`, `:497` (check 1 of `08` §1.6, which decision 16 makes the one
 gate text), `:506`, `:1199`, `:1219` and `:1258`; and the plugin record in §4 and §5,
 where it names the module that holds `sdk/plugin` and `sdk/gate` (decision 54), and in
-§12. The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
+§12. The other lines that named the module `sdk/def` are renamed with decision 54:
+`07:59-60` (R1 and R2) and `:213`; `08:1201` (assumption 2) and `:1208` (the layout);
+line 16 of `docs/architecture/README.md`; and row 5 of plugin record §2. Dated
+proposals, audits and reports, and the amendment list of plugin record §17, keep the
+name of their date. The ADR table of `08` §3 lists this ADR, and the next free number is ADR-061. Left
 to later commits: the `go.mod` lines of decision 54, with the code that moves the module
 root; the one exit text of decision 30; and the one gate text of decision 16, which
 carries the check 8 clause of decision 57. An option the owner did not choose edits
