@@ -50,6 +50,15 @@ func TestImports(t *testing.T) {
 		{"loader test fake", "loader/a_test.go", imp(mp + "/sdk/def/loader/v0/fake"), ""},
 		{"loader non-test fake", "loader/a.go", imp(mp + "/sdk/def/clock/v0/fake"), "no fake or sdk/testkit"},
 		{"plugin ok", "plugins/a/plugin.go", imp(mp+"/sdk/kernel", mp+"/sdk/def/clock/v0", mp+"/plugins/a/internal/x"), ""},
+		{"plugin imports sdk/plugin", "plugins/a/plugin.go", imp(mp+"/sdk/plugin", mp+"/sdk/kernel"), ""},
+		{"sdk/plugin allowed", "sdk/plugin/a.go", imp("fmt", mp+"/sdk/kernel", mp+"/sdk/def/launch/v0"), ""},
+		{"sdk/plugin third party", "sdk/plugin/a.go", imp("example.com/x"), "sdk/plugin imports the standard library, sdk/kernel and sdk/def only"},
+		{"sdk/plugin test testkit", "sdk/plugin/a_test.go", imp(mp + "/sdk/testkit/kerneltest"), ""},
+		{"sdk/plugin non-test testkit", "sdk/plugin/a.go", imp(mp + "/sdk/testkit/kerneltest"), "sdk/plugin imports"},
+		{"sdk/plugin yaml", "sdk/plugin/a.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
+		{"def imports sdk/plugin", "sdk/def/clock/v0/a.go", imp(mp + "/sdk/plugin"), "sdk/def imports"},
+		{"boot imports sdk/plugin", "boot/a.go", imp(mp + "/sdk/plugin"), "boot imports"},
+		{"loader imports sdk/plugin", "loader/a.go", imp(mp + "/sdk/plugin"), "loader imports"},
 		{"plugin third party", "plugins/a/internal/x/x.go", imp("github.com/jackc/pgx/v5"), "a plugin imports"},
 		{"grandfathered pgx", "plugins/jobs-river/internal/s0/x.go", imp("github.com/jackc/pgx/v5", "github.com/riverqueue/river/rivertype"), ""},
 		{"grandfather is per plugin", "plugins/a/internal/x/x.go", imp("github.com/riverqueue/river"), "a plugin imports"},
@@ -143,6 +152,7 @@ func TestGoListDeps(t *testing.T) {
 
 func TestPluginVet(t *testing.T) {
 	const kimp = "import \"" + mp + "/sdk/kernel\"\n"
+	const pimp = "import \"" + mp + "/sdk/plugin\"\n"
 	pk := func(imports, body string) string { return "package p\n" + imports + body }
 	for _, tc := range []struct {
 		name, file, src string
@@ -150,6 +160,12 @@ func TestPluginVet(t *testing.T) {
 	}{
 		{"clean plugin", "plugins/a/plugin.go", pk(kimp+"import (\"errors\"; \"fmt\")\n", "var Plugin = kernel.Define(kernel.Plugin{})\nvar ErrX = errors.New(\"x\")\nvar ErrY = fmt.Errorf(\"y\")\nvar _ I = (*T)(nil)\nconst c = 1\ntype I interface{}\ntype T struct{}\nvar key = kernel.NewKey[int](\"k\")\n"), ""},
 		{"def constructor", "plugins/a/plugin.go", pk("import def \""+mp+"/sdk/def/clock/v0\"\n", "var h = def.NewHook()\n"), ""},
+		{"plugin.Define", "plugins/a/plugin.go", pk(pimp, "var Plugin = plugin.Define(plugin.Spec[Config]{ID: \"a/b\"})\ntype Config struct{}\n"), ""},
+		{"plugin.Define instantiated", "plugins/a/plugin.go", pk(pimp, "var Plugin = plugin.Define[Config](plugin.Spec[Config]{})\ntype Config struct{}\n"), ""},
+		{"plugin.Define renamed import", "plugins/a/plugin.go", pk("import sdk \""+mp+"/sdk/plugin\"\n", "var Plugin = sdk.Define(sdk.Spec[struct{}]{})\n"), ""},
+		{"other sdk/plugin call", "plugins/a/plugin.go", pk(pimp, "var info, _ = plugin.Describe[struct{}]()\n"), "package-level var info is mutable state"},
+		{"standard library plugin package", "plugins/a/plugin.go", pk("import \"plugin\"\n", "var p, _ = plugin.Open(\"x\")\n"), "package-level var p is mutable state"},
+		{"standard library plugin.Define is not ours", "plugins/a/plugin.go", pk("import \"plugin\"\n", "var p = plugin.Define()\n"), "package-level var p is mutable state"},
 		{"init", "plugins/a/plugin.go", pk("", "func init() {}\n"), "plugin.go:2: init function"},
 		{"method named init", "plugins/a/plugin.go", pk("", "type T struct{}\nfunc (T) init() {}\n"), ""},
 		{"mutable var", "plugins/a/plugin.go", pk("", "var counter int\n"), "package-level var counter is mutable state"},
