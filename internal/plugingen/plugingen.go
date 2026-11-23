@@ -72,6 +72,10 @@ func Generate(dir string) (Result, error) {
 	if err := Requires(&g, defs); err != nil {
 		return Result{}, fmt.Errorf("%s: %w", t.ID, err)
 	}
+	fakes := injected(defs, g.Uses)
+	if err := fakesProvide(fakes, g.Provides); err != nil {
+		return Result{}, fmt.Errorf("%s: %w", t.ID, err)
+	}
 	src, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
 	if err != nil {
 		return Result{}, fmt.Errorf("%s: write the hand-written half of plugin.yaml first: %w", t.ID, err)
@@ -97,7 +101,7 @@ func Generate(dir string) (Result, error) {
 	for _, k := range g.Registers {
 		registers = append(registers, k.Key)
 	}
-	if r.Files[CycleFile], err = cycleTest(t, injected(defs, g.Uses), registers, config); err != nil {
+	if r.Files[CycleFile], err = cycleTest(t, fakes, registers, config); err != nil {
 		return Result{}, err
 	}
 	if slices.Contains(m.Scope, "process") {
@@ -321,6 +325,22 @@ func injected(defs []Definition, uses []plugin.Use) []Definition {
 		}
 	}
 	return out
+}
+
+// fakesProvide fails when a key of provides belongs to a definition of fakes. The
+// fake of a definition provides every key the definition declares, so the cycle
+// test would mount two providers of the key and could never pass.
+func fakesProvide(fakes []Definition, provides []plugin.KeyRef) error {
+	var errs []error
+	for _, d := range fakes {
+		for _, k := range provides {
+			if _, ok := d.Classes[k.Key]; ok && k.Major == d.Major {
+				errs = append(errs, fmt.Errorf("it provides %s@%d, a key of %s, whose fake the cycle test mounts for the key it injects and which provides every key of the definition; "+
+					"declare the keys a plugin provides apart from those it injects", k.Key, k.Major, d.Path))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // cycleConfig returns the Go literal of testdata/cycle.yaml in dir, or "nil". The

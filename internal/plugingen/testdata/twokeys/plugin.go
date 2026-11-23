@@ -3,7 +3,7 @@
 // Package twokeys is a plugin that plugingen refuses to generate from: it injects
 // one key of the launch definition and provides another, so the fake of launch,
 // which provides every key of it, would provide that key a second time in the cycle
-// test.
+// test. It has no plugin.yaml: plugingen refuses it before it reads one.
 package twokeys
 
 import (
