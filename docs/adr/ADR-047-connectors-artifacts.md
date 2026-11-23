@@ -364,7 +364,8 @@ gaps:
       the command is given, `<publisher>/connector-<system>` or, with `--contrib`,
       `contrib/connector-<system>` (`00:657`; `08:407`), `version: 0.1.0`,
       `license: Apache-2.0`, `publisher.id` equal to the owner segment,
-      `stability: experimental`, `scope: [process]` and `runtimes: []` (`07:129`;
+      `stability: experimental`, `scope` set to process in the form ADR-048 fixes, a list
+      or one value (`07:94`, `:128`; ADR-060 decision 33), and `runtimes: []` (`07:129`;
       `08:387`); then the generated half that `plugin check --write` derives,
       `requires.definitions` of the registries the rows feed and no `pluginApi` (`07:139`).
     - `bundle.yaml`: one `insert` item with one row per instantiable plugin of the release
@@ -377,9 +378,16 @@ gaps:
       the `configSchema` that the release's signed manifest carries for that plugin
       (ADR-060 decision 20). Against a release that serves no instantiable plugin, as the
       shipped release at S2a, the command fails with that reason and writes nothing.
-    - `fixtures/` with a README that names what step 5 and the scenario replay, and no
-      recorded file, so that step 5 fails with one line per obligation (`07:1561`;
-      `08:1264`).
+    - `fixtures/` with a README that names the cases that step 5 and the scenario read,
+      and no case. Step 5 runs, for each registry the pack's rows feed, that registry's
+      suite on the pack's rows (`07:1571`; ADR-060 decision 46), and for a pack each
+      obligation of the suite takes its recorded case from the pack's fixtures, at the
+      path the suite fixes for that obligation: `fixtures/<registry>/<obligation id>.json`
+      for `echoers` at S2a. An obligation whose case is missing fails with its id and the
+      path it read. So a fresh pack fails step 5 with one line per obligation (`07:1561`;
+      `08:1264`; ADR-060 decisions 24 and 30, P1), and the fixture of P1 holds one case per
+      obligation. The files of the echo scenario sit beside them, in the layout that
+      scenario fixes (ADR-060 decision 49).
     - `README.md`: what the pack connects to, the `plugin enable <name>:<row>` lines, and
       the profile-layer patch with which an operator sets a row's config, since a patch
       replaces the whole config (`08:157`) and the bundle may hold no `${env:}` or
@@ -389,10 +397,15 @@ gaps:
     - No `content/` and no `testenv/`: content is optional (`07:1838`), and the test
       environment against which an author records is the author's (`07:1658`).
 
-    Two rules follow for an instantiable plugin, and `plugin check` enforces them on its
-    manifest: its `configSchema` carries at least one root `examples` entry, and no example
-    holds an `${env:}` or `${file:}` reference, so a pack written from it passes check 8.
-    Where the derivation takes the examples from is ADR-048's. At S2a the template job and
+    The examples are the files `testdata/config/*.json` of the instantiable plugin, which
+    step 3 of `plugin check` already validates against the derived schema (`07:1569`):
+    `plugingen` writes them, in the byte order of their names, as the root `examples` of
+    the `configSchema` it derives, so the release's signed manifest carries them (ADR-060
+    decisions 11 and 20), and "the first entry" is the first of them. `examples` is a
+    keyword of JSON Schema 2020-12, so this adds no field to the manifest. Two rules follow
+    for an instantiable plugin, and `plugin check` enforces them: it has at least one such
+    file, and no file holds an `${env:}` or `${file:}` reference, so a pack written from
+    it passes check 8. At S2a the template job and
     step P1 write one row of the toy instantiable echoer of the test release (ADR-060
     decisions 24 and 38); from S8a the same command writes rows of `tool-mcp`,
     `signal-ingest-generic-json` and `notifier-webhook` with no change here.
