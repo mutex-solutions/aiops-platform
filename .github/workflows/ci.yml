@@ -132,6 +132,11 @@ jobs:
             go run ./tools/kernelcheck lines sdk/def/$d/v0/fake 800 provisional
             go run ./tools/kernelcheck lines sdk/def/$d/v0/conformance 800 provisional
           done
+      - name: Definition suite line caps
+        # ADR-060 decision 35: a definition's suite is a package of its own, 800 lines,
+        # provisional until the S2a exit.
+        run: |
+          go run ./tools/kernelcheck lines sdk/def/clock/v0/conformance 800 provisional
 
   s1-suites:
     name: S1 exit suites on the built binary
