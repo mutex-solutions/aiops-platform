@@ -54,6 +54,7 @@ func TestImports(t *testing.T) {
 		{"sdk/plugin allowed", "sdk/plugin/a.go", imp("fmt", mp+"/sdk/kernel", mp+"/sdk/def/launch/v0"), ""},
 		{"sdk/plugin third party", "sdk/plugin/a.go", imp("example.com/x"), "sdk/plugin imports the standard library, sdk/kernel and sdk/def only"},
 		{"sdk/plugin test testkit", "sdk/plugin/a_test.go", imp(mp + "/sdk/testkit/kerneltest"), ""},
+		{"sdk/plugin external test", "sdk/plugin/a_test.go", imp(mp+"/sdk/plugin", mp+"/sdk/kernel"), ""},
 		{"sdk/plugin non-test testkit", "sdk/plugin/a.go", imp(mp + "/sdk/testkit/kerneltest"), "sdk/plugin imports"},
 		{"sdk/plugin yaml", "sdk/plugin/a.go", imp("go.yaml.in/yaml/v3"), "YAML package"},
 		{"def imports sdk/plugin", "sdk/def/clock/v0/a.go", imp(mp + "/sdk/plugin"), "sdk/def imports"},
