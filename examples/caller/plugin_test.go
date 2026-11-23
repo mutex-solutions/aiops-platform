@@ -22,7 +22,7 @@ import (
 )
 
 // When the control file changes, the caller calls every echoer and every stamper
-// through the dispatcher and writes what each answered (ADR-060, the answer Q1 (a)).
+// through the dispatcher and writes what each answered (ADR-060 decision 37).
 func TestCallsBothRegistriesWhenAsked(t *testing.T) {
 	home := t.TempDir()
 	run := filepath.Join(home, "run")

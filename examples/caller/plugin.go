@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package caller is example-caller, the toy caller of the S2a test release (ADR-060,
-// the answer Q1 (a)): when a control file asks, it calls every echoer and every
+// Package caller is example-caller, the toy caller of the S2a test release (ADR-060
+// decision 37, Q1 (a)): when a control file asks, it calls every echoer and every
 // stamper through the dispatcher and writes what each answered to a result file that
 // a test reads, as the control rows of ADR-059 decision 9 do. It consumes both toy
 // registries and is in no shipped bundle.
