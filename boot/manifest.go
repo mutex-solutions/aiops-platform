@@ -128,15 +128,11 @@ const jsonSchemaDialect = "https://json-schema.org/draft/2020-12/schema"
 // modes fail on an absent manifestVersion and on a major other than 1
 // (08-profiles-roadmap-adrs.md:497), and on every rule of the schema.
 func ReadManifest(file string, data []byte, mode ManifestMode) (Manifest, error) {
-	if len(data) > MaxFileBytes {
-		return Manifest{}, &Error{File: file, Rule: RuleLimit, Msg: "a manifest is larger than " + strconv.Itoa(MaxFileBytes) + " bytes"}
-	}
-	root, err := parseDocument(file, data)
+	r, root, err := newReader(file, data, RuleManifest, MaxFileBytes, "a manifest")
 	if err != nil {
 		return Manifest{}, err
 	}
 	// manifestVersion says whether an unknown field is ignored, so it is read first.
-	r := &mreader{parser: parser{file: file, literal: true}}
 	var m Manifest
 	var vn *yaml.Node
 	prs, err := r.pairs(root, "", "a manifest")
@@ -300,12 +296,27 @@ func volatileOf(s map[string]any, path string) []string {
 	return out
 }
 
-// mreader reads one manifest. It keeps the first error, after which every read is a
-// no-op that returns a zero value.
+// mreader reads one manifest, or one other file of boot's own formats, whose rule it
+// names in an error. It keeps the first error, after which every read is a no-op that
+// returns a zero value.
 type mreader struct {
 	parser
+	rule   Rule
 	ignore bool // an unknown field is ignored: the lenient mode at a higher minor
 	err    error
+}
+
+// newReader returns a reader of data, the content of file, which what names in an
+// error, with the root of its one YAML document. ${ is text in each of these formats.
+func newReader(file string, data []byte, rule Rule, limit int, what string) (*mreader, *yaml.Node, error) {
+	if len(data) > limit {
+		return nil, nil, &Error{File: file, Rule: RuleLimit, Msg: what + " is larger than " + strconv.Itoa(limit) + " bytes"}
+	}
+	root, err := parseDocument(file, data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &mreader{parser: parser{file: file, literal: true}, rule: rule}, root, nil
 }
 
 func (r *mreader) keep(err error) bool {
@@ -317,7 +328,7 @@ func (r *mreader) keep(err error) bool {
 
 func (r *mreader) fail(n *yaml.Node, format string, a ...any) {
 	if r.err == nil {
-		r.err = r.parser.err(n, RuleManifest, "", format, a...)
+		r.err = r.parser.err(n, r.rule, "", format, a...)
 	}
 }
 
@@ -392,8 +403,11 @@ func (r *mreader) num(n *yaml.Node, what string) int {
 	return int(v.Int)
 }
 
-// list returns the entries of the sequence n, which is present.
+// list returns the entries of the sequence n, or nil when n is absent.
 func (r *mreader) list(n *yaml.Node, what string) []*yaml.Node {
+	if n == nil {
+		return nil
+	}
 	if r.err == nil && r.keep(r.guard(n, "")) && n.Kind != yaml.SequenceNode {
 		r.keep(r.parser.err(n, RuleType, "", "%s must be a list", what))
 	}
@@ -487,10 +501,7 @@ func (r *mreader) schema(n *yaml.Node) map[string]any {
 // never empty (ADR-048 decision 12).
 func (r *mreader) requires(n *yaml.Node, runtimes []string) ManifestRequires {
 	f := r.fields(n, "requires", []string{"pluginApi", "remoteProtocol", "definitions"}, "definitions")
-	q := ManifestRequires{PluginAPI: r.word(f["pluginApi"], "requires.pluginApi", func(s string) bool {
-		_, _, ok := majorMinor(s)
-		return ok || s == ""
-	})}
+	q := ManifestRequires{PluginAPI: r.word(f["pluginApi"], "requires.pluginApi", func(s string) bool { return s == "" || okMajorMinor(s) })}
 	if pn := f["remoteProtocol"]; pn != nil {
 		q.RemoteProtocol = []int{}
 		for _, c := range r.list(pn, "requires.remoteProtocol") {
@@ -525,7 +536,7 @@ func (r *mreader) definitions(n *yaml.Node) map[string][]string {
 		}
 		vs, majors := []string{}, []int{}
 		for _, c := range r.list(pr.v, what) {
-			s := r.word(c, what+" version", func(s string) bool { _, _, ok := majorMinor(s); return ok })
+			s := r.word(c, what+" version", okMajorMinor)
 			major, _, _ := majorMinor(s)
 			vs, majors = append(vs, s), append(majors, major)
 		}
@@ -553,6 +564,11 @@ func majorMinor(s string) (major, minor int, ok bool) {
 	major, _ = strconv.Atoi(m[1])
 	minor, _ = strconv.Atoi(m[2])
 	return major, minor, true
+}
+
+func okMajorMinor(s string) bool {
+	_, _, ok := majorMinor(s)
+	return ok
 }
 
 // okSemver reports whether s is a Semantic Versioning 2.0.0 version, by the regular

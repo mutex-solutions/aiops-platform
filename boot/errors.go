@@ -65,6 +65,11 @@ const (
 	// RuleManifest: a plugin manifest breaks a rule of schema 1.0 or names a major
 	// this reader does not know; gate check 1 denies it (ADR-048 decisions 3 and 24).
 	RuleManifest Rule = "manifest"
+	// RuleAttestation: an attestation statement breaks its format (ADR-020 decision 9).
+	RuleAttestation Rule = "attestation"
+	// RuleTrust: trust.yaml breaks its format or holds a field that waits for S6a
+	// (ADR-020 decisions 5, 6 and 26).
+	RuleTrust Rule = "trust"
 )
 
 // Error is a composition error. It names the file, the line when the YAML
