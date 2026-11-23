@@ -343,6 +343,19 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.dist.add(manifestText("o/prov", "provides: [{key: toy.store, major: 0}]", `requires: {pluginApi: "0.1", definitions: {toy: ["0.2"]}}`),
 				`{"toy": {"version": "0.2"}}`)
 		}, []string{"10 prov attestation stop=false"}},
+		// Decision 55: an attestation passes when it names the served revision.
+		{"a statement of suite revision 0 for a definition served at 1", func(fx *gateFix) {
+			fx.dist.add(manifestText("aiops/echo", "instantiable: true", echoRegisters, echoRequires), `{"echoers": {"version": "0.1", "suite": 0}}`)
+		}, []string{"10 pack:e1 attestation stop=false"}},
+		{"a statement of a positive suite revision for a definition served at 0", func(fx *gateFix) {
+			fx.dist.add(manifestText("o/prov", "provides: [{key: toy.store, major: 0}]", `requires: {pluginApi: "0.1", definitions: {toy: ["0.2"]}}`),
+				`{"toy": {"version": "0.2", "suite": 7}}`)
+		}, []string{"10 prov attestation stop=false"}},
+		{"a pack's statement of a stale suite revision of a registry it feeds", func(fx *gateFix) {
+			fx.art("acme/pack", func(a *Artifact) {
+				a.Record.Attestation = art("acme/pack@0.1.0", hexA, `{"echoers": {"version": "0.1", "suite": 0}}`, `, "scenario": {"name": "echo", "version": 1, "halves": ["kernel"]}`)
+			})
+		}, []string{"10 pack:e1 attestation stop=false"}},
 		{"a pack's statement that lacks the suite of a registry it feeds", func(fx *gateFix) {
 			fx.art("acme/pack", func(a *Artifact) {
 				a.Record.Attestation = art("acme/pack@0.1.0", hexA, `{"echoers": {"version": "0.1"}}`, `, "scenario": {"name": "echo", "version": 1, "halves": ["kernel"]}`)

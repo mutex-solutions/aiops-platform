@@ -471,9 +471,13 @@ func (g *gate) attested(r ComposedRow, s *subject, what string) []RowResult {
 			f("the attestation names %s at %q, and requires names %v", name, v, m.Requires.Definitions[name])
 		}
 	}
-	for _, name := range g.suites(s) {
-		if at.Definitions[name].Suite == nil {
+	suites := g.suites(s)
+	for _, name := range slices.Sorted(maps.Keys(suites)) {
+		switch n := at.Definitions[name].Suite; {
+		case n == nil:
 			f("the attestation lacks the suite revision of %s, which the plugin provides, contributes to or feeds", name)
+		case *n != suites[name]:
+			f("the attestation names suite revision %d of %s, and the distribution serves revision %d (ADR-060 decision 55)", *n, name, suites[name])
 		}
 	}
 	if len(m.Runtimes) == 0 && at.Scenario == nil {
@@ -486,28 +490,27 @@ func (g *gate) attested(r ComposedRow, s *subject, what string) []RowResult {
 	return out
 }
 
-// suites returns the definitions whose suite revision the statement of s must name:
-// those of the keys it provides or registers, and for a pack those of the keys that
-// the plugins of its rows register (ADR-060 decision 56).
-func (g *gate) suites(s *subject) []string {
+// suites returns, by name, the served suite revision of each definition whose revision
+// the statement of s must name: those of the keys it provides or registers, and for a
+// pack those of the keys that the plugins of its rows register (ADR-060 decision 56).
+func (g *gate) suites(s *subject) map[string]int {
 	keys := slices.Concat(s.man.Provides, s.man.Registers)
 	if len(s.man.Runtimes) == 0 {
 		for _, id := range g.feeds[s.id] {
 			keys = append(keys, g.subject(id, false).man.Registers...)
 		}
 	}
-	var out []string
+	out := map[string]int{}
 	if g.in.Dist != nil {
 		for name, sds := range g.in.Dist.Serves.Definitions {
-			if slices.ContainsFunc(sds, func(sd ServedDefinition) bool {
+			for _, sd := range sds {
 				major, _, _ := majorMinor(sd.Version)
-				return slices.ContainsFunc(keys, func(k ManifestKey) bool { _, ok := sd.Classes[k.Key]; return ok && k.Major == major })
-			}) {
-				out = append(out, name)
+				if slices.ContainsFunc(keys, func(k ManifestKey) bool { _, ok := sd.Classes[k.Key]; return ok && k.Major == major }) {
+					out[name] = sd.Suite
+				}
 			}
 		}
 	}
-	slices.Sort(out)
 	return out
 }
 
