@@ -38,6 +38,7 @@ check:
 	$(KC) coverage sdk/kernel/cover.out $(MOD)/sdk/kernel
 	$(KC) imports .
 	$(KC) pluginvet plugins loader boot
+	go run ./tools/deflint .
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader
 	$(KC) lines boot 6800

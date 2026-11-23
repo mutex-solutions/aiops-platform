@@ -102,6 +102,11 @@ jobs:
       - name: Plugin vet
         # plugin-system-2026-11.md §14 (T0 Static); allow-var and allow-go exemptions are counted in the output.
         run: go run ./tools/kernelcheck pluginvet plugins loader boot
+      - name: Definition lint
+        # Standing rule 1 (08-profiles-roadmap-adrs.md:676; ADR-060 decision 32): each
+        # definition under sdk/def has its files, a provider and a consumer among the
+        # plugins of the distributions, and keeps the static rules of 07-c4-plugin-sdk.md:514-520.
+        run: go run ./tools/deflint .
       - name: Boot and loader statement coverage profiles
         run: |
           go test -count=1 -coverprofile=cover-boot.out ./boot
