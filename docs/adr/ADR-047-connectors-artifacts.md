@@ -206,7 +206,8 @@ gaps:
    - The fixtures layer has the same form; nothing unpacks it into the home. The name lint
      of `plugin check` step 1 already covers content paths (`07:1567`).
 
-4. **The OCI client** that `plugin push`, `inspect` and `install` use is
+4. **The OCI client** that `plugin pack`, `sign`, `push`, `inspect`, `gate --against`,
+   `install` and `verify` use is
    `oras.land/oras-go/v2@v2.7.0`, which `08:1403` and licence:43 already list among the
    linked libraries (as ORAS, Apache-2.0, without a version). The operations plugin links it
    (ADR-060 decision 41), and with it both binaries of the release table (`08:359`); `boot`
@@ -297,10 +298,11 @@ gaps:
    one path per site (`07:1843`; `02:313`), and from S2b a remote plugin has one shared
    instance per site (`08:386`; `02:312`), so a site holds one digest of a plugin id. This
    departs from dsh, which installs with pnpm inside each profile directory, so that each
-   profile can hold its own version of a package (dsh-architecture §4.2). Install of an id
-   whose kept files (decision 5) are at the same digest, into another profile, appends
-   that profile's bundle list and reuses them. Install of an id kept at another digest
-   refuses, names the kept digest and the profiles that name the id, and writes nothing. A
+   profile can hold its own version of a package (dsh-architecture §4.2). Install into a
+   profile of an id that another profile names, with its kept files (decision 5) at the
+   same digest, appends that profile's bundle list and reuses them. Install of an id that
+   a profile names at another digest refuses, names the kept digest and the profiles that
+   name the id, and writes nothing. A
    new version arrives by `update` at S6b (`08:377`), or by `remove` and `install`. A
    `profile rollback` at S6b that would return a lock to another digest of an id
    (`08:378`) is bound by this rule or needs content kept per digest; S6b chooses, and its
@@ -405,10 +407,10 @@ gaps:
     keyword of JSON Schema 2020-12, so this adds no field to the manifest. Two rules follow
     for an instantiable plugin, and `plugin check` enforces them: it has at least one such
     file, and no file holds an `${env:}` or `${file:}` reference, so a pack written from
-    it passes check 8. At S2a the template job and
-    step P1 write one row of the toy instantiable echoer of the test release (ADR-060
-    decisions 24 and 38); from S8a the same command writes rows of `tool-mcp`,
-    `signal-ingest-generic-json` and `notifier-webhook` with no change here.
+    it passes check 8. At S2a the template job and step P1 write one row of the toy
+    instantiable echoer of the test release (ADR-060 decisions 24 and 38); from S8a the
+    same command writes rows of `tool-mcp`, `signal-ingest-generic-json` and
+    `notifier-webhook` with no change here.
 
 ### The home
 
@@ -440,9 +442,10 @@ gaps:
     whose owner is not its effective user, so a run as another user cannot leave a file
     that the kernel cannot read. The kernel, as a binary or as a container, runs with the
     uid and gid of the home's owner as the host sees them. For a container that is a
-    property of the runtime's user mapping, not of the image: the exit runs rootful Docker
-    with `--user <uid>:<gid>` of the owner (ADR-060 decision 30), and any other runtime
-    and mode qualifies whose mapping gives the same, such as rootless Podman with
+    property of the runtime's user mapping, not of the image: the container runtime of the
+    exit's clean machine (ADR-060 decision 30) is rootful Docker, run with `--user
+    <uid>:<gid>` of the owner, and any other runtime and mode qualifies whose mapping
+    gives the same, such as rootless Podman with
     `--userns=keep-id`. A mapping to a subordinate uid of the host cannot read a 0600 file
     of the home, and boot then fails on the first file it reads. On a host with SELinux
     enforcing, each bind of decision 15 also needs a label the container may read (the
@@ -476,11 +479,14 @@ gaps:
 ## Consequences
 
 - The S2a code gains, in the operations plugin, the writer and reader of decisions 1 to 3
-  on `oras-go`, for a registry and for the local layout of decision 1, and the checks of decisions 3, 6 and 7 at install. `boot` gains the reader
-  of `bundles/<plugin id>/`, the group row of decision 5, the boot rule of decision 6,
-  the clause of decision 11 and the lock entries of decision 8; the bundle names of `profile.yaml` admit a plugin id;
+  on `oras-go`, for a registry and for the local layout of decision 1, and the checks of
+  decisions 3, 6, 7 and 10 at install. `boot` gains the reader of `bundles/<plugin id>/`,
+  the group row of decision 5, the boot rule of decision 6, the clause of decision 11 and
+  the lock entries of decision 8; the bundle names of `profile.yaml` admit a plugin id;
   `internal/serve` creates `run/` with mode 0700 and finds it present under a read-only
   home.
+- The exit gains the container case of decision 15: the kernel reads the 0600 files of
+  the home and writes `run/` under the user mapping of decision 14.
 - A site cannot hold two digests of one plugin id, and, with question Q2 (a), two
   artifacts of one name in one profile, so two publishers' packs for one system never
   share a profile.
@@ -551,7 +557,7 @@ both `connector-victorialogs`. dsh names a bundle by its scoped package name
 (`@deepseek-ai/dsh-base`; dsh-architecture §3.1, §3.2), so two owners' bundles of one
 short name coexist there as packages, and a profile here names a bundle by its plugin id
 under every option (community:296). dsh mounts no group per bundle (§3.2), so the group,
-and a clash of its id, are ours under every option.
+and a clash of its id, depart from dsh under every option (`00:478`).
 - (a) Install composes the target profile with the artifact's bundle appended, as boot
   would, and refuses when the group id equals the id of any row of that composition, the
   group of the other artifact included. It names both, writes nothing and exits 1 with the
