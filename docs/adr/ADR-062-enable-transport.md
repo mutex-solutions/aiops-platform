@@ -1,9 +1,10 @@
 # ADR-062: The enable transport: how `aiopsctl` submits a generation before `admin-api`
 
-- Status: **proposed 2026-11-23, awaiting the project owner.** Nothing in this ADR is in
-  force. `00-decisions.md` is unchanged and wins until the owner accepts this ADR and the
-  edits it lists in "Edits on acceptance" land in the commit that records the answers
-  (`08:997`).
+- Status: **accepted 2026-11-23 by the project owner.** The owner answered all nine
+  questions on the same date with the recommended option of each; the section "Owner
+  answers of 2026-11-23" records them as decisions 19 to 27. The commit that records the
+  answers makes the edits of "Edits on acceptance" for the chosen options,
+  `00-decisions.md` among them (`08:997`), as the section of the answers lists.
 - Scope: the transport that ADR-060 decision 48 (question Q12, answer (c)) leaves open:
   how `aiopsctl plugin enable`, `disable`, `remove` and `install` submit one generation to
   the running process's reload queue before `admin-api` exists. Decision 48 asks for the
@@ -661,6 +662,7 @@ edits `00:275`.
   failure of the transport leaves the queue and the required set alone; and under Q7 (a)
   the row leaves whole at S6a. Its cost is one row and the edit of `00:275`. Needed
   before the row merges.
+- **Answered 2026-11-23: (a)**, decision 19.
 
 **Q2. What goes over the socket?** The reply is the reload `Result`, and `Op` carries no
 content (ADR-059 decision 48), so a request is small.
@@ -673,6 +675,7 @@ content (ADR-059 decision 48), so a request is small.
   `aiops-core`, which ADR-054 decision 23 refuses.
 - Recommended: (a). It needs the standard library only, two request kinds cover a submit
   and a reconnect, and the golden test freezes it. Needed before the wire types merge.
+- **Answered 2026-11-23: (a)**, decision 20.
 
 **Q3. What does plugin vet say about a listener?** Vet has no listener rule (Context), and
 the revisit of ADR-059 decision 52 names "another row needs a listener" as its trigger.
@@ -690,6 +693,7 @@ the revisit of ADR-059 decision 52 names "another row needs a listener" as its t
   opens through the packages of decision 13 a reviewed list entry, which `plugin check`
   also enforces for third parties, while (b) lets any first-party file add one with a
   comment and (c) lets any plugin open one. Needed before the row merges.
+- **Answered 2026-11-23: (a)**, decision 21.
 
 **Q4. How does the client's dial meet the dial rule?** `07:1400` and harness:58 have
 plugin vet refuse "a dial or an HTTP client outside `dialer`" for every plugin. The client
@@ -705,6 +709,7 @@ of this socket is in the operations plugin of ADR-060 decision 41, which dials
   needed, and both lines are edited to "no network dial".
 - Recommended: (a). It leaves the written rule whole and names the one departure, where
   (b) narrows the rule for every plugin. Needed before the client merges.
+- **Answered 2026-11-23: (a)**, decision 22.
 
 **Q5. What happens to the files when the generation fails?** `08:374` restores a snapshot
 on a failure of `install`, `remove` and `purge`; `08:375` says of `enable` and `disable`
@@ -721,6 +726,7 @@ only "one generation, forward". dsh carries "snapshot and restore" (`08:76`, row
 - Recommended: (a). Under (b) the next start boots a departure that the verdict refused,
   and the boot rules differ from the live ones (ADR-059 decision 15), so the failure
   shows up again in another form. Needed before `enable` merges.
+- **Answered 2026-11-23: (a)**, decision 23.
 
 **Q6. What does a command answer when nothing answers on the socket?** `00:490` says
 "without the `reload` row every change answers `restart-required`". ADR-060 decision 23
@@ -738,6 +744,7 @@ which decision 9 handles by connecting.
   what the files say, and an install before the first start exits 0. A process that
   crashed without writing `stopped` reads as running, and `restart-required` is then
   true. Needed before the exit test is written.
+- **Answered 2026-11-23: (a)**, decision 24.
 
 **Q7. How does the socket relate to `admin-api`?** At S4a `admin-api` carries bindings and
 platform users only (`03:145`; `08:697`). From S6a "every plugin operation goes through
@@ -759,6 +766,7 @@ while `00:490` lists `aiopsctl` among the submitters.
   the owner may prefer for a single host with no identity provider, at the cost of an
   edit of `02:208` and a rule for several processes. Needed before the row merges, since
   (a) and (b) edit `00:275` differently.
+- **Answered 2026-11-23: (a)**, decision 25.
 
 **Q8. How does the dsh table record the socket?** The table of `08` §1.1, numbered as in
 plugin record §15, is how the owner checks the plan against dsh (`08:30`), and "no
@@ -781,6 +789,7 @@ operations.
   exists, since the owner checks the plan there; "added" claims no dsh property, so no
   adaptation is argued from schedule, and the row says what forces it. Needed before the
   row merges.
+- **Answered 2026-11-23: (a)**, decision 26.
 
 **Q9. What does `plugin smoke` do with `reload-socket`?** At S2a smoke boots the release's
 `aiops-core` bundle and the plugin's bundle with its rows enabled, and passes when every
@@ -800,3 +809,83 @@ apply when `run/` is not mode 0700 and owned by the process's user, or when the 
   submitter, so (a) keeps a smoke result about the plugin under test, while the row's own
   cycle test and T3 boot still run (decision 18). (b) keeps reading 1 to the letter at
   the cost of failures that depend on the author's runtime. Needed before smoke merges.
+- **Answered 2026-11-23: (a)**, decision 27.
+
+## Owner answers of 2026-11-23
+
+The project owner accepted this ADR on 2026-11-23 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option.
+Each decision below names the question it answers. Where a decision above leaves a point
+to a question, the decision here settles it.
+
+19. **A new row `reload-socket` of `aiops-core` serves the socket** (Q1 (a)). The row of
+    decisions 1 and 2 is a bound consumer of `reload`, is in no required set and is
+    disabled by the `aiops-cli` bundle. `00:275` gains it.
+
+20. **JSON lines, version 1, go over the socket** (Q2 (a)). The socket is a stream socket
+    that carries the requests `submit` and `await` and the reply forms of decisions 6 and
+    7, and the wire types are a file of `sdk/def/reload/v0` (decision 8).
+
+21. **Plugin vet refuses a listener outside a list of plugin ids** (Q3 (a)). Vet refuses
+    every call of decision 13 that opens a listener or binds a socket, except those that a
+    list in the vet package allows per plugin id under the reserved owner `aiops`. At S2a
+    the list holds one entry, `net.ListenUnix` for `aiops/reload-socket`; `http-server`
+    joins it with its own ADR at S3. `07:471`, `07:1400` and `08:1258` state the rule.
+
+22. **The client's dial is one named exception to the dial rule** (Q4 (a)). When the dial
+    rule of `07:1400` and harness:58 is built, the operations plugin of ADR-060 decision
+    41 may call `net.DialUnix`, with the network `unix`, for the socket of decision 3; the
+    rule stays as written for every other plugin and every other dial (decision 14).
+    `07:1400` and harness:58 name the exception.
+
+23. **All four commands restore the snapshot when the generation fails** (Q5 (a)).
+    `enable`, `disable`, `remove` and `install` restore the snapshot of `08:374` when the
+    row refused the submission before it had an id, or when the final result is
+    `rejected`, `rolled back`, `rollback failed`, or `abandoned` after its generation was
+    applied, so the files on disk match the tree that runs. With no final result they
+    submit once more, and where the verdict stays unknown they keep the files (decisions
+    10 and 11). `08:375` gains that sentence.
+
+24. **`status.json` decides what a command answers when nothing answers on the socket**
+    (Q6 (a)). When no process runs the command's profile on the home, `aiopsctl` keeps the
+    files, says that the change applies when the process starts and exits 0. When a
+    process runs that profile and does not answer within `--connect-wait`, the command
+    answers `restart-required` and exits 1 (decision 9).
+
+25. **The socket bridges to S6a** (Q7 (a)). S4a changes nothing for the socket. At S6a
+    the four commands move to `admin-api` and `plugin-manager`, and the commit that moves
+    them removes `reload-socket` from `aiops-core` with its consumer binding, its vet
+    entries and the wire types (decision 15). The row is therefore not counted at P1
+    scope: the count of `aiops-core` stays 11, and the figure `02-plugin-distribution`
+    does not change. What decision 2 and "Edits on acceptance" write for Q7 (b) does not
+    apply: `aiops-hosted` does not disable the row, and ADR-038 need not state which
+    process serves the socket.
+
+26. **The dsh table records the socket as row 64, status added** (Q8 (a)). Row 64 of
+    `08` §1.1 and of plugin record §15 reads "A host-local path for `aiopsctl`: the row
+    `reload-socket` serves the `reload` queue on a Unix socket in `run/`, checked by the
+    directory, the socket mode and the peer's uid", forced by ADR-060 decision 48, from
+    S2a to S6a. The counts read 64 rows and 9 added.
+
+27. **`plugin smoke` boots with a `--patch` file that disables `reload-socket`** (Q9
+    (a)). The profile that smoke boots still lists `aiops-core`, every other row is judged
+    as written, and `07:1578` names the patch. The row's own cycle test and T3 boot still
+    run, and of the smoke test of decision 18 the case for (a) applies.
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:997`), and that commit makes the edits that "Edits on acceptance" and the chosen
+options name: `00:275`; the text under the figure `02-plugin-distribution`
+(`02:185-187`), whose list of what is not drawn names the socket, and the relation after
+`02:207`; `03:75` and `:551`; `07:471`, `:1400`, `:1578` and `:1855`; `08:271`, `:375`,
+`:446` and `:1258`, and row 64 of the table of `08` §1.1 with its counts (`08:32-37`);
+harness:58; plugin record §15, its row 64 and its counts; ADR-047 decisions 10, 13 and
+14; ADR-059 decision 52; and ADR-060 decisions 30 (step C4), 36 and 48. The same commit
+keeps the lines that restate them consistent: the counts of the dsh table at `00:91`;
+the lists of vet's rules at `00:297` and in plugin record §14, which restate
+`08:1258`; `enable` and `disable` in plugin record §12, which restates `08:375`; and reading 1 of
+ADR-060 decision 58, which `07:1578` restates. Left to later commits: the row of this
+ADR in the ADR table of `08` §3, and the next free number at `08:997`, to the commit
+that brings that table to the ADRs accepted on 2026-11-23; and the lines of ADR-061 that
+name the transport ADR, its table of submission outcomes and its item on `tree
+--effects`, to the commit that brings ADR-061 to this ADR (decision 16). An option the
+owner did not choose edits nothing.

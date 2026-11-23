@@ -34,7 +34,7 @@ The founding requirement is the dsh architecture: everything is a plugin behind 
 | carried | 20 | The semantics are unchanged |
 | adapted | 24 | The property holds in another form; the row says how and what is lost |
 | not carried | 11 | The property is absent; the row says why |
-| added | 8 | Not a dsh property; the row says what forces it |
+| added | 9 | Not a dsh property; the row says what forces it |
 
 No adaptation is argued from schedule. Each one is forced by a Go server with several tenants and several replicas.
 
@@ -103,6 +103,7 @@ No adaptation is argued from schedule. Each one is forced by a Go server with se
 | 61 | Hook ownership, declared listeners and stages, access classes | added | Deterministic chains and third-party rows |
 | 62 | Typed scope values written only by the provider of the owning key | added | Tenancy without the word tenant in the kernel |
 | 63 | Generations with a composer state machine, canary replica, `module-missing`, quarantine, a breaker per (tenant, row), the durable namespace registry | added | Multiple replicas and unattended operation. On one process `reload` is the committer; the composer, the canary and quarantine arrive at S4b and S6b behind the same definitions (§1.3) |
+| 64 | A host-local path for `aiopsctl`: the row `reload-socket` serves the `reload` queue on a Unix socket in `run/`, checked by the directory, the socket mode and the peer's uid | added | A live enable at S2a, before `admin-api` carries plugin operations (ADR-060 decision 48). From S2a to S6a, when the commands move to `plugin-manager` (ADR-062 decision 26) |
 
 **How the checklist stays true.** "Faithful" is a tested property, not a claim. A differential test runs the same scripted scenarios on Cordis 4.1.0 with loader 1.1.0, vendored from the harness repository at a pinned commit as a test-only oracle with `cosmokit`, `schemastery` and both MIT notices, and on the Go kernel, and compares settled states and status traces. It covers the carried rows of the kernel and excludes the properties this table marks adapted or not carried: dispatch without a filter, `global`, registration order and `ctx.get`. The adapted and added rows are proven by the conformance suites, the recomposition suite, the failure matrix (§1.6) and `test/policy-bypass/`. The pin moves only by ADR, with the differential test re-run (ADR-035). The research note `dsh-architecture.md` describes Cordis 4.0.5 and is wrong on the epoch (row 11); it is corrected under the same ADR.
 
@@ -269,7 +270,7 @@ Numbers give the bundle's position in the profile's `bundles` list; a dash means
 | `aiops-dashboard-app` (P2) | later | optional | optional | optional | optional | - |
 | Bundles of installed artifacts (connector packs, plugins) | per artifact | last | last | last | last | last |
 
-`aiops-core` holds the process basics shared by the server, the CLI and tests, so it is first in every server profile and, with `aiops-cli`, forms the `cli` profile: `aiopsctl` is a profile of the same launcher, and a plugin contributes its own subcommands through `commands`. A bundle that holds a command ships it in a companion bundle of command rows that need only what the `cli` profile serves, such as `aiops-chatops-slack-cli`, and install into the profile `cli` takes in-process code only, after `dist use`, refusing a pack and remote code (ADR-061 decision 40). Three of its eleven rows arrive on the way to the release: `remote` at S2b, `plugin-manager` and `plugin-index` at S6a. `composer` is a row of `aiops-base` from S4b, composed only by a profile that runs more than one process, and is not among the 54; no profile of the first community release composes it (§1.3). A server profile that carries `aiops-stack` also lists `agent-base`, because the agent config templates are `fleet-template-<feature>` rows, contributions to the `fleetTemplates` registry, which `fleet-composer`, the seventh row of `agent-base`, provides and `fleet` injects. From P2 the same profiles also list `agent-security`, after `agent-base`, for its one template row (`00-decisions.md` §6.2, §6.3). The `loader` row is mounted by `boot` and belongs to no bundle.
+`aiops-core` holds the process basics shared by the server, the CLI and tests, so it is first in every server profile and, with `aiops-cli`, forms the `cli` profile: `aiopsctl` is a profile of the same launcher, and a plugin contributes its own subcommands through `commands`. A bundle that holds a command ships it in a companion bundle of command rows that need only what the `cli` profile serves, such as `aiops-chatops-slack-cli`, and install into the profile `cli` takes in-process code only, after `dist use`, refusing a pack and remote code (ADR-061 decision 40). Three of its eleven rows arrive on the way to the release: `remote` at S2b, `plugin-manager` and `plugin-index` at S6a. `reload-socket` serves from S2a to S6a (ADR-062), so it is not among the eleven. `composer` is a row of `aiops-base` from S4b, composed only by a profile that runs more than one process, and is not among the 54; no profile of the first community release composes it (§1.3). A server profile that carries `aiops-stack` also lists `agent-base`, because the agent config templates are `fleet-template-<feature>` rows, contributions to the `fleetTemplates` registry, which `fleet-composer`, the seventh row of `agent-base`, provides and `fleet` injects. From P2 the same profiles also list `agent-security`, after `agent-base`, for its one template row (`00-decisions.md` §6.2, §6.3). The `loader` row is mounted by `boot` and belongs to no bundle.
 
 Agent profiles: `agent-host` is `agent-base`, `agent-host`; `agent-k8s` is `agent-base`, `agent-k8s`. From P2, `agent-security` and the `agent-windows` variant are appended.
 
@@ -373,7 +374,7 @@ Scope of the figure: the `aiops-only` profile of one self-host site, with the de
 |---|---|---|
 | `list`, `inspect` | Rows with plugin, version, runtime, scope, state, epoch, what each waits for, health, effects, signer and origin artifact; what a spec names, with every row config and content path of a pack, fetching only the artifact's manifest and bundle, never its content, module or image, and running nothing (ADR-060 decision 58). Per tenant with `--tenant` from S4b | S6a |
 | `install`, `remove`, `purge` | Install as below; a failure restores a snapshot of the profile definition, `plugins.lock` and the profile patch. `remove` detaches the row and keeps durable state; `purge` drops the plugin's durable namespaces through `durable` (ADR-042), for one tenant with `--tenant <id>` from S4b | S6a |
-| `enable`, `disable` | Writes only a departure from the bundle layers into the profile layer; one generation, forward. With `--tenant <id>` it writes a tenant overlay | S6a; `--tenant` from S4b |
+| `enable`, `disable` | Writes only a departure from the bundle layers into the profile layer; one generation, forward; a result that refuses or fails the generation restores the snapshot of the profile definition, `plugins.lock` and the profile patch, as for `install` (ADR-062 decision 11). With `--tenant <id>` it writes a tenant overlay | S6a; `--tenant` from S4b |
 | `search`; `index add`, `compose`, `sign`, `verify` | Resolve an `<id>@<version>` spec in a configured index after verifying its signature; compose, sign and verify an index document, the commands our own index CI uses | S6a |
 | `update --cohort` | Check, apply to a cohort or tenant, judge, promote or restore (`00-decisions.md` §6.4) | S6b |
 | `profile rollback --scope process\|tenant/<id> --to <generation>` | Returns the whole scope, lock digests included, to an earlier committed generation | S6b |
@@ -444,7 +445,7 @@ The figure shows the main path of each runtime, drawn as one chain in the order 
 | `aiopsctl` | `builder` | In-process only: `dist build` from `dist.yaml`, then `dist sign` with the site's key |
 | `builder` | Distribution image | Writes the image with its module table, notices and SBOM; `dist use` rolls it |
 | Operator's orchestrator | Remote plugin instance | Starts the unit (compose, systemd or Helm); the kernel never launches a plugin process |
-| `aiopsctl` | Server process | `plugin enable <row>` submits one generation to the reload queue |
+| `aiopsctl` | Server process | `plugin enable <row>` submits one generation to the reload queue, over `<home>/run/reload.sock` until S6a (ADR-062) |
 | Server process | Remote plugin instance | The proxy row dials it over mutual TLS and handshakes before the row is ACTIVE |
 
 ### 1.6 Failure policy and compatibility gate
@@ -1256,7 +1257,7 @@ There is no top-level `conformance/`, `proto/` or `kernel/` directory. A suite l
 | `sdk/kernel` has no `require` line, no product word, no policy number beyond its three deadlines and no service name beyond its four built-ins. Growth past the line budget fixed at the S0 exit, or a new package under `sdk/kernel`, `boot/` or `loader/`, needs an ADR | CI checks in `tools/` (module file, vocabulary, line budget), not review (plugin record §3) |
 | `boot/` and `loader/` import `sdk/kernel`, `sdk/def/launch`, `sdk/def/loader` and `sdk/def/composition`, and nothing else from `sdk/def/` or `plugins/` | import analyzer in `tools/` |
 | A plugin under `plugins/` imports the SDK and its own dependencies only: definitions, never a provider, and never `plugins/B`. Everything but `plugin.go` is under `internal/` | import analyzer (T0) |
-| A plugin has no bare `go` statement, no package-level mutable state, no `init`, no default registry or mux | plugin vet (T0) |
+| A plugin has no bare `go` statement, no package-level mutable state, no `init`, no default registry or mux, and no listener outside the list of ADR-062 decision 13 | plugin vet (T0) |
 | The generated manifest fields (`uses`, `provides`, `registers`, `hooks`, `configSchema`, `durable`, `requires`) equal the `Spec` and the `definition.yaml` versions it was built against | parity check in CI, Go and Python |
 | No `fake` or `sdk/testkit` package appears in the package graph of a server binary | `aiopsctl dist build`; gate check 7 (§1.6) |
 | No row of the other bundles of `aiops-only` needs a key that only an `aiops-stack` row provides | the static graph of `aiopsctl profile render` on `aiops-only`, in CI (`00-decisions.md` §6.3) |

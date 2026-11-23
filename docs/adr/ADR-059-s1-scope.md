@@ -579,7 +579,8 @@ decisions win.
       server assembled in steps. The rule is syntactic: a struct field, an embedded
       field, a type alias and a nil variable escape it. It is revisited at S3 if the
       `http-server` provider must assemble its server in steps or another row needs a
-      listener.
+      listener. Note of 2026-11-23: ADR-062 decision 13 answers the "another row needs
+      a listener" part of this revisit; the `http-server` part stays at S3.
 
 53. **The suites use the kernel seam only to observe** (item 17), beside decision 9. The
     kernel-side oracle reaches the root through the `Kernel` field of `boot.RunOptions`

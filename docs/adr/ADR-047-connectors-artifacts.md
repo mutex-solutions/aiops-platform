@@ -343,7 +343,9 @@ gaps:
     snapshot of `08:374` never leaves a lock entry without its files. A failure between
     those steps can leave either directory with no profile that names the id; install
     removes such a leftover, and says so, after the checks of decision 7 and before it
-    writes.
+    writes. Note of 2026-11-23: `remove` deletes the two directories only after a final
+    result that shows the change, or when no process runs the profile, and keeps them
+    where the verdict stays unknown (ADR-062 decision 11).
 
 ### The gate rule
 
@@ -431,7 +433,7 @@ gaps:
     | `image.yaml`: one field, `image`, the reference by digest of the image that `dist use` verified | `aiopsctl` `dist use` | Read-only, and the kernel does not read it: the host starts the container from it (decision 15) | ADR-060 decision 22 |
     | `write.lock`, the one write lock of the home | `aiopsctl`: every method of the operations library that writes the home holds it | Read-only; the kernel takes no lock and does not read it at S2a | ADR-061 decision 19 |
     | `snapshot/`: a copy of every file a write replaces or deletes and the list of the paths it creates | `aiopsctl`: every method of the operations library that writes the home, which removes it after the submission or restores it | Read-only; the kernel does not read it at S2a | ADR-061 decisions 17 and 19 |
-    | `run/` | The kernel: `status.json`, the files of the test control rows, and the submission socket if the transport ADR of ADR-060 decision 48 takes the candidate | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
+    | `run/` | The kernel: `status.json`, the files of the test control rows, and `reload.sock` and `reload.lock` of `reload-socket` (ADR-062) | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
 
     At S2a the kernel writes nothing outside `run/`. Later paths join the table with their
     step: `tenants/` at S4b and `profiles/<p>/compatibility.yaml` at S6b (`08:508`). From
@@ -454,8 +456,8 @@ gaps:
     of the home, and boot then fails on the first file it reads. On a host with SELinux
     enforcing, each bind of decision 15 also needs a label the container may read (the
     `z` option of the bind in Docker and Podman), which the exit does not test. Only the
-    site user can then open the socket in `run/` that ADR-060 decision 48 names as the
-    candidate transport, and no other unprivileged user of the host reads or changes a
+    site user can then open `run/reload.sock`, the socket of ADR-062, and no other
+    unprivileged user of the host reads or changes a
     file of the home between install and boot. Any protection of the records of install
     and `dist use` beyond that is ADR-020's (`07:75` R17).
 

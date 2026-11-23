@@ -72,7 +72,7 @@ The figure shows the main path: the profile layers and the signed distribution m
 | `remote` | row; `aiops-core`; S2b; one proxy row per remote plugin instance (`aiops/remote`) | none | `sidecars`, `tenantMint` (C) | The in-process fiber of an out-of-process plugin. It opens every connection with the frozen handshake and registers the plugin's contributions with the dispatchers that serve their definition versions (§8.6). One shared instance per plugin on self-host; one per (tenant, plugin) in hosted, from S4b. |
 | `composer` | row; `aiops-base`, from S4b, composed only in profiles that run more than one process; a leader on the worker role | none | `platformSql` (C), `reload` (C), `durable` | Owns one generation state machine per scope: `proposed`, `canary`, `promoting`, `committed` or `rolled-back`. Replicas report and never select a generation. No profile of the first community release composes it: there `reload` commits. |
 | `durable` | provider; `aiops-base`, a leader on the worker role | `durable` (`-`), `durablePurge` (`C`) | `platformSql` (C) | The registry of durable namespaces, per plugin and tenant. It creates schemas and per-plugin roles, runs migrations under the owner role, and purges a namespace on `plugin purge` and on tenant delete. |
-| `reload-generation` (hosted, S4b), `reload-watch-files` (dev) | rows | none | `reload` (C) | Followers: the first submits when the mounted generation object changes, the second when a layer file changes. Server profiles on self-host run neither, and a change goes through `aiopsctl` or `plugin-manager`. |
+| `reload-generation` (hosted, S4b), `reload-watch-files` (dev), `reload-socket` (`aiops-core`, S2a to S6a) | rows | none | `reload` (C); `reload-socket` also `cmdline` | Followers: the first submits when the mounted generation object changes, the second when a layer file changes. `reload-socket` submits what `aiopsctl` asks on `<home>/run/reload.sock` (ADR-062). Server profiles on self-host run neither follower, and a change goes through `aiopsctl` or `plugin-manager`. |
 
 | From → to | Interface | Why it matters |
 |---|---|---|
@@ -548,7 +548,7 @@ This is the one role-placement table of the set; 04, 05 and 06 link here. Placem
 
 | Rows | edge | api | worker |
 |---|---|---|---|
-| `loader`; `telemetry`, `log-export`, `clock`, `restart-policy`, `reload`, `readiness`, `config-refs`, `plugin-inventory`; `reload-generation` (hosted) | yes | yes | yes |
+| `loader`; `telemetry`, `log-export`, `clock`, `restart-policy`, `reload`, `reload-socket` (S2a to S6a), `readiness`, `config-refs`, `plugin-inventory`; `reload-generation` (hosted) | yes | yes | yes |
 | `sql-postgres`, `kv-postgres`, `blob-s3`, `events-outbox`, `limiter`, `dialer-guarded`, `secrets`, the `kek` provider, `tenant-directory`, `tenant-handle`, `tenant-trees`, `identity` and its verifier rows, `audit-chain` | yes | yes | yes |
 | `jobs-river` | insert only | insert only | workers and leader |
 | `http-server` | edge listener | public and internal listeners | health only |

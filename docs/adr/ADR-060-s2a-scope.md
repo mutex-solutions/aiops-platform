@@ -535,7 +535,9 @@ gaps:
     - **C4.** `plugin enable` enables the rows (question Q11) and they reach the running
       process (question Q12). The `teststate` row of the test release (question Q2)
       writes the committed state, and the step passes when every row of the composition
-      is ACTIVE in it.
+      is ACTIVE in it. It also passes only when the final result that `plugin enable`
+      prints is `passed`, shows the change as ADR-062 decision 11 says, and names the
+      generation that `teststate` reports (ADR-062 decision 18).
     - **C5.** Both are called (question Q1): each echoer answers through the dispatcher
       with the reply its code or its row config fixes.
     - **C6.** The composition holds no policy row and no tenant row (`08:694`).
@@ -724,7 +726,9 @@ row 53), so it covers the new gate checks.
     directions, cosign verifying an `aiopsctl`-signed artifact and distribution manifest
     and `aiopsctl` verifying cosign-signed ones in key mode (`07:75`, `:1852`;
     `08:1379`); the `s2a-exit` job and its local-toolchain variant, race-built and
-    failing on any race report as `s1-suites` does; the caps of decision 35. None pushes,
+    failing on any race report as `s1-suites` does; the caps of decision 35; and, in the
+    `test` job, the peer-credential step of ADR-062 decision 18, whose Makefile target
+    `make check` does not run, since it needs passwordless `sudo`. None pushes,
     publishes or holds a long-lived key.
 
 ## Consequences
@@ -1287,7 +1291,10 @@ to a question, the decision here settles it.
     socket under `<home>/run/` that only the site's user can open; a row beside `reload`
     is not in the list of `00:275`, so that form edits it. The transport, its plugin vet
     rule and how it relates to `admin-api` at S4a are written in an ADR before the exit
-    test. Decision 27 keeps `dev` to `aiops-core` at S2a.
+    test. Decision 27 keeps `dev` to `aiops-core` at S2a. Note of 2026-11-23: ADR-062
+    settles the transport: the row `reload-socket` of `aiops-core`, a bound consumer of
+    `reload` beside it, serves `<home>/run/reload.sock` from S2a to S6a, and `00:275`
+    lists it.
 
 49. **A pack attests the echo scenario at S2a** (Q13 (a)). A scenario is a named,
     versioned script run inside `aiopsctl`, with its halves named. The S2a pack carries
@@ -1357,7 +1364,8 @@ to a question, the decision here settles it.
     1. **Smoke.** At S2a the test-only profile that `plugin smoke` boots is the release's
        `aiops-core` bundle plus the plugin's bundle with its rows enabled, and smoke
        passes when every row is ACTIVE or says what it waits for, the boot rule of `dev`
-       (`08:738`). It edits `07:1576`.
+       (`08:738`). It edits `07:1576`. Note of 2026-11-23: smoke boots that profile with
+       a `--patch` file that disables `reload-socket` (ADR-062 decision 27).
     2. **Inspect.** `inspect` fetches only the manifest and the bundle, never content,
        module or image, and runs nothing. It edits `08:373` and `07:1853`.
     3. **`wasm`.** Check 1 denies it, as a runtime this schema version does not serve,
