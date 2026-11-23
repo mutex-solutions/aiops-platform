@@ -107,7 +107,9 @@ jobs:
       - name: Import boundaries (U2)
         # docs/architecture/07-c4-plugin-sdk.md:27-48; the import boundary U2 of ADR-054
         # decision 13 reads the modules, plugins and importers of the upstream register.
-        # Skips the server-closure part until cmd/aiops exists.
+        # The closure of cmd/aiops holds no fake or sdk/testkit package, and the link guard
+        # of ADR-060 decision 28 keeps every package under test/ and examples/ out of the
+        # closures of cmd/aiops and cmd/aiopsctl.
         run: go run ./tools/kernelcheck imports . tools/upstream-components.yaml
       - name: Plugin vet
         # plugin-system-2026-11.md §14 (T0 Static); allow-var and allow-go exemptions are counted in the output.
@@ -121,7 +123,8 @@ jobs:
         # ADR-060 decisions 11 and 36 (08-profiles-roadmap-adrs.md:1257): the generated half
         # of every plugin.yaml, read as data, and the generated tests beside it are what
         # plugingen writes from the plugin's value; so is the signed distribution manifest
-        # of each binary built in the repository (ADR-060 decisions 20 and 28).
+        # of each binary built in the repository (ADR-060 decisions 20 and 28), and the
+        # release's serves names no definition outside sdk/def (ADR-060 decision 28).
         run: go run ./tools/plugingen .
       - name: Register check (U7), name lint (U1) and suite neutrality (U3)
         # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package

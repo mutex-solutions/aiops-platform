@@ -39,12 +39,14 @@ check:
 	$(KC) lines sdk/kernel 8200
 	$(KC) testctor .
 	$(KC) coverage sdk/kernel/cover.out $(MOD)/sdk/kernel
-	@# ADR-054 decision 13: the import boundary U2 reads the upstream register.
+	@# ADR-054 decision 13: the import boundary U2 reads the upstream register. ADR-060
+	@# decision 28: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl.
 	$(KC) imports . tools/upstream-components.yaml
 	$(KC) pluginvet plugins loader boot
 	go run ./tools/deflint .
 	@# ADR-060 decisions 11, 20, 28 and 36: manifest parity of every plugin.yaml and its generated tests,
-	@# and of the signed distribution manifest of each binary built in the repository.
+	@# and of the signed distribution manifest of each binary built in the repository; the
+	@# release serves no definition outside sdk/def.
 	go run ./tools/plugingen .
 	@# ADR-054 decisions 12, 14, 15 and 22, ADR-060 decision 51: the register check U7,
 	@# the name lint U1 and suite neutrality U3.

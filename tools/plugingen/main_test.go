@@ -114,3 +114,25 @@ func TestEveryPluginOfTheModuleTablesHasAGeneratedManifest(t *testing.T) {
 		}
 	}
 }
+
+// A release serves no definition outside sdk/def: the test definitions are fixtures of
+// the launcher's tests at suite revision 0, so the check fails when a release's signed
+// manifest links a package that holds a definition.yaml anywhere else (ADR-060
+// decisions 28 and 55). The test distribution serves its two.
+func TestAReleaseServesOnlyTheDefinitionsOfTheSDK(t *testing.T) {
+	root := filepath.Join("..", "..")
+	release, err := os.ReadFile(filepath.Join(root, "dist", "distribution.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := servesOnlySDK(root, release); err != nil {
+		t.Fatalf("the release: %v", err)
+	}
+	if err := servesOnlySDK(root, testdist.Signed); err == nil ||
+		!strings.Contains(err.Error(), "test/dist/def/spine/v0, github.com/mutex-solutions/aiops-platform/test/dist/def/toy/v0") {
+		t.Fatalf("the test distribution as a release: %v", err)
+	}
+	if err := servesOnlySDK(root, []byte("x: [")); err == nil {
+		t.Fatal("a malformed manifest passes")
+	}
+}

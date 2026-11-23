@@ -170,6 +170,34 @@ func TestImportsServerClosure(t *testing.T) {
 	}
 }
 
+// The link guard of ADR-060 decision 28 (ADR-059 decision 9): no package under test/ or
+// examples/ is in the closure of cmd/aiops or cmd/aiopsctl. aiopsctl carries the fakes
+// by design, so the fake rule is cmd/aiops's alone.
+func TestImportsServerClosureLinksNoTestOrExample(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "cmd/aiops/main.go", "package main\n")
+	write(t, d, "cmd/aiopsctl/main.go", "package main\n")
+	closure := func(deps map[string][]string) listDeps {
+		return func(_, pkg string) ([]string, error) { return deps[pkg], nil }
+	}
+	fake := mp + "/sdk/def/clock/v0/fake"
+	if err := checkImports(d, testRegister, closure(map[string][]string{"./cmd/aiopsctl": {"fmt", fake}})); err != nil {
+		t.Fatalf("a fake in aiopsctl: %v", err)
+	}
+	for _, bin := range []string{"aiops", "aiopsctl"} {
+		for _, leak := range []string{mp + "/test/dist", mp + "/test/trusted", mp + "/examples/echoer"} {
+			err := checkImports(d, testRegister, closure(map[string][]string{"./cmd/" + bin: {"fmt", leak}}))
+			if err == nil || !strings.Contains(err.Error(), "cmd/"+bin+": dependency closure contains "+leak+": no package under test/ or examples/") {
+				t.Errorf("%s links %s: %v", bin, leak, err)
+			}
+		}
+	}
+	// A path that only starts like one of the two directories is neither.
+	if err := checkImports(d, testRegister, closure(map[string][]string{"./cmd/aiops": {mp + "/testkitx", mp + "/examplesx"}})); err != nil {
+		t.Errorf("a look-alike path: %v", err)
+	}
+}
+
 func TestImportsParseError(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "boot/a.go", "package")
