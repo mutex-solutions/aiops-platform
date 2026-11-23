@@ -207,6 +207,18 @@ var guards = []check{
 				errCall, errReg, e.reg.Inventory())
 		}
 	}},
+	{"stampers/guard-remount", func(e *env) {
+		old := e.reg
+		_, live := e.hold()
+		e.restart()
+		e.contribute("up", nil)
+		_, errCall := old.Stamp(e.t.Context(), "up", "hi")
+		errReg := old.Register(live, "x", &stamper{name: "x"})
+		if !errors.Is(errCall, kernel.ErrInactive) || !errors.Is(errReg, kernel.ErrInactive) || len(old.Inventory()) != 0 {
+			e.fail("the registry of the first activation, after the second started: Stamp = %v, Register = %v, Inventory = %v; want kernel.ErrInactive twice and nothing listed",
+				errCall, errReg, old.Inventory())
+		}
+	}},
 	{"stampers/guard-side-door", func(e *env) {
 		if doors := deftest.SideDoors[stampers.Registry](e.reg); len(doors) > 0 {
 			e.fail("the provided registry has methods outside stampers.Registry: %v", doors)
@@ -297,6 +309,19 @@ func (e *env) hold() (*kernel.Fiber, *kernel.Context) {
 	f := e.mount(kernel.Define(kernel.Plugin{ID: "conformance/holder",
 		Apply: func(c *kernel.Context, _ any) error { held = c; return nil }}))
 	return f, held
+}
+
+// restart restarts the subject's fiber, so a second activation provides the key, and
+// waits until it is ACTIVE.
+func (e *env) restart() {
+	e.t.Helper()
+	if err := e.s.fiber.Update(e.t.Context(), nil); err != nil {
+		e.fail("restart: %v", err)
+	}
+	err := e.root.Settle(e.t.Context())
+	if st, _ := e.s.fiber.State(e.t.Context()); st != kernel.Active {
+		e.fail("the restarted subject is %s, want ACTIVE: %v", st, err)
+	}
 }
 
 // dispose disposes f and waits until it is.
