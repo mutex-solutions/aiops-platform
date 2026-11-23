@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"cmp"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
@@ -226,6 +227,123 @@ func (r *mreader) key(n *yaml.Node, release bool) string {
 func okPattern(s string) bool {
 	owner, name, ok := strings.Cut(s, "/")
 	return ok && okKebab(owner) && (name == "*" || okKebab(name)) && owner != "aiops" && owner != "contrib"
+}
+
+// Unsigned is the signer of a record whose artifact allowUnsigned admitted (ADR-020
+// decision 8).
+const Unsigned = "unsigned"
+
+// Record is the record.yaml of a directory verified/sha256-<hex>/ that aiopsctl wrote
+// after it verified the digest the directory is named by (ADR-020 decision 10):
+//
+//	kind: artifact | distribution
+//	digest: sha256:<hex>          the digest of the directory's name
+//	signer: <key id> | unsigned   unsigned for an artifact only
+//	id: <plugin id>               an artifact only, as are version and runtimes
+//	version: <semantic version>
+//	runtimes: [inproc, remote]    a set, empty for a pack
+//	module: {path, version, sum}  exactly when runtimes holds inproc
+//
+// Attestation is attestation.json beside the record of an artifact, the statement
+// aiopsctl verified, and nil when there is none; ReadAttestation reads it.
+type Record struct {
+	Kind, Digest, Signer string
+	ID, Version          string
+	Runtimes             []string
+	Module               *GoModule
+	Attestation          []byte
+}
+
+// GoModule is a Go module as build information records it (ADR-020 decision 12).
+// Version and Sum are empty for the main module, a replaced module and a directory
+// that replaces one (ADR-020 decision 28).
+type GoModule struct{ Path, Version, Sum string }
+
+// ReadRecord reads the record of digest under verified/ of home. A missing record is
+// a RuleMissing error.
+func ReadRecord(home fs.FS, digest string) (Record, error) {
+	dir := "verified/" + strings.Replace(digest, ":", "-", 1)
+	if !okDigest(digest) {
+		return Record{}, &Error{File: dir, Rule: RuleRecord, Msg: fmt.Sprintf("digest %q is not sha256:<hex>", digest)}
+	}
+	file := dir + "/record.yaml"
+	r, root, err := readHome(home, file, RuleRecord)
+	if r == nil {
+		return Record{}, cmp.Or(err, fileError(file, fs.ErrNotExist))
+	}
+	f := r.fields(root, "record.yaml", []string{"kind", "digest", "signer", "id", "version", "runtimes", "module"},
+		"kind", "digest", "signer")
+	rec := Record{Kind: r.word(f["kind"], "kind", oneOf("artifact", "distribution")), Digest: r.word(f["digest"], "digest", okDigest),
+		Signer: r.word(f["signer"], "signer", func(s string) bool { return okHash32(s) || s == Unsigned }),
+		ID:     r.word(f["id"], "id", okManifestID), Version: r.word(f["version"], "version", okSemver),
+		Runtimes: r.set(f["runtimes"], "runtimes", oneOf("inproc", "remote"))}
+	art := rec.Kind == "artifact"
+	switch {
+	case rec.Digest != digest:
+		r.fail(f["digest"], "the record of %s vouches for %s", digest, rec.Digest)
+	case (f["id"] != nil) != art || (f["version"] != nil) != art || (f["runtimes"] != nil) != art:
+		r.fail(root, "a record states id, version and runtimes exactly when its kind is artifact")
+	case (f["module"] != nil) != slices.Contains(rec.Runtimes, "inproc"):
+		r.fail(root, "a record states module exactly when runtimes holds inproc")
+	case !art && rec.Signer == Unsigned:
+		r.fail(f["signer"], "a record of a distribution names the key that signed it")
+	}
+	if n := f["module"]; n != nil {
+		m := r.gomod(r.fields(n, "module", []string{"path", "version", "sum"}, "path", "version"), "module")
+		rec.Module = &m
+	}
+	if r.err != nil {
+		return Record{}, r.err
+	}
+	if art {
+		rec.Attestation, err = readFile(File{FS: home, Path: dir + "/attestation.json"})
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return Record{}, fileError(dir+"/attestation.json", err)
+		}
+	}
+	return rec, nil
+}
+
+// ReadCurrent reads verified/current of home, the digest of the distribution manifest
+// that dist use verified last, one line (ADR-020 decision 12), or "" when there is
+// none.
+func ReadCurrent(home fs.FS) (string, error) {
+	const file = "verified/current"
+	data, err := readFile(File{FS: home, Path: file})
+	s := strings.TrimSuffix(string(data), "\n")
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", nil
+	case err != nil:
+		return "", fileError(file, err)
+	case !okDigest(s):
+		return "", &Error{File: file, Rule: RuleRecord, Msg: "verified/current holds one line, sha256:<hex>"}
+	}
+	return s, nil
+}
+
+// gomod reads the fields path, version and sum of a Go module, version and sum both or
+// neither.
+func (r *mreader) gomod(f map[string]*yaml.Node, what string) GoModule {
+	m := GoModule{Path: r.word(f["path"], what+" path", okPath), Version: r.word(f["version"], what+" version", okGoVersion),
+		Sum: r.word(f["sum"], what+" sum", func(s string) bool { h, ok := strings.CutPrefix(s, "h1:"); return ok && okHash32(h) })}
+	if (m.Version == "") != (m.Sum == "") {
+		r.fail(f["path"], "%s %s states version and sum, both or neither", what, m.Path)
+	}
+	return m
+}
+
+// okGoVersion reports whether s is a Go module version: v and a semantic version.
+func okGoVersion(s string) bool {
+	v, ok := strings.CutPrefix(s, "v")
+	return ok && okSemver(v)
+}
+
+// okHash32 reports whether s is the standard base64 of 32 bytes, as a key id and the
+// hash of an h1: sum are.
+func okHash32(s string) bool {
+	b, err := base64.StdEncoding.DecodeString(s)
+	return len(s) == 44 && err == nil && len(b) == 32
 }
 
 // readHome returns a reader of file of home under rule, or three nils when the file

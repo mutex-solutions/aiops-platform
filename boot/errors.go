@@ -70,6 +70,9 @@ const (
 	// RuleTrust: trust.yaml breaks its format or holds a field that waits for S6a
 	// (ADR-020 decisions 5, 6 and 26).
 	RuleTrust Rule = "trust"
+	// RuleRecord: a record under verified/ breaks its format or vouches for another
+	// digest (ADR-020 decision 10).
+	RuleRecord Rule = "record"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

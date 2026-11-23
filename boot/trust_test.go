@@ -201,3 +201,105 @@ func TestReadTrust(t *testing.T) {
 		}
 	}
 }
+
+const (
+	hexB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	hexC = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	sumA = "h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+)
+
+// records holds a record of each form of ADR-020 decision 10: in-process code with
+// its attestation, a pack that allowUnsigned admitted, and a distribution manifest.
+func records() fstest.MapFS {
+	return fstest.MapFS{
+		"verified/sha256-" + hexA + "/record.yaml": {Data: []byte("kind: artifact\ndigest: sha256:" + hexA + "\nsigner: " + keyP256ID +
+			"\nid: acme/echoer\nversion: 0.1.0\nruntimes: [inproc]\nmodule: {path: example.com/acme/echoer, version: v0.1.0, sum: \"" + sumA + "\"}\n")},
+		"verified/sha256-" + hexA + "/attestation.json": {Data: []byte(statement)},
+		"verified/sha256-" + hexB + "/record.yaml": {Data: []byte("kind: artifact\ndigest: sha256:" + hexB +
+			"\nsigner: unsigned\nid: acme/connector-y\nversion: 0.2.0\nruntimes: []\n")},
+		"verified/sha256-" + hexC + "/record.yaml": {Data: []byte("kind: distribution\ndigest: sha256:" + hexC + "\nsigner: " + keyP256ID + "\n")},
+	}
+}
+
+func TestReadRecord(t *testing.T) {
+	home := records()
+	for digest, want := range map[string]Record{
+		"sha256:" + hexA: {Kind: "artifact", Digest: "sha256:" + hexA, Signer: keyP256ID, ID: "acme/echoer", Version: "0.1.0",
+			Runtimes: []string{"inproc"}, Module: &GoModule{"example.com/acme/echoer", "v0.1.0", sumA}, Attestation: []byte(statement)},
+		"sha256:" + hexB: {Kind: "artifact", Digest: "sha256:" + hexB, Signer: Unsigned, ID: "acme/connector-y", Version: "0.2.0",
+			Runtimes: []string{}},
+		"sha256:" + hexC: {Kind: "distribution", Digest: "sha256:" + hexC, Signer: keyP256ID},
+	} {
+		if got, err := ReadRecord(home, digest); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v\n got %+v\nwant %+v", digest, err, got, want)
+		}
+	}
+	recA, recC := "verified/sha256-"+hexA+"/record.yaml", "verified/sha256-"+hexC+"/record.yaml"
+	for _, c := range []struct {
+		name, file string
+		edits      []string
+		rule       Rule
+		want       string
+	}{
+		{"unknown field", recC, []string{"signer:", "by:"}, RuleUnknownField, `"by"`},
+		{"no signer", recC, []string{"signer: " + keyP256ID + "\n", ""}, RuleRecord, "record.yaml states signer"},
+		{"another kind", recC, []string{"kind: distribution", "kind: image"}, RuleRecord, `kind "image"`},
+		{"another digest", recC, []string{"digest: sha256:" + hexC, "digest: sha256:" + hexB}, RuleRecord, "vouches for sha256:" + hexB},
+		{"a digest of another form", recC, []string{"digest: sha256:" + hexC, "digest: " + hexC}, RuleRecord, "digest"},
+		{"a signer that is no key id", recC, []string{"signer: " + keyP256ID, "signer: abc"}, RuleRecord, `signer "abc"`},
+		{"an unsigned distribution", recC, []string{"signer: " + keyP256ID, "signer: unsigned"}, RuleRecord, "names the key"},
+		{"a distribution with an id", recC, []string{"\nsigner:", "\nid: a/b\nsigner:"}, RuleRecord, "exactly when its kind is artifact"},
+		{"an artifact with no runtimes", recA, []string{"runtimes: [inproc]\n", ""}, RuleRecord, "exactly when its kind is artifact"},
+		{"wasm", recA, []string{"[inproc]", "[inproc, wasm]"}, RuleRecord, `runtimes entry "wasm"`},
+		{"code with no module", recA, []string{"runtimes: [inproc]", "runtimes: [remote]"}, RuleRecord, "module exactly when"},
+		{"a module with no sum", recA, []string{`, sum: "` + sumA + `"`, ""}, RuleRecord, "both or neither"},
+		{"a module with no version", recA, []string{"version: v0.1.0, ", ""}, RuleRecord, "module states version"},
+		{"a module version", recA, []string{"version: v0.1.0", "version: 0.1.0"}, RuleRecord, `module version "0.1.0"`},
+		{"a module sum", recA, []string{sumA, "h1:abc"}, RuleRecord, "module sum"},
+		{"a module path", recA, []string{"path: example.com/acme/echoer", `path: "a b"`}, RuleRecord, "module path"},
+		{"a version", recA, []string{"version: 0.1.0\n", "version: v0.1.0\n"}, RuleRecord, `version "v0.1.0"`},
+		{"an id", recA, []string{"id: acme/echoer", "id: echoer"}, RuleRecord, `id "echoer"`},
+		{"not YAML", recC, []string{"kind: distribution", "kind: ["}, RuleSyntax, ""},
+	} {
+		home := records()
+		src := strings.NewReplacer(c.edits...).Replace(string(home[c.file].Data))
+		if src == string(home[c.file].Data) {
+			t.Fatalf("%s: the edit changed nothing", c.name)
+		}
+		home[c.file] = &fstest.MapFile{Data: []byte(src)}
+		_, err := ReadRecord(home, "sha256:"+strings.Split(c.file, "-")[1][:64])
+		var e *Error
+		if !errors.As(err, &e) || e.Rule != c.rule || e.File != c.file || !strings.Contains(e.Msg, c.want) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+	big := records()
+	big["verified/sha256-"+hexA+"/attestation.json"] = &fstest.MapFile{Data: make([]byte, MaxFileBytes+1)}
+	for _, c := range []struct {
+		home   fstest.MapFS
+		digest string
+		rule   Rule
+	}{{home, "sha256:" + hexA[1:], RuleRecord}, {home, "sha256:" + strings.Repeat("d", 64), RuleMissing}, {big, "sha256:" + hexA, RuleLimit}} {
+		var e *Error
+		if _, err := ReadRecord(c.home, c.digest); !errors.As(err, &e) || e.Rule != c.rule {
+			t.Errorf("%s: %v, want rule %s", c.digest, err, c.rule)
+		}
+	}
+}
+
+func TestReadCurrent(t *testing.T) {
+	for data, want := range map[string]string{"sha256:" + hexC + "\n": "sha256:" + hexC, "sha256:" + hexC: "sha256:" + hexC} {
+		if got, err := ReadCurrent(fstest.MapFS{"verified/current": {Data: []byte(data)}}); err != nil || got != want {
+			t.Errorf("%q: %q, %v", data, got, err)
+		}
+	}
+	if got, err := ReadCurrent(fstest.MapFS{}); got != "" || err != nil {
+		t.Errorf("none: %q, %v", got, err)
+	}
+	for data, rule := range map[string]Rule{"sha256:" + hexC + "\n\n": RuleRecord, "": RuleRecord, string(make([]byte, MaxFileBytes+1)): RuleLimit} {
+		var e *Error
+		if _, err := ReadCurrent(fstest.MapFS{"verified/current": {Data: []byte(data)}}); !errors.As(err, &e) || e.Rule != rule {
+			t.Errorf("%.20q: %v", data, err)
+		}
+	}
+}
