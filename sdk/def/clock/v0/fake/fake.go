@@ -28,13 +28,15 @@ type Clock struct {
 var _ clock.Clock = (*Clock)(nil)
 
 // New returns a clock standing at start and the plugin that provides it under
-// clock.Key. Each call returns a new plugin value, a new entry of its own.
+// clock.Key. Each call returns a new plugin value, a new entry of its own. The
+// plugin provides the methods of clock.Clock only: Advance and Pending are the
+// test's (no side door, 07-c4-plugin-sdk.md §4.3).
 func New(start time.Time) (*Clock, kernel.Plugin) {
 	f := &Clock{now: start}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/clock-fake",
 		Provides: []kernel.AnyKey{clock.Key},
-		Apply:    func(c *kernel.Context, _ any) error { return clock.Key.Provide(c, f) },
+		Apply:    func(c *kernel.Context, _ any) error { return clock.Key.Provide(c, struct{ clock.Clock }{f}) },
 	})
 }
 
