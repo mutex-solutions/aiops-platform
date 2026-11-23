@@ -64,7 +64,7 @@ type Artifact struct {
 }
 
 // subject is what checks 1, 2, 4, 5, 6 and 10 read for a row: the plugin of the
-// module table, or the installed artifact whose bundle inserted the row.
+// module table, or the installed artifact that inserted the row or holds its plugin.
 type subject struct {
 	id     string
 	man    Manifest
@@ -169,6 +169,9 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 	// Before the rebuild a row of the artifact's own in-process plugin has the artifact
 	// as its one subject, and check 5 finds no module in the table (ADR-060 decision 17).
 	art := installedBundle(r)
+	if _, ok := g.in.Artifacts[r.Plugin]; art == "" && ok {
+		art = r.Plugin // a row of an installed plugin that no artifact bundle inserted (ADR-020 decision 12)
+	}
 	var subs []*subject
 	if _, built := g.in.Mods[r.Plugin]; built || art != r.Plugin {
 		subs = append(subs, g.subject(r.Plugin, false))

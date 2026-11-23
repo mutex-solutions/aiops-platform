@@ -252,6 +252,19 @@ func TestBootInputArtifacts(t *testing.T) {
 	}
 }
 
+// Boot reads the record of an installed in-process plugin for a row that no artifact
+// bundle inserted, by the plugin id (ADR-020 decision 12), and none for a plugin that
+// install did not keep.
+func TestBootInputReadsTheArtifactOfARowWithNoOrigin(t *testing.T) {
+	home, d := homeFor(t)
+	digest := installHome(home, manifestText("o/p"), "[]\n", "")
+	c := Composition{Rows: []ComposedRow{{Row: Row{ID: "a", Plugin: "o/p", Enabled: true}}, {Row: Row{ID: "b", Plugin: "o/q", Enabled: true}}}}
+	in, _ := bootInput(home, "p", c, nil, d, nil, nil)
+	if a := in.Artifacts["o/p"]; a.Err != nil || a.Digest != digest || len(in.Artifacts) != 1 {
+		t.Fatalf("artifacts %+v", in.Artifacts)
+	}
+}
+
 func cloneFS(m fstest.MapFS) fstest.MapFS {
 	out := fstest.MapFS{}
 	for k, v := range m {

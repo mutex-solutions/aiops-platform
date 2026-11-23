@@ -204,8 +204,14 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	}
 	lock, lerr := ReadLock(home, profile)
 	for _, r := range c.Rows {
-		if id := installedBundle(r); id != "" {
-			if _, done := in.Artifacts[id]; !done {
+		// The artifact of a row's origin, or of its plugin for a row of an installed
+		// plugin that no artifact bundle inserted (ADR-020 decision 12).
+		ids := []string{installedBundle(r)}
+		if _, err := fs.Stat(home, path.Join("bundles", r.Plugin, "artifact.json")); err == nil {
+			ids = append(ids, r.Plugin)
+		}
+		for _, id := range ids {
+			if _, done := in.Artifacts[id]; id != "" && !done {
 				in.Artifacts[id] = installedArtifact(home, profile, id, lock, lerr)
 			}
 		}

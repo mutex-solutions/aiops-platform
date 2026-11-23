@@ -625,6 +625,35 @@ func TestGateInstallBeforeTheRebuild(t *testing.T) {
 	}
 }
 
+// A row of an installed in-process plugin that no artifact bundle inserted, such as one
+// an operator layer adds, is judged on the record that install made for its plugin id
+// as a row the bundle inserted is: check 5 on its signer and check 10 on the module tie
+// (ADR-020 decision 12).
+func TestGateJudgesARowWithNoOriginOnItsPluginsArtifact(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		edit func(fx *gateFix)
+		want []string
+	}{
+		{"clean", func(*gateFix) {}, nil},
+		{"another module than the binary runs", func(fx *gateFix) {
+			fx.in.Tie["acme/echoer"] = Tie{Module: GoModule{Path: testModule, Version: "v0.2.0", Sum: sumA}}
+		}, []string{"10 direct attestation stop=false", "10 echoer:e2 attestation stop=false"}},
+		{"a signer outside trust.yaml", func(fx *gateFix) { fx.trust.Signers[0].IDs = []string{"beta/*"} },
+			[]string{"5 direct signer stop=false", "5 echoer:e2 signer stop=false", "5 pack:e1 signer stop=false"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newGateFix()
+			fx.bundles["b"] += "    - {id: direct, plugin: acme/echoer}\n"
+			tc.edit(fx)
+			got := slices.Sorted(slices.Values(gateLines(fx.run(t))))
+			if !equalLines(got, slices.Sorted(slices.Values(tc.want))) {
+				t.Fatalf("failures %q", got)
+			}
+		})
+	}
+}
+
 func TestLicensed(t *testing.T) {
 	for e, want := range map[string]bool{
 		"MIT": true, "Apache-2.0 AND MIT": true, "GPL-2.0-only": false, "GPL-2.0-or-later OR BSD-3-Clause": true,
