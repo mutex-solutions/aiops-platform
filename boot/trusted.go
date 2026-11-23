@@ -203,6 +203,9 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 		lines = append(lines, "bindings: the site raises the required set by "+strings.Join(req, ", "))
 	}
 	lock, lerr := ReadLock(home, profile)
+	for id := range c.Unread {
+		in.Artifacts[id] = installedArtifact(home, profile, id, lock, lerr)
+	}
 	for _, r := range c.Rows {
 		// The artifact of a row's origin, or of its plugin for a row of an installed
 		// plugin that no artifact bundle inserted (ADR-020 decision 12).

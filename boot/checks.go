@@ -187,12 +187,7 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 			what = "the installed artifact " + s.id
 		}
 		if s.art != nil && s.art.Err != nil {
-			var e *Error
-			rule := RuleSigner
-			if errors.As(s.art.Err, &e) && (e.Rule == RuleKept || e.Rule == RuleRecord) {
-				rule = e.Rule
-			}
-			f(CheckTrust, rule, "row %q: %s: %v", r.ID, what, s.art.Err)
+			f(CheckTrust, artRule(s.art.Err), "row %q: %s: %v", r.ID, what, s.art.Err)
 			continue
 		}
 		out = append(out, g.trust(r, s, what)...)
@@ -216,6 +211,16 @@ func (g *gate) checks(r ComposedRow) []RowResult {
 		f(b.check, b.rule, "row %q: %s", r.ID, b.why)
 	}
 	return out
+}
+
+// artRule is the rule of check 5 that an installed artifact which cannot be read
+// breaks: its kept files, its record, or else its signer.
+func artRule(err error) Rule {
+	var e *Error
+	if errors.As(err, &e) && (e.Rule == RuleKept || e.Rule == RuleRecord) {
+		return e.Rule
+	}
+	return RuleSigner
 }
 
 // rank orders the stabilities, experimental < preview < ga; "" is below all, so a
@@ -538,7 +543,8 @@ func (g *gate) suites(s *subject) map[string]int {
 // says instantiable, sets only id, plugin, roles, enabled: false and config, and holds
 // no ${env:} or ${file:} reference. A breach denies every row the bundle inserted, under
 // the group that Compose adds. An artifact whose group id was taken (Composition.Clashes)
-// is denied by its plugin id, since none of its rows was inserted.
+// or whose kept bundle does not read (Composition.Unread) is denied by its plugin id,
+// since none of its rows was inserted.
 func (g *gate) installed(c Composition) []RowResult {
 	var out []RowResult
 	for _, id := range slices.Sorted(maps.Keys(g.feeds)) {
@@ -556,6 +562,14 @@ func (g *gate) installed(c Composition) []RowResult {
 			if why != "" && installedBundle(r) == id && r.ID != name {
 				out = append(out, g.fail(CheckLayerRules, r.Row, RuleInstalled, false, "row %q: the bundle of the installed artifact %s %s", r.ID, id, why))
 			}
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(c.Unread)) {
+		if s := g.subject(id, true); s.art.Err != nil {
+			out = append(out, g.fail(CheckTrust, Row{ID: id}, artRule(s.art.Err), false, "the installed artifact %s: %v", id, s.art.Err))
+		} else {
+			out = append(out, g.fail(CheckLayerRules, Row{ID: id}, RuleInstalled, false,
+				"the bundle of the installed artifact %s does not compose, so none of its rows is inserted: %s", id, c.Unread[id]))
 		}
 	}
 	for _, id := range c.Clashes {

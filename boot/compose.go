@@ -72,7 +72,7 @@ type Options struct {
 // rule "the last enabled provider of a bound key cannot be disabled" needs the
 // distribution manifest and is not checked here.
 func Compose(src Sources, opt Options) (Composition, []Warning, error) {
-	c := &composer{opt: opt, index: map[string]int{}}
+	c := &composer{opt: opt, index: map[string]int{}, unread: map[string]string{}}
 	if !okIdent(src.Profile) {
 		return Composition{}, nil, &Error{File: src.Profile, Rule: RuleSyntaxID, Msg: "profile name is not a name"}
 	}
@@ -153,9 +153,10 @@ type composer struct {
 	rows    []*crow
 	index   map[string]int
 	warns   []Warning
-	read    int      // bytes of the layer files and of each include mount, against MaxComposeBytes
-	min     string   // minStability of profile.yaml
-	clashes []string // the installed artifacts whose group id was taken (artifact)
+	read    int               // bytes of the layer files and of each include mount, against MaxComposeBytes
+	min     string            // minStability of profile.yaml
+	clashes []string          // the installed artifacts whose group id was taken (artifact)
+	unread  map[string]string // the installed artifacts whose kept bundle does not read (layer)
 }
 
 // The ten fields in canonical order, as indexes of crow.origin.
@@ -190,17 +191,27 @@ func interceptField(key string) FieldName { return FieldIntercept + "." + FieldN
 // skipped.
 func (c *composer) layer(f File, number int, source string, optional bool) error {
 	data, err := readFile(f)
-	if err != nil {
-		if optional && errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return fileError(f.Path, err)
+	if optional && errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	items, err := c.parseItems(f, data)
-	if err != nil {
+	var items []Item
+	if err == nil {
+		items, err = c.parseItems(f, data)
+	} else {
+		err = fileError(f.Path, err)
+	}
+	id, ok := strings.CutPrefix(source, "bundle:")
+	installed := ok && strings.Contains(id, "/")
+	switch {
+	case installed && err != nil:
+		// The kept bundle of an installed artifact that does not read inserts nothing, and
+		// the gate denies the artifact: a composition error would stop every profile that
+		// holds it (ADR-047 decisions 6 and 18).
+		c.unread[id] = err.Error()
+		return nil
+	case err != nil:
 		return err
-	}
-	if id, ok := strings.CutPrefix(source, "bundle:"); ok && strings.Contains(id, "/") {
+	case installed:
 		items = c.artifact(id, items)
 	}
 	l := Layer{Number: number, Source: source, File: f.Path, Items: items}
@@ -422,7 +433,7 @@ func (c *composer) finish() Composition {
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
 		plain[i] = cr.row
 	}
-	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min, Clashes: c.clashes}
+	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min, Clashes: c.clashes, Unread: c.unread}
 }
 
 // collectRefs appends the references of a value, in document order for lists

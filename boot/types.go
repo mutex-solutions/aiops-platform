@@ -230,12 +230,15 @@ type Digest [32]byte
 // when absent, which sets no minimum; gate check 4 reads it (ADR-060 decision 14).
 // Clashes are the plugin ids of the installed artifacts whose group takes the id of a
 // row composed before it or of the loader's row, so none of their rows is inserted;
-// gate check 8 denies them (ADR-047 decision 6).
+// gate check 8 denies them (ADR-047 decision 6). Unread holds, by plugin id, why the
+// kept bundle of an installed artifact is missing or does not parse: none of its rows
+// is inserted, and gate check 5 or 8 denies it (ADR-047 decisions 6 and 18).
 type Composition struct {
 	Rows         []ComposedRow
 	Digest       Digest
 	MinStability string
 	Clashes      []string
+	Unread       map[string]string
 }
 
 // ModuleEntry is what the launcher knows of one plugin of the module table: what its

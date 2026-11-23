@@ -360,7 +360,7 @@ func GateWith(c Composition, in GateInput) GateResult {
 	}
 	add(g.lastProvider(c, dist))
 	add(g.installed(c))
-	res.Rows = append(res.Rows, c.Clashes...)
+	res.Rows = append(slices.Concat(res.Rows, c.Clashes), slices.Collect(maps.Keys(c.Unread))...)
 	sort.Strings(res.Rows)
 	res.finish()
 	return res

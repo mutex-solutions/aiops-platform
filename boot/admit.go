@@ -1,6 +1,9 @@
 package boot
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Admission is the result of steps 2 and 3 of boot on one composition: the
 // gate, the static graph and the static half of the required audit
@@ -96,7 +99,7 @@ func (a Admission) Diagnostics() []string {
 				out = append(out, fmt.Sprintf("error: static graph: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
 			case f.Stop:
 				out = append(out, fmt.Sprintf("error: denied: %s, rule %s: %s", gateCheck(s.N), f.Rule, f.Reason))
-			case f.Rule == RuleGroupClash:
+			case strings.Contains(f.Row, "/"): // a plugin id: an artifact none of whose rows was inserted
 				out = append(out, fmt.Sprintf("warning: the installed artifact %s is left out: %s, rule %s: %s", f.Row, gateCheck(s.N), f.Rule, f.Reason))
 			default:
 				out = append(out, fmt.Sprintf("warning: row %q detached as disabled: %s, rule %s: %s", f.Row, gateCheck(s.N), f.Rule, f.Reason))

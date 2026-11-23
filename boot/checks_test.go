@@ -352,6 +352,16 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			[]string{"8 acme/loader group-clash stop=false"}},
 		{"a group that takes the id of a required row", func(fx *gateFix) { fx.dist.bindings = "{required: {rows: [pack]}}" },
 			[]string{"8 pack group-clash stop=true"}},
+		// ADR-047 decisions 6 and 18: a kept bundle that does not compose inserts no row,
+		// and the artifact is denied by the check its kept files fail.
+		{"a kept bundle.yaml that differs from the artifact and does not compose", func(fx *gateFix) {
+			fx.bundles["acme/pack"] = "- insert:\n    - {id: e1}\n"
+			fx.art("acme/pack", func(a *Artifact) { a.Err = &Error{Rule: RuleKept, Msg: "bundle.yaml does not hash to its layer"} })
+		}, []string{"5 acme/pack kept stop=false"}},
+		{"a kept bundle.yaml of the artifact that does not compose", func(fx *gateFix) {
+			fx.bundles["acme/pack"] = "- insert:\n    - {id: e1}\n"
+			fx.art("acme/pack", func(a *Artifact) { a.Kept.Bundle = []byte(fx.bundles["acme/pack"]) })
+		}, []string{"8 acme/pack installed-artifact stop=false"}},
 		{"an installed bundle that does not parse", func(fx *gateFix) {
 			fx.bundles["acme/pack"] = string(fx.arts["acme/pack"].Kept.Bundle)
 			fx.art("acme/pack", func(a *Artifact) { a.Kept.Bundle = []byte("{}") })
@@ -426,7 +436,7 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 				t.Fatalf("failures\n got %q\nwant %q\nopen %q", got, want, openLines(g))
 			}
 			for _, f := range slices.Concat(g.Slots[CheckTrust-1].Fails, g.Slots[CheckAttestation-1].Fails) {
-				if !strings.Contains(f.Reason, "row ") {
+				if !strings.Contains(f.Reason, "row ") && !strings.Contains(f.Row, "/") { // an artifact none of whose rows was inserted
 					t.Errorf("reason %q names no row", f.Reason)
 				}
 			}

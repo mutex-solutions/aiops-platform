@@ -265,6 +265,21 @@ func TestBootInputReadsTheArtifactOfARowWithNoOrigin(t *testing.T) {
 	}
 }
 
+// Boot reads the kept files of an installed artifact whose bundle did not compose, so
+// that check 5 names a kept file that differs (ADR-047 decision 18).
+func TestBootInputReadsAnArtifactLeftOut(t *testing.T) {
+	home, d := homeFor(t)
+	installHome(home, packManifestText("acme/pack"), "[]\n", "")
+	c := Composition{Unread: map[string]string{"acme/pack": "bundle.yaml: no such file"}}
+	if in, _ := bootInput(home, "p", c, nil, d, nil, nil); in.Artifacts["acme/pack"].Err != nil {
+		t.Fatalf("artifacts %+v", in.Artifacts)
+	}
+	delete(home, "bundles/acme/pack/bundle.yaml")
+	if in, _ := bootInput(home, "p", c, nil, d, nil, nil); in.Artifacts["acme/pack"].Err == nil || !strings.Contains(in.Artifacts["acme/pack"].Err.Error(), "kept") {
+		t.Fatalf("artifacts %+v", in.Artifacts)
+	}
+}
+
 func cloneFS(m fstest.MapFS) fstest.MapFS {
 	out := fstest.MapFS{}
 	for k, v := range m {

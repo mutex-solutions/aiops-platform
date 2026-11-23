@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -727,6 +728,27 @@ func TestYamlLine(t *testing.T) {
 		if got := yamlLine(errors.New(in)); got != want {
 			t.Errorf("%q: %d, want %d", in, got, want)
 		}
+	}
+}
+
+// A kept bundle that is missing or does not parse inserts none of the artifact's rows,
+// and the rest of the profile composes: the gate denies the artifact by check 5 or 8
+// (ADR-047 decisions 6 and 18). A composition error would stop every profile that holds
+// it.
+func TestComposeLeavesOutAnInstalledBundleThatDoesNotRead(t *testing.T) {
+	for name, files := range map[string]fstest.MapFS{
+		"missing":   {},
+		"malformed": {"bundles/acme/pack/bundle.yaml": {Data: []byte("- insert:\n    - {id: e1}\n")}},
+	} {
+		home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b, acme/pack]")}, "bundles/b/bundle.yaml": {Data: []byte(rows("id: x, plugin: o/x"))}}
+		maps.Copy(home, files)
+		c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home}, Options{})
+		if err != nil || len(c.Rows) != 1 || c.Unread["acme/pack"] == "" {
+			t.Errorf("%s: %v %+v", name, err, c)
+		}
+	}
+	if _, _, err := Compose(Sources{Profile: "p", Home: fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}}}, Options{}); err == nil {
+		t.Error("a missing first-party bundle composes")
 	}
 }
 
