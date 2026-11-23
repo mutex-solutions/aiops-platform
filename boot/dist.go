@@ -267,7 +267,7 @@ func (p *parser) bindings(n *yaml.Node, what string, validKey func(string) bool)
 	return out, nil
 }
 
-// okHook reports whether s is a hook name such as "incident/correlate": 1 to
+// okHook reports whether s is a hook name such as "composition/applied": 1 to
 // 128 bytes of [A-Za-z0-9._/-], starting with a letter or digit.
 func okHook(s string) bool {
 	if s == "" || len(s) > 128 {
