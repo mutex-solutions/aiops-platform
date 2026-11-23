@@ -57,7 +57,9 @@ type entry struct {
 var _ loader.Loader = (*Loader)(nil)
 
 // New returns an empty loader and the plugin that provides it under loader.Key.
-// Each call returns a new plugin value, a new entry of its own.
+// Each call returns a new plugin value, a new entry of its own. The plugin provides
+// the methods of loader.Loader only: SetState, Entries and Patch are the test's (no
+// side door, 07-c4-plugin-sdk.md §4.3).
 func New() (*Loader, kernel.Plugin) {
 	f := &Loader{entries: map[string]entry{}}
 	return f, kernel.Define(kernel.Plugin{
@@ -69,7 +71,7 @@ func New() (*Loader, kernel.Plugin) {
 			f.patch = loader.PatchContext.Bind(c)
 			f.setLC(c)
 			c.Defer("loader-fake", func(context.Context) error { f.setLC(nil); return nil })
-			return loader.Key.Provide(c, f)
+			return loader.Key.Provide(c, struct{ loader.Loader }{f})
 		},
 	})
 }

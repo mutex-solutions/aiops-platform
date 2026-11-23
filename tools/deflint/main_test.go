@@ -241,7 +241,7 @@ func TestShapes(t *testing.T) {
 // outside tools/, and lists the fake and the suite of each definition, so that what a
 // fake gives to Provide is judged too.
 func TestSideDoorScope(t *testing.T) {
-	got := patterns([]*definition{{rel: "sdk/def/x/v0"}})
+	got := patterns([]*definition{fixture(t, "x", complete)})
 	for _, p := range []string{"./dist", "./test/dist", "./examples", modPath + "/sdk/def/x/v0", modPath + "/sdk/def/x/v0/fake", modPath + "/sdk/def/x/v0/conformance"} {
 		if !slices.Contains(got, p) {
 			t.Errorf("patterns = %q, want %s among them", got, p)

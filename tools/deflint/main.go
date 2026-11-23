@@ -13,7 +13,8 @@
 //     ADR-059 decision 16);
 //   - the rules of 07-c4-plugin-sdk.md:514-520 that a static check decides: the method
 //     set (no side door), the caller's context first, Inventory() on a registry, and
-//     no upstream import.
+//     no upstream import. The side-door check reads every package of the root module
+//     outside tools/ and of the SDK module, the fakes and suites included.
 //
 // A definition whose consumer lands later is no error as long as it has one consumer:
 // 08:676 asks a provider and a consumer per definition, not per key.
@@ -90,16 +91,15 @@ func lint(root string, plugins []plugin) ([]string, int, error) {
 	}
 	var out []string
 	var typed []*definition // the definitions with a Go package to type-check
-	paths := []string{"./dist", "./test/dist", "./examples"}
 	for _, d := range defs {
 		out = append(out, prefix(d, files(d))...)
 		out = append(out, prefix(d, layout(d))...)
 		out = append(out, prefix(d, imports(d))...)
 		if len(goFiles(d.dir, false)) > 0 {
-			typed, paths = append(typed, d), append(paths, d.path())
+			typed = append(typed, d)
 		}
 	}
-	pkgs, err := list(root, paths...)
+	pkgs, err := list(root, patterns(typed)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -116,7 +116,7 @@ func lint(root string, plugins []plugin) ([]string, int, error) {
 		out = append(out, prefix(d, shapes(pkg))...)
 	}
 	for _, path := range sortedKeys(pkgs) {
-		if p := pkgs[path]; p.Module == nil || p.Module.Path != modPath || hasPath(path, modPath+"/tools") {
+		if !judged(pkgs[path]) {
 			continue
 		}
 		files, err := c.parseDir(path)
@@ -132,6 +132,33 @@ func lint(root string, plugins []plugin) ([]string, int, error) {
 	out = append(out, roles(defs, plugins)...)
 	sort.Strings(out)
 	return out, len(defs), nil
+}
+
+// patterns are what go list lists for the side-door check: the distributions, the
+// toy plugins, and each definition with its fake and its suite, so that what a fake
+// gives to Provide is judged too. A fake or a suite that does not exist yet is left
+// out: files reports it.
+func patterns(defs []*definition) []string {
+	out := []string{"./dist", "./test/dist", "./examples"}
+	for _, d := range defs {
+		out = append(out, d.path())
+		for _, sub := range []string{"fake", "conformance"} {
+			if len(goFiles(filepath.Join(d.dir, sub), false)) > 0 {
+				out = append(out, d.path()+"/"+sub)
+			}
+		}
+	}
+	return out
+}
+
+// judged reports whether the side-door check reads p: a package of the root module
+// outside tools/, or of the SDK module, which holds the definitions, their fakes and
+// suites, and sdk/plugin. sdk/kernel and sdk/testkit are modules of their own.
+func judged(p *listed) bool {
+	if p.Module == nil || hasPath(p.ImportPath, modPath+"/tools") {
+		return false
+	}
+	return p.Module.Path == modPath || p.Module.Path == modPath+"/sdk"
 }
 
 func prefix(d *definition, problems []string) []string {
