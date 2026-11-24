@@ -333,20 +333,13 @@ func (l Library) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected,
 		return def.Inspected{}, refused("%s is not a plugin artifact with plugin.yaml and a bundle (ADR-047 decision 1)", r.Spec)
 	}
 	in := def.Inspected{Digest: d.Digest.String()}
-	var pm struct {
-		ID, Version string
-		Runtimes    []string
-	}
 	var items []struct {
 		Insert []struct {
 			ID, Plugin string
 			Config     map[string]any
 		}
 	}
-	mb, err := fetch(ctx, src, *man)
-	if err == nil {
-		err = yaml.Unmarshal(mb, &pm)
-	}
+	pm, err := pluginOf(ctx, src, m)
 	var bb []byte
 	if err == nil {
 		bb, err = fetch(ctx, src, *bun)
@@ -384,6 +377,26 @@ func bundles(ctx context.Context, src source, d ocispec.Descriptor, predicateTyp
 	return out, err
 }
 
+// pluginYAML is what the library reads of the plugin.yaml of an artifact.
+type pluginYAML struct {
+	ID, Version string
+	Runtimes    []string
+}
+
+// pluginOf reads plugin.yaml of the artifact m in src.
+func pluginOf(ctx context.Context, src content.Fetcher, m ocispec.Manifest) (pluginYAML, error) {
+	var pm pluginYAML
+	l := layer(m, layerManifest)
+	if l == nil {
+		return pm, refused("the artifact holds no plugin.yaml (ADR-047 decision 1)")
+	}
+	b, err := fetch(ctx, src, *l)
+	if err == nil {
+		err = yaml.Unmarshal(b, &pm)
+	}
+	return pm, err
+}
+
 // statementOf returns the subject name and predicate type of a statement.
 func statementOf(st []byte) (name, predicateType string) {
 	var s struct {
@@ -400,7 +413,8 @@ func statementOf(st []byte) (name, predicateType string) {
 // pack recorded, each signed with the private key file as a bundle and written as a
 // referrer in the bundle form of cosign; the unsigned statement is then removed
 // (ADR-020 decisions 2, 9 and 24). Signing again, with another key, signs the
-// statement that the attestation bundle carries.
+// statement that the attestation bundle carries. A statement whose one subject is not
+// the artifact's digest, named <id>@<version> of its plugin.yaml, is refused.
 func (l Library) Sign(ctx context.Context, r def.SignRequest) (def.Written, error) {
 	if err := errors.Join(absolute("the layout", r.Out), absolute("the key file", r.Key)); err != nil {
 		return def.Written{}, err
@@ -436,6 +450,15 @@ func (l Library) Sign(ctx context.Context, r def.SignRequest) (def.Written, erro
 	name, pt := statementOf(st)
 	if err != nil || pt != attestationURI {
 		return def.Written{}, refused("the layout %s holds no attestation that pack recorded: %v", r.Out, err)
+	}
+	m, err := manifest(ctx, s, d)
+	var pm pluginYAML
+	if err == nil {
+		pm, err = pluginOf(ctx, s, m)
+	}
+	if got, serr := subject(st); err != nil || serr != nil || name != pm.ID+"@"+pm.Version || hex.EncodeToString(got) != d.Digest.Encoded() {
+		return def.Written{}, refused("the attestation in %s names %s at %x, and the artifact is %s@%s at %s (ADR-020 decisions 9 and 24): %v",
+			r.Out, name, got, pm.ID, pm.Version, d.Digest, errors.Join(err, serr))
 	}
 	sig := signatureOf(name, d.Digest.Encoded())
 	for _, b := range []struct {
@@ -525,15 +548,9 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 		}
 	}
 	m, err := manifest(ctx, src, d)
-	var pm struct {
-		ID, Version string
-		Runtimes    []string
-	}
-	if l := layer(m, layerManifest); err == nil && l != nil {
-		var mb []byte
-		if mb, err = fetch(ctx, src, *l); err == nil {
-			err = yaml.Unmarshal(mb, &pm)
-		}
+	var pm pluginYAML
+	if err == nil {
+		pm, err = pluginOf(ctx, src, m)
 	}
 	if err != nil {
 		return v, err
