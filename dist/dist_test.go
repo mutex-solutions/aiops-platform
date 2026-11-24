@@ -83,9 +83,10 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 }
 
 // The release ships aiops-core, aiops-cli and the cli profile, which lists the two in that
-// order (ADR-061 decision 29; ADR-060 decision 27). The cli profile composes from them
-// alone with every row a plugin of the module table and cli required, and it is no
-// server profile: its rows of aiops-cli state no roles.
+// order (ADR-061 decision 29; ADR-060 decision 27). aiops-cli inserts cli, operations
+// and the five command rows. The cli profile composes from them alone with every row a
+// plugin of the module table and cli required, and it is no server profile: its rows of
+// aiops-cli state no roles.
 func TestShipsTheCLIProfile(t *testing.T) {
 	reg, _, _, err := Load()
 	if err != nil {
@@ -105,7 +106,7 @@ func TestShipsTheCLIProfile(t *testing.T) {
 		}
 	}
 	want := []string{"clock", "config-refs", "restart-policy", "reload", "reload-socket", "readiness",
-		"cli", "command-profile", "command-plugin", "command-trust", "command-dist", "command-key"}
+		"cli", "operations", "command-profile", "command-plugin", "command-trust", "command-dist", "command-key"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("rows %v, want %v", ids, want)
 	}
