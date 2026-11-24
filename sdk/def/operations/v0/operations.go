@@ -152,7 +152,10 @@ const (
 
 	ReasonNoTransport = "no-transport"
 	ReasonNoReload    = "no-reload"
-	ReasonImage       = "image" // a new image is a new process (07-c4-plugin-sdk.md:1869)
+	// ReasonNotSubmitted: a write that version 1 of the wire of ADR-062 does not carry,
+	// so the running process reads it at its next start (ADR-061 decision 17).
+	ReasonNotSubmitted = "not-submitted"
+	ReasonImage        = "image" // a new image is a new process (07-c4-plugin-sdk.md:1869)
 )
 
 // Operations is what the key serves (ADR-061 decision 16). Each method takes the

@@ -62,7 +62,8 @@ func TestGenerateKeyWritesCosignFiles(t *testing.T) {
 
 // trust add writes trust.yaml with mode 0600, keeps what the operator wrote in it, and
 // answers by run/status.json: not-running with no running process of the profile it
-// names, restart-required for want of a transport with one (ADR-061 decision 17).
+// names, and with one restart-required with the reason not-submitted, since version 1
+// of the wire of ADR-062 carries no trust add (ADR-061 decision 17).
 func TestAddTrustKeepsTheFileAndAnswersByStatus(t *testing.T) {
 	l := Library{LockWait: time.Second}
 	dir, home := t.TempDir(), filepath.Join(t.TempDir(), "home")
@@ -80,7 +81,7 @@ func TestAddTrustKeepsTheFileAndAnswersByStatus(t *testing.T) {
 	}{
 		{"", def.NotRunning, ""},
 		{`{"phase": "stopped", "profile": "dev"}`, def.NotRunning, ""},
-		{`{"phase": "running", "profile": "dev"}`, def.RestartRequired, def.ReasonNoTransport},
+		{`{"phase": "running", "profile": "dev"}`, def.RestartRequired, def.ReasonNotSubmitted},
 	} {
 		status := filepath.Join(home, "run", "status.json")
 		_ = os.Remove(status)

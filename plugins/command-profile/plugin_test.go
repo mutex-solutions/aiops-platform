@@ -167,8 +167,9 @@ func mode(t *testing.T, p string) os.FileMode {
 
 // profile init copies the shipped template into the home under the write lock, with
 // mode 0600 in directories of mode 0700, keeps a profile the home holds, and answers
-// the outcome of its submission: restart-required while a process of the profile runs,
-// since no transport exists yet (ADR-061 decisions 17 and 19; ADR-060 decision 27).
+// its outcome: restart-required with the reason not-submitted while a process of the
+// profile runs, since version 1 of the wire of ADR-062 carries no profile init (ADR-061
+// decisions 17 and 19; ADR-060 decision 27).
 func TestInitWritesTheHome(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	w := newWorld(t, home)
@@ -200,6 +201,16 @@ func TestInitWritesTheHome(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(file); string(data) != "bundles: [mine]\n" {
 		t.Errorf("init changed a profile the home holds: %q", data)
+	}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	w.err.Reset()
+	if code := w.run(t.Context(), "profile", "init", "cli"); code != 0 || !strings.Contains(w.err.String(), "restart-required: not-submitted") {
+		t.Fatalf("exit %d: %s", code, w.err.String())
+	}
+	if err := os.WriteFile(file, []byte("bundles: [mine]\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if code := w.run(t.Context(), "profile", "sanitize"); code != 0 || !strings.Contains(w.err.String(), "no layer file") {
 		t.Fatalf("exit %d: %s", code, w.err.String())
