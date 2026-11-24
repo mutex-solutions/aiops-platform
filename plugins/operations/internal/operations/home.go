@@ -74,7 +74,8 @@ const (
 // list of those it creates, renames each change into place, submits, and removes the
 // snapshot. A failure after the snapshot, a failed submission and the end of ctx
 // restore the snapshot under a context of their own, bounded to five seconds; when
-// the bound passes or the process dies, the snapshot stays for the next writer.
+// the bound passes or the process dies, the snapshot stays for the next writer, which
+// restores what is left of it under its own context before anything else.
 func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	if err := h.prepare(); err != nil {
 		return Done{}, err
@@ -85,7 +86,7 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	}
 	defer unlock()
 	var done Done
-	restored, err := h.recover()
+	restored, err := h.recover(ctx)
 	if err != nil {
 		return done, fmt.Errorf("restore the snapshot of an interrupted write in %s: %w", h.path(snapshotDir), err)
 	}
@@ -325,8 +326,10 @@ func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
 // renamed before it was, and one that was being removed, and restores one that was
 // renamed into place. A snapshot/ with no paths.json is part of a snapshot whose
 // removal an earlier version did not rename aside: paths.json is in place before the
-// snapshot is, so it is removed too. It reports whether it restored.
-func (h Home) recover() (bool, error) {
+// snapshot is, so it is removed too. It reports whether it restored. The restore is not
+// bounded: the writer holds the lock and does nothing else until it is done, and ctx
+// stops it with its progress kept.
+func (h Home) recover(ctx context.Context) (bool, error) {
 	for _, p := range []string{snapshotNew, snapshotOld} {
 		if err := os.RemoveAll(h.path(p)); err != nil {
 			return false, err
@@ -337,14 +340,13 @@ func (h Home) recover() (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), restoreBound)
-	defer cancel()
 	return true, h.restore(ctx)
 }
 
 // restore copies each replaced path back from the snapshot, removes each created path
-// and then the snapshot. Each step can run again, so a restore that stopped is
-// finished by the next one.
+// and then the snapshot. After each entry it writes paths.json without that entry, and
+// each step can run again, so a restore that stopped is finished by the next one from
+// where it stopped.
 func (h Home) restore(ctx context.Context) error {
 	snap := h.path(snapshotDir)
 	b, err := os.ReadFile(filepath.Join(snap, "paths.json"))
@@ -360,10 +362,11 @@ func (h Home) restore(ctx context.Context) error {
 			return fmt.Errorf("the snapshot names %q, which is not a path under the home", rel)
 		}
 	}
-	for _, rel := range l.Replaced {
+	for len(l.Replaced) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		rel := l.Replaced[0]
 		dst := h.path(rel)
 		tmp := filepath.Join(filepath.Dir(dst), "."+filepath.Base(dst)+".restore")
 		err := os.RemoveAll(tmp)
@@ -376,21 +379,46 @@ func (h Home) restore(ctx context.Context) error {
 		if err == nil {
 			err = os.Rename(tmp, dst)
 		}
+		if err == nil {
+			l.Replaced = l.Replaced[1:]
+			err = progress(snap, l)
+		}
 		if err != nil {
 			return err
 		}
 		h.step("restored")
 	}
-	for _, rel := range l.Created {
+	for len(l.Created) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := os.RemoveAll(h.path(rel)); err != nil {
+		err := os.RemoveAll(h.path(l.Created[0]))
+		if err == nil {
+			l.Created = l.Created[1:]
+			err = progress(snap, l)
+		}
+		if err != nil {
 			return err
 		}
 		h.step("restored")
 	}
 	return h.drop()
+}
+
+// progress replaces paths.json of the snapshot snap with l, the entries a restore has
+// left to restore.
+func progress(snap string, l paths) error {
+	b, err := json.Marshal(l)
+	if err == nil {
+		err = writeFile(filepath.Join(snap, "paths.json.new"), b)
+	}
+	if err == nil {
+		err = os.Rename(filepath.Join(snap, "paths.json.new"), filepath.Join(snap, "paths.json"))
+	}
+	if err == nil {
+		err = syncDir(snap)
+	}
+	return err
 }
 
 // copyTree copies the file or the directory src to dst, files with mode 0600 and
