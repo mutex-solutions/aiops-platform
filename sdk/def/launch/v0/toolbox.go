@@ -16,7 +16,7 @@ import (
 // and a plugin uses them without importing boot. Every path in a request is absolute.
 
 // ErrNotCarried is the error of a part of Tools that the binary does not link: every
-// part in aiops, which links neither the builder nor what it links.
+// part in aiops, which links neither the builder nor what it links, nor the module zip.
 var ErrNotCarried = errors.New("launch: this binary does not carry the tool")
 
 // Toolbox is the launcher's toolbox. Render, Gate, ReadManifest, Shipped and Release
@@ -59,6 +59,9 @@ type Tools interface {
 	// Scenario runs a named, versioned scenario on a pack's rows replayed from its
 	// fixtures.
 	Scenario(ctx context.Context, r ScenarioRequest) (ScenarioReport, error)
+	// Module reads the module of in-process code for the module layer and the SBOM of
+	// plugin pack (ADR-047 decision 1): the h1 sum of its module zip and its build list.
+	Module(ctx context.Context, r ModuleRequest) (Module, error)
 }
 
 // NoTools is the Tools of a binary that links none of them: every part answers
@@ -81,6 +84,7 @@ func (NoTools) Template(context.Context, TemplateRequest) (map[string][]byte, er
 func (NoTools) Scenario(context.Context, ScenarioRequest) (ScenarioReport, error) {
 	return ScenarioReport{}, ErrNotCarried
 }
+func (NoTools) Module(context.Context, ModuleRequest) (Module, error) { return Module{}, ErrNotCarried }
 
 // Diagnostic is one finding. Check is a gate check, a step of plugin check or an
 // obligation id; File and Line are where, when known.
@@ -297,4 +301,20 @@ type ScenarioReport struct {
 	Name, Version string
 	Halves        []string
 	Failures      []string
+}
+
+// ModuleRequest names the root of the module of in-process code, the plugin directory,
+// and the version it is packed at.
+type ModuleRequest struct {
+	Dir, Version string
+}
+
+// Module is a Go module: its path, its version and its h1 sum, as go mod download
+// records them; in a build list a replaced module's version names its replacement, and
+// a replacement by a directory has no sum. For the module of a ModuleRequest, Deps is
+// the rest of its build list, as go list -m -json all reads it with the author's
+// toolchain.
+type Module struct {
+	Path, Version, Sum string
+	Deps               []Module
 }

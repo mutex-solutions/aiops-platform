@@ -4,33 +4,24 @@ package operations
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/mod/module"
-	"golang.org/x/mod/sumdb/dirhash"
-	modzip "golang.org/x/mod/zip"
 )
 
 // The layers that plugin pack reads from a plugin directory (ADR-047 decisions 1 and
-// 3): the content and fixtures trees as canonical tars, the module of in-process code
-// and the SBOM.
+// 3): the content and fixtures trees as canonical tars and the SBOM. The module of
+// in-process code is the toolbox's (launch.Tools.Module), which aiopsctl alone links.
 
 // regularFiles returns the regular files under dir by slash path relative to it, nil when dir
 // does not exist. A link, a device or a path that is not valid UTF-8 and clean fails.
@@ -94,70 +85,6 @@ func untar(b []byte, put func(name string, data []byte) error) error {
 			return err
 		}
 	}
-}
-
-// moduleOf returns module.json of the in-process code in dir at version, {"path",
-// "version", "sum"}: the path of its main module and the h1 sum of the module zip of
-// dir, as go mod download records it, and adds the build list of the module to the
-// SBOM, each module with its path, its version with its replacement and its sum, as go
-// list -m -json all reads them with the author's toolchain, licences not asserted
-// (ADR-047 decision 1). The toolchain writes no go.mod or go.sum here (-mod=readonly).
-func moduleOf(ctx context.Context, dir, version string, doc *sbom) ([]byte, error) {
-	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
-		return nil, refused("in-process code is packed from the root of its module: %v", err)
-	}
-	type listed struct {
-		Path, Version, Sum string
-		Main               bool
-		Replace            *listed
-	}
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "go", "list", "-mod=readonly", "-m", "-json", "all")
-	cmd.Dir, cmd.Env, cmd.Stderr = dir, append(os.Environ(), "GOWORK=off"), &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, refused("go list -m -json all in %s, the build list of its SBOM: %v: %s", dir, err, bytes.TrimSpace(stderr.Bytes()))
-	}
-	var mods []listed
-	for d := json.NewDecoder(bytes.NewReader(out)); d.More(); {
-		var l listed
-		if err := d.Decode(&l); err != nil {
-			return nil, err
-		}
-		mods = append(mods, l)
-	}
-	if len(mods) == 0 || !mods[0].Main {
-		return nil, refused("go list -m -json all in %s names no main module first", dir)
-	}
-	m := module.Version{Path: mods[0].Path, Version: version}
-	var z bytes.Buffer
-	if err := modzip.CreateFromDir(&z, m, dir); err != nil {
-		return nil, refused("the module zip of %s: %v", dir, err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(z.Bytes()), int64(z.Len()))
-	if err != nil {
-		return nil, err
-	}
-	files := map[string]*zip.File{}
-	for _, zf := range zr.File {
-		files[zf.Name] = zf
-	}
-	sum, err := dirhash.Hash1(slices.Collect(maps.Keys(files)), func(name string) (io.ReadCloser, error) { return files[name].Open() })
-	if err != nil {
-		return nil, err
-	}
-	doc.module(m.Path, m.Version, sum)
-	for _, l := range mods[1:] {
-		if r := l.Replace; r != nil {
-			l.Version, l.Sum = strings.TrimSpace(l.Version+" => "+r.Path+" "+r.Version), r.Sum
-		}
-		doc.module(l.Path, l.Version, l.Sum)
-	}
-	return json.Marshal(struct {
-		Path    string `json:"path"`
-		Version string `json:"version"`
-		Sum     string `json:"sum"`
-	}{m.Path, m.Version, sum})
 }
 
 // sbom is an SPDX 2.3 document in its JSON form, written with encoding/json (ADR-047

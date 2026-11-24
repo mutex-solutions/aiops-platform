@@ -355,15 +355,18 @@ entries:
       - {dir: plugins/operations, decision: "ADR-047 decisions 1 and 4: the types of the OCI client"}
     default: false
 
-  # The module zip, its h1 sum and the go.mod reader that plugin pack uses for the module
-  # layer and the SBOM of in-process code (ADR-047 decision 1): the packages modfile,
-  # module, sumdb/dirhash and zip, which the go command itself uses, so the sum is the
-  # one go.sum records. The module was in the package graph already, through sigstore-go,
-  # at the same pin; its go.mod requires golang.org/x/tools for its own tests only.
+  # The module zip and its h1 sum that plugin pack takes for the module layer and the SBOM
+  # of in-process code (ADR-047 decision 1): the packages module, sumdb/dirhash and zip,
+  # with modfile through zip, which the go command itself uses, so the sum is the one
+  # go.sum records. They are the toolbox's, which aiopsctl alone links, and enter no
+  # server binary (ADR-044, Consequences, and the owner's decision of 2026-11-24). The
+  # module was in the package graph already, through sigstore-go, which links its packages
+  # semver and sumdb/note, at the same pin; its go.mod requires golang.org/x/tools for its
+  # own tests only.
   - id: x-mod
     names: [x-mod]
     form: library
-    behind: operations
+    behind: none
     modules: [golang.org/x/mod]
     pin: v0.42.0
     licence: BSD-3-Clause
@@ -373,7 +376,7 @@ entries:
       - {source: "golang.org/x/mod@v0.42.0 LICENSE (BSD-3-Clause, Copyright 2009 The Go Authors), PATENTS and go.mod", read: "2026-11-24", version: v0.42.0}
     mark: needs-approval
     importers:
-      - {dir: plugins/operations, decision: "ADR-047 decision 1: the module layer and the SBOM of in-process code"}
+      - {dir: internal/authoring, decision: "ADR-047 decision 1; ADR-044, Consequences: the module zip of the toolbox, for the module layer and the SBOM of in-process code"}
     default: false
 
   - id: goleak

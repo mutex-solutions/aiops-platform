@@ -78,6 +78,8 @@ func writeTree(t *testing.T, dir string, files map[string]string) string {
 // answers the clauses of deny and records each request, and Suite and Scenario answer
 // suite and scenario, or that they are not carried when nil, as in an aiopsctl built
 // without the suite binaries; each records whether its directory held the fixtures.
+// Module answers mod at the version asked, as the module zip of the toolbox reads it,
+// or that it is not carried when mod names no path, as in aiops.
 type packBox struct {
 	launch.NoTools
 	sum      launch.ManifestSummary
@@ -85,9 +87,19 @@ type packBox struct {
 	deny     []launch.Clause
 	suite    *launch.SuiteReport
 	scenario *launch.ScenarioReport
+	mod      launch.Module
 	mu       sync.Mutex
 	gates    []launch.GateRequest
 	fixtures []bool
+}
+
+func (b *packBox) Module(ctx context.Context, q launch.ModuleRequest) (launch.Module, error) {
+	if b.mod.Path == "" {
+		return b.NoTools.Module(ctx, q)
+	}
+	m := b.mod
+	m.Version = q.Version
+	return m, nil
 }
 
 func (*packBox) Render(context.Context, launch.RenderRequest) (launch.Rendered, error) {
@@ -329,31 +341,33 @@ func TestPackWritesOneArtifact(t *testing.T) {
 	}
 }
 
-// The module layer of in-process code holds the path of go.mod, the version of the
-// manifest and the sum of the module zip of the directory, as the Go toolchain writes
-// it in go.sum; its SBOM lists the build list of the module, each module with its path,
-// its version with its replacement and its sum, as go list -m -json all reads it, a
-// module that only a requirement requires among them (ADR-047 decision 1). It carries
-// no fixtures layer. The module cache alone serves golang.org/x/sync, which the
-// repository requires at that version.
+// The module layer of in-process code holds the path, the version of the manifest and
+// the h1 sum that the module zip of the toolbox reads; its SBOM lists that module and
+// its build list, each module with its path, its version with its replacement and its
+// sum, none for a replacement by a directory (ADR-047 decision 1). It carries no
+// fixtures layer. Where the toolbox carries no module zip, as in aiops, pack refuses
+// and leaves no layout.
 func TestPackOfInProcessCode(t *testing.T) {
-	t.Setenv("GOPROXY", "off")
 	sum := packSummary()
 	sum.Runtimes = []string{"inproc"}
-	l := Library{Box: &packBox{sum: sum}}
-	root := t.TempDir()
-	writeTree(t, filepath.Join(root, "b"), map[string]string{"go.mod": "module example.test/b\n\ngo 1.26\n\nrequire example.test/c v1.0.0\n"})
-	writeTree(t, filepath.Join(root, "c"), map[string]string{"go.mod": "module example.test/c\n\ngo 1.26\n"})
-	dir := writeTree(t, filepath.Join(root, "echo"), map[string]string{
+	b := &packBox{sum: sum}
+	l := Library{Box: b}
+	dir := pluginDir(t, map[string]string{
 		"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
 		"bundle.yaml": "[]\n",
-		"go.mod": "module example.test/echo\n\ngo 1.26.0\n\nrequire (\n\texample.test/b v1.0.0\n\tgolang.org/x/sync v0.24.0\n)\n\n" +
-			"replace example.test/b => ../b\n\nreplace example.test/c => ../c\n",
-		"go.sum":     "golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=\ngolang.org/x/sync v0.24.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=\n",
-		"echo.go":    "package echo\n",
-		"fixtures/x": "x\n",
+		"go.mod":      "module example.test/echo\n",
+		"echo.go":     "package echo\n",
+		"fixtures/x":  "x\n",
 	})
 	out := filepath.Join(t.TempDir(), "artifact")
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), launch.ErrNotCarried.Error()) {
+		t.Errorf("Pack with no module zip = %v; want a refusal naming the tool not carried", err)
+	}
+	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a refused pack left %s: %v", out, err)
+	}
+	b.mod = launch.Module{Path: "example.test/echo", Sum: echoSum, Deps: []launch.Module{{Path: "example.test/b", Version: "v1.0.0 => ../b"},
+		{Path: "example.test/c", Version: "v1.0.0 => ../c"}, {Path: "golang.org/x/sync", Version: "v0.24.0", Sum: "h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA="}}}
 	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
 		t.Fatal(err)
 	}
@@ -385,8 +399,8 @@ func TestPackOfInProcessCode(t *testing.T) {
 	}
 }
 
-// echoSum is the h1 sum of the module example.test/echo at v0.1.0 of
-// TestPackOfInProcessCode, as go mod download would record it.
+// echoSum is an h1 sum of the module example.test/echo at v0.1.0, as go mod download
+// would record it.
 const echoSum = "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="
 
 // Pack refuses, and leaves no layout, where the gate denies a clause, where a content

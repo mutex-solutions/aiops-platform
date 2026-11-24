@@ -76,10 +76,15 @@ func image(reg *ocitest.Registry, name, tag string, manifest []byte) ocitest.Des
 // box is the launcher's toolbox of a case: Render answers the Rendered of the Setup for
 // the profile, Shipped its shipped files, ReadManifest its manifest, and the gate
 // passes every clause; the suites are not carried, as in an aiopsctl built before
-// they land.
+// they land, and the module zip answers a module of the plugin directory, as that of
+// aiopsctl does.
 type box struct {
 	launch.NoTools
 	s conformance.Setup
+}
+
+func (box) Module(ctx context.Context, q launch.ModuleRequest) (launch.Module, error) {
+	return launch.Module{Path: "example.test/echo", Version: q.Version, Sum: "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="}, ctx.Err()
 }
 
 func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendered, error) {

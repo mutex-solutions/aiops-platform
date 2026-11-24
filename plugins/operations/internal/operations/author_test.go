@@ -224,7 +224,8 @@ func TestCheckStep7Packs(t *testing.T) {
 func TestPackOfCodeNamesWhatDidNotRun(t *testing.T) {
 	sum := packSummary()
 	sum.Runtimes = []string{"inproc"}
-	b := &packBox{sum: sum, suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Skipped: []string{"TestTenants"}}}}}
+	b := &packBox{sum: sum, suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Skipped: []string{"TestTenants"}}}},
+		mod: launch.Module{Path: "example.test/echo", Sum: echoSum}}
 	l := Library{Box: checkBox{b}}
 	dir := pluginDir(t, map[string]string{"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
 		"bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n\ngo 1.26\n", "echo.go": "package echo\n"})

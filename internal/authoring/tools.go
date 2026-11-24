@@ -2,8 +2,9 @@
 
 // Package authoring is the part of the launcher's toolbox that only aiopsctl links and
 // hands to boot (ADR-061 decision 21): plugingen, the import analyzer and plugin vet of
-// internal/vet, the suites, the templates of plugin new and the scenarios, and the data
-// of the lints of step 1 of plugin check. aiops links none of it.
+// internal/vet, the suites, the templates of plugin new and the scenarios, the module zip
+// of plugin pack, and the data of the lints of step 1 of plugin check. aiops links none
+// of it.
 //
 // The suites of a Go plugin run in the author's module through the Go toolchain, so the
 // attestation names the suites that plugin check ran and not those an author's test

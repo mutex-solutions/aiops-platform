@@ -145,11 +145,21 @@ func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSumm
 	p.layers = []blob{{layerManifest, p.manifest, title("plugin.yaml")}, {layerBundle, p.bundle, title("bundle.yaml")}}
 	doc := newSBOM(sum.ID, sum.Version, m.License)
 	if slices.Contains(sum.Runtimes, "inproc") {
-		mod, err := moduleOf(ctx, dir, "v"+sum.Version, doc)
+		// module.json, {"path", "version", "sum"}, and the build list in the SBOM, licences
+		// not asserted (ADR-047 decision 1), from the module zip of the toolbox.
+		mod, err := l.Box.Module(ctx, launch.ModuleRequest{Dir: dir, Version: "v" + sum.Version})
 		if err != nil {
-			return p, err
+			return p, refused("the module of in-process code in %s: %v", dir, err)
 		}
-		p.layers = append(p.layers, blob{layerModule, mod, title("module.json")})
+		for _, m := range append([]launch.Module{mod}, mod.Deps...) {
+			doc.module(m.Path, m.Version, m.Sum)
+		}
+		b, _ := json.Marshal(struct {
+			Path    string `json:"path"`
+			Version string `json:"version"`
+			Sum     string `json:"sum"`
+		}{mod.Path, mod.Version, mod.Sum})
+		p.layers = append(p.layers, blob{layerModule, b, title("module.json")})
 	}
 	for _, t := range []struct {
 		dir, mediaType string
