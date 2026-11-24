@@ -18,7 +18,7 @@ consumers:
   reload: [aiops/reload-socket, aiops-test/test-submit, aiops-test/test-state]
   # The command rows as in the release; ops-caller stands for the others of aiops-cli
   # (ADR-061 decision 20).
-  operations: [aiops/command-key, aiops-test/ops-caller]
+  operations: [aiops/command-key, aiops/command-trust, aiops-test/ops-caller]
 sealedHooks:
   internal/status: [aiops/restart-policy, aiops/readiness]
   internal/config: [aiops/config-refs]

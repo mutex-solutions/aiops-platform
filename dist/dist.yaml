@@ -26,7 +26,7 @@ consumers:
   loader: [aiops/reload]
   profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile]
   reload: [aiops/reload-socket]
-  operations: [aiops/command-key]
+  operations: [aiops/command-key, aiops/command-trust]
 # Sealed hooks (07-c4-plugin-sdk.md:463): internal/status for the two rows that follow
 # the state of every fiber, internal/config for the references.
 sealedHooks:
