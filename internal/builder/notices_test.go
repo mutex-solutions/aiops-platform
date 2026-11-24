@@ -121,6 +121,24 @@ func TestLicenceReport(t *testing.T) {
 	}
 }
 
+// A notice is a comment that holds a copyright line of someone other than the Go
+// Authors: a run of // lines, or a /* */ block, as the BSD notice of debug/elf/elf.go
+// is (ADR-044 decision 27).
+func TestNoticeOf(t *testing.T) {
+	const goHeader = "// Copyright 2009 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\n"
+	block := "/*\nCopyright (c) 1996-1998 John D. Polstra.  All rights reserved.\nCopyright (c) 2001 David E. O'Brien\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted.\n*/"
+	for src, want := range map[string]string{
+		goHeader + "package math\n":            "",
+		goHeader + block + "\n\npackage elf\n": block + "\n",
+		goHeader + "// Copyright © 1994-1999 Lucent Technologies Inc.\n// All rights reserved.\n\nTEXT ·f(SB),0,$0\n": "// Copyright © 1994-1999 Lucent Technologies Inc.\n// All rights reserved.\n",
+		goHeader + "/* not a notice */\n\npackage x\n":                                                                "",
+	} {
+		if got := noticeOf([]byte(src)); got != want {
+			t.Errorf("noticeOf(%q) = %q, want %q", src, got, want)
+		}
+	}
+}
+
 // The list of the standard library's files with a notice other than the Go Authors' is
 // the walk of the tree of the pin (ADR-044 decision 27), and a listed file that a
 // binary compiles and that carries no notice fails the build.
@@ -148,5 +166,10 @@ func TestStdNotices(t *testing.T) {
 		Module: Module{Path: Toolchain, Version: ToolchainVersion, Dir: tree}, SFiles: []string{"memmove_amd64.s"}}})
 	if err != nil || len(files) != 1 || !strings.Contains(string(files[0].Data), "Lucent Technologies") {
 		t.Errorf("the notice of runtime/memmove_amd64.s: %v, %v", err, files)
+	}
+	files, err = stdNoticeFiles([]Package{{ImportPath: "debug/elf", Dir: filepath.Join(tree, "src", "debug", "elf"), Standard: true,
+		Module: Module{Path: Toolchain, Version: ToolchainVersion, Dir: tree}, GoFiles: []string{"elf.go"}}})
+	if err != nil || len(files) != 1 || !strings.Contains(string(files[0].Data), "John D. Polstra") {
+		t.Errorf("the notice of debug/elf/elf.go, in a /* */ block: %v, %v", err, files)
 	}
 }
