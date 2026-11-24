@@ -306,7 +306,7 @@ func (f *Fake) publicKey(p string) (string, error) {
 		return "", refused("read the public key: %v", err)
 	}
 	blk, _ := pem.Decode(b)
-	if blk == nil || blk.Type != "PUBLIC KEY" {
+	if blk == nil || !strings.HasPrefix(strings.TrimSpace(string(b)), "-----BEGIN ") || blk.Type != "PUBLIC KEY" {
 		return "", refused("%s holds no PEM block PUBLIC KEY", p)
 	}
 	pk, err := x509.ParsePKIXPublicKey(blk.Bytes)

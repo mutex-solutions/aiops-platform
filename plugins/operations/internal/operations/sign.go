@@ -95,10 +95,12 @@ func LoadPrivateKey(data, password []byte) (*ecdsa.PrivateKey, error) {
 
 // LoadPublicKey reads data, one PEM block PUBLIC KEY of an ECDSA P-256 key and nothing
 // else, and returns the key and its id, the base64 of the SHA-256 of its DER form, the
-// hint that cosign and sigstore-go write (ADR-020 decision 4).
+// hint that cosign and sigstore-go write (ADR-020 decision 4). pem.Decode skips what
+// stands before a block, and boot reads a key of trust.yaml only when its text starts
+// with the block (boot.ReadTrust), so neither does this.
 func LoadPublicKey(data []byte) (*ecdsa.PublicKey, string, error) {
 	b, rest := pem.Decode(data)
-	if b == nil || b.Type != "PUBLIC KEY" || len(b.Headers) > 0 || len(bytes.TrimSpace(rest)) > 0 {
+	if b == nil || !bytes.HasPrefix(bytes.TrimSpace(data), []byte("-----BEGIN ")) || b.Type != "PUBLIC KEY" || len(b.Headers) > 0 || len(bytes.TrimSpace(rest)) > 0 {
 		return nil, "", errors.New("not a public key file: one PEM block PUBLIC KEY and nothing else (ADR-020 decision 4)")
 	}
 	k, err := x509.ParsePKIXPublicKey(b.Bytes)
