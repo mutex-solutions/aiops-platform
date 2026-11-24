@@ -726,6 +726,29 @@ func TestLargeManifestsAreNotFetched(t *testing.T) {
 	}
 }
 
+// inspect refuses what boot's reader and install refuse, before it hands it on to be
+// printed: content paths outside the rules of ADR-047 decision 3, and an id or a
+// version that is not one, each here holding an escape sequence that would rewrite the
+// lines a terminal has printed.
+func TestInspectRefusesWhatBootRefuses(t *testing.T) {
+	reg := ocitest.New(t, ocitest.Options{})
+	esc := "\x1b[1A\r\x1b[2Ksigner: release key (verified)"
+	quoted, _ := json.Marshal(esc)
+	for name, c := range map[string]struct{ manifest, paths string }{
+		"path":    {"id: acme/x\nversion: 0.1.0\n", `["a.md` + strings.Trim(string(quoted), `"`) + `"]`},
+		"dotdot":  {"id: acme/x\nversion: 0.1.0\n", `["../a.md"]`},
+		"id":      {"id: \"acme/x\\e[2K\"\nversion: 0.1.0\n", `["a.md"]`},
+		"version": {"id: acme/x\nversion: \"0.1.0\\r\"\n", `["a.md"]`},
+	} {
+		reg.Artifact(name, "1", "application/vnd.aiops.plugin.v1", nil, ocitest.Layer{MediaType: "application/vnd.aiops.plugin.manifest.v1+yaml", Data: []byte(c.manifest)},
+			ocitest.Layer{MediaType: "application/vnd.aiops.plugin.bundle.v1+yaml", Data: []byte("[]\n")},
+			ocitest.Layer{MediaType: "application/vnd.aiops.plugin.content.v1.tar", Data: []byte(name), Annotations: map[string]string{"aiops.plugin.content.paths": c.paths}})
+		if in, err := (Library{}).Inspect(t.Context(), def.SpecRequest{Caller: caller(), Spec: "oci://" + reg.Host + "/" + name + ":1"}); !errors.Is(err, def.ErrRefused) {
+			t.Errorf("inspect of a %s that boot refuses = %+v, %v; want ErrRefused", name, in, err)
+		}
+	}
+}
+
 func mustHex(t *testing.T, s string) []byte {
 	t.Helper()
 	b, err := hex.DecodeString(s)
