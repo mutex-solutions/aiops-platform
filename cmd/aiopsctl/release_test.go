@@ -150,9 +150,9 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 		}
 	}
 
-	build := func(builderPath string) (string, launch.Built) {
+	try := func(builderPath, release string) (string, launch.Built, string, error) {
 		site := t.TempDir()
-		yaml := fmt.Sprintf("release: %s/aiops/release@%s\nplugins:\n  - {module: %s, version: v0.1.0, sum: %s}\n", reg.Host, rel.digest, echo.path, echo.sum)
+		yaml := fmt.Sprintf("release: %s\nplugins:\n  - {module: %s, version: v0.1.0, sum: %s}\n", release, echo.path, echo.sum)
 		if err := os.WriteFile(filepath.Join(site, "dist.yaml"), []byte(yaml), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -160,12 +160,24 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 		tools := authoring.New()
 		tools.Signed, tools.Progress = first.Manifest, &progress
 		b, err := tools.Build(ctx, launch.BuildRequest{DistYAML: filepath.Join(site, "dist.yaml"), ModCache: src, Builder: builderPath})
+		return filepath.Join(site, "build"), b, progress.String(), err
+	}
+	build := func(builderPath string) (string, launch.Built) {
+		out, b, progress, err := try(builderPath, reg.Host+"/aiops/release@"+rel.digest)
 		if err != nil {
-			t.Fatalf("dist build --builder %s: %v\n%s", builderPath, err, progress.String())
+			t.Fatalf("dist build --builder %s: %v\n%s", builderPath, err, progress)
 		}
-		return filepath.Join(site, "build"), b
+		return out, b
 	}
 	t.Cleanup(func() { _ = exec.Command("docker", "image", "rm", reg.Host+"/aiops/release@"+bld.digest).Run() })
+	// An image whose aiopsctl embeds another release's manifest refuses to build: the
+	// release artifact names the release's builder image and holds another signed
+	// manifest, and the image's aiopsctl makes the check of the local path (ADR-044
+	// decisions 1 and 14).
+	other := releaseArtifact(reg, []byte("distVersion: 1\n# another release's manifest\n"), map[string]string{builder.BuilderAnnotation: bld.digest})
+	if _, _, progress, err := try("image", other); err == nil || !strings.Contains(progress, "name the release artifact of "+testVersion) {
+		t.Errorf("the image path on a release whose manifest the image's aiopsctl does not embed: %v\n%s", err, progress)
+	}
 	imageOut, built := build("image")
 	localOut, _ := build("local")
 	if built.Image != filepath.Join(imageOut, "image") || built.Aiopsctl != filepath.Join(imageOut, "aiopsctl", "aiopsctl") || len(built.Manifest) == 0 {

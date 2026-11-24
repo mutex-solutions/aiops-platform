@@ -25,6 +25,8 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 	"github.com/mutex-solutions/aiops-platform/templates"
 )
 
@@ -42,8 +44,10 @@ const testVersion = "v0.2.0-s2a.test"
 // manifest as a referrer, which dist sign signs with the site's key and dist use
 // records; the site's aiopsctl then boots on that record. This binary's own module
 // table is not the release's, whose modules are served, so it runs only the toolbox on
-// the release and the commands that do not read it. A zip whose sum
-// differs from dist.yaml's is refused, and so is a module outside the release that
+// the release and the commands that do not read it. dist.yaml names the release
+// artifact in a registry by digest, and one whose signed manifest is not the one the
+// builder embeds is refused, as is a zip whose sum
+// differs from dist.yaml's, and a module outside the release that
 // declares an aiops/ id, links a fake package, registers a default-mux handler from
 // init and is under a licence dist.yaml does not accept. It builds from nothing with the
 // pinned toolchain module, read from the Go module cache, so -short skips it and the CI
@@ -92,10 +96,13 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		t.Errorf("a release build on a module zip that differs from the go.sum of the root module: %v", err)
 	}
 
+	// The release artifact that dist.yaml names, by digest, in a registry: the referrer
+	// that holds the release's signed manifest (ADR-044 decision 1; ADR-060 decision 17).
+	reg := ocitest.New(t, ocitest.Options{})
+	releaseRef := releaseArtifact(reg, rel.Manifest, nil)
 	site, home := t.TempDir(), filepath.Join(t.TempDir(), "home")
 	env := map[string]string{"PWD": site, "AIOPS_KEY_PASSWORD": "", "AIOPS_HOME": home}
 	build := func(dir string, p modulePin) (launch.Built, string, error) {
-		releaseRef := fmt.Sprintf("registry.example/aiops/release@sha256:%064x", 1)
 		yaml := fmt.Sprintf("release: %s\nplugins:\n  - {module: %s, version: v0.1.0, sum: %s}\n", releaseRef, p.path, p.sum)
 		if err := os.WriteFile(filepath.Join(dir, "dist.yaml"), []byte(yaml), 0o644); err != nil {
 			t.Fatal(err)
@@ -109,6 +116,13 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	if _, _, err := build(t.TempDir(), modulePin{echo.path, h1Of("another zip")}); err == nil || !strings.Contains(err.Error(), "dist.yaml lists") {
 		t.Errorf("a zip whose sum differs: %v", err)
 	}
+	// On the local path, a release whose signed manifest is not, by digest, the one this
+	// aiopsctl embeds is refused, naming the release to use (ADR-044 decisions 1 and 14).
+	releaseRef = releaseArtifact(reg, []byte("distVersion: 1\n# another release's manifest\n"), nil)
+	if _, _, err := build(t.TempDir(), echo); err == nil || !strings.Contains(err.Error(), "name the release artifact of "+testVersion) {
+		t.Errorf("a release whose manifest this aiopsctl does not embed: %v", err)
+	}
+	releaseRef = releaseArtifact(reg, rel.Manifest, nil)
 	_, _, err = build(t.TempDir(), rogue)
 	for _, want := range []string{"declares the id aiops/rogue", "a fake or sdk/testkit package", "init deny-list: a default-mux handler: net/http.HandleFunc",
 		"example.com/acme/rogue is under GPL-2.0-only"} {
@@ -227,6 +241,17 @@ func fill(t *testing.T, repo, download, src string) {
 			}
 		}
 	}
+}
+
+// releaseArtifact stores in reg the release artifact of the signed manifest, the
+// distribution referrer with the manifest as its layer and notes among its annotations,
+// and returns its reference by digest.
+func releaseArtifact(reg *ocitest.Registry, manifest []byte, notes map[string]string) string {
+	const name = "aiops/release"
+	layer := reg.Blob(name, operations.DistributionLayer, manifest)
+	m, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ocitest.ManifestType, "artifactType": operations.DistributionType,
+		"config": reg.Blob(name, ocitest.EmptyType, []byte("{}")), "layers": []ocitest.Descriptor{layer}, "annotations": notes})
+	return reg.Host + "/" + name + "@" + reg.Manifest(name, "", ocitest.ManifestType, m).Digest
 }
 
 // linkTree links every file under from into to, at the same path.
