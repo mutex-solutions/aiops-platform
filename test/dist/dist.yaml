@@ -13,8 +13,9 @@ consumers:
   loader: [aiops/reload, aiops-test/test-state]
   # test-state composes a candidate through profileContext.
   profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile, aiops-test/test-state]
-  # test-submit submits; test-state reads the results.
-  reload: [aiops-test/test-submit, aiops-test/test-state]
+  # reload-socket submits as in the release; test-submit submits; test-state reads the
+  # results.
+  reload: [aiops/reload-socket, aiops-test/test-submit, aiops-test/test-state]
   # ops-caller stands for the command rows of aiops-cli (ADR-061 decision 20).
   operations: [aiops-test/ops-caller]
 sealedHooks:

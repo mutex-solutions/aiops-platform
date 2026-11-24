@@ -54,6 +54,12 @@ jobs:
       # test/recomposition, test/loader-smoke) skip themselves, loudly; the s1-suites job
       # runs them without it. Nothing else in the repository reads -short.
       - run: go test -race -short -count=1 ./...
+      - name: reload-socket peer credentials
+        # ADR-062 decision 18 and ADR-060 decision 36: a client run as root enters run/
+        # and is refused with peer, and a client run as another unprivileged user cannot
+        # open the socket. The runner has passwordless sudo; the step fails, and does not
+        # skip, when it cannot run them. make check does not run it.
+        run: make peer-check
       - name: Kernel module build, vet, race tests
         working-directory: sdk/kernel
         run: |

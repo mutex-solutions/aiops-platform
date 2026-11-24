@@ -18,6 +18,15 @@ s1-suites:
 	if ls $$r/report.* >/dev/null 2>&1; then cat $$r/report.*; echo 's1-suites: a race-built process reported a data race'; s=1; fi; \
 	rm -rf $$r; exit $$s
 
+# `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
+# a client run as root is refused by reload-socket and one run as another user cannot
+# open its socket. It needs passwordless sudo, so `make check` does not run it. It fails,
+# and does not skip, when it cannot run the cases.
+.PHONY: peer-check
+peer-check:
+	out=$$(AIOPS_PEER_SUDO=1 go test -count=1 -v -run '^TestPeerCredentialsAcrossUsers$$' ./plugins/reload-socket 2>&1); s=$$?; \
+	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestPeerCredentialsAcrossUsers'
+
 .PHONY: check
 check:
 	test -z "$$(gofmt -l . | tee /dev/stderr)"
