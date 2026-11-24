@@ -106,13 +106,14 @@ jobs:
         # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl and the
         # operations library, plugins/operations, provisional caps during S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
-        # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each.
+        # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
+        # 4,500 since the note of 2026-11-24, which raised them from 3,500.
         run: |
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
-          go run ./tools/kernelcheck lines plugins/operations 3500 provisional internal
-          go run ./tools/kernelcheck lines plugins/operations/internal/operations 3500 provisional
+          go run ./tools/kernelcheck lines plugins/operations 4500 provisional internal
+          go run ./tools/kernelcheck lines plugins/operations/internal/operations 4500 provisional
       - name: pluginApi check
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
         # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.
@@ -201,11 +202,13 @@ jobs:
           done
       - name: Operations definition line caps
         # ADR-060 decision 35 and ADR-061: the operations definition, its fake and its
-        # suite are packages of their own, 800 lines each, provisional until the S2a exit.
+        # suite are packages of their own, provisional until the S2a exit: the definition
+        # 800 lines, the fake and the suite 1,000 each since the note of 2026-11-24, which
+        # raised them from 800.
         run: |
           go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 800 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1000 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1000 provisional
 
   s1-suites:
     name: S1 exit suites on the built binary

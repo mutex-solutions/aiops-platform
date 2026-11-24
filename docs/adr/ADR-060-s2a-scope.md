@@ -707,6 +707,14 @@ gaps:
     rises from 9,000 to 10,500 lines for the rest of S2a, with `ci.yml` and the Makefile
     changed in the same commit. `boot` measures 8,901 lines at `6774918`, and the growth
     that the consequences allow it over its count at `491a518` becomes 4,327 lines.
+    Second note of 2026-11-24: on the owner's word, the provisional caps of the operations
+    library, `plugins/operations` and its internal package, rise from 3,500 to 4,500 lines
+    each, and those of the operations fake and the operations suite,
+    `sdk/def/operations/v0/fake` and `sdk/def/operations/v0/conformance`, from 800 to
+    1,000 lines each, for the rest of S2a, with `ci.yml` and the Makefile changed in the
+    same commit; the operations definition keeps 800. Before plugin install, enable,
+    disable and remove (ADR-061), the internal package measures 3,446 lines, the fake 771
+    and the suite 780 at `df1231a`.
 
 | Package | Measured at `491a518` | Cap during S2a |
 |---|---|---|
@@ -717,8 +725,8 @@ gaps:
 | each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |
 | `cmd/aiopsctl` | 210 (s1-report:75) | 2,500, provisional |
 | each command row's plugin, with question Q17 (a), and `plugins/cli` (ADR-061) | new | 1,500 each, provisional |
-| `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional |
-| the operations library, `plugins/operations` (ADR-061) | new | 3,500, provisional |
+| `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional; the fake and the suite of `sdk/def/operations/v0` 1,000 each (800 until the second note of 2026-11-24) |
+| the operations library, `plugins/operations` (ADR-061) | new | 4,500, provisional (3,500 until the second note of 2026-11-24) |
 | the builder | new | 3,000, provisional |
 | `plugingen` | new | 1,500, provisional |
 

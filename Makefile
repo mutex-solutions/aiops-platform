@@ -60,11 +60,11 @@ check:
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
-	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 3,500
-	@# lines, provisional: the row package, internal/ skipped, and its internal package,
-	@# with the client of reload-socket (ADR-062 decision 16), each.
-	$(KC) lines plugins/operations 3500 provisional internal
-	$(KC) lines plugins/operations/internal/operations 3500 provisional
+	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
+	@# lines since the note of 2026-11-24, provisional: the row package, internal/ skipped,
+	@# and its internal package, with the client of reload-socket (ADR-062 decision 16), each.
+	$(KC) lines plugins/operations 4500 provisional internal
+	$(KC) lines plugins/operations/internal/operations 4500 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
@@ -113,8 +113,8 @@ check:
 	for p in cli command-profile command-plugin command-trust command-dist command-key; do \
 		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
 	done
-	@# ADR-060 decision 35 and ADR-061: the operations definition, its fake and its suite,
-	@# 800 each.
+	@# ADR-060 decision 35 and ADR-061: the operations definition, 800 lines; its fake and
+	@# its suite, 1,000 each since the note of 2026-11-24.
 	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
-	$(KC) lines sdk/def/operations/v0/fake 800 provisional
-	$(KC) lines sdk/def/operations/v0/conformance 800 provisional
+	$(KC) lines sdk/def/operations/v0/fake 1000 provisional
+	$(KC) lines sdk/def/operations/v0/conformance 1000 provisional
