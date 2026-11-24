@@ -41,6 +41,9 @@ const (
 	ExitGaveUp   = 5 // replaced: restart-policy gave up on an infrastructure provider
 	ExitInternal = 6 // the launcher failed: the kernel refused its config, a launch key could not be provided
 	ExitRestore  = 7 // replaced: a restore failed
+	// ExitInterrupted is the stop by a signal or the end of ctx under RunOptions.Command
+	// (ADR-061 decision 13).
+	ExitInterrupted = 8
 )
 
 // LoaderID is the module-table id of the loader plugin, which boot mounts first
@@ -196,6 +199,10 @@ type RunOptions struct {
 	Release   *Release
 	Limits    Limits
 	Clock     Clock
+
+	// Command is set by aiopsctl, whose cli row runs one command and requests the exit
+	// with its code (ADR-061 decision 13).
+	Command bool
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)
