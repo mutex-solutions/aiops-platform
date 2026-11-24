@@ -5,6 +5,7 @@ package operations
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -408,5 +409,32 @@ func TestASnapshotWithNoListIsRemoved(t *testing.T) {
 	}
 	if got := tree(t, h); !equal(got, map[string]string{"trust.yaml": "after\n"}) {
 		t.Errorf("home %v, want trust.yaml written and no snapshot", got)
+	}
+}
+
+// A restore that stops goes on where it stopped: each entry leaves paths.json once it is
+// restored, so the next writer restores only what is left, and a restore that cannot
+// finish within one bound still makes progress (ADR-061 decision 17).
+func TestAStoppedRestoreResumes(t *testing.T) {
+	h := newHome(t)
+	before := tree(t, h)
+	kill(t, h, "restore") // stopped after the first entry, trust.yaml, is restored
+	b, err := os.ReadFile(filepath.Join(h.Dir, "snapshot", "paths.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l paths
+	if err := json.Unmarshal(b, &l); err != nil || len(l.Replaced) != 0 || !slices.Equal(l.Created, []string{"verified"}) {
+		t.Fatalf("paths.json %s, %v; want only the created path that is left", b, err)
+	}
+	if got := tree(t, h)["trust.yaml"]; got != before["trust.yaml"] {
+		t.Fatalf("trust.yaml %q, want it restored to %q", got, before["trust.yaml"])
+	}
+	h.LockWait = 0
+	if _, err := h.Write(t.Context(), Write{Command: "next", Plan: plan(nil)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tree(t, h); !equal(got, before) {
+		t.Errorf("home %v, want it restored to %v", got, before)
 	}
 }
