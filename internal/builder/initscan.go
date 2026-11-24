@@ -20,25 +20,30 @@ import (
 )
 
 // The init deny-list (ADR-044 decisions 11, 12, 21, 24 and 25; 08:402): a call of a
-// function of registrations, or of a method of a registry on its default value, that
-// the call graph reaches from the init function of any package of the server's graph,
-// which runs the package-level variable initializers and every init, the package that
-// declares the registry included, is a finding unless exceptions names it.
+// function of registrations, or a load of a default registry of defaults, in any
+// function that the call graph reaches from the init function of any package of the
+// server's graph, which runs the package-level variable initializers and every init,
+// the package that declares the registry included, is a finding unless exceptions
+// names it. A load counts however init then reaches a method of the registry: through
+// an interface value, a method value, a variable or a parameter.
 var registrations = map[string]string{
 	"database/sql.Register": "a database/sql driver",
 	"net/http.Handle":       "a default-mux handler",
 	"net/http.HandleFunc":   "a default-mux handler",
-	"github.com/prometheus/client_golang/prometheus.Register":                       "a default-registry collector",
-	"github.com/prometheus/client_golang/prometheus.MustRegister":                   "a default-registry collector",
-	"google.golang.org/grpc/encoding.RegisterCodec":                                 "a global codec",
-	"google.golang.org/grpc/encoding.RegisterCodecV2":                               "a global codec",
-	"google.golang.org/grpc/encoding.RegisterCompressor":                            "a global codec",
-	"encoding/gob.Register":                                                         "a global codec",
-	"encoding/gob.RegisterName":                                                     "a global codec",
-	"(*net/http.ServeMux).Handle@net/http.DefaultServeMux":                          "a default-mux handler",
-	"(*net/http.ServeMux).HandleFunc@net/http.DefaultServeMux":                      "a default-mux handler",
-	"Register@github.com/prometheus/client_golang/prometheus.DefaultRegisterer":     "a default-registry collector",
-	"MustRegister@github.com/prometheus/client_golang/prometheus.DefaultRegisterer": "a default-registry collector",
+	"github.com/prometheus/client_golang/prometheus.Register":     "a default-registry collector",
+	"github.com/prometheus/client_golang/prometheus.MustRegister": "a default-registry collector",
+	"google.golang.org/grpc/encoding.RegisterCodec":               "a global codec",
+	"google.golang.org/grpc/encoding.RegisterCodecV2":             "a global codec",
+	"google.golang.org/grpc/encoding.RegisterCompressor":          "a global codec",
+	"encoding/gob.Register":                                       "a global codec",
+	"encoding/gob.RegisterName":                                   "a global codec",
+}
+
+// defaults are the default registries of the table whose methods register: a load of
+// one is a finding, as a call of a function of registrations is.
+var defaults = map[string]string{
+	"net/http.DefaultServeMux": "a default-mux handler",
+	"github.com/prometheus/client_golang/prometheus.DefaultRegisterer": "a default-registry collector",
 }
 
 // promauto is the package whose constructors, its package-level New functions,
@@ -135,6 +140,11 @@ func ScanInits(ctx context.Context, dir string, env []string, mains ...string) (
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
+		for _, g := range loads(n.Func) {
+			if f := (Finding{Kind: defaults[g], Call: g, In: n.Func.String(), From: seen[n]}); !slices.Contains(out, f) {
+				out = append(out, f)
+			}
+		}
 		for _, e := range n.Out {
 			if kind, call := registration(e); kind != "" {
 				f := Finding{Kind: kind, Call: call, In: e.Caller.Func.String(), From: seen[n]}
@@ -163,27 +173,24 @@ func registration(e *callgraph.Edge) (string, string) {
 	if k, ok := registrations[name]; ok {
 		return k, name
 	}
-	if e.Site == nil {
-		return "", ""
-	}
-	c := e.Site.Common()
-	recv := c.Value
-	if !c.IsInvoke() && len(c.Args) > 0 && callee.Signature.Recv() != nil {
-		recv = c.Args[0]
-	}
-	method := name
-	if c.IsInvoke() {
-		method = c.Method.Name()
-	}
-	if u, ok := recv.(*ssa.UnOp); ok && u.Op == token.MUL {
-		if g, ok := u.X.(*ssa.Global); ok && g.Pkg != nil {
-			key := method + "@" + g.Pkg.Pkg.Path() + "." + g.Name()
-			if k, ok := registrations[key]; ok {
-				return k, key
+	return "", ""
+}
+
+// loads returns each default registry of defaults that fn loads.
+// ponytail: a load, not an address taken (&http.DefaultServeMux), which no package of
+// the graph writes; count the address too if one ever does.
+func loads(fn *ssa.Function) []string {
+	var out []string
+	for _, b := range fn.Blocks {
+		for _, in := range b.Instrs {
+			if u, ok := in.(*ssa.UnOp); ok && u.Op == token.MUL {
+				if g, ok := u.X.(*ssa.Global); ok && defaults[g.String()] != "" {
+					out = append(out, g.String())
+				}
 			}
 		}
 	}
-	return "", ""
+	return out
 }
 
 // excepted reports whether an exception names the registration call made in fn, at the
