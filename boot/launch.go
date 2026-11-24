@@ -82,6 +82,7 @@ type profileContext struct {
 	signed        Distribution
 	release       *Release
 	tie           map[string]Tie
+	commits       chan struct{} // pinged at each commit: the run loop publishes the rows
 
 	mu        sync.Mutex
 	committed Composition
@@ -201,11 +202,12 @@ func (p *profileContext) Commit(lc launch.Composition) error {
 	}
 	c = p.admitted(c)
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.committed.Digest != c.Digest {
 		p.rememberLocked(p.committed)
 	}
 	p.committed = c
+	p.mu.Unlock()
+	ping(p.commits)
 	return nil
 }
 

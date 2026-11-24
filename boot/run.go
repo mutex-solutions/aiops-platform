@@ -264,6 +264,8 @@ type run struct {
 	pub      *publisher
 	root     *kernel.Root
 	cat      *catalog
+	pc       *profileContext
+	loader   *kernel.Fiber
 	ready    *latch
 	exits    chan launch.ExitRequest
 	leakPing chan struct{}
@@ -357,7 +359,7 @@ func (r *run) run(ctx context.Context) int {
 	committed := a.Admitted
 	committed.Rows = committed.Rows[1:]
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
-		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}}
+		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}, commits: make(chan struct{}, 1)}
 	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }, booted: make(chan struct{})}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {
@@ -393,6 +395,7 @@ func (r *run) run(ctx context.Context) int {
 	}()
 	loader := root.Plugin(loaderPlugin, o.Registry.LoaderConfig(entrySpecs(a.Admitted), root.Batch, cat.plugins))
 	root.Plugin(r.auditPlugin(), nil)
+	r.pc, r.loader = pc, loader
 
 	// 5. Settle under a bound, then the required audit over the live tree
 	// (03-c3-kernel.md:361).
@@ -416,7 +419,9 @@ func (r *run) run(ctx context.Context) int {
 		fmt.Fprintf(r.errw, "warning: settle: %v\n", serr)
 	}
 	// The audit reads the tree whatever happens to ctx meanwhile: the run loop sees its end.
-	errs, wls := AuditRequired(a.Graph, a.Required, r.view(context.WithoutCancel(ctx), loader))
+	// The status carries what it read, whatever the audit finds.
+	v := r.publishRows(context.WithoutCancel(ctx), a.Graph)
+	errs, wls := AuditRequired(a.Graph, a.Required, v)
 	for _, w := range wls {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
@@ -693,8 +698,22 @@ func (r *run) loop(ctx context.Context) int {
 			}
 		case <-graceUp:
 			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline", false)
+		case <-r.pc.commits:
+			r.pc.mu.Lock()
+			c := r.pc.committed
+			r.pc.mu.Unlock()
+			g, _, _ := BuildGraph(WithLoader(c), r.pc.mods, r.pc.dist, r.pc.roles)
+			r.publishRows(ctx, g)
 		}
 	}
+}
+
+// publishRows reads the tree and publishes the rows that g mounts with their states,
+// and returns what it read.
+func (r *run) publishRows(ctx context.Context, g Graph) StateView {
+	v := r.view(ctx, r.loader)
+	r.pub.update(func(s *ProcessStatus) { s.Rows = rowStates(g, v) })
+	return v
 }
 
 // interrupted is the code of a stop that a signal or the end of ctx began.

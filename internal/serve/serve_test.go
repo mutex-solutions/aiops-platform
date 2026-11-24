@@ -283,6 +283,7 @@ func TestStatusFileCarriesTheRows(t *testing.T) {
 	if !reflect.DeepEqual(got["rows"], want) {
 		t.Errorf("rows = %#v, want %#v", got["rows"], want)
 	}
+	got = nil
 	if err := json.Unmarshal(statusJSON(boot.ProcessStatus{Phase: boot.PhaseStarting}), &got); err != nil || got["rows"] != nil {
 		t.Errorf("rows before boot read them = %#v, %v", got["rows"], err)
 	}

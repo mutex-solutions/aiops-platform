@@ -191,7 +191,11 @@ type StatusRow struct {
 }
 
 func statusJSON(s boot.ProcessStatus) []byte {
-	b, _ := json.MarshalIndent(Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail, nil}, "", "  ")
+	st := Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail, nil}
+	for _, r := range s.Rows {
+		st.Rows = append(st.Rows, StatusRow{ID: r.ID, State: string(r.State), WaitsFor: r.WaitsFor})
+	}
+	b, _ := json.MarshalIndent(st, "", "  ")
 	return append(b, '\n')
 }
 

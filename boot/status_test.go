@@ -68,7 +68,9 @@ func TestCommitPublishesTheRows(t *testing.T) {
 	if err := pc.Commit(next); err != nil {
 		t.Fatal(err)
 	}
-	// The toy loader mounted nothing of the new row: it has no fiber yet.
+	// The run loop publishes the rows of the committed composition. The toy loader mounted
+	// nothing of the new row: it has no fiber yet.
+	f.waitFor(t, done, func(s ProcessStatus) bool { _, ok := rowsByID(s.Rows)["later"]; return ok })
 	got := rowsByID(f.lastStatus().Rows)
 	if g := got["later"]; g.ID != "later" || g.State != "" || len(g.WaitsFor) != 0 || got["store"].State != StateActive {
 		t.Errorf("rows after the commit = %+v", got)
