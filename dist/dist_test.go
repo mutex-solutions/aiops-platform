@@ -104,13 +104,51 @@ func TestShipsTheCLIProfile(t *testing.T) {
 			t.Errorf("row %s: plugin %s in the table %v, required %v", r.ID, r.Plugin, ok, r.Required)
 		}
 	}
-	want := []string{"clock", "config-refs", "restart-policy", "reload", "readiness",
+	want := []string{"clock", "config-refs", "restart-policy", "reload", "reload-socket", "readiness",
 		"cli", "command-profile", "command-plugin", "command-trust", "command-dist", "command-key"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("rows %v, want %v", ids, want)
 	}
 	if _, _, err := boot.Compose(src, boot.Options{Server: true, Modules: reg.Modules}); err == nil || !strings.Contains(err.Error(), "roles") {
 		t.Fatalf("the server rule on the cli profile: %v", err)
+	}
+}
+
+// reload-socket is a row of aiops-core with the roles of the reload row it serves, no
+// config and no required mark, so every server profile that lists aiops-core runs it;
+// the aiops-cli bundle disables it with a bundle-layer patch, so aiopsctl never listens
+// (ADR-062 decisions 1, 2 and 19).
+func TestAiopsCoreServesTheSocketAndAiopsCLIDisablesIt(t *testing.T) {
+	reg, _, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Shipped()
+	row := func(c boot.Composition, id string) boot.Row {
+		t.Helper()
+		for _, r := range c.Rows {
+			if r.ID == id {
+				return r.Row
+			}
+		}
+		t.Fatalf("no row %s", id)
+		return boot.Row{}
+	}
+	home := fstest.MapFS{"profiles/core/profile.yaml": {Data: []byte("bundles: [aiops-core]\n")}}
+	core, _, err := boot.Compose(boot.Sources{Profile: "core", Home: home, Bundles: s}, boot.Options{Server: true, Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sock, rl := row(core, "reload-socket"), row(core, "reload")
+	if sock.Plugin != "aiops/reload-socket" || !sock.Enabled || sock.Required || !slices.Equal(sock.Roles, rl.Roles) || len(sock.Config.Map) != 0 {
+		t.Fatalf("reload-socket in aiops-core: %+v, reload roles %v", sock, rl.Roles)
+	}
+	cli, _, err := boot.Compose(boot.Sources{Profile: "cli", Home: s, Bundles: s}, boot.Options{Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := row(cli, "reload-socket"); r.Enabled {
+		t.Fatalf("reload-socket is enabled in the cli profile: %+v", r)
 	}
 }
 
