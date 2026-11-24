@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/authoring"
 )
 
 // aiopsctl is the launcher of the cli profile (ADR-061 decisions 24 and 25): it boots
@@ -86,7 +87,7 @@ func run(ctx context.Context, args []string, p process, d distribution) int {
 		Stdout: io.Discard, Stderr: p.Err,
 		Stdio: boot.Stdio{In: p.In, Out: p.Out, Err: p.Err}, Dir: p.Dir, Environ: p.Environ,
 		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: d.Limits, Clock: boot.SystemClock(),
-		Command: true, Shipped: d.Shipped, Files: p.Files,
+		Command: true, Shipped: d.Shipped, Files: p.Files, Tools: authoring.New(), Lint: authoring.Lint(),
 	}
 	o.BuildInfo, _ = debug.ReadBuildInfo()
 	return exitCode(boot.Run(ctx, o), p.Err)

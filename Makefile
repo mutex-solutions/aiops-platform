@@ -21,6 +21,18 @@ s1-suites:
 	if ls $$r/report.* >/dev/null 2>&1; then cat $$r/report.*; echo 's1-suites: a race-built process reported a data race'; s=1; fi; \
 	rm -rf $$r; exit $$s
 
+# `make templates` is the templates job (ADR-060 decisions 24 and 36): a plugin
+# generated from the template of each registry compiles, passes T0 and the generated
+# tests, and fails conformance with exactly one line per obligation. It builds Go in
+# modules of its own, which reach the modules of this repository through the module
+# cache, so `make check` (-short) skips it. It fails, and does not skip, when the case
+# does not run.
+.PHONY: templates
+templates:
+	go mod download
+	out=$$(go test -count=1 -v -run '^TestTemplateJob$$' ./internal/authoring 2>&1); s=$$?; \
+	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestTemplateJob'
+
 # `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
 # a client run as root is refused by reload-socket and one run as another user cannot
 # open its socket. It needs passwordless sudo, so `make check` does not run it. It fails,

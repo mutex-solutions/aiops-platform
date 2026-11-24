@@ -67,6 +67,16 @@ func TestTemplateJob(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "go.sum"), sum, 0o644); err != nil {
 				t.Fatal(err)
 			}
+			// The steps of the template's README: go mod tidy, from the module cache alone,
+			// before and after plugin check --write.
+			tidy := func() {
+				cmd := exec.Command("go", "mod", "tidy", "-e") // -e: the tests of goleak import a module the cache need not hold
+				cmd.Dir, cmd.Env = dir, append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOSUMDB=off")
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("go mod tidy: %v\n%s", err, out)
+				}
+			}
+			tidy()
 			// plugin check --write: the generated half and the generated tests.
 			if ds, err := tl.Generate(t.Context(), launch.GenerateRequest{Dir: dir, Write: true}); err != nil || len(ds) != 0 {
 				t.Fatalf("Generate: %+v, %v", ds, err)
@@ -76,6 +86,7 @@ func TestTemplateJob(t *testing.T) {
 					t.Errorf("plugin check --write wrote no %s: %v", f, err)
 				}
 			}
+			tidy()
 			if ds, err := tl.Generate(t.Context(), launch.GenerateRequest{Dir: dir}); err != nil || len(ds) != 0 {
 				t.Errorf("step 2 after --write: %+v, %v", ds, err)
 			}

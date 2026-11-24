@@ -223,6 +223,21 @@ jobs:
       # s1-suites target of the Makefile).
       - run: make s1-suites
 
+  templates:
+    name: Templates of plugin new
+    # ADR-060 decisions 24 and 36 (08-profiles-roadmap-adrs.md:1263; 07-c4-plugin-sdk.md:1563):
+    # a plugin generated from the template of each registry compiles, passes T0 and the
+    # generated tests under -race, and fails conformance with exactly one line per
+    # obligation, so a template cannot fall behind its definition.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: make templates
+
   postgres:
     name: PostgreSQL probes
     runs-on: ubuntu-24.04

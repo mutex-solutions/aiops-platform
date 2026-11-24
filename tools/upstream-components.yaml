@@ -383,6 +383,30 @@ entries:
       - {dir: sdk/testkit, decision: "ADR-060 decision 12; ADR-054 decision 17"}
     default: false
 
+  - id: spdx-license-list
+    names: [spdx]
+    form: content
+    behind: none
+    pin: v3.29.0
+    # The short identifiers of the licenses and exceptions of the list, copied into
+    # internal/authoring/spdx.txt, which aiopsctl embeds for the SPDX lookup of step 1
+    # of plugin check (ADR-060 decision 23; ADR-048 decision 19). The published data
+    # states no licence of its own and points to its source repository, which holds no
+    # licence file and whose release notes put the files of the list under CC0-1.0.
+    licence: CC0-1.0
+    verdict: ok-with-conditions
+    modes: [copy]
+    conditions:
+      - {condition: "Data only: the identifiers of the list, never a licence text, and nothing of it is linked as code", row: L7}
+      - {condition: "spdx.txt names the version and the SHA-256 of the published files it was read from, and a version bump reads the data and its terms again", row: L17}
+    evidence:
+      - {source: "github.com/spdx/license-list-data@v3.29.0+incompatible README.md (Licensing Information), json/licenses.json and json/exceptions.json", read: "2026-11-24", version: v3.29.0}
+      - {source: "github.com/spdx/license-list-XML@v3.29.0+incompatible RELEASE-NOTES.md (version 3.3: the .json, schema and .js files of the list under CC0-1.0); no LICENSE file at that version", read: "2026-11-24", version: v3.29.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/authoring, decision: "ADR-060 decision 23: the SPDX list data embedded in aiopsctl"}
+    default: true
+
   - id: nodejs
     names: [nodejs, node.js]
     form: process

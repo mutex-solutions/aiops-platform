@@ -8,7 +8,8 @@ returns "not implemented" until it is written.
 
 1. Run `go mod tidy`, then `aiopsctl plugin check --write ./`, which writes the generated
    half of `plugin.yaml` and the generated tests `zz_cycle_test.go` and
-   `zz_tenants_test.go`.
+   `zz_tenants_test.go`, then `go mod tidy` again: the generated cycle test imports the
+   cycle runner of the test kit.
 2. Fill in the stubs under `internal/`. A client of an external API is built on the
    injected dialer, and its credentials come from `secrets`, never from a log or a fixture.
 3. Record the responses of the external API under `fixtures/`: the tests replay them, so
