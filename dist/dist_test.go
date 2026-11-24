@@ -74,6 +74,12 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "appExit" }); i < 0 || !slices.Contains(man.Consumers[i].Plugins, "aiops/cli") {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
+	// operations is consumer-bound: the release lists the command rows that call the
+	// operations library (ADR-061 decisions 15 and 20).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "operations" }); i < 0 ||
+		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-key") {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
 	// command-profile reaches the toolbox through profileContext until the operations
 	// library carries Render, InitProfile and SanitizeProfile (ADR-061 decision 20).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "profileContext" }); i < 0 ||

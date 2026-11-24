@@ -64,7 +64,7 @@ func TestExitCodes(t *testing.T) {
 	}{
 		{nil, 2, "usage: aiopsctl <command>"},
 		{[]string{"nope"}, 2, "no such command"},
-		{[]string{"key", "generate", "k"}, 1, "aiopsctl: key generate: key generate is not built yet"},
+		{[]string{"key", "generate", "k"}, 2, "AIOPS_KEY_PASSWORD"},
 		{[]string{"profile", "init", "cli"}, 2, "AIOPS_HOME is not set"},
 		{[]string{"profile", "render", "--profile", "cli", "--dump", "--role", "api"}, 0, ""},
 	} {
@@ -72,6 +72,32 @@ func TestExitCodes(t *testing.T) {
 		if r.code != c.code || !strings.Contains(r.errOut, c.stderr) || r.code != 0 && r.out != "" {
 			t.Errorf("%q: exit %d, stdout %q, stderr:\n%s", c.args, r.code, r.out, r.errOut)
 		}
+	}
+}
+
+// key generate, answered by the row command-key through the operations row of
+// aiops-cli, writes the key pair in cosign's format in the working directory, the
+// private key with mode 0600, and refuses a prefix whose files exist (ADR-061 decisions
+// 20 and 29; ADR-020 decisions 4 and 21).
+func TestKeyGenerateWritesThePair(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"PWD": dir, "AIOPS_KEY_PASSWORD": "test"}
+	r := do(t, fstest.MapFS{}, env, "key", "generate", "site")
+	if r.code != 0 || r.out != "" || !strings.Contains(r.errOut, filepath.Join(dir, "site.pub")) {
+		t.Fatalf("exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)
+	}
+	priv, err := os.ReadFile(filepath.Join(dir, "site.key"))
+	if err != nil || !strings.HasPrefix(string(priv), "-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----") {
+		t.Fatalf("site.key: %v\n%s", err, priv)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, "site.key")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("site.key: %v, %v", fi, err)
+	}
+	if pub, err := os.ReadFile(filepath.Join(dir, "site.pub")); err != nil || !strings.HasPrefix(string(pub), "-----BEGIN PUBLIC KEY-----") {
+		t.Errorf("site.pub: %v\n%s", err, pub)
+	}
+	if r := do(t, fstest.MapFS{}, env, "key", "generate", "site"); r.code != 1 || !strings.Contains(r.errOut, "exists") {
+		t.Errorf("a second pair: exit %d; stderr:\n%s", r.code, r.errOut)
 	}
 }
 
