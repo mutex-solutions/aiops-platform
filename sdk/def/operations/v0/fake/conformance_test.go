@@ -15,7 +15,7 @@ import (
 // The fake passes the suite that the operations row passes (ADR-061 decision 18).
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
-		_, p := fake.New(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted})
+		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted})
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)
@@ -26,7 +26,7 @@ func TestConformance(t *testing.T) {
 // The fake reports nothing from Inventory, since the definition takes no
 // registration (ADR-060 decision 12).
 func TestInventoryIsEmpty(t *testing.T) {
-	f, _ := fake.New(fake.Config{})
+	f, _ := fake.New()
 	if got := f.Inventory(); len(got) != 0 {
 		t.Fatalf("Inventory = %v", got)
 	}

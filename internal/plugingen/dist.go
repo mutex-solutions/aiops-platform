@@ -165,12 +165,16 @@ func statement(id string, manifest []byte, serves ServesData) (string, error) {
 	return string(b), err
 }
 
-// registerLicences returns the licence of each module of the upstream register.
+// registerLicences returns the licence of each module of the upstream register: the
+// entry's for a module of its modules, and its own for a module of its contains.
 func registerLicences(register []byte) (map[string]string, error) {
 	var r struct {
 		Entries []struct {
-			Modules []string `yaml:"modules"`
-			Licence string   `yaml:"licence"`
+			Modules  []string `yaml:"modules"`
+			Licence  string   `yaml:"licence"`
+			Contains []struct {
+				Module, Licence string
+			} `yaml:"contains"`
 		} `yaml:"entries"`
 	}
 	if err := yaml.Unmarshal(register, &r); err != nil {
@@ -180,6 +184,11 @@ func registerLicences(register []byte) (map[string]string, error) {
 	for _, e := range r.Entries {
 		for _, m := range e.Modules {
 			out[m] = e.Licence
+		}
+		for _, c := range e.Contains {
+			if c.Module != "" {
+				out[c.Module] = c.Licence
+			}
 		}
 	}
 	return out, nil

@@ -36,6 +36,7 @@ import (
 	commandprofile "github.com/mutex-solutions/aiops-platform/plugins/command-profile"
 	commandtrust "github.com/mutex-solutions/aiops-platform/plugins/command-trust"
 	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
+	"github.com/mutex-solutions/aiops-platform/plugins/operations"
 	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
 	"github.com/mutex-solutions/aiops-platform/plugins/reload"
 	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
@@ -116,8 +117,8 @@ func Table(mods ...Module) (boot.Registry, error) {
 // PLUGIN HERE: one Module per plugin, with the manifest beside its package, which the
 // root package embeds, and its bindings in dist.yaml; then go run ./tools/plugingen
 // --write . writes distribution.yaml again. The list holds the loader, the five
-// core rows of S1, and the cli row and the command rows of aiops-cli (ADR-061
-// decisions 24 and 30); the others arrive with their own steps.
+// core rows of S1, and the cli row, the command rows and the operations row of
+// aiops-cli (ADR-061 decisions 14, 24 and 30); the others arrive with their own steps.
 func Modules() []Module {
 	m := func(p kernel.Plugin, dir string) Module {
 		return Module{Plugin: p, Manifest: Manifest(aiops.Manifests, dir)}
@@ -135,6 +136,7 @@ func Modules() []Module {
 		m(commandtrust.Plugin, "plugins/command-trust"),
 		m(commanddist.Plugin, "plugins/command-dist"),
 		m(commandkey.Plugin, "plugins/command-key"),
+		m(operations.Plugin, "plugins/operations"),
 	}
 }
 

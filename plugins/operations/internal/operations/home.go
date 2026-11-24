@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
 // Home is one $AIOPS_HOME as the library writes it.
@@ -48,10 +50,10 @@ type Done struct {
 	Notes   []string // what the operator is told
 }
 
-// The refusals of a write.
+// The refusals of a write, which match the errors of the definition.
 var (
-	ErrLocked = errors.New("write.lock is held by another writer")
-	ErrOwner  = errors.New("the home is owned by another user")
+	ErrLocked = fmt.Errorf("%w", def.ErrLocked)
+	ErrOwner  = fmt.Errorf("%w: the home is owned by another user", def.ErrRefused)
 )
 
 const (

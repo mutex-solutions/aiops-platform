@@ -91,6 +91,7 @@ entries:
       - {dir: boot, decision: ADR-059 decision 6}
       - {dir: tools, decision: ADR-059 decision 6}
       - {dir: internal/plugingen, decision: ADR-060 decision 41}
+      - {dir: plugins/operations, decision: ADR-060 decision 41}
     default: true
 
   - id: river
