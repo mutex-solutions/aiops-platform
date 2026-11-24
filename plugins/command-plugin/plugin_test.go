@@ -155,7 +155,7 @@ func TestPackSignAndPushCallTheLibrary(t *testing.T) {
 		out, err string
 	}{
 		{[]string{"plugin", "pack"}, operations.PackRequest{Dir: "/work", Out: "/work/artifact"}, "", "wrote /work/artifact"},
-		{[]string{"plugin", "pack", "x", "--out", "/tmp/o"}, operations.PackRequest{Dir: "/work/x", Out: "/tmp/o"}, "", "wrote /tmp/o"},
+		{[]string{"plugin", "pack", "x", "--out", "/layouts/x"}, operations.PackRequest{Dir: "/work/x", Out: "/layouts/x"}, "", "wrote /layouts/x"},
 		{[]string{"plugin", "sign", "--key", "a.key"}, operations.SignRequest{Out: "/work/artifact", Key: "/work/a.key"}, "", "signed /work/artifact"},
 		{[]string{"plugin", "push", "registry.example/acme/x", "--out", "o"}, operations.PushRequest{Out: "/work/o", Registry: "registry.example/acme/x"},
 			"oci://registry.example/acme/x@sha256:ab\n", ""},
