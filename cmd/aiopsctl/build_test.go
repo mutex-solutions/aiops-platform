@@ -3,6 +3,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -75,6 +76,20 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		Out: filepath.Join(t.TempDir(), "release"), Progress: &progress})
 	if err != nil {
 		t.Fatalf("the release, its first phase: %v\n%s", err, progress.String())
+	}
+	// The release build checks each module zip against the go.sum of the root module and
+	// of the SDK modules it serves, the files their author resolved with, so every hash
+	// of its pins is recorded; a zip of the module source that differs fails it (ADR-044
+	// decision 8).
+	if len(rel.Unchecked) > 0 {
+		t.Errorf("the release build checked against nothing: %q", rel.Unchecked)
+	}
+	tampered := t.TempDir()
+	linkTree(t, src, tampered)
+	tamper(t, filepath.Join(tampered, "go.yaml.in", "yaml", "v3", "@v", "v3.0.6.zip"), "go.yaml.in/yaml/v3@v3.0.6/yaml.go")
+	if _, err := builder.Build(ctx, builder.Request{Input: input, Root: testVersion, ModCache: tampered, Cache: filepath.Join(cache, "aiopsctl"),
+		Out: filepath.Join(t.TempDir(), "release")}); err == nil || !strings.Contains(err.Error(), "go.yaml.in/yaml/v3@v3.0.6: checksum mismatch") {
+		t.Errorf("a release build on a module zip that differs from the go.sum of the root module: %v", err)
 	}
 
 	site, home := t.TempDir(), filepath.Join(t.TempDir(), "home")
@@ -211,6 +226,60 @@ func fill(t *testing.T, repo, download, src string) {
 				t.Fatal(err)
 			}
 		}
+	}
+}
+
+// linkTree links every file under from into to, at the same path.
+func linkTree(t *testing.T, from, to string) {
+	t.Helper()
+	err := filepath.WalkDir(from, func(p string, e os.DirEntry, err error) error {
+		rel, _ := filepath.Rel(from, p)
+		switch {
+		case err != nil:
+			return err
+		case e.IsDir():
+			return os.MkdirAll(filepath.Join(to, rel), 0o755)
+		}
+		return link(p, filepath.Join(to, rel))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// tamper writes the module zip file again, as a new file, with a line added to its
+// entry name.
+func tamper(t *testing.T, file, name string) {
+	t.Helper()
+	z, err := zip.OpenReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer z.Close()
+	var b bytes.Buffer
+	zw := zip.NewWriter(&b)
+	for _, f := range z.File {
+		r, err := f.Open()
+		var data []byte
+		if err == nil {
+			data, err = io.ReadAll(r)
+		}
+		var w io.Writer
+		if err == nil {
+			w, err = zw.Create(f.Name)
+		}
+		if f.Name == name {
+			data = append(data, "\n// A line the release's go.sum does not record.\n"...)
+		}
+		if err == nil {
+			_, err = w.Write(data)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := errors.Join(zw.Close(), os.Remove(file), os.WriteFile(file, b.Bytes(), 0o644)); err != nil {
+		t.Fatal(err)
 	}
 }
 
