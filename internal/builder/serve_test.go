@@ -44,6 +44,35 @@ func TestServedGoMod(t *testing.T) {
 	}
 }
 
+// The comparison of TestServedGoMod sees any change of a served copy but the versions
+// of its repository requirements and its replace lines: another module line, a comment
+// that names the repository, another go line and another requirement each differ
+// (ADR-060 decision 21).
+func TestServedComparison(t *testing.T) {
+	orig, err := os.ReadFile(filepath.Join("..", "..", "sdk", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Served(orig, "v0.2.0-s2a.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	served := string(b)
+	if rest(string(orig)) != rest(served) {
+		t.Fatalf("the served copy differs:\n%s", served)
+	}
+	for _, bad := range []string{
+		strings.Replace(served, "module "+rootModule+"/sdk\n", "module "+rootModule+"/sdk/evil\n", 1),
+		served + "\n// served from " + rootModule + "/sdk\n",
+		strings.Replace(served, "\ngo ", "\ngo 1.99\n// go ", 1),
+		served + "\nrequire example.test/extra v1.0.0\n",
+	} {
+		if bad == served || rest(string(orig)) == rest(bad) {
+			t.Errorf("the comparison does not see:\n%s", bad)
+		}
+	}
+}
+
 // rest returns a go.mod without its replace lines and the lines that name a module of
 // the repository, so that a repository file and its served copy compare.
 func rest(gomod string) string {
