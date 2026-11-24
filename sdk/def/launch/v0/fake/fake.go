@@ -217,7 +217,36 @@ func (f *Launcher) knownLocked(c launch.Composition) error {
 	return nil
 }
 
-func (f *Launcher) Toolbox() launch.Toolbox { return f.Box }
+// Toolbox returns Box, or with none a toolbox whose every part answers ErrNotCarried.
+func (f *Launcher) Toolbox() launch.Toolbox {
+	if f.Box != nil {
+		return f.Box
+	}
+	return notCarried{}
+}
+
+// notCarried is the toolbox of a fake that was given none.
+type notCarried struct{ launch.NoTools }
+
+func (notCarried) Render(context.Context, launch.RenderRequest) (launch.Rendered, error) {
+	return launch.Rendered{}, launch.ErrNotCarried
+}
+
+func (notCarried) Gate(context.Context, launch.GateRequest) (launch.Verdict, error) {
+	return launch.Verdict{}, launch.ErrNotCarried
+}
+
+func (notCarried) ReadManifest(context.Context, launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
+	return launch.ManifestSummary{}, nil, launch.ErrNotCarried
+}
+
+func (notCarried) Shipped(context.Context) (map[string][]byte, error) {
+	return nil, launch.ErrNotCarried
+}
+
+func (notCarried) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{}, launch.ErrNotCarried
+}
 
 // Required is RequiredOf(Current).
 func (f *Launcher) Required() launch.RequiredSet { return f.requiredOf(f.Committed()) }

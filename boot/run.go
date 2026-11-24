@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -367,6 +368,7 @@ func (r *run) run(ctx context.Context) int {
 	committed.Rows = committed.Rows[1:]
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
 		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}, commits: make(chan struct{}, 1)}
+	pc.box = &toolbox{Tools: cmp.Or[launch.Tools](o.Tools, launch.NoTools{}), p: pc, files: orNone(o.Files), shipped: orNone(o.Shipped), signed: o.Signed}
 	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }, booted: make(chan struct{})}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {

@@ -67,15 +67,19 @@ type NoTools struct{}
 
 var _ Tools = NoTools{}
 
-func (NoTools) Build(context.Context, BuildRequest) (Built, error)              { return Built{}, nil }
-func (NoTools) Generate(context.Context, GenerateRequest) ([]Diagnostic, error) { return nil, nil }
-func (NoTools) Vet(context.Context, string) ([]Diagnostic, error)               { return nil, nil }
-func (NoTools) Suite(context.Context, SuiteRequest) (SuiteReport, error)        { return SuiteReport{}, nil }
+func (NoTools) Build(context.Context, BuildRequest) (Built, error) { return Built{}, ErrNotCarried }
+func (NoTools) Generate(context.Context, GenerateRequest) ([]Diagnostic, error) {
+	return nil, ErrNotCarried
+}
+func (NoTools) Vet(context.Context, string) ([]Diagnostic, error) { return nil, ErrNotCarried }
+func (NoTools) Suite(context.Context, SuiteRequest) (SuiteReport, error) {
+	return SuiteReport{}, ErrNotCarried
+}
 func (NoTools) Template(context.Context, TemplateRequest) (map[string][]byte, error) {
-	return nil, nil
+	return nil, ErrNotCarried
 }
 func (NoTools) Scenario(context.Context, ScenarioRequest) (ScenarioReport, error) {
-	return ScenarioReport{}, nil
+	return ScenarioReport{}, ErrNotCarried
 }
 
 // Diagnostic is one finding. Check is a gate check, a step of plugin check or an

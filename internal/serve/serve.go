@@ -155,6 +155,9 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Stdio:    boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr},
 		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: lim, Clock: boot.SystemClock(),
 		Publish: publish,
+		// The toolbox reads the shipped files and the absolute paths of a request; a server
+		// carries no Tools, so each answers ErrNotCarried (ADR-061 decision 21).
+		Shipped: d.Shipped, Files: os.DirFS("/"),
 	}
 	opts.BuildInfo, _ = debug.ReadBuildInfo()
 	if d.Kernel != nil {

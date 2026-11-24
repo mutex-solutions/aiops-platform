@@ -83,6 +83,7 @@ type profileContext struct {
 	release       *Release
 	tie           map[string]Tie
 	commits       chan struct{} // pinged at each commit: the run loop publishes the rows
+	box           *toolbox
 
 	mu        sync.Mutex
 	committed Composition
@@ -222,7 +223,8 @@ func (p *profileContext) Required() launch.RequiredSet {
 	return p.requiredOf(c)
 }
 
-func (p *profileContext) Toolbox() launch.Toolbox { return nil }
+// Toolbox returns the launcher's toolbox (toolbox.go).
+func (p *profileContext) Toolbox() launch.Toolbox { return p.box }
 
 // RequiredOf is the required set of a composition that Commit would take.
 func (p *profileContext) RequiredOf(lc launch.Composition) (launch.RequiredSet, error) {
@@ -268,23 +270,12 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	// Every denied row is listed, a required one too: its denial is also an error that
 	// rejects the generation, and reload reports either as ErrDenied (ADR-059 decision 15).
 	// A disabled row is detached already, so only check 8 denies it here, as it did before
-	// the gate evaluated an artifact's disabled rows: disabling a row stays possible.
-	var out launch.Admission
-	for _, id := range a.Gate.Rows {
-		d, ok := a.Gate.Denial(id)
-		if r, found := findRow(w, id); found && !r.Enabled {
-			d = a.Gate.Result(CheckLayerRules, id)
-			ok = d.Status == StatusFail
-		}
-		if ok {
-			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
-		}
-	}
+	// the gate evaluated an artifact's disabled rows (launchAdmission).
 	errs := p.configErrors(ctx, c)
 	if lines := errorLines(a); len(lines) > 0 {
 		errs = append([]error{errors.New(strings.Join(lines, "; "))}, errs...)
 	}
-	return out, errors.Join(errs...)
+	return launchAdmission(a), errors.Join(errs...)
 }
 
 // dryRun is the dry run that config-refs provides under configRefsDryRun

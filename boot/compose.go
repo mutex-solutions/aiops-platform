@@ -32,12 +32,15 @@ type File struct {
 //	layer 6  not a layer of rows: see ReadKillSwitches
 //
 // Home holds profiles/<Profile>/profile.yaml, which is required. Layer 5, the
-// tenant overlay, arrives at S4b (08-profiles-roadmap-adrs.md:111).
+// tenant overlay, arrives at S4b (08-profiles-roadmap-adrs.md:111). Append names
+// bundles that follow those of profile.yaml in layer 1, as install appends the bundle
+// of an artifact (ADR-047 decision 17).
 type Sources struct {
 	Profile string
 	Home    fs.FS
 	Bundles fs.FS
 	Patches []File
+	Append  []string
 }
 
 // Options tune a composition.
@@ -86,7 +89,7 @@ func Compose(src Sources, opt Options) (Composition, []Warning, error) {
 		return Composition{}, nil, err
 	}
 	c.min = min
-	for _, name := range bundles {
+	for _, name := range slices.Concat(bundles, src.Append) {
 		// The bundle of an installed artifact, named by its plugin id, is read from the
 		// home only (ADR-047 decision 5).
 		f := File{FS: src.Bundles, Path: path.Join("bundles", name, "bundle.yaml")}

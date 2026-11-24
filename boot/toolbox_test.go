@@ -238,6 +238,12 @@ func clauseOutcomes(v launch.Verdict) map[string]string {
 func TestToolboxGate(t *testing.T) {
 	b := newBox(t)
 	b.files["profiles/q/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b]")}
+	// Two homes on which dist use recorded nothing, one that allows the artifact unsigned.
+	for _, h := range []string{"clean", "allowed"} {
+		b.extra[h+"/profiles/p/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b]")}
+		b.extra[h+"/bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte(boxBundle)}
+	}
+	b.extra["allowed/trust.yaml"] = &fstest.MapFile{Data: []byte("allowUnsigned: [acme/echo]\n")}
 	tb := b.start(t, nil)
 	ctx := t.Context()
 	man, _, att, digest := artifact("acme/echo")
@@ -245,16 +251,23 @@ func TestToolboxGate(t *testing.T) {
 
 	// Install of in-process code: the home's trust.yaml lists no signer for it.
 	q := launch.GateRequest{Entry: string(EntryInstall), Manifest: man, Bundle: own, Attestation: att, Digest: digest,
-		Signer: Unsigned, Home: "/h", Profile: "p"}
+		Signer: Unsigned, Home: "/x/clean", Profile: "p"}
 	v, err := tb.Gate(ctx, q)
 	if got := clauseOutcomes(v); err != nil || v.Entry != string(EntryInstall) || got["5 signer"] != launch.OutcomeDeny || v.RebuildRequired {
 		t.Errorf("unsigned install: %+v, %v", v, err)
 	}
 	// Listed in allowUnsigned, every evaluated clause passes: it takes a rebuild.
-	b.files["trust.yaml"].Data = append(slices.Clone(b.files["trust.yaml"].Data), []byte("allowUnsigned: [acme/echo]\n")...)
+	q.Home = "/x/allowed"
 	v, err = tb.Gate(ctx, q)
 	if got := clauseOutcomes(v); err != nil || !v.RebuildRequired || got["5 module"] != launch.OutcomeNotEvaluated || got["6 "] != launch.OutcomeNotEvaluated {
 		t.Errorf("allowed install: %+v, %v", v, err)
+	}
+	// After dist use every clause is evaluated: the module of in-process code is not in
+	// the recorded distribution.
+	q.Home = "/h"
+	v, err = tb.Gate(ctx, q)
+	if got := clauseOutcomes(v); err != nil || v.Entry != string(EntryInstallUsed) || got["5 module"] != launch.OutcomeDeny || v.RebuildRequired {
+		t.Errorf("install after dist use: %+v, %v", v, err)
 	}
 
 	// A pack whose row is of a plugin that is not instantiable, gated offline against the
