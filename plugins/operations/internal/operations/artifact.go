@@ -15,8 +15,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"go.yaml.in/yaml/v3"
@@ -350,6 +353,9 @@ func (l Library) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected,
 	if c := layer(m, layerContent); err == nil && c != nil {
 		err = json.Unmarshal([]byte(c.Annotations[contentPaths]), &in.Content)
 	}
+	if err == nil {
+		err = readable(pm, in.Content)
+	}
 	if err != nil {
 		return def.Inspected{}, refused("%s: %v", r.Spec, err)
 	}
@@ -360,6 +366,26 @@ func (l Library) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected,
 		}
 	}
 	return in, nil
+}
+
+// readable refuses what boot's reader and install refuse of what inspect hands on to
+// be printed: an id that is not <owner>/<name> in kebab-case, a version that is not
+// Semantic Versioning 2.0.0 by the expression of semver.org, and a content path
+// outside the rules of ADR-047 decision 3, a control character among them.
+func readable(pm pluginYAML, paths []string) error {
+	kebab := `[a-z][a-z0-9]*(-[a-z0-9]+)*`
+	switch {
+	case !regexp.MustCompile(`^` + kebab + `/` + kebab + `$`).MatchString(pm.ID):
+		return fmt.Errorf("%q is not a plugin id <owner>/<name>, each kebab-case", pm.ID)
+	case !regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\+[0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*)?$`).MatchString(pm.Version):
+		return fmt.Errorf("%q is not a version of Semantic Versioning 2.0.0", pm.Version)
+	}
+	for _, p := range paths {
+		if !utf8.ValidString(p) || !fs.ValidPath(p) || p == "." || strings.ContainsFunc(p, unicode.IsControl) {
+			return fmt.Errorf("the content path %q is not valid UTF-8, clean and free of control characters (ADR-047 decision 3)", p)
+		}
+	}
+	return nil
 }
 
 // bundles returns the bundle of each referrer of d in src whose predicate type is

@@ -21,7 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
@@ -261,16 +264,25 @@ func inspect(ctx context.Context, ops operations.Operations, inv commands.Invoca
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(inv.Out, "digest: %s\nid: %s\nversion: %s\nruntimes: [%s]\n", in.Digest, in.ID, in.Version, strings.Join(in.Runtimes, ", "))
+	fmt.Fprintf(inv.Out, "digest: %s\nid: %s\nversion: %s\nruntimes: [%s]\n", in.Digest, shown(in.ID), shown(in.Version), shown(strings.Join(in.Runtimes, ", ")))
 	fmt.Fprintln(inv.Out, "signer: not verified") // install verifies the signature over the digest (ADR-047 decision 2)
 	for _, r := range in.Rows {
 		config, _ := json.Marshal(r.Config)
-		fmt.Fprintf(inv.Out, "row %s: plugin %s, config %s\n", r.ID, r.Plugin, config)
+		fmt.Fprintf(inv.Out, "row %s: plugin %s, config %s\n", shown(r.ID), shown(r.Plugin), shown(string(config)))
 	}
 	for _, p := range in.Content {
-		fmt.Fprintln(inv.Out, "content: "+p)
+		fmt.Fprintln(inv.Out, "content: "+shown(p))
 	}
 	return nil
+}
+
+// shown returns s, or s quoted where it is not UTF-8 or holds a control character: what
+// an artifact supplies is shown on a terminal, and never run by it.
+func shown(s string) string {
+	if utf8.ValidString(s) && !strings.ContainsFunc(s, unicode.IsControl) {
+		return s
+	}
+	return strconv.Quote(s)
 }
 
 // verify is plugin verify: each step on stdout, and exit 1 naming the steps that did
@@ -283,7 +295,7 @@ func verify(ctx context.Context, ops operations.Operations, inv commands.Invocat
 	fmt.Fprintf(inv.Out, "digest: %s\nsigner: %s\n", v.Digest, v.Signer)
 	var failed []string
 	for _, s := range v.Steps {
-		fmt.Fprintf(inv.Out, "step %s: %s: %s\n", s.Name, s.Outcome, s.Reason)
+		fmt.Fprintf(inv.Out, "step %s: %s: %s\n", s.Name, s.Outcome, shown(s.Reason))
 		if s.Outcome != "pass" {
 			failed = append(failed, s.Name+" "+s.Outcome)
 		}
