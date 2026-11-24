@@ -1,4 +1,7 @@
 The cases of the commands suite for {{.ID}} (ADR-061 decision 5). Each obligation reads
 its file beside this one: paths.json, the paths the row registers; run.json, the cases
 of each command and their outcomes; cancel.json, the cases that run until they are
-cancelled. There is none yet, so each obligation fails on its missing file.
+cancelled, each after its delay. run.json and cancel.json hold one case of the command
+example, which its stub fails with "not implemented" until Run is written; add the
+cases of each command it runs. paths.json is yours to write, so commands/paths fails
+on its missing file until it lists the paths.

@@ -25,7 +25,7 @@ import (
 var goFiles = map[string][]string{
 	"echoers":  {"internal/echo/echo.go", "fixtures/echoers/README.md"},
 	"stampers": {"internal/stamp/stamp.go", "fixtures/stampers/README.md"},
-	"commands": {"internal/command/command.go", "fixtures/commands/README.md"},
+	"commands": {"internal/command/command.go", "fixtures/commands/README.md", "fixtures/commands/run.json", "fixtures/commands/cancel.json"},
 }
 
 var common = []string{"plugin.go", "plugin_test.go", "plugin.yaml", "bundle.yaml", "README.md", "LICENSE", "go.mod", ".github/workflows/check.yml"}
