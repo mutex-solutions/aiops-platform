@@ -115,6 +115,23 @@ func TestTemplateJob(t *testing.T) {
 			if r := rep.Definitions[0]; r.Name != reg || r.Revision < 1 || !slices.Equal(r.Halves, []string{"obligations"}) || !slices.Equal(r.Failed, obligations[reg]) {
 				t.Errorf("step 5: %+v; want suite %s failing each of %v once", r, reg, obligations[reg])
 			}
+			// The failures of commands come from its stub: a command that works passes the
+			// cases of run.json and cancel.json that the template ships, and paths.json,
+			// which the author writes, fails on its missing file (07-c4-plugin-sdk.md:1561).
+			if reg == "commands" {
+				file := filepath.Join(dir, "internal", "command", "command.go")
+				src, err := os.ReadFile(file)
+				if err == nil {
+					err = os.WriteFile(file, []byte(strings.Replace(string(src), "return ErrNotImplemented", "return ctx.Err()", 1)), 0o644)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				rep, err = tl.Suite(t.Context(), launch.SuiteRequest{Dir: dir, Definitions: map[string]string{reg: "0.1"}, Halves: []string{"obligations"}, Fixtures: filepath.Join(dir, "fixtures")})
+				if err != nil || len(rep.Definitions) != 1 || !slices.Equal(rep.Definitions[0].Failed, []string{"commands/paths"}) {
+					t.Errorf("step 5 on a command that works: %+v, %v; want commands/paths failing alone", rep, err)
+				}
+			}
 		})
 	}
 }
