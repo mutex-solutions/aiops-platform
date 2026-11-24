@@ -46,6 +46,7 @@ type Setup struct {
 	// catalog and admits it as a consumer of profileContext and appExit, which are
 	// consumer-bound.
 	Consumer kernel.Plugin
+	// The launcher carries no Tools, as in aiops.
 }
 
 // Mount starts a launcher that provides the six keys as s says, and returns, once the
@@ -234,6 +235,22 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
+		t.Run("launch.O10 the parts of Tools answer ErrNotCarried where the launcher carries none", func(t *testing.T) {
+			tb, ctx := toolbox(t, use(t, mount).pc), t.Context()
+			_, errBuild := tb.Build(ctx, launch.BuildRequest{})
+			_, errGenerate := tb.Generate(ctx, launch.GenerateRequest{})
+			_, errVet := tb.Vet(ctx, "/conformance")
+			_, errSuite := tb.Suite(ctx, launch.SuiteRequest{})
+			_, errTemplate := tb.Template(ctx, launch.TemplateRequest{})
+			_, errScenario := tb.Scenario(ctx, launch.ScenarioRequest{})
+			for name, err := range map[string]error{"Build": errBuild, "Generate": errGenerate, "Vet": errVet,
+				"Suite": errSuite, "Template": errTemplate, "Scenario": errScenario} {
+				if !errors.Is(err, launch.ErrNotCarried) {
+					t.Errorf("%s = %v, want ErrNotCarried", name, err)
+				}
+			}
+		})
+
 		t.Run("launch.O9 Booted is closed once the launcher has booted", func(t *testing.T) {
 			rd := use(t, mount).rd
 			select {
@@ -306,8 +323,21 @@ func Run(t *testing.T, mount Mount) {
 					t.Errorf("the value provided under %s has methods outside its interface: %v", name, doors)
 				}
 			}
+			if doors := deftest.SideDoors[launch.Toolbox](toolbox(t, u.pc)); len(doors) > 0 {
+				t.Errorf("the toolbox has methods outside its interface: %v", doors)
+			}
 		})
 	})
+}
+
+// toolbox returns the launcher's toolbox, and fails the case when there is none.
+func toolbox(t *testing.T, pc launch.ProfileContext) launch.Toolbox {
+	t.Helper()
+	tb := pc.Toolbox()
+	if tb == nil {
+		t.Fatal("Toolbox = nil")
+	}
+	return tb
 }
 
 // user is the consumer of the six keys on a started launcher.

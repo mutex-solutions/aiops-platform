@@ -217,6 +217,13 @@ type RunOptions struct {
 	// Command is set by aiopsctl, whose cli row runs one command and requests the exit
 	// with its code (ADR-061 decision 13).
 	Command bool
+	// Tools are the parts of the toolbox that only aiopsctl links, nil in aiops, where
+	// each answers launch.ErrNotCarried; Shipped holds the bundles and profiles that the
+	// binary embeds; Files is the file system, rooted at "/", that the toolbox reads the
+	// absolute paths of a request from (ADR-061 decision 21). Each may be nil.
+	Tools   launch.Tools
+	Shipped fs.FS
+	Files   fs.FS
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)

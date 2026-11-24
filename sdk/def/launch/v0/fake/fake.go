@@ -42,6 +42,7 @@ type Launcher struct {
 	Out, ErrOut io.Writer          // for Cmdline.Stdout and Stderr
 	WorkDir     string             // for Cmdline.Dir
 	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
+	Box         launch.Toolbox     // what ProfileContext.Toolbox returns; nil answers ErrNotCarried from every part
 	Needed      launch.RequiredSet // the distribution's required rows and keys, for ProfileContext.Required
 
 	ComposeFn func(context.Context) (launch.Composition, error)
@@ -215,6 +216,8 @@ func (f *Launcher) knownLocked(c launch.Composition) error {
 	}
 	return nil
 }
+
+func (f *Launcher) Toolbox() launch.Toolbox { return f.Box }
 
 // Required is RequiredOf(Current).
 func (f *Launcher) Required() launch.RequiredSet { return f.requiredOf(f.Committed()) }

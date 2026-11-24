@@ -303,6 +303,10 @@ func TestRunPassesTheStreamsAndNoEnviron(t *testing.T) {
 	if got.Stdio != (boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr}) || got.Dir != "" || got.Environ != nil {
 		t.Errorf("Stdio %+v, Dir %q, Environ %q", got.Stdio, got.Dir, got.Environ)
 	}
+	// The toolbox of a server reads the root of the file system and carries no Tools.
+	if got.Tools != nil || got.Files == nil || got.Command {
+		t.Errorf("Tools %v, Files %v, Command %v", got.Tools, got.Files, got.Command)
+	}
 }
 
 // The distribution's Kernel seam reaches boot with the runtime directory of the home;

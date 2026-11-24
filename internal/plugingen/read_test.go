@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
@@ -158,8 +160,25 @@ func TestBootReadsEveryFieldAsThePluginTypeWritesIt(t *testing.T) {
 	}
 }
 
+// sameSummary reports whether the six fields of a summary that the toolbox's
+// ReadManifest hands out are those of the manifest that plugingen writes (ADR-061
+// decision 21): a summary has no second reader.
+func sameSummary(s launch.ManifestSummary, m plugin.Manifest) bool {
+	keys := func(ks []plugin.KeyRef) []string {
+		var out []string
+		for _, k := range ks {
+			out = append(out, k.Key)
+		}
+		return out
+	}
+	return s.ID == m.ID && s.Version == m.Version && slices.Equal(s.Runtimes, m.Runtimes) &&
+		slices.Equal(s.Provides, keys(m.Provides)) && slices.Equal(s.Registers, keys(m.Registers)) &&
+		maps.EqualFunc(s.Definitions, m.Requires.Definitions, slices.Equal)
+}
+
 // Every plugin.yaml of the repository reads, in both of boot's modes, as the YAML
-// library reads it into plugin.Manifest with no unknown field.
+// library reads it into plugin.Manifest with no unknown field, and its summary holds
+// the same six fields.
 func TestBootReadsEveryManifestOfTheRepositoryAsThePluginType(t *testing.T) {
 	root := filepath.Join("..", "..")
 	n := 0
@@ -190,6 +209,8 @@ func TestBootReadsEveryManifestOfTheRepositoryAsThePluginType(t *testing.T) {
 				t.Errorf("mode %d: %v", mode, err)
 			} else if a, b := asJSON(t, got), asJSON(t, want); !reflect.DeepEqual(a, b) {
 				t.Errorf("%s, mode %d: boot reads\n%v\nthe plugin type reads\n%v", p, mode, a, b)
+			} else if s := got.Summary(); !sameSummary(s, want) {
+				t.Errorf("%s, mode %d: the summary of the toolbox is %+v", p, mode, s)
 			}
 		}
 		return nil

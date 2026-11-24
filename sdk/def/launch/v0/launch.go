@@ -223,6 +223,10 @@ type ProfileContext interface {
 	// before it commits the candidate. c is one that Commit would take; for another it
 	// returns an error.
 	RequiredOf(c Composition) (RequiredSet, error)
+	// Toolbox returns the launcher's toolbox (added at 0.2; ADR-061 decision 33). The
+	// release manifest lists aiops/operations as a consumer of profileContext for it;
+	// every other consumer reaches it too, so it is that plugin's by review.
+	Toolbox() Toolbox
 }
 
 // RoleAll is the role of a process that mounts every row: "--role all mounts every

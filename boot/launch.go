@@ -222,6 +222,8 @@ func (p *profileContext) Required() launch.RequiredSet {
 	return p.requiredOf(c)
 }
 
+func (p *profileContext) Toolbox() launch.Toolbox { return nil }
+
 // RequiredOf is the required set of a composition that Commit would take.
 func (p *profileContext) RequiredOf(lc launch.Composition) (launch.RequiredSet, error) {
 	c, err := p.lookup(lc, false)

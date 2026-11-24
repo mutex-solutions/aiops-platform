@@ -359,3 +359,25 @@ func TestEnvironListsTheEnvironment(t *testing.T) {
 		t.Error("Env served HOME")
 	}
 }
+
+// Toolbox returns Box; with none, every part of the toolbox answers ErrNotCarried.
+func TestToolboxIsTheBox(t *testing.T) {
+	l, _ := fake.New()
+	tb, ctx := l.Toolbox(), t.Context()
+	_, errRender := tb.Render(ctx, launch.RenderRequest{})
+	_, errGate := tb.Gate(ctx, launch.GateRequest{})
+	_, _, errRead := tb.ReadManifest(ctx, launch.ManifestRequest{})
+	_, errShipped := tb.Shipped(ctx)
+	_, errRelease := tb.Release(ctx, "")
+	for name, err := range map[string]error{"Render": errRender, "Gate": errGate, "ReadManifest": errRead,
+		"Shipped": errShipped, "Release": errRelease} {
+		if !errors.Is(err, launch.ErrNotCarried) {
+			t.Errorf("%s with no Box = %v, want ErrNotCarried", name, err)
+		}
+	}
+	box := struct{ launch.Toolbox }{tb}
+	l.Box = box
+	if got := l.Toolbox(); got != launch.Toolbox(box) {
+		t.Errorf("Toolbox = %v, want the Box", got)
+	}
+}
