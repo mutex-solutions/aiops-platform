@@ -329,7 +329,7 @@ func gate(ctx context.Context, ops operations.Operations, inv commands.Invocatio
 		}
 		line += ": " + c.Outcome
 		if c.Reason != "" {
-			line += ": " + c.Reason
+			line += ": " + shown(c.Reason)
 		}
 		fmt.Fprintln(inv.Out, line)
 		if c.Outcome == launch.OutcomeDeny {
@@ -397,17 +397,18 @@ func remove(ctx context.Context, ops operations.Operations, inv commands.Invocat
 // changed prints a change of the home: the paths written and the notes on stderr; on
 // stdout the dist.yaml lines of rebuild-required, the final result, or with none the
 // operation ids and the last status, and the outcome (ADR-061 decisions 11 and 44).
-// The library's error decides the exit.
+// The library's error decides the exit. The paths, the notes and the dist.yaml lines
+// carry what an artifact supplies, so they are shown as inspect shows it.
 func changed(inv commands.Invocation) func(operations.Change, error) error {
 	return func(ch operations.Change, err error) error {
 		for _, p := range ch.Written {
-			fmt.Fprintln(inv.Err, "wrote "+p)
+			fmt.Fprintln(inv.Err, "wrote "+shown(p))
 		}
 		for _, n := range ch.Notes {
-			fmt.Fprintln(inv.Err, n)
+			fmt.Fprintln(inv.Err, shown(n))
 		}
 		for _, l := range ch.DistLines {
-			fmt.Fprintln(inv.Out, l)
+			fmt.Fprintln(inv.Out, shown(l))
 		}
 		switch r := ch.Result; {
 		case r != nil:
