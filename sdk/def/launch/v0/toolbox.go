@@ -202,11 +202,14 @@ type ManifestSummary struct {
 }
 
 // Release is a signed distribution manifest: its digest, its bytes, and its
-// instantiable plugins.
+// instantiable plugins. Key is the release public key, PEM, that a release binary
+// carries beside the manifest it embeds, its default distribution root (ADR-020
+// decision 13); nil for another binary and for the manifest at another path.
 type Release struct {
 	Digest   string
 	Manifest []byte
 	Plugins  []ReleasePlugin
+	Key      []byte
 }
 
 // ReleasePlugin is an instantiable plugin of a release: its id, the first entry of the

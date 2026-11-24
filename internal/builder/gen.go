@@ -23,7 +23,7 @@ import (
 func siteGo(plugins []tablePlugin, keyID string) []byte {
 	release := ""
 	if keyID != "" {
-		release = fmt.Sprintf(" = &boot.Release{KeyID: %q}", keyID)
+		release = fmt.Sprintf(" = &boot.Release{KeyID: %q, Key: Key, Bundle: Bundle}", keyID)
 	}
 	var imports, embeds, entries bytes.Buffer
 	for i, p := range plugins {
@@ -57,8 +57,8 @@ var Key []byte
 //go:embed distribution.bundle
 var Bundle []byte
 
-// Release is the id of the release key, the default distribution root of a release
-// binary, with Signed its built-in record; nil in a site's.
+// Release is the release key with its id, the default distribution root of a release
+// binary, with Signed its built-in record, and the bundle of Signed; nil in a site's.
 var Release *boot.Release%s
 
 %s// Modules is the module table: the release's, then the site's plugins.

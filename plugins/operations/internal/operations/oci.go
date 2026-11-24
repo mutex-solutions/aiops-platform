@@ -345,9 +345,9 @@ func privateKey(c def.Caller, p string) (*ecdsa.PrivateKey, error) {
 // with each key of distributions in trust.yaml, and with the same key a signature of
 // the image's digest, which the manifest does not name; then the record of the
 // manifest's digest, verified/current and image.yaml, or nothing (ADR-020 decisions 10
-// and 12; ADR-047 decision 13). The default release root is verified with the key that a
-// release binary carries, which no binary built at S2a has, so only the keys trust.yaml
-// holds verify here.
+// and 12; ADR-047 decision 13). Where trust.yaml trusts the default release root, so
+// with no trust.yaml at all, the key that a release binary carries verifies too, and
+// the record names the signer release (ADR-020 decision 13).
 func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err != nil {
@@ -379,6 +379,9 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 			if err != nil {
 				return nil, err
 			}
+			if t.dists == nil || slices.Contains(t.dists, def.Release) {
+				t.distKeys = append(t.distKeys, l.releaseKey(ctx)...)
+			}
 			for _, d := range dists {
 				i := slices.IndexFunc(t.distKeys, func(k trustKey) bool {
 					return d.bundle != nil && VerifyBlob(k.pub, d.bundle, d.manifest) == nil && signs(k.pub)
@@ -402,4 +405,18 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 		return def.Change{Notes: done.Notes}, err
 	}
 	return def.Change{Written: done.Written, Notes: done.Notes, Outcome: def.RestartRequired, Reason: def.ReasonImage}, nil
+}
+
+// releaseKey returns the default release root, the key that this binary carries if it
+// is a release binary, or none.
+func (l Library) releaseKey(ctx context.Context) []trustKey {
+	if l.Box == nil {
+		return nil
+	}
+	r, err := l.Box.Release(ctx, "")
+	pub, _, kerr := LoadPublicKey(r.Key)
+	if err != nil || r.Key == nil || kerr != nil {
+		return nil
+	}
+	return []trustKey{{id: def.Release, pub: pub}}
 }

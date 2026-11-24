@@ -475,6 +475,9 @@ func (t *toolbox) Release(ctx context.Context, against string) (launch.Release, 
 		}
 	}
 	out := launch.Release{Digest: d.Digest, Manifest: raw}
+	if against == "" && t.p.release != nil {
+		out.Key = t.p.release.Key // the default distribution root of a release binary
+	}
 	for _, id := range slices.Sorted(maps.Keys(d.Plugins)) {
 		m, err := ReadManifest("plugin.yaml of "+id, d.Plugins[id].Manifest, ManifestLenient)
 		if err != nil || !m.Instantiable {

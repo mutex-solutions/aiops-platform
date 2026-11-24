@@ -18,11 +18,14 @@ import (
 // (ADR-047 decisions 16 and 18). Boot verifies no signature: it reads what aiopsctl
 // verified and recorded (08-profiles-roadmap-adrs.md:404).
 
-// Release is what a release binary carries beside the manifest it embeds: the id of
-// the release key, its default distribution root, with which the embedded manifest is
-// its built-in record (ADR-020 decision 13; ADR-060 decision 50). A binary built
-// without a release key carries none.
-type Release struct{ KeyID string }
+// Release is what a release binary carries beside the manifest it embeds: the release
+// key, PEM, and its id, its default distribution root, with which the embedded manifest
+// is its built-in record, and the bundle of that manifest (ADR-020 decision 13; ADR-060
+// decision 50). A binary built without a release key carries none.
+type Release struct {
+	KeyID       string
+	Key, Bundle []byte
+}
 
 // Bindings returns the binding maps and the required set of d: the release's, with
 // each entry the site added (ADR-044 decisions 13 and 22).
