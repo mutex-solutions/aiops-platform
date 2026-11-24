@@ -58,7 +58,8 @@ func say(c def.Caller, format string, a ...any) {
 // Pack is plugin pack (ADR-047 decision 1; ADR-060 decisions 18 and 19): the suites
 // of plugin check that the attestation records, then step 7 of plugin check into the
 // layout, with the artifact tagged by its version and the statement, unsigned, as its
-// referrer, and the gate at its entry. A refusal leaves no layout.
+// referrer, and the gate at its entry. A denial refuses, naming the suite binaries
+// where they did not run (ADR-060 decisions 23 and 46), and a refusal leaves no layout.
 func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, error) {
 	if err := errors.Join(absolute("the plugin directory", r.Dir), absolute("the layout", r.Out)); err != nil {
 		return def.Written{}, err
@@ -96,15 +97,14 @@ func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, erro
 	v, err := c.seal(r.Out)
 	var denied []string
 	for _, c := range v.Clauses {
-		switch {
-		case c.Outcome != launch.OutcomeDeny:
-		case c.Check == 10 && !ran:
-			say(r.Caller, "pack: check 10 is not evaluated, since the suites that write what it reads did not run: %s", c.Reason)
-		default:
+		if c.Outcome == launch.OutcomeDeny {
 			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
 		}
 	}
 	if err == nil && len(denied) > 0 {
+		if !ran { // the suites that write what check 10 reads did not run
+			denied = append(denied, notCarried)
+		}
 		err = refused("the gate at plugin pack denies: %s", strings.Join(denied, "; "))
 	}
 	if err != nil {

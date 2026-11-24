@@ -82,14 +82,14 @@ func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendere
 
 func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.s.Shipped, ctx.Err() }
 
-// Gate passes every clause that plugin check evaluates, and needs the attestation of
-// the plugin to read.
-func (box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
+// Gate passes every clause that plugin check evaluates, and denies check 10 where the
+// attestation does not name the plugin of the Setup.
+func (b box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
 	v := launch.Verdict{Entry: q.Entry}
 	for _, n := range []int{1, 2, 5, 7, 8, 10} {
 		v.Clauses = append(v.Clauses, launch.Clause{Check: n, Outcome: launch.OutcomePass})
 	}
-	if !strings.Contains(string(q.Attestation), "acme/echo@0.1.0") {
+	if !strings.Contains(string(q.Attestation), b.s.Plugin.Summary.ID+"@"+b.s.Plugin.Summary.Version) {
 		v.Clauses[5].Outcome = launch.OutcomeDeny
 	}
 	return v, ctx.Err()
