@@ -7,3 +7,6 @@ docs/architecture/diagrams/html/
 # Coverage profiles of the structural checks.
 cover.out
 cover-*.out
+
+# The socket directory that the tests of reload-socket create and remove.
+plugins/reload-socket/testdata/run/

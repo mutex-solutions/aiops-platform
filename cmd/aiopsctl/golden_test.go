@@ -135,8 +135,8 @@ func TestRenderDetachesWhatTheServerDetaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, drop := range [][]string{
-		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n"},
-		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n", "    toy.policy:\n      - aiops-test/toy-provider\n"},
+		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n      - aiops/reload-socket\n"},
+		{"    reload:\n      - aiops-test/test-state\n      - aiops-test/test-submit\n      - aiops/reload-socket\n", "    toy.policy:\n      - aiops-test/toy-provider\n"},
 	} {
 		signed := string(testdist.Signed)
 		for _, b := range drop {

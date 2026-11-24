@@ -42,14 +42,14 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	man := bindings(t, signed)
-	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy",
+	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/reload-socket", "aiops/restart-policy",
 		"aiops/cli", "aiops/command-profile", "aiops/command-plugin", "aiops/command-trust", "aiops/command-dist", "aiops/command-key",
 		"aiops/operations"} {
 		if _, ok := reg.Modules[id]; !ok {
 			t.Errorf("%s is missing from the module table", id)
 		}
 	}
-	if len(reg.Modules) != 13 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
+	if len(reg.Modules) != 14 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
 		t.Fatalf("%d modules, %d hooks", len(reg.Modules), len(reg.Hooks))
 	}
 	if !slices.Equal(man.RequiredRows, []string{"loader", "readiness", "reload", "restart-policy"}) || !slices.Equal(man.RequiredKeys, []string{"clock"}) {
@@ -57,6 +57,10 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	}
 	if lim.LoadDeadline == 0 || lim.ShutdownBound == 0 {
 		t.Fatalf("limits %+v", lim)
+	}
+	// reload-socket is the one row that submits to reload (ADR-062 decision 1).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "reload" }); i < 0 || !slices.Equal(man.Consumers[i].Plugins, []string{"aiops/reload-socket"}) {
+		t.Fatalf("consumers %+v", man.Consumers)
 	}
 	listeners := map[string][]string{}
 	for _, h := range man.SealedHooks {
@@ -112,7 +116,8 @@ func TestShipsTheCLIProfile(t *testing.T) {
 
 // Gate check 7 on the release manifest detaches an optional row that the kernel would
 // refuse with ErrBinding or ErrSealed, instead of letting it fail and be given up on:
-// reload has no consumer yet, and the loader's hooks are sealed by their definition.
+// x/needreload is not a listed consumer of reload, and the loader's hooks are sealed by
+// their definition.
 func TestGateDetachesARowOutsideTheReleaseBindings(t *testing.T) {
 	reg, signed, _, err := Load()
 	if err != nil {

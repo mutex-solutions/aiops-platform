@@ -1,0 +1,4 @@
+# The row config the generated cycle test mounts the row with (ADR-062 decision 18).
+# TestMain creates the directory with mode 0700 before the tests and removes it after
+# them, since Git records no directory mode.
+dir: testdata/run
