@@ -69,15 +69,18 @@ func pluginDir(t *testing.T, files map[string]string) string {
 }
 
 // packBox is the launcher's toolbox of these tests: ReadManifest answers sum, the gate
-// answers the clauses of deny and records each request, and Scenario answers scenario,
-// or that it is not carried when it is nil, as no suite is before package check lands.
+// answers the clauses of deny and records each request, and Suite and Scenario answer
+// suite and scenario, or that they are not carried when nil, as in an aiopsctl built
+// without the suite binaries; each records whether its directory held the fixtures.
 type packBox struct {
 	launch.NoTools
 	sum      launch.ManifestSummary
 	deny     []launch.Clause
+	suite    *launch.SuiteReport
 	scenario *launch.ScenarioReport
 	mu       sync.Mutex
 	gates    []launch.GateRequest
+	fixtures []bool
 }
 
 func (*packBox) Render(context.Context, launch.RenderRequest) (launch.Rendered, error) {
@@ -105,10 +108,26 @@ func (b *packBox) Gate(_ context.Context, q launch.GateRequest) (launch.Verdict,
 }
 
 func (b *packBox) Scenario(ctx context.Context, q launch.ScenarioRequest) (launch.ScenarioReport, error) {
+	b.saw(q.Dir)
 	if b.scenario == nil {
 		return b.NoTools.Scenario(ctx, q)
 	}
 	return *b.scenario, nil
+}
+
+func (b *packBox) Suite(ctx context.Context, q launch.SuiteRequest) (launch.SuiteReport, error) {
+	b.saw(q.Dir)
+	if b.suite == nil {
+		return b.NoTools.Suite(ctx, q)
+	}
+	return *b.suite, nil
+}
+
+func (b *packBox) saw(dir string) {
+	_, err := os.Stat(filepath.Join(dir, "fixtures", "echo.json"))
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.fixtures = append(b.fixtures, err == nil)
 }
 
 func packSummary() launch.ManifestSummary {
@@ -522,6 +541,45 @@ func TestVerifyOfAnUnsignedArtifactThatAllowUnsignedLists(t *testing.T) {
 	v, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
 	if err != nil || v.Signer != "unsigned" || v.Steps[1].Outcome != "pass" {
 		t.Errorf("Verify = %+v, %v; want the signer unsigned and the attestation read", v, err)
+	}
+}
+
+// verify runs the suites of plugin check, through the same runs, on what a pack's
+// artifact carries: step 5 on its fixtures and the echo scenario of step 8. The step
+// passes when both pass, fails naming a failed obligation, and is not built where the
+// binary carries no suite (ADR-060 decisions 46 and 49); pack records in the
+// attestation the suite revision that the same runs report.
+func TestVerifyRunsTheSuitesOfPluginCheck(t *testing.T) {
+	l, out, home, _ := signed(t)
+	b := l.Box.(*packBox)
+	v, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
+	if err != nil || v.Passed || v.Steps[2].Outcome != "not-built" || !strings.Contains(v.Steps[2].Reason, "suite") {
+		t.Fatalf("Verify with no suite carried = %+v, %v; want the suites not built", v, err)
+	}
+	b.suite = &launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 3, Halves: []string{"obligations"}}}}
+	b.scenario = &launch.ScenarioReport{Name: "echo", Version: "1", Halves: []string{"kernel"}}
+	b.fixtures = nil
+	v, err = l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
+	if err != nil || !v.Passed || len(v.Steps) != 3 || v.Steps[2].Name != "suites" || v.Steps[2].Outcome != "pass" {
+		t.Errorf("Verify with the suites carried = %+v, %v; want every step passing", v, err)
+	}
+	if !slices.Equal(b.fixtures, []bool{true, true}) {
+		t.Errorf("the suite and the scenario ran on a directory with the fixtures of the artifact: %v, want both", b.fixtures)
+	}
+	b.suite.Definitions[0].Failed = []string{"echoers/reply"}
+	v, err = l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
+	if err != nil || v.Passed || v.Steps[2].Outcome != "fail" || !strings.Contains(v.Steps[2].Reason, "echoers/reply") {
+		t.Errorf("Verify with a failed obligation = %+v, %v; want the suites failing and naming it", v, err)
+	}
+	b.suite.Definitions[0].Failed = nil
+	out2 := filepath.Join(t.TempDir(), "artifact")
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: pluginDir(t, pack), Out: out2}); err != nil {
+		t.Fatal(err)
+	}
+	desc, _, blob := layout(t, out2)
+	refs := layoutReferrers(t, out2, desc, "application/vnd.in-toto+json")
+	if len(refs) != 1 || !strings.Contains(string(blob(refs[0].Layers[0])), `"echoers":{"version":"0.1","suite":3,"halves":["obligations"]}`) {
+		t.Errorf("the attestation of pack does not record the suite revision 3 that step 5 reports")
 	}
 }
 
