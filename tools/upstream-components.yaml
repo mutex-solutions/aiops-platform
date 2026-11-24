@@ -290,17 +290,26 @@ entries:
 
   # The OCI client of ADR-047 decision 4, which the operations library alone imports
   # (ADR-060 decision 41). Chosen over a client on the standard library by measurement
-  # at the pin: linking it adds 25 packages and 8,674 lines of Go to the package graph
-  # of aiopsctl and 717,301 bytes (2.3 per cent) to its binary, and the library's own
-  # client code is the repository, the referrers and the push of an artifact. What a
-  # client on the standard library would write again is the part of oras-go it uses:
-  # registry/remote (2,551 lines), its auth (1,564), with the bearer-token and Basic
-  # challenges, and its credentials (783), with config.json and the credential helpers,
-  # and the referrers tag schema of a registry with no referrers API, which the exit's
-  # registry needs (ADR-047 decision 4). Even a narrow copy of that is several hundred
-  # lines of protocol code in a library capped at 3,500 (ADR-060 decision 35), with none
-  # of upstream's tests, so writing it carries more risk than linking a pinned,
-  # Apache-2.0 module of three requirements, two of which the graph already holds.
+  # at the pin. Its first link, for the registry forms of dist sign and dist use, added
+  # 25 packages and 8,674 lines of Go to the package graph of aiopsctl and 717,301
+  # bytes (2.3 per cent) to its binary. Measured again on 2026-11-24, once plugin pack,
+  # sign, push, inspect and verify brought in its OCI image layout store, content/oci,
+  # with the graph, resolver and tarfs packages beside it: it adds 36 packages, 32 of
+  # oras-go, 2 of image-spec, and x/sync/semaphore and hash/maphash, which only oras-go
+  # imports, with 13,189 lines of Go. aiopsctl cannot be built without it now, since the
+  # library calls it, so the bytes are scaled: its symbols take 274,274 bytes of the
+  # 35,827,467 of aiopsctl (go tool nm -size), against 180,037 at its first link, whose
+  # binary grows by 727,605 bytes when rebuilt with this toolchain, so it adds about
+  # 1.1 MB (3.1 per cent). What a client on the standard library would write again is
+  # the part of oras-go it uses: registry/remote (2,551 lines), its auth (1,564), with
+  # the bearer-token and Basic challenges, its credentials (783), with config.json and
+  # the credential helpers, the referrers tag schema of a registry with no referrers
+  # API, which the exit's registry needs (ADR-047 decision 4), and the OCI image layout
+  # of ADR-047 decision 1, content/oci (1,170). Even a narrow copy of that is well over
+  # a thousand lines of protocol code in a library capped at 3,500 (ADR-060 decision
+  # 35), with none of upstream's tests, so writing it carries more risk than linking a
+  # pinned, Apache-2.0 module of three requirements, two of which the graph already
+  # holds. The conclusion is that of the first measurement.
   - id: oras-go
     names: [oras, oras-go]
     form: library
