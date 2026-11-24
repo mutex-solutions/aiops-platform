@@ -235,6 +235,32 @@ func TestImportsServerClosureLinksNoToolbox(t *testing.T) {
 	}
 }
 
+// The module zip of golang.org/x/mod is the toolbox's (ADR-044, Consequences; the
+// owner's decision of 2026-11-24): aiopsctl links it, and cmd/aiops links no package of
+// the module but semver and sumdb/note, which sigstore-go links into both binaries.
+func TestImportsServerClosureLinksNoModuleZip(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "cmd/aiops/main.go", "package main\n")
+	write(t, d, "cmd/aiopsctl/main.go", "package main\n")
+	closure := func(deps map[string][]string) ListDeps {
+		return func(_, pkg string) ([]string, error) { return deps[pkg], nil }
+	}
+	zip := []string{"golang.org/x/mod/zip", "golang.org/x/mod/modfile", "golang.org/x/mod/module", "golang.org/x/mod/sumdb/dirhash", "golang.org/x/mod/internal/lazyregexp"}
+	if err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiopsctl": zip})); err != nil {
+		t.Fatalf("the module zip in aiopsctl: %v", err)
+	}
+	for _, leak := range zip {
+		err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiops": {"fmt", leak}}))
+		if err == nil || !strings.Contains(err.Error(), "cmd/aiops: dependency closure contains "+leak+": no package of golang.org/x/mod in a server binary") {
+			t.Errorf("aiops links %s: %v", leak, err)
+		}
+	}
+	sigstore := []string{"golang.org/x/mod/semver", "golang.org/x/mod/sumdb/note", "golang.org/x/modx"}
+	if err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiops": sigstore})); err != nil {
+		t.Errorf("the packages that sigstore-go links, and a look-alike path: %v", err)
+	}
+}
+
 func TestImportsParseError(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "boot/a.go", "package")
