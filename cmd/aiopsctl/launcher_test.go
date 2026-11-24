@@ -111,14 +111,15 @@ func TestKeyGenerateWritesThePair(t *testing.T) {
 func TestPluginNewAndCheck(t *testing.T) {
 	dir := t.TempDir()
 	env := map[string]string{"PWD": dir}
-	r := do(t, fstest.MapFS{}, env, "plugin", "new", "echoers", "acme/echo-loud")
+	root := os.DirFS("/") // the toolbox reads the plugin from the files of the process, as main gives them
+	r := do(t, root, env, "plugin", "new", "echoers", "acme/echo-loud")
 	if r.code != 0 || r.out != "" || !strings.Contains(r.errOut, filepath.Join(dir, "echo-loud", "plugin.go")) {
 		t.Fatalf("plugin new: exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "echo-loud", "internal", "echo", "echo.go")); err != nil || !strings.Contains(string(b), "not implemented") {
 		t.Errorf("internal/echo/echo.go: %v\n%s", err, b)
 	}
-	r = do(t, fstest.MapFS{}, env, "plugin", "check", "echo-loud")
+	r = do(t, root, env, "plugin", "check", "echo-loud")
 	if r.code != 1 || r.out != "" || !strings.Contains(r.errOut, "step 1 manifest: fail") || !strings.Contains(r.errOut, "requires") ||
 		!strings.Contains(r.errOut, "step 8 scenario: skipped") {
 		t.Errorf("plugin check of a fresh plugin: exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)

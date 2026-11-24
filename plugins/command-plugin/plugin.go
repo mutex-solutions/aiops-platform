@@ -5,14 +5,17 @@
 // sign, push, inspect, verify, gate, install, enable, disable and remove (ADR-061
 // decision 30; 07-c4-plugin-sdk.md:1565, :1578; 08-profiles-roadmap-adrs.md:373-375).
 // pack, sign, push, inspect and verify call the methods of the operations library of
-// the same names on the OCI artifact of ADR-047 (ADR-061 decisions 16 and 20). The
-// other commands are declared with their synopses and flags, so the module table and
-// the name lint hold them, and answer that they are not built yet: each runs through
-// one method of the library, which lands with the parts it needs. plugin purge joins
-// at S3 (ADR-060 decision 47).
+// the same names on the OCI artifact of ADR-047, and plugin new and plugin check call
+// New and Check and print what was written or the steps of the check (ADR-061
+// decisions 16 and 20; ADR-060 decisions 23 and 24). The other commands are declared
+// with their synopses and flags, so the module table and the name lint hold them, and
+// answer that they are not built yet: each runs through one method of the operations
+// library, which they join with that method. plugin purge joins at S3 (ADR-060
+// decision 47).
 package commandplugin
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,20 +43,11 @@ var Plugin = plugin.Define(plugin.Spec[Config]{
 	Apply: func(c *kernel.Context, _ *Config) error {
 		r, ops := commands.Key.Of(c), operations.Key.Of(c)
 		runs := map[string]func(context.Context, operations.Operations, commands.Invocation) error{
-			"pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify}
+			"new": newPlugin, "check": check, "pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify}
 		for _, s := range specs() {
 			var cmd commands.Command = notBuilt(s.Name())
 			if run, ok := runs[s.Path[1]]; ok {
-				cmd = command(func(ctx context.Context, inv commands.Invocation) error {
-					if err := ctx.Err(); err != nil {
-						return err
-					}
-					err := run(ctx, ops, inv)
-					if errors.Is(err, operations.ErrUsage) {
-						return fmt.Errorf("%w: %w", commands.ErrUsage, err)
-					}
-					return err
-				})
+				cmd = library(ops, run)
 			}
 			if err := r.Register(c, s, cmd); err != nil {
 				return err
@@ -102,26 +96,111 @@ func specs() []commands.Spec {
 	}
 }
 
-// notBuilt is a command whose operation lands with the part of the library it needs.
+// notBuilt is a command whose operation lands with its method of the operations
+// library.
 type notBuilt string
 
 func (n notBuilt) Run(ctx context.Context, _ commands.Invocation) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return fmt.Errorf("%s is not built yet: it arrives with the operations library (ADR-061 decision 16)", string(n))
+	return fmt.Errorf("%s is not built yet: it arrives with its method of the operations library (ADR-061 decision 16)", string(n))
 }
 
 type command func(ctx context.Context, inv commands.Invocation) error
 
 func (f command) Run(ctx context.Context, inv commands.Invocation) error { return f(ctx, inv) }
 
-// abs resolves p against the working directory of the invocation.
+// library is a command that calls the operations library: a usage error of the library
+// is a usage error of the command (ADR-061 decision 10).
+func library(ops operations.Operations, run func(context.Context, operations.Operations, commands.Invocation) error) commands.Command {
+	return command(func(ctx context.Context, inv commands.Invocation) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := run(ctx, ops, inv)
+		if errors.Is(err, operations.ErrUsage) {
+			return fmt.Errorf("%w: %w", commands.ErrUsage, err)
+		}
+		return err
+	})
+}
+
+// abs resolves p against the working directory of the invocation; "" stays "".
 func abs(inv commands.Invocation, p string) string {
-	if filepath.IsAbs(p) {
+	if p == "" || filepath.IsAbs(p) {
 		return p
 	}
 	return filepath.Join(inv.Dir, p)
+}
+
+func caller(inv commands.Invocation) operations.Caller {
+	return operations.Caller{Env: inv.Env, Progress: inv.Err}
+}
+
+// newPlugin is plugin new <registry> <id>: the template written into the directory of
+// the plugin's name under the working directory, Go unless --lang names another.
+func newPlugin(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	_, name, _ := strings.Cut(inv.Args[1], "/")
+	if name == "" {
+		return fmt.Errorf("%w: %q is not a plugin id <owner>/<name>", commands.ErrUsage, inv.Args[1])
+	}
+	w, err := ops.New(ctx, operations.NewRequest{Caller: caller(inv), Registry: inv.Args[0], ID: inv.Args[1],
+		Lang: cmp.Or(inv.Value("lang"), "go"), Contrib: inv.Bool("contrib"), Against: abs(inv, inv.Value("against")),
+		Plugins: inv.List("plugin"), Dir: abs(inv, name)})
+	if err != nil {
+		return err
+	}
+	for _, p := range w.Paths {
+		fmt.Fprintln(inv.Err, "wrote "+p)
+	}
+	return nil
+}
+
+// check is plugin check [<dir>]: each step on stderr with its findings, one line per
+// failed obligation, and the attestation it would sign; with --json the report alone on
+// stdout (07-c4-plugin-sdk.md:1565; ADR-061 decision 11). A failed step is an error.
+func check(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	dir := "."
+	if len(inv.Args) > 0 {
+		dir = inv.Args[0]
+	}
+	r, err := ops.Check(ctx, operations.CheckRequest{Caller: caller(inv), Dir: abs(inv, dir), Write: inv.Bool("write"),
+		Against: abs(inv, inv.Value("against"))})
+	if err != nil {
+		return err
+	}
+	if inv.Bool("json") {
+		b, err := json.MarshalIndent(r, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(inv.Out, "%s\n", b)
+	}
+	var failed string
+	for _, s := range r.Steps {
+		fmt.Fprintf(inv.Err, "step %d %s: %s\n", s.N, s.Name, s.Outcome)
+		for _, d := range s.Diagnostics {
+			line := d.Text
+			if d.File != "" && d.Line > 0 {
+				line = fmt.Sprintf("%s:%d: %s", d.File, d.Line, d.Text)
+			} else if d.File != "" {
+				line = d.File + ": " + d.Text
+			}
+			if d.Warning {
+				line = "warning: " + line
+			}
+			fmt.Fprintln(inv.Err, "  "+line)
+		}
+		if s.Outcome == operations.StepFail && failed == "" {
+			failed = fmt.Sprintf("step %d %s failed", s.N, s.Name)
+		}
+	}
+	if failed != "" {
+		return errors.New(failed)
+	}
+	fmt.Fprintf(inv.Err, "the attestation it would sign: %s\n", r.Attestation)
+	return nil
 }
 
 // spec resolves an artifact's spec: oci:// and a reference as written, or a layout.
@@ -138,10 +217,6 @@ func layout(inv commands.Invocation) string {
 		return abs(inv, o)
 	}
 	return abs(inv, "artifact")
-}
-
-func caller(inv commands.Invocation) operations.Caller {
-	return operations.Caller{Env: inv.Env, Progress: inv.Err}
 }
 
 // pack is plugin pack: the directory, the working directory by default, packed into
