@@ -694,11 +694,11 @@ func TestLicensed(t *testing.T) {
 		"(MIT OR GPL-2.0-only) AND ISC": true, "MIT AND (GPL-2.0-only OR LGPL-2.1-only)": false, "GPL-2.0+": false,
 		"": false, "MIT AND": false, "LicenseRef-x": false,
 	} {
-		if got := licensed(e, nil); got != want {
-			t.Errorf("licensed(%q) = %v", e, got)
+		if got := Licensed(e, nil); got != want {
+			t.Errorf("Licensed(%q) = %v", e, got)
 		}
 	}
-	if !licensed("LicenseRef-x OR GPL-3.0-only", []string{"LicenseRef-x"}) {
+	if !Licensed("LicenseRef-x OR GPL-3.0-only", []string{"LicenseRef-x"}) {
 		t.Error("an accepted id is refused")
 	}
 }

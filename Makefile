@@ -38,6 +38,24 @@ templates:
 	out=$$(go test -count=1 -v -run '^TestTemplateJob$$' ./internal/authoring 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestTemplateJob'
 
+# `make builder` is the builder job (ADR-060 decisions 22 and 36; ADR-044): the corpus of
+# the licence classifier is what tools/spdxcorpus writes from the pinned SPDX data; the
+# cases of the builder that read the tree of the pinned toolchain module, the licence
+# report of aiops and aiopsctl among them, with THIRD_PARTY_LICENSES/, the NOTICE texts
+# and the MPL-2.0 lines written for each as for an image, and the deny-list scan of the
+# whole program. Both modules come from the module proxy into the module cache, so
+# `make check` (-short) skips these cases; here they fail, and do not skip, when they
+# do not run.
+TOOLCHAIN := golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64
+SPDXDATA  := github.com/spdx/license-list-data@v3.29.0+incompatible
+.PHONY: builder
+builder:
+	go mod download $(TOOLCHAIN) $(SPDXDATA)
+	go run ./tools/spdxcorpus .
+	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag)$$' ./internal/builder 2>&1); s=$$?; \
+	echo "$$out"; [ $$s -eq 0 ] && ! echo "$$out" | grep -q -- '--- SKIP' && \
+		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 4 ]
+
 # `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
 # a client run as root is refused by reload-socket and one run as another user cannot
 # open its socket. It needs passwordless sudo, so `make check` does not run it. It fails,
@@ -63,6 +81,8 @@ check:
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
+	@# ADR-060 decision 35: the builder, 3,000 lines, provisional.
+	$(KC) lines internal/builder 3000 provisional
 	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
 	@# lines since the second note of 2026-11-24, provisional: the row package, internal/
 	@# skipped, and its internal package, with the client of reload-socket (ADR-062

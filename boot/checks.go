@@ -410,7 +410,7 @@ func (g *gate) binaryFaults() []binaryFault {
 		}
 	}
 	for _, m := range d.Modules {
-		if !licensed(m.Licence, d.AcceptLicenses) {
+		if !Licensed(m.Licence, d.AcceptLicenses) {
 			out = append(out, binaryFault{CheckLicence, RuleLicence, fmt.Sprintf("module %s is under %s, outside the L7 allow-list and not in acceptLicenses", m.Path, m.Licence)})
 			break
 		}
@@ -421,7 +421,7 @@ func (g *gate) binaryFaults() []binaryFault {
 	return out
 }
 
-// licensed reports whether the SPDX expression e passes L7 with the accepted ids: A OR
+// Licensed reports whether the SPDX expression e passes L7 with the accepted ids: A OR
 // B when one side does, A AND B when both do, an id on the allow-list or accepted, and
 // an id WITH an exception as the id. The licences L7 allows with a recorded condition
 // are allowed here, since the register records the condition.
@@ -431,7 +431,7 @@ func (g *gate) binaryFaults() []binaryFault {
 // that name in boot/ and no item of the register's exceptions gives it this place;
 // until the owner adds one, a module under that licence alone needs acceptLicenses.
 // No module of a distribution is under it.
-func licensed(e string, accepted []string) bool {
+func Licensed(e string, accepted []string) bool {
 	toks := strings.Fields(strings.NewReplacer("(", " ( ", ")", " ) ").Replace(e))
 	i := 0
 	var or func() bool

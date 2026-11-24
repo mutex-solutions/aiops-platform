@@ -1480,28 +1480,28 @@ modules:
     sum: h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
     licence: Apache-2.0 AND MIT
   - path: golang.org/x/crypto
-    version: v0.54.0
-    sum: h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=
+    version: v0.57.0
+    sum: h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
     licence: BSD-3-Clause
   - path: golang.org/x/mod
     version: v0.42.0
     sum: h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
     licence: BSD-3-Clause
   - path: golang.org/x/net
-    version: v0.57.0
-    sum: h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
+    version: v0.59.0
+    sum: h1:5zfYln+w5XCxwrnMMJPufRgNoXEaGxl0wo5GqPXyues=
     licence: BSD-3-Clause
   - path: golang.org/x/sync
     version: v0.24.0
     sum: h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
     licence: BSD-3-Clause
   - path: golang.org/x/sys
-    version: v0.47.0
-    sum: h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
+    version: v0.48.0
+    sum: h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
     licence: BSD-3-Clause
   - path: golang.org/x/term
-    version: v0.45.0
-    sum: h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
+    version: v0.46.0
+    sum: h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=
     licence: BSD-3-Clause
   - path: golang.org/x/text
     version: v0.43.0
@@ -2194,29 +2194,29 @@ pins:
     sum: h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
     gomod: h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
   - path: golang.org/x/crypto
-    version: v0.54.0
-    sum: h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=
-    gomod: h1:KWL8ny2AZdGR2cWmzeHrp2azQPGogOv+HeQaVEXC2dk=
+    version: v0.57.0
+    sum: h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
+    gomod: h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
   - path: golang.org/x/mod
     version: v0.42.0
     sum: h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
     gomod: h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
   - path: golang.org/x/net
-    version: v0.57.0
-    sum: h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
-    gomod: h1:KpXc8iv+r3XplLAG/f7Jsf9RPszJzdR0f58q9vGOuEU=
+    version: v0.59.0
+    sum: h1:5zfYln+w5XCxwrnMMJPufRgNoXEaGxl0wo5GqPXyues=
+    gomod: h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
   - path: golang.org/x/sync
     version: v0.24.0
     sum: h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
     gomod: h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
   - path: golang.org/x/sys
-    version: v0.47.0
-    sum: h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
-    gomod: h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+    version: v0.48.0
+    sum: h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
+    gomod: h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
   - path: golang.org/x/term
-    version: v0.45.0
-    sum: h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
-    gomod: h1:9aqxs0blBcrm/n0L9QW0aRVD+ktan8ssZromtqJC43w=
+    version: v0.46.0
+    sum: h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=
+    gomod: h1:+K02xbkittuwc0Am4abfA3Fc+XRGXkvBXNO88NCXPoc=
   - path: golang.org/x/text
     version: v0.43.0
     sum: h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=

@@ -93,6 +93,7 @@ entries:
       - {dir: internal/plugingen, decision: ADR-060 decision 41}
       - {dir: internal/vet, decision: "ADR-060 decision 23: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share"}
       - {dir: plugins/operations, decision: ADR-060 decision 41}
+      - {dir: internal/builder, decision: "ADR-060 decision 41: the builder reads the site's dist.yaml and writes the signed distribution manifest"}
     default: true
 
   - id: river
@@ -164,10 +165,12 @@ entries:
       - {condition: "Linked without its pkg/sign, which adds eleven modules, two of them MPL-2.0 (ADR-020 decision 20)", row: L7}
       - {condition: "Every artifact that links it carries in THIRD_PARTY_LICENSES/ the NOTICE files of go-openapi/jsonpointer, go-openapi/jsonreference, go-openapi/runtime, go-tuf/v2 and grpc (NOTICE.txt), the PATENTS files of x/crypto, x/mod, x/net, x/sync, x/sys, x/term, x/text and protobuf, the full Apache-2.0 text beside the notices of json-canonicalization, in-toto/attestation and in-toto-golang, the licence files of the three OpenTelemetry modules whole, GO-LICENSE of go-pathspec beside its LICENSE, and the MIT file of go-openapi/runtime/middleware/denco (ADR-020 decision 16)", row: L7}
       - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-020 decision 30, reading 4; ADR-047 decision 21)", row: L16}
-      - {condition: "The builder builds every binary with the tag grpcnotrace, which drops golang.org/x/net/trace and its two default-mux handlers, and its init deny-list exempts one registration, the codec of package google.golang.org/grpc/encoding/proto (RegisterCodecV2) at google.golang.org/grpc v1.82.1, read again at every version bump (ADR-020 decision 27; ADR-044 decision 21)", row: L16}
+      - {condition: "The builder builds every binary with the tag grpcnotrace, which drops golang.org/x/net/trace and its two default-mux handlers, and its init deny-list exempts the codec of package google.golang.org/grpc/encoding/proto (RegisterCodecV2) at google.golang.org/grpc v1.82.1, read again at every version bump (ADR-020 decision 27; ADR-044 decision 21)", row: L16}
+      - {condition: "The deny-list scan finds three gob registrations that sigstore-go brings in through go-openapi: gob's own basic types (encoding/gob at the toolchain pin), and map[string]any and []any from the init of github.com/go-openapi/loads v0.25.0 and github.com/go-openapi/spec v0.22.9; the exceptions table of the builder names each by package and version, for the owner's review (ADR-044 decisions 21 and 24)", row: L16}
     evidence:
       - {source: "github.com/sigstore/sigstore-go@v1.3.0 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.3.0}
       - {source: "the root licence files of each module of contains at its version, in the module cache; github.com/opencontainers/go-digest@v1.0.0 LICENSE.docs and README.md", read: "2026-11-24", version: v1.3.0}
+      - {source: "golang.org/x/crypto@v0.57.0, golang.org/x/net@v0.59.0, golang.org/x/sys@v0.48.0 and golang.org/x/term@v0.46.0 LICENSE and PATENTS, each equal to the toolchain's, read again at the versions that x/tools raises them to", read: "2026-11-25", version: v1.3.0}
     mark: needs-approval
     importers:
       - {dir: plugins/operations, decision: "ADR-020 decision 1; ADR-060 decision 41"}
@@ -226,12 +229,12 @@ entries:
       - {module: go.opentelemetry.io/otel, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
       - {module: go.opentelemetry.io/otel/metric, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
       - {module: go.opentelemetry.io/otel/trace, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
-      - {module: golang.org/x/crypto, version: v0.54.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/crypto, version: v0.57.0, licence: BSD-3-Clause}
       - {module: golang.org/x/mod, version: v0.42.0, licence: BSD-3-Clause}
-      - {module: golang.org/x/net, version: v0.57.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/net, version: v0.59.0, licence: BSD-3-Clause}
       - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
-      - {module: golang.org/x/sys, version: v0.47.0, licence: BSD-3-Clause}
-      - {module: golang.org/x/term, version: v0.45.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/sys, version: v0.48.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/term, version: v0.46.0, licence: BSD-3-Clause}
       - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
       - {module: google.golang.org/genproto/googleapis/api, version: v0.0.0-20260526163538-3dc84a4a5aaa, licence: Apache-2.0}
       - {module: google.golang.org/genproto/googleapis/rpc, version: v0.0.0-20260523011958-0a33c5d7ca68, licence: Apache-2.0}
@@ -327,6 +330,7 @@ entries:
     mark: needs-approval
     importers:
       - {dir: plugins/operations, decision: "ADR-047 decision 4; ADR-060 decision 41"}
+      - {dir: internal/builder, decision: "ADR-044 decisions 1 and 6: the OCI image layout of the image dist build writes, its distribution manifest a referrer"}
     contains:
       - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
       - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
@@ -353,6 +357,7 @@ entries:
     mark: needs-approval
     importers:
       - {dir: plugins/operations, decision: "ADR-047 decisions 1 and 4: the types of the OCI client"}
+      - {dir: internal/builder, decision: "ADR-044 decision 6: the manifest and the config of the image dist build writes"}
     default: false
 
   # The module zip and its h1 sum that plugin pack takes for the module layer and the SBOM
@@ -377,6 +382,62 @@ entries:
     mark: needs-approval
     importers:
       - {dir: internal/authoring, decision: "ADR-047 decision 1; ADR-044, Consequences: the module zip of the toolbox, for the module layer and the SBOM of in-process code"}
+      - {dir: internal/builder, decision: "ADR-044 decisions 7, 8, 10, 16 and 23: the scratch go.mod, the module zips and their h1 sums, the strict versions, the toolchain module and the served go.mod copies"}
+      - {dir: cmd/aiopsctl, decision: "ADR-044 decision 9: the case of dist build fills a module source with module zips, as a site does"}
+      - {dir: tools/spdxcorpus, decision: "ADR-044 decision 26: the h1 sum of the SPDX data that the corpus is written from"}
+    default: false
+
+  # The call graph of the init deny-list scan (ADR-044 decisions 12 and 25): go/packages,
+  # go/ssa, go/ssa/ssautil, go/callgraph and go/callgraph/vta, with their internal
+  # packages. Only the builder imports it, and the closure check of kernelcheck imports
+  # refuses every package of the module in cmd/aiops (ADR-044, Consequences). Adding it
+  # raises golang.org/x/net to v0.59.0 and golang.org/x/sys to v0.48.0, which its go.mod
+  # requires, and through x/net golang.org/x/crypto to v0.57.0 and golang.org/x/term to
+  # v0.46.0; the licence of each is read again at the new version (ADR-054 decision 6),
+  # under the entry that has it in contains.
+  - id: x-tools
+    names: [x-tools]
+    form: library
+    behind: none
+    modules: [golang.org/x/tools]
+    pin: v0.51.0
+    licence: BSD-3-Clause
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "golang.org/x/tools@v0.51.0 LICENSE and PATENTS, each equal to the toolchain's (SHA-256 911f8f57... and 96f408bf...), and go.mod", read: "2026-11-25", version: v0.51.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/builder, decision: "ADR-044 decisions 12 and 25: the call graph of the init deny-list scan"}
+    default: false
+
+  # The licence classifier of the builder (ADR-044 decision 15), linked without its
+  # package assets: its corpus is built from the SPDX License List data
+  # (spdx-license-list, ADR-044 decision 26). Its root package imports go-diff and
+  # go-spew, at the versions the build list selects: certificate-transparency-go, which
+  # sigstore-go links, requires go-diff v1.4.0 and a go-spew commit after v1.1.1, above
+  # the v1.1.0 and v1.1.1 that the classifier's go.mod names and ADR-044 read.
+  - id: licenseclassifier
+    names: [licenseclassifier]
+    form: library
+    behind: none
+    modules: [github.com/google/licenseclassifier/v2]
+    pin: v2.0.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked without its package assets, whose 431 files state no source; the corpus is the builder's, from the pinned SPDX data (ADR-044 decision 26)", row: L7}
+      - {condition: "go-diff carries the Apache-2.0 text of the library it ports beside its MIT LICENSE, both in THIRD_PARTY_LICENSES/ of aiopsctl", row: L7}
+    evidence:
+      - {source: "github.com/google/licenseclassifier/v2@v2.0.0 LICENSE (Apache-2.0) and go.mod", read: "2026-11-25", version: v2.0.0}
+      - {source: "github.com/sergi/go-diff@v1.4.0 LICENSE (MIT, Copyright 2012-2016 The go-diff Authors) and APACHE-LICENSE-2.0; github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc LICENSE (ISC, Copyright 2012-2016 Dave Collins)", read: "2026-11-25", version: v2.0.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/builder, decision: "ADR-044 decision 15: the licence scan of the builder"}
+    contains:
+      - {module: github.com/sergi/go-diff, version: v1.4.0, licence: Apache-2.0 AND MIT}
+      - {module: github.com/davecgh/go-spew, version: v1.1.2-0.20180830191138-d8f796af33cc, licence: ISC}
     default: false
 
   - id: goleak
@@ -402,21 +463,27 @@ entries:
     pin: v3.29.0
     # The short identifiers of the licenses and exceptions of the list, copied into
     # internal/authoring/spdx.txt, which aiopsctl embeds for the SPDX lookup of step 1
-    # of plugin check (ADR-060 decision 23; ADR-048 decision 19). The published data
-    # states no licence of its own and points to its source repository, which holds no
-    # licence file and whose release notes put the files of the list under CC0-1.0.
+    # of plugin check (ADR-060 decision 23; ADR-048 decision 19); and the texts, the
+    # template texts and the standard headers of json/details/*.json and
+    # json/exceptions/*.json of the same data, which tools/spdxcorpus writes into
+    # internal/builder/spdx-corpus.tar.gz, the corpus of the licence classifier that
+    # aiopsctl embeds (ADR-044 decision 26). The published data states no licence of its
+    # own and points to its source repository, which holds no licence file and whose
+    # release notes put the .json files of the list under CC0-1.0.
     licence: CC0-1.0
     verdict: ok-with-conditions
     modes: [copy]
     conditions:
-      - {condition: "Data only: the identifiers of the list, never a licence text, and nothing of it is linked as code", row: L7}
-      - {condition: "spdx.txt names the version and the SHA-256 of the published files it was read from, and a version bump reads the data and its terms again", row: L17}
+      - {condition: "Data only: the identifiers of the list, and the licence texts of the list carried to recognise them, which the builder's scan matches and no binary runs; nothing of it is linked as code", row: L7}
+      - {condition: "spdx.txt names the version and the SHA-256 of the published files it was read from, internal/builder pins the module's h1 sum that tools/spdxcorpus checks, and a version bump reads the data and its terms again", row: L17}
     evidence:
       - {source: "github.com/spdx/license-list-data@v3.29.0+incompatible README.md (Licensing Information), json/licenses.json and json/exceptions.json", read: "2026-11-24", version: v3.29.0}
       - {source: "github.com/spdx/license-list-XML@v3.29.0+incompatible RELEASE-NOTES.md (version 3.3: the .json, schema and .js files of the list under CC0-1.0); no LICENSE file at that version", read: "2026-11-24", version: v3.29.0}
+      - {source: "github.com/spdx/license-list-data@v3.29.0+incompatible, h1:zLVVtcoiXca+aMQmv9wyCUL3xfOXLv1LLjJow34CQnA=, json/details/*.json and json/exceptions/*.json, the files of the corpus", read: "2026-11-25", version: v3.29.0}
     mark: needs-approval
     importers:
       - {dir: internal/authoring, decision: "ADR-060 decision 23: the SPDX list data embedded in aiopsctl"}
+      - {dir: internal/builder, decision: "ADR-044 decision 26: the corpus of the licence classifier, built from the SPDX list data"}
     default: true
 
   - id: nodejs

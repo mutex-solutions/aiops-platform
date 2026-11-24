@@ -39,12 +39,21 @@ const (
 
 // toolbox are the packages that aiopsctl alone links and hands to boot (ADR-061
 // decision 21): plugingen, the import analyzer and plugin vet, the suites and the
-// templates.
-var toolbox = []string{"internal/plugingen", "internal/vet", "internal/authoring", "templates"}
+// templates, the builder, and the launcher of aiopsctl; builderLibs are the modules
+// that only the builder links (ADR-044, Consequences).
+var (
+	toolbox     = []string{"internal/plugingen", "internal/vet", "internal/authoring", "templates", "internal/builder", "internal/aiopsctl"}
+	builderLibs = []string{"golang.org/x/tools", "github.com/google/licenseclassifier/v2", "github.com/sergi/go-diff", "github.com/davecgh/go-spew"}
+)
 
 func isToolbox(p string) bool {
 	for _, t := range toolbox {
 		if hasPath(p, modPath+"/"+t) {
+			return true
+		}
+	}
+	for _, m := range builderLibs {
+		if hasPath(p, m) {
 			return true
 		}
 	}

@@ -102,9 +102,10 @@ jobs:
         # 00-decisions.md §4.3: sdk requires sdk/kernel, and sdk/testkit for its tests only;
         # pgx v5 joins at S3 (ADR-060 decision 4).
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
-      - name: Plugin package, plugingen, aiopsctl and operations library line caps
-        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl and the
-        # operations library, plugins/operations, provisional caps during S2a. The row
+      - name: Plugin package, plugingen, aiopsctl, builder and operations library line caps
+        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl, the builder
+        # (3,000) and the operations library, plugins/operations, provisional caps during
+        # S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
         # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
         # 4,500 since the second note of 2026-11-24, which raised them from 3,500.
@@ -112,6 +113,7 @@ jobs:
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
+          go run ./tools/kernelcheck lines internal/builder 3000 provisional
           go run ./tools/kernelcheck lines plugins/operations 4500 provisional internal
           go run ./tools/kernelcheck lines plugins/operations/internal/operations 4500 provisional
       - name: pluginApi check
@@ -139,9 +141,10 @@ jobs:
       - name: Manifest parity
         # ADR-060 decisions 11 and 36 (08-profiles-roadmap-adrs.md:1257): the generated half
         # of every plugin.yaml, read as data, and the generated tests beside it are what
-        # plugingen writes from the plugin's value; so is the signed distribution manifest
-        # of each binary built in the repository (ADR-060 decisions 20 and 28), and the
-        # release's serves names no definition outside sdk/def (ADR-060 decision 28).
+        # plugingen writes from the plugin's value; the signed distribution manifest of each
+        # binary built in the repository is what the builder writes from its build, with
+        # the licences its scan detects (ADR-060 decisions 20 and 28; ADR-044 decision 3),
+        # and the release's serves names no definition outside sdk/def (ADR-060 decision 28).
         run: go run ./tools/plugingen .
       - name: Register check (U7), name lint (U1) and suite neutrality (U3)
         # ADR-054 decision 12, ADR-060 decisions 36 and 51: every module of the package
@@ -228,6 +231,22 @@ jobs:
       # Race-built, binary included; any race report of any process fails the job (see the
       # s1-suites target of the Makefile).
       - run: make s1-suites
+
+  builder:
+    name: Builder and licence report
+    # ADR-060 decisions 22 and 36; ADR-044: the corpus of the licence classifier against
+    # the pinned SPDX data; the cases of the builder on the tree of the pinned toolchain
+    # module, the licence report of aiops and aiopsctl with THIRD_PARTY_LICENSES/, the
+    # NOTICE texts and the MPL-2.0 lines among them (see the builder target of the
+    # Makefile). Nothing is pushed or published.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: make builder
 
   templates:
     name: Templates of plugin new

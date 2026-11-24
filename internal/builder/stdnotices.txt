@@ -1,0 +1,44 @@
+# The files of the standard library of golang.org/toolchain
+# v0.0.1-go1.26.8.linux-amd64 whose comments carry a copyright statement other than
+# the Go Authors' (ADR-044 decision 27), as StdNotices walks the tree. The builder
+# copies the notice of each that a binary compiles into its THIRD_PARTY_LICENSES/, as
+# a notice file. TestStdNotices holds the list to the tree of the pin.
+src/crypto/internal/fips140/edwards25519/scalar.go
+src/internal/profile/graph.go
+src/math/acosh.go
+src/math/asinh.go
+src/math/atan.go
+src/math/atanh.go
+src/math/big/internal/asmgen/asm.go
+src/math/cbrt.go
+src/math/cmplx/asin.go
+src/math/cmplx/exp.go
+src/math/cmplx/log.go
+src/math/cmplx/pow.go
+src/math/cmplx/sin.go
+src/math/cmplx/sqrt.go
+src/math/cmplx/tan.go
+src/math/erf.go
+src/math/exp.go
+src/math/expm1.go
+src/math/gamma.go
+src/math/j0.go
+src/math/j1.go
+src/math/jn.go
+src/math/lgamma.go
+src/math/log.go
+src/math/log1p.go
+src/math/remainder.go
+src/math/sin.go
+src/math/sqrt.go
+src/math/tan.go
+src/math/tanh.go
+src/runtime/memclr_arm.s
+src/runtime/memmove_386.s
+src/runtime/memmove_amd64.s
+src/runtime/memmove_arm.s
+src/runtime/memmove_plan9_386.s
+src/runtime/memmove_plan9_amd64.s
+src/runtime/vlop_386.s
+src/runtime/vlop_arm.s
+src/runtime/vlrt.go
