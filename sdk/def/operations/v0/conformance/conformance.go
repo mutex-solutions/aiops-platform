@@ -232,8 +232,8 @@ func Run(t *testing.T, mount Mount) {
 			u.trust(operations.TrustRequest{KeyFile: pub, Distribution: true})
 			img := u.image("site")
 			w, err := u.ops.SignDist(t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: img, Key: private(pub)})
-			if err != nil || len(w.Paths) != 1 || !strings.HasPrefix(w.Paths[0], u.s.Registry+"/site@sha256:") {
-				t.Fatalf("SignDist = %v, %v; want the referrer it pushed, by digest", w, err)
+			if err != nil || len(w.Paths) == 0 || slices.ContainsFunc(w.Paths, func(p string) bool { return !strings.HasPrefix(p, u.s.Registry+"/site@sha256:") }) {
+				t.Fatalf("SignDist = %v, %v; want the referrers it pushed, by digest", w, err)
 			}
 			ch, err := u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Home: u.s.Home, Image: img})
 			if err != nil || ch.Outcome != operations.RestartRequired || ch.Reason != operations.ReasonImage {

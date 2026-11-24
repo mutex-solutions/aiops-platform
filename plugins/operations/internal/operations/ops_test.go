@@ -157,9 +157,10 @@ func siteHome(t *testing.T, l Library, dir string) (string, string) {
 	return home, prefix
 }
 
-// dist sign pushes the manifest and its bundle as one referrer of the image, with the
-// credentials of config.json under DOCKER_CONFIG; dist use verifies it with a key of
-// distributions and writes the record of the manifest's digest, verified/current and
+// dist sign pushes the manifest and its bundle as one referrer of the image, and a
+// signature of the image's digest as another, in the bundle form of cosign sign, with
+// the credentials of config.json under DOCKER_CONFIG; dist use verifies both with a key
+// of distributions and writes the record of the manifest's digest, verified/current and
 // image.yaml, which names the image by digest, in that order (ADR-020 decisions 10 and
 // 12; ADR-061 decision 17; ADR-047 decision 13).
 func TestDistSignAndUseWriteTheRecord(t *testing.T) {
@@ -171,12 +172,16 @@ func TestDistSignAndUseWriteTheRecord(t *testing.T) {
 	img := distImage(reg, manifest)
 	c := env(map[string]string{"DOCKER_CONFIG": dockerConfig(t, reg.Host, "site", "secret")})
 	w, err := l.SignDist(t.Context(), def.SignDistRequest{Caller: c, Image: "oci://" + reg.Host + "/site:1", Key: prefix + ".key"})
-	if err != nil || len(w.Paths) != 1 {
+	if err != nil || len(w.Paths) != 2 {
 		t.Fatalf("SignDist = %v, %v", w, err)
 	}
 	referrer, ok := strings.CutPrefix(w.Paths[0], reg.Host+"/site@")
+	signature, sok := strings.CutPrefix(w.Paths[1], reg.Host+"/site@")
 	refs := reg.Referrers("site", img.Digest)
-	if !ok || len(refs) != 2 || !slices.ContainsFunc(refs, func(d ocitest.Descriptor) bool { return d.Digest == referrer && d.ArtifactType == def.DistributionType }) {
+	if !ok || !sok || len(refs) != 3 || !slices.ContainsFunc(refs, func(d ocitest.Descriptor) bool { return d.Digest == referrer && d.ArtifactType == def.DistributionType }) ||
+		!slices.ContainsFunc(refs, func(d ocitest.Descriptor) bool {
+			return d.Digest == signature && d.ArtifactType == bundleType && d.Annotations["dev.sigstore.bundle.predicateType"] == "https://sigstore.dev/cosign/sign/v1"
+		}) {
 		t.Fatalf("SignDist wrote %v; the image has the referrers %+v", w.Paths, refs)
 	}
 	raw, _ := reg.Fetch("site", referrer)
@@ -193,6 +198,14 @@ func TestDistSignAndUseWriteTheRecord(t *testing.T) {
 	pub, id, _ := LoadPublicKey(pubPEM)
 	if err := VerifyBlob(pub, bundle, manifest); err != nil {
 		t.Fatalf("the bundle dist sign pushed: %v", err)
+	}
+	raw, _ = reg.Fetch("site", signature)
+	if err := json.Unmarshal(raw, &m); err != nil || len(m.Layers) != 1 || m.Subject.Digest != img.Digest {
+		t.Fatalf("the signature referrer %s: %s, %v", signature, raw, err)
+	}
+	b, _ := reg.Fetch("site", m.Layers[0].Digest)
+	if st, err := VerifyStatement(pub, b, mustHex(t, strings.TrimPrefix(img.Digest, "sha256:"))); err != nil || !strings.Contains(string(st), `"predicateType":"https://sigstore.dev/cosign/sign/v1"`) {
+		t.Fatalf("the signature of the image that dist sign pushed: %s, %v", st, err)
 	}
 	if _, err := l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: home, Image: reg.Host + "/site:1"}); err == nil {
 		t.Error("dist use with no credentials for a registry that asks for them: no error")
@@ -239,8 +252,8 @@ func TestDistOnARegistryWithoutReferrersAPI(t *testing.T) {
 	if _, err := l.SignDist(t.Context(), def.SignDistRequest{Caller: caller(), Image: reg.Host + "/site@" + img.Digest, Key: prefix + ".key"}); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := reg.Fetch("site", strings.Replace(img.Digest, ":", "-", 1)); strings.Count(string(b), `"digest"`) != 2 {
-		t.Errorf("the index under the referrers tag schema: %s; want the two referrers", b)
+	if b, _ := reg.Fetch("site", strings.Replace(img.Digest, ":", "-", 1)); strings.Count(string(b), `"digest"`) != 3 {
+		t.Errorf("the index under the referrers tag schema: %s; want the three referrers", b)
 	}
 	if _, err := l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: home, Image: reg.Host + "/site:1"}); err != nil {
 		t.Fatal(err)
@@ -292,6 +305,44 @@ func TestDistUseRefusesWhatDoesNotVerify(t *testing.T) {
 	reg.Artifact("site", "", def.DistributionType, &img, ocitest.Layer{MediaType: def.DistributionLayer, Data: []byte("distVersion: 3\n")})
 	if _, err := l.SignDist(t.Context(), def.SignDistRequest{Caller: caller(), Image: reg.Host + "/site:1", Key: prefix + ".key"}); !errors.Is(err, def.ErrRefused) {
 		t.Errorf("dist sign of an image with two distribution manifests: %v, want ErrRefused", err)
+	}
+}
+
+// dist use writes image.yaml only for an image that a key of distributions signed: the
+// distribution manifest names no image, so a signed distribution referrer copied onto
+// another image is refused, and nothing is written (ADR-020 decision 12; ADR-047
+// decision 13).
+func TestDistUseRefusesAnImageNoKeySigned(t *testing.T) {
+	l := Library{LockWait: time.Second}
+	home, prefix := siteHome(t, l, t.TempDir())
+	reg := ocitest.New(t, ocitest.Options{})
+	img := distImage(reg, []byte("distVersion: 1\n"))
+	if _, err := l.SignDist(t.Context(), def.SignDistRequest{Caller: caller(), Image: reg.Host + "/site:1", Key: prefix + ".key"}); err != nil {
+		t.Fatal(err)
+	}
+	var layers []ocitest.Layer
+	for _, r := range reg.Referrers("site", img.Digest) {
+		raw, _ := reg.Fetch("site", r.Digest)
+		var m struct {
+			Layers []struct{ MediaType, Digest string }
+		}
+		if json.Unmarshal(raw, &m) == nil && r.ArtifactType == def.DistributionType && len(m.Layers) == 2 {
+			for _, layer := range m.Layers {
+				b, _ := reg.Fetch("site", layer.Digest)
+				layers = append(layers, ocitest.Layer{MediaType: layer.MediaType, Data: b})
+			}
+		}
+	}
+	if len(layers) != 2 {
+		t.Fatalf("the signed distribution referrer has the layers %+v", layers)
+	}
+	evil := reg.Artifact("site", "evil", "application/vnd.example.image.v1", nil, ocitest.Layer{MediaType: "application/vnd.example.layer.v1", Data: []byte("attacker binary")})
+	reg.Artifact("site", "", def.DistributionType, &evil, layers...)
+	if _, err := l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: home, Image: reg.Host + "/site:evil"}); !errors.Is(err, def.ErrRefused) {
+		t.Errorf("dist use of an image that only a copied referrer names: %v, want ErrRefused", err)
+	}
+	if h, err := l.Home(t.Context(), def.HomeRequest{Home: home}); err != nil || h.Image != "" || h.Current != "" || len(h.Records) != 0 {
+		t.Errorf("a refused dist use wrote %+v, %v", h, err)
 	}
 }
 
