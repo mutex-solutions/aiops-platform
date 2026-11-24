@@ -12,8 +12,9 @@
 // UseDist (dist sign and dist use, on an OCI image reference), Pack, Sign, Push,
 // Inspect and Verify (the OCI artifact of ADR-047 decision 1, its signature and its
 // attestation as referrers, ADR-020 decisions 2, 9 and 24), and New and Check (plugin
-// new and plugin check, through the toolbox). Verify reports its suite step as not
-// built until the suites of package check land (ADR-060 decision 46). The other
-// methods of ADR-061 decision 16 join with the parts they need: the builder and the
-// gate of the toolbox for Gate, Build, Smoke, Install, Enable, Disable and Remove.
+// new and plugin check, through the toolbox). Pack and Verify run the suites of
+// plugin check as Check runs them, and a binary that does not carry them reports the
+// suite step as not built (ADR-060 decision 46). The other methods of ADR-061
+// decision 16 join with the parts they need: the builder and the gate of the toolbox
+// for Gate, Build, Smoke, Install, Enable, Disable and Remove.
 package operations

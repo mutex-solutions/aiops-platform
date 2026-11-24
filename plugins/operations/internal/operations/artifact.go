@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -164,27 +163,24 @@ func (l Library) layers(ctx context.Context, r def.PackRequest, sum launch.Manif
 	return p, errors.Join(err, ctx.Err())
 }
 
-// attest runs what the toolbox carries of the suites, writes the statement of what
-// ran, signs it with a throwaway key held in memory and verifies it, and runs the gate
-// at the entry of plugin check step 7 (ADR-020 decision 14; ADR-060 decisions 17 and
-// 18). A step not carried, as the suites are until package check lands, is named, and
-// check 10, which reads what it records, is then not evaluated.
+// attest runs the suites of plugin check that the attestation records, as plugin
+// check runs them, writes the statement of what ran with the subject d, signs it with
+// a throwaway key held in memory and verifies it, and runs the gate at the entry of
+// plugin check step 7 (ADR-020 decision 14; ADR-060 decisions 17 and 18). A suite
+// that the binary does not carry is named, and check 10, which reads what it records,
+// is then not evaluated.
 func (l Library) attest(ctx context.Context, r def.PackRequest, sum launch.ManifestSummary, d ocispec.Descriptor, manifest, bundle []byte) ([]byte, error) {
-	p := predicate{Definitions: map[string]attested{}}
-	for name, vs := range sum.Definitions {
-		if len(vs) > 0 {
-			p.Definitions[name] = attested{Version: vs[len(vs)-1]}
-		}
-	}
-	ran, err := l.suites(ctx, r, sum, &p)
-	if err != nil {
+	c := &checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: r.Dir}, sum: sum, code: len(sum.Runtimes) > 0}
+	ran, ds, err := c.attested()
+	switch {
+	case err != nil:
 		return nil, err
+	case hasError(ds):
+		return nil, refused("plugin check fails: %s", texts(ds))
+	case !ran:
+		say(r.Caller, "pack: %s, so the attestation names no suite revision and no scenario", notCarried)
 	}
-	st, err := json.Marshal(statement{Type: statementV1, PredicateType: attestationURI, Predicate: p,
-		Subject: []subjectOf{{Name: sum.ID + "@" + sum.Version, Digest: map[string]string{"sha256": d.Digest.Encoded()}}}})
-	if err != nil {
-		return nil, err
-	}
+	st := c.statement(d.Digest.Encoded())
 	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err == nil {
 		var b []byte
@@ -215,51 +211,8 @@ func (l Library) attest(ctx context.Context, r def.PackRequest, sum launch.Manif
 	return st, nil
 }
 
-// suites runs the suites of in-process code or the echo scenario of a pack through the
-// toolbox and records them in p (ADR-060 decisions 49 and 56); it reports whether they
-// ran.
-func (l Library) suites(ctx context.Context, r def.PackRequest, sum launch.ManifestSummary, p *predicate) (bool, error) {
-	if len(sum.Runtimes) == 0 {
-		s, err := l.Box.Scenario(ctx, launch.ScenarioRequest{Dir: r.Dir, Name: "echo"})
-		if errors.Is(err, launch.ErrNotCarried) {
-			say(r.Caller, "pack: the echo scenario is not built yet: it runs in aiopsctl with package check (ADR-060 decisions 46 and 49), so the attestation names no scenario")
-			return false, nil
-		}
-		v, verr := strconv.Atoi(s.Version)
-		switch {
-		case err != nil:
-			return false, err
-		case len(s.Failures) > 0:
-			return false, refused("the scenario %s fails: %s", s.Name, strings.Join(s.Failures, "; "))
-		case verr != nil:
-			return false, fmt.Errorf("the scenario %s has the version %q, not a number", s.Name, s.Version)
-		}
-		p.Scenario = &scenarioOf{Name: s.Name, Version: v, Halves: s.Halves}
-		return true, nil
-	}
-	defs := map[string]string{}
-	for name, a := range p.Definitions {
-		defs[name] = a.Version
-	}
-	rep, err := l.Box.Suite(ctx, launch.SuiteRequest{Dir: r.Dir, Definitions: defs, Halves: []string{"obligations", "guard"}, Fixtures: filepath.Join(r.Dir, "fixtures")})
-	if errors.Is(err, launch.ErrNotCarried) {
-		say(r.Caller, "pack: the suites are not built yet: they run in aiopsctl with package check (ADR-060 decision 46), so the attestation names no suite revision")
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	for _, s := range rep.Definitions {
-		if len(s.Failed) > 0 {
-			return false, refused("the suite of %s fails %s", s.Name, strings.Join(s.Failed, ", "))
-		}
-		rev := s.Revision
-		p.Definitions[s.Name] = attested{Version: p.Definitions[s.Name].Version, Suite: &rev, Halves: s.Halves}
-	}
-	return true, nil
-}
-
-// The in-toto Statement v1 of the conformance attestation (ADR-020 decision 9).
+// The in-toto Statement v1 of a signature (ADR-020 decision 9); the attestation is
+// def.Statement's.
 type (
 	statement struct {
 		Type          string      `json:"_type"`
@@ -270,20 +223,6 @@ type (
 	subjectOf struct {
 		Name   string            `json:"name"`
 		Digest map[string]string `json:"digest"`
-	}
-	predicate struct {
-		Definitions map[string]attested `json:"definitions"`
-		Scenario    *scenarioOf         `json:"scenario,omitempty"`
-	}
-	attested struct {
-		Version string   `json:"version"`
-		Suite   *int     `json:"suite,omitempty"`
-		Halves  []string `json:"halves,omitempty"`
-	}
-	scenarioOf struct {
-		Name    string   `json:"name"`
-		Version int      `json:"version"`
-		Halves  []string `json:"halves"`
 	}
 )
 
@@ -538,8 +477,8 @@ func covers(s def.Signer, id string, runtimes []string) bool {
 // with each signer of trust.yaml, then the attestation with the key that verified it,
 // before any other blob but plugin.yaml, which names the runtimes the signer must
 // cover; an id that allowUnsigned lists may carry neither and is read with the
-// statement that pack recorded. The suites run in aiopsctl with package check, which
-// is not built yet, so that step is reported as not built and the verdict does not pass.
+// statement that pack recorded. The suites then run as plugin check runs them, and the
+// verdict passes when they pass.
 func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
 	h, err := l.home(r.Home)
 	if err != nil {
@@ -600,9 +539,59 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	if err := attestation(ctx, src, d, key, id); err != nil {
 		return v, err
 	}
-	v.Steps = append(v.Steps, def.VerifyStep{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()},
-		def.VerifyStep{Name: "suites", Outcome: "not-built", Reason: "the suites run in aiopsctl as embedded test binaries of package check, which is not built yet (ADR-060 decision 46)"})
-	return v, nil
+	v.Steps = append(v.Steps, def.VerifyStep{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()})
+	st, err := l.verifySuites(ctx, r.Caller, src, m, len(pm.Runtimes) > 0)
+	v.Steps = append(v.Steps, st)
+	v.Passed = st.Outcome == "pass"
+	return v, err
+}
+
+// verifySuites is the step suites of plugin verify: the suites of plugin check, run as
+// plugin check runs them on the pack that the artifact carries, its manifest, bundle
+// and fixtures unpacked into a directory of its own (ADR-060 decisions 46 and 49).
+func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m ocispec.Manifest, code bool) (def.VerifyStep, error) {
+	st := def.VerifyStep{Name: "suites", Outcome: "not-built"}
+	if code {
+		st.Reason = "the suites of in-process code run on its module, which plugin verify fetches with the builder of ADR-044, not built yet"
+		return st, nil
+	}
+	dir, err := os.MkdirTemp("", "aiops-verify-")
+	if err != nil {
+		return st, err
+	}
+	defer os.RemoveAll(dir)
+	for _, d := range m.Layers {
+		var b []byte
+		if b, err = fetch(ctx, src, d); err != nil {
+			return st, err
+		}
+		switch d.MediaType {
+		case layerManifest:
+			err = os.WriteFile(filepath.Join(dir, "plugin.yaml"), b, 0o600)
+		case layerBundle:
+			err = os.WriteFile(filepath.Join(dir, "bundle.yaml"), b, 0o600)
+		case layerFixtures:
+			err = untar(b, filepath.Join(dir, "fixtures"))
+		}
+		if err != nil {
+			return st, err
+		}
+	}
+	sum, _, err := l.Box.ReadManifest(ctx, launch.ManifestRequest{Dir: dir})
+	if err != nil {
+		return st, refused("plugin.yaml of the artifact: %v", err)
+	}
+	ran, ds, err := (&checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: c, Dir: dir}, sum: sum}).attested()
+	switch {
+	case err != nil:
+	case hasError(ds):
+		st.Outcome, st.Reason = "fail", texts(ds)
+	case !ran:
+		st.Reason = notCarried
+	default:
+		st.Outcome, st.Reason = "pass", "step 5 and the echo scenario of plugin check"
+	}
+	return st, err
 }
 
 // attestation checks the attestation of d: with key, the bundle that verifies, and

@@ -403,8 +403,9 @@ type Operations interface {
 	Inspect(ctx context.Context, r SpecRequest) (Inspected, error)
 	// Verify is plugin verify: it verifies the signature with the signers of trust.yaml
 	// that cover the artifact, then the attestation with the same key, before it uses
-	// any other blob, then runs the suites. A signature or an attestation that does not
-	// verify is a refusal; a suite step not built is a step that did not pass.
+	// any other blob, then runs the suites of plugin check on what the artifact
+	// carries. A signature or an attestation that does not verify is a refusal; a suite
+	// step not built is a step that did not pass.
 	Verify(ctx context.Context, r SpecRequest) (Verified, error)
 	// New is plugin new (added at 0.2). It writes the files of the template into Dir
 	// and returns their paths, sorted; it refuses a Dir that holds anything, a template

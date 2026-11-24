@@ -72,6 +72,34 @@ func canonicalTar(files map[string][]byte) ([]byte, []string) {
 	return b.Bytes(), paths
 }
 
+// untar writes the regular files of the tar b under dir, mode 0600, and refuses a
+// path that leaves dir.
+func untar(b []byte, dir string) error {
+	r := tar.NewReader(bytes.NewReader(b))
+	for {
+		h, err := r.Next()
+		switch {
+		case errors.Is(err, io.EOF):
+			return nil
+		case err != nil:
+			return err
+		case h.Typeflag != tar.TypeReg || !filepath.IsLocal(h.Name):
+			return refused("the tar holds %q, which is not a regular file under its root (ADR-047 decision 3)", h.Name)
+		}
+		p := filepath.Join(dir, filepath.FromSlash(h.Name))
+		data, err := io.ReadAll(r)
+		if err == nil {
+			err = os.MkdirAll(filepath.Dir(p), 0o700)
+		}
+		if err == nil {
+			err = os.WriteFile(p, data, 0o600)
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
 // moduleOf returns module.json of the in-process code in dir at version, {"path",
 // "version", "sum"}: the path of go.mod and the h1 sum of the module zip of dir, as go
 // mod download records it, and adds the module and each requirement of go.mod with its
