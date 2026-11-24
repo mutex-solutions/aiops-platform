@@ -34,8 +34,13 @@ import (
 // artifacts the library pushes, each an OCI image manifest with the empty config.
 
 // maxBlob bounds a blob that the library reads whole: a manifest, a bundle, a layer of
-// a plugin artifact.
-const maxBlob = 64 << 20
+// a plugin artifact. plugin.yaml and the bundle of an artifact, which it parses as
+// YAML, are bounded by maxFile, the 1 MiB that boot reads of a file
+// (boot.MaxFileBytes).
+const (
+	maxBlob = 64 << 20
+	maxFile = 1 << 20
+)
 
 // remoteRepo returns the repository of ref, an OCI reference with oci:// optional,
 // that reads the credentials of config.json under DOCKER_CONFIG, or under .docker/ of
@@ -87,10 +92,15 @@ func resolve(ctx context.Context, r *remote.Repository) (ocispec.Descriptor, err
 	return d, err
 }
 
-// fetch returns the blob or manifest d of src, checked against its digest and size.
+// fetch returns the blob or manifest d of src, checked against its digest and size,
+// and refuses one larger than its media type may be before it fetches it.
 func fetch(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) ([]byte, error) {
-	if d.Size > maxBlob {
-		return nil, refused("%s is %d bytes, more than the %d a blob of an artifact may hold", d.Digest, d.Size, maxBlob)
+	limit := int64(maxBlob)
+	if d.MediaType == layerManifest || d.MediaType == layerBundle {
+		limit = maxFile
+	}
+	if d.Size > limit {
+		return nil, refused("%s is %d bytes, more than the %d a %s may hold", d.Digest, d.Size, limit, d.MediaType)
 	}
 	return content.FetchAll(ctx, src, d)
 }

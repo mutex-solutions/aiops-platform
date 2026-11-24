@@ -513,9 +513,10 @@ func covers(s def.Signer, id string, runtimes []string) bool {
 // Verify is plugin verify (ADR-047 decision 2; ADR-020 decision 14): the signature
 // with each signer of trust.yaml, then the attestation with the key that verified it,
 // before any other blob but plugin.yaml, which names the runtimes the signer must
-// cover; an id that allowUnsigned lists may carry neither and is read with the
-// statement that pack recorded. The suites then run as plugin check runs them, and the
-// verdict passes when they pass.
+// cover and is fetched only once a signature verified or where allowUnsigned lists an
+// id; an id that allowUnsigned lists may carry neither and is read with the statement
+// that pack recorded. The suites then run as plugin check runs them, and the verdict
+// passes when they pass.
 func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
 	h, err := l.home(r.Home)
 	if err != nil {
@@ -546,6 +547,9 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 				found = append(found, verified{i, n})
 			}
 		}
+	}
+	if len(found) == 0 && len(t.allow) == 0 {
+		return v, refused("check 5: no signature of %s verifies with a key that trust.yaml lists, and allowUnsigned lists no id", d.Digest)
 	}
 	m, err := manifest(ctx, src, d)
 	var pm pluginYAML
