@@ -20,9 +20,9 @@ import (
 // What it passes to boot:
 //
 //   - the profile cli and the role all, with the server rule off (Command);
-//   - the home from $AIOPS_HOME as the flag home that cmdline serves; with none it
-//     composes the shipped cli profile alone, and a command that writes the home is a
-//     usage error;
+//   - the home from $AIOPS_HOME, a relative one under the working directory, as the
+//     flag home that cmdline serves; with none it composes the shipped cli profile
+//     alone, and a command that writes the home is a usage error;
 //   - every argument as argv, the three streams, the working directory and the
 //     environment for cmdline;
 //   - nothing that the launcher writes on stdout, which carries only what a command was
@@ -63,6 +63,9 @@ func run(ctx context.Context, args []string, p process, d distribution) int {
 		}
 	}
 	home := env["AIOPS_HOME"]
+	if home != "" && !path.IsAbs(home) {
+		home = path.Join(p.Dir, home) // as aiops resolves its home, and S1 aiopsctl did
+	}
 	layers := d.Shipped
 	if home != "" {
 		h, err := fs.Sub(p.Files, strings.TrimPrefix(path.Clean("/"+home), "/"))
