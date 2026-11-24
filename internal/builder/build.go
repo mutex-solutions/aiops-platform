@@ -18,6 +18,7 @@ package builder
 import (
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -112,10 +113,7 @@ type tablePlugin struct {
 
 // Build runs one build on the local path.
 func Build(ctx context.Context, q Request) (Result, error) {
-	b := &build{q: q, recorded: map[string]string{}, progress: q.Progress}
-	if b.progress == nil {
-		b.progress = io.Discard
-	}
+	b := &build{q: q, recorded: map[string]string{}, progress: cmp.Or[io.Writer](q.Progress, io.Discard)}
 	if err := b.inputs(); err != nil {
 		return Result{}, err
 	}
@@ -125,8 +123,7 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	}
 	defer os.RemoveAll(scratch)
 	b.scratch = scratch
-	b.goroot, err = Tree(q.ModCache, q.Cache, b.toolchainSum())
-	if err != nil {
+	if b.goroot, err = Tree(q.ModCache, q.Cache, b.toolchainSum()); err != nil {
 		return Result{}, err
 	}
 	b.g = Go{Bin: filepath.Join(b.goroot, "bin", "go"), Dir: scratch, Env: b.env(b.goroot)}
@@ -328,11 +325,7 @@ func (b *build) module(ctx context.Context) error {
 // plugin.yaml to the module table. Two sources that record different hashes for one
 // version fail the build (ADR-044 decision 8).
 func (b *build) plugin(p module.Version) error {
-	esc, err := module.EscapePath(p.Path)
-	if err != nil {
-		return err
-	}
-	file := filepath.Join(b.q.ModCache, esc, "@v", p.Version+".zip")
+	file := b.zip(p)
 	got, err := dirhash.HashZip(file, dirhash.Hash1)
 	if err != nil {
 		return fmt.Errorf("plugin module %s %s: %w", p.Path, p.Version, err)
@@ -395,6 +388,12 @@ func (b *build) plugin(p module.Version) error {
 		b.plugins = append(b.plugins, tablePlugin{pkg: pkg, accessor: accessor, manifest: manifest})
 	}
 	return nil
+}
+
+// zip returns the file of the module zip of m in the module source.
+func (b *build) zip(m module.Version) string {
+	esc, _ := module.EscapePath(m.Path)
+	return filepath.Join(b.q.ModCache, esc, "@v", m.Version+".zip")
 }
 
 func readZip(f *zip.File) ([]byte, error) {
@@ -744,12 +743,10 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 	}
 	for _, m := range mpl {
 		esc, _ := module.EscapePath(m.Path)
-		data, err := os.ReadFile(filepath.Join(b.q.ModCache, esc, "@v", m.Version+".zip"))
+		data, err := os.ReadFile(b.zip(module.Version{Path: m.Path, Version: m.Version}))
 		if err == nil {
-			err = os.MkdirAll(filepath.Join(out, "mpl-sources"), 0o755)
-		}
-		if err == nil {
-			err = os.WriteFile(filepath.Join(out, "mpl-sources", strings.ReplaceAll(esc, "/", "_")+"@"+m.Version+".zip"), data, 0o644)
+			err = errors.Join(os.MkdirAll(filepath.Join(out, "mpl-sources"), 0o755),
+				os.WriteFile(filepath.Join(out, "mpl-sources", strings.ReplaceAll(esc, "/", "_")+"@"+m.Version+".zip"), data, 0o644))
 		}
 		if err != nil {
 			return res, err

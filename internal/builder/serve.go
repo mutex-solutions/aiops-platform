@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
+	"testing/fstest"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
@@ -116,19 +116,12 @@ type (
 	diskFile struct{ path, file string }
 )
 
-func (f memFile) Path() string                 { return f.path }
-func (f memFile) Lstat() (fs.FileInfo, error)  { return memInfo{f}, nil }
+func (f memFile) Path() string { return f.path }
+func (f memFile) Lstat() (fs.FileInfo, error) {
+	return fs.Stat(fstest.MapFS{f.path: {Data: f.data}}, f.path)
+}
 func (f memFile) Open() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(f.data)), nil }
 
 func (f diskFile) Path() string                 { return f.path }
 func (f diskFile) Lstat() (fs.FileInfo, error)  { return os.Lstat(f.file) }
 func (f diskFile) Open() (io.ReadCloser, error) { return os.Open(f.file) }
-
-type memInfo struct{ f memFile }
-
-func (i memInfo) Name() string       { return filepath.Base(i.f.path) }
-func (i memInfo) Size() int64        { return int64(len(i.f.data)) }
-func (i memInfo) Mode() fs.FileMode  { return 0o644 }
-func (i memInfo) ModTime() time.Time { return time.Time{} }
-func (i memInfo) IsDir() bool        { return false }
-func (i memInfo) Sys() any           { return nil }

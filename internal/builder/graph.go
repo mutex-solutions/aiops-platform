@@ -4,6 +4,7 @@ package builder
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,11 +39,7 @@ type Go struct {
 
 // Run runs go with args and returns its standard output.
 func (g Go) Run(ctx context.Context, args ...string) ([]byte, error) {
-	bin := g.Bin
-	if bin == "" {
-		bin = "go"
-	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, cmp.Or(g.Bin, "go"), args...)
 	cmd.Dir, cmd.Env = g.Dir, g.Env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
