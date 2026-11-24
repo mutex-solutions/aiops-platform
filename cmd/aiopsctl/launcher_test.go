@@ -65,7 +65,7 @@ func TestExitCodes(t *testing.T) {
 		{nil, 2, "usage: aiopsctl <command>"},
 		{[]string{"nope"}, 2, "no such command"},
 		{[]string{"key", "generate", "k"}, 2, "AIOPS_KEY_PASSWORD"},
-		{[]string{"profile", "init", "cli"}, 2, "AIOPS_HOME is not set"},
+		{[]string{"profile", "init", "cli"}, 2, "no home: AIOPS_HOME is unset or empty"},
 		{[]string{"profile", "render", "--profile", "cli", "--dump", "--role", "api"}, 0, ""},
 	} {
 		r := do(t, fstest.MapFS{}, nil, c.args...)
