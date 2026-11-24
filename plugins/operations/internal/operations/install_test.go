@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -165,5 +166,34 @@ func TestRemoveTakesAnInstalledArtifactOnly(t *testing.T) {
 	}
 	if got := tree(t, h); !equal(got, before) {
 		t.Errorf("a refused remove kept a change: %v", got)
+	}
+}
+
+// Remove deletes bundles/<id>/ and content/<id>/ only once its write is kept and the
+// snapshot dropped, so a deletion that fails leaves the bundle list and plugins.lock
+// without the id and says so: it never leaves a lock entry without its files (ADR-047
+// decision 10; ADR-062 decision 11).
+func TestRemoveDeletesTheKeptFilesAfterTheWrite(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root deletes from a directory of mode 0500")
+	}
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	if _, err := installed(t, l, home, pack, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	content := filepath.Join(home, "content", "acme", "connector-x")
+	if err := os.Chmod(content, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(content, 0o700) })
+	ch, err := l.Remove(t.Context(), def.RemoveRequest{Home: home, Profile: "dev", ID: "acme/connector-x"})
+	files := tree(t, Home{Dir: home})
+	if err != nil || files["profiles/dev/profile.yaml"] != "bundles: [aiops-core]\n" || strings.Contains(files["profiles/dev/plugins.lock"], "acme/connector-x") {
+		t.Errorf("remove: %v; profile.yaml %q, plugins.lock %q; want both kept without the id",
+			err, files["profiles/dev/profile.yaml"], files["profiles/dev/plugins.lock"])
+	}
+	if !slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, content) }) {
+		t.Errorf("notes %q; want one that names the directory that stays", ch.Notes)
 	}
 }
