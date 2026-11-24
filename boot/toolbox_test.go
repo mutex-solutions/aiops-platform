@@ -104,7 +104,12 @@ func TestToolboxRender(t *testing.T) {
 	b := newBox(t)
 	b.files["patch.yml"] = &fstest.MapFile{Data: []byte("- {id: user, enabled: false}\n- {id: nobody, enabled: false}\n")}
 	b.extra["bundles/b/bundle.yaml"] = &fstest.MapFile{Data: []byte("- insert:\n    - {id: store, plugin: t/store, roles: [api]}\n")}
+	// A raise that --allow-bump admitted and a hash checked against nothing are departures
+	// from the release too (ADR-044 decisions 8 and 10).
+	pins := "pins:\n  - {path: example.test/dep, version: v0.1.0, gomod: \"h1:" + strings.Repeat("A", 43) + "=\", unchecked: true}\n" +
+		"  - {path: golang.org/x/text, version: v0.44.0, sum: \"h1:" + strings.Repeat("B", 43) + "=\", release: v0.43.0}\n"
 	tb := b.start(t, func(s []byte) []byte {
+		s = bytes.Replace(s, []byte("pins: []\n"), []byte(pins), 1)
 		return bytes.Replace(s, []byte("serves:"), []byte("site: {consumers: {profileContext: [t/probe]}}\nserves:"), 1)
 	})
 	ctx := t.Context()
@@ -127,7 +132,9 @@ func TestToolboxRender(t *testing.T) {
 	if slices.Contains(r.Required.Rows, LoaderRowID) || len(errorTexts(r.Diagnostics)) > 0 || len(r.Admission.Denied) > 0 {
 		t.Errorf("required %v, errors %v, denied %v", r.Required, errorTexts(r.Diagnostics), r.Admission.Denied)
 	}
-	if !slices.Equal(r.Departures, []string{"the site adds consumers of profileContext: t/probe"}) ||
+	if !slices.Equal(r.Departures, []string{"the site adds consumers of profileContext: t/probe",
+		"the site raises golang.org/x/text from v0.43.0, the release's pin, to v0.44.0, which --allow-bump admitted (ADR-044 decision 10)",
+		"example.test/dep v0.1.0 was checked against nothing: no source recorded its hash (ADR-044 decision 8)"}) ||
 		!slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return d.Warning && strings.HasPrefix(d.Text, "trust: ") }) {
 		t.Errorf("departures %q, diagnostics %+v", r.Departures, r.Diagnostics)
 	}

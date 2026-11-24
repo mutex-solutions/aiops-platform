@@ -142,6 +142,10 @@ func TestBootInputPrints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A raise admitted by --allow-bump and hashes checked against nothing, which the signed
+	// manifest records beside the pins (ADR-044 decisions 8 and 10).
+	d.Pins = []DistPin{{Path: "example.test/dep", Version: "v0.1.0", Sum: "h1:s", GoMod: "h1:m", Unchecked: true},
+		{Path: "golang.org/x/text", Version: "v0.44.0", Sum: "h1:t", Release: "v0.43.0"}, {Path: "golang.org/x/sync", Version: "v0.24.0", Sum: "h1:y"}}
 	home := fstest.MapFS{"trust.yaml": {Data: []byte("allowUnsigned: [acme/x]\n")}}
 	// A pack states its credential class in integrates, and an in-process artifact is
 	// warned on once (08-profiles-roadmap-adrs.md:391).
@@ -156,6 +160,8 @@ func TestBootInputPrints(t *testing.T) {
 	want := []string{"trust: allowUnsigned lists acme/x", "licence: the distribution accepts GPL-3.0-only",
 		"bindings: the site adds providers of k: o/p", "bindings: the site adds consumers of c: o/p",
 		"bindings: the site adds listeners of the sealed hook h: o/p", "bindings: the site raises the required set by k, r",
+		"pins: example.test/dep v0.1.0 was checked against nothing: no source recorded its hash (ADR-044 decision 8)",
+		"pins: the site raises golang.org/x/text from v0.43.0, the release's pin, to v0.44.0, which --allow-bump admitted (ADR-044 decision 10)",
 		broader("a", "o/p"), broader("pack:e1", "acme/pack"), broader("p:x", "o/p")}
 	if !slices.Equal(lines[1:], want) {
 		t.Fatalf("lines\n%s", strings.Join(lines, "\n"))
