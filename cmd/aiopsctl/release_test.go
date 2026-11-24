@@ -93,7 +93,7 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 	der, _ := x509.MarshalPKIXPublicKey(&k.PublicKey)
 	sum := sha256.Sum256(der)
 	keyID := base64.StdEncoding.EncodeToString(sum[:])
-	bundle := []byte(`{"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json"}`)
+	bundle := []byte(`{"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json", "note": "the bundle of the release manifest of this case"}`)
 	q.Out = filepath.Join(t.TempDir(), "release")
 	q.Signed = &builder.Signed{Manifest: first.Manifest, Bundle: bundle, Key: pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), Definition: def}
 	second, err := builder.Build(ctx, q)
@@ -111,6 +111,17 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 		"aiopsctl/aiopsctl", "aiopsctl/NOTICE", "aiopsctl/aiopsctl.spdx.json", "aiopsctl/THIRD_PARTY_LICENSES/golang.org/x/mod/PATENTS", "image/index.json"} {
 		if _, err := os.Stat(filepath.Join(q.Out, filepath.FromSlash(f))); err != nil {
 			t.Errorf("the second phase wrote no %s: %v", f, err)
+		}
+	}
+	// The release server and the release aiopsctl embed the manifest, its bundle and the
+	// release public key (ADR-020 decision 13), so that dist use of the release image
+	// verifies it with the key the binary carries.
+	for _, bin := range []string{"aiops/aiops", "aiopsctl/aiopsctl"} {
+		b, err := os.ReadFile(filepath.Join(q.Out, filepath.FromSlash(bin)))
+		for what, part := range map[string][]byte{"the manifest": first.Manifest, "the bundle": bundle, "the release key": []byte(base64.StdEncoding.EncodeToString(der)[:60])} {
+			if err != nil || !bytes.Contains(b, part) {
+				t.Errorf("the release %s does not embed %s (%v)", bin, what, err)
+			}
 		}
 	}
 	cmd := exec.Command(filepath.Join(q.Out, "aiopsctl", "aiopsctl"), "profile", "verify")

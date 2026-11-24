@@ -3,6 +3,7 @@
 package operations
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 )
@@ -257,6 +259,56 @@ func TestDistOnARegistryWithoutReferrersAPI(t *testing.T) {
 	}
 	if _, err := l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: home, Image: reg.Host + "/site:1"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// releaseBox is a toolbox of a release binary, which carries the release public key.
+type releaseBox struct {
+	*packBox
+	key []byte
+}
+
+func (b releaseBox) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{Key: b.key}, nil
+}
+
+// dist use verifies an image with the default release root, the key that a release
+// binary carries, where trust.yaml trusts it, which it does with no trust.yaml at all,
+// and records the signer release; with the root removed from distributions, or in a
+// binary that carries no key, the same image is refused (ADR-020 decision 13).
+func TestDistUseVerifiesTheReleaseRoot(t *testing.T) {
+	dir := t.TempDir()
+	prefix := generate(t, Library{LockWait: time.Second}, dir, "release")
+	pub, err := os.ReadFile(prefix + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := Library{Box: releaseBox{&packBox{}, pub}, LockWait: time.Second}
+	reg := ocitest.New(t, ocitest.Options{})
+	manifest := []byte("distVersion: 1\n# the release\n")
+	distImage(reg, manifest)
+	if _, err := l.SignDist(t.Context(), def.SignDistRequest{Caller: caller(), Image: reg.Host + "/site:1", Key: prefix + ".key"}); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(t.TempDir(), "home")
+	if _, err := l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: home, Image: reg.Host + "/site:1"}); err != nil {
+		t.Fatalf("dist use with the release root: %v", err)
+	}
+	sum := sha256.Sum256(manifest)
+	if b, err := os.ReadFile(filepath.Join(home, "verified", "sha256-"+hex.EncodeToString(sum[:]), "record.yaml")); err != nil || !strings.Contains(string(b), "signer: release\n") {
+		t.Errorf("the record: %s, %v; want the signer release", b, err)
+	}
+	other := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(other, 0o755); err != nil || os.WriteFile(filepath.Join(other, "trust.yaml"), []byte("distributions: []\n"), 0o644) != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		l    Library
+		home string
+	}{"the root removed": {l, other}, "a binary with no key": {Library{Box: releaseBox{&packBox{}, nil}, LockWait: time.Second}, filepath.Join(t.TempDir(), "home")}} {
+		if _, err := c.l.UseDist(t.Context(), def.UseRequest{Caller: caller(), Home: c.home, Image: reg.Host + "/site:1"}); !errors.Is(err, def.ErrRefused) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

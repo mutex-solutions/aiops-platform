@@ -566,6 +566,19 @@ func TestToolboxRelease(t *testing.T) {
 			t.Errorf("Release(%s) = nil error", against)
 		}
 	}
+	// A release binary hands dist use the release public key it carries, its default
+	// distribution root, with the manifest it embeds and with no other (ADR-020
+	// decision 13).
+	b = newBox(t)
+	b.opt.Release = &Release{KeyID: "K", Key: []byte("the release key"), Bundle: []byte("its bundle")}
+	tb = b.start(t, nil)
+	if r, err := tb.Release(ctx, ""); err != nil || string(r.Key) != "the release key" || len(r.Manifest) == 0 {
+		t.Errorf("the release of a release binary = key %q, %v", r.Key, err)
+	}
+	b.extra["dist.yaml"] = &fstest.MapFile{Data: d.text()}
+	if r, err := tb.Release(ctx, "/x/dist.yaml"); err != nil || r.Key != nil {
+		t.Errorf("the release of --against = key %q, %v", r.Key, err)
+	}
 }
 
 // fakeTools are the Tools that a test hands in, as aiopsctl hands in its own.
