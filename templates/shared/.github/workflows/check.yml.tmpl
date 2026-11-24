@@ -1,6 +1,6 @@
 # One job that runs the check of the platform on this plugin (07-c4-plugin-sdk.md:1559).
-# Put on PATH the aiopsctl of the release the plugin is built against: the check runs
-# step 7 against the release that aiopsctl was built from.
+# It needs on PATH the aiopsctl of the release the plugin is built against: the check
+# runs step 7 against the release that aiopsctl was built from.
 name: check
 
 on:
@@ -21,5 +21,14 @@ jobs:
         with:
           go-version: "1.26.8"
 {{- end}}
+      # Install the aiopsctl of the release the plugin is built against here, downloaded
+      # by its version and digest and verified. No release publishes one to download
+      # yet, so the step stops the job, naming that install, when none is on PATH.
+      - name: aiopsctl
+        run: |
+          command -v aiopsctl >/dev/null || {
+            echo "::error::aiopsctl is not on PATH: install the aiopsctl of the release this plugin is built against, by version and digest, in the step before plugin check"
+            exit 1
+          }
       - name: plugin check
         run: aiopsctl plugin check ./
