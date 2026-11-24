@@ -121,7 +121,7 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	// A bad command line writes no status: it may not name the home of this process,
 	// and "aiops --help" must not mark a server that runs on $AIOPS_HOME stopped.
 	runDir := runfile.Dir(*home)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
+	if err := os.MkdirAll(runDir, 0o700); err != nil { // only the site user enters run/ (ADR-047 decision 14)
 		fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return boot.ExitInternal
 	}
