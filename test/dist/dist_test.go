@@ -82,9 +82,7 @@ func startEnv(t *testing.T, environ map[string]string, profile string, patches .
 func startDist(t *testing.T, d serve.Distribution, environ map[string]string, profile string, patches ...string) *proc {
 	t.Helper()
 	home := t.TempDir()
-	if err := trusted.Write(home, d.Signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, home, d.Signed)
 	limits := filepath.Join(t.TempDir(), "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)
@@ -324,9 +322,7 @@ func TestSpineHasASlowButBoundedUnload(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	if err := trusted.Write(home, d.Signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, home, d.Signed)
 	limits := filepath.Join(dir, "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)

@@ -77,9 +77,7 @@ func start(t *testing.T, bin string, env []string, patches ...string) *process {
 func startWith(t *testing.T, bin string, env, flags []string, patches ...string) *process {
 	t.Helper()
 	home := t.TempDir()
-	if err := trusted.Write(home, testdist.Signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, home, testdist.Signed)
 	args := append([]string{"--profile", "smoke", "--home", home}, flags...)
 	for _, p := range patches {
 		args = append(args, "--patch", p)

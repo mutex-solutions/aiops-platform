@@ -45,10 +45,7 @@ func testDistFS(t *testing.T, signed []byte) fstest.MapFS {
 		t.Fatal(err)
 	}
 	m := fstest.MapFS{"dist/distribution.yaml": {Data: signed}}
-	files, err := trusted.Files(signed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	files := trusted.Files(t, signed)
 	for name, data := range files {
 		m["home/"+name] = &fstest.MapFile{Data: data}
 	}

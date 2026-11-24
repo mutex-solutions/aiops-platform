@@ -178,10 +178,7 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := releaseHome("", "${env:AIOPS_REF_WINDOW}")
-	files, err := trusted.Files(signed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	files := trusted.Files(t, signed)
 	for name, data := range files {
 		home[name] = &fstest.MapFile{Data: data}
 	}

@@ -29,10 +29,7 @@ func trustedHome(t *testing.T) fstest.MapFS {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := trusted.Files(signed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	files := trusted.Files(t, signed)
 	m := fstest.MapFS{}
 	for name, data := range files {
 		m["home/"+name] = &fstest.MapFile{Data: data}
@@ -125,9 +122,7 @@ func TestABrokenSiteLayer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := trusted.Write(home, signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, home, signed)
 	layer := filepath.Join(home, "aiops.patch.yml")
 	if err := os.WriteFile(layer, []byte("- {id: clock,\n"), 0o600); err != nil {
 		t.Fatal(err)

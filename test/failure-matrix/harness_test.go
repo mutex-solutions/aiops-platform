@@ -455,7 +455,7 @@ func rejectedProblems(before, s harness.Snapshot) []string {
 	return bad
 }
 
-func runScenario(bin string, e boot.Expect, p plan) result {
+func runScenario(t *testing.T, bin string, e boot.Expect, p plan) result {
 	opts := harness.Options{Profile: p.profile, Env: p.env}
 	if p.install != "" {
 		opts.Install = func(home string) error { return installFault(home, p.install) }
@@ -493,7 +493,7 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			return result{problems: []string{err.Error()}}
 		}
 	}
-	proc, err := harness.Start(bin, opts)
+	proc, err := harness.Start(t, bin, opts)
 	if err != nil {
 		return result{problems: []string{err.Error()}}
 	}
@@ -668,9 +668,9 @@ func TestFailureMatrix(t *testing.T) {
 					if !ok {
 						res = result{problems: []string{"the harness has no procedure for this cell: an S1 cell may not be skipped"}}
 					} else {
-						res = runScenario(bin, c.Expect, p)
+						res = runScenario(t, bin, c.Expect, p)
 						for _, v := range p.then {
-							r := runScenario(bin, v.expect, v.plan)
+							r := runScenario(t, bin, v.expect, v.plan)
 							for _, pr := range r.problems {
 								res.problems = append(res.problems, v.name+": "+pr)
 							}

@@ -143,9 +143,10 @@ type Proc struct {
 	code   int
 }
 
-// Start runs the binary with a fresh home. The caller must call Stop or Kill; a test
+// Start runs the binary with a fresh home, which trusts Signed through the
+// operations row mounted for tb (test/trusted). The caller must call Stop or Kill; a test
 // registers it with t.Cleanup.
-func Start(bin string, o Options) (*Proc, error) {
+func Start(tb testing.TB, bin string, o Options) (*Proc, error) {
 	home, err := os.MkdirTemp("", "aiops-test-home-")
 	if err != nil {
 		return nil, err
@@ -154,9 +155,7 @@ func Start(bin string, o Options) (*Proc, error) {
 	if lim == "" {
 		lim = Limits
 	}
-	if err := trusted.Write(home, Signed); err != nil {
-		return nil, err
-	}
+	trusted.Write(tb, home, Signed)
 	if o.Install != nil {
 		if err := o.Install(home); err != nil {
 			return nil, err

@@ -73,9 +73,7 @@ func env(args ...string) (Env, *safeBuf, chan os.Signal) {
 func home(t *testing.T, bundle string) string {
 	t.Helper()
 	h := t.TempDir()
-	if err := trusted.Write(h, distribution(t).Signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, h, distribution(t).Signed)
 	for name, data := range map[string]string{"profiles/p/profile.yaml": "bundles: [b]", "bundles/b/bundle.yaml": bundle} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(h, name)), 0o755); err != nil {
 			t.Fatal(err)
@@ -129,9 +127,7 @@ func TestRunUsesTheHomeFromTheEnvironmentAndShippedFiles(t *testing.T) {
 	shipped := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}, "bundles/b/bundle.yaml": {Data: []byte("[]")}}
 	d := distribution(t)
 	d.Shipped = shipped
-	if err := trusted.Write(h, d.Signed); err != nil {
-		t.Fatal(err)
-	}
+	trusted.Write(t, h, d.Signed)
 	e, stderr, _ := env("--profile", "p", "--role", "bogus")
 	e.Getenv = func(n string) string {
 		if n == "AIOPS_HOME" {

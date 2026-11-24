@@ -79,7 +79,7 @@ func bootInstalled(t *testing.T, install func(home string) error, patches ...str
 		opts.Patches = append(opts.Patches, f)
 	}
 	opts.Patches = append(opts.Patches, w.live)
-	p, err := harness.Start(bin, opts)
+	p, err := harness.Start(t, bin, opts)
 	if err != nil {
 		t.Fatal(err)
 	}

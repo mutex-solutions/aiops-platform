@@ -4,13 +4,20 @@ package trusted
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/plugins/operations"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
 const manifest = `manifestVersion: "1.0"
@@ -31,6 +38,93 @@ durable: []
 requires: {pluginApi: "0.2", definitions: {}}
 `
 
+// What Write writes is what boot reads (ADR-020 decisions 10, 12 and 13; ADR-060
+// decision 28): trust.yaml with the default root and a key under distributions, the
+// record of the manifest's digest, of kind distribution, whose signer is that key, and
+// verified/current naming it. The record keeps the manifest and a bundle that dist use
+// of the operations row verifies again, in another home that trusts the same key.
+func TestWriteRecordsWhatBootReads(t *testing.T) {
+	signed := []byte("distVersion: 1\n")
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.Mkdir(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	Write(t, home, signed)
+	fsys := os.DirFS(home)
+	trust, err := boot.ReadTrust(fsys)
+	if err != nil || len(trust.Distributions) != 2 || trust.Distributions[0] != boot.ReleaseRoot || len(trust.Signers) != 0 {
+		t.Fatalf("trust.yaml %+v, %v; want the default root and one key under distributions", trust, err)
+	}
+	sum := sha256.Sum256(signed)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	if cur, err := boot.ReadCurrent(fsys); err != nil || cur != digest {
+		t.Fatalf("verified/current %q, %v; want %s", cur, err, digest)
+	}
+	rec, err := boot.ReadRecord(fsys, digest)
+	if err != nil || rec.Kind != "distribution" || rec.Signer != trust.Distributions[1] {
+		t.Fatalf("record %+v, %v; want a record of a distribution signed by the key of trust.yaml", rec, err)
+	}
+	dir := filepath.Join(home, "verified", strings.Replace(digest, ":", "-", 1))
+	img := t.TempDir()
+	for _, name := range []string{"manifest", "manifest.sigstore.json"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("the record of the distribution: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(img, name), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := filepath.Join(t.TempDir(), "other")
+	if err := os.Mkdir(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(home, "trust.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "trust.yaml"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := kerneltest.New(t)
+	f := root.Plugin(operations.Plugin, nil)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var ops def.Operations
+	c := root.Plugin(kernel.Define(kernel.Plugin{ID: "aiops-test/trusted-check", Inject: []kernel.Dep{kernel.Need(def.Key)},
+		Apply: func(c *kernel.Context, _ any) error { ops = def.Key.Of(c); return nil }}), nil)
+	if err := c.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ops.UseDist(t.Context(), def.UseRequest{Home: other, Image: img}); err != nil {
+		t.Fatalf("dist use of the record's manifest and bundle in a home that trusts the same key: %v", err)
+	}
+}
+
+// Files are the files that Write writes into a home, by slash path.
+func TestFilesAreWhatWriteWrites(t *testing.T) {
+	signed := []byte("distVersion: 1\n")
+	files := Files(t, signed)
+	sum := sha256.Sum256(signed)
+	dir := "verified/sha256-" + hex.EncodeToString(sum[:]) + "/"
+	for _, name := range []string{"trust.yaml", "verified/current", dir + "record.yaml", dir + "manifest", dir + "manifest.sigstore.json"} {
+		if files[name] == nil {
+			t.Errorf("no %s in the files of a home that trusts the manifest", name)
+		}
+	}
+	if string(files[dir+"manifest"]) != string(signed) {
+		t.Errorf("the record keeps %q, want the manifest", files[dir+"manifest"])
+	}
+	fsys := fstest.MapFS{}
+	for name, data := range files {
+		fsys[name] = &fstest.MapFile{Data: data}
+	}
+	if _, err := boot.ReadRecord(fsys, "sha256:"+hex.EncodeToString(sum[:])); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // What Install writes is what boot reads of an installed in-process artifact: the kept
 // files that hash to the digest, the record beside it with its signer and module, the
 // statement, and the signer in trust.yaml beside the distribution key of Write.
@@ -40,9 +134,7 @@ func TestInstallWritesWhatBootReads(t *testing.T) {
 		{Manifest: []byte(manifest), Bundle: []byte("[]\n"), Definitions: "{}", Unsigned: true, Subject: strings.Repeat("ab", 32)},
 	} {
 		home := t.TempDir()
-		if err := Write(home, []byte("distVersion: 1\n")); err != nil {
-			t.Fatal(err)
-		}
+		Write(t, home, []byte("distVersion: 1\n"))
 		if err := Install(home, a); err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +158,7 @@ func TestInstallWritesWhatBootReads(t *testing.T) {
 			t.Fatalf("statement %+v: %v", st, err)
 		}
 		trust, err := boot.ReadTrust(fsys)
-		if err != nil || len(trust.Distributions) != 1 || len(trust.Signers) != 1 || !slices.Equal(trust.Signers[0].IDs, []string{"aiops-test/x"}) {
+		if err != nil || len(trust.Distributions) != 2 || len(trust.Signers) != 1 || !slices.Equal(trust.Signers[0].IDs, []string{"aiops-test/x"}) {
 			t.Fatalf("trust %+v: %v", trust, err)
 		}
 		if (rec.Signer == boot.Unsigned) != a.Unsigned || !a.Unsigned && rec.Signer != trust.Signers[0].KeyID {
@@ -84,24 +176,5 @@ func TestInstallWritesWhatBootReads(t *testing.T) {
 	}
 	if err := Install(t.TempDir(), Artifact{Manifest: []byte(manifest)}); err == nil {
 		t.Fatal("a home with no trust.yaml installs")
-	}
-}
-
-// The record of a distribution holds the files of ADR-020 decision 10: record.yaml, the
-// manifest and its Sigstore bundle, here a placeholder, since nothing is signed.
-func TestFilesWriteTheRecordOfADistribution(t *testing.T) {
-	manifest := []byte("distVersion: 1\n")
-	files, err := Files(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := "verified/" + strings.Replace(digest(manifest), ":", "-", 1) + "/"
-	for _, name := range []string{"record.yaml", "manifest", "manifest.sigstore.json"} {
-		if files[dir+name] == nil {
-			t.Errorf("no %s in the record of the distribution", name)
-		}
-	}
-	if string(files[dir+"manifest"]) != string(manifest) || !strings.Contains(string(files[dir+"manifest.sigstore.json"]), "not a Sigstore bundle") {
-		t.Errorf("files %q", files)
 	}
 }

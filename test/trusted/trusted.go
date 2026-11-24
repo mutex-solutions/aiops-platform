@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 )
@@ -73,7 +74,16 @@ func statement(m boot.Manifest, subject, definitions string) string {
 // distributions, verified/sha256-<hex>/record.yaml of kind distribution whose signer
 // is that key, beside it the manifest as dist use keeps it and the placeholder of its
 // bundle, and verified/current.
-func Files(manifest []byte) (map[string][]byte, error) {
+func Files(tb testing.TB, manifest []byte) map[string][]byte {
+	tb.Helper()
+	files, err := placeholders(manifest)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return files
+}
+
+func placeholders(manifest []byte) (map[string][]byte, error) {
 	pub, id, err := newKey()
 	if err != nil {
 		return nil, err
@@ -114,12 +124,11 @@ func Rebind(signed []byte, bindings string) []byte {
 }
 
 // Write writes Files into the directory home.
-func Write(home string, manifest []byte) error {
-	files, err := Files(manifest)
-	if err != nil {
-		return err
+func Write(tb testing.TB, home string, manifest []byte) {
+	tb.Helper()
+	if err := write(home, Files(tb, manifest)); err != nil {
+		tb.Fatal(err)
 	}
-	return write(home, files)
 }
 
 func write(home string, files map[string][]byte) error {

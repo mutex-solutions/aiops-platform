@@ -33,10 +33,7 @@ func world(t *testing.T) fstest.MapFS {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := trusted.Files(m["work/dist/distribution.yaml"].Data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	files := trusted.Files(t, m["work/dist/distribution.yaml"].Data)
 	for name, data := range files {
 		m["work/home/"+name] = &fstest.MapFile{Data: data}
 	}
