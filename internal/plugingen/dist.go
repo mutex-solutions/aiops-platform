@@ -21,13 +21,24 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 )
 
-// BuildFlags are the flags of every build of a binary of the repository.
-var BuildFlags []string
+// BuildFlags are the flags of every build of a binary of the repository: the tag
+// grpcnotrace drops golang.org/x/net/trace, which gRPC links through the signing
+// library and whose init registers /debug/requests and /debug/events on
+// http.DefaultServeMux (ADR-020 decision 27; ADR-044 decision 21). Distribution lists
+// a graph with them, make check and CI build with them in GOFLAGS, and so does the
+// harness of the test binary.
+var BuildFlags = []string{"-tags=grpcnotrace"}
 
 const tracePackage = "golang.org/x/net/trace"
 
-// traceFree checks the package graph pkgs of main.
-func traceFree(main string, pkgs []string) error { return nil }
+// traceFree refuses the package graph pkgs of main when it holds the trace package,
+// so a signed manifest never records a build without the tag.
+func traceFree(main string, pkgs []string) error {
+	if slices.Contains(pkgs, tracePackage) {
+		return fmt.Errorf("%s links %s, which serves its handlers on http.DefaultServeMux: build it with the tag grpcnotrace (ADR-020 decision 27)", main, tracePackage)
+	}
+	return nil
+}
 
 // Distribution writes the signed distribution manifest (ADR-060 decision 20) of the
 // binary whose main package is mainPkg in the module at root, as boot reads it
@@ -57,7 +68,7 @@ func Distribution(root, mainPkg string, input, register []byte) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	out, err := goCmd(root, "list", "-deps", "-json", mainPkg)
+	out, err := goCmd(root, slices.Concat([]string{"list", "-deps", "-json"}, BuildFlags, []string{mainPkg})...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +113,9 @@ func Distribution(root, mainPkg string, input, register []byte) ([]byte, error) 
 		}
 	}
 	slices.Sort(doc.Packages)
+	if err := traceFree(mainPkg, doc.Packages); err != nil {
+		return nil, err
+	}
 	for _, path := range slices.Sorted(maps.Keys(mods)) {
 		m := mods[path]
 		e := distModule{Path: path, Licence: licences[path]}

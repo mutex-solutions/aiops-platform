@@ -21,11 +21,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
@@ -68,7 +70,7 @@ func Binary(t testing.TB) string {
 			return
 		}
 		buildBin = filepath.Join(buildDir, "aiops-test")
-		cmd := exec.Command("go", "build", "-o", buildBin, ".")
+		cmd := exec.Command("go", slices.Concat([]string{"build"}, plugingen.BuildFlags, []string{"-o", buildBin, "."})...)
 		cmd.Dir = filepath.Join(distDir(), "cmd", "aiops-test")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)

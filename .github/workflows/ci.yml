@@ -14,7 +14,10 @@ concurrency:
 
 env:
   GOTOOLCHAIN: local
-  GOFLAGS: -mod=readonly
+  # Every build has the tag grpcnotrace, which drops golang.org/x/net/trace and the two
+  # handlers its init registers on http.DefaultServeMux (ADR-020 decision 27), as the
+  # Makefile and plugingen.BuildFlags have it.
+  GOFLAGS: -mod=readonly -tags=grpcnotrace
 
 jobs:
   hygiene:

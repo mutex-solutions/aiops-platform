@@ -3,7 +3,10 @@
 # part arrives with aiopsctl at S2a.)
 MOD := github.com/mutex-solutions/aiops-platform
 KC  := go run ./tools/kernelcheck
-export GOFLAGS ?= -mod=readonly
+# Every build has the tag grpcnotrace, which drops golang.org/x/net/trace and the two
+# handlers its init registers on http.DefaultServeMux (ADR-020 decision 27); plugingen
+# lists the graph of a signed manifest with the same flags (plugingen.BuildFlags).
+export GOFLAGS ?= -mod=readonly -tags=grpcnotrace
 
 # `make s1-suites` is the s1-suites job: the failure matrix, the recomposition suite and
 # the loader smoke test on the built test binary. `make check` skips them (-short).

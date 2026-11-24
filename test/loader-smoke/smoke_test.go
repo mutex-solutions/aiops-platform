@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
@@ -42,7 +43,7 @@ func (s *syncBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(
 func build(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "aiops-test")
-	out, err := exec.Command("go", "build", "-o", bin, "../dist/cmd/aiops-test").CombinedOutput()
+	out, err := exec.Command("go", slices.Concat([]string{"build"}, plugingen.BuildFlags, []string{"-o", bin, "../dist/cmd/aiops-test"})...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
