@@ -69,7 +69,9 @@ check:
 	$(KC) testctor .
 	$(KC) coverage sdk/kernel/cover.out $(MOD)/sdk/kernel
 	@# ADR-054 decision 13: the import boundary U2 reads the upstream register. ADR-060
-	@# decision 28: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl.
+	@# decision 28: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl. ADR-061
+	@# decision 21: no part of the toolbox (plugingen, the analyzer, the templates, the
+	@# suites) in cmd/aiops.
 	$(KC) imports . tools/upstream-components.yaml
 	$(KC) pluginvet plugins loader boot
 	go run ./tools/deflint .

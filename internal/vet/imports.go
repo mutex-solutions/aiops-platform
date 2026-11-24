@@ -33,7 +33,22 @@ const (
 	docFake    = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
 	docLink    = "ADR-060 decision 28; ADR-059 decision 9"
 	docMain    = "ADR-061 decision 28"
+	docTools   = "ADR-061 decision 21; ADR-044, Consequences"
 )
+
+// toolbox are the packages that aiopsctl alone links and hands to boot (ADR-061
+// decision 21): plugingen, the import analyzer and plugin vet, the suites and the
+// templates.
+var toolbox = []string{"internal/plugingen", "internal/vet", "internal/authoring", "templates"}
+
+func isToolbox(p string) bool {
+	for _, t := range toolbox {
+		if hasPath(p, modPath+"/"+t) {
+			return true
+		}
+	}
+	return false
+}
 
 // bootDefs are the only definitions boot/ and loader/ may import.
 var bootDefs = []string{"launch", "loader", "composition"}
@@ -249,8 +264,8 @@ func GoListDeps(root, pkg string) ([]string, error) {
 }
 
 // Imports applies the import boundary table and U2, with the entries reg of the
-// upstream register, to every Go file under root; the fake rule to the dependency
-// closure of the server binary cmd/aiops; and the link guard of ADR-060 decision 28,
+// upstream register, to every Go file under root; the fake rule and the toolbox rule to
+// the dependency closure of the server binary cmd/aiops; and the link guard of ADR-060 decision 28,
 // no package under test/ or examples/, to the closures of cmd/aiops and cmd/aiopsctl,
 // each where the command exists.
 func Imports(root string, reg []Upstream, list ListDeps) error {
@@ -289,6 +304,9 @@ func Imports(root string, reg []Upstream, list ListDeps) error {
 		for _, d := range deps {
 			if bin == "aiops" && isFakePath(d) {
 				bad = append(bad, fmt.Sprintf("cmd/aiops: dependency closure contains %s: no fake or sdk/testkit package in a server binary (%s)", d, docFake))
+			}
+			if bin == "aiops" && isToolbox(d) {
+				bad = append(bad, fmt.Sprintf("cmd/aiops: dependency closure contains %s: no part of the toolbox in a server binary (%s)", d, docTools))
 			}
 			if hasPath(d, modPath+"/test") || hasPath(d, modPath+"/examples") {
 				bad = append(bad, fmt.Sprintf("cmd/%s: dependency closure contains %s: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl (%s)", bin, d, docLink))
