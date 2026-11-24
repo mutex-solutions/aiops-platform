@@ -6,7 +6,16 @@ package operations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -45,7 +54,378 @@ var (
 	ErrOwner  = errors.New("the home is owned by another user")
 )
 
-// Write runs one write of the home.
+const (
+	lockFile    = "write.lock"
+	snapshotDir = "snapshot"
+	snapshotNew = "snapshot.new" // a snapshot being written, renamed to snapshotDir once synced
+	// restoreBound is how long a restore runs after its write failed or its context
+	// ended: half the drain deadline of ADR-059 decision 30 (ADR-061 decision 17).
+	restoreBound = 5 * time.Second
+	lockPoll     = 20 * time.Millisecond
+)
+
+// Write runs one write of the home (ADR-061 decisions 17 and 19). It makes sure of
+// the home, takes write.lock, restores a snapshot that an interrupted write left,
+// runs the plan, writes into snapshot/ a copy of each path the plan replaces and the
+// list of those it creates, renames each change into place, submits, and removes the
+// snapshot. A failure after the snapshot, a failed submission and the end of ctx
+// restore the snapshot under a context of their own, bounded to five seconds; when
+// the bound passes or the process dies, the snapshot stays for the next writer.
 func (h Home) Write(ctx context.Context, w Write) (Done, error) {
-	return Done{}, errors.New("not implemented")
+	if err := h.prepare(); err != nil {
+		return Done{}, err
+	}
+	unlock, err := h.lock(ctx, w.Command)
+	if err != nil {
+		return Done{}, err
+	}
+	defer unlock()
+	var done Done
+	restored, err := h.recover()
+	if err != nil {
+		return done, fmt.Errorf("restore the snapshot of an interrupted write in %s: %w", h.path(snapshotDir), err)
+	}
+	if restored {
+		done.Notes = append(done.Notes, "restored the snapshot that an interrupted write left in "+h.path(snapshotDir))
+	}
+	if err := ctx.Err(); err != nil {
+		return done, err
+	}
+	changes, err := w.Plan()
+	if err != nil {
+		return done, err
+	}
+	if err := h.snapshot(changes); err != nil {
+		return done, errors.Join(err, os.RemoveAll(h.path(snapshotNew)))
+	}
+	err = h.apply(ctx, changes, &done)
+	if err == nil {
+		err = ctx.Err()
+	}
+	if err == nil && w.Submit != nil {
+		err = w.Submit(ctx)
+	}
+	if err != nil {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreBound)
+		defer cancel()
+		if rerr := h.restore(rctx); rerr != nil {
+			return Done{}, fmt.Errorf("%w; the restore stopped, and the next writer restores %s: %v", err, h.path(snapshotDir), rerr)
+		}
+		return Done{Notes: append(done.Notes, "restored the home from its snapshot")}, err
+	}
+	return done, os.RemoveAll(h.path(snapshotDir))
+}
+
+func (h Home) path(rel string) string { return filepath.Join(h.Dir, filepath.FromSlash(rel)) }
+
+func (h Home) step(stage string) {
+	if h.hook != nil {
+		h.hook(stage)
+	}
+}
+
+// prepare creates the home and run/ with mode 0700 where they are missing, but not a
+// missing parent, and refuses a home whose owner is not the effective user (ADR-047
+// decision 14).
+func (h Home) prepare() error {
+	if err := os.Mkdir(h.Dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	st, err := os.Stat(h.Dir)
+	if err != nil {
+		return err
+	}
+	euid := os.Geteuid()
+	if h.euid != nil {
+		euid = h.euid()
+	}
+	if s, ok := st.Sys().(*syscall.Stat_t); ok && int(s.Uid) != euid {
+		return fmt.Errorf("%w: %s belongs to uid %d, and this process runs as uid %d (ADR-047 decision 14)", ErrOwner, h.Dir, s.Uid, euid)
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("the home %s is not a directory", h.Dir)
+	}
+	if err := os.Mkdir(h.path("run"), 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return nil
+}
+
+// lock takes the exclusive flock(2) of write.lock, the one file of the home that is
+// created once with mode 0600 and never renamed or deleted, since the lock binds to one
+// inode (ADR-061 decision 19). The system releases it when its holder exits. A second
+// writer tries until LockWait has passed and then fails, naming the holder from the
+// record that it reads without the lock. The holder writes its record, its process id
+// and its command, in place through the locked descriptor.
+func (h Home) lock(ctx context.Context, command string) (func(), error) {
+	p := h.path(lockFile)
+	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	fd := int(f.Fd())
+	deadline := time.Now().Add(h.LockWait)
+	tick := time.NewTicker(lockPoll)
+	defer tick.Stop()
+	for {
+		err := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, errors.Join(err, f.Close())
+		}
+		if !time.Now().Before(deadline) {
+			return nil, errors.Join(fmt.Errorf("%w: %s, after %v, by %s (ADR-061 decision 19)", ErrLocked, p, h.LockWait, holder(p)), f.Close())
+		}
+		select {
+		case <-ctx.Done():
+			return nil, errors.Join(ctx.Err(), f.Close())
+		case <-tick.C:
+		}
+	}
+	unlock := func() { _ = syscall.Flock(fd, syscall.LOCK_UN); _ = f.Close() }
+	err = f.Truncate(0)
+	if err == nil {
+		_, err = f.WriteAt(fmt.Appendf(nil, "%d %s\n", os.Getpid(), command), 0)
+	}
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	return unlock, nil
+}
+
+// holder reads the record of write.lock at p: a short or empty read is an unknown
+// holder.
+func holder(p string) string {
+	b, _ := os.ReadFile(p)
+	s, whole := strings.CutSuffix(string(b), "\n")
+	pid, cmd, ok := strings.Cut(s, " ")
+	if !whole || !ok || pid == "" {
+		return "an unknown holder"
+	}
+	return "process " + pid + " (" + cmd + ")"
+}
+
+// paths is the list of a snapshot: the paths a write replaces, whose copies are under
+// files/, and the paths it creates.
+type paths struct{ Replaced, Created []string }
+
+// snapshot writes into snapshot/ a copy of each path that changes replace and the list
+// of the paths they create, the highest missing directory for a path whose parent is
+// missing, and syncs it before it renames it into place.
+func (h Home) snapshot(changes []Change) error {
+	tmp := h.path(snapshotNew)
+	if err := os.RemoveAll(tmp); err != nil {
+		return err
+	}
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		return err
+	}
+	var l paths
+	for _, c := range changes {
+		_, err := os.Lstat(h.path(c.Path))
+		switch {
+		case err == nil:
+			l.Replaced = append(l.Replaced, c.Path)
+			if err := copyTree(h.path(c.Path), filepath.Join(tmp, "files", filepath.FromSlash(c.Path))); err != nil {
+				return err
+			}
+		case !errors.Is(err, fs.ErrNotExist):
+			return err
+		default:
+			top := c.Path
+			for d := path.Dir(c.Path); d != "."; d = path.Dir(d) {
+				if _, err := os.Lstat(h.path(d)); err == nil {
+					break
+				}
+				top = d
+			}
+			if !slices.ContainsFunc(l.Created, func(p string) bool { return p == top || strings.HasPrefix(top, p+"/") }) {
+				l.Created = append(l.Created, top)
+			}
+		}
+	}
+	b, err := json.Marshal(l)
+	if err == nil {
+		err = writeFile(filepath.Join(tmp, "paths.json"), b)
+	}
+	if err == nil {
+		err = syncDir(tmp)
+	}
+	if err == nil {
+		err = os.Rename(tmp, h.path(snapshotDir))
+	}
+	if err == nil {
+		err = syncDir(h.Dir)
+	}
+	return err
+}
+
+// apply renames each change into place, in order: a file or a directory is written
+// beside its target and renamed over it.
+func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
+	for _, c := range changes {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		dst := h.path(c.Path)
+		dir := filepath.Dir(dst)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		tmp := filepath.Join(dir, "."+filepath.Base(dst)+".new")
+		err := os.RemoveAll(tmp)
+		if err == nil && c.Files != nil {
+			err = writeDir(tmp, c.Files)
+			if err == nil {
+				err = os.RemoveAll(dst)
+			}
+		} else if err == nil {
+			err = writeFile(tmp, c.Data)
+		}
+		if err == nil {
+			err = os.Rename(tmp, dst)
+		}
+		if err == nil {
+			err = syncDir(dir)
+		}
+		if err != nil {
+			return err
+		}
+		done.Written = append(done.Written, dst)
+		h.step("renamed")
+	}
+	return nil
+}
+
+// recover removes a snapshot that was never renamed into place, since no change was
+// renamed before it was, and restores one that was. It reports whether it restored.
+func (h Home) recover() (bool, error) {
+	if err := os.RemoveAll(h.path(snapshotNew)); err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(h.path(snapshotDir)); errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), restoreBound)
+	defer cancel()
+	return true, h.restore(ctx)
+}
+
+// restore copies each replaced path back from the snapshot, removes each created path
+// and then the snapshot. Each step can run again, so a restore that stopped is
+// finished by the next one.
+func (h Home) restore(ctx context.Context) error {
+	snap := h.path(snapshotDir)
+	b, err := os.ReadFile(filepath.Join(snap, "paths.json"))
+	if err != nil {
+		return err
+	}
+	var l paths
+	if err := json.Unmarshal(b, &l); err != nil {
+		return err
+	}
+	for _, rel := range slices.Concat(l.Replaced, l.Created) {
+		if !fs.ValidPath(rel) || rel == "." {
+			return fmt.Errorf("the snapshot names %q, which is not a path under the home", rel)
+		}
+	}
+	for _, rel := range l.Replaced {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		dst := h.path(rel)
+		tmp := filepath.Join(filepath.Dir(dst), "."+filepath.Base(dst)+".restore")
+		err := os.RemoveAll(tmp)
+		if err == nil {
+			err = copyTree(filepath.Join(snap, "files", filepath.FromSlash(rel)), tmp)
+		}
+		if st, serr := os.Stat(tmp); err == nil && serr == nil && st.IsDir() {
+			err = os.RemoveAll(dst)
+		}
+		if err == nil {
+			err = os.Rename(tmp, dst)
+		}
+		if err != nil {
+			return err
+		}
+		h.step("restored")
+	}
+	for _, rel := range l.Created {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(h.path(rel)); err != nil {
+			return err
+		}
+		h.step("restored")
+	}
+	return os.RemoveAll(snap)
+}
+
+// copyTree copies the file or the directory src to dst, files with mode 0600 and
+// directories with mode 0700.
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", p)
+		}
+		b, err := os.ReadFile(p)
+		if err == nil {
+			err = os.MkdirAll(filepath.Dir(target), 0o700)
+		}
+		if err == nil {
+			err = writeFile(target, b)
+		}
+		return err
+	})
+}
+
+// writeDir writes files into the new directory dir.
+func writeDir(dir string, files map[string][]byte) error {
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		return err
+	}
+	for name, data := range files {
+		if name != filepath.Base(name) || name == "." || name == ".." {
+			return fmt.Errorf("%q is not a file name", name)
+		}
+		if err := writeFile(filepath.Join(dir, name), data); err != nil {
+			return err
+		}
+	}
+	return syncDir(dir)
+}
+
+// writeFile writes data to p with mode 0600 and syncs it.
+func writeFile(p string, data []byte) error {
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	return errors.Join(err, f.Close())
+}
+
+func syncDir(dir string) error {
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Sync(), f.Close())
 }
