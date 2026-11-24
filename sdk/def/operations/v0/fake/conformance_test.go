@@ -23,7 +23,7 @@ func TestConformance(t *testing.T) {
 		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted, Shipped: s.Shipped, Rendered: s.Rendered,
 			Images: images, Artifact: s.Artifact,
 			Template: s.Template, Summary: s.Plugin.Summary, Failed: s.Plugin.Failed, Skipped: s.Plugin.Skipped,
-			Verdict: s.Verdict, Result: s.Result})
+			Verdict: s.Verdict, Result: s.Result, Built: s.Built})
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)

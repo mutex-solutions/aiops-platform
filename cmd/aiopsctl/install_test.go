@@ -133,7 +133,7 @@ func doTest(t *testing.T, env map[string]string, tools authoring.Tools, args ...
 	}
 	var out, errOut syncBuffer
 	code := run(t.Context(), args, process{In: strings.NewReader(""), Out: &out, Err: &errOut, Environ: environ, Dir: cmp.Or(env["PWD"], "/"), Files: os.DirFS("/")},
-		distribution{Registry: d.Registry, Signed: d.Signed, Limits: d.Limits, Shipped: overlay{d.Shipped, dist.Shipped()}, Tools: tools})
+		distribution{Registry: d.Registry, Signed: d.Signed, Limits: d.Limits, Shipped: overlay{First: d.Shipped, Second: dist.Shipped()}, Tools: tools})
 	return result{code, out.String(), errOut.String()}
 }
 

@@ -9,7 +9,8 @@
 // use on the images of a registry, the profile commands on the launcher's toolbox, the
 // outcomes they answer, plugin pack, sign, push, inspect and verify of the pack of the
 // suite and their refusals, and plugin install, enable, disable and remove with the
-// outcome of their submission and what they refuse. The guard half holds it to the write lock and the
+// outcome of their submission and what they refuse, and dist build through the
+// toolbox. The guard half holds it to the write lock and the
 // snapshot: a write after an interrupted one restores first, a second writer fails
 // after its bound naming the holder, concurrent writers lose nothing; and to what it
 // refuses once released, with no side door. Each case has an id, the first word of its
@@ -74,7 +75,12 @@ type Setup struct {
 	// socket of ADR-062; with no Result no process runs.
 	Verdict launch.Verdict
 	Result  *reload.WireResult
+	// Built is what the toolbox's builder answers for dist build. use sets the suite's.
+	Built launch.Built
 }
+
+// Built is what the builder of the suite builds.
+var Built = launch.Built{Image: "/site/build/image", Manifest: []byte("distVersion: 1\n"), Aiopsctl: "/site/build/aiopsctl/aiopsctl"}
 
 // Pack is the plugin directory of the cases of the artifact, by path: a pack whose
 // bundle inserts one row, disabled, with content and a fixture (ADR-047 decision 1).
@@ -579,6 +585,21 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("remove of what is not installed: %v, want ErrRefused", err)
 			}
 		})
+		t.Run("operations.O20 dist build answers what the toolbox builds and refuses a relative path", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			q := operations.BuildRequest{Caller: u.caller(), BuildRequest: launch.BuildRequest{DistYAML: filepath.Join(u.s.Dir, "dist.yaml"),
+				ModCache: filepath.Join(u.s.Dir, "modcache"), Builder: "local"}}
+			if got, err := u.ops.Build(t.Context(), q); err != nil || !reflect.DeepEqual(got, Built) {
+				t.Errorf("Build = %+v, %v; want %+v", got, err, Built)
+			}
+			q.DistYAML = "dist.yaml"
+			if _, err := u.ops.Build(t.Context(), q); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("a relative dist.yaml: %v, want ErrUsage", err)
+			}
+			if h := u.home(); h.Current != "" || len(h.Records) != 0 {
+				t.Errorf("dist build wrote the home: %+v", h)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -668,6 +689,7 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Enable"] = u.ops.Enable(ctx, u.row(Row))
 			_, calls["Disable"] = u.ops.Disable(ctx, u.row(Row))
 			_, calls["Remove"] = u.ops.Remove(ctx, operations.RemoveRequest{Caller: c, Home: u.s.Home, Profile: "dev", ID: "acme/x"})
+			_, calls["Build"] = u.ops.Build(ctx, operations.BuildRequest{Caller: c, BuildRequest: launch.BuildRequest{DistYAML: filepath.Join(u.s.Dir, "dist.yaml"), Builder: "local"}})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)
@@ -696,7 +718,7 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
-	s.Shipped, s.Rendered, s.Images, s.Artifact, s.Template = Shipped, Rendered, Images, Artifact, Template
+	s.Shipped, s.Rendered, s.Images, s.Artifact, s.Template, s.Built = Shipped, Rendered, Images, Artifact, Template, Built
 	if s.Plugin.Summary.ID == "" {
 		s.Plugin.Summary = PackSummary
 	}

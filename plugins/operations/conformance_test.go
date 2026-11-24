@@ -83,6 +83,11 @@ type box struct {
 	s conformance.Setup
 }
 
+// Build answers what the Setup says the builder built.
+func (b box) Build(ctx context.Context, _ launch.BuildRequest) (launch.Built, error) {
+	return b.s.Built, ctx.Err()
+}
+
 func (box) Module(ctx context.Context, q launch.ModuleRequest) (launch.Module, error) {
 	return launch.Module{Path: "example.test/echo", Version: q.Version, Sum: "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="}, ctx.Err()
 }

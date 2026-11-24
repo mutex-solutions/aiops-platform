@@ -16,6 +16,7 @@ import (
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/fake"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -23,18 +24,28 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the help goldens")
 
-// stub provides operations: SignDist and UseDist record each request and answer w, ch
-// and err, so the tests read what the row asks of the library without a key or an
-// image.
+// stub provides operations: SignDist, UseDist and Build record each request and answer
+// w, ch, built and err, so the tests read what the row asks of the library without a
+// key, an image or a toolchain.
 type stub struct {
 	operations.Operations
 	w   operations.Written
 	ch  operations.Change
 	err error
 
-	mu    sync.Mutex
-	signs []operations.SignDistRequest
-	uses  []operations.UseRequest
+	built launch.Built
+
+	mu     sync.Mutex
+	signs  []operations.SignDistRequest
+	uses   []operations.UseRequest
+	builds []operations.BuildRequest
+}
+
+func (s *stub) Build(ctx context.Context, r operations.BuildRequest) (launch.Built, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.builds = append(s.builds, r)
+	return s.built, cmp.Or(ctx.Err(), s.err)
 }
 
 func (s *stub) SignDist(ctx context.Context, r operations.SignDistRequest) (operations.Written, error) {
@@ -136,10 +147,31 @@ func TestSignAndUseExits(t *testing.T) {
 	}
 }
 
-// dist build answers that it is not built yet, with exit 1: it runs through the builder
-// of the toolbox, which lands with ADR-044.
-func TestBuildIsNotBuiltYet(t *testing.T) {
-	if code, _, errOut := dispatch(t, world(t, &stub{}), "dist", "build", "dist.yaml"); code != 1 || !strings.Contains(errOut, "dist build is not built yet") {
-		t.Errorf("exit %d, stderr %q", code, errOut)
+// dist build calls Build with dist.yaml and the module cache resolved against the
+// working directory, each --mirror as a prefix and its site prefix, each --allow-bump and
+// the builder, and the environment of the invocation; it names what the builder wrote
+// and the digest of the signed manifest on stderr, prints nothing on stdout and exits
+// 0. A malformed --mirror is a usage error, and a refusal of the builder exits 1 with
+// its reason (ADR-061 decisions 10 and 30; ADR-044 decisions 7, 9 and 10).
+func TestBuildCallsTheLibrary(t *testing.T) {
+	s := &stub{built: launch.Built{Image: "/work/build/image", Manifest: []byte("distVersion: 1\n"), Aiopsctl: "/work/build/aiopsctl/aiopsctl"}}
+	rec := world(t, s)
+	code, out, errOut := dispatch(t, rec, "dist", "build", "site/dist.yaml", "--modcache", "/cache", "--mirror", "registry.example/aiops=mirror.site/aiops",
+		"--allow-bump", "golang.org/x/text", "--allow-bump", "golang.org/x/sync", "--builder", "local")
+	if code != 0 || out != "" || !strings.Contains(errOut, "wrote /work/build/image") || !strings.Contains(errOut, "wrote /work/build/aiopsctl/aiopsctl") ||
+		!strings.Contains(errOut, "the signed manifest sha256:") {
+		t.Errorf("dist build: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	r := s.builds[len(s.builds)-1]
+	if r.DistYAML != "/work/site/dist.yaml" || r.ModCache != "/cache" || r.Builder != "local" || r.Env == nil ||
+		r.Mirrors["registry.example/aiops"] != "mirror.site/aiops" || strings.Join(r.AllowBump, ",") != "golang.org/x/text,golang.org/x/sync" {
+		t.Errorf("request %+v", r)
+	}
+	if code, _, errOut := dispatch(t, rec, "dist", "build", "dist.yaml", "--mirror", "registry.example/aiops"); code != 2 || !strings.Contains(errOut, "--mirror") {
+		t.Errorf("a malformed mirror: exit %d, stderr %q", code, errOut)
+	}
+	refusal := fmt.Errorf("%w: module example.test/x declares the id aiops/x", operations.ErrRefused)
+	if code, _, errOut := dispatch(t, world(t, &stub{err: refusal}), "dist", "build", "dist.yaml"); code != 1 || !strings.Contains(errOut, refusal.Error()) {
+		t.Errorf("a refusal: exit %d, stderr %q", code, errOut)
 	}
 }
