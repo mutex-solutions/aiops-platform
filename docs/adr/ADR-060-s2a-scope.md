@@ -683,12 +683,15 @@ gaps:
     At the S2a exit each cap becomes the measured count plus ten per cent, rounded up to
     the next hundred (the rule of ADR-059 decision 11), and this ADR, `ci.yml` and the
     Makefile change together. Growth past a provisional cap before the exit needs the
-    owner's word.
+    owner's word. Note of 2026-11-24: on the owner's word, the provisional cap of `boot`
+    rises from 9,000 to 10,500 lines for the rest of S2a, with `ci.yml` and the Makefile
+    changed in the same commit. `boot` measures 8,901 lines at `6774918`, and the growth
+    that the consequences allow it over its count at `491a518` becomes 4,327 lines.
 
 | Package | Measured at `491a518` | Cap during S2a |
 |---|---|---|
 | `sdk/kernel` | 8,043 | 8,200, unchanged (ADR-034) |
-| `boot` | 6,173 | 9,000, provisional |
+| `boot` | 6,173 | 10,500, provisional (9,000 until the note of 2026-11-24) |
 | `loader` | 1,100 | 1,300, unchanged |
 | the `plugin` package | new | 2,500, provisional |
 | each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |

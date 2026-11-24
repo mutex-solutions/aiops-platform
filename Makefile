@@ -53,8 +53,9 @@ check:
 	go run ./tools/register .
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader
-	@# ADR-060 decision 35: boot's provisional cap during S2a (the manifest reader, ADR-048 decision 18).
-	$(KC) lines boot 9000 provisional
+	@# ADR-060 decision 35: boot's provisional cap during S2a (the manifest reader, ADR-048 decision 18),
+	@# 10,500 since its note of 2026-11-24.
+	$(KC) lines boot 10500 provisional
 	$(KC) vocab boot tools/kernelcheck/vocabulary-boot.txt
 	$(KC) coverage cover-boot.out $(MOD)/boot
 	$(KC) lines loader 1300
