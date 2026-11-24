@@ -5,6 +5,7 @@ package operations
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -450,6 +451,44 @@ func TestSignWritesTheReferrersOfCosign(t *testing.T) {
 	}
 	if left := layoutReferrers(t, out, desc, "application/vnd.in-toto+json"); len(left) != 0 {
 		t.Errorf("the unsigned statement is still a referrer: %+v", left)
+	}
+}
+
+// plugin sign refuses, and writes no referrer, where the statement that pack recorded
+// names another digest or another id and version than the artifact's: its one subject
+// is the digest of the OCI manifest, named <id>@<version> of its plugin.yaml (ADR-020
+// decisions 9 and 24).
+func TestSignRefusesAnotherSubject(t *testing.T) {
+	l := Library{Box: &packBox{sum: packSummary()}}
+	prefix := generate(t, l, t.TempDir(), "author")
+	other := ocitest.Digest([]byte("another artifact"))
+	for _, st := range []struct{ name, version, digest string }{{"evil/other", "9.9.9", other}, {"evil/other", "9.9.9", ""}, {"acme/connector-x", "0.1.0", other}} {
+		out := filepath.Join(t.TempDir(), "artifact")
+		if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: pluginDir(t, pack), Out: out}); err != nil {
+			t.Fatal(err)
+		}
+		desc, _, _ := layout(t, out)
+		s, err := oci.NewWithContext(t.Context(), out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range layoutReferrers(t, out, desc, "application/vnd.in-toto+json") {
+			raw, _ := json.Marshal(r)
+			if err := s.Delete(t.Context(), content.NewDescriptorFromBytes(ocispec.MediaTypeImageManifest, raw)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		digest := strings.TrimPrefix(cmp.Or(st.digest, desc.Digest.String()), "sha256:")
+		forged := def.Statement(st.name, st.version, digest, map[string]def.Attested{"echoers": {Version: "0.1"}}, nil, nil)
+		if _, err := pushArtifact(t.Context(), s, "application/vnd.in-toto+json", &desc, nil, blob{"application/vnd.in-toto+json", forged, nil}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := l.Sign(t.Context(), def.SignRequest{Caller: caller(), Out: out, Key: prefix + ".key"}); !errors.Is(err, def.ErrRefused) {
+			t.Errorf("sign of a statement of %s@%s at %s: %v, want ErrRefused", st.name, st.version, digest, err)
+		}
+		if refs := layoutReferrers(t, out, desc, "application/vnd.dev.sigstore.bundle.v0.3+json"); len(refs) != 0 {
+			t.Errorf("a refused sign wrote %d bundle referrers", len(refs))
+		}
 	}
 }
 
