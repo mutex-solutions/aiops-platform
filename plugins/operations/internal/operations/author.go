@@ -460,11 +460,17 @@ func (c *checkRun) runScenario() ([]launch.Diagnostic, error) {
 // notCarried says why a suite did not run.
 const notCarried = "the suite binaries of internal/authoring/suites are not built into this binary (ADR-060 decision 46)"
 
-// attested runs what the attestation records, step 5 and for a pack the echo scenario
-// of step 8, as plugin check runs them, for plugin pack and plugin verify. A suite that
-// the toolbox does not carry fails nothing: ran is false.
+// attested runs what the attestation records, as plugin check runs them, for plugin
+// pack and plugin verify: for code step 4, whose tests that did not run it names, then
+// step 5, and for a pack the echo scenario of step 8. A suite that the toolbox does not
+// carry fails nothing: ran is false.
 func (c *checkRun) attested() (ran bool, ds []launch.Diagnostic, err error) {
-	_, ds, err = c.conformance()
+	if c.code {
+		_, ds, err = c.alone()
+	}
+	if err == nil && !hasError(ds) {
+		_, ds, err = c.conformance()
+	}
 	if err == nil && !c.code && !hasError(ds) {
 		ds, err = c.runScenario()
 	}
