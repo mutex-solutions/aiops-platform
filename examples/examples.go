@@ -10,6 +10,8 @@
 package examples
 
 import (
+	"embed"
+
 	"github.com/mutex-solutions/aiops-platform/examples/caller"
 	"github.com/mutex-solutions/aiops-platform/examples/dispatch"
 	"github.com/mutex-solutions/aiops-platform/examples/echoer"
@@ -21,3 +23,9 @@ import (
 func Plugins() []kernel.Plugin {
 	return []kernel.Plugin{dispatch.Plugin, echoer.Plugin, stamper.Plugin, caller.Plugin}
 }
+
+// Manifests holds the plugin.yaml of each toy plugin, by its directory: the name of its
+// id without example-.
+//
+//go:embed */plugin.yaml
+var Manifests embed.FS

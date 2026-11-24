@@ -8,8 +8,9 @@ KC  := go run ./tools/kernelcheck
 # lists the graph of a signed manifest with the same flags (plugingen.BuildFlags).
 export GOFLAGS ?= -mod=readonly -tags=grpcnotrace
 
-# `make s1-suites` is the s1-suites job: the failure matrix, the recomposition suite and
-# the loader smoke test on the built test binary. `make check` skips them (-short).
+# `make s1-suites` is the s1-suites job: the failure matrix, the recomposition suite, the
+# loader smoke test and the install of a pack into a running process through aiopsctl
+# (ADR-062 decision 18), on the built test binary. `make check` skips them (-short).
 # -race in GOFLAGS reaches the suites' nested go build, so the binary is race-built too.
 # A cell passes whatever the binary prints and the harness kills it, so GORACE writes
 # every race report to a file and any report fails the target.
@@ -18,6 +19,8 @@ s1-suites:
 	r=$$(mktemp -d); s=0; \
 	GOFLAGS='$(GOFLAGS) -race' GORACE="log_path=$$r/report" \
 		go test -count=1 ./test/failure-matrix/... ./test/recomposition/... ./test/loader-smoke/... || s=$$?; \
+	GOFLAGS='$(GOFLAGS) -race' GORACE="log_path=$$r/report" \
+		go test -count=1 -run '^TestInstallAndEnableReachARunningProcess$$' ./cmd/aiopsctl || s=$$?; \
 	if ls $$r/report.* >/dev/null 2>&1; then cat $$r/report.*; echo 's1-suites: a race-built process reported a data race'; s=1; fi; \
 	rm -rf $$r; exit $$s
 

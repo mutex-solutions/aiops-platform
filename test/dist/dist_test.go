@@ -149,7 +149,9 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Registry.Modules) != 29 {
+	// The release table (14), the S1 test plugins (15) and the four toy plugins of the
+	// S2a test release (ADR-060 decision 38).
+	if len(d.Registry.Modules) != 33 {
 		t.Fatalf("%d modules", len(d.Registry.Modules))
 	}
 	// The test table is the release table plus the test plugins, never the other way.

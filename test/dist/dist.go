@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package testdist is the test distribution: the release module table of dist plus
-// the toy plugins, the ten fault plugins and the two test-only control rows, with
+// the toy plugins, the ten fault plugins, the two test-only control rows and the toy
+// plugins of the S2a test release under examples/ (ADR-060 decision 38), with
 // the bundles, profiles and layer 4 patches that the loader smoke test and the
 // failure matrix run on. test/dist/cmd/aiops-test is its binary.
 //
@@ -15,9 +16,11 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
+	"github.com/mutex-solutions/aiops-platform/examples"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/dist/def"
@@ -61,13 +64,14 @@ var Signed []byte
 var manifests embed.FS
 
 // Modules is the test table: the modules of the release distribution, then the test
-// ones, each with the manifest beside its package. The count of fail-apply is per
-// plugin value, so each call makes new values.
+// ones, each with the manifest beside its package, then the toy plugins of examples/,
+// whose rows an installed pack instantiates. The count of fail-apply is per plugin
+// value, so each call makes new values.
 func Modules() []dist.Module {
 	m := func(p kernel.Plugin, dir string) dist.Module {
 		return dist.Module{Plugin: p, Manifest: dist.Manifest(manifests, "plugins/"+dir)}
 	}
-	return append(dist.Modules(),
+	mods := append(dist.Modules(),
 		m(toyprovider.New(), "toy-provider"),
 		m(toyconsumer.New(), "toy-consumer"),
 		m(toyspine.New(), "toy-spine"),
@@ -84,6 +88,11 @@ func Modules() []dist.Module {
 		m(teststate.New(), "teststate"),
 		m(testsubmit.New(), "testsubmit"),
 	)
+	for _, p := range examples.Plugins() {
+		_, name, _ := strings.Cut(p.ID, "/example-")
+		mods = append(mods, dist.Module{Plugin: p, Manifest: dist.Manifest(examples.Manifests, name)})
+	}
+	return mods
 }
 
 // Distribution returns what the test binary links.

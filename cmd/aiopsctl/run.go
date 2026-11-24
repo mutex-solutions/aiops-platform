@@ -13,6 +13,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/authoring"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
 // aiopsctl is the launcher of the cli profile (ADR-061 decisions 24 and 25): it boots
@@ -45,14 +46,15 @@ type process struct {
 }
 
 // distribution is what the binary links: the module table, the signed distribution
-// manifest it embeds, the release key of a release binary, the limits and the shipped
-// bundles and profiles.
+// manifest it embeds, the release key of a release binary, the limits, the shipped
+// bundles and profiles, and the tools of the toolbox, nil for this binary's.
 type distribution struct {
 	Registry boot.Registry
 	Signed   []byte
 	Release  *boot.Release
 	Limits   boot.Limits
 	Shipped  fs.FS
+	Tools    launch.Tools
 }
 
 // run boots the cli profile in Command mode and returns the exit code of aiopsctl.
@@ -87,7 +89,10 @@ func run(ctx context.Context, args []string, p process, d distribution) int {
 		Stdout: io.Discard, Stderr: p.Err,
 		Stdio: boot.Stdio{In: p.In, Out: p.Out, Err: p.Err}, Dir: p.Dir, Environ: p.Environ,
 		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: d.Limits, Clock: boot.SystemClock(),
-		Command: true, Shipped: d.Shipped, Files: p.Files, Tools: authoring.New(), Lint: authoring.Lint(),
+		Command: true, Shipped: d.Shipped, Files: p.Files, Tools: d.Tools, Lint: authoring.Lint(),
+	}
+	if o.Tools == nil {
+		o.Tools = authoring.New()
 	}
 	o.BuildInfo, _ = debug.ReadBuildInfo()
 	return exitCode(boot.Run(ctx, o), p.Err)

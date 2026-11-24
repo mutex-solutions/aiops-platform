@@ -10,7 +10,6 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/mutex-solutions/aiops-platform/examples"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 )
@@ -76,11 +75,8 @@ var dirs = map[string]string{
 func TestEveryPluginOfTheModuleTablesHasAGeneratedManifest(t *testing.T) {
 	root := filepath.Join("..", "..")
 	var ids []string
-	for _, m := range testdist.Modules() { // the release table and the test plugins
+	for _, m := range testdist.Modules() { // the release table, the test plugins and the toy plugins
 		ids = append(ids, m.Plugin.ID)
-	}
-	for _, p := range examples.Plugins() {
-		ids = append(ids, p.ID)
 	}
 	var listed []string
 	for id := range dirs {
