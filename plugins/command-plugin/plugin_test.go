@@ -257,20 +257,26 @@ func TestInspectPrintsTheArtifact(t *testing.T) {
 	}
 }
 
-// inspect and verify print no control character of what an artifact supplies: a
-// string that holds one is printed quoted, so a terminal shows the sequence and does
-// not run it, and no line it prints starts with a forged signer.
+// inspect, verify, gate and install print no control character of what an artifact
+// supplies, on stdout or stderr: the clause reasons of the gate, the dist.yaml lines
+// of the module of rebuild-required, the notes and the paths written are printed as
+// inspect prints the manifest, a string that holds one quoted, so a terminal shows the
+// sequence and does not run it, and no line it prints starts with a forged signer.
 func TestPrintsNoControlCharacterOfTheArtifact(t *testing.T) {
 	esc := "\x1b[1A\r\x1b[2Ksigner: release key (verified)\n"
 	s := &stub{in: operations.Inspected{Digest: "sha256:ab", ID: "acme/x" + esc, Version: "0.1.0" + esc, Runtimes: []string{"inproc" + esc},
 		Rows:    []operations.Row{{ID: "logs" + esc, Plugin: "aiops/echoer" + esc, Config: map[string]any{"k": "\u009b2K" + esc}}},
 		Content: []string{"a.md" + esc}},
-		v: operations.Verified{Digest: "sha256:ab", Signer: "unsigned", Steps: []operations.VerifyStep{{Name: "suites", Outcome: "fail", Reason: "plugin.yaml: " + esc}}}}
+		v:  operations.Verified{Digest: "sha256:ab", Signer: "unsigned", Steps: []operations.VerifyStep{{Name: "suites", Outcome: "fail", Reason: "plugin.yaml: " + esc}}},
+		vd: launch.Verdict{Clauses: []launch.Clause{{Check: 2, Clause: "unserved-definition", Outcome: launch.OutcomeDeny, Reason: "requires " + esc}}},
+		ch: operations.Change{Written: []string{"/site/bundles/acme/x" + esc}, Notes: []string{"kept " + esc},
+			DistLines: []string{"modules:", "  - {path: example.com/x" + esc + ", version: v0.1.0" + esc + "}"}}}
 	rec := world(t, s)
-	for _, cmd := range []string{"inspect", "verify"} {
-		_, out, _ := dispatch(t, rec, "plugin", cmd, "artifact")
-		if strings.ContainsAny(out, "\x1b\r\u009b") || strings.Contains(out, "\nsigner: release key") {
-			t.Errorf("plugin %s printed a control character or a forged line: %q", cmd, out)
+	for _, argv := range [][]string{{"plugin", "inspect", "artifact"}, {"plugin", "verify", "artifact"},
+		{"plugin", "gate", "artifact", "--against", "rel/dist.yaml"}, {"plugin", "install", "artifact"}} {
+		_, out, errOut := dispatch(t, rec, argv...)
+		if both := out + "\x00" + errOut; strings.ContainsAny(both, "\x1b\r\u009b") || strings.Contains(both, "\nsigner: release key") {
+			t.Errorf("%q printed a control character or a forged line: stdout %q, stderr %q", argv, out, errOut)
 		}
 	}
 }
