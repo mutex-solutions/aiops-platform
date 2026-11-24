@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package transport is the client of the socket of the row reload-socket, internal to
-// the operations plugin (ADR-062 decision 16): from the read of <home>/run/status.json
-// to the second submission. The library's Install, Enable, Disable and Remove call
-// Submit while they hold the write lock and the snapshot of 08:374, and do with the
-// files what Outcome.Restore says (ADR-062 decision 11). It speaks wire format
-// version 1 of sdk/def/reload/v0 and dials with net.DialUnix and the network unix
-// only, the named exception of the dial rule (decision 14).
-package transport
+package operations
+
+// This file is the client of the socket of the row reload-socket, internal to the
+// operations plugin (ADR-062 decision 16): from the read of <home>/run/status.json to
+// the second submission. The library's Install, Enable, Disable and Remove call Submit
+// while they hold the write lock and the snapshot of 08:374, and do with the files
+// what Outcome.Restore says (ADR-062 decision 11). It speaks wire format version 1 of
+// sdk/def/reload/v0 and dials with net.DialUnix and the network unix only, the named
+// exception of the dial rule (decision 14).
 
 import (
 	"bufio"

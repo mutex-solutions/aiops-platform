@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package transport_test
+package operations_test
 
 import (
 	"bufio"
@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mutex-solutions/aiops-platform/plugins/operations/internal/transport"
+	ops "github.com/mutex-solutions/aiops-platform/plugins/operations/internal/operations"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 )
 
@@ -113,9 +113,9 @@ func refusal(cause string) string {
 	return string(reload.Line(reload.Reply{V: reload.WireVersion, Error: reload.NewError("refused: "+cause, cause)}))
 }
 
-func submit(t *testing.T, home string) transport.Outcome {
+func submit(t *testing.T, home string) ops.Outcome {
 	t.Helper()
-	o, err := transport.Submit(t.Context(), transport.Request{Home: home, Profile: "dev", Command: reload.CommandEnable,
+	o, err := ops.Submit(t.Context(), ops.Request{Home: home, Profile: "dev", Command: reload.CommandEnable,
 		ConnectWait: 300 * time.Millisecond, Wait: 10 * time.Second})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func submit(t *testing.T, home string) transport.Outcome {
 	return o
 }
 
-func check(t *testing.T, o transport.Outcome, kind transport.Kind, restore bool, ids []reload.ID, last reload.Status) {
+func check(t *testing.T, o ops.Outcome, kind ops.Kind, restore bool, ids []reload.ID, last reload.Status) {
 	t.Helper()
 	if o.Kind != kind || o.Restore() != restore || !slices.Equal(o.IDs, ids) || o.Last != last {
 		t.Fatalf("outcome %s restore=%v ids=%v last=%q (result %+v, error %+v); want %s restore=%v ids=%v last=%q",
@@ -147,7 +147,7 @@ func TestEachFinalResultDecides(t *testing.T) {
 			home := newHome(t)
 			s := serve(t, home, turn{lines: []string{result(4, reload.Queued), result(4, c.status, c.causes...)}})
 			o := submit(t, home)
-			check(t, o, transport.Final, c.restore, []reload.ID{4}, c.status)
+			check(t, o, ops.Final, c.restore, []reload.ID{4}, c.status)
 			var causes []string
 			if o.Result.Error != nil {
 				causes = o.Result.Error.Causes
@@ -169,7 +169,7 @@ func TestEachRefusalBeforeAnIDRestores(t *testing.T) {
 			home := newHome(t)
 			serve(t, home, turn{lines: []string{refusal(cause)}})
 			o := submit(t, home)
-			check(t, o, transport.Refused, true, nil, "")
+			check(t, o, ops.Refused, true, nil, "")
 			if !o.Error.Has(cause) {
 				t.Errorf("error %+v", o.Error)
 			}
@@ -182,7 +182,7 @@ func TestEachRefusalBeforeAnIDRestores(t *testing.T) {
 func TestABusyRefusalBeforeTheRequestRestores(t *testing.T) {
 	home := newHome(t)
 	serve(t, home, turn{busy: true, lines: []string{refusal(reload.CauseBusy)}})
-	check(t, submit(t, home), transport.Refused, true, nil, "")
+	check(t, submit(t, home), ops.Refused, true, nil, "")
 }
 
 // An end of file before the first reply line submits once more, and the second
@@ -190,7 +190,7 @@ func TestABusyRefusalBeforeTheRequestRestores(t *testing.T) {
 func TestAnEndBeforeTheFirstLineSubmitsOnceMore(t *testing.T) {
 	home := newHome(t)
 	s := serve(t, home, turn{}, turn{lines: []string{result(2, reload.Queued), result(2, reload.Passed)}})
-	check(t, submit(t, home), transport.Final, false, []reload.ID{2}, reload.Passed)
+	check(t, submit(t, home), ops.Final, false, []reload.ID{2}, reload.Passed)
 	if got := s.sent(); !slices.Equal(got, []string{"submit plugin enable", "submit plugin enable"}) {
 		t.Errorf("requests %v", got)
 	}
@@ -203,7 +203,7 @@ func TestAnEndAfterTheIDAwaitsIt(t *testing.T) {
 		turn{lines: []string{result(7, reload.Queued)}},
 		turn{busy: true, lines: []string{refusal(reload.CauseBusy)}},
 		turn{lines: []string{result(7, reload.Running), result(7, reload.RolledBack, reload.CauseVerdict)}})
-	check(t, submit(t, home), transport.Final, true, []reload.ID{7}, reload.RolledBack)
+	check(t, submit(t, home), ops.Final, true, []reload.ID{7}, reload.RolledBack)
 	if got := s.sent(); !slices.Equal(got, []string{"submit plugin enable", "await 7"}) {
 		t.Errorf("requests %v", got)
 	}
@@ -216,7 +216,7 @@ func TestUnknownOnTheAwaitSubmitsOnceMore(t *testing.T) {
 		turn{lines: []string{result(7, reload.Queued)}},
 		turn{lines: []string{refusal(reload.CauseUnknown)}},
 		turn{lines: []string{result(1, reload.Passed)}})
-	check(t, submit(t, home), transport.Final, false, []reload.ID{7, 1}, reload.Passed)
+	check(t, submit(t, home), ops.Final, false, []reload.ID{7, 1}, reload.Passed)
 	if got := s.sent(); !slices.Equal(got, []string{"submit plugin enable", "await 7", "submit plugin enable"}) {
 		t.Errorf("requests %v", got)
 	}
@@ -229,7 +229,7 @@ func TestAbandonedTwiceRestores(t *testing.T) {
 	s := serve(t, home,
 		turn{lines: []string{result(3, reload.Queued), result(3, reload.Abandoned, reload.CauseAbandoned)}},
 		turn{lines: []string{result(4, reload.Abandoned, reload.CauseAbandoned)}})
-	check(t, submit(t, home), transport.NoFinal, true, []reload.ID{3, 4}, reload.Abandoned)
+	check(t, submit(t, home), ops.NoFinal, true, []reload.ID{3, 4}, reload.Abandoned)
 	if got := s.sent(); !slices.Equal(got, []string{"submit plugin enable", "submit plugin enable"}) {
 		t.Errorf("requests %v", got)
 	}
@@ -244,13 +244,13 @@ func TestNoFinalResultOnTheSecondSubmissionKeepsTheFiles(t *testing.T) {
 		turn{lines: []string{refusal(reload.CauseUnknown)}},
 		turn{lines: []string{result(9, reload.Running)}},
 		turn{lines: []string{refusal(reload.CauseUnknown)}})
-	check(t, submit(t, home), transport.NoFinal, false, []reload.ID{3, 9}, reload.Running)
+	check(t, submit(t, home), ops.NoFinal, false, []reload.ID{3, 9}, reload.Running)
 
 	// An end before the first line, then an abandoned operation: the first may have
 	// run, so the files stay.
 	home = newHome(t)
 	serve(t, home, turn{}, turn{lines: []string{result(5, reload.Abandoned, reload.CauseAbandoned)}})
-	check(t, submit(t, home), transport.NoFinal, false, []reload.ID{5}, reload.Abandoned)
+	check(t, submit(t, home), ops.NoFinal, false, []reload.ID{5}, reload.Abandoned)
 }
 
 func TestNoProcessOnTheProfileKeepsTheFiles(t *testing.T) {
@@ -268,7 +268,7 @@ func TestNoProcessOnTheProfileKeepsTheFiles(t *testing.T) {
 			} else {
 				status(t, home, st)
 			}
-			check(t, submit(t, home), transport.NotRunning, false, nil, "")
+			check(t, submit(t, home), ops.NotRunning, false, nil, "")
 		})
 	}
 }
@@ -277,13 +277,13 @@ func TestNoProcessOnTheProfileKeepsTheFiles(t *testing.T) {
 func TestNothingAnswersIsRestartRequired(t *testing.T) {
 	home := newHome(t)
 	o := submit(t, home)
-	check(t, o, transport.RestartRequired, false, nil, "")
+	check(t, o, ops.RestartRequired, false, nil, "")
 	if o.Socket != filepath.Join(home, "run", "reload.sock") {
 		t.Errorf("socket %s", o.Socket)
 	}
 	// A status file that does not read names no phase: a process may run.
 	status(t, home, "{")
-	check(t, submit(t, home), transport.RestartRequired, false, nil, "")
+	check(t, submit(t, home), ops.RestartRequired, false, nil, "")
 }
 
 // --wait elapsed after the operation was accepted: the files stay, with the id and
@@ -308,12 +308,12 @@ func TestWaitElapsedKeepsTheFiles(t *testing.T) {
 		<-release // holds the connection open and writes nothing more
 		_ = conn.Close()
 	}()
-	o, err := transport.Submit(t.Context(), transport.Request{Home: home, Profile: "dev", Command: reload.CommandEnable,
+	o, err := ops.Submit(t.Context(), ops.Request{Home: home, Profile: "dev", Command: reload.CommandEnable,
 		ConnectWait: time.Second, Wait: 300 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	check(t, o, transport.Unknown, false, []reload.ID{6}, reload.Running)
+	check(t, o, ops.Unknown, false, []reload.ID{6}, reload.Running)
 }
 
 // The end of ctx ends the wait with the outcome so far.
@@ -338,11 +338,11 @@ func TestTheEndOfTheContextEndsTheWait(t *testing.T) {
 		cancel()
 		_, _ = conn.Read(make([]byte, 1)) // until the client closes
 	}()
-	o, err := transport.Submit(ctx, transport.Request{Home: home, Profile: "dev", Command: reload.CommandEnable})
+	o, err := ops.Submit(ctx, ops.Request{Home: home, Profile: "dev", Command: reload.CommandEnable})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v", err)
 	}
-	check(t, o, transport.Unknown, false, []reload.ID{8}, reload.Queued)
+	check(t, o, ops.Unknown, false, []reload.ID{8}, reload.Queued)
 }
 
 // A line of another form, or of another version, ends the wait: the verdict is
@@ -356,7 +356,7 @@ func TestALineOfAnotherFormKeepsTheFiles(t *testing.T) {
 			home := newHome(t)
 			s := serve(t, home, turn{lines: []string{result(3, reload.Queued), line}})
 			o := submit(t, home)
-			check(t, o, transport.Unknown, false, []reload.ID{3}, reload.Queued)
+			check(t, o, ops.Unknown, false, []reload.ID{3}, reload.Queued)
 			if o.Error == nil || !strings.Contains(o.Error.Text, "another form") {
 				t.Errorf("error %+v", o.Error)
 			}
@@ -369,16 +369,16 @@ func TestALineOfAnotherFormKeepsTheFiles(t *testing.T) {
 
 func TestARequestItCannotSendIsAnError(t *testing.T) {
 	long := filepath.Join(t.TempDir(), strings.Repeat("h", 120))
-	for _, r := range []transport.Request{
+	for _, r := range []ops.Request{
 		{Home: long, Profile: "dev", Command: reload.CommandEnable},
 		{Profile: "dev", Command: reload.CommandEnable},
 		{Home: t.TempDir(), Command: reload.CommandEnable},
 	} {
-		if _, err := transport.Submit(t.Context(), r); err == nil {
+		if _, err := ops.Submit(t.Context(), r); err == nil {
 			t.Errorf("Submit(%+v) = nil error", r)
 		}
 	}
-	if _, err := transport.Submit(t.Context(), transport.Request{Home: long, Profile: "dev"}); err == nil || !strings.Contains(err.Error(), "Linux holds at most 107") {
+	if _, err := ops.Submit(t.Context(), ops.Request{Home: long, Profile: "dev"}); err == nil || !strings.Contains(err.Error(), "Linux holds at most 107") {
 		t.Errorf("long path: %v", err)
 	}
 }

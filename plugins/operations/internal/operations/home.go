@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package operations is the operations library of the plugin aiops/operations
-// (ADR-061 decisions 14 to 19; ADR-060 decision 41).
+// (ADR-061 decisions 14 to 19; ADR-060 decision 41), with the client of the socket of
+// reload-socket (ADR-062 decision 16).
 package operations
 
 import (
