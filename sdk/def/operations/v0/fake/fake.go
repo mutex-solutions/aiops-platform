@@ -56,6 +56,9 @@ type Config struct {
 	// and what Render answers for each profile.
 	Shipped  map[string][]byte
 	Rendered map[string]launch.Rendered
+	// Images stand for a registry: the distribution manifest of each image, by its
+	// reference.
+	Images map[string][]byte
 }
 
 // Fake is the in-memory engine.

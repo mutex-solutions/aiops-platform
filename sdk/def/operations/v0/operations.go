@@ -123,20 +123,33 @@ type KeyRequest struct {
 	Prefix string
 }
 
+// An image is an OCI image reference, <registry>/<repository> with :<tag> or
+// @sha256:<digest>, and optionally oci:// before it. The builder pushes the
+// distribution manifest beside its image as a referrer of it, of artifactType
+// DistributionType, whose one layer of DistributionLayer holds the manifest's bytes;
+// dist sign pushes one more referrer of that type, with the manifest and its bundle, a
+// layer of BundleType (ADR-020 decisions 2 and 12; ADR-044 decision 1). A request
+// reads the credentials of a registry from config.json under DOCKER_CONFIG, or under
+// .docker/ of HOME, of the caller's environment, and reaches a registry on the
+// loopback interface over plain HTTP.
+const (
+	DistributionType  = "application/vnd.aiops.distribution.v1"
+	DistributionLayer = "application/vnd.aiops.distribution.manifest.v1+yaml"
+	BundleType        = "application/vnd.dev.sigstore.bundle.v0.3+json"
+)
+
 // SignDistRequest is dist sign: the distribution manifest of Image signed with the
-// private key file Key (ADR-020 decision 12). Until the OCI client of ADR-047
-// decision 4 lands, an image is its local form: a directory that holds manifest, the
-// bytes of the signed distribution manifest, beside which dist sign writes the
-// manifest's bundle, the two blobs of the referrer that dist sign pushes.
+// private key file Key and pushed with its bundle as one referrer of the image. It
+// refuses an image whose referrers hold no distribution manifest, or two.
 type SignDistRequest struct {
 	Caller
 	Image, Key string
 }
 
-// UseRequest is dist use: the bundle of the distribution manifest of Image verified
-// with each key of distributions, then its record and verified/current written, or
-// nothing (ADR-020 decisions 10 and 12). image.yaml names an image by digest, which
-// the local form has not, so dist use of a local image leaves it.
+// UseRequest is dist use: the bundle of each distribution referrer of Image verified
+// with each key of distributions, then the record of the manifest's digest,
+// verified/current and image.yaml, which names the image by digest, written, or
+// nothing (ADR-020 decisions 10 and 12; ADR-047 decision 13).
 type UseRequest struct {
 	Caller
 	Home, Image string
@@ -197,9 +210,10 @@ type Operations interface {
 	AddTrust(ctx context.Context, r TrustRequest) (Change, error)
 	// GenerateKey is key generate. It writes no home.
 	GenerateKey(ctx context.Context, r KeyRequest) (Written, error)
-	// SignDist is dist sign. It writes no home.
+	// SignDist is dist sign. It writes no home, and Written names the referrer it
+	// pushed by digest.
 	SignDist(ctx context.Context, r SignDistRequest) (Written, error)
 	// UseDist is dist use. It writes the record of the distribution, then
-	// verified/current, and answers RestartRequired with ReasonImage.
+	// verified/current, then image.yaml, and answers RestartRequired with ReasonImage.
 	UseDist(ctx context.Context, r UseRequest) (Change, error)
 }

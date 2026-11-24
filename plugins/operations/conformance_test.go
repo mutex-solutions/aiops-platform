@@ -18,15 +18,18 @@ import (
 	"github.com/mutex-solutions/aiops-platform/plugins/operations"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 )
 
 // The operations row passes the operations definition's suite, as its fake does (T2,
 // 07-c4-plugin-sdk.md §8.2; ADR-061 decision 18), on a home in a temporary directory
 // that each case's Setup prepares as the files a writer leaves, with the launch fake's
-// toolbox answering as the Setup says.
+// toolbox answering as the Setup says, and a registry inside the test that holds the
+// images of the Setup.
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
 		home := filepath.Join(t.TempDir(), "home")
@@ -47,8 +50,20 @@ func TestConformance(t *testing.T) {
 		if st, err := f.State(t.Context()); err != nil || st != kernel.Active {
 			t.Fatalf("the operations row is %v, %v", st, err)
 		}
-		return conformance.Subject{Root: root, Provider: f, Home: home, Dir: t.TempDir()}
+		reg := ocitest.New(t, ocitest.Options{})
+		for name, manifest := range s.Images {
+			image(reg, name, "dist", manifest)
+		}
+		return conformance.Subject{Root: root, Provider: f, Home: home, Dir: t.TempDir(), Registry: reg.Host}
 	})
+}
+
+// image pushes an image to the repository name under tag, with its distribution
+// manifest as a referrer with no bundle, as the builder leaves it (ADR-044 decision 1).
+func image(reg *ocitest.Registry, name, tag string, manifest []byte) ocitest.Descriptor {
+	img := reg.Artifact(name, tag, "application/vnd.example.image.v1", nil, ocitest.Layer{MediaType: "application/vnd.example.layer.v1", Data: []byte(name)})
+	reg.Artifact(name, "", def.DistributionType, &img, ocitest.Layer{MediaType: def.DistributionLayer, Data: manifest})
+	return img
 }
 
 // box is the launcher's toolbox of a case: Render answers the Rendered of the Setup for

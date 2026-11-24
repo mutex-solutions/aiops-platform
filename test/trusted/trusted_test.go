@@ -16,6 +16,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 )
 
 const manifest = `manifestVersion: "1.0"
@@ -40,7 +41,8 @@ requires: {pluginApi: "0.2", definitions: {}}
 // decision 28): trust.yaml with the default root and a key under distributions, the
 // record of the manifest's digest, of kind distribution, whose signer is that key, and
 // verified/current naming it. The record keeps the manifest and a bundle that dist use
-// of the operations row verifies again, in another home that trusts the same key.
+// of the operations row verifies again, as the referrer of an image, in another home
+// that trusts the same key.
 func TestWriteRecordsWhatBootReads(t *testing.T) {
 	signed := []byte("distVersion: 1\n")
 	home := filepath.Join(t.TempDir(), "home")
@@ -63,16 +65,10 @@ func TestWriteRecordsWhatBootReads(t *testing.T) {
 		t.Fatalf("record %+v, %v; want a record of a distribution signed by the key of trust.yaml", rec, err)
 	}
 	dir := filepath.Join(home, "verified", strings.Replace(digest, ":", "-", 1))
-	img := t.TempDir()
-	for _, name := range []string{"manifest", "manifest.sigstore.json"} {
-		b, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			t.Fatalf("the record of the distribution: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(img, name), b, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	reg := ocitest.New(t, ocitest.Options{})
+	img := reg.Artifact("site", "1", "application/vnd.example.image.v1", nil)
+	reg.Artifact("site", "", def.DistributionType, &img, ocitest.Layer{MediaType: def.DistributionLayer, Data: readFile(t, filepath.Join(dir, "manifest"))},
+		ocitest.Layer{MediaType: def.BundleType, Data: readFile(t, filepath.Join(dir, "manifest.sigstore.json"))})
 	other := filepath.Join(t.TempDir(), "other")
 	if err := os.Mkdir(other, 0o700); err != nil {
 		t.Fatal(err)
@@ -84,7 +80,7 @@ func TestWriteRecordsWhatBootReads(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(other, "trust.yaml"), b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mount(t).UseDist(t.Context(), def.UseRequest{Home: other, Image: img}); err != nil {
+	if _, err := mount(t).UseDist(t.Context(), def.UseRequest{Home: other, Image: reg.Host + "/site:1"}); err != nil {
 		t.Fatalf("dist use of the record's manifest and bundle in a home that trusts the same key: %v", err)
 	}
 }

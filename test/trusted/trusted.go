@@ -4,7 +4,8 @@
 // that a binary built inside the repository boots on it (ADR-060 decision 28; ADR-020
 // decisions 1, 10, 12 and 13). Write mounts the operations row on a kernel of the test
 // and calls the key it provides, as every consumer does: key generate makes a
-// throwaway key pair inside the test, dist sign signs the manifest with it, trust add
+// throwaway key pair inside the test, dist sign signs the manifest with it as the
+// referrer of an image in a registry inside the test, trust add
 // lists the key under distributions, and dist use verifies the signature and writes the
 // record of the manifest's digest and verified/current. What it writes is what boot
 // reads (boot.ReadTrust, boot.ReadRecord, boot.ReadCurrent). No key is committed.
@@ -40,6 +41,7 @@ import (
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 )
 
 // newKey returns a throwaway ECDSA P-256 public key as a PEM block, indented for a key
@@ -127,14 +129,15 @@ func mount(tb testing.TB) def.Operations {
 	return ops
 }
 
-// image returns the local image of manifest signed with the key of the process, and
-// the public key file, both in a temporary directory of tb.
+// image pushes an image with manifest as its distribution referrer, signed with the
+// key of the process, to a registry inside tb, and returns the image's reference and
+// the public key file, in a temporary directory of tb.
 func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) {
 	tb.Helper()
 	signer.Lock()
 	defer signer.Unlock()
 	dir := tb.TempDir()
-	key, pub, img := filepath.Join(dir, "dist.key"), filepath.Join(dir, "dist.pub"), filepath.Join(dir, "image")
+	key, pub := filepath.Join(dir, "dist.key"), filepath.Join(dir, "dist.pub")
 	if signer.pub == nil {
 		if _, err := ops.GenerateKey(tb.Context(), def.KeyRequest{Caller: caller(), Prefix: filepath.Join(dir, "dist")}); err != nil {
 			tb.Fatal(err)
@@ -143,22 +146,28 @@ func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) 
 	} else if err := write(dir, map[string][]byte{"dist.key": signer.key, "dist.pub": signer.pub}); err != nil {
 		tb.Fatal(err)
 	}
-	d := digest(manifest)
-	files := map[string][]byte{"image/manifest": manifest}
+	reg := ocitest.New(tb, ocitest.Options{})
+	d, ref := digest(manifest), reg.Host+"/dist:1"
+	img := reg.Artifact("dist", "1", "application/vnd.example.image.v1", nil)
+	layers := []ocitest.Layer{{MediaType: def.DistributionLayer, Data: manifest}}
 	if b, ok := signer.bundles[d]; ok {
-		files["image/manifest.sigstore.json"] = b
+		layers = append(layers, ocitest.Layer{MediaType: def.BundleType, Data: b})
 	}
-	if err := write(dir, files); err != nil {
-		tb.Fatal(err)
-	}
-	if len(files) == 1 {
-		w, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: img, Key: key})
+	reg.Artifact("dist", "", def.DistributionType, &img, layers...)
+	if len(layers) == 1 {
+		w, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: ref, Key: key})
 		if err != nil {
 			tb.Fatal(err)
 		}
-		signer.bundles[d] = readFile(tb, w.Paths[0])
+		_, referrer, _ := strings.Cut(w.Paths[0], "@")
+		raw, _ := reg.Fetch("dist", referrer)
+		var m struct{ Layers []struct{ Digest string } }
+		if err := json.Unmarshal(raw, &m); err != nil || len(m.Layers) != 2 {
+			tb.Fatalf("the referrer that dist sign pushed: %s, %v", raw, err)
+		}
+		signer.bundles[d], _ = reg.Fetch("dist", m.Layers[1].Digest)
 	}
-	return img, pub
+	return ref, pub
 }
 
 func readFile(tb testing.TB, p string) []byte {

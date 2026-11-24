@@ -15,11 +15,17 @@ import (
 // The fake passes the suite that the operations row passes (ADR-061 decision 18).
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
-		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted, Shipped: s.Shipped, Rendered: s.Rendered})
+		const registry = "registry.fake"
+		images := map[string][]byte{}
+		for name, manifest := range s.Images {
+			images[registry+"/"+name+":dist"] = manifest
+		}
+		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted, Shipped: s.Shipped, Rendered: s.Rendered,
+			Images: images})
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)
-		return conformance.Subject{Root: root, Provider: f, Home: filepath.Join(t.TempDir(), "home"), Dir: t.TempDir()}
+		return conformance.Subject{Root: root, Provider: f, Home: filepath.Join(t.TempDir(), "home"), Dir: t.TempDir(), Registry: registry}
 	})
 }
 

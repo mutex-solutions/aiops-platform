@@ -91,27 +91,28 @@ func dispatch(t *testing.T, rec *fake.Registry, argv ...string) (code int, out, 
 	return code, o.String(), e.String()
 }
 
-// dist sign calls SignDist with the image and the key file resolved against the working
-// directory and the environment of the invocation, from which the library reads the key
-// password; dist use calls UseDist with the home and the image. Each names what it wrote
-// and the outcome on stderr, prints nothing on stdout and exits 0 (ADR-061 decisions 16,
-// 20 and 30; ADR-020 decision 12).
+// dist sign calls SignDist with the image reference as written and the key file
+// resolved against the working directory, and the environment of the invocation, from
+// which the library reads the key password and the registry credentials; dist use
+// calls UseDist with the home and the image. dist sign names the referrer it pushed,
+// dist use what it wrote and the outcome, on stderr; each prints nothing on stdout and
+// exits 0 (ADR-061 decisions 16, 20 and 30; ADR-020 decision 12).
 func TestSignAndUseCallTheLibrary(t *testing.T) {
-	s := &stub{w: operations.Written{Paths: []string{"/work/img/manifest.sigstore.json"}},
-		ch: operations.Change{Written: []string{"/site/verified/sha256-ab", "/site/verified/current"}, Outcome: operations.RestartRequired, Reason: operations.ReasonImage}}
+	s := &stub{w: operations.Written{Paths: []string{"registry.example/site@sha256:cd"}},
+		ch: operations.Change{Written: []string{"/site/verified/sha256-ab", "/site/verified/current", "/site/image.yaml"}, Outcome: operations.RestartRequired, Reason: operations.ReasonImage}}
 	rec := world(t, s)
-	code, out, errOut := dispatch(t, rec, "dist", "sign", "img", "--key", "site.key")
-	if code != 0 || out != "" || !strings.Contains(errOut, "wrote /work/img/manifest.sigstore.json") {
+	code, out, errOut := dispatch(t, rec, "dist", "sign", "registry.example/site:1", "--key", "site.key")
+	if code != 0 || out != "" || !strings.Contains(errOut, "pushed registry.example/site@sha256:cd") {
 		t.Errorf("dist sign: exit %d, stdout %q, stderr %q", code, out, errOut)
 	}
-	if r := s.signs[len(s.signs)-1]; r.Image != "/work/img" || r.Key != "/work/site.key" || r.Env == nil {
+	if r := s.signs[len(s.signs)-1]; r.Image != "registry.example/site:1" || r.Key != "/work/site.key" || r.Env == nil {
 		t.Errorf("request %+v", r)
 	}
-	code, out, errOut = dispatch(t, rec, "dist", "use", "/images/site")
-	if code != 0 || out != "" || !strings.Contains(errOut, "wrote /site/verified/current") || !strings.Contains(errOut, "restart-required: image") {
+	code, out, errOut = dispatch(t, rec, "dist", "use", "oci://registry.example/site:1")
+	if code != 0 || out != "" || !strings.Contains(errOut, "wrote /site/image.yaml") || !strings.Contains(errOut, "restart-required: image") {
 		t.Errorf("dist use: exit %d, stdout %q, stderr %q", code, out, errOut)
 	}
-	if r := s.uses[len(s.uses)-1]; r.Home != "/site" || r.Image != "/images/site" || r.Env == nil {
+	if r := s.uses[len(s.uses)-1]; r.Home != "/site" || r.Image != "oci://registry.example/site:1" || r.Env == nil {
 		t.Errorf("request %+v", r)
 	}
 }

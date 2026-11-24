@@ -19,7 +19,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -50,7 +49,14 @@ type Setup struct {
 	// Render for each profile. use sets Shipped and Rendered of the suite.
 	Shipped  map[string][]byte
 	Rendered map[string]launch.Rendered
+	// Images are the images of the registry of the case, by repository: each is tagged
+	// dist and carries its distribution manifest as a referrer with no bundle, as the
+	// builder leaves it beside the image. use sets Images of the suite.
+	Images map[string][]byte
 }
+
+// Images are the images of the suite, each with its distribution manifest.
+var Images = map[string][]byte{"site": []byte("distVersion: 1\n"), "foreign": []byte("distVersion: 2\n"), "unsigned": []byte("distVersion: 3\n")}
 
 // Shipped is the one shipped profile of the suite, cli.
 var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n")}
@@ -65,7 +71,8 @@ type Subject struct {
 	Root     *kernel.Root
 	Provider *kernel.Fiber // ACTIVE; the suite releases the provider by disposing it
 	Home     string        // the home of the case, absolute; it exists only where Setup asks for a state
-	Dir      string        // an existing directory outside the home, for key files and images
+	Dir      string        // an existing directory outside the home, for key files
+	Registry string        // the host of a registry that holds the images of Setup
 }
 
 // Mount mounts a provider of operations.Key on a root of its own, its home in the
@@ -163,7 +170,7 @@ func Run(t *testing.T, mount Mount) {
 			calls := map[string]error{}
 			_, calls["Home"] = u.ops.Home(t.Context(), operations.HomeRequest{Caller: u.caller()})
 			_, calls["AddTrust"] = u.ops.AddTrust(t.Context(), operations.TrustRequest{Caller: u.caller(), KeyFile: a, IDs: []string{"acme/*"}})
-			_, calls["UseDist"] = u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Image: u.s.Dir})
+			_, calls["UseDist"] = u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Image: u.image("site")})
 			_, calls["InitProfile"] = u.ops.InitProfile(t.Context(), operations.ProfileRequest{Caller: u.caller(), Profile: "cli"})
 			_, calls["SanitizeProfile"] = u.ops.SanitizeProfile(t.Context(), operations.ProfileRequest{Caller: u.caller()})
 			for name, err := range calls {
@@ -173,26 +180,25 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O6 dist sign and dist use record a distribution", func(t *testing.T) {
+		t.Run("operations.O6 dist sign and dist use record a distribution and its image", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			pub := u.key("site")
 			u.trust(operations.TrustRequest{KeyFile: pub, Distribution: true})
-			manifest := []byte("distVersion: 1\n")
-			img := u.image("img", manifest)
+			img := u.image("site")
 			w, err := u.ops.SignDist(t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: img, Key: private(pub)})
-			if err != nil || len(w.Paths) != 1 || filepath.Dir(w.Paths[0]) != img {
-				t.Fatalf("SignDist = %v, %v; want the bundle written in the image", w, err)
+			if err != nil || len(w.Paths) != 1 || !strings.HasPrefix(w.Paths[0], u.s.Registry+"/site@sha256:") {
+				t.Fatalf("SignDist = %v, %v; want the referrer it pushed, by digest", w, err)
 			}
 			ch, err := u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Home: u.s.Home, Image: img})
 			if err != nil || ch.Outcome != operations.RestartRequired || ch.Reason != operations.ReasonImage {
 				t.Fatalf("UseDist = %+v, %v; want restart-required for the reason image", ch, err)
 			}
-			sum := sha256.Sum256(manifest)
+			sum := sha256.Sum256(Images["site"])
 			d := "sha256:" + hex.EncodeToString(sum[:])
 			h := u.home()
 			want := []operations.Record{{Digest: d, Kind: "distribution", Signer: h.Distributions[1]}}
-			if !reflect.DeepEqual(h.Records, want) || h.Current != d {
-				t.Errorf("records %+v and current %q; want %+v and %s", h.Records, h.Current, want, d)
+			if !reflect.DeepEqual(h.Records, want) || h.Current != d || !strings.HasPrefix(h.Image, u.s.Registry+"/site@sha256:") {
+				t.Errorf("records %+v, current %q and image %q; want %+v, %s and the image by digest", h.Records, h.Current, h.Image, want, d)
 			}
 		})
 
@@ -201,14 +207,9 @@ func Run(t *testing.T, mount Mount) {
 			site, other := u.key("site"), u.key("other")
 			u.trust(operations.TrustRequest{KeyFile: site, Distribution: true})
 			before := u.home()
-			unsigned := u.image("unsigned", []byte("distVersion: 1\n"))
-			foreign := u.signed("foreign", []byte("distVersion: 2\n"), other)
-			changed := u.signed("changed", []byte("distVersion: 3\n"), site)
-			if err := os.WriteFile(filepath.Join(changed, "manifest"), []byte("distVersion: 4\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			for why, img := range map[string]string{"an unsigned image": unsigned, "an image signed by an untrusted key": foreign,
-				"a manifest changed after it was signed": changed} {
+			u.signed("foreign", other)
+			for why, img := range map[string]string{"an unsigned image": u.image("unsigned"), "an image signed by an untrusted key": u.image("foreign"),
+				"an image the registry does not hold": u.s.Registry + "/none:dist"} {
 				if _, err := u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Home: u.s.Home, Image: img}); !errors.Is(err, operations.ErrRefused) {
 					t.Errorf("%s: %v, want ErrRefused", why, err)
 				}
@@ -216,13 +217,16 @@ func Run(t *testing.T, mount Mount) {
 			if after := u.home(); !reflect.DeepEqual(after, before) {
 				t.Errorf("a refused dist use changed the home: %+v, was %+v", after, before)
 			}
-			img := u.image("img", []byte("distVersion: 5\n"))
+			img := u.image("site")
 			wrong := operations.Caller{Env: env(map[string]string{operations.KeyPasswordVar: "not the password"})}
 			if _, err := u.ops.SignDist(t.Context(), operations.SignDistRequest{Caller: wrong, Image: img, Key: private(site)}); !errors.Is(err, operations.ErrRefused) {
 				t.Errorf("dist sign with a wrong password: %v, want ErrRefused", err)
 			}
 			if _, err := u.ops.SignDist(t.Context(), operations.SignDistRequest{Image: img, Key: private(site)}); !errors.Is(err, operations.ErrUsage) {
 				t.Errorf("dist sign with no password in the environment: %v, want ErrUsage", err)
+			}
+			if _, err := u.ops.SignDist(t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: u.s.Registry + "/none:dist", Key: private(site)}); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("dist sign of an image the registry does not hold: %v, want ErrRefused", err)
 			}
 		})
 
@@ -351,8 +355,8 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Home"] = u.ops.Home(ctx, operations.HomeRequest{Caller: c, Home: u.s.Home})
 			_, calls["AddTrust"] = u.ops.AddTrust(ctx, operations.TrustRequest{Caller: c, Home: u.s.Home, KeyFile: a, IDs: []string{"acme/*"}})
 			_, calls["GenerateKey"] = u.ops.GenerateKey(ctx, operations.KeyRequest{Caller: c, Prefix: filepath.Join(u.s.Dir, "late")})
-			_, calls["SignDist"] = u.ops.SignDist(ctx, operations.SignDistRequest{Caller: c, Image: u.s.Dir, Key: private(a)})
-			_, calls["UseDist"] = u.ops.UseDist(ctx, operations.UseRequest{Caller: c, Home: u.s.Home, Image: u.s.Dir})
+			_, calls["SignDist"] = u.ops.SignDist(ctx, operations.SignDistRequest{Caller: c, Image: u.image("site"), Key: private(a)})
+			_, calls["UseDist"] = u.ops.UseDist(ctx, operations.UseRequest{Caller: c, Home: u.s.Home, Image: u.image("site")})
 			q := operations.RenderRequest{Caller: c, RenderRequest: launch.RenderRequest{Home: u.s.Home, Profile: "cli"}}
 			_, calls["Render"] = u.ops.Render(ctx, q)
 			_, calls["VerifyProfile"] = u.ops.VerifyProfile(ctx, q)
@@ -386,7 +390,7 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
-	s.Shipped, s.Rendered = Shipped, Rendered
+	s.Shipped, s.Rendered, s.Images = Shipped, Rendered, Images
 	u := &user{t: t, s: mount(t, s)}
 	_, _, u.ops = deftest.Consume(t, u.s.Root, operations.Key)
 	return u
@@ -414,27 +418,15 @@ func (u *user) key(name string) string {
 
 func private(pub string) string { return strings.TrimSuffix(pub, ".pub") + ".key" }
 
-// image writes the local form of an image, Dir/name with its manifest.
-func (u *user) image(name string, manifest []byte) string {
-	u.t.Helper()
-	dir := filepath.Join(u.s.Dir, name)
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		u.t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "manifest"), manifest, 0o644); err != nil {
-		u.t.Fatal(err)
-	}
-	return dir
-}
+// image returns the reference of the image of the suite in the repository name.
+func (u *user) image(name string) string { return u.s.Registry + "/" + name + ":dist" }
 
-// signed writes an image and signs it with the private key of pub.
-func (u *user) signed(name string, manifest []byte, pub string) string {
+// signed signs the image name with the private key of pub.
+func (u *user) signed(name, pub string) {
 	u.t.Helper()
-	img := u.image(name, manifest)
-	if _, err := u.ops.SignDist(u.t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: img, Key: private(pub)}); err != nil {
+	if _, err := u.ops.SignDist(u.t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: u.image(name), Key: private(pub)}); err != nil {
 		u.t.Fatal(err)
 	}
-	return img
 }
 
 func (u *user) home() operations.Home {
