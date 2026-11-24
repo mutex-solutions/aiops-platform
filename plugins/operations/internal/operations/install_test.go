@@ -5,6 +5,8 @@ package operations
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -227,5 +229,65 @@ func TestRemoveDropsTheEnabledOfItsRows(t *testing.T) {
 	notes := strings.Join(ch.Notes, "\n")
 	if !strings.Contains(notes, "connector-x:audit") || strings.Contains(notes, "connector-x:logs") {
 		t.Errorf("notes %q; want the kept item connector-x:audit named, and not connector-x:logs", ch.Notes)
+	}
+}
+
+// One digest of a plugin id per site (ADR-047 decisions 7 and 16): an install of an id
+// that another profile names at another digest, by its lock entry or, as in-process
+// code does, by the kept files alone, refuses, names that digest and those profiles,
+// and writes nothing; at the same digest it appends the bundle list and reuses the kept
+// files. Remove deletes them once no profile names the id, and an install removes a
+// leftover that no profile names, and says so (decision 10).
+func TestInstallKeepsOneDigestPerID(t *testing.T) {
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	h := Home{Dir: home}
+	v1 := signedPack(t, l, home, pack, "acme")
+	other := maps.Clone(pack)
+	other["content/labels.yaml"] = "service: y\n"
+	v2 := signedPack(t, l, home, other, "acme")
+	install := func(spec, p string) (def.Change, error) {
+		return l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: p, Spec: spec})
+	}
+	if _, err := install(v1, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	put(t, h, "profiles/two/profile.yaml", "bundles: [aiops-core]\n")
+	put(t, h, "profiles/three/profile.yaml", "bundles: [aiops-core, acme/connector-x]\n")
+	before := tree(t, h)
+	digest := strings.TrimSuffix(strings.SplitN(strings.SplitN(before["profiles/dev/plugins.lock"], "digest: ", 2)[1], ",", 2)[0], "}")
+	if _, err := install(v2, "two"); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), digest) ||
+		!strings.Contains(err.Error(), "dev") || !strings.Contains(err.Error(), "three") {
+		t.Errorf("install of another digest: %v; want ErrRefused naming %s, dev and three", err, digest)
+	}
+	if got := tree(t, h); !equal(got, before) {
+		t.Fatalf("the refused install wrote the home: profile.yaml of two %q", got["profiles/two/profile.yaml"])
+	}
+	ch, err := install(v1, "two")
+	if got := tree(t, h)["profiles/two/profile.yaml"]; err != nil || got != "bundles: [aiops-core, acme/connector-x]\n" {
+		t.Fatalf("install of the same digest into two: %v, %q", err, got)
+	}
+	for _, w := range ch.Written {
+		if strings.HasPrefix(w, filepath.Join(home, "bundles")) || strings.HasPrefix(w, filepath.Join(home, "content")) {
+			t.Errorf("install at the same digest wrote %s again", w)
+		}
+	}
+	kept := filepath.Join(home, "bundles", "acme", "connector-x", "artifact.json")
+	for _, p := range []string{"dev", "two", "three"} {
+		if _, err := l.Remove(t.Context(), def.RemoveRequest{Home: home, Profile: p, ID: "acme/connector-x"}); err != nil {
+			t.Fatalf("remove from %s: %v", p, err)
+		}
+		if _, err := os.Stat(kept); (p == "three") != errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("after remove from %s, the kept files: %v", p, err)
+		}
+	}
+	put(t, h, "bundles/acme/connector-x/stale", "x\n")
+	put(t, h, "content/acme/connector-x/stale.md", "x\n")
+	ch, err = install(v2, "dev")
+	if err != nil || !slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, "leftover") }) {
+		t.Errorf("install over a leftover: %q, %v; want a note that names the leftover", ch.Notes, err)
+	}
+	if files := tree(t, h); files["bundles/acme/connector-x/stale"] != "" || files["content/acme/connector-x/stale.md"] != "" {
+		t.Errorf("the leftover stays")
 	}
 }
