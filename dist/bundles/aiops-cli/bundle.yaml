@@ -1,12 +1,13 @@
-# aiops-cli: the cli row and the rows that contribute to commands; with aiops-core it is
-# the cli profile, and no other shipped profile lists it (ADR-061 decisions 29 and 30;
-# 00-decisions.md:277). cli is required, so a cli that is not ACTIVE stops the boot of
-# aiopsctl with a reason. No row states roles: the cli profile is no server profile.
-# The row operations joins with the operations library (ADR-061 decision 14). The patch
-# below disables reload-socket of aiops-core, so aiopsctl never listens (ADR-062
-# decision 2).
+# aiops-cli: the cli row, the operations row and the rows that contribute to commands;
+# with aiops-core it is the cli profile, and no other shipped profile lists it (ADR-061
+# decisions 29 and 30; 00-decisions.md:277). cli is required, so a cli that is not ACTIVE
+# stops the boot of aiopsctl with a reason. operations provides the operations library
+# to the command rows (ADR-061 decisions 14 and 20; ADR-060 decision 41). No row states
+# roles: the cli profile is no server profile. The patch below disables reload-socket of
+# aiops-core, so aiopsctl never listens (ADR-062 decision 2).
 - insert:
     - {id: cli, plugin: aiops/cli, required: true}
+    - {id: operations, plugin: aiops/operations}
     - {id: command-profile, plugin: aiops/command-profile}
     - {id: command-plugin, plugin: aiops/command-plugin}
     - {id: command-trust, plugin: aiops/command-trust}
