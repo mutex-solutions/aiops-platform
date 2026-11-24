@@ -53,10 +53,25 @@ SPDXDATA  := github.com/spdx/license-list-data@v3.29.0+incompatible
 builder:
 	go mod download $(TOOLCHAIN) $(SPDXDATA)
 	go run ./tools/spdxcorpus .
-	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag)$$' ./internal/builder 2>&1 && \
+	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag|TestToolchainLicenceFiles)$$' ./internal/builder 2>&1 && \
 		go test -count=1 -v -timeout 30m -run '^TestDistBuildSignAndUse$$' ./cmd/aiopsctl 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && ! echo "$$out" | grep -q -- '--- SKIP' && \
-		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 5 ]
+		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 6 ]
+
+# `make builder-image` is the builder-image job (ADR-060 decisions 22 and 36; ADR-044
+# decisions 1, 3 to 6 and 17; ADR-020 decision 13): the release built in two phases from
+# the served modules, the builder image written from dist/builder/image.yaml on no base
+# layer, the licence report of the release image and of the release aiopsctl, with
+# THIRD_PARTY_LICENSES/, the NOTICE texts and the MPL-2.0 lines, and a site's dist build
+# on the image path, which runs that builder image in a container runtime, compared with
+# the local path. It needs docker and the module cache of the builder job, so `make
+# check` (-short) skips it; here it fails, and does not skip, when it does not run. It
+# removes the image it pulls and pushes nothing outside the job.
+.PHONY: builder-image
+builder-image:
+	go mod download $(TOOLCHAIN)
+	out=$$(go test -count=1 -v -timeout 40m -run '^TestReleaseAndBuilderImage$$' ./cmd/aiopsctl 2>&1); s=$$?; \
+	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestReleaseAndBuilderImage'
 
 # `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
 # a client run as root is refused by reload-socket and one run as another user cannot
@@ -77,6 +92,9 @@ check:
 	cd sdk/testkit && go build ./... && go vet ./... && go test -race -count=1 ./...
 	cd sdk && go build ./... && go vet ./... && go test -race -count=1 ./...
 	cd sdk && go test -count=1 ./remote/handshake
+	@# ADR-060 decisions 21 and 36; ADR-044 decision 23: the served copies of the go.mod of
+	@# the root module and of each SDK module.
+	go test -count=1 -run '^TestServedGoMod$$' ./internal/builder
 	cd sdk/kernel && go test -count=1 -coverprofile=cover.out ./...
 	$(KC) modfile sdk/kernel
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
