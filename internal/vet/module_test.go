@@ -3,6 +3,7 @@
 package vet
 
 import (
+	"go/build"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,32 @@ var ErrX = errors.New("x")
 	got, err := Module(root)
 	if err != nil || len(got) != 0 {
 		t.Errorf("Module = %v, %v; want no finding", got, err)
+	}
+}
+
+// Plugin vet type-checks the standard library to find a goMethods call such as
+// (*sync.WaitGroup).Go. In a binary built with -trimpath, as the release aiopsctl that
+// the builder runs is, build.Default.GOROOT is empty unless the environment sets it:
+// the check still finds the call, or Module fails, and never skips it in silence
+// (ADR-044 decisions 2 and 16).
+func TestModuleTypeChecksTheStandardLibrary(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, map[string]string{
+		"go.mod":      "module example.com/acme/echo\n\ngo 1.26.0\n",
+		"plugin.yaml": "id: acme/echo\n",
+		"plugin.go":   "package echo\n",
+		"internal/work/work.go": `package work
+
+import "sync"
+
+func Run(wg *sync.WaitGroup, f func()) { wg.Go(f) }
+`,
+	})
+	defer func(g string) { build.Default.GOROOT = g }(build.Default.GOROOT)
+	build.Default.GOROOT = "" // as in a binary built with -trimpath and no GOROOT set
+	got, err := Module(root)
+	if err == nil && (len(got) != 1 || !strings.Contains(got[0].Text, "(*sync.WaitGroup).Go starts an untracked goroutine")) {
+		t.Errorf("Module = %v, %v; want the WaitGroup.Go finding or an error", got, err)
 	}
 }
 
