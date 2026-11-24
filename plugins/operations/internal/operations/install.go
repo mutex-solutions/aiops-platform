@@ -4,11 +4,14 @@ package operations
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -81,11 +84,14 @@ func recorded(ctx context.Context, src source, d ocispec.Descriptor) ([]byte, er
 
 // Install is plugin install: under the lock it verifies the signature and the
 // attestation as Verify does, refuses remote code until S2b and a pack or remote code
-// into the profile cli (ADR-061 decision 40), renders the profile with the artifact's
-// bundle appended, which refuses a group that clashes, refuses an artifact of the name
-// of one the profile holds, of whatever owner, and runs every clause of the entry point
-// plugin install. A denial and rebuild-required write nothing. Then it writes the kept
-// files, the record, plugins.lock for a pack and the bundle list, and submits.
+// into the profile cli (ADR-061 decision 40), refuses an id that another profile names
+// at another digest, since a site holds one (ADR-047 decision 7), renders the profile
+// with the artifact's bundle appended, which refuses a group that clashes, refuses an
+// artifact of the name of one the profile holds, of whatever owner, and runs every
+// clause of the entry point plugin install. A denial and rebuild-required write
+// nothing. Then it writes the kept files, which it reuses where another profile names
+// them and which replace, with a note, a leftover that no profile names (decision 10),
+// the record, plugins.lock for a pack and the bundle list, and submits.
 func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -112,6 +118,20 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 			case r.Profile == "cli" && !code:
 				return nil, refused("into the profile cli only in-process code installs, since a pack's rows contribute no command (ADR-061 decision 40)")
 			}
+			keptAt, held, err := holders(h, r.Profile, a.ID)
+			if err != nil {
+				return nil, err
+			}
+			var other []string
+			for _, p := range slices.Sorted(maps.Keys(held)) {
+				if held[p] != d.Digest.String() {
+					other = append(other, fmt.Sprintf("%s (%s)", p, cmp.Or(held[p], "no kept files")))
+				}
+			}
+			if len(other) > 0 {
+				return nil, refused("the profiles %s name %s at another digest, and a site holds one digest of a plugin id (ADR-047 decision 7): plugin remove it from them before an install of %s",
+					strings.Join(other, ", "), a.ID, d.Digest)
+			}
 			profile, _, err := l.profile(ctx, h, r.Profile, &ch)
 			if err != nil {
 				return nil, err
@@ -135,7 +155,22 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 				return nil, err
 			}
 			changes, entry, err := kept(ctx, src, d, a, bundle)
-			if err == nil && len(a.Runtimes) == 0 {
+			if err != nil {
+				return nil, err
+			}
+			for _, dir := range []string{"bundles/" + a.ID, "content/" + a.ID} {
+				_, serr := os.Stat(h.path(dir))
+				switch {
+				case len(held) > 0 && keptAt == d.Digest.String() && serr == nil: // another profile names these kept files
+					changes = slices.DeleteFunc(changes, func(c Change) bool { return c.Path == dir })
+				case len(held) == 0 && serr == nil:
+					ch.Notes = append(ch.Notes, fmt.Sprintf("removed the leftover %s, which no profile names (ADR-047 decision 10)", h.path(dir)))
+					if !slices.ContainsFunc(changes, func(c Change) bool { return c.Path == dir }) {
+						changes = append([]Change{{Path: dir, Remove: true}}, changes...)
+					}
+				}
+			}
+			if len(a.Runtimes) == 0 {
 				var lock []byte
 				lock, err = withLock(h, r.Profile, entry.ID, &entry)
 				changes = append(changes, Change{Path: "profiles/" + r.Profile + "/plugins.lock", Data: lock})
@@ -145,6 +180,39 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 		Submit: submitted(h, r.Profile, reload.CommandInstall, "", [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res),
 	})
 	return changed(done, ch, err, res)
+}
+
+// holders returns the digest of the kept artifact.json of id, "" for none, and each
+// profile of the home but p that names id, in its bundle list or its lock, with the
+// digest it holds: that of its lock entry or, for in-process code, which has none, the
+// kept one (ADR-047 decisions 7 and 16).
+func holders(h Home, p, id string) (string, map[string]string, error) {
+	kept := ""
+	if b, err := os.ReadFile(h.path("bundles/" + id + "/artifact.json")); err == nil {
+		kept = fmt.Sprintf("sha256:%x", sha256.Sum256(b))
+	}
+	held := map[string]string{}
+	files, _ := filepath.Glob(h.path("profiles/*/profile.yaml"))
+	for _, f := range files {
+		q := filepath.Base(filepath.Dir(f))
+		if q == p {
+			continue
+		}
+		var list struct{ Bundles []string }
+		locked, err := readLock(h, q)
+		if err == nil {
+			err = readYAML(f, &list)
+		}
+		if err != nil {
+			return "", nil, err
+		}
+		if i := slices.IndexFunc(locked, func(e def.Locked) bool { return e.ID == id }); i >= 0 {
+			held[q] = locked[i].Digest
+		} else if slices.Contains(list.Bundles, id) {
+			held[q] = kept
+		}
+	}
+	return kept, held, nil
 }
 
 // profileOf is the profile of a command: p, or with none the profile that
