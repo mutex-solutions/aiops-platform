@@ -165,6 +165,59 @@ func TestCheckPackParity(t *testing.T) {
 	}
 }
 
+// checkBox is packBox with what plugin check needs beside it: a release whose
+// instantiable aiops/echoer the rows of the pack feed echoers 0.1 through, and T0 and
+// plugingen that find nothing.
+type checkBox struct{ *packBox }
+
+func (checkBox) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{Digest: "sha256:ab", Plugins: []launch.ReleasePlugin{{ID: "aiops/echoer", Feeds: map[string][]string{"echoers": {"0.1"}}}}}, nil
+}
+
+func (checkBox) Vet(context.Context, string) ([]launch.Diagnostic, error) { return nil, nil }
+
+func (checkBox) Generate(context.Context, launch.GenerateRequest) ([]launch.Diagnostic, error) {
+	return nil, nil
+}
+
+// Step 7 runs plugin pack into a directory of its own and removes it: the gate of plugin
+// check reads the digest of the OCI manifest that plugin pack writes of the same
+// directory, the attestation names it, and no layout stays behind (07-c4-plugin-sdk.md:1573;
+// ADR-047 decision 1).
+func TestCheckStep7Packs(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	b := &packBox{sum: packSummary(), suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 1, Halves: []string{"obligations"}}}},
+		scenario: &launch.ScenarioReport{Name: "echo", Version: "1", Halves: []string{"kernel"}}}
+	l := Library{Box: checkBox{b}}
+	dir := pluginDir(t, pack)
+	r, err := l.Check(t.Context(), def.CheckRequest{Caller: caller(), Dir: dir})
+	if err != nil || r.Attestation == nil {
+		t.Fatalf("Check = %v, %v", steps(r), err)
+	}
+	if es, _ := os.ReadDir(tmp); len(es) != 0 {
+		t.Errorf("step 7 left %v in the temporary directory", es)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "artifact")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("step 7 wrote a layout into the plugin directory: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "artifact")
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
+		t.Fatal(err)
+	}
+	desc, _, _ := layout(t, out)
+	var asked []string
+	for _, g := range b.gates {
+		asked = append(asked, g.Entry+" "+g.Digest)
+	}
+	if len(b.gates) != 2 || b.gates[0].Digest != desc.Digest.String() || b.gates[1].Digest != desc.Digest.String() || b.gates[0].Signer == "" {
+		t.Fatalf("the gate was asked of %q; want check and pack each at the artifact %s", asked, desc.Digest)
+	}
+	if !strings.Contains(string(r.Attestation), `"sha256":"`+desc.Digest.Encoded()+`"`) || string(r.Attestation) != string(b.gates[1].Attestation) {
+		t.Errorf("the attestation of check %s; want the one pack records, of %s", r.Attestation, desc.Digest)
+	}
+}
+
 // Step 1 refuses a manifest that lists remote until S2b (ADR-060 decision 23).
 func TestCheckRefusesRemote(t *testing.T) {
 	b := &connectorBox{sum: launch.ManifestSummary{ID: "acme/x", Version: "0.1.0", Runtimes: []string{"inproc", "remote"}}}
