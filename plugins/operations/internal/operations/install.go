@@ -441,13 +441,6 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 	}
 	var ch def.Change
 	var res error
-	render := func(ctx context.Context) (launch.Rendered, error) {
-		rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile})
-		if e := errorsOf(rd.Diagnostics); err == nil && e != "" {
-			err = refused("%s does not compose: %s", r.Profile, e)
-		}
-		return rd, err
-	}
 	layer := "profiles/" + r.Profile + "/aiops.patch.yml"
 	done, err := h.Write(ctx, Write{Command: command + " " + r.Row,
 		Plan: func() ([]Change, error) {
@@ -455,7 +448,7 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			if err != nil {
 				return nil, err
 			}
-			rd, err := render(ctx)
+			rd, err := l.composes(ctx, h, r.Profile)
 			switch {
 			case err != nil:
 			case command == reload.CommandDisable:
@@ -474,13 +467,23 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			return changes, err
 		},
 		Submit: func(ctx context.Context) error {
-			if _, err := render(ctx); err != nil {
+			if _, err := l.composes(ctx, h, r.Profile); err != nil {
 				return err
 			}
 			return submitted(h, r.Profile, command, r.Row, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res)(ctx)
 		},
 	})
 	return changed(done, ch, err, res)
+}
+
+// composes renders the profile p of the home as boot would, and refuses it when it does
+// not compose (ADR-060 decision 17).
+func (l Library) composes(ctx context.Context, h Home, p string) (launch.Rendered, error) {
+	rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p})
+	if e := errorsOf(rd.Diagnostics); err == nil && e != "" {
+		err = refused("%s does not compose: %s", p, e)
+	}
+	return rd, err
 }
 
 // withEnabled returns the profile layer at p with the departure {id, enabled: on}: the
@@ -524,11 +527,16 @@ func field(n *yaml.Node, key string) *yaml.Node {
 }
 
 // Remove is plugin remove (ADR-047 decision 10): under the lock it refuses an id the
-// profile does not install and an artifact with a row that CannotDisable refuses,
-// detaches the bundle, then the lock entry, keeps the departures of the artifact's
-// rows in the profile layer and names them, and submits. Once the submission kept the
-// change, and no other profile names the id, it deletes bundles/<id>/ and
-// content/<id>/, so a restore always finds them (ADR-062 decision 11).
+// profile does not install; an id that is no installed artifact, a plugin id with its
+// kept files or its lock entry, which keeps every first-party bundle, aiops-cli and the
+// transport's among them, out of its reach (ADR-062 decision 12); and, before it
+// writes, a removal that takes away a row that CannotDisable refuses or the last
+// enabled providers of a bound or a required key (ADR-061 decision 17). It detaches the
+// bundle, then the lock entry, keeps the departures of the artifact's rows in the
+// profile layer and names them, keeps the change only when the changed profile renders
+// as boot would admit it, and submits. Once the submission kept the change, and no
+// other profile names the id, it deletes bundles/<id>/ and content/<id>/, so a restore
+// always finds them (ADR-062 decision 11).
 func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -555,15 +563,21 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 			if err != nil {
 				return nil, err
 			}
-			rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile})
-			for _, row := range rd.Composition.Rows {
-				if row.Origin == r.ID && err == nil {
-					err = def.CannotDisable(rd, r.Profile, row.ID)
-				}
+			locked, err := readLock(h, r.Profile)
+			if err != nil {
+				return nil, err
 			}
-			locked, lerr := readLock(h, r.Profile)
+			_, kerr := os.Stat(h.path("bundles/" + r.ID))
+			if strings.Count(r.ID, "/") != 1 || !fs.ValidPath(r.ID) || kerr != nil && !slices.ContainsFunc(locked, func(e def.Locked) bool { return e.ID == r.ID }) {
+				return nil, refused("%s is no installed artifact of %s: plugin remove takes the plugin id of one, with its kept files or its lock entry (ADR-047 decision 10; ADR-062 decision 12); edit profiles/%s/profile.yaml to drop another bundle",
+					r.ID, r.Profile, r.Profile)
+			}
+			rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile})
+			if err == nil {
+				err = cannotRemove(rd, r.Profile, r.ID)
+			}
 			lock, werr := withLock(h, r.Profile, r.ID, nil)
-			if err = errors.Join(err, lerr, werr); err != nil {
+			if err = errors.Join(err, werr); err != nil {
 				return nil, err
 			}
 			var items []map[string]any
@@ -581,6 +595,9 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 			return changes, nil
 		},
 		Submit: func(ctx context.Context) error {
+			if _, err := l.composes(ctx, h, r.Profile); err != nil {
+				return err
+			}
 			if err := submit(ctx); err != nil || res != nil {
 				return err
 			}
@@ -595,4 +612,29 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 		},
 	})
 	return changed(done, ch, err, res)
+}
+
+// cannotRemove refuses the removal of the installed artifact id from the profile p that
+// rd renders, which takes away the rows whose origin is id, when one of them is a row
+// that CannotDisable refuses, or when they are every enabled provider of a bound or a
+// required key (ADR-061 decision 17).
+func cannotRemove(rd launch.Rendered, p, id string) error {
+	lost := map[string]bool{}
+	for _, row := range rd.Composition.Rows {
+		if row.Origin != id {
+			continue
+		}
+		if err := def.CannotDisable(rd, p, row.ID); err != nil {
+			return err
+		}
+		lost[row.ID] = true
+	}
+	for _, k := range rd.Keys {
+		bound := k.Provider == "bound" || k.Consumer == "bound" || slices.Contains(rd.Required.Keys, k.Name)
+		if bound && len(k.Rows) > 0 && !slices.ContainsFunc(k.Rows, func(row string) bool { return !lost[row] }) {
+			return refused("the manager cannot remove %s from %s: its rows are the last enabled providers of the key %s; edit profiles/%s/profile.yaml and restart the process",
+				id, p, k.Name, p)
+		}
+	}
+	return nil
 }
