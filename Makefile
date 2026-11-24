@@ -43,9 +43,10 @@ check:
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
-	@# ADR-060 decision 35 and ADR-061: the operations library, the internal package of
-	@# plugins/operations, with the client of reload-socket (ADR-062 decision 16), 3,500
-	@# lines, provisional.
+	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 3,500
+	@# lines, provisional: the row package, internal/ skipped, and its internal package,
+	@# with the client of reload-socket (ADR-062 decision 16), each.
+	$(KC) lines plugins/operations 3500 provisional internal
 	$(KC) lines plugins/operations/internal/operations 3500 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt

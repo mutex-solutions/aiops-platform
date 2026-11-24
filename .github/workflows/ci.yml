@@ -101,13 +101,14 @@ jobs:
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
       - name: Plugin package, plugingen, aiopsctl and operations library line caps
         # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl and the
-        # operations library, provisional caps during S2a. The library is the internal
-        # package of plugins/operations and holds the client of reload-socket (ADR-061
-        # decision 41; ADR-062 decision 16).
+        # operations library, plugins/operations, provisional caps during S2a. The row
+        # package, internal/ skipped, and its internal package, which holds the client of
+        # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each.
         run: |
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
+          go run ./tools/kernelcheck lines plugins/operations 3500 provisional internal
           go run ./tools/kernelcheck lines plugins/operations/internal/operations 3500 provisional
       - name: pluginApi check
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
