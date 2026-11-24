@@ -367,8 +367,18 @@ func TestALineOfAnotherFormKeepsTheFiles(t *testing.T) {
 	}
 }
 
+// A socket path over the Linux limit is an error only where a process runs the profile,
+// since the check comes before the dial: with none the files stay and the outcome is
+// not-running (ADR-062 decisions 3 and 9).
 func TestARequestItCannotSendIsAnError(t *testing.T) {
 	long := filepath.Join(t.TempDir(), strings.Repeat("h", 120))
+	if err := os.MkdirAll(filepath.Join(long, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if o, err := ops.Submit(t.Context(), ops.Request{Home: long, Profile: "dev", Command: reload.CommandEnable}); err != nil || o.Kind != ops.NotRunning {
+		t.Errorf("long path and no process: %+v, %v; want not-running", o, err)
+	}
+	status(t, long, `{"phase":"running","profile":"dev","ready":true}`)
 	for _, r := range []ops.Request{
 		{Home: long, Profile: "dev", Command: reload.CommandEnable},
 		{Profile: "dev", Command: reload.CommandEnable},
