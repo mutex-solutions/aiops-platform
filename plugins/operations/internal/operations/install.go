@@ -489,6 +489,62 @@ func (l Library) composes(ctx context.Context, h Home, p string) (launch.Rendere
 // withEnabled returns the profile layer at p with the departure {id, enabled: on}: the
 // enabled of an item of the row is set, or such an item is appended.
 func withEnabled(p, id string, on bool) ([]byte, error) {
+	doc, err := itemsOf(p)
+	if err != nil {
+		return nil, err
+	}
+	seq := doc.Content[0]
+	value := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(on)}
+	for _, it := range seq.Content {
+		if v := field(it, "enabled"); v != nil && field(it, "id") != nil && field(it, "id").Value == id {
+			*v = *value
+			return yaml.Marshal(doc)
+		}
+	}
+	seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "id"}, {Kind: yaml.ScalarNode, Value: id}, {Kind: yaml.ScalarNode, Value: "enabled"}, value}})
+	return yaml.Marshal(doc)
+}
+
+// withoutEnabled returns the profile layer at p with the enabled field of every item
+// under group dropped, and an item left with its id alone, nil where nothing changes;
+// and, as JSON, each item under group that stays (ADR-047 decision 10).
+func withoutEnabled(p, group string) ([]byte, []string, error) {
+	doc, err := itemsOf(p)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed, kept := false, []string(nil)
+	doc.Content[0].Content = slices.DeleteFunc(doc.Content[0].Content, func(it *yaml.Node) bool {
+		if id := field(it, "id"); id == nil || !strings.HasPrefix(id.Value, group+":") {
+			return false
+		}
+		for i := 0; i+1 < len(it.Content); i += 2 {
+			if it.Content[i].Value == "enabled" {
+				it.Content, changed = slices.Delete(it.Content, i, i+2), true
+				break
+			}
+		}
+		if len(it.Content) == 2 {
+			changed = true
+			return true
+		}
+		var m map[string]any
+		_ = it.Decode(&m)
+		y, _ := json.Marshal(m)
+		kept = append(kept, string(y))
+		return false
+	})
+	if !changed {
+		return nil, kept, nil
+	}
+	b, err := yaml.Marshal(doc)
+	return b, kept, err
+}
+
+// itemsOf reads the profile layer at p as a list of items, an empty one where it is
+// absent.
+func itemsOf(p string) (*yaml.Node, error) {
 	b, err := os.ReadFile(p)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
@@ -500,20 +556,10 @@ func withEnabled(p, id string, on bool) ([]byte, error) {
 	if len(doc.Content) == 0 {
 		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.SequenceNode}}}
 	}
-	seq := doc.Content[0]
-	if seq.Kind != yaml.SequenceNode {
+	if doc.Content[0].Kind != yaml.SequenceNode {
 		return nil, refused("%s is not a list of items", p)
 	}
-	value := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(on)}
-	for _, it := range seq.Content {
-		if v := field(it, "enabled"); v != nil && field(it, "id") != nil && field(it, "id").Value == id {
-			*v = *value
-			return yaml.Marshal(&doc)
-		}
-	}
-	seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{
-		{Kind: yaml.ScalarNode, Value: "id"}, {Kind: yaml.ScalarNode, Value: id}, {Kind: yaml.ScalarNode, Value: "enabled"}, value}})
-	return yaml.Marshal(&doc)
+	return &doc, nil
 }
 
 // field returns the value of key in the mapping n, nil for none.
@@ -532,8 +578,10 @@ func field(n *yaml.Node, key string) *yaml.Node {
 // transport's among them, out of its reach (ADR-062 decision 12); and, before it
 // writes, a removal that takes away a row that CannotDisable refuses or the last
 // enabled providers of a bound or a required key (ADR-061 decision 17). It detaches the
-// bundle, then the lock entry, keeps the departures of the artifact's rows in the
-// profile layer and names them, keeps the change only when the changed profile renders
+// bundle, then the lock entry, drops the enabled field of every item of the profile
+// layer under the artifact's group and an item left with its id alone, so a later
+// install leaves those rows disabled, keeps and names the items with other fields,
+// keeps the change only when the changed profile renders
 // as boot would admit it, and submits. After a final result that shows the change, or
 // with no process on the profile, once the snapshot is dropped and when no profile
 // names the id, it deletes bundles/<id>/ and content/<id>/, so a restore always finds
@@ -548,7 +596,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 	}
 	var ch def.Change
 	var res error
-	list := "profiles/" + r.Profile + "/profile.yaml"
+	list, layer := "profiles/"+r.Profile+"/profile.yaml", "profiles/"+r.Profile+"/aiops.patch.yml"
 	submit := submitted(h, r.Profile, reload.CommandRemove, r.ID, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res)
 	done, err := h.Write(ctx, Write{Command: "plugin remove " + r.ID,
 		Plan: func() ([]Change, error) {
@@ -578,20 +626,19 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 				err = cannotRemove(rd, r.Profile, r.ID)
 			}
 			lock, werr := withLock(h, r.Profile, r.ID, nil)
-			if err = errors.Join(err, werr); err != nil {
+			patch, kept, perr := withoutEnabled(h.path(layer), def.Group(r.ID))
+			if err = errors.Join(err, werr, perr); err != nil {
 				return nil, err
 			}
-			var items []map[string]any
-			_ = readYAML(h.path("profiles/"+r.Profile+"/aiops.patch.yml"), &items)
-			for _, it := range items {
-				if id, _ := it["id"].(string); strings.HasPrefix(id, def.Group(r.ID)+":") {
-					y, _ := json.Marshal(it)
-					ch.Notes = append(ch.Notes, fmt.Sprintf("kept in profiles/%s/aiops.patch.yml: %s", r.Profile, y))
-				}
+			for _, y := range kept {
+				ch.Notes = append(ch.Notes, fmt.Sprintf("kept in %s: %s", layer, y))
 			}
 			changes := []Change{{Path: list, Data: b}}
 			if slices.ContainsFunc(locked, func(e def.Locked) bool { return e.ID == r.ID }) {
 				changes = append(changes, Change{Path: "profiles/" + r.Profile + "/plugins.lock", Data: lock})
+			}
+			if patch != nil {
+				changes = append(changes, Change{Path: layer, Data: patch})
 			}
 			return changes, nil
 		},
