@@ -101,6 +101,7 @@ type build struct {
 	keyID    string // the release key's id, for a release's second phase
 	scratch  string
 	recorded map[string]string // go.sum line key ("<path> <version>[/go.mod]") to hash
+	served   map[string]string // a release build: the go.sum lines of the modules it serves
 	plugins  []tablePlugin
 	progress io.Writer
 }
@@ -197,10 +198,13 @@ func (b *build) inputs() error {
 		if err != nil || !semver.IsValid(q.Root) {
 			return errors.Join(err, fmt.Errorf("a release build names the version of the root module, not %q", q.Root))
 		}
+		var errs []error
+		for _, m := range sdkModules {
+			errs = append(errs, b.goSum(module.Version{Path: m, Version: q.Root}))
+		}
+		b.served, b.recorded = b.recorded, map[string]string{} // checked as go writes them (resolve)
 		if s := q.Signed; s != nil {
-			var bundle struct {
-				MediaType string `json:"mediaType"`
-			}
+			var bundle struct{ MediaType string }
 			var kerr, berr error
 			b.keyID, kerr = keyID(s.Key)
 			_, derr := readDefinition(s.Definition)
@@ -208,9 +212,9 @@ func (b *build) inputs() error {
 			if json.Unmarshal(s.Bundle, &bundle) != nil || bundle.MediaType != bundleType {
 				berr = fmt.Errorf("the bundle of the manifest is not a Sigstore bundle of media type %s (ADR-020 decision 2)", bundleType)
 			}
-			return errors.Join(kerr, derr, merr, berr)
+			errs = append(errs, kerr, derr, merr, berr)
 		}
-		return nil
+		return errors.Join(errs...)
 	}
 	raw, err := os.ReadFile(q.DistYAML)
 	if err == nil {
@@ -278,8 +282,7 @@ func (b *build) module(ctx context.Context) error {
 	_ = f.AddGoStmt("1.26.0")
 	if b.release == nil {
 		_ = f.AddRequire(rootModule, b.q.Root)
-	}
-	if b.release != nil {
+	} else {
 		for _, p := range b.release.Pins {
 			if p.Sum != "" && p.Path != Toolchain {
 				_ = f.AddRequire(p.Path, p.Version)
@@ -319,11 +322,32 @@ func (b *build) module(ctx context.Context) error {
 	return nil
 }
 
+// goSum records the lines of the go.sum inside the module zip of m in the module
+// source, if it holds one: the file its author resolved with (ADR-044 decision 8).
+func (b *build) goSum(m module.Version) error {
+	z, err := zip.OpenReader(b.zip(m))
+	if err != nil {
+		return fmt.Errorf("module %s %s: %w", m.Path, m.Version, err)
+	}
+	defer z.Close()
+	i := slices.IndexFunc(z.File, func(f *zip.File) bool { return f.Name == m.String()+"/go.sum" })
+	if i < 0 {
+		return nil
+	}
+	data, err := readZip(z.File[i])
+	for _, l := range strings.Split(string(data), "\n") {
+		if fs := strings.Fields(l); len(fs) == 3 && err == nil {
+			err = b.record(fs[0]+" "+fs[1], fs[2], "the go.sum of "+m.Path)
+		}
+	}
+	return err
+}
+
 // plugin reads the module zip of a plugin of dist.yaml from the module source, checked
 // against the sum dist.yaml lists: it records the sum and the lines of the zip's go.sum,
-// the file its author resolved with, and adds each package of the module that holds a
-// plugin.yaml to the module table. Two sources that record different hashes for one
-// version fail the build (ADR-044 decision 8).
+// and adds each package of the module that holds a plugin.yaml to the module table. Two
+// sources that record different hashes for one version fail the build (ADR-044
+// decision 8).
 func (b *build) plugin(p module.Version) error {
 	file := b.zip(p)
 	got, err := dirhash.HashZip(file, dirhash.Hash1)
@@ -333,7 +357,7 @@ func (b *build) plugin(p module.Version) error {
 	if want := b.site.Sums[p.Path]; got != want {
 		return fmt.Errorf("the module source serves %s %s with the sum %s, and dist.yaml lists %s (ADR-044 decision 8)", p.Path, p.Version, got, want)
 	}
-	if err := b.record(p.Path+" "+p.Version, got, "dist.yaml"); err != nil {
+	if err := errors.Join(b.record(p.Path+" "+p.Version, got, "dist.yaml"), b.goSum(p)); err != nil {
 		return err
 	}
 	z, err := zip.OpenReader(file)
@@ -346,20 +370,6 @@ func (b *build) plugin(p module.Version) error {
 	for _, f := range z.File {
 		rel := strings.TrimPrefix(f.Name, prefix)
 		dirs[filepath.ToSlash(filepath.Dir(rel))] = append(dirs[filepath.ToSlash(filepath.Dir(rel))], f)
-		if rel != "go.sum" {
-			continue
-		}
-		data, err := readZip(f)
-		if err != nil {
-			return err
-		}
-		for _, l := range strings.Split(string(data), "\n") {
-			if fs := strings.Fields(l); len(fs) == 3 {
-				if err := b.record(fs[0]+" "+fs[1], fs[2], "the go.sum of "+p.Path); err != nil {
-					return err
-				}
-			}
-		}
 	}
 	for _, dir := range sortedKeys(dirs) {
 		var manifest []byte
@@ -443,7 +453,10 @@ func (b *build) record(key, hash, source string) error {
 // compiled ones' zips and the graph's go.mod files, checking each against the go.sum
 // lines the sources record; a hash that no source records is the module source's, and
 // is returned to be printed and recorded as checked against nothing (ADR-044 decision
-// 8). go completes the scratch go.mod with the requirements of the modules that give
+// 8), but in a release build that of a module it serves, its own source. A release
+// build writes no line before go runs and checks each that go writes against the go.sum
+// of the modules it serves, before anything compiles, so its pins are the lines of its
+// own build. go completes the scratch go.mod with the requirements of the modules that give
 // packages, whose versions the strict-version check then holds to the release.
 func (b *build) resolve(ctx context.Context) ([]string, error) {
 	args := []string{"list", "-mod=mod", "-deps", "-test", "-tags=grpcnotrace", "./..."}
@@ -460,7 +473,12 @@ func (b *build) resolve(ctx context.Context) ([]string, error) {
 	var out []string
 	for _, l := range strings.Split(string(sum), "\n") {
 		if fs := strings.Fields(l); len(fs) == 3 {
-			if _, ok := b.recorded[fs[0]+" "+fs[1]]; !ok && b.release != nil {
+			have, served := b.served[fs[0]+" "+fs[1]]
+			if served && have != fs[2] {
+				return nil, fmt.Errorf("%s@%s: checksum mismatch: the module source serves %s, and the go.sum of a module the release serves records %s (ADR-044 decision 8)", fs[0], fs[1], fs[2], have)
+			}
+			own := b.release == nil && slices.Contains(sdkModules, fs[0]) && strings.TrimSuffix(fs[1], "/go.mod") == b.q.Root
+			if _, ok := b.recorded[fs[0]+" "+fs[1]]; !ok && !served && !own {
 				out = append(out, l)
 			}
 			b.recorded[fs[0]+" "+fs[1]] = fs[2]
