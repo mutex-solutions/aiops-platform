@@ -175,12 +175,78 @@ func TestToolboxRenderRefuses(t *testing.T) {
 		"relative patch":   {launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{"patch.yml"}}, "not an absolute path"},
 		"unknown dump":     {launch.RenderRequest{Home: "/h", Profile: "p", Dumps: []string{"--dump-all"}}, "not a dump"},
 		"bad role":         {launch.RenderRequest{Home: "/h", Profile: "p", Roles: []string{"root"}}, `role "root"`},
-		"no profile":       {launch.RenderRequest{Home: "/h", Profile: "nope"}, "profile.yaml"},
 		"reserved row":     {launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{"/h/reserved.yml"}}, "reserved"},
 		"another current":  {launch.RenderRequest{Home: "/x/other", Profile: "p"}, "ADR-061 decision 26"},
 		"torn current":     {launch.RenderRequest{Home: "/x/torn", Profile: "p"}, "verified/current"},
 	} {
 		if _, err := tb.Render(t.Context(), tc.q); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v, want %q", name, err, tc.want)
+		}
+	}
+}
+
+// A composition that stops on a file is a refused render whose diagnostic names the file
+// and the line, so profile render prints it and profile sanitize finds the layer file of
+// the home that stops a boot (ADR-061 decision 41).
+func TestToolboxRenderNamesTheFileThatStopsComposition(t *testing.T) {
+	b := newBox(t)
+	tb := b.start(t, nil)
+	for name, f := range b.files {
+		b.extra["broken/"+name] = f
+	}
+	b.extra["broken/profiles/p/aiops.patch.yml"] = &fstest.MapFile{Data: []byte("- {id: user,\n  enabled: [\n")}
+	for _, c := range []struct {
+		q    launch.RenderRequest
+		file string
+	}{
+		{launch.RenderRequest{Home: "/x/broken", Profile: "p"}, "profiles/p/aiops.patch.yml"},
+		{launch.RenderRequest{Home: "/h", Profile: "nope"}, "profiles/nope/profile.yaml"},
+	} {
+		r, err := tb.Render(t.Context(), c.q)
+		i := slices.IndexFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return !d.Warning && d.File == c.file })
+		if err != nil || i < 0 || r.Diagnostics[i].Check != "compose" || len(r.Composition.Rows) > 0 || r.Distribution != digestOf(b.opt.Signed) {
+			t.Errorf("%s: %+v, %v; want an error diagnostic of compose on %s", c.q.Home, r, err, c.file)
+		}
+	}
+}
+
+// With Against a render reads the module table and the bindings from that signed
+// manifest, as `aiopsctl profile render --dist` does, and holds a home to that manifest's
+// digest instead of the embedded one (ADR-061 decision 26).
+func TestToolboxRenderAgainst(t *testing.T) {
+	b := newBox(t)
+	tb := b.start(t, nil)
+	against := bytes.Replace(b.opt.Signed, []byte("serves:"), []byte("site: {consumers: {profileContext: [t/probe]}}\nserves:"), 1)
+	b.extra["dist/distribution.yaml"] = &fstest.MapFile{Data: against}
+	b.extra["bad.yaml"] = &fstest.MapFile{Data: []byte("x: [")}
+	for name, f := range b.files {
+		if !strings.HasPrefix(name, "verified/") && name != "trust.yaml" {
+			b.extra["other/"+name] = f
+		}
+	}
+	other, _ := trustedHome(against)
+	for name, f := range other {
+		b.extra["other/"+name] = f
+	}
+	ctx := t.Context()
+	r, err := tb.Render(ctx, launch.RenderRequest{Profile: "shipped", Against: "/x/dist/distribution.yaml"})
+	if err != nil || r.Distribution != digestOf(against) || !slices.Equal(r.Departures, []string{"the site adds consumers of profileContext: t/probe"}) {
+		t.Errorf("no home: distribution %s, departures %q, %v", r.Distribution, r.Departures, err)
+	}
+	r, err = tb.Render(ctx, launch.RenderRequest{Home: "/x/other", Profile: "p", Against: "/x/dist/distribution.yaml", Dumps: []string{"--dump"}})
+	if err != nil || len(errorTexts(r.Diagnostics)) > 0 || !slices.Equal(rowIDs(r.Composition), []string{"store", "user", "probe"}) || r.Dumps["--dump"] == "" {
+		t.Errorf("a home that runs it: rows %v, errors %v, %v", rowIDs(r.Composition), errorTexts(r.Diagnostics), err)
+	}
+	for name, tc := range map[string]struct {
+		q    launch.RenderRequest
+		want string
+	}{
+		"a home that runs another": {launch.RenderRequest{Home: "/h", Profile: "p", Against: "/x/dist/distribution.yaml"}, "ADR-061 decision 26"},
+		"relative":                 {launch.RenderRequest{Profile: "p", Against: "dist/distribution.yaml"}, "not an absolute path"},
+		"missing":                  {launch.RenderRequest{Profile: "p", Against: "/x/none.yaml"}, "none.yaml"},
+		"malformed":                {launch.RenderRequest{Profile: "p", Against: "/x/bad.yaml"}, "/x/bad.yaml"},
+	} {
+		if _, err := tb.Render(ctx, tc.q); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: %v, want %q", name, err, tc.want)
 		}
 	}

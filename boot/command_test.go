@@ -139,3 +139,39 @@ func TestCommandUsageOfTheLauncherIsInternal(t *testing.T) {
 		t.Fatalf("exit %d; stderr:\n%s", got, f.errb.String())
 	}
 }
+
+// Under Command the server rule is off, since the cli profile is not a server profile and
+// its rows state no roles; aiops keeps the rule for every run (ADR-061 decision 25).
+func TestCommandTurnsTheServerRuleOff(t *testing.T) {
+	bundle := happyBundle + "    - {id: command, plugin: t/command}\n"
+	f := newFixture(t, bundle, commandExit(ExitOK))
+	bindLaunch(f, "t/command")
+	f.opt.Command = true
+	if got := f.run(t.Context()); got != ExitOK {
+		t.Fatalf("exit %d; stderr:\n%s", got, f.errb.String())
+	}
+	f = newFixture(t, bundle, commandExit(ExitOK))
+	bindLaunch(f, "t/command")
+	if got := f.run(t.Context()); got != ExitRefused || !strings.Contains(f.errb.String(), "roles") {
+		t.Fatalf("exit %d without Command; stderr:\n%s", got, f.errb.String())
+	}
+}
+
+// Under Command the kernel logs at the warning level, so stderr carries the warnings and
+// the errors of the rows and not their progress (ADR-061 decision 25).
+func TestCommandLogsAtTheWarningLevel(t *testing.T) {
+	logs := toy(toySpec{id: "t/logs", needs: []kernel.AnyKey{kernel.LoggerKey}, apply: func(c *kernel.Context, _ any) error {
+		l := kernel.LoggerKey.Of(c).For(c)
+		l.Info("progress of the row")
+		l.Warn("warning of the row")
+		return nil
+	}})
+	for _, command := range []bool{true, false} {
+		f := commandFixture(t, ExitOK, logs)
+		f.opt.Command = command
+		f.run(t.Context())
+		if got := f.errb.String(); !strings.Contains(got, "warning of the row") || strings.Contains(got, "progress of the row") == command {
+			t.Errorf("Command %v: stderr:\n%s", command, got)
+		}
+	}
+}

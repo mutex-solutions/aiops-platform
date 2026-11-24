@@ -127,7 +127,10 @@ type Bundle struct {
 // profiles are composed alone; Bundles is "" for the home's. Roles, Server and Dumps
 // are the flags of profile render, each dump by its flag (--dump, --dump-hooks,
 // --dump-config-schema). Append is the bundle of an artifact, appended to the profile's
-// bundles as install appends it (ADR-047 decision 17); a zero ID appends none.
+// bundles as install appends it (ADR-047 decision 17); a zero ID appends none. Against is
+// the path of a signed distribution manifest to render against instead of the embedded
+// one, its module table read from the manifests it holds, "" for none: the flag --dist of
+// profile render.
 type RenderRequest struct {
 	Home, Profile, Bundles string
 	Patches                []string
@@ -135,6 +138,7 @@ type RenderRequest struct {
 	Server                 bool
 	Dumps                  []string
 	Append                 Bundle
+	Against                string
 }
 
 // KeyProviders is one key of a rendered profile: its classes ("open" or "bound") and
