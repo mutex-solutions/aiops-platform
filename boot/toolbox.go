@@ -28,6 +28,7 @@ type toolbox struct {
 	files   fs.FS
 	shipped fs.FS
 	signed  []byte
+	lint    ManifestLint
 }
 
 var _ launch.Toolbox = (*toolbox)(nil)
@@ -375,9 +376,10 @@ func verdictOf(g GateResult, mine map[string]bool, rebuild bool) launch.Verdict 
 	return v
 }
 
-// ReadManifest is boot's reader in strict mode on dir/plugin.yaml. A manifest the reader
-// refuses is a diagnostic of step 1 of plugin check, not an error. The lints of step 1
-// read data that aiopsctl hands in (ADR-061 decision 21) and arrive with it.
+// ReadManifest is boot's reader in strict mode on dir/plugin.yaml, then the lints of
+// step 1 on the data that aiopsctl hands in (ADR-061 decision 21). A manifest the reader
+// refuses, and each finding of a lint, is a diagnostic of step 1 of plugin check, not an
+// error.
 func (t *toolbox) ReadManifest(ctx context.Context, q launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
 	if err := t.ready(ctx); err != nil {
 		return launch.ManifestSummary{}, nil, err
@@ -400,13 +402,11 @@ func (t *toolbox) ReadManifest(ctx context.Context, q launch.ManifestRequest) (l
 		}
 		return launch.ManifestSummary{}, []launch.Diagnostic{d}, nil
 	}
-	return m.Summary(), nil, nil
-}
-
-// ManifestLint is the data of the lints of step 1 of plugin check.
-type ManifestLint struct {
-	Licenses     map[string]bool
-	Marks, Tiers []string
+	var ds []launch.Diagnostic
+	for _, text := range t.lint.lint(t.files, dir, m) {
+		ds = append(ds, launch.Diagnostic{Check: "1", File: "/" + file, Text: text})
+	}
+	return m.Summary(), ds, nil
 }
 
 // Summary returns the six fields of m that the toolbox's ReadManifest hands out.
@@ -475,9 +475,16 @@ func (t *toolbox) Release(ctx context.Context, against string) (launch.Release, 
 		if err != nil || !m.Instantiable {
 			continue
 		}
-		p := launch.ReleasePlugin{ID: id}
+		p := launch.ReleasePlugin{ID: id, Feeds: map[string][]string{}}
 		if xs, _ := m.ConfigSchema["examples"].([]any); len(xs) > 0 {
 			p.Example = xs[0]
+		}
+		// ponytail: a registry maps to the definition of its name, as every registry of
+		// S2a does.
+		for _, k := range m.Registers {
+			if vs, ok := m.Requires.Definitions[k.Key]; ok {
+				p.Feeds[k.Key] = vs
+			}
 		}
 		out.Plugins = append(out.Plugins, p)
 	}
