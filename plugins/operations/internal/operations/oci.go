@@ -114,22 +114,28 @@ func layer(m ocispec.Manifest, mediaType string) *ocispec.Descriptor {
 	return &m.Layers[i]
 }
 
+// referrer is a referrer manifest with its descriptor.
+type referrer struct {
+	ocispec.Manifest
+	desc ocispec.Descriptor
+}
+
 // referrers returns, sorted by digest, the image manifests of artifactType in src
 // whose subject is d.
-func referrers(ctx context.Context, src content.ReadOnlyGraphStorage, d ocispec.Descriptor, artifactType string) ([]ocispec.Manifest, error) {
+func referrers(ctx context.Context, src content.ReadOnlyGraphStorage, d ocispec.Descriptor, artifactType string) ([]referrer, error) {
 	refs, err := registry.Referrers(ctx, src, d, artifactType)
 	if err != nil {
 		return nil, err
 	}
 	slices.SortFunc(refs, func(a, b ocispec.Descriptor) int { return strings.Compare(string(a.Digest), string(b.Digest)) })
-	var out []ocispec.Manifest
+	var out []referrer
 	for _, r := range refs {
 		m, err := manifest(ctx, src, r)
 		if err != nil {
 			return nil, err
 		}
 		if m.Subject != nil && m.Subject.Digest == d.Digest && m.ArtifactType == artifactType {
-			out = append(out, m)
+			out = append(out, referrer{m, r})
 		}
 	}
 	return out, nil
@@ -142,41 +148,53 @@ type blob struct {
 	annotations map[string]string
 }
 
-// pushBlob pushes data to dst unless it holds it, and returns its descriptor.
-func pushBlob(ctx context.Context, dst content.Pusher, mediaType string, data []byte) (ocispec.Descriptor, error) {
-	d := content.NewDescriptorFromBytes(mediaType, data)
+// pushBlob pushes data to dst as d unless dst holds it.
+func pushBlob(ctx context.Context, dst content.Pusher, d ocispec.Descriptor, data []byte) error {
 	if err := dst.Push(ctx, d, bytes.NewReader(data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
-		return d, err
+		return err
 	}
-	return d, nil
+	return nil
 }
 
-// pushArtifact pushes to dst an OCI image manifest of artifactType with the empty
-// config and the layers, a referrer of subject when it is not nil, and returns its
-// descriptor with its artifactType. It writes no time, so the same layers give the
-// same digest.
-func pushArtifact(ctx context.Context, dst content.Pusher, artifactType string, subject *ocispec.Descriptor, annotations map[string]string, layers ...blob) (ocispec.Descriptor, error) {
+// manifestOf returns the OCI image manifest of artifactType with the empty config and
+// the layers, a referrer of subject when it is not nil, and its descriptor, which
+// carries its artifactType. It holds no time, so the same layers give the same digest.
+func manifestOf(artifactType string, subject *ocispec.Descriptor, annotations map[string]string, layers []blob) (ocispec.Descriptor, []byte, error) {
 	m := ocispec.Manifest{MediaType: ocispec.MediaTypeImageManifest, ArtifactType: artifactType, Config: ocispec.DescriptorEmptyJSON,
 		Layers: []ocispec.Descriptor{}, Subject: subject, Annotations: annotations}
 	m.SchemaVersion = 2
-	_, err := pushBlob(ctx, dst, ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
 	for _, l := range layers {
-		var d ocispec.Descriptor
-		if err == nil {
-			d, err = pushBlob(ctx, dst, l.mediaType, l.data)
-		}
+		d := content.NewDescriptorFromBytes(l.mediaType, l.data)
 		d.Annotations = l.annotations
 		m.Layers = append(m.Layers, d)
 	}
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
 	b, err := json.Marshal(m)
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
-	d, err := pushBlob(ctx, dst, m.MediaType, b)
+	d := content.NewDescriptorFromBytes(m.MediaType, b)
 	d.ArtifactType = artifactType
+	return d, b, err
+}
+
+// push pushes to dst the empty config, the layers and then the manifest raw as d.
+func push(ctx context.Context, dst content.Pusher, d ocispec.Descriptor, raw []byte, layers []blob) error {
+	err := pushBlob(ctx, dst, ocispec.DescriptorEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
+	for _, l := range layers {
+		if err == nil {
+			err = pushBlob(ctx, dst, content.NewDescriptorFromBytes(l.mediaType, l.data), l.data)
+		}
+	}
+	if err == nil {
+		err = pushBlob(ctx, dst, d, raw)
+	}
+	return err
+}
+
+// pushArtifact pushes to dst the artifact that manifestOf describes and returns its
+// descriptor.
+func pushArtifact(ctx context.Context, dst content.Pusher, artifactType string, subject *ocispec.Descriptor, annotations map[string]string, layers ...blob) (ocispec.Descriptor, error) {
+	d, raw, err := manifestOf(artifactType, subject, annotations, layers)
+	if err == nil {
+		err = push(ctx, dst, d, raw, layers)
+	}
 	return d, err
 }
 
@@ -193,10 +211,10 @@ func distributions(ctx context.Context, r *remote.Repository, img ocispec.Descri
 	var out []distribution
 	for _, m := range ms {
 		var d distribution
-		if l := layer(m, def.DistributionLayer); l != nil {
+		if l := layer(m.Manifest, def.DistributionLayer); l != nil {
 			d.manifest, err = fetch(ctx, r, *l)
 		}
-		if l := layer(m, bundleType); l != nil && err == nil {
+		if l := layer(m.Manifest, bundleType); l != nil && err == nil {
 			d.bundle, err = fetch(ctx, r, *l)
 		}
 		if err != nil {

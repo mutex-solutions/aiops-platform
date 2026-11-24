@@ -29,4 +29,4 @@ requires:
   pluginApi: "0.3"
   definitions:
     commands: ["0.1"]
-    operations: ["0.1"]
+    operations: ["0.2"]

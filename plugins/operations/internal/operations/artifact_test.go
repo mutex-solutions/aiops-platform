@@ -19,6 +19,8 @@ import (
 	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/content/oci"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
@@ -113,8 +115,9 @@ func packSummary() launch.ManifestSummary {
 	return launch.ManifestSummary{ID: "acme/connector-x", Version: "0.1.0", Definitions: map[string][]string{"echoers": {"0.1"}}}
 }
 
-// layout reads the OCI image layout dir: the descriptor of its one manifest in
-// index.json, the manifest, and its blobs by digest.
+// layout reads the OCI image layout dir: the descriptor of the one manifest in
+// index.json of the artifact type of a plugin (ADR-047 decision 1), the manifest, and
+// its blobs by digest.
 func layout(t *testing.T, dir string) (ocispec.Descriptor, ocispec.Manifest, func(ocispec.Descriptor) []byte) {
 	t.Helper()
 	blob := func(d ocispec.Descriptor) []byte {
@@ -135,14 +138,21 @@ func layout(t *testing.T, dir string) (ocispec.Descriptor, ocispec.Manifest, fun
 	if err == nil {
 		err = json.Unmarshal(b, &index)
 	}
-	if err != nil || len(index.Manifests) != 1 {
-		t.Fatalf("index.json %s, %v; want one manifest", b, err)
+	var found []ocispec.Descriptor
+	for _, d := range index.Manifests {
+		var m ocispec.Manifest
+		if json.Unmarshal(blob(d), &m) == nil && m.ArtifactType == "application/vnd.aiops.plugin.v1" {
+			found = append(found, d)
+		}
+	}
+	if err != nil || len(found) != 1 {
+		t.Fatalf("index.json %s, %v; want one manifest of the artifact type of a plugin", b, err)
 	}
 	var m ocispec.Manifest
-	if err := json.Unmarshal(blob(index.Manifests[0]), &m); err != nil {
+	if err := json.Unmarshal(blob(found[0]), &m); err != nil {
 		t.Fatal(err)
 	}
-	return index.Manifests[0], m, blob
+	return found[0], m, blob
 }
 
 // statements returns the referrers of artifactType of the manifest d that the store
@@ -476,18 +486,26 @@ func TestVerifyRefusesAnotherSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other := filepath.Join(t.TempDir(), "other")
-	if err := os.CopyFS(other, os.DirFS(out)); err != nil {
+	// The layout keeps the signature and takes, in place of the attestation, a referrer
+	// of the same form whose statement names acme/other.
+	s, err := oci.NewWithContext(t.Context(), out)
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range layoutReferrers(t, other, desc, "application/vnd.dev.sigstore.bundle.v0.3+json") {
+	for _, r := range layoutReferrers(t, out, desc, "application/vnd.dev.sigstore.bundle.v0.3+json") {
 		if r.Annotations["dev.sigstore.bundle.predicateType"] != "https://sigstore.dev/cosign/sign/v1" {
-			if err := os.WriteFile(filepath.Join(other, "blobs", "sha256", r.Layers[0].Digest.Encoded()), b, 0o644); err != nil {
+			raw, _ := json.Marshal(r)
+			if err := s.Delete(t.Context(), content.NewDescriptorFromBytes(ocispec.MediaTypeImageManifest, raw)); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	if _, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: other, Home: home}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "check 10") {
+	ann := map[string]string{"dev.sigstore.bundle.predicateType": "https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1"}
+	if _, err := pushArtifact(t.Context(), s, "application/vnd.dev.sigstore.bundle.v0.3+json", &desc, ann,
+		blob{"application/vnd.dev.sigstore.bundle.v0.3+json", b, nil}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "check 10") {
 		t.Errorf("an attestation of another subject: %v, want ErrRefused naming check 10", err)
 	}
 }

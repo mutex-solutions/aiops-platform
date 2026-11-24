@@ -2,16 +2,17 @@
 
 // Package fake is the in-memory engine of the operations definition (ADR-061
 // decision 18): it holds each home in memory, keeps the key pairs it generates and the
-// signatures it makes, and writes no file. It reads a file only where a request names
-// one that it did not make: a public key file of trust add. It takes from its config
-// what it cannot compute without the libraries of the operations row: a holder of every
-// write lock, an interrupted write in every home, whether a process runs the profile,
-// what the launcher's toolbox ships and renders, and the distribution manifest of each
-// image a registry holds. On that model it keeps the rules that do not concern files: the forms and
-// refusals of trust add, the default root, the refusals of dist use, the copy of a
-// shipped profile, the restore of an interrupted write before the next one, and a lock
-// with its wait. It imports the standard library, sdk/kernel and its
-// definition only.
+// signatures it makes, and the artifacts it packs, and writes no file. It reads a file
+// only where a request names one that it did not make: a public key file of trust add,
+// and the directory and the layout of plugin pack. It takes from its config what it
+// cannot compute without the libraries of the operations row: a holder of every write
+// lock, an interrupted write in every home, whether a process runs the profile, what
+// the launcher's toolbox ships and renders, the distribution manifest of each image a
+// registry holds, and what a plugin directory packs to. On that model it keeps the
+// rules that do not concern files: the forms and refusals of trust add, the default
+// root, the refusals of dist use and of plugin verify, the copy of a shipped profile,
+// the restore of an interrupted write before the next one, and a lock with its wait.
+// It imports the standard library, sdk/kernel and its definition only.
 package fake
 
 import (
@@ -65,12 +66,13 @@ type Config struct {
 
 // Fake is the in-memory engine.
 type Fake struct {
-	cfg    Config
-	mu     sync.Mutex
-	homes  map[string]*home
-	keys   map[string]key       // the key files it generated, by path
-	images map[string]signature // the images it signed, by reference
-	calls  []string
+	cfg       Config
+	mu        sync.Mutex
+	homes     map[string]*home
+	keys      map[string]key       // the key files it generated, by path
+	images    map[string]signature // the images it signed, by reference
+	artifacts map[string]*artifact // the artifacts it packed, by layout and by spec
+	calls     []string
 }
 
 type home struct {
@@ -107,7 +109,8 @@ func NewWith(cfg Config) (*Fake, kernel.Plugin) {
 	if cfg.LockWait == 0 {
 		cfg.LockWait = 2 * time.Minute
 	}
-	f := &Fake{cfg: cfg, homes: map[string]*home{}, keys: map[string]key{}, images: map[string]signature{}}
+	f := &Fake{cfg: cfg, homes: map[string]*home{}, keys: map[string]key{}, images: map[string]signature{},
+		artifacts: map[string]*artifact{}}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/operations-fake",
 		Provides: []kernel.AnyKey{operations.Key},

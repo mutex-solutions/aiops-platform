@@ -18,6 +18,7 @@ require (
 	github.com/sigstore/sigstore v1.10.8
 	github.com/sigstore/sigstore-go v1.3.0
 	go.yaml.in/yaml/v3 v3.0.6
+	golang.org/x/mod v0.42.0
 	oras.land/oras-go/v2 v2.7.0
 )
 
@@ -87,7 +88,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

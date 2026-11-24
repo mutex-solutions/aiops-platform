@@ -107,8 +107,8 @@ plugins:
         pluginApi: "0.3"
         definitions:
           commands: ["0.1"]
-          operations: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"0d7e5a37d4d12d6ec9f9c58869795d77e8caf1471b0e2a50f0aa2d824d3ff0e1"},"name":"aiops/command-dist@0.1.0"}]}'
+          operations: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"43d53e351351c18bae4fe12273e5c740ce2f016859bd70fd4b0b7c722a3f8e7b"},"name":"aiops/command-dist@0.1.0"}]}'
   aiops/command-key:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-key
     manifest: |
@@ -143,8 +143,8 @@ plugins:
         pluginApi: "0.3"
         definitions:
           commands: ["0.1"]
-          operations: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"a36dddfb834786702aa8db8ed1b67b40eca4fe7d00ed6bd4374c53afc4fc14ae"},"name":"aiops/command-key@0.1.0"}]}'
+          operations: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"6826478ca91eeb97c45d42ef3878fb3a024fa73c08603c6b0509b9ad9ce439b6"},"name":"aiops/command-key@0.1.0"}]}'
   aiops/command-plugin:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-plugin
     manifest: |
@@ -213,8 +213,8 @@ plugins:
         pluginApi: "0.3"
         definitions:
           commands: ["0.1"]
-          operations: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"c7864688611c74fa8b4fce2f22509c8e6cc7f68bf0ef1465073349e98a9be8a3"},"name":"aiops/command-profile@0.1.0"}]}'
+          operations: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9a1c150349bc2937cb8d61ae6f20db75933f4d2d453f3670c2ccd90904d6e26e"},"name":"aiops/command-profile@0.1.0"}]}'
   aiops/command-trust:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-trust
     manifest: |
@@ -249,8 +249,8 @@ plugins:
         pluginApi: "0.3"
         definitions:
           commands: ["0.1"]
-          operations: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"8bb214087c0edc4f058c68424d0d4966b55154f71699ddb1b11ba80cf4481300"},"name":"aiops/command-trust@0.1.0"}]}'
+          operations: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"operations":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"49581ab4891d13e3431e87a08cf43cf93d0b01af2e88aaa57d21fcc570fba670"},"name":"aiops/command-trust@0.1.0"}]}'
   aiops/config-refs:
     package: github.com/mutex-solutions/aiops-platform/plugins/config-refs
     manifest: |
@@ -363,8 +363,8 @@ plugins:
         pluginApi: "0.3"
         definitions:
           launch: ["0.2"]
-          operations: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"d926a58b4b3abbf12bf270bd5b2a3e9a3475c58b353ed39e727c0e32b1fabce2"},"name":"aiops/operations@0.1.0"}]}'
+          operations: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.2","suite":2,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"f17e60ca40fa2594480a4f75be15973fa22615e16082b8f8b67b884e7e2ef007"},"name":"aiops/operations@0.1.0"}]}'
   aiops/readiness:
     package: github.com/mutex-solutions/aiops-platform/plugins/readiness
     manifest: |
@@ -1077,8 +1077,13 @@ packages:
   - golang.org/x/crypto/scrypt
   - golang.org/x/crypto/ssh
   - golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+  - golang.org/x/mod/internal/lazyregexp
+  - golang.org/x/mod/modfile
+  - golang.org/x/mod/module
   - golang.org/x/mod/semver
+  - golang.org/x/mod/sumdb/dirhash
   - golang.org/x/mod/sumdb/note
+  - golang.org/x/mod/zip
   - golang.org/x/net/http/httpguts
   - golang.org/x/net/http2
   - golang.org/x/net/http2/hpack
@@ -1215,14 +1220,26 @@ packages:
   - k8s.io/klog/v2/internal/serialize
   - k8s.io/klog/v2/internal/severity
   - k8s.io/klog/v2/internal/sloghandler
+  - oras.land/oras-go/v2
   - oras.land/oras-go/v2/content
+  - oras.land/oras-go/v2/content/oci
   - oras.land/oras-go/v2/errdef
   - oras.land/oras-go/v2/internal/cas
+  - oras.land/oras-go/v2/internal/container/set
+  - oras.land/oras-go/v2/internal/copyutil
   - oras.land/oras-go/v2/internal/descriptor
   - oras.land/oras-go/v2/internal/docker
+  - oras.land/oras-go/v2/internal/fs/tarfs
+  - oras.land/oras-go/v2/internal/graph
   - oras.land/oras-go/v2/internal/httputil
+  - oras.land/oras-go/v2/internal/interfaces
   - oras.land/oras-go/v2/internal/ioutil
+  - oras.land/oras-go/v2/internal/manifestutil
+  - oras.land/oras-go/v2/internal/platform
+  - oras.land/oras-go/v2/internal/registryutil
+  - oras.land/oras-go/v2/internal/resolver
   - oras.land/oras-go/v2/internal/spec
+  - oras.land/oras-go/v2/internal/status
   - oras.land/oras-go/v2/internal/syncutil
   - oras.land/oras-go/v2/registry
   - oras.land/oras-go/v2/registry/remote
@@ -1680,8 +1697,9 @@ serves:
             access: sealed
             remote: "no"
     operations:
-      - version: "0.1"
-        suite: 1
+      - version: "0.2"
+        compatibleFrom: "0.1"
+        suite: 2
         classes:
           operations:
             provider: open

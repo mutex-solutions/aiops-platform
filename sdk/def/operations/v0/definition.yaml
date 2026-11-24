@@ -3,9 +3,13 @@
 # of the plugin manager: class C, an open provider side and a bound consumer side, as
 # pluginManager (00-decisions.md:222), so the release manifest names who may call it
 # (ADR-061 decision 15). It holds no tenant data and owns no hook.
+# 0.2 adds Pack, Sign, Push, Inspect and Verify, the methods of the OCI artifact of
+# ADR-047, so a consumer built for 0.1 is served. Suite revision 2: the suite adds the
+# cases of the artifact and of dist sign and dist use on an image reference.
 key: operations
-version: "0.1"
+version: "0.2"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
-suite: 1
+compatibleFrom: "0.1"
+suite: 2

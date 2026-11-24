@@ -164,10 +164,11 @@ func appendTrust(file string, e entry) ([]byte, error) {
 
 // trust is what Home and dist use read of trust.yaml.
 type trust struct {
-	signers  []def.Signer
-	dists    []string // key ids, def.Release among them; nil when the field is absent
-	distKeys []trustKey
-	allow    []string
+	signers    []def.Signer
+	signerKeys []*ecdsa.PublicKey // the key of each signer
+	dists      []string           // key ids, def.Release among them; nil when the field is absent
+	distKeys   []trustKey
+	allow      []string
 }
 
 type trustKey struct {
@@ -190,11 +191,12 @@ func readTrust(file string) (trust, error) {
 	}
 	t := trust{allow: f.AllowUnsigned}
 	for _, s := range f.Signers {
-		_, id, err := LoadPublicKey([]byte(s.Key))
+		pub, id, err := LoadPublicKey([]byte(s.Key))
 		if err != nil {
 			return trust{}, fmt.Errorf("%s: a signer: %w", file, err)
 		}
 		t.signers = append(t.signers, def.Signer{KeyID: id, IDs: s.IDs, Runtimes: s.Runtimes, Signed: s.Signed})
+		t.signerKeys = append(t.signerKeys, pub)
 	}
 	if f.Distributions != nil {
 		t.dists = []string{}
