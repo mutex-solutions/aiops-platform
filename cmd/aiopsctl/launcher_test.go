@@ -136,6 +136,30 @@ func TestTrustAddWritesTheHome(t *testing.T) {
 	}
 }
 
+// A relative $AIOPS_HOME is the home under the working directory, as aiopsctl of S1
+// resolved it against $PWD and aiops resolves its home: the cli profile composes from
+// it, and each command gets it as an absolute path (ADR-061 decisions 2 and 25).
+func TestARelativeHomeIsUnderTheWorkingDirectory(t *testing.T) {
+	w := world(t)
+	args := []string{"profile", "render", "--profile", "demo", "--dist", "dist", "--server", "--dump"}
+	abs := do(t, w, map[string]string{"PWD": "/work", "AIOPS_HOME": "/work/home"}, args...)
+	rel := do(t, w, map[string]string{"PWD": "/work", "AIOPS_HOME": "home"}, args...)
+	if abs.code != 0 || rel.code != 0 || rel.out != abs.out {
+		t.Errorf("render with AIOPS_HOME=home in /work: exit %d, stderr:\n%s\nwith /work/home: exit %d", rel.code, rel.errOut, abs.code)
+	}
+	dir := t.TempDir()
+	env := map[string]string{"PWD": dir, "AIOPS_HOME": "home", "AIOPS_KEY_PASSWORD": "test"}
+	if r := do(t, os.DirFS("/"), env, "key", "generate", "site"); r.code != 0 {
+		t.Fatalf("key generate: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+	if r := do(t, os.DirFS("/"), env, "trust", "add", "site.pub", "--ids", "acme/*"); r.code != 0 {
+		t.Fatalf("trust add: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "home", "trust.yaml")); err != nil {
+		t.Errorf("trust add with AIOPS_HOME=home did not write the home under the working directory: %v", err)
+	}
+}
+
 // The launcher's code is mapped to the three of aiopsctl: 0 and 2 are the command's, 8 is
 // a signal, and every other code is a failure of the launcher (ADR-061 decisions 10 and
 // 13).
