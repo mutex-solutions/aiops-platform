@@ -3,6 +3,7 @@
 package authoring
 
 import (
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -43,8 +44,23 @@ func TestTemplateJob(t *testing.T) {
 		t.Fatalf("the job covers %v, and the templates are %v", got, templates.Registries)
 	}
 	tl := Tools{SDK: "v0.0.0"}
+	ran := map[string]bool{} // the templates the job ran a case of
+	defer func() {
+		// Every template is a case of the job: one left out is never generated.
+		es, err := fs.ReadDir(templates.FS, ".")
+		var all []string
+		for _, e := range es {
+			if e.IsDir() && e.Name() != "shared" && e.Name() != "go" {
+				all = append(all, e.Name())
+			}
+		}
+		if got := slices.Sorted(maps.Keys(ran)); err != nil || !slices.Equal(got, all) {
+			t.Errorf("the job runs a case of the templates %v, and the templates are %v", got, all)
+		}
+	}()
 	for _, reg := range templates.Registries {
 		t.Run(reg, func(t *testing.T) {
+			ran[reg] = true
 			dir := filepath.Join(t.TempDir(), reg)
 			files, err := tl.Template(t.Context(), launch.TemplateRequest{Registry: reg, ID: "acme/job-" + reg, Lang: "go"})
 			if err != nil {
