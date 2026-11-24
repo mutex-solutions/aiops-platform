@@ -12,13 +12,13 @@ consumers:
   registry: [aiops/restart-policy]
   loader: [aiops/reload, aiops-test/test-state]
   # test-state composes a candidate through profileContext.
-  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile, aiops/operations, aiops-test/test-state]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/operations, aiops-test/test-state]
   # reload-socket submits as in the release; test-submit submits; test-state reads the
   # results.
   reload: [aiops/reload-socket, aiops-test/test-submit, aiops-test/test-state]
   # The command rows that call the operations library, as in the release (ADR-061
   # decision 20).
-  operations: [aiops/command-key, aiops/command-trust]
+  operations: [aiops/command-profile, aiops/command-plugin, aiops/command-dist, aiops/command-trust, aiops/command-key]
 sealedHooks:
   internal/status: [aiops/restart-policy, aiops/readiness]
   internal/config: [aiops/config-refs]

@@ -14,18 +14,18 @@ providers:
 # the code of its command (ADR-061 decision 7); reload resolves loader
 # (07-c4-plugin-sdk.md:557); the loader, reload and readiness resolve profileContext,
 # which holds Commit, and so does the operations row, for the launcher's toolbox (ADR-061
-# decisions 20 and 33), and command-profile until it calls the operations library. reload-socket submits what aiopsctl asks over <home>/run/reload.sock until
-# S6a (ADR-062); the other rows that submit are added with their plugin. The command
-# rows that call the operations library resolve operations, each as its commands do
-# (ADR-061 decisions 15 and 20). This file lists who is allowed; gate check 7 reads the
+# decisions 20 and 33); no command row does. reload-socket submits what aiopsctl asks over <home>/run/reload.sock until
+# S6a (ADR-062); the other rows that submit are added with their plugin. The five command
+# rows resolve operations, the one key they call besides commands (ADR-061 decisions 15
+# and 20). This file lists who is allowed; gate check 7 reads the
 # classes from the definitions (ADR-059 decision 20).
 consumers:
   appExit: [aiops/restart-policy, aiops/cli]
   registry: [aiops/restart-policy]
   loader: [aiops/reload]
-  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile, aiops/operations]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/operations]
   reload: [aiops/reload-socket]
-  operations: [aiops/command-key, aiops/command-trust]
+  operations: [aiops/command-profile, aiops/command-plugin, aiops/command-dist, aiops/command-trust, aiops/command-key]
 # Sealed hooks (07-c4-plugin-sdk.md:463): internal/status for the two rows that follow
 # the state of every fiber, internal/config for the references.
 sealedHooks:
