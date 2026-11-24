@@ -31,7 +31,10 @@ import (
 // Exit codes of Run. The documents say only that boot "exits non-zero when the
 // required set is not met" (08-profiles-roadmap-adrs.md:520, :538) and that a
 // process is replaced in three cases (03-c3-kernel.md:372); the numbers are this
-// package's, adopted as written (ADR-059 decision 29).
+// package's, adopted as written (ADR-059 decision 29). Under RunOptions.Command 0, 1
+// and 2 are also the codes of the command, a signal or the end of ctx is
+// ExitInterrupted, and the launcher never returns ExitUsage, so 0 and 2 are always the
+// command's (ADR-061 decision 13).
 const (
 	ExitOK       = 0 // stopped by a signal or by the caller's context, tree disposed in time
 	ExitRefused  = 1 // boot stopped before any row mounted: a layer, the gate, the static graph, the distribution
@@ -280,7 +283,11 @@ func (r *run) run(ctx context.Context) int {
 	}
 	role, roles, err := parseRunRole(o.Role)
 	if err != nil {
-		return r.fail(ExitUsage, "%v", err)
+		code := ExitUsage
+		if o.Command {
+			code = ExitInternal
+		}
+		return r.fail(code, "%v", err)
 	}
 	cat, err := newCatalog(o.Registry)
 	if err != nil {
@@ -390,9 +397,9 @@ func (r *run) run(ctx context.Context) int {
 	stopBoot()
 	switch {
 	case <-signalled:
-		return r.stop(ctx, ExitOK, "signal")
+		return r.stop(ctx, r.interrupted(), "signal", false)
 	case ctx.Err() != nil:
-		return r.stop(ctx, ExitOK, "context ended")
+		return r.stop(ctx, r.interrupted(), "context ended", false)
 	}
 	if serr != nil {
 		fmt.Fprintf(r.errw, "warning: settle: %v\n", serr)
@@ -406,7 +413,7 @@ func (r *run) run(ctx context.Context) int {
 		fmt.Fprintf(r.errw, "error: %s\n", e.Error())
 	}
 	if len(errs) > 0 {
-		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)))
+		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)), false)
 	}
 	// The latch is the readiness row's, not boot's (03-c3-kernel.md:67): a distribution
 	// that links no readiness row is never ready, and says so by its required set. Boot
@@ -656,11 +663,14 @@ func (r *run) loop(ctx context.Context) int {
 	for {
 		select {
 		case <-r.o.Signals:
-			return r.stop(ctx, ExitOK, "signal")
+			return r.stop(ctx, r.interrupted(), "signal", false)
 		case <-ctx.Done():
-			return r.stop(ctx, ExitOK, "context ended")
+			return r.stop(ctx, r.interrupted(), "context ended", false)
 		case req := <-r.exits:
-			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail))
+			if req.Reason == launch.ExitCommand && r.o.Command && req.Code >= ExitOK && req.Code <= ExitUsage {
+				return r.stop(ctx, req.Code, fmt.Sprintf("%s: %s", req.Reason, req.Detail), true)
+			}
+			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail), false)
 		case <-r.leakPing:
 			if graceUp == nil {
 				r.ready.end()
@@ -671,11 +681,21 @@ func (r *run) loop(ctx context.Context) int {
 				graceUp = done
 			}
 		case <-graceUp:
-			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline")
+			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline", false)
 		}
 	}
 }
 
+// interrupted is the code of a stop that a signal or the end of ctx began.
+func (r *run) interrupted() int {
+	if r.o.Command {
+		return ExitInterrupted
+	}
+	return ExitOK
+}
+
+// exitCodeOf is the code of an exit request other than a command's: ExitCommand with no
+// Command, or with a code other than 0, 1 and 2, is a launcher failure.
 func exitCodeOf(why launch.ExitReason) int {
 	switch why {
 	case launch.ExitDisposeLeak:
@@ -690,8 +710,9 @@ func exitCodeOf(why launch.ExitReason) int {
 
 // stop is the bounded shutdown: drop readiness, close the kernel under the
 // shutdown bound, report. why is one line. A shutdown that overran its bound, or
-// that saw a fiber leak, is a replacement, not a clean stop.
-func (r *run) stop(ctx context.Context, code int, why string) int {
+// that saw a fiber leak, is a replacement, not a clean stop: it replaces ExitOK and the
+// code of a command, which command marks.
+func (r *run) stop(ctx context.Context, code int, why string, command bool) int {
 	r.ready.end()
 	r.pub.update(func(s *ProcessStatus) { s.Phase, s.Detail = PhaseStopping, why })
 	if code == ExitOK {
@@ -709,7 +730,7 @@ func (r *run) stop(ctx context.Context, code int, why string) int {
 	// The observer of the root sees the events of Close, and the diagnostic of Close
 	// says it too.
 	leaked := r.leakSeen.Load() || errors.Is(err, kernel.ErrLeaked)
-	if code == ExitOK && (timedOut || leaked) {
+	if (code == ExitOK || command) && (timedOut || leaked) {
 		// The detail says why the process asks to be replaced, not what began the stop.
 		code, why = ExitLeak, fmt.Sprintf("shutdown did not finish cleanly: the bound of %s passed", r.o.Limits.ShutdownBound)
 		if leaked {
