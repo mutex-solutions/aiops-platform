@@ -1,0 +1,30 @@
+// Package {{.Package}} is the plugin {{.ID}}: a stamper, a contribution to the stampers
+// registry (sdk/def/stampers/v0). The stamper itself is in internal/stamp.
+package {{.Package}}
+
+import (
+	stampers "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
+
+	"{{.Module}}/internal/stamp"
+)
+
+// ID is the plugin id.
+const ID = "{{.ID}}"
+
+// Config is the row config; plugin check --write derives its schema.
+type Config struct {
+	// Name is the name the stamper registers under.
+	Name string `default:"{{.Name}}"`
+}
+
+// Plugin is the plugin: it registers one stamper under the name of its config.
+var Plugin = plugin.Define(plugin.Spec[Config]{
+	ID:        ID,
+	Inject:    []kernel.Dep{kernel.Need(stampers.Key)},
+	Registers: []kernel.AnyKey{stampers.Key},
+	Apply: func(c *kernel.Context, cfg *Config) error {
+		return stampers.Key.Of(c).Register(c, cfg.Name, stamp.New(c))
+	},
+})

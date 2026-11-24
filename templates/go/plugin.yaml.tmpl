@@ -1,0 +1,16 @@
+# The hand-written half of the manifest (07-c4-plugin-sdk.md section 2; ADR-048). Fill
+# in the description, source and support. aiopsctl plugin check --write writes the
+# generated half below it from the plugin's value, and plugin check fails when it
+# differs.
+manifestVersion: "1.0"
+id: {{.ID}}
+version: 0.1.0
+title: {{.Title}}
+description: A contribution to {{.Registry}}.
+license: Apache-2.0
+publisher: {id: {{.Owner}}}
+source: https://example.com/{{.Owner}}/{{.Name}}
+support: {url: https://example.com/{{.Owner}}/{{.Name}}/issues}
+stability: experimental
+scope: [process]
+runtimes: [inproc]

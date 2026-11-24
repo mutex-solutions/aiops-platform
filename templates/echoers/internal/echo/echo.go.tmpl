@@ -1,0 +1,26 @@
+// Package echo is the echoer of {{.ID}}: one stub per method of echoers.Echoer, each
+// returning ErrNotImplemented until it is written.
+package echo
+
+import (
+	"context"
+	"errors"
+
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+)
+
+// ErrNotImplemented is the answer of a stub.
+var ErrNotImplemented = errors.New("not implemented")
+
+// Echoer answers messages for the activation of the plugin that registered it.
+type Echoer struct{ c *kernel.Context }
+
+// New returns the echoer of the activation c.
+func New(c *kernel.Context) Echoer { return Echoer{c: c} }
+
+// Echo returns a reply that ends with msg, the same reply each time for the same msg.
+// It returns ctx's error when ctx is done, and kernel.ErrInactive once the activation
+// is released: take c.Enter() for the length of the call.
+func (e Echoer) Echo(ctx context.Context, msg string) (string, error) {
+	return "", ErrNotImplemented
+}

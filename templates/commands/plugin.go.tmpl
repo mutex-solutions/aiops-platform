@@ -1,0 +1,28 @@
+// Package {{.Package}} is the plugin {{.ID}}: a command row, a contribution to the
+// commands registry of aiopsctl (sdk/def/commands/v0). Its command is in
+// internal/command.
+package {{.Package}}
+
+import (
+	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
+
+	"{{.Module}}/internal/command"
+)
+
+// ID is the plugin id.
+const ID = "{{.ID}}"
+
+// Config is the row config, which has none.
+type Config struct{}
+
+// Plugin is the plugin: it registers the command of internal/command.
+var Plugin = plugin.Define(plugin.Spec[Config]{
+	ID:        ID,
+	Inject:    []kernel.Dep{kernel.Need(commands.Key)},
+	Registers: []kernel.AnyKey{commands.Key},
+	Apply: func(c *kernel.Context, _ *Config) error {
+		return commands.Key.Of(c).Register(c, command.Spec(), command.New(c))
+	},
+})
