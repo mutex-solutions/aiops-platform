@@ -101,6 +101,36 @@ func TestKeyGenerateWritesThePair(t *testing.T) {
 	}
 }
 
+// plugin new, answered by the row command-plugin through the operations row and the
+// templates that aiopsctl embeds, writes the Go template of a registry into the
+// directory of the plugin's name; plugin check runs its steps through boot's strict
+// reader, so a fresh plugin, whose generated half plugin check --write has not written
+// yet, fails step 1 and skips the rest, on stderr, with exit 1. plugin new connector
+// against the shipped release, which serves no instantiable plugin at S2a, is refused
+// (ADR-060 decision 24; ADR-047 decision 12).
+func TestPluginNewAndCheck(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"PWD": dir}
+	r := do(t, fstest.MapFS{}, env, "plugin", "new", "echoers", "acme/echo-loud")
+	if r.code != 0 || r.out != "" || !strings.Contains(r.errOut, filepath.Join(dir, "echo-loud", "plugin.go")) {
+		t.Fatalf("plugin new: exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "echo-loud", "internal", "echo", "echo.go")); err != nil || !strings.Contains(string(b), "not implemented") {
+		t.Errorf("internal/echo/echo.go: %v\n%s", err, b)
+	}
+	r = do(t, fstest.MapFS{}, env, "plugin", "check", "echo-loud")
+	if r.code != 1 || r.out != "" || !strings.Contains(r.errOut, "step 1 manifest: fail") || !strings.Contains(r.errOut, "requires") ||
+		!strings.Contains(r.errOut, "step 8 scenario: skipped") {
+		t.Errorf("plugin check of a fresh plugin: exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)
+	}
+	if r := do(t, fstest.MapFS{}, env, "plugin", "new", "echoers", "acme/echo-loud"); r.code != 1 || !strings.Contains(r.errOut, "holds files") {
+		t.Errorf("a second plugin new: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+	if r := do(t, fstest.MapFS{}, env, "plugin", "new", "connector", "acme/connector-x"); r.code != 1 || !strings.Contains(r.errOut, "serves no instantiable plugin") {
+		t.Errorf("plugin new connector against the shipped release: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+}
+
 // trust add, answered by the row command-trust through the operations row, appends the
 // key to trust.yaml of the home in both forms, the default root first, and answers by
 // run/status.json: not-running with no process, and restart-required with the reason

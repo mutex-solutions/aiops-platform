@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/fake"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -25,15 +27,20 @@ import (
 var update = flag.Bool("update", false, "rewrite the help goldens")
 
 // stub provides operations: the five methods of the artifact record each request and
-// answer the values of the stub, or err.
+// answer the values of the stub, or err; New and Check record each request and answer
+// w, rep and err, so the tests read what the row asks of the library.
 type stub struct {
 	operations.Operations
 	in  operations.Inspected
 	v   operations.Verified
+	w   operations.Written
+	rep operations.CheckReport
 	err error
 
-	mu   sync.Mutex
-	reqs []any
+	mu     sync.Mutex
+	reqs   []any
+	news   []operations.NewRequest
+	checks []operations.CheckRequest
 }
 
 func (s *stub) record(ctx context.Context, r any) error {
@@ -70,6 +77,20 @@ func (s *stub) Inspect(ctx context.Context, r operations.SpecRequest) (operation
 
 func (s *stub) Verify(ctx context.Context, r operations.SpecRequest) (operations.Verified, error) {
 	return s.v, s.record(ctx, r)
+}
+
+func (s *stub) New(ctx context.Context, r operations.NewRequest) (operations.Written, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.news = append(s.news, r)
+	return s.w, cmp.Or(ctx.Err(), s.err)
+}
+
+func (s *stub) Check(ctx context.Context, r operations.CheckRequest) (operations.CheckReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.checks = append(s.checks, r)
+	return s.rep, cmp.Or(ctx.Err(), s.err)
 }
 
 // mountRow mounts s as the provider of operations and the row on a root of its own.
@@ -113,8 +134,8 @@ func dispatch(t *testing.T, rec *fake.Registry, argv ...string) (code int, out, 
 }
 
 // built are the commands that run through the operations library (ADR-061 decision
-// 16; ADR-047 decision 1).
-var built = []string{"plugin inspect", "plugin pack", "plugin push", "plugin sign", "plugin verify"}
+// 16; ADR-047 decision 1; ADR-060 decisions 23 and 24).
+var built = []string{"plugin check", "plugin inspect", "plugin new", "plugin pack", "plugin push", "plugin sign", "plugin verify"}
 
 // Every other command answers that it is not built yet, with exit 1, on a command line
 // that its spec reads.
@@ -245,6 +266,81 @@ func TestVerifyPrintsTheSteps(t *testing.T) {
 	}
 }
 
+// plugin new calls New with the template of the registry, Go by default, into the
+// directory of the plugin's name under the working directory, and names what it wrote
+// on stderr; plugin new connector passes the release and the plugins of its rows
+// (ADR-060 decision 24; ADR-047 decision 12; ADR-061 decision 30).
+func TestNewCallsTheLibrary(t *testing.T) {
+	s := &stub{w: operations.Written{Paths: []string{"/work/echo/plugin.go", "/work/echo/plugin.yaml"}}}
+	rec := world(t, s)
+	code, out, errOut := dispatch(t, rec, "plugin", "new", "echoers", "acme/echo")
+	if code != 0 || out != "" || !strings.Contains(errOut, "wrote /work/echo/plugin.yaml") {
+		t.Errorf("plugin new: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	want := operations.NewRequest{Registry: "echoers", ID: "acme/echo", Lang: "go", Dir: "/work/echo"}
+	if len(s.news) == 0 {
+		t.Fatal("plugin new did not call New")
+	}
+	if r := s.news[0]; r.Registry != want.Registry || r.ID != want.ID || r.Lang != want.Lang || r.Dir != want.Dir || r.Contrib || r.Env == nil {
+		t.Errorf("request %+v", r)
+	}
+	dispatch(t, rec, "plugin", "new", "connector", "acme/connector-x", "--contrib", "--against", "rel/dist.yaml", "--plugin", "aiops/example-echoer")
+	if r := s.news[1]; r.Registry != operations.Connector || r.Dir != "/work/connector-x" || !r.Contrib || r.Against != "/work/rel/dist.yaml" ||
+		!slices.Equal(r.Plugins, []string{"aiops/example-echoer"}) {
+		t.Errorf("request %+v", r)
+	}
+	if code, _, _ := dispatch(t, rec, "plugin", "new", "echoers", "acme"); code != 2 {
+		t.Errorf("an id with no name: exit %d, want a usage error", code)
+	}
+}
+
+// report is a check that stops at step 5 with two failed obligations.
+var report = operations.CheckReport{Steps: []operations.Step{
+	{N: 1, Name: "manifest", Outcome: operations.StepPass},
+	{N: 4, Name: "alone", Outcome: operations.StepPass, Diagnostics: []launch.Diagnostic{{Check: "4", Text: "TestTwoTenants skipped and did not run", Warning: true}}},
+	{N: 5, Name: "conformance", Outcome: operations.StepFail, Diagnostics: []launch.Diagnostic{
+		{Check: "echoers/reply", Text: "echoers/reply: the obligation failed"}, {Check: "echoers/stable", Text: "echoers/stable: the obligation failed"}}},
+	{N: 6, Name: "effects", Outcome: operations.StepSkipped},
+}}
+
+// plugin check calls Check on the directory, the working directory by default, prints
+// each step on stderr with one line per failed obligation, and exits 1 on a failed
+// step; with --json the report alone is on stdout (07-c4-plugin-sdk.md:1565; ADR-061
+// decision 11). A check that passes prints the attestation it would sign.
+func TestCheckCallsTheLibrary(t *testing.T) {
+	s := &stub{rep: report}
+	rec := world(t, s)
+	code, out, errOut := dispatch(t, rec, "plugin", "check")
+	if len(s.checks) == 0 {
+		t.Fatalf("plugin check did not call Check: exit %d, stderr %q", code, errOut)
+	}
+	if code != 1 || out != "" || s.checks[0].Dir != "/work" || s.checks[0].Write {
+		t.Errorf("plugin check: exit %d, stdout %q, request %+v", code, out, s.checks[0])
+	}
+	for _, w := range []string{"step 1 manifest: pass\n", "step 5 conformance: fail\n", "  echoers/reply: the obligation failed\n",
+		"  echoers/stable: the obligation failed\n", "  warning: TestTwoTenants skipped and did not run\n", "step 6 effects: skipped\n", "step 5 conformance failed"} {
+		if !strings.Contains(errOut, w) {
+			t.Errorf("stderr lacks %q:\n%s", w, errOut)
+		}
+	}
+	if n := strings.Count(errOut, "echoers/reply"); n != 1 {
+		t.Errorf("echoers/reply is on %d lines, want one:\n%s", n, errOut)
+	}
+	pass := operations.CheckReport{Steps: []operations.Step{{N: 1, Name: "manifest", Outcome: operations.StepPass}}, Attestation: []byte(`{"_type":"x"}`)}
+	s.rep = pass
+	code, out, errOut = dispatch(t, rec, "plugin", "check", "echo", "--json", "--write", "--against", "/rel/dist.yaml")
+	var got operations.CheckReport
+	if err := json.Unmarshal([]byte(out), &got); code != 0 || err != nil || string(got.Attestation) != `{"_type":"x"}` {
+		t.Errorf("--json: exit %d, stdout %q (%v), stderr %q", code, out, err, errOut)
+	}
+	if r := s.checks[1]; r.Dir != "/work/echo" || !r.Write || r.Against != "/rel/dist.yaml" || r.Env == nil {
+		t.Errorf("request %+v", r)
+	}
+	if code, out, errOut := dispatch(t, rec, "plugin", "check", "echo"); code != 0 || out != "" || !strings.Contains(errOut, `the attestation it would sign: {"_type":"x"}`) {
+		t.Errorf("a check that passes: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+}
+
 // A usage error of the library exits 2, and a refusal 1 with its reason (ADR-061
 // decision 10).
 func TestExits(t *testing.T) {
@@ -256,7 +352,8 @@ func TestExits(t *testing.T) {
 		{fmt.Errorf("%w: the layout is not empty", operations.ErrRefused), 1},
 	} {
 		rec := world(t, &stub{err: c.err})
-		for _, argv := range [][]string{{"plugin", "pack"}, {"plugin", "sign", "--key", "k"}, {"plugin", "push", "r.example/x"}, {"plugin", "inspect", "a"}} {
+		for _, argv := range [][]string{{"plugin", "pack"}, {"plugin", "sign", "--key", "k"}, {"plugin", "push", "r.example/x"}, {"plugin", "inspect", "a"},
+			{"plugin", "new", "echoers", "acme/echo"}, {"plugin", "check"}} {
 			if code, out, errOut := dispatch(t, rec, argv...); code != c.code || out != "" || !strings.Contains(errOut, c.err.Error()) {
 				t.Errorf("%q with %v: exit %d, stdout %q, stderr %q", argv, c.err, code, out, errOut)
 			}
