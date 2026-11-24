@@ -673,6 +673,38 @@ func TestVerifyFailsWhatTheStrictReaderRefuses(t *testing.T) {
 	}
 }
 
+// inspect and verify fetch no plugin.yaml and no bundle larger than the 1 MiB that boot
+// reads of a file (boot.MaxFileBytes), and refuse it; verify fetches plugin.yaml of no
+// artifact that no key of trust.yaml signed, where allowUnsigned lists no id (ADR-047
+// decision 2).
+func TestLargeManifestsAreNotFetched(t *testing.T) {
+	reg := ocitest.New(t, ocitest.Options{})
+	pad := bytes.Repeat([]byte("x"), 2<<20)
+	big := map[string][]byte{"manifest": append([]byte("id: acme/x\nversion: 0.1.0\n#"), pad...), "bundle": append([]byte("[]\n#"), pad...)}
+	reg.Artifact("manifest", "1", "application/vnd.aiops.plugin.v1", nil, ocitest.Layer{MediaType: "application/vnd.aiops.plugin.manifest.v1+yaml", Data: big["manifest"]},
+		ocitest.Layer{MediaType: "application/vnd.aiops.plugin.bundle.v1+yaml", Data: []byte("[]\n")})
+	reg.Artifact("bundle", "1", "application/vnd.aiops.plugin.v1", nil, ocitest.Layer{MediaType: "application/vnd.aiops.plugin.manifest.v1+yaml", Data: []byte("id: acme/x\nversion: 0.1.0\n")},
+		ocitest.Layer{MediaType: "application/vnd.aiops.plugin.bundle.v1+yaml", Data: big["bundle"]})
+	l := Library{Box: &packBox{}}
+	fetched := func(name string) bool {
+		return slices.ContainsFunc(reg.Requests(), func(r string) bool {
+			return strings.HasPrefix(r, "GET ") && strings.HasSuffix(r, ocitest.Digest(big[name]))
+		})
+	}
+	for _, name := range []string{"manifest", "bundle"} {
+		spec := "oci://" + reg.Host + "/" + name + ":1"
+		if _, err := l.Inspect(t.Context(), def.SpecRequest{Caller: caller(), Spec: spec}); !errors.Is(err, def.ErrRefused) || fetched(name) {
+			t.Errorf("inspect of a %s of 2 MiB: %v, fetched %v; want ErrRefused and no fetch", name, err, fetched(name))
+		}
+	}
+	reg = ocitest.New(t, ocitest.Options{})
+	reg.Artifact("x", "1", "application/vnd.aiops.plugin.v1", nil, ocitest.Layer{MediaType: "application/vnd.aiops.plugin.manifest.v1+yaml", Data: big["manifest"]},
+		ocitest.Layer{MediaType: "application/vnd.aiops.plugin.bundle.v1+yaml", Data: []byte("[]\n")})
+	if _, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: "oci://" + reg.Host + "/x:1", Home: t.TempDir()}); !errors.Is(err, def.ErrRefused) || fetched("manifest") {
+		t.Errorf("verify of an unsigned artifact: %v, fetched %v; want ErrRefused and no fetch", err, fetched("manifest"))
+	}
+}
+
 func mustHex(t *testing.T, s string) []byte {
 	t.Helper()
 	b, err := hex.DecodeString(s)
