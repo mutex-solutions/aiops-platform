@@ -736,7 +736,8 @@ func (u *user) check() operations.CheckReport {
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		u.t.Fatal(err)
 	}
-	for name, body := range map[string]string{"plugin.yaml": "id: acme/echo\n", "bundle.yaml": "- insert: []\n"} {
+	// In-process code, packed by step 7 from the root of its module.
+	for name, body := range map[string]string{"plugin.yaml": "id: acme/echo\n", "bundle.yaml": "- insert: []\n", "go.mod": "module example.test/echo\n"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			u.t.Fatal(err)
 		}

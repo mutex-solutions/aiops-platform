@@ -5,12 +5,6 @@ package operations
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -162,16 +156,17 @@ const echoScenario = "echo"
 
 // checkRun is one run of plugin check.
 type checkRun struct {
-	l       Library
-	ctx     context.Context
-	r       def.CheckRequest
-	sum     launch.ManifestSummary
-	code    bool                    // the manifest lists a runtime: Go code; otherwise a pack with no code
-	gen     []launch.Diagnostic     // what Generate with --write found, before step 1
-	defs    map[string]def.Attested // what the attestation says of each definition
-	notRun  []string                // the generated tests that did not run
-	scene   *def.Scenario           // the scenario a pack ran
-	scenery []launch.Diagnostic     // its failures, step 8
+	l           Library
+	ctx         context.Context
+	r           def.CheckRequest
+	sum         launch.ManifestSummary
+	code        bool                    // the manifest lists a runtime: Go code; otherwise a pack with no code
+	gen         []launch.Diagnostic     // what Generate with --write found, before step 1
+	defs        map[string]def.Attested // what the attestation says of each definition
+	notRun      []string                // the generated tests that did not run
+	scene       *def.Scenario           // the scenario a pack ran
+	scenery     []launch.Diagnostic     // its failures, step 8
+	attestation []byte                  // the statement that step 7 packed, of the artifact's digest
 }
 
 func hasError(ds []launch.Diagnostic) bool {
@@ -233,7 +228,7 @@ func (l Library) Check(ctx context.Context, r def.CheckRequest) (def.CheckReport
 		rep.Steps = append(rep.Steps, st)
 	}
 	if !failed {
-		rep.Attestation = c.statement(c.digest())
+		rep.Attestation = c.attestation
 	}
 	return rep, nil
 }
@@ -406,53 +401,24 @@ func (c *checkRun) effects() (string, []launch.Diagnostic, error) {
 	return def.StepNotApplicable, nil, nil
 }
 
-// digest is the subject of the attestation of step 7.
-// ponytail: the SHA-256 of plugin.yaml and bundle.yaml, until plugin pack writes the
-// OCI layout whose image manifest digest is the subject (ADR-047 decision 1).
-func (c *checkRun) digest() string {
-	h := sha256.New()
-	for _, f := range []string{"plugin.yaml", "bundle.yaml"} {
-		b, _ := os.ReadFile(filepath.Join(c.r.Dir, f))
-		h.Write(b)
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
 func (c *checkRun) statement(digest string) []byte {
 	return def.Statement(c.sum.ID, c.sum.Version, digest, c.defs, c.scene, c.notRun)
 }
 
-// packAndVerify is step 7: the attestation signed with a throwaway key held in memory
-// and verified against it (ADR-020, the row of plugin check step 7), then the gate at
-// the entry point plugin check, against the release this binary embeds or --against:
-// signature, attestation and manifest digest must agree (07-c4-plugin-sdk.md:1573).
+// packAndVerify is step 7: plugin pack into a directory of its own, which it removes,
+// and the gate on the artifact against the release this binary embeds or --against, so
+// that signature, attestation and manifest digest agree (07-c4-plugin-sdk.md:1573;
+// ADR-047 decision 1).
 func (c *checkRun) packAndVerify() (string, []launch.Diagnostic, error) {
-	digest := c.digest()
-	st := c.statement(digest)
-	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmp, err := os.MkdirTemp("", "aiops-check-")
 	if err != nil {
 		return "", nil, err
 	}
-	if _, err := SignStatement(k, st); err != nil {
-		return def.StepFail, []launch.Diagnostic{{Check: "7", Text: "the attestation does not verify: " + err.Error()}}, nil
+	defer os.RemoveAll(tmp)
+	v, err := c.seal(filepath.Join(tmp, "artifact"))
+	if errors.Is(err, def.ErrRefused) {
+		return def.StepFail, []launch.Diagnostic{{Check: "7", Text: err.Error()}}, nil
 	}
-	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
-	if err != nil {
-		return "", nil, err
-	}
-	q := launch.GateRequest{Entry: entryCheck, Attestation: st, Digest: "sha256:" + digest, Signer: keyID(der)}
-	if q.Manifest, err = os.ReadFile(filepath.Join(c.r.Dir, "plugin.yaml")); err != nil {
-		return "", nil, err
-	}
-	if q.Bundle, err = os.ReadFile(filepath.Join(c.r.Dir, "bundle.yaml")); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", nil, err
-	}
-	if c.r.Against != "" {
-		if q.Against, err = os.ReadFile(c.r.Against); err != nil {
-			return "", nil, err
-		}
-	}
-	v, err := c.l.Box.Gate(c.ctx, q)
 	if err != nil {
 		return "", nil, err
 	}

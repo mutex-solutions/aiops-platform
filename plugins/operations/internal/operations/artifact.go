@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -54,10 +55,10 @@ func say(c def.Caller, format string, a ...any) {
 	}
 }
 
-// Pack is plugin pack (ADR-047 decision 1; ADR-060 decisions 18 and 19): the layers
-// of the plugin directory, the attestation of what ran, the gate at the entry of
-// plugin check step 7, and only then the layout, with the artifact tagged by its
-// version and the statement, unsigned, as its referrer. A refusal leaves no layout.
+// Pack is plugin pack (ADR-047 decision 1; ADR-060 decisions 18 and 19): the suites
+// of plugin check that the attestation records, then step 7 of plugin check into the
+// layout, with the artifact tagged by its version and the statement, unsigned, as its
+// referrer, and the gate at its entry. A refusal leaves no layout.
 func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, error) {
 	if err := errors.Join(absolute("the plugin directory", r.Dir), absolute("the layout", r.Out)); err != nil {
 		return def.Written{}, err
@@ -82,19 +83,30 @@ func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, erro
 	if slices.Contains(sum.Runtimes, "remote") {
 		return def.Written{}, refused("a remote plugin is packed from S2b, with the remote runtime (ADR-060 decision 29)")
 	}
-	a, err := l.layers(ctx, r, sum)
-	if err != nil {
+	c := &checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: r.Dir}, sum: sum, code: len(sum.Runtimes) > 0}
+	ran, ds, err := c.attested()
+	switch {
+	case err != nil:
 		return def.Written{}, err
+	case hasError(ds):
+		return def.Written{}, refused("plugin check fails: %s", texts(ds))
+	case !ran:
+		say(r.Caller, "pack: %s, so the attestation names no suite revision and no scenario", notCarried)
 	}
-	d, raw, err := manifestOf(artifactType, nil, nil, a.layers)
-	if err != nil {
-		return def.Written{}, err
+	v, err := c.seal(r.Out)
+	var denied []string
+	for _, c := range v.Clauses {
+		switch {
+		case c.Outcome != launch.OutcomeDeny:
+		case c.Check == 10 && !ran:
+			say(r.Caller, "pack: check 10 is not evaluated, since the suites that write what it reads did not run: %s", c.Reason)
+		default:
+			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
+		}
 	}
-	st, err := l.attest(ctx, r, sum, d, a.manifest, a.bundle)
-	if err != nil {
-		return def.Written{}, err
+	if err == nil && len(denied) > 0 {
+		err = refused("the gate at plugin pack denies: %s", strings.Join(denied, "; "))
 	}
-	err = writeLayout(ctx, r.Out, d, raw, a.layers, sum.Version, st)
 	if err != nil {
 		err = errors.Join(err, os.RemoveAll(r.Out))
 		if existed {
@@ -114,13 +126,13 @@ type packed struct {
 // layers reads the layers of the plugin directory: plugin.yaml and bundle.yaml, the
 // module of in-process code, the content and, for a pack, the fixtures as canonical
 // tars, and the SBOM.
-func (l Library) layers(ctx context.Context, r def.PackRequest, sum launch.ManifestSummary) (packed, error) {
+func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSummary) (packed, error) {
 	var p packed
 	var err error
-	if p.manifest, err = os.ReadFile(filepath.Join(r.Dir, "plugin.yaml")); err != nil {
+	if p.manifest, err = os.ReadFile(filepath.Join(dir, "plugin.yaml")); err != nil {
 		return p, refused("%v", err)
 	}
-	if p.bundle, err = os.ReadFile(filepath.Join(r.Dir, "bundle.yaml")); err != nil {
+	if p.bundle, err = os.ReadFile(filepath.Join(dir, "bundle.yaml")); err != nil {
 		return p, refused("every artifact carries a bundle of its rows, all disabled (ADR-060 decision 19): %v", err)
 	}
 	var m struct{ License string }
@@ -130,7 +142,7 @@ func (l Library) layers(ctx context.Context, r def.PackRequest, sum launch.Manif
 	p.layers = []blob{{layerManifest, p.manifest, title("plugin.yaml")}, {layerBundle, p.bundle, title("bundle.yaml")}}
 	doc := newSBOM(sum.ID, sum.Version, m.License)
 	if slices.Contains(sum.Runtimes, "inproc") {
-		mod, err := moduleOf(r.Dir, "v"+sum.Version, doc)
+		mod, err := moduleOf(dir, "v"+sum.Version, doc)
 		if err != nil {
 			return p, err
 		}
@@ -140,7 +152,7 @@ func (l Library) layers(ctx context.Context, r def.PackRequest, sum launch.Manif
 		dir, mediaType string
 		on             bool
 	}{{"content", layerContent, true}, {"fixtures", layerFixtures, len(sum.Runtimes) == 0}} {
-		files, err := regularFiles(filepath.Join(r.Dir, t.dir))
+		files, err := regularFiles(filepath.Join(dir, t.dir))
 		if err != nil {
 			return p, refused("%s/: %v (ADR-047 decision 3)", t.dir, err)
 		}
@@ -163,52 +175,47 @@ func (l Library) layers(ctx context.Context, r def.PackRequest, sum launch.Manif
 	return p, errors.Join(err, ctx.Err())
 }
 
-// attest runs the suites of plugin check that the attestation records, as plugin
-// check runs them, writes the statement of what ran with the subject d, signs it with
-// a throwaway key held in memory and verifies it, and runs the gate at the entry of
-// plugin check step 7 (ADR-020 decision 14; ADR-060 decisions 17 and 18). A suite
-// that the binary does not carry is named, and check 10, which reads what it records,
-// is then not evaluated.
-func (l Library) attest(ctx context.Context, r def.PackRequest, sum launch.ManifestSummary, d ocispec.Descriptor, manifest, bundle []byte) ([]byte, error) {
-	c := &checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: r.Dir}, sum: sum, code: len(sum.Runtimes) > 0}
-	ran, ds, err := c.attested()
-	switch {
-	case err != nil:
-		return nil, err
-	case hasError(ds):
-		return nil, refused("plugin check fails: %s", texts(ds))
-	case !ran:
-		say(r.Caller, "pack: %s, so the attestation names no suite revision and no scenario", notCarried)
+// seal is step 7 on the plugin directory of c (07-c4-plugin-sdk.md:1573; ADR-020
+// decision 14): its layers packed into the OCI image layout out, the artifact tagged by
+// its version with the statement of what c ran, whose subject is its digest, as the
+// unsigned referrer; a signature of that digest and the statement signed with a
+// throwaway key held in memory, each verified against the digest; and the verdict of
+// the gate at the entry plugin check on the artifact (ADR-060 decision 17).
+func (c *checkRun) seal(out string) (launch.Verdict, error) {
+	a, err := c.l.layers(c.ctx, c.r.Dir, c.sum)
+	if err != nil {
+		return launch.Verdict{}, err
 	}
-	st := c.statement(d.Digest.Encoded())
+	d, raw, err := manifestOf(artifactType, nil, nil, a.layers)
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	c.attestation = c.statement(d.Digest.Encoded())
 	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err == nil {
-		var b []byte
-		if b, err = SignStatement(k, st); err == nil {
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	for _, st := range [][]byte{signatureOf(c.sum.ID+"@"+c.sum.Version, d.Digest.Encoded()), c.attestation} {
+		b, err := SignStatement(k, st)
+		if err == nil {
 			_, err = VerifyStatement(&k.PublicKey, b, mustDecode(d.Digest.Encoded()))
 		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("step 7: sign and verify the attestation with a throwaway key: %w", err)
-	}
-	v, err := l.Box.Gate(ctx, launch.GateRequest{Entry: "plugin check", Manifest: manifest, Bundle: bundle, Attestation: st, Digest: d.Digest.String()})
-	if err != nil {
-		return nil, err
-	}
-	var denied []string
-	for _, c := range v.Clauses {
-		switch {
-		case c.Outcome != launch.OutcomeDeny:
-		case c.Check == 10 && !ran:
-			say(r.Caller, "pack: check 10 is not evaluated, since the suites that write what it reads did not run: %s", c.Reason)
-		default:
-			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
+		if err != nil {
+			return launch.Verdict{}, refused("step 7: the signature and the attestation of %s, signed with a throwaway key, do not verify: %v", d.Digest, err)
 		}
 	}
-	if len(denied) > 0 {
-		return nil, refused("the gate at plugin pack denies: %s", strings.Join(denied, "; "))
+	if err := writeLayout(c.ctx, out, d, raw, a.layers, c.sum.Version, c.attestation); err != nil {
+		return launch.Verdict{}, err
 	}
-	return st, nil
+	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
+	q := launch.GateRequest{Entry: entryCheck, Manifest: a.manifest, Bundle: a.bundle, Attestation: c.attestation, Digest: d.Digest.String(), Signer: keyID(der)}
+	if err == nil && c.r.Against != "" {
+		q.Against, err = os.ReadFile(c.r.Against)
+	}
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	return c.l.Box.Gate(c.ctx, q)
 }
 
 // The in-toto Statement v1 of a signature (ADR-020 decision 9); the attestation is
@@ -225,6 +232,14 @@ type (
 		Digest map[string]string `json:"digest"`
 	}
 )
+
+// signatureOf is the statement that a signature of the artifact name at the hex digest
+// signs: the predicate type of cosign sign, which plugin sign writes (ADR-020 decision 9).
+func signatureOf(name, digest string) []byte {
+	b, _ := json.Marshal(statement{Type: statementV1, PredicateType: signURI, Predicate: map[string]any{},
+		Subject: []subjectOf{{Name: name, Digest: map[string]string{"sha256": digest}}}})
+	return b
+}
 
 func mustDecode(s string) []byte {
 	b, _ := hex.DecodeString(s)
@@ -422,8 +437,7 @@ func (l Library) Sign(ctx context.Context, r def.SignRequest) (def.Written, erro
 	if err != nil || pt != attestationURI {
 		return def.Written{}, refused("the layout %s holds no attestation that pack recorded: %v", r.Out, err)
 	}
-	sig, _ := json.Marshal(statement{Type: statementV1, PredicateType: signURI, Predicate: map[string]any{},
-		Subject: []subjectOf{{Name: name, Digest: map[string]string{"sha256": d.Digest.Encoded()}}}})
+	sig := signatureOf(name, d.Digest.Encoded())
 	for _, b := range []struct {
 		predicateType string
 		statement     []byte
