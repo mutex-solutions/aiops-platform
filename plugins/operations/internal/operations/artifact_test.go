@@ -613,6 +613,27 @@ func TestVerifyOfAnUnsignedArtifactThatAllowUnsignedLists(t *testing.T) {
 	}
 }
 
+// verify refuses by check 5, before allowUnsigned, an artifact with no module whose id
+// is under the reserved owner aiops or contrib and whose signer is not the release key
+// the binary carries, as the gate does at install and at boot (ADR-048 decision 14).
+func TestVerifyRefusesAReservedOwner(t *testing.T) {
+	sum := packSummary()
+	sum.ID = "aiops/connector-x"
+	l := Library{Box: &packBox{sum: sum}}
+	files := map[string]string{}
+	for name, data := range pack {
+		files[name] = strings.ReplaceAll(data, "acme", "aiops")
+	}
+	out := filepath.Join(t.TempDir(), "artifact")
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: pluginDir(t, files), Out: out}); err != nil {
+		t.Fatal(err)
+	}
+	home := pluginDir(t, map[string]string{"trust.yaml": "allowUnsigned: [aiops/connector-x]\n"})
+	if v, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("Verify of an unsigned aiops/connector-x = %+v, %v; want ErrRefused naming the reserved owner", v, err)
+	}
+}
+
 // verify runs the suites of plugin check, through the same runs, on what a pack's
 // artifact carries: step 5 on its fixtures and the echo scenario of step 8. The step
 // passes when both pass, fails naming a failed obligation, and is not built where the
