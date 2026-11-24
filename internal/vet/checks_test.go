@@ -212,7 +212,9 @@ func TestImportsServerClosureLinksNoTestOrExample(t *testing.T) {
 }
 
 // The toolbox that aiopsctl alone carries (ADR-061 decision 21): plugingen, the import
-// analyzer and plugin vet, the templates and the embedded suites enter no server binary.
+// analyzer and plugin vet, the templates and the embedded suites, the builder and the
+// launcher of aiopsctl that hands them to boot enter no server binary, nor does what the
+// builder links, x/tools and the licence classifier (ADR-044, Consequences).
 func TestImportsServerClosureLinksNoToolbox(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "cmd/aiops/main.go", "package main\n")
@@ -220,7 +222,8 @@ func TestImportsServerClosureLinksNoToolbox(t *testing.T) {
 	closure := func(deps map[string][]string) ListDeps {
 		return func(_, pkg string) ([]string, error) { return deps[pkg], nil }
 	}
-	tools := []string{mp + "/internal/plugingen", mp + "/internal/vet", mp + "/internal/authoring", mp + "/templates"}
+	tools := []string{mp + "/internal/plugingen", mp + "/internal/vet", mp + "/internal/authoring", mp + "/templates", mp + "/internal/builder",
+		mp + "/internal/aiopsctl", "golang.org/x/tools/go/ssa", "github.com/google/licenseclassifier/v2", "github.com/sergi/go-diff/diffmatchpatch"}
 	if err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiopsctl": tools})); err != nil {
 		t.Fatalf("the toolbox in aiopsctl: %v", err)
 	}
