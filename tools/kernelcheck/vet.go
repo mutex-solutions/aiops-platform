@@ -7,16 +7,21 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // Document references for plugin vet.
 const (
-	docVet = "plugin-system-2026-11.md §14 (T0 Static); 08-profiles-roadmap-adrs.md:1256"
-	docGo  = "plugin-system-2026-11.md §14 (bare go); 07-c4-plugin-sdk.md:37 (signals are boot's)"
+	docVet    = "plugin-system-2026-11.md §14 (T0 Static); 08-profiles-roadmap-adrs.md:1256"
+	docGo     = "plugin-system-2026-11.md §14 (bare go); 07-c4-plugin-sdk.md:37 (signals are boot's)"
+	docListen = "ADR-062 decision 13"
 )
 
 // vetSkip lists directories, as slash path fragments, that plugin vet does not
@@ -46,9 +51,71 @@ var forbiddenCalls = map[string][]string{
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel":    {"WithCommit"},
 }
 
-// listenAllow is the list of ADR-062 decisions 13 and 14. The listener rule is not
-// built yet.
-var listenAllow map[string][]string
+// listenFuncs are the functions that open a listening socket or bind a socket to an
+// address, by import path, and listenMethods the methods that do, by the full name
+// the type check gives them (ADR-062 decision 13). A listener is a way into the
+// process past the identities and authz checks of http-server (03-c3-kernel.md:109),
+// so plugin code calls one only where listenAllow names its plugin.
+var listenFuncs = map[string][]string{
+	"net": {"Listen", "ListenPacket", "ListenTCP", "ListenUDP", "ListenIP", "ListenUnix", "ListenUnixgram",
+		"ListenMulticastUDP", "FileListener", "FilePacketConn"},
+	"crypto/tls":            {"Listen"},
+	"net/http":              {"ListenAndServe", "ListenAndServeTLS"},
+	"net/http/httptest":     {"NewServer", "NewTLSServer", "NewUnstartedServer"},
+	"syscall":               {"Listen", "Bind"},
+	"golang.org/x/sys/unix": {"Listen", "Bind"},
+}
+
+var listenMethods = map[string]bool{
+	"(*net.ListenConfig).Listen": true, "(*net.ListenConfig).ListenPacket": true,
+	"(*net/http.Server).ListenAndServe": true, "(*net/http.Server).ListenAndServeTLS": true,
+	"(*net/http/httptest.Server).Start": true, "(*net/http/httptest.Server).StartTLS": true,
+}
+
+// listenAllow is the one list of ADR-062 decisions 13 and 14: each plugin id, under
+// the reserved owner aiops that no third party carries (ADR-048 decision 14), with
+// the calls it may make, named as "<import path>.<function>" or by a method's full
+// name. Vet reads the id from the plugin.yaml of the plugin that holds the file, so a
+// file with no manifest above it matches no entry. aiopsctl plugin check uses the
+// same list once vet moves into a package both share (ADR-060 decision 23); the
+// http-server entry joins with its own ADR at S3.
+var listenAllow = map[string][]string{
+	"aiops/reload-socket": {"net.ListenUnix"},
+	// The named exception of the dial rule (07-c4-plugin-sdk.md:1400): the client of
+	// the socket of reload-socket, with the network unix (ADR-062 decision 14). Vet
+	// does not build that rule yet; the entry admits no listener.
+	"aiops/operations": {"net.DialUnix"},
+}
+
+// listens reports whether call, a function of listenFuncs or a method of
+// listenMethods, is refused to the plugin id.
+func listens(id, call string) bool { return !slices.Contains(listenAllow[id], call) }
+
+// listenViolation reports a listener at where that the list does not allow id.
+func listenViolation(where, call, id string) string {
+	if id == "" {
+		id = "a directory with no plugin.yaml"
+	}
+	return fmt.Sprintf("%s: %s opens a listener or binds a socket, which the list of plugin vet does not allow %s (%s)", where, call, id, docListen)
+}
+
+// manifestID returns the id of the plugin.yaml nearest above dir, up to root, and ""
+// when there is none or it does not read.
+func manifestID(dir, root string) string {
+	for {
+		if b, err := os.ReadFile(filepath.Join(dir, "plugin.yaml")); err == nil {
+			var m struct{ ID string }
+			if yaml.Unmarshal(b, &m) != nil {
+				return ""
+			}
+			return m.ID
+		}
+		if dir == root || filepath.Dir(dir) == dir {
+			return ""
+		}
+		dir = filepath.Dir(dir)
+	}
+}
 
 // goFuncs start an untracked goroutine like a bare go statement does. Plugin
 // code may not call them; boot may, with an allow-go comment.
@@ -120,11 +187,12 @@ func (t *treeImporter) Import(p string) (*types.Package, error) {
 	return pkg, nil
 }
 
-// vetMethods type-checks the files of one directory, given as path to report
-// name, and reports each use of a goMethods method (untracked). Type errors are
-// expected, as imports outside the standard library and the tree stay unresolved;
-// they are ignored.
-func vetMethods(files map[string]string, imp types.Importer, boot bool) (vetResult, error) {
+// vetMethods type-checks the files of one directory of the plugin id, given as path
+// to report name, and reports each use of a goMethods method (untracked) and of a
+// listenMethods method that the list does not allow id. Type errors are expected, as
+// imports outside the standard library and the tree stay unresolved; they are
+// ignored.
+func vetMethods(files map[string]string, imp types.Importer, boot bool, id string) (vetResult, error) {
 	var r vetResult
 	fset := token.NewFileSet()
 	var parsed []*ast.File
@@ -140,9 +208,16 @@ func vetMethods(files map[string]string, imp types.Importer, boot bool) (vetResu
 	conf := types.Config{Importer: imp, Error: func(error) {}}
 	_, _ = conf.Check("p", fset, parsed, info)
 	for sel, s := range info.Selections {
-		if fn, ok := s.Obj().(*types.Func); ok && goMethods[fn.FullName()] {
-			name := fset.PositionFor(sel.Sel.Pos(), false).Filename
-			r.untracked(fset, byPath[name], files[name], sel.Sel.Pos(), fn.FullName()+" starts an untracked goroutine", boot)
+		fn, ok := s.Obj().(*types.Func)
+		if !ok {
+			continue
+		}
+		pos := fset.PositionFor(sel.Sel.Pos(), false)
+		if goMethods[fn.FullName()] {
+			r.untracked(fset, byPath[pos.Filename], files[pos.Filename], sel.Sel.Pos(), fn.FullName()+" starts an untracked goroutine", boot)
+		}
+		if listenMethods[fn.FullName()] && listens(id, fn.FullName()) {
+			r.violations = append(r.violations, listenViolation(fmt.Sprintf("%s:%d", files[pos.Filename], pos.Line), fn.FullName(), id))
 		}
 	}
 	return r, nil
@@ -228,9 +303,9 @@ func allowedVarCall(e ast.Expr, imports map[string]string) bool {
 	return false
 }
 
-// vetFile checks one non-test file. boot relaxes the bare go rule to a
-// //kernelcheck:allow-go comment.
-func vetFile(p, rel string, boot bool) (vetResult, error) {
+// vetFile checks one non-test file of the plugin pluginID. boot relaxes the bare go
+// rule to a //kernelcheck:allow-go comment.
+func vetFile(p, rel string, boot bool, pluginID string) (vetResult, error) {
 	var r vetResult
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, p, nil, parser.ParseComments|parser.SkipObjectResolution)
@@ -322,6 +397,9 @@ func vetFile(p, rel string, boot bool) (vetResult, error) {
 					break
 				}
 			}
+			if slices.Contains(listenFuncs[path], x.Sel.Name) && listens(pluginID, path+"."+x.Sel.Name) {
+				r.violations = append(r.violations, listenViolation(fmt.Sprintf("%s:%d", rel, fset.Position(x.Pos()).Line), id.Name+"."+x.Sel.Name, pluginID))
+			}
 			if goFuncs[path] == x.Sel.Name {
 				r.untracked(fset, f, rel, x.Pos(), fmt.Sprintf("%s.%s starts an untracked goroutine", id.Name, x.Sel.Name), boot)
 			}
@@ -385,7 +463,8 @@ func vetSkipped(p string) bool {
 }
 
 // checkPluginVet reads the non-test Go files under each dir. A dir whose base
-// name is boot gets the allow-go relaxation for every goroutine starter.
+// name is boot gets the allow-go relaxation for every goroutine starter. A file
+// belongs to the plugin of the plugin.yaml nearest above it within dir.
 func checkPluginVet(dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
@@ -397,7 +476,7 @@ func checkPluginVet(dirs []string) error {
 				return nil
 			}
 			name := filepath.ToSlash(filepath.Join(dir, rel))
-			r, err := vetFile(p, name, boot)
+			r, err := vetFile(p, name, boot, manifestID(filepath.Dir(p), dir))
 			res.violations = append(res.violations, r.violations...)
 			res.exemptions = append(res.exemptions, r.exemptions...)
 			d := filepath.Dir(p)
@@ -411,8 +490,8 @@ func checkPluginVet(dirs []string) error {
 			return err
 		}
 		imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}}
-		for _, files := range pkgs {
-			r, err := vetMethods(files, imp, boot)
+		for d, files := range pkgs {
+			r, err := vetMethods(files, imp, boot, manifestID(d, dir))
 			if err != nil {
 				return err
 			}

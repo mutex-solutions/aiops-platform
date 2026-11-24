@@ -416,7 +416,7 @@ func TestPluginVetListenList(t *testing.T) {
 func TestPluginVetCountsExemptions(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "plugins/a/plugin.go", "package p\n\n//kernelcheck:allow-var one\nvar a int\n\n//kernelcheck:allow-var two\nvar b int\n")
-	r, err := vetFile(filepath.Join(d, "plugins/a/plugin.go"), "plugins/a/plugin.go", false)
+	r, err := vetFile(filepath.Join(d, "plugins/a/plugin.go"), "plugins/a/plugin.go", false, "")
 	if err != nil || len(r.violations) != 0 || len(r.exemptions) != 2 || r.exemptions[0] != "plugins/a/plugin.go:4: allow-var: one" {
 		t.Fatalf("%+v %v", r, err)
 	}
@@ -427,11 +427,11 @@ func TestPluginVetCountsBootStarters(t *testing.T) {
 	d := t.TempDir()
 	p := filepath.Join(d, "boot/a.go")
 	write(t, d, "boot/a.go", "package boot\n\nimport (\"context\"; \"sync\")\n\nfunc f(ctx context.Context, wg *sync.WaitGroup) {\n\twg.Go(func() {}) //kernelcheck:allow-go joined by Close\n\tcontext.AfterFunc(ctx, func() {}) //kernelcheck:allow-go stops with ctx\n}\n")
-	r, err := vetFile(p, "boot/a.go", true)
+	r, err := vetFile(p, "boot/a.go", true, "")
 	if err != nil || len(r.violations) != 0 || !slices.Equal(r.exemptions, []string{"boot/a.go:7: allow-go: stops with ctx"}) {
 		t.Fatalf("file: %+v %v", r, err)
 	}
-	r, err = vetMethods(map[string]string{p: "boot/a.go"}, stdImporter, true)
+	r, err = vetMethods(map[string]string{p: "boot/a.go"}, stdImporter, true, "")
 	if err != nil || len(r.violations) != 0 || !slices.Equal(r.exemptions, []string{"boot/a.go:6: allow-go: joined by Close"}) {
 		t.Fatalf("methods: %+v %v", r, err)
 	}
