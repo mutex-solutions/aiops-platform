@@ -60,7 +60,6 @@ type Request struct {
 	Out       string            // the output directory, which does not exist or is empty
 	Cache     string            // the builder's own cache, which holds the toolchain
 	Progress  io.Writer
-	Created   time.Time // the creation time of the SBOMs
 }
 
 // Signed is the second phase of a release build (ADR-020 decision 13): the manifest
@@ -726,10 +725,7 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 	if _, err := ctlGo.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiopsctl, "./cmd/aiopsctl"); err != nil {
 		return res, err
 	}
-	created := b.q.Created
-	if created.IsZero() {
-		created = time.Now()
-	}
+	created := time.Unix(0, 0).UTC() // the epoch, as every manifest of the image records, so one build writes one digest
 	mpl, err := Notices(filepath.Join(out, "aiops"), "aiops", pkgs, l, created)
 	if err != nil {
 		return res, err

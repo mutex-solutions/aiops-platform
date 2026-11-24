@@ -5,6 +5,7 @@ package builder
 import (
 	"bytes"
 	"cmp"
+	"crypto/sha256"
 	_ "embed" // stdnotices.txt
 	"encoding/json"
 	"errors"
@@ -32,7 +33,7 @@ import (
 //     the module zip that the build checked (MPL-2.0 §3.2);
 //   - <name>.spdx.json: an SBOM, SPDX 2.3 in JSON, of the binary name and each module
 //     it links, the toolchain module among them, with its version, sum and detected
-//     licence, created at created.
+//     licence, created at created, its namespace the digest of its content.
 //
 // It returns the MPL-2.0 modules, whose zips the distributor of the binary keeps.
 func Notices(dir, name string, pkgs []Package, l Licences, created time.Time) ([]Module, error) {
@@ -112,8 +113,7 @@ func spdxOf(name string, cs []component, created time.Time) ([]byte, error) {
 	}
 	const none = "NOASSERTION"
 	doc := map[string]any{"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT", "name": name,
-		"documentNamespace": "https://github.com/mutex-solutions/aiops-platform/spdx/" + name + "/" + created.UTC().Format("20060102T150405Z"),
-		"creationInfo":      map[string]any{"created": created.UTC().Format(time.RFC3339), "creators": []string{"Tool: aiopsctl"}}}
+		"creationInfo": map[string]any{"created": created.UTC().Format(time.RFC3339), "creators": []string{"Tool: aiopsctl"}}}
 	packages := []pkg{{SPDXID: "SPDXRef-Package-0", Name: name, DownloadLocation: none, LicenseConcluded: none, LicenseDeclared: none, CopyrightText: none}}
 	rels := []rel{{"SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Package-0"}}
 	for i, c := range cs {
@@ -136,6 +136,12 @@ func spdxOf(name string, cs []component, created time.Time) ([]byte, error) {
 		rels = append(rels, rel{"SPDXRef-Package-0", "CONTAINS", p.SPDXID})
 	}
 	doc["packages"], doc["relationships"] = packages, rels
+	// The namespace is unique to the content, not to the time: one build writes one SBOM.
+	content, err := json.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	doc["documentNamespace"] = fmt.Sprintf("https://github.com/mutex-solutions/aiops-platform/spdx/%s/%x", name, sha256.Sum256(content))
 	return json.MarshalIndent(doc, "", "  ")
 }
 
