@@ -5,13 +5,14 @@
 // sign, push, inspect, verify, gate, install, enable, disable and remove (ADR-061
 // decision 30; 07-c4-plugin-sdk.md:1565, :1578; 08-profiles-roadmap-adrs.md:373-375).
 // pack, sign, push, inspect and verify call the methods of the operations library of
-// the same names on the OCI artifact of ADR-047, and plugin new and plugin check call
-// New and Check and print what was written or the steps of the check (ADR-061
-// decisions 16 and 20; ADR-060 decisions 23 and 24). The other commands are declared
-// with their synopses and flags, so the module table and the name lint hold them, and
-// answer that they are not built yet: each runs through one method of the operations
-// library, which they join with that method. plugin purge joins at S3 (ADR-060
-// decision 47).
+// the same names on the OCI artifact of ADR-047; plugin new and plugin check call New
+// and Check and print what was written or the steps of the check (ADR-061 decisions 16
+// and 20; ADR-060 decisions 23 and 24); gate, install, enable, disable and remove call
+// Gate, Install, Enable, Disable and Remove, which submit over the socket of ADR-062
+// within --connect-wait and --wait, and print the outcome (ADR-061 decisions 17 and
+// 44). plugin smoke is declared with its synopsis and flags, so the module table and
+// the name lint hold it, and answers that it is not built yet: it joins with the
+// builder of ADR-044. plugin purge joins at S3 (ADR-060 decision 47).
 package commandplugin
 
 import (
@@ -23,10 +24,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
@@ -46,7 +49,8 @@ var Plugin = plugin.Define(plugin.Spec[Config]{
 	Apply: func(c *kernel.Context, _ *Config) error {
 		r, ops := commands.Key.Of(c), operations.Key.Of(c)
 		runs := map[string]func(context.Context, operations.Operations, commands.Invocation) error{
-			"new": newPlugin, "check": check, "pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify}
+			"new": newPlugin, "check": check, "pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify,
+			"gate": gate, "install": install, "enable": enable, "disable": disable, "remove": remove}
 		for _, s := range specs() {
 			var cmd commands.Command = notBuilt(s.Name())
 			if run, ok := runs[s.Path[1]]; ok {
@@ -75,6 +79,10 @@ func specs() []commands.Spec {
 	out := commands.Flag{Name: "out", Kind: commands.String, Value: "<dir>", Usage: "the directory of the artifact's layout"}
 	profile := commands.Flag{Name: "profile", Kind: commands.String, Value: "<p>", Usage: "the profile to change (default: the one that run/status.json of the home names)"}
 	against := commands.Flag{Name: "against", Kind: commands.String, Value: "<dist.yaml>", Usage: "the published signed manifest of the release to check against"}
+	// The bounds of a submission over the socket of reload-socket (ADR-062 decisions 9
+	// and 10).
+	connect := commands.Flag{Name: "connect-wait", Kind: commands.String, Value: "<duration>", Usage: "how long to try the socket of a running process (default: 60s)"}
+	wait := commands.Flag{Name: "wait", Kind: commands.String, Value: "<duration>", Usage: "how long to wait for the final result (default: 10m)"}
 	return []commands.Spec{
 		spec("new", "Write a new plugin from the template of a registry, or a connector pack of a release.", []string{"<registry>", "<id>"}, 2, 2,
 			commands.Flag{Name: "lang", Kind: commands.String, Value: "go", Usage: "the language of the plugin"},
@@ -92,10 +100,10 @@ func specs() []commands.Spec {
 		spec("inspect", "Show what a spec names, fetching only its manifest and its bundle.", []string{"<spec>"}, 1, 1),
 		spec("verify", "Verify the signer of an artifact and run its suites.", []string{"<spec>"}, 1, 1, builder),
 		spec("gate", "Run the clauses of the gate on an artifact against a published release.", []string{"<spec>"}, 1, 1, required(against)),
-		spec("install", "Install an artifact into a profile of the home.", []string{"<spec>"}, 1, 1, profile),
-		spec("enable", "Enable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile),
-		spec("disable", "Disable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile),
-		spec("remove", "Remove an installed plugin from a profile of the home.", []string{"<id>"}, 1, 1, profile),
+		spec("install", "Install an artifact into a profile of the home.", []string{"<spec>"}, 1, 1, profile, connect, wait),
+		spec("enable", "Enable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile, connect, wait),
+		spec("disable", "Disable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile, connect, wait),
+		spec("remove", "Remove an installed plugin from a profile of the home.", []string{"<id>"}, 1, 1, profile, connect, wait),
 	}
 }
 
@@ -304,4 +312,116 @@ func verify(ctx context.Context, ops operations.Operations, inv commands.Invocat
 		return fmt.Errorf("plugin verify did not pass: %s", strings.Join(failed, ", "))
 	}
 	return nil
+}
+
+// gate is plugin gate <spec> --against <dist.yaml>: each clause on stdout, and exit 1
+// when one denies (08:493).
+func gate(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	v, err := ops.Gate(ctx, operations.GateRequest{Caller: caller(inv), Spec: specOf(inv, inv.Args[0]), Against: abs(inv, inv.Value("against"))})
+	if err != nil {
+		return err
+	}
+	var denied []string
+	for _, c := range v.Clauses {
+		line := fmt.Sprintf("check %d", c.Check)
+		if c.Clause != "" {
+			line += " " + c.Clause
+		}
+		line += ": " + c.Outcome
+		if c.Reason != "" {
+			line += ": " + c.Reason
+		}
+		fmt.Fprintln(inv.Out, line)
+		if c.Outcome == launch.OutcomeDeny {
+			denied = append(denied, line)
+		}
+	}
+	if len(denied) > 0 {
+		return fmt.Errorf("the gate at plugin gate --against denies: %s", strings.Join(denied, "; "))
+	}
+	return nil
+}
+
+// waits returns the bounds of --connect-wait and --wait, zero for the library's
+// defaults.
+func waits(inv commands.Invocation) (connect, wait time.Duration, err error) {
+	for _, f := range []struct {
+		name string
+		d    *time.Duration
+	}{{"connect-wait", &connect}, {"wait", &wait}} {
+		if v := inv.Value(f.name); v != "" && err == nil {
+			*f.d, err = time.ParseDuration(v)
+		}
+	}
+	if err != nil {
+		err = fmt.Errorf("%w: --connect-wait and --wait take a duration, 60s or 10m: %v", commands.ErrUsage, err)
+	}
+	return connect, wait, err
+}
+
+func install(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	c, w, err := waits(inv)
+	if err != nil {
+		return err
+	}
+	return changed(inv)(ops.Install(ctx, operations.InstallRequest{Caller: caller(inv), Home: inv.Home, Profile: inv.Value("profile"),
+		Spec: specOf(inv, inv.Args[0]), ConnectWait: c, Wait: w}))
+}
+
+func enable(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	return row(ctx, inv, ops.Enable)
+}
+
+func disable(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	return row(ctx, inv, ops.Disable)
+}
+
+func row(ctx context.Context, inv commands.Invocation, m func(context.Context, operations.RowRequest) (operations.Change, error)) error {
+	c, w, err := waits(inv)
+	if err != nil {
+		return err
+	}
+	return changed(inv)(m(ctx, operations.RowRequest{Caller: caller(inv), Home: inv.Home, Profile: inv.Value("profile"), Row: inv.Args[0],
+		ConnectWait: c, Wait: w}))
+}
+
+func remove(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	c, w, err := waits(inv)
+	if err != nil {
+		return err
+	}
+	return changed(inv)(ops.Remove(ctx, operations.RemoveRequest{Caller: caller(inv), Home: inv.Home, Profile: inv.Value("profile"), ID: inv.Args[0],
+		ConnectWait: c, Wait: w}))
+}
+
+// changed prints a change of the home: the paths written and the notes on stderr; on
+// stdout the dist.yaml lines of rebuild-required, the final result, or with none the
+// operation ids and the last status, and the outcome (ADR-061 decisions 11 and 44).
+// The library's error decides the exit.
+func changed(inv commands.Invocation) func(operations.Change, error) error {
+	return func(ch operations.Change, err error) error {
+		for _, p := range ch.Written {
+			fmt.Fprintln(inv.Err, "wrote "+p)
+		}
+		for _, n := range ch.Notes {
+			fmt.Fprintln(inv.Err, n)
+		}
+		for _, l := range ch.DistLines {
+			fmt.Fprintln(inv.Out, l)
+		}
+		switch r := ch.Result; {
+		case r != nil:
+			fmt.Fprintf(inv.Out, "result %s, generation %d, digest %s\n", r.Status, r.Generation, r.Digest)
+		case len(ch.IDs) > 0:
+			ids := make([]string, len(ch.IDs))
+			for i, id := range ch.IDs {
+				ids[i] = fmt.Sprint(id)
+			}
+			fmt.Fprintf(inv.Out, "operations %s; last status %s\n", strings.Join(ids, ", "), ch.Last)
+		}
+		if ch.Outcome != "" {
+			fmt.Fprintln(inv.Out, strings.TrimSuffix(string(ch.Outcome)+": "+ch.Reason, ": "))
+		}
+		return err
+	}
 }

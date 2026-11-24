@@ -89,7 +89,7 @@ func recorded(ctx context.Context, src source, d ocispec.Descriptor) ([]byte, er
 func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
-		err = def.ProfileName(r.Profile)
+		r.Profile, err = profileOf(h, r.Profile)
 	}
 	if err != nil {
 		return def.Change{}, err
@@ -145,6 +145,21 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 		Submit: submitted(h, r.Profile, reload.CommandInstall, "", [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res),
 	})
 	return changed(done, ch, err, res)
+}
+
+// profileOf is the profile of a command: p, or with none the profile that
+// run/status.json of the home names (ADR-061 decision 30).
+func profileOf(h Home, p string) (string, error) {
+	if p == "" {
+		var st reload.ProcessStatus
+		if b, err := os.ReadFile(h.path("run/status.json")); err == nil && json.Unmarshal(b, &st) == nil {
+			p = st.Profile
+		}
+		if p == "" {
+			return "", usage("no --profile, and no run/status.json of %s names a profile", h.Dir)
+		}
+	}
+	return p, def.ProfileName(p)
 }
 
 // profile returns profiles/<p>/profile.yaml of the home, or the shipped template,
@@ -419,7 +434,7 @@ func (l Library) Disable(ctx context.Context, r def.RowRequest) (def.Change, err
 func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
-		err = def.ProfileName(r.Profile)
+		r.Profile, err = profileOf(h, r.Profile)
 	}
 	if err != nil {
 		return def.Change{}, err
@@ -517,7 +532,7 @@ func field(n *yaml.Node, key string) *yaml.Node {
 func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
-		err = def.ProfileName(r.Profile)
+		r.Profile, err = profileOf(h, r.Profile)
 	}
 	if err != nil {
 		return def.Change{}, err

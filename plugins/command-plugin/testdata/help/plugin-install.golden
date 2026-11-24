@@ -1,9 +1,11 @@
-usage: aiopsctl plugin install <spec> [--profile <p>]
+usage: aiopsctl plugin install <spec> [--profile <p>] [--connect-wait <duration>] [--wait <duration>]
 
 Install an artifact into a profile of the home.
 
 Flags:
-  --profile <p>  the profile to change (default: the one that run/status.json of the home names)
+  --profile <p>              the profile to change (default: the one that run/status.json of the home names)
+  --connect-wait <duration>  how long to try the socket of a running process (default: 60s)
+  --wait <duration>          how long to wait for the final result (default: 10m)
 
 Exit codes:
   0  success, or help that was asked for
