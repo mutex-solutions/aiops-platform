@@ -101,6 +101,35 @@ func TestManifestOfASite(t *testing.T) {
 	}
 }
 
+// The owner check runs on what the manifest records (ADR-060 decision 22; 08:402): a
+// package of a module outside the release that holds a plugin.yaml under aiops/ or
+// contrib/ is refused wherever it lies, under testdata/ too, which go builds once a
+// package imports it; and two packages that declare one id are refused, not one entry
+// kept. A server graph that links a package under testdata/ is refused too.
+func TestManifestOwners(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "plugins", "clock", "plugin.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	acme := strings.NewReplacer("id: aiops/clock", "id: acme/clock", "publisher: {id: aiops}", "publisher: {id: acme}").Replace(string(src))
+	sneak := Module{Path: "example.test/sneak", Version: "v0.1.0", Sum: h1("sneak"), Dir: moduleDir(t, map[string]string{
+		"plugin.go": "package sneak\n", "plugin.yaml": acme, "internal/testdata/reg/plugin.yaml": string(src), "internal/testdata/reg/reg.go": "package reg\n"})}
+	other := Module{Path: "example.test/other", Version: "v0.1.0", Sum: h1("other"), Dir: moduleDir(t, map[string]string{"plugin.go": "package other\n", "plugin.yaml": acme})}
+	licences := map[string]string{sneak.Path: "Apache-2.0", other.Path: "Apache-2.0"}
+	root := Package{ImportPath: sneak.Path, Dir: sneak.Dir, Module: sneak}
+	if _, err := (Manifest{Graph: []Package{root, pkg(sneak, "internal/testdata/reg")}, Licences: licences}).Write(); err == nil ||
+		!strings.Contains(err.Error(), "example.test/sneak/internal/testdata/reg declares the id aiops/clock") {
+		t.Errorf("an aiops/ id outside the release, under testdata/: %v", err)
+	}
+	if _, err := (Manifest{Graph: []Package{root, {ImportPath: other.Path, Dir: other.Dir, Module: other}}, Licences: licences}).Write(); err == nil ||
+		!strings.Contains(err.Error(), "acme/clock is declared by example.test/sneak and by example.test/other") {
+		t.Errorf("one id declared twice: %v", err)
+	}
+	if err := fakes([]Package{pkg(sneak, "internal/testdata/reg")}); err == nil || !strings.Contains(err.Error(), "under testdata/") {
+		t.Errorf("a package under testdata/ in the server graph: %v", err)
+	}
+}
+
 // No binary of the repository links golang.org/x/net/trace, whose init registers
 // /debug/requests and /debug/events on http.DefaultServeMux: gRPC reaches every binary
 // through the signing library, and each build has the tag grpcnotrace (ADR-020
