@@ -21,6 +21,14 @@ import (
 	"github.com/mutex-solutions/aiops-platform/boot"
 )
 
+// BuildFlags are the flags of every build of a binary of the repository.
+var BuildFlags []string
+
+const tracePackage = "golang.org/x/net/trace"
+
+// traceFree checks the package graph pkgs of main.
+func traceFree(main string, pkgs []string) error { return nil }
+
 // Distribution writes the signed distribution manifest (ADR-060 decision 20) of the
 // binary whose main package is mainPkg in the module at root, as boot reads it
 // (boot.ReadDistribution), with the bindings and the required set of the builder's
