@@ -269,16 +269,22 @@ func TestWritersAreSerialised(t *testing.T) {
 // on its stdout, and waits there to be killed.
 const helperEnv = "OPERATIONS_TEST_HELPER"
 
+// stops is the stage at which the child of each mode stops: after its first rename;
+// after the first step of the restore that its refused submission starts; and after
+// the snapshot is renamed aside for its removal, at the end of the write or of the
+// restore.
+var stops = map[string]string{"rename": "renamed", "restore": "restored", "remove": "trashed", "restore-remove": "trashed"}
+
 func TestHelperProcess(t *testing.T) {
 	mode := os.Getenv(helperEnv)
 	if mode == "" {
 		t.Skip("run by the kill tests in a child process")
 	}
 	h := Home{Dir: os.Getenv("OPERATIONS_TEST_HOME"), LockWait: time.Second}
-	stop := "renamed"
+	stop := stops[mode]
 	var submit func(context.Context) error
-	if mode == "restore" {
-		stop, submit = "restored", func(context.Context) error { return errors.New("refused") }
+	if strings.HasPrefix(mode, "restore") {
+		submit = func(context.Context) error { return errors.New("refused") }
 	}
 	h.hook = func(stage string) {
 		if stage == stop {
@@ -303,6 +309,9 @@ func kill(t *testing.T, h Home, mode string) {
 		t.Fatal(err)
 	}
 	line, err := bufio.NewReader(out).ReadString('\n')
+	if err == nil && line != stops[mode]+"\n" {
+		err = errors.New("not the stage " + stops[mode])
+	}
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
@@ -345,5 +354,59 @@ func TestKilledWriteIsRestoredByTheNextWriter(t *testing.T) {
 				t.Errorf("notes %q, want one that says the snapshot was restored", done.Notes)
 			}
 		})
+	}
+}
+
+// A write killed while it removes its snapshot, at the end of the write or at the end
+// of its restore, leaves a home that the next writer writes at once: the snapshot is
+// renamed aside before it is removed, so no reader finds part of one, and the next
+// writer restores nothing and keeps what the killed write left.
+func TestWriteKilledWhileItRemovesItsSnapshot(t *testing.T) {
+	for _, mode := range []string{"remove", "restore-remove"} {
+		t.Run(mode, func(t *testing.T) {
+			h := newHome(t)
+			want := tree(t, h)
+			if mode == "remove" {
+				want = map[string]string{"trust.yaml": "child\n", "verified/sha256-ab/record.yaml": "kind: distribution\n",
+					"verified/sha256-ab/manifest": "child\n", "verified/current": "sha256:ab\n"}
+			}
+			kill(t, h, mode)
+			h.LockWait = 0
+			done, err := h.Write(t.Context(), Write{Command: "next", Plan: func() ([]Change, error) {
+				got := tree(t, h)
+				for p := range got {
+					if strings.HasPrefix(p, "snapshot") {
+						delete(got, p)
+					}
+				}
+				if !equal(got, want) {
+					t.Errorf("the next writer planned on %v, want %v", got, want)
+				}
+				return nil, nil
+			}})
+			if err != nil || len(done.Notes) != 0 {
+				t.Fatalf("the next write: %+v, %v; want no error and no note", done, err)
+			}
+			if got := tree(t, h); !equal(got, want) {
+				t.Errorf("home %v, want %v and no snapshot", got, want)
+			}
+		})
+	}
+}
+
+// A snapshot/ with no paths.json is what a removal killed by an earlier version left:
+// paths.json is renamed into place before the snapshot is, so such a directory is never
+// a snapshot to restore, and the next writer removes it and writes.
+func TestASnapshotWithNoListIsRemoved(t *testing.T) {
+	h := newHome(t)
+	put(t, h, "snapshot/files/verified/sha256-ab/manifest", "partial\n")
+	before := tree(t, h)
+	delete(before, "snapshot/files/verified/sha256-ab/manifest")
+	done, err := h.Write(t.Context(), Write{Command: "next", Plan: plan([]Change{{Path: "trust.yaml", Data: []byte("after\n")}})})
+	if err != nil || len(done.Notes) != 0 {
+		t.Fatalf("write: %+v, %v; want no error and no note", done, err)
+	}
+	if got := tree(t, h); !equal(got, map[string]string{"trust.yaml": "after\n"}) {
+		t.Errorf("home %v, want trust.yaml written and no snapshot", got)
 	}
 }
