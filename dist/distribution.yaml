@@ -611,7 +611,7 @@ modules:
   - path: github.com/go-openapi/runtime
     version: v0.33.0
     sum: h1:Dd3Oj2ig+WH8ckK95l0Wn2V8a4bH/UqWPRZVT0vc8yU=
-    licence: Apache-2.0
+    licence: Apache-2.0 AND MIT
   - path: github.com/go-openapi/runtime/server-middleware
     version: v0.30.0
     sum: h1:8rPoJ/xv7JL8BsovaqboKETlpWBArVh8n+0L/GyePog=
@@ -1490,6 +1490,9 @@ pins:
     version: v3.0.6
     sum: h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
     gomod: h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+  - path: golang.org/toolchain
+    version: v0.0.1-go1.26.8.linux-amd64
+    sum: h1:ZOmGe1OnfREDMIdb1Qi4G9JSuDPBLGExZMQ4nis1RXM=
   - path: golang.org/x/crypto
     version: v0.57.0
     sum: h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=

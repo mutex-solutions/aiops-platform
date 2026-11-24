@@ -3,8 +3,9 @@
 // argument is a directory searched for plugin.yaml files, outside testdata and
 // hidden directories; each directory that holds one is a Go plugin. An argument that
 // holds dist/dist.yaml is the repository root: the signed distribution manifest of
-// each binary built in it (distributions) is checked, or written, too, and the
-// release's serves names no definition outside sdk/def (servesOnlySDK).
+// each binary built in it (distributions), which the builder writes from its build
+// (builder.Distribution), is checked, or written, too, and the release's serves names
+// no definition outside sdk/def (servesOnlySDK).
 //
 //	go run ./tools/plugingen .                        # parity of every plugin and manifest
 //	go run ./tools/plugingen --write plugins/clock     # write one plugin's files
@@ -14,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 )
 
@@ -83,11 +86,7 @@ func distribution(root, main, dir string, write bool) error {
 	if err != nil {
 		return err
 	}
-	register, err := os.ReadFile(filepath.Join(root, "tools", "upstream-components.yaml"))
-	if err != nil {
-		return err
-	}
-	want, err := plugingen.Distribution(root, main, input, register)
+	want, err := builder.Distribution(context.Background(), builder.Go{Dir: root}, main, input)
 	if err != nil {
 		return fmt.Errorf("%s: %w", main, err)
 	}
