@@ -831,7 +831,8 @@
     over the test distribution's module table and the counterpart of `aiops-test`
     (`cmd/aiops/main.go`). It is signed as ADR-060 decision 28 states and kept out of
     `cmd/aiopsctl` by its link guard, and the commit that moves the goldens regenerates
-    and reviews them.
+    and reviews them. Amended by decision 42: `aiopsctl` keeps `--dist`, and the goldens
+    of the test distribution stay in `cmd/aiopsctl` and compose through it.
 
 28. **No command code in a `main`.** The import analyzer fails when a package under
     `cmd/` imports `sdk/def/commands` or `sdk/def/operations`, as dsh refuses an entry
@@ -873,7 +874,7 @@
     | Command | Synopsis | Source |
     |---|---|---|
     | `help` | `help [<word>...]`; `--help` or `-h` after any words | Decision 9 |
-    | `profile render` | `profile render --profile <p> [--home <dir>] [--bundles <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]` | `08:359`-`364`; `cmd/aiopsctl/run.go` at S1, less `--dist` (decision 27) |
+    | `profile render` | `profile render --profile <p> [--home <dir>] [--bundles <dir>] [--dist <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]` | `08:359`-`364`; `cmd/aiopsctl/run.go` at S1, with `--dist` (decision 42) |
     | `profile verify` | `profile verify` | `08:366` |
     | `profile init` | `profile init <p>` | `08:72` row 30; ADR-060 decision 27 |
     | `profile sanitize` | `profile sanitize [<p>]` | `08:72` row 30; dsh §3.4; question Q9 |
@@ -1404,3 +1405,53 @@ the steps that build `oncall override` and `slack manifest` (P1, `00:137`) edit 
 build their command rows by decision 40 (decision 32). Until then those lists omit
 `aiops-chatops-slack-cli`, which `00` §4.4 and `08` §1.4 list. An option the owner did not
 choose edits nothing.
+
+## Owner answers of 2026-11-24
+
+The project owner answered on 2026-11-24 three points that the work of S2a raised after
+the acceptance of this ADR. Each decision below records one; where a decision above says
+otherwise, the decision here holds.
+
+42. **`aiopsctl` keeps `--dist`** (amends decision 27). `profile render` keeps the flag
+    `--dist <dir>`, which renders against the signed manifest `distribution.yaml` of a
+    directory instead of the one `aiopsctl` embeds. The goldens of the test distribution
+    stay in `cmd/aiopsctl/testdata/test-dist/` and compose through `--dist`. The option
+    that decision 27 recommended, a separate `aiopsctl-test` binary under
+    `test/dist/cmd/` over the test distribution's module table, is declined, so no such
+    binary is signed or guarded. The CLI spec of decision 30 lists `--dist` for `profile
+    render`.
+
+43. **A write that the wire does not carry answers `restart-required` and exits 0 while
+    a process runs.** `profile init`, `profile sanitize` and `trust add` answer
+    `Outcome` `restart-required` with the reason `not-submitted` and exit 0 when
+    `run/status.json` names a running process of the profile they changed, or for `trust
+    add` of the profile the file names, as the table of decision 17 says. Version 1 of
+    the wire of ADR-062 carries `plugin install`, `enable`, `disable` and `remove` only
+    (ADR-062 decisions 6 and 15), so the running process reads the change at its next
+    start; the files are kept.
+
+44. **`Change` carries the submission of the four commands, and `Outcome` only for
+    `not-running` and `restart-required`**, as decision 16 says. For `Install`,
+    `Enable`, `Disable` and `Remove`, `Change` carries `Result`, the final result as the
+    wire carries it, or with none `Error`, the error line before an id, or `IDs` and
+    `Last`, each operation id and the last status. `Outcome` is set only where no
+    process runs the profile (`not-running`) and where one runs and nothing answers
+    (`restart-required`). The rows of the table of ADR-062 decision 11 that end with no
+    final result take the names below, which the definition `sdk/def/operations/v0`
+    fixes when the four methods join it, and with which the text of the error of each
+    begins; `aiopsctl` exits 1 on each.
+
+    | Row of ADR-062 decision 11 | Name | `Change` | Files |
+    |---|---|---|---|
+    | An error line before an id exists, `peer`, `busy`, `request` or `version`, or a refusal of `Submit` | `refused` | `Error` | Restored |
+    | No final result on the second submission either | `no-final-result` | `IDs` and `Last` | Restored after `abandoned` without `state-unknown`; kept otherwise |
+    | `--wait` elapsed, or the connection was lost beyond the connect window, after the operation was accepted | `verdict-unknown` | `IDs` and `Last` | Kept |
+    | A process runs the profile and nothing answers within `--connect-wait` | `restart-required`, reason `no-answer` | `Outcome` and `Reason` | Kept |
+
+    A final result that does not show the change keeps its status as its name:
+    `rejected`, `rolled back`, `rollback failed` and `abandoned` with `state-unknown`
+    restore the files, and a `passed` that does not show the change keeps them and names
+    the row and the later layer that overrides it. `operations.ErrSubmission` matches
+    the error of every row that exits 1, and `operations.ErrRebuildRequired` the
+    `rebuild-required` of `Install`, which writes nothing and returns the `dist.yaml`
+    lines in `Change.DistLines`.
