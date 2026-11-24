@@ -118,6 +118,22 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	if _, ok := d.Plugins["acme/echo"]; !ok || len(d.Serves.Definitions["echoers"]) == 0 {
 		t.Errorf("the signed manifest lacks acme/echo or echoers: %v", d.Serves.Definitions)
 	}
+	// One build of the same inputs writes the same bytes, SBOMs and image layout included,
+	// so the image that dist sign signs can be built again to its digest (ADR-044
+	// decision 3).
+	again := t.TempDir()
+	if _, printed, err := build(again, echo); err != nil {
+		t.Fatalf("dist build again: %v\n%s", err, printed)
+	}
+	a, b := tree(t, out), tree(t, filepath.Join(again, "build"))
+	for name, sum := range a {
+		if b[name] != sum {
+			t.Errorf("%s differs between two builds of the same inputs", name)
+		}
+	}
+	if len(a) != len(b) {
+		t.Errorf("two builds of the same inputs wrote %d and %d files", len(a), len(b))
+	}
 	for _, f := range []string{"aiops/aiops", "aiops/NOTICE", "aiops/aiops.spdx.json", "aiops/THIRD_PARTY_LICENSES/golang.org/toolchain/LICENSE",
 		"aiops/THIRD_PARTY_LICENSES/golang.org/toolchain/src/runtime/memmove_amd64.s.NOTICE", "aiops/THIRD_PARTY_LICENSES/example.com/acme/echo/LICENSE",
 		"aiopsctl/aiopsctl", "aiopsctl/THIRD_PARTY_LICENSES/github.com/google/licenseclassifier/v2/LICENSE", "aiopsctl/aiopsctl.spdx.json", "image/index.json"} {

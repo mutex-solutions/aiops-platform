@@ -44,8 +44,8 @@ import (
 // trust.yaml. Once the layout is in a registry, a site's dist build of an echoer module
 // on that release runs, on the image path, the builder image the release artifact names,
 // and writes the same server, site aiopsctl and manifest as the local path from the same
-// inputs, the same licence report and the same SBOM but its creation time (ADR-044
-// decision 3). It needs the pinned toolchain module and a container runtime, so -short
+// inputs, the same licence report, the same SBOMs and the same image, digest for digest
+// (ADR-044 decision 3). It needs the pinned toolchain module and a container runtime, so -short
 // skips it and the CI job builder-image runs it.
 func TestReleaseAndBuilderImage(t *testing.T) {
 	if testing.Short() {
@@ -278,34 +278,20 @@ func layerNames(t *testing.T, dir, digest string) map[string]bool {
 	}
 }
 
-// tree returns the SHA-256 of each file under dir by its path, but the image layout,
-// whose layer holds an SBOM with its creation time, and each SBOM read without its
-// creation time and the namespace that holds it (ADR-044 decision 3).
+// tree returns the SHA-256 of each file under dir by its path, the SBOMs and the image
+// layout among them: one build of the same inputs writes the same bytes, so the image
+// that dist sign signs can be built again to its digest (ADR-044 decision 3).
 func tree(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 	err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
 		rel, _ := filepath.Rel(dir, p)
-		switch {
-		case err != nil:
+		if err != nil || e.IsDir() {
 			return err
-		case e.IsDir() && rel == "image":
-			return filepath.SkipDir
-		case e.IsDir():
-			return nil
 		}
 		data, err := os.ReadFile(p)
 		if err != nil {
 			return err
-		}
-		if strings.HasSuffix(p, ".spdx.json") {
-			var doc map[string]any
-			if err := json.Unmarshal(data, &doc); err != nil {
-				return err
-			}
-			delete(doc, "creationInfo")
-			delete(doc, "documentNamespace")
-			data, _ = json.Marshal(doc)
 		}
 		out[filepath.ToSlash(rel)] = fmt.Sprintf("%x", sha256.Sum256(data))
 		return nil
