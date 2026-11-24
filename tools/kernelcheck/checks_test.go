@@ -398,6 +398,37 @@ func TestPluginVetListeners(t *testing.T) {
 	}
 }
 
+// The id is read from the manifest at the root of the plugin that holds the file: the
+// directory given to vet when it holds a plugin.yaml, otherwise the directory under it
+// that holds the file. A plugin.yaml further down names no plugin, so no directory of a
+// plugin can claim the allowance of another id (ADR-062 decision 13).
+func TestPluginVetReadsTheIDAtThePluginRoot(t *testing.T) {
+	manifest := func(id string) string { return "manifestVersion: \"1.0\"\nid: " + id + "\nversion: 0.1.0\n" }
+	listen := "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n"
+	d := t.TempDir()
+	write(t, d, "plugins/foo/plugin.yaml", manifest("acme/foo"))
+	write(t, d, "plugins/foo/internal/x/plugin.yaml", manifest("aiops/reload-socket"))
+	write(t, d, "plugins/foo/internal/x/x.go", "package x\n"+listen)
+	write(t, d, "plugins/bar/internal/y/plugin.yaml", manifest("aiops/reload-socket"))
+	write(t, d, "plugins/bar/internal/y/y.go", "package y\n"+listen)
+	err := checkPluginVet([]string{filepath.Join(d, "plugins")})
+	for _, want := range []string{
+		"plugins/foo/internal/x/x.go:3: net.ListenUnix opens a listener or binds a socket, which the list of plugin vet does not allow acme/foo",
+		"plugins/bar/internal/y/y.go:3: net.ListenUnix opens a listener or binds a socket, which the list of plugin vet does not allow a directory with no plugin.yaml",
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("want %q, got %v", want, err)
+		}
+	}
+	// The directory given to vet is the root of the plugin when it holds the manifest.
+	one := filepath.Join(t.TempDir(), "reload-socket")
+	write(t, one, "plugin.yaml", manifest("aiops/reload-socket"))
+	write(t, one, "internal/x/x.go", "package x\n"+listen)
+	if err := checkPluginVet([]string{one}); err != nil {
+		t.Errorf("the listener of the plugin at the root of vet: %v", err)
+	}
+}
+
 // The list holds one entry per plugin id, each under the reserved owner aiops: at S2a
 // net.ListenUnix for reload-socket and the named exception of the dial rule for the
 // operations plugin (ADR-062 decisions 13 and 14).
