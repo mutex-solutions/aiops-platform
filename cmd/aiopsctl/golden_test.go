@@ -83,25 +83,49 @@ func TestGoldenDumpsOfTheTestDistribution(t *testing.T) {
 				if r.code != 0 {
 					t.Fatalf("exit %d; stderr:\n%s", r.code, r.errOut)
 				}
-				golden := filepath.Join("testdata", "test-dist", name+"."+dump.ext+".golden")
-				if *update {
-					if err := os.MkdirAll(filepath.Dir(golden), 0o755); err != nil {
-						t.Fatal(err)
-					}
-					if err := os.WriteFile(golden, []byte(r.out), 0o644); err != nil {
-						t.Fatal(err)
-					}
-					return
-				}
-				want, err := os.ReadFile(golden)
-				if err != nil {
-					t.Fatalf("%v (go test -update writes it)", err)
-				}
-				if string(want) != r.out {
-					t.Errorf("%s differs from the dump (go test -update rewrites it):\n%s", golden, firstDiff(string(want), r.out))
-				}
+				golden(t, filepath.Join("testdata", "test-dist", name+"."+dump.ext+".golden"), r.out)
 			})
 		}
+	}
+}
+
+// The goldens of the shipped cli profile (ADR-061 decisions 27 and 31; ADR-062 decision
+// 18): the dump and the hook dump of `aiopsctl profile render --profile cli`, as a
+// release aiopsctl with no home composes the profile from the files it ships, with the
+// module table of the release, aiops-core then aiops-cli, and reload-socket disabled by
+// aiops-cli. The files are in testdata/cli and `go test -update` rewrites them; a
+// change to a shipped bundle, a row's config or a hook of the cli profile is a change
+// of these files.
+func TestGoldenDumpsOfTheCLIProfile(t *testing.T) {
+	for _, dump := range []struct{ flag, ext string }{{"--dump", "dump"}, {"--dump-hooks", "hooks"}} {
+		t.Run("cli."+dump.ext, func(t *testing.T) {
+			r := do(t, fstest.MapFS{}, nil, "profile", "render", "--profile", "cli", dump.flag)
+			if r.code != 0 {
+				t.Fatalf("exit %d; stderr:\n%s", r.code, r.errOut)
+			}
+			golden(t, filepath.Join("testdata", "cli", "cli."+dump.ext+".golden"), r.out)
+		})
+	}
+}
+
+// golden compares got with the file, or with -update writes it.
+func golden(t *testing.T, file, got string) {
+	t.Helper()
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("%v (go test -update writes it)", err)
+	}
+	if string(want) != got {
+		t.Errorf("%s differs from the dump (go test -update rewrites it):\n%s", file, firstDiff(string(want), got))
 	}
 }
 
