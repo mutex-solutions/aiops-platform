@@ -108,7 +108,26 @@ func (l Library) Home(_ context.Context, r def.HomeRequest) (def.Home, error) {
 	out.Image = img.Image
 	_, err = os.Stat(h.path(snapshotDir))
 	out.Snapshot = err == nil
-	return out, nil
+	if r.Profile == "" {
+		return out, nil
+	}
+	var f struct{ Bundles []string }
+	var items []struct {
+		ID      string
+		Enabled *bool
+	}
+	out.Locked, err = readLock(h, r.Profile)
+	err = errors.Join(err, readYAML(h.path("profiles/"+r.Profile+"/profile.yaml"), &f), readYAML(h.path("profiles/"+r.Profile+"/aiops.patch.yml"), &items))
+	out.Bundles = f.Bundles
+	for _, it := range items {
+		if it.Enabled != nil && out.Enabled == nil {
+			out.Enabled = map[string]bool{}
+		}
+		if it.Enabled != nil {
+			out.Enabled[it.ID] = *it.Enabled
+		}
+	}
+	return out, err
 }
 
 // readYAML decodes the file p into v; a missing file leaves v as it is.

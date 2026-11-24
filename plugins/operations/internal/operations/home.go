@@ -456,10 +456,11 @@ func writeDir(dir string, files map[string][]byte) error {
 		return err
 	}
 	for name, data := range files {
-		if name != filepath.Base(name) || name == "." || name == ".." {
-			return fmt.Errorf("%q is not a file name", name)
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if !filepath.IsLocal(filepath.FromSlash(name)) {
+			return fmt.Errorf("%q is not a path under the directory", name)
 		}
-		if err := writeFile(filepath.Join(dir, name), data); err != nil {
+		if err := errors.Join(os.MkdirAll(filepath.Dir(p), 0o700), writeFile(p, data)); err != nil {
 			return err
 		}
 	}

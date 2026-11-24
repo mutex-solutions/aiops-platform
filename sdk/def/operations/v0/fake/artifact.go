@@ -104,25 +104,35 @@ func (s served) Inspect(_ context.Context, r operations.SpecRequest) (operations
 // signers of the home that cover its id and runtimes; the fake runs no suite.
 func (s served) Verify(_ context.Context, r operations.SpecRequest) (operations.Verified, error) {
 	return do(s, "Verify", func() (operations.Verified, error) {
-		if err := homeOf(r.Home); err != nil {
-			return operations.Verified{}, err
-		}
-		a, err := s.f.artifactAt(r.Spec)
+		a, signer, err := s.f.signer(r.Home, r.Spec)
 		if err != nil {
 			return operations.Verified{}, err
 		}
-		s.f.mu.Lock()
-		signers := s.f.home(r.Home).state.signers
-		s.f.mu.Unlock()
-		owner, _, _ := strings.Cut(a.in.ID, "/")
-		i := slices.IndexFunc(signers, func(sg operations.Signer) bool {
-			return slices.Contains(a.signers, sg.KeyID) && (slices.Contains(sg.IDs, a.in.ID) || slices.Contains(sg.IDs, owner+"/*")) &&
-				!slices.ContainsFunc(a.in.Runtimes, func(rt string) bool { return !slices.Contains(sg.Runtimes, rt) })
-		})
-		if i < 0 {
-			return operations.Verified{}, refused("check 5: no signer of the home that covers %s signed it", a.in.ID)
-		}
-		return operations.Verified{Digest: a.in.Digest, Signer: signers[i].KeyID, Steps: []operations.VerifyStep{{Name: "signature", Outcome: "pass"},
+		return operations.Verified{Digest: a.in.Digest, Signer: signer, Steps: []operations.VerifyStep{{Name: "signature", Outcome: "pass"},
 			{Name: "attestation", Outcome: "pass"}, {Name: "suites", Outcome: "not-built", Reason: "the fake runs no suite"}}}, nil
 	})
+}
+
+// signer returns the artifact at spec and the first signer of the home at dir that
+// covers its id and runtimes and signed it.
+func (f *Fake) signer(dir, spec string) (*artifact, string, error) {
+	if err := homeOf(dir); err != nil {
+		return nil, "", err
+	}
+	a, err := f.artifactAt(spec)
+	if err != nil {
+		return nil, "", err
+	}
+	f.mu.Lock()
+	signers := f.home(dir).state.signers
+	f.mu.Unlock()
+	owner, _, _ := strings.Cut(a.in.ID, "/")
+	i := slices.IndexFunc(signers, func(sg operations.Signer) bool {
+		return slices.Contains(a.signers, sg.KeyID) && (slices.Contains(sg.IDs, a.in.ID) || slices.Contains(sg.IDs, owner+"/*")) &&
+			!slices.ContainsFunc(a.in.Runtimes, func(rt string) bool { return !slices.Contains(sg.Runtimes, rt) })
+	})
+	if i < 0 {
+		return nil, "", refused("check 5: no signer of the home that covers %s signed it", a.in.ID)
+	}
+	return a, signers[i].KeyID, nil
 }

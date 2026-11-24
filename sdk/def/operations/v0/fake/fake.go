@@ -8,7 +8,8 @@
 // cannot compute without the libraries of the operations row: a holder of every write
 // lock, an interrupted write in every home, whether a process runs the profile, what
 // the launcher's toolbox ships and renders, the distribution manifest of each image a
-// registry holds, and what a plugin directory packs to. On that model it keeps the
+// registry holds, what a plugin directory packs to, the verdict of the gate at install
+// and the final result of a submission. On that model it keeps the
 // rules that do not concern files: the forms and refusals of trust add, the default
 // root, the refusals of dist use and of plugin verify, the copy of a shipped profile,
 // the restore of an interrupted write before the next one, and a lock with its wait.
@@ -26,6 +27,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -102,6 +104,7 @@ type state struct {
 	records  []operations.Record
 	current  string
 	image    string
+	layers   map[string]layer // by profile
 }
 
 type key struct {
@@ -234,7 +237,10 @@ func (f *Fake) write(ctx context.Context, dir string, change func(*state) error)
 	}
 	next := h.state
 	next.signers, next.dists, next.records = slices.Clone(next.signers), slices.Clone(next.dists), slices.Clone(next.records)
-	next.profiles = slices.Clone(next.profiles)
+	next.profiles, next.layers = slices.Clone(next.profiles), maps.Clone(next.layers)
+	if next.layers == nil {
+		next.layers = map[string]layer{}
+	}
 	if err := change(&next); err != nil {
 		return notes, err
 	}
@@ -255,6 +261,9 @@ func (s served) Home(_ context.Context, r operations.HomeRequest) (operations.Ho
 			Records: slices.Clone(h.state.records), Current: h.state.current, Image: h.state.image, Snapshot: h.snapshot != nil}
 		if out.Distributions == nil {
 			out.Distributions = []string{operations.Release}
+		}
+		if l, ok := h.state.layers[r.Profile]; ok {
+			out.Bundles, out.Enabled, out.Locked = slices.Clone(l.bundles), maps.Clone(l.enabled), slices.Clone(l.locked)
 		}
 		return out, nil
 	})

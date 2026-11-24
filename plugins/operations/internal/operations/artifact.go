@@ -411,10 +411,11 @@ func bundles(ctx context.Context, src source, d ocispec.Descriptor, predicateTyp
 	return out, err
 }
 
-// pluginYAML is what the library reads of the plugin.yaml of an artifact.
+// pluginYAML is what the library reads of the plugin.yaml of an artifact, and the file.
 type pluginYAML struct {
 	ID, Version string
 	Runtimes    []string
+	file        []byte
 }
 
 // pluginOf reads plugin.yaml of the artifact m in src.
@@ -428,6 +429,7 @@ func pluginOf(ctx context.Context, src content.Fetcher, m ocispec.Manifest) (plu
 	if err == nil {
 		err = yaml.Unmarshal(b, &pm)
 	}
+	pm.file = b
 	return pm, err
 }
 
@@ -555,67 +557,95 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	if err != nil {
 		return def.Verified{}, err
 	}
-	t, err := readTrust(h.path("trust.yaml"))
-	if err != nil {
-		return def.Verified{}, err
-	}
 	src, d, err := open(ctx, r.Caller, r.Spec)
 	if err != nil {
 		return def.Verified{}, err
 	}
-	v := def.Verified{Digest: d.Digest.String()}
-	sigs, err := bundles(ctx, src, d, signURI)
+	a, err := verified(ctx, h, src, d)
+	v := def.Verified{Digest: d.Digest.String(), Signer: a.signer}
 	if err != nil {
 		return v, err
 	}
-	type verified struct {
+	id := a.ID + "@" + a.Version
+	v.Steps = []def.VerifyStep{{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer},
+		{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()}}
+	st, err := l.verifySuites(ctx, r.Caller, src, a.m, a.pluginYAML)
+	v.Steps = append(v.Steps, st)
+	v.Passed = st.Outcome == "pass"
+	return v, err
+}
+
+// trusted is an artifact whose signature and attestation verified: its image
+// manifest, raw and read, plugin.yaml as pluginOf reads it, the signer's key id or
+// unsigned, and the bundles and the statement that install records (ADR-020 decision
+// 10).
+type trusted struct {
+	m   ocispec.Manifest
+	raw []byte
+	pluginYAML
+	signer              string
+	sig, att, statement []byte
+}
+
+// verified verifies the signature of d with each signer of trust.yaml of h, then the
+// attestation with the key that verified it, before any other blob but plugin.yaml,
+// which names the runtimes the signer must cover and is fetched only once a signature
+// verified or where allowUnsigned lists an id; an id that allowUnsigned lists may carry
+// neither and is read with the statement that pack recorded. An artifact with no module
+// under a reserved owner is refused (ADR-047 decision 2; ADR-020 decisions 8, 13 and 14).
+func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (trusted, error) {
+	var a trusted
+	t, err := readTrust(h.path("trust.yaml"))
+	if err != nil {
+		return a, err
+	}
+	sigs, err := bundles(ctx, src, d, signURI)
+	if err != nil {
+		return a, err
+	}
+	type signed struct {
 		signer int    // the index of the entry of signers
 		name   string // the subject name of the signed statement
+		bundle []byte
 	}
-	var found []verified
+	var found []signed
 	for i := range t.signers {
 		for _, b := range sigs {
 			st, err := VerifyStatement(t.signerKeys[i], b, mustDecode(d.Digest.Encoded()))
 			if n, pt := statementOf(st); err == nil && pt == signURI {
-				found = append(found, verified{i, n})
+				found = append(found, signed{i, n, b})
 			}
 		}
 	}
 	if len(found) == 0 && len(t.allow) == 0 {
-		return v, refused("check 5: no signature of %s verifies with a key that trust.yaml lists, and allowUnsigned lists no id", d.Digest)
+		return a, refused("check 5: no signature of %s verifies with a key that trust.yaml lists, and allowUnsigned lists no id", d.Digest)
 	}
-	m, err := manifest(ctx, src, d)
-	var pm pluginYAML
+	if a.raw, err = fetch(ctx, src, d); err == nil && (json.Unmarshal(a.raw, &a.m) != nil || a.m.MediaType != ocispec.MediaTypeImageManifest) {
+		err = refused("%s is not an OCI image manifest", d.Digest)
+	}
 	if err == nil {
-		pm, err = pluginOf(ctx, src, m)
+		a.pluginYAML, err = pluginOf(ctx, src, a.m)
 	}
 	if err != nil {
-		return v, err
+		return a, err
 	}
-	id := pm.ID + "@" + pm.Version
+	id := a.ID + "@" + a.Version
 	var key *ecdsa.PublicKey
-	i := slices.IndexFunc(found, func(f verified) bool { return f.name == id && covers(t.signers[f.signer], pm.ID, pm.Runtimes) })
-	switch owner, _, _ := strings.Cut(pm.ID, "/"); {
-	case !slices.Contains(pm.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
+	i := slices.IndexFunc(found, func(f signed) bool { return f.name == id && covers(t.signers[f.signer], a.ID, a.Runtimes) })
+	switch owner, _, _ := strings.Cut(a.ID, "/"); {
+	case !slices.Contains(a.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
 		// As the gate's check 5: only the release key signs such an artifact, and no
 		// binary built at S2a carries one (ADR-020 decision 13).
-		return v, refused("check 5: %s has no module and its id is under the reserved owner %s, which only the release key the binary carries signs (ADR-048 decision 14)", id, owner)
+		return a, refused("check 5: %s has no module and its id is under the reserved owner %s, which only the release key the binary carries signs (ADR-048 decision 14)", id, owner)
 	case i >= 0:
-		key, v.Signer = t.signerKeys[found[i].signer], t.signers[found[i].signer].KeyID
-	case slices.Contains(t.allow, pm.ID):
-		v.Signer = "unsigned"
+		key, a.signer, a.sig = t.signerKeys[found[i].signer], t.signers[found[i].signer].KeyID, found[i].bundle
+	case slices.Contains(t.allow, a.ID):
+		a.signer = "unsigned"
 	default:
-		return v, refused("check 5: no signature of %s verifies with a key that trust.yaml lists for %s and the runtimes %v, and allowUnsigned does not list it", d.Digest, id, pm.Runtimes)
+		return a, refused("check 5: no signature of %s verifies with a key that trust.yaml lists for %s and the runtimes %v, and allowUnsigned does not list it", d.Digest, id, a.Runtimes)
 	}
-	v.Steps = append(v.Steps, def.VerifyStep{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer})
-	if err := attestation(ctx, src, d, key, id); err != nil {
-		return v, err
-	}
-	v.Steps = append(v.Steps, def.VerifyStep{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()})
-	st, err := l.verifySuites(ctx, r.Caller, src, m, pm)
-	v.Steps = append(v.Steps, st)
-	v.Passed = st.Outcome == "pass"
-	return v, err
+	a.statement, a.att, err = attestation(ctx, src, d, key, id)
+	return a, err
 }
 
 // verifySuites is the step suites of plugin verify: the suites of plugin check, run as
@@ -643,7 +673,10 @@ func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m o
 		}
 		b, err := fetch(ctx, src, d)
 		if err == nil && name == "fixtures" {
-			err = untar(b, filepath.Join(dir, name))
+			err = untar(b, func(name string, data []byte) error {
+				f := filepath.Join(dir, "fixtures", filepath.FromSlash(name))
+				return errors.Join(os.MkdirAll(filepath.Dir(f), 0o700), os.WriteFile(f, data, 0o600))
+			})
 		} else if err == nil {
 			err = os.WriteFile(filepath.Join(dir, name), b, 0o600)
 		}
@@ -677,40 +710,41 @@ func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m o
 
 // attestation checks the attestation of d: with key, the bundle that verifies, and
 // with none the statement that pack recorded; its subject must be id at d (check 10).
-func attestation(ctx context.Context, src source, d ocispec.Descriptor, key *ecdsa.PublicKey, id string) error {
-	var sts [][]byte
+func attestation(ctx context.Context, src source, d ocispec.Descriptor, key *ecdsa.PublicKey, id string) (st, bundle []byte, err error) {
+	type found struct{ st, bundle []byte }
+	var sts []found
 	if key == nil {
 		ms, err := referrers(ctx, src, d, statementType)
 		for _, m := range ms {
 			if len(m.Layers) == 1 && err == nil {
 				var st []byte
 				st, err = fetch(ctx, src, m.Layers[0])
-				sts = append(sts, st)
+				sts = append(sts, found{st, nil})
 			}
 		}
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 	} else {
 		bs, err := bundles(ctx, src, d, attestationURI)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		for _, b := range bs {
 			if st, err := VerifyStatement(key, b, mustDecode(d.Digest.Encoded())); err == nil {
-				sts = append(sts, st)
+				sts = append(sts, found{st, b})
 			}
 		}
 	}
-	for _, st := range sts {
-		name, pt := statementOf(st)
-		got, err := subject(st)
+	for _, f := range sts {
+		name, pt := statementOf(f.st)
+		got, err := subject(f.st)
 		if pt == attestationURI && name == id && err == nil && hex.EncodeToString(got) == d.Digest.Encoded() {
-			return nil
+			return f.st, f.bundle, nil
 		}
 		if pt == attestationURI {
-			return refused("check 10: the attestation names another subject, %s, and the artifact is %s at %s", name, id, d.Digest)
+			return nil, nil, refused("check 10: the attestation names another subject, %s, and the artifact is %s at %s", name, id, d.Digest)
 		}
 	}
-	return refused("check 10: the conformance attestation of %s is missing or does not verify with the signer's key", id)
+	return nil, nil, refused("check 10: the conformance attestation of %s is missing or does not verify with the signer's key", id)
 }

@@ -72,9 +72,9 @@ func canonicalTar(files map[string][]byte) ([]byte, []string) {
 	return b.Bytes(), paths
 }
 
-// untar writes the regular files of the tar b under dir, mode 0600, and refuses a
-// path that leaves dir.
-func untar(b []byte, dir string) error {
+// untar hands put each regular file of the tar b by its slash path, and refuses an
+// entry of another type or a path that leaves the root (ADR-047 decision 3).
+func untar(b []byte, put func(name string, data []byte) error) error {
 	r := tar.NewReader(bytes.NewReader(b))
 	for {
 		h, err := r.Next()
@@ -83,16 +83,12 @@ func untar(b []byte, dir string) error {
 			return nil
 		case err != nil:
 			return err
-		case h.Typeflag != tar.TypeReg || !filepath.IsLocal(h.Name):
+		case h.Typeflag != tar.TypeReg || !filepath.IsLocal(filepath.FromSlash(h.Name)):
 			return refused("the tar holds %q, which is not a regular file under its root (ADR-047 decision 3)", h.Name)
 		}
-		p := filepath.Join(dir, filepath.FromSlash(h.Name))
 		data, err := io.ReadAll(r)
 		if err == nil {
-			err = os.MkdirAll(filepath.Dir(p), 0o700)
-		}
-		if err == nil {
-			err = os.WriteFile(p, data, 0o600)
+			err = put(h.Name, data)
 		}
 		if err != nil {
 			return err

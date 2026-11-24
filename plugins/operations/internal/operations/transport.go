@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"time"
 
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 )
 
@@ -55,7 +56,7 @@ const (
 	Final Kind = "final"
 	// Refused: an error line before an id existed, in Error: peer, busy, request,
 	// version, or a refusal of Submit.
-	Refused Kind = "refused"
+	Refused Kind = def.SubmitRefused
 	// NotRunning: status.json is absent, says stopped or names another profile; the
 	// change applies when the process starts.
 	NotRunning Kind = "not-running"
@@ -63,10 +64,10 @@ const (
 	// within the connect window; the change applies at the next start.
 	RestartRequired Kind = "restart-required"
 	// NoFinal: the second submission ended with no final result either.
-	NoFinal Kind = "no-final"
+	NoFinal Kind = def.NoFinalResult
 	// Unknown: Wait elapsed, or the connection was lost beyond the connect window,
 	// after a request was sent.
-	Unknown Kind = "unknown"
+	Unknown Kind = def.VerdictUnknown
 )
 
 // Outcome is what a submission came to.
