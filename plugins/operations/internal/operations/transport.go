@@ -104,18 +104,19 @@ func (o Outcome) Restore() bool {
 // waits for the outcome (ADR-062 decisions 9 and 10). An end of the connection after
 // an id awaits that id on a new connection; an end before the first line, unknown on
 // an await, and a result abandoned without state-unknown submit once more, at most
-// once. It returns an error for a request it cannot send and, with the outcome so
-// far, when ctx ends.
+// once. It returns an error for a request it cannot send, among them a socket path
+// over the Linux limit where a process runs the profile, and, with the outcome so far,
+// when ctx ends.
 func Submit(ctx context.Context, r Request) (Outcome, error) {
 	if r.Home == "" || r.Profile == "" {
 		return Outcome{}, errors.New("transport: a submission names its home and profile")
 	}
 	sock := filepath.Join(r.Home, reload.RunDir, reload.SocketFile)
-	if len(sock) > reload.MaxSocketPath {
-		return Outcome{}, fmt.Errorf("transport: the socket path %s is %d bytes; Linux holds at most %d", sock, len(sock), reload.MaxSocketPath)
-	}
 	if !running(r.Home, r.Profile) {
 		return Outcome{Kind: NotRunning, Socket: sock}, nil
+	}
+	if len(sock) > reload.MaxSocketPath {
+		return Outcome{}, fmt.Errorf("transport: the socket path %s is %d bytes; Linux holds at most %d", sock, len(sock), reload.MaxSocketPath)
 	}
 	if r.ConnectWait <= 0 {
 		r.ConnectWait = DefaultConnectWait
