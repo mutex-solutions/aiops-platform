@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// Package operations is the operations row, aiops/operations: it provides the
+// operations key with the operations library of internal/operations (ADR-061
+// decisions 14 to 19; ADR-060 decision 41). The library writes a home under its one
+// write lock, signs and verifies with the signing library of ADR-020, writes the
+// records under verified/ that boot reads, and reads the environment only through the
+// caller of each request. It reaches no other row.
+package operations
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	ops "github.com/mutex-solutions/aiops-platform/plugins/operations/internal/operations"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
+)
+
+// Config is the config of the row.
+type Config struct {
+	// LockWait is how long a second writer waits for the write lock of a home before
+	// it fails naming the holder: two minutes, the wait of the reference design
+	// (ADR-061 decision 19).
+	LockWait time.Duration `default:"2m"`
+}
+
+// Plugin is the operations row. Each binary has one value of it: the module table
+// holds it and the release manifest lists its consumers.
+var Plugin = plugin.Define(plugin.Spec[Config]{
+	ID:       "aiops/operations",
+	Provides: []kernel.AnyKey{def.Key},
+	Validate: func(c *Config) error {
+		if c.LockWait < 0 {
+			return errors.New("lockWait is a duration of zero or more")
+		}
+		return nil
+	},
+	Apply: func(c *kernel.Context, cfg *Config) error {
+		return def.Key.Provide(c, served{lib: ops.Library{LockWait: cfg.LockWait}, act: c})
+	},
+})
+
+// served is what an activation provides: the library, each call refused with
+// kernel.ErrInactive once the activation is released (07-c4-plugin-sdk.md:520).
+type served struct {
+	lib ops.Library
+	act *kernel.Context
+}
+
+func call[R, Q any](s served, ctx context.Context, r Q, m func(ops.Library, context.Context, Q) (R, error)) (R, error) {
+	leave, ok := s.act.Enter()
+	if !ok {
+		var zero R
+		return zero, kernel.ErrInactive
+	}
+	defer leave()
+	return m(s.lib, ctx, r)
+}
+
+func (s served) Home(ctx context.Context, r def.HomeRequest) (def.Home, error) {
+	return call(s, ctx, r, ops.Library.Home)
+}
+
+func (s served) AddTrust(ctx context.Context, r def.TrustRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.AddTrust)
+}
+
+func (s served) GenerateKey(ctx context.Context, r def.KeyRequest) (def.Written, error) {
+	return call(s, ctx, r, ops.Library.GenerateKey)
+}
+
+func (s served) SignDist(ctx context.Context, r def.SignDistRequest) (def.Written, error) {
+	return call(s, ctx, r, ops.Library.SignDist)
+}
+
+func (s served) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.UseDist)
+}

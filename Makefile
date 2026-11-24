@@ -83,3 +83,8 @@ check:
 	for p in cli command-profile command-plugin command-trust command-dist command-key; do \
 		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
 	done
+	@# ADR-060 decision 35 and ADR-061: the operations definition, its fake and its suite,
+	@# 800 each.
+	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
+	$(KC) lines sdk/def/operations/v0/fake 800 provisional
+	$(KC) lines sdk/def/operations/v0/conformance 800 provisional

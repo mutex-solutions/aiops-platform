@@ -189,6 +189,13 @@ jobs:
           for p in cli command-profile command-plugin command-trust command-dist command-key; do
             go run ./tools/kernelcheck lines plugins/$p 1500 provisional
           done
+      - name: Operations definition line caps
+        # ADR-060 decision 35 and ADR-061: the operations definition, its fake and its
+        # suite are packages of their own, 800 lines each, provisional until the S2a exit.
+        run: |
+          go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 800 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 800 provisional
 
   s1-suites:
     name: S1 exit suites on the built binary

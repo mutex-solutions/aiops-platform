@@ -1,0 +1,11 @@
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: ADR-061 decisions 14 to 19. The operations library of the CLI and, from S6a,
+# of the plugin manager: class C, an open provider side and a bound consumer side, as
+# pluginManager (00-decisions.md:222), so the release manifest names who may call it
+# (ADR-061 decision 15). It holds no tenant data and owns no hook.
+key: operations
+version: "0.1"
+stability: preview
+class: {provider: open, consumer: bound}
+remote: "no"
+suite: 1
