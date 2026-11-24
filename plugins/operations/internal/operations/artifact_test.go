@@ -56,7 +56,12 @@ var pack = map[string]string{
 // pluginDir writes files under a new directory and returns it.
 func pluginDir(t *testing.T, files map[string]string) string {
 	t.Helper()
-	dir := t.TempDir()
+	return writeTree(t, t.TempDir(), files)
+}
+
+// writeTree writes files under dir and returns it.
+func writeTree(t *testing.T, dir string, files map[string]string) string {
+	t.Helper()
 	for name, data := range files {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -326,19 +331,27 @@ func TestPackWritesOneArtifact(t *testing.T) {
 
 // The module layer of in-process code holds the path of go.mod, the version of the
 // manifest and the sum of the module zip of the directory, as the Go toolchain writes
-// it in go.sum; its SBOM lists the module and each requirement of go.mod with its sum
-// in go.sum (ADR-047 decision 1). It carries no fixtures layer.
+// it in go.sum; its SBOM lists the build list of the module, each module with its path,
+// its version with its replacement and its sum, as go list -m -json all reads it, a
+// module that only a requirement requires among them (ADR-047 decision 1). It carries
+// no fixtures layer. The module cache alone serves golang.org/x/sync, which the
+// repository requires at that version.
 func TestPackOfInProcessCode(t *testing.T) {
+	t.Setenv("GOPROXY", "off")
 	sum := packSummary()
 	sum.Runtimes = []string{"inproc"}
 	l := Library{Box: &packBox{sum: sum}}
-	dir := pluginDir(t, map[string]string{
+	root := t.TempDir()
+	writeTree(t, filepath.Join(root, "b"), map[string]string{"go.mod": "module example.test/b\n\ngo 1.26\n\nrequire example.test/c v1.0.0\n"})
+	writeTree(t, filepath.Join(root, "c"), map[string]string{"go.mod": "module example.test/c\n\ngo 1.26\n"})
+	dir := writeTree(t, filepath.Join(root, "echo"), map[string]string{
 		"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
 		"bundle.yaml": "[]\n",
-		"go.mod":      "module example.test/echo\n\ngo 1.26\n\nrequire example.test/dep v1.0.0\n",
-		"go.sum":      "example.test/dep v1.0.0 h1:Tlr2Kx8bGO0Ks3JZ4dCAxvsTm5dcDT4QeDdP6Usk9ks=\nexample.test/dep v1.0.0/go.mod h1:1+u3SyWnZnn7sAzwYwRkvCF2GZwPmMd3FQ34Zm6iaNE=\n",
-		"echo.go":     "package echo\n",
-		"fixtures/x":  "x\n",
+		"go.mod": "module example.test/echo\n\ngo 1.26.0\n\nrequire (\n\texample.test/b v1.0.0\n\tgolang.org/x/sync v0.24.0\n)\n\n" +
+			"replace example.test/b => ../b\n\nreplace example.test/c => ../c\n",
+		"go.sum":     "golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=\ngolang.org/x/sync v0.24.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=\n",
+		"echo.go":    "package echo\n",
+		"fixtures/x": "x\n",
 	})
 	out := filepath.Join(t.TempDir(), "artifact")
 	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
@@ -357,17 +370,24 @@ func TestPackOfInProcessCode(t *testing.T) {
 		t.Errorf("module.json %s", got)
 	}
 	var sbom struct {
-		Packages []struct{ Name, VersionInfo, LicenseConcluded string }
+		Packages []struct{ Name, VersionInfo, LicenseConcluded, Comment string }
 	}
-	if err := json.Unmarshal(blob(m.Layers[3]), &sbom); err != nil || len(sbom.Packages) != 3 || sbom.Packages[1].Name != "example.test/echo" ||
-		sbom.Packages[2].Name != "example.test/dep" || sbom.Packages[2].VersionInfo != "v1.0.0" || sbom.Packages[2].LicenseConcluded != "NOASSERTION" {
-		t.Errorf("SBOM %+v, %v", sbom, err)
+	if err := json.Unmarshal(blob(m.Layers[3]), &sbom); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range sbom.Packages[1:] {
+		got = append(got, p.Name+" "+p.VersionInfo+" "+p.LicenseConcluded+" "+p.Comment)
+	}
+	if want := []string{"example.test/echo v0.1.0 NOASSERTION sum " + echoSum, "example.test/b v1.0.0 => ../b NOASSERTION ", "example.test/c v1.0.0 => ../c NOASSERTION ",
+		"golang.org/x/sync v0.24.0 NOASSERTION sum h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA="}; !slices.Equal(got, want) {
+		t.Errorf("the SBOM lists the modules\n%q\nwant\n%q", got, want)
 	}
 }
 
 // echoSum is the h1 sum of the module example.test/echo at v0.1.0 of
 // TestPackOfInProcessCode, as go mod download would record it.
-const echoSum = "h1:CuDjptRJ5bw/sRPs2/bfnr6IGglsof5GyvlW0ys9gJs="
+const echoSum = "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="
 
 // Pack refuses, and leaves no layout, where the gate denies a clause, where a content
 // entry is a link, where the manifest lists a remote runtime, and where the out
