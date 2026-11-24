@@ -117,9 +117,9 @@ var Template = map[string][]byte{"plugin.go": []byte("package echo\n"), "interna
 var Echo = launch.ManifestSummary{ID: "acme/echo", Version: "0.1.0", Runtimes: []string{"inproc"},
 	Registers: []string{"echoers"}, Definitions: map[string][]string{"echoers": {"0.1"}}}
 
-// Shipped are the shipped profiles of the suite, cli and dev.
+// Shipped are the shipped profiles of the suite, cli, dev and ops, which renders no row.
 var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n"),
-	"profiles/dev/profile.yaml": []byte("bundles: [aiops-core]\n")}
+	"profiles/dev/profile.yaml": []byte("bundles: [aiops-core]\n"), "profiles/ops/profile.yaml": []byte("bundles: [aiops-core]\n")}
 
 // Rendered is what the toolbox of the suite renders: cli with one departure from the
 // release bindings and one dump, and dev with a required row, the one provider of a
@@ -570,8 +570,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("enable rolled back: %+v, %v; want ErrSubmission and the home restored", ch, err)
 			}
 			u = use(t, mount, Setup{})
-			spec := u.signedPack()
-			if _, err := u.ops.Install(t.Context(), operations.InstallRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", Spec: spec}); err != nil {
+			if err := u.install(u.signedPack(), "dev"); err != nil {
 				t.Fatal(err)
 			}
 			q := operations.RemoveRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", ID: "acme/connector-x"}
@@ -598,6 +597,54 @@ func Run(t *testing.T, mount Mount) {
 			}
 			if h := u.home(); h.Current != "" || len(h.Records) != 0 {
 				t.Errorf("dist build wrote the home: %+v", h)
+			}
+		})
+		t.Run("operations.O21 plugin remove takes an installed artifact only, and drops the enabled departures of its rows", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			if err := u.install(u.signedPack(), "dev"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := u.ops.Enable(t.Context(), u.row(Row)); err != nil {
+				t.Fatal(err)
+			}
+			before := u.homeOf("dev")
+			if err := u.remove("dev", "aiops-core"); !errors.Is(err, operations.ErrRefused) || !reflect.DeepEqual(u.homeOf("dev"), before) {
+				t.Errorf("remove of aiops-core, a bundle that is no installed artifact: %v; want ErrRefused and nothing written", err)
+			}
+			if err := u.remove("dev", "acme/connector-x"); err != nil {
+				t.Fatal(err)
+			}
+			if en, ok := u.homeOf("dev").Enabled[Row]; ok {
+				t.Errorf("after remove the departure {id: %s, enabled: %v} stays; want it dropped, so a later install leaves the row disabled", Row, en)
+			}
+		})
+		t.Run("operations.O22 a site holds one digest of a plugin id", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			v1 := u.signedPack()
+			if err := os.WriteFile(filepath.Join(filepath.Dir(v1), "content", "labels.yaml"), []byte("service: y\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			v2 := filepath.Join(u.s.Dir, "v2")
+			u.packed(filepath.Dir(v1), v2, filepath.Join(u.s.Dir, "author.key"))
+			d1, d2 := u.inspect(v1).Digest, u.inspect(v2).Digest
+			if err := u.install(v1, "dev"); err != nil || d1 == d2 {
+				t.Fatalf("install of %s: %v; and %s, want another digest for other content", d1, err, d2)
+			}
+			before := u.home()
+			if err := u.install(v2, "ops"); !errors.Is(err, operations.ErrRefused) || !strings.Contains(err.Error(), d1) || !strings.Contains(err.Error(), "dev") ||
+				!reflect.DeepEqual(u.home(), before) {
+				t.Errorf("install of %s while dev holds %s: %v; want ErrRefused naming dev and %s, and nothing written", d2, d1, err, d1)
+			}
+			if err := u.install(v1, "ops"); err != nil {
+				t.Errorf("install into ops of the digest that dev holds: %v", err)
+			}
+			for _, p := range []string{"dev", "ops"} {
+				if err := u.remove(p, "acme/connector-x"); err != nil {
+					t.Fatalf("remove from %s: %v", p, err)
+				}
+			}
+			if err := u.install(v2, "dev"); err != nil {
+				t.Errorf("install of %s once no profile names acme/connector-x: %v", d2, err)
 			}
 		})
 	})
@@ -823,13 +870,31 @@ func (u *user) signedPack() string {
 	out := filepath.Join(u.plugin(), "artifact")
 	pub := u.key("author")
 	u.trust(operations.TrustRequest{KeyFile: pub, IDs: []string{"acme/*"}})
-	if _, err := u.ops.Pack(u.t.Context(), operations.PackRequest{Caller: u.caller(), Dir: filepath.Dir(out), Out: out}); err != nil {
-		u.t.Fatal(err)
-	}
-	if _, err := u.ops.Sign(u.t.Context(), operations.SignRequest{Caller: u.caller(), Out: out, Key: private(pub)}); err != nil {
-		u.t.Fatal(err)
-	}
+	u.packed(filepath.Dir(out), out, private(pub))
 	return out
+}
+
+// packed packs the plugin directory dir into the layout out and signs it with the
+// private key file key.
+func (u *user) packed(dir, out, key string) {
+	u.t.Helper()
+	if _, err := u.ops.Pack(u.t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: out}); err != nil {
+		u.t.Fatal(err)
+	}
+	if _, err := u.ops.Sign(u.t.Context(), operations.SignRequest{Caller: u.caller(), Out: out, Key: key}); err != nil {
+		u.t.Fatal(err)
+	}
+}
+
+// install installs spec into the profile p, and remove removes the plugin id from it.
+func (u *user) install(spec, p string) error {
+	_, err := u.ops.Install(u.t.Context(), operations.InstallRequest{Caller: u.caller(), Home: u.s.Home, Profile: p, Spec: spec})
+	return err
+}
+
+func (u *user) remove(p, id string) error {
+	_, err := u.ops.Remove(u.t.Context(), operations.RemoveRequest{Caller: u.caller(), Home: u.s.Home, Profile: p, ID: id})
+	return err
 }
 
 // row is a request for the row id of dev.
@@ -847,14 +912,7 @@ func (u *user) homeOf(p string) operations.Home {
 	return h
 }
 
-func (u *user) home() operations.Home {
-	u.t.Helper()
-	h, err := u.ops.Home(u.t.Context(), operations.HomeRequest{Caller: u.caller(), Home: u.s.Home})
-	if err != nil {
-		u.t.Fatal(err)
-	}
-	return h
-}
+func (u *user) home() operations.Home { u.t.Helper(); return u.homeOf("") }
 
 func (u *user) trust(r operations.TrustRequest) operations.Change {
 	u.t.Helper()

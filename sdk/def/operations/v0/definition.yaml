@@ -10,7 +10,8 @@
 # image reference inside the minor (ADR-060 decision 10). 0.3 adds Build, dist build
 # through the toolbox's builder (ADR-044; ADR-061 decision 16), and the OCI image
 # layout as an image of dist sign and dist use; suite revision 3 adds the case of
-# Build.
+# Build, and those of plugin remove of an installed artifact only and of one digest of
+# a plugin id per site.
 key: operations
 version: "0.3"
 stability: preview
