@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -176,5 +177,36 @@ func TestInstallWritesWhatBootReads(t *testing.T) {
 	}
 	if err := Install(t.TempDir(), Artifact{Manifest: []byte(manifest)}); err == nil {
 		t.Fatal("a home with no trust.yaml installs")
+	}
+}
+
+// childEnv makes TestLeavesNothingInTMPDIR the child that makes one home.
+const childEnv = "TRUSTED_TEST_CHILD"
+
+// A test process that makes homes leaves nothing in $TMPDIR when it ends: the key pair
+// and the signed images live in the test's own temporary directories, which the
+// testing package removes. The child runs Write in a fresh $TMPDIR, and the parent
+// reads that directory once the child has exited.
+func TestLeavesNothingInTMPDIR(t *testing.T) {
+	if os.Getenv(childEnv) != "" {
+		Write(t, filepath.Join(t.TempDir(), "home"), []byte("distVersion: 1\n"))
+		return
+	}
+	tmp := t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestLeavesNothingInTMPDIR$", "-test.count=1")
+	cmd.Env = append(os.Environ(), childEnv+"=1", "TMPDIR="+tmp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("the child: %v\n%s", err, out)
+	}
+	left, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range left {
+		names = append(names, e.Name())
+	}
+	if len(names) > 0 {
+		t.Errorf("the child left %q in $TMPDIR", names)
 	}
 }
