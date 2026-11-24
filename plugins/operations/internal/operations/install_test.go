@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -195,5 +196,36 @@ func TestRemoveDeletesTheKeptFilesAfterTheWrite(t *testing.T) {
 	}
 	if !slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, content) }) {
 		t.Errorf("notes %q; want one that names the directory that stays", ch.Notes)
+	}
+}
+
+// Remove drops the enabled field of every item of the profile layer under the
+// artifact's group, and an item left with its id alone, so that a later install leaves
+// those rows disabled; it keeps every other field and names each item it kept (ADR-047
+// decision 10; ADR-062 decision 11).
+func TestRemoveDropsTheEnabledOfItsRows(t *testing.T) {
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	if _, err := installed(t, l, home, pack, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	layer := filepath.Join(home, "profiles", "dev", "aiops.patch.yml")
+	put(t, Home{Dir: home}, "profiles/dev/aiops.patch.yml", "- {id: 'connector-x:logs', enabled: true}\n"+
+		"- {id: 'connector-x:audit', enabled: true, config: {level: 2}}\n- {id: metrics, enabled: false}\n")
+	ch, err := l.Remove(t.Context(), def.RemoveRequest{Home: home, Profile: "dev", ID: "acme/connector-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]any
+	if err := readYAML(layer, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []map[string]any{{"id": "connector-x:audit", "config": map[string]any{"level": 2}}, {"id": "metrics", "enabled": false}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("the profile layer holds %v, want %v", got, want)
+	}
+	notes := strings.Join(ch.Notes, "\n")
+	if !strings.Contains(notes, "connector-x:audit") || strings.Contains(notes, "connector-x:logs") {
+		t.Errorf("notes %q; want the kept item connector-x:audit named, and not connector-x:logs", ch.Notes)
 	}
 }
