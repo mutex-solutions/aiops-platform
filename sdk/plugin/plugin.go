@@ -232,8 +232,11 @@ type decoded struct {
 // handOff is the hand-off of a config type with a Volatile field: it stores the
 // value of each cell of committed into the cell of applied at the same path. It
 // reads the two records only, never a *C, whose slices and maps the author may
-// change while it runs. A path in one record only is skipped: a volatile-only
-// change keeps the shape of lists and maps.
+// change while it runs. A path in one record only is skipped. The loader commits in
+// place only a change that keeps the length of each list and the keys of each map
+// that holds a Volatile value (loader.VolatileOnly), and the decoder gives a cell to
+// each Volatile field of a struct, present or absent, so the two records of such a
+// commit have the same paths.
 func handOff(applied, committed any) {
 	to := applied.(*decoded).cells
 	for path, c := range committed.(*decoded).cells {

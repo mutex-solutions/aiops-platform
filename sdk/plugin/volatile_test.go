@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -56,6 +57,41 @@ func TestGetReturnsTheValueCommittedInPlace(t *testing.T) {
 		if c.URL.Get() != "https://b" || c.Level.Get() != 3 || c.Mode != "m1" {
 			t.Fatalf("after the commit the activation reads url %q, level %d, mode %q", c.URL.Get(), c.Level.Get(), c.Mode)
 		}
+	}
+}
+
+// A map of Volatile values: new values of its keys are committed in place and reach
+// the running activation, while a key added or removed is not volatile, by the
+// loader's rule over the paths Describe reports, so the row restarts and its next
+// activation has the keys (ADR-034 G13).
+func TestAMapOfVolatileValuesCommitsItsValuesOnly(t *testing.T) {
+	type mapCfg struct {
+		Labels map[string]plugin.Volatile[string]
+	}
+	info, err := plugin.Describe[mapCfg]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, v := range info.Volatile {
+		paths = append(paths, strings.Join(v, "."))
+	}
+	before := map[string]any{"labels": map[string]any{"a": "1"}}
+	after := map[string]any{"labels": map[string]any{"a": "2"}}
+	for _, labels := range []map[string]any{{"a": "2", "b": "x"}, {}} {
+		if _, only := loader.VolatileOnly(before, map[string]any{"labels": labels}, paths); only {
+			t.Errorf("labels %v are volatile over the paths %q", labels, paths)
+		}
+	}
+	if _, only := loader.VolatileOnly(before, after, paths); !only {
+		t.Fatalf("a change of a label's value is not volatile over the paths %q", paths)
+	}
+	f, cfg := running[mapCfg](t, kerneltest.New(t), before, nil)
+	if err := f.Commit(t.Context(), after); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Labels["a"].Get(); got != "2" || len(cfg.Labels) != 1 {
+		t.Fatalf("after the commit the activation reads %q of %d labels", got, len(cfg.Labels))
 	}
 }
 
