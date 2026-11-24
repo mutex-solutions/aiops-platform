@@ -158,6 +158,11 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	if ex := l.Exits(); len(ex) != 1 || ex[0].Reason != launch.ExitGaveUp || ex[0].Detail != "sql" {
 		t.Fatalf("exits = %v", ex)
 	}
+	select {
+	case <-l.ExitRequested():
+	default:
+		t.Fatal("ExitRequested is open after an exit request")
+	}
 }
 
 // Commit takes a composition that the launcher composed, the committed one or one it

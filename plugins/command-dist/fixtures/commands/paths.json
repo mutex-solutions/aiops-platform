@@ -1,0 +1,5 @@
+[
+  {"path": "dist build", "summary": "Build the site's distribution, its image and its aiopsctl from dist.yaml."},
+  {"path": "dist sign", "summary": "Sign the distribution manifest of an image with the site's key."},
+  {"path": "dist use", "summary": "Verify the distribution of an image and record it as the one the home runs."}
+]

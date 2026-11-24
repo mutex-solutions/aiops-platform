@@ -54,6 +54,8 @@ type Launcher struct {
 	ready  bool
 	boot   sync.Once
 	booted chan struct{}
+	exit   sync.Once
+	exited chan struct{}
 	exits  []launch.ExitRequest
 	known  map[launch.Digest]bool // composed or replaced by a commit
 }
@@ -74,7 +76,7 @@ var (
 // profileContext of an activation refuses its calls once that activation is
 // released, as served.
 func New() (*Launcher, kernel.Plugin) {
-	f := &Launcher{known: map[launch.Digest]bool{}, booted: make(chan struct{})}
+	f := &Launcher{known: map[launch.Digest]bool{}, booted: make(chan struct{}), exited: make(chan struct{})}
 	return f, kernel.Define(kernel.Plugin{
 		ID: "aiops/launch-fake",
 		Provides: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey,
@@ -389,4 +391,9 @@ func (f *Launcher) RequestExit(r launch.ExitRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.exits = append(f.exits, r)
+	f.exit.Do(func() { close(f.exited) })
 }
+
+// ExitRequested is closed at the first exit request, so a test waits for one without
+// polling Exits.
+func (f *Launcher) ExitRequested() <-chan struct{} { return f.exited }

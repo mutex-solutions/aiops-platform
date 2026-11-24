@@ -72,3 +72,11 @@ check:
 	$(KC) lines sdk/def/configrefs/v0/conformance 800 provisional
 	$(KC) lines sdk/def/reload/v0/conformance 800 provisional
 	$(KC) lines sdk/def/launch/v0/conformance 800 provisional
+	@# ADR-060 decision 35 and ADR-061, Consequences: the commands definition, its fake and its
+	@# suite, 800 lines each; the cli row and each command row, 1,500 each.
+	$(KC) lines sdk/def/commands/v0 800 provisional fake conformance
+	$(KC) lines sdk/def/commands/v0/fake 800 provisional
+	$(KC) lines sdk/def/commands/v0/conformance 800 provisional
+	for p in cli command-plugin command-trust command-dist command-key; do \
+		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
+	done

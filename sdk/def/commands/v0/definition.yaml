@@ -1,0 +1,10 @@
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: ADR-061 decision 1 (00-decisions.md:222): a registry of class `-` on both
+# sides, with no remote contribution, at preview like the launcher's and the loader's
+# definitions. The definition owns no hook.
+key: commands
+version: "0.1"
+stability: preview
+class: {provider: open, consumer: open}
+remote: "no"
+suite: 1

@@ -1,0 +1,3 @@
+[
+  {"path": "key generate", "summary": "Write a signing key pair, <prefix>.key and <prefix>.pub; the password of the private key is AIOPS_KEY_PASSWORD."}
+]

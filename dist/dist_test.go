@@ -42,12 +42,13 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	man := bindings(t, signed)
-	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy"} {
+	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy",
+		"aiops/cli", "aiops/command-plugin", "aiops/command-trust", "aiops/command-dist", "aiops/command-key"} {
 		if _, ok := reg.Modules[id]; !ok {
 			t.Errorf("%s is missing from the module table", id)
 		}
 	}
-	if len(reg.Modules) != 6 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
+	if len(reg.Modules) != 11 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
 		t.Fatalf("%d modules, %d hooks", len(reg.Modules), len(reg.Hooks))
 	}
 	if !slices.Equal(man.RequiredRows, []string{"loader", "readiness", "reload", "restart-policy"}) || !slices.Equal(man.RequiredKeys, []string{"clock"}) {
@@ -62,6 +63,11 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	}
 	if !slices.Equal(listeners["internal/config"], []string{"aiops/config-refs"}) || !slices.Contains(listeners["internal/status"], "aiops/readiness") {
 		t.Fatalf("sealed hooks %v", listeners)
+	}
+	// appExit is consumer-bound, and the cli row requests the exit of aiopsctl with the
+	// code of its command (ADR-061 decision 7).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "appExit" }); i < 0 || !slices.Contains(man.Consumers[i].Plugins, "aiops/cli") {
+		t.Fatalf("consumers %+v", man.Consumers)
 	}
 }
 

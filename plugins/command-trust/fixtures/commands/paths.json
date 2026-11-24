@@ -1,0 +1,3 @@
+[
+  {"path": "trust add", "summary": "Trust a public key: for the plugins that --ids names, or with --distribution as a root of distributions."}
+]
