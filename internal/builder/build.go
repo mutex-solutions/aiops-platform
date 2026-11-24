@@ -159,12 +159,10 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	for _, f := range findings {
 		ferr = errors.Join(ferr, fmt.Errorf("init deny-list: %s (ADR-044 decision 11)", f))
 	}
-	err = errors.Join(err, lerr, ferr, CheckLicences(l, b.site.AcceptLicenses), b.owners(), fakes(pkgs))
-	if err != nil {
-		return res, err
-	}
 	m := Manifest{Graph: pkgs, Licences: l.Modules, Pins: pins, Release: b.input, Site: b.site.Bindings, Accept: b.site.AcceptLicenses}
-	if res.Manifest, err = m.Write(); err != nil {
+	var merr error
+	res.Manifest, merr = m.Write()
+	if err = errors.Join(err, lerr, ferr, CheckLicences(l, b.site.AcceptLicenses), merr, fakes(pkgs)); err != nil {
 		return res, err
 	}
 	switch {
@@ -610,30 +608,17 @@ func requirers(graph, target string) string {
 	return strings.Join(out, ", ")
 }
 
-// owners refuses a plugin of a module outside the release whose id is under aiops/
-// or contrib/, the two owners reserved to the release pipeline (08:402).
-func (b *build) owners() error {
-	var errs []error
-	for _, p := range b.plugins {
-		man, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if owner, _, _ := strings.Cut(man.ID, "/"); owner == "aiops" || owner == "contrib" {
-			errs = append(errs, fmt.Errorf("%s declares the id %s: the owner %s is reserved to the artifacts the release pipeline builds, and the module is outside the release (08:402)", p.pkg, man.ID, owner))
-		}
-	}
-	return errors.Join(errs...)
-}
-
 // fakes refuses a fake or sdk/testkit package in the package graph of the server
-// (07:47; ADR-060 decisions 22 and 58).
+// (07:47; ADR-060 decisions 22 and 58), and a package under testdata/, which go builds
+// once a package imports it and which neither the module table nor plugin vet reads.
 func fakes(pkgs []Package) error {
 	var errs []error
 	for _, p := range pkgs {
-		if slices.Contains(strings.Split(p.ImportPath, "/"), "fake") || strings.HasPrefix(p.ImportPath, rootModule+"/sdk/testkit") {
+		switch elems := strings.Split(p.ImportPath, "/"); {
+		case slices.Contains(elems, "fake") || strings.HasPrefix(p.ImportPath, rootModule+"/sdk/testkit"):
 			errs = append(errs, fmt.Errorf("the server links %s, a fake or sdk/testkit package (07:47; ADR-060 decision 58)", p.ImportPath))
+		case slices.Contains(elems, "testdata"):
+			errs = append(errs, fmt.Errorf("the server links %s, a package under testdata/ (ADR-060 decision 22)", p.ImportPath))
 		}
 	}
 	return errors.Join(errs...)

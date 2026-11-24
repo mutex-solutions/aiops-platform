@@ -39,10 +39,12 @@ type Manifest struct {
 
 // Write returns the manifest as boot reads it (boot.ReadDistribution): the module table
 // is each package of the graph that holds a plugin.yaml, with that manifest byte for
-// byte and the statement of a first-party plugin; the modules are those of the graph
-// with their detected licences, a module of the repository replaced by a directory
-// with no version and no sum (ADR-020 decision 28); serves is plugingen's for the
-// definitions in the graph; the pins are sorted, with the toolchain module's.
+// byte and the statement of a first-party plugin; it refuses an id that two packages
+// declare, and an id under aiops/ or contrib/, the two owners reserved to the release
+// pipeline, of a package outside the modules it builds (08:402); the modules are those
+// of the graph with their detected licences, a module of the repository replaced by a
+// directory with no version and no sum (ADR-020 decision 28); serves is plugingen's for
+// the definitions in the graph; the pins are sorted, with the toolchain module's.
 func (m Manifest) Write() ([]byte, error) {
 	doc := distDoc{DistVersion: 1, Plugins: map[string]distPlugin{}, Bindings: bindingsDoc(m.Release), Packages: []string{},
 		AcceptLicenses: slices.Sorted(slices.Values(m.Accept))}
@@ -66,6 +68,13 @@ func (m Manifest) Write() ([]byte, error) {
 			man, err := boot.ReadManifest(p.ImportPath+"/plugin.yaml", src, boot.ManifestStrict)
 			if err != nil {
 				return nil, err
+			}
+			owner, _, _ := strings.Cut(man.ID, "/")
+			switch have, dup := doc.Plugins[man.ID]; {
+			case dup:
+				return nil, fmt.Errorf("the id %s is declared by %s and by %s", man.ID, have.Package, p.ImportPath)
+			case (owner == "aiops" || owner == "contrib") && !slices.Contains(sdkModules, p.Module.Path):
+				return nil, fmt.Errorf("%s declares the id %s: the owner %s is reserved to the artifacts the release pipeline builds, and its module %s is outside the release (08:402)", p.ImportPath, man.ID, owner, p.Module.Path)
 			}
 			doc.Plugins[man.ID] = distPlugin{Package: p.ImportPath, Manifest: string(src), firstParty: p.Module.Path == rootModule}
 		}
