@@ -1,5 +1,5 @@
 # aiopsctl profile render --dump
-digest sha256:49fc0f41af30fbf83df8374572cbc86b25cf8fc2c0fcf6a44e92a1d1070f7f10
+digest sha256:12fb9ad8164d1d7044775986dc70fc1cb3288b202b05e4856523150ab898ae69
 roles all
 
 ##  (layer 0)

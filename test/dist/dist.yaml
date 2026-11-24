@@ -16,9 +16,9 @@ consumers:
   # reload-socket submits as in the release; test-submit submits; test-state reads the
   # results.
   reload: [aiops/reload-socket, aiops-test/test-submit, aiops-test/test-state]
-  # The command rows as in the release; ops-caller stands for the others of aiops-cli
-  # (ADR-061 decision 20).
-  operations: [aiops/command-key, aiops/command-trust, aiops-test/ops-caller]
+  # The command rows that call the operations library, as in the release (ADR-061
+  # decision 20).
+  operations: [aiops/command-key, aiops/command-trust]
 sealedHooks:
   internal/status: [aiops/restart-policy, aiops/readiness]
   internal/config: [aiops/config-refs]

@@ -25,7 +25,6 @@ import (
 	failapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/fail-apply"
 	foreignattestation "github.com/mutex-solutions/aiops-platform/test/dist/plugins/foreign-attestation"
 	leakygoroutine "github.com/mutex-solutions/aiops-platform/test/dist/plugins/leaky-goroutine"
-	opscaller "github.com/mutex-solutions/aiops-platform/test/dist/plugins/ops-caller"
 	panicapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/panic-apply"
 	rogueprovider "github.com/mutex-solutions/aiops-platform/test/dist/plugins/rogue-provider"
 	slowapply "github.com/mutex-solutions/aiops-platform/test/dist/plugins/slow-apply"
@@ -84,7 +83,6 @@ func Modules() []dist.Module {
 		m(foreignattestation.New(), "foreign-attestation"),
 		m(teststate.New(), "teststate"),
 		m(testsubmit.New(), "testsubmit"),
-		m(opscaller.New(), "ops-caller"),
 	)
 }
 

@@ -61,7 +61,6 @@ var dirs = map[string]string{
 	"aiops-test/foreign-attestation": "test/dist/plugins/foreign-attestation",
 	"aiops-test/test-state":          "test/dist/plugins/teststate",
 	"aiops-test/test-submit":         "test/dist/plugins/testsubmit",
-	"aiops-test/ops-caller":          "test/dist/plugins/ops-caller",
 	"aiops/example-dispatch":         "examples/dispatch",
 	"aiops/example-echoer":           "examples/echoer",
 	"aiops/example-stamper":          "examples/stamper",
