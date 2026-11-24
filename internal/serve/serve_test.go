@@ -378,9 +378,14 @@ func TestRunReplacesAStaleStatusBeforeBoot(t *testing.T) {
 }
 
 // Only the site user enters run/ (ADR-047 decision 14), which the socket of
-// reload-socket relies on (ADR-062 decisions 4 and 16).
+// reload-socket relies on (ADR-062 decisions 4 and 16). The home of the test is made
+// through the operations library, which creates run/ with mode 0700 itself, so run/ is
+// removed first: Run creates it here.
 func TestRunCreatesTheRuntimeDirectoryWithMode0700(t *testing.T) {
 	h := home(t, "[]")
+	if err := os.RemoveAll(filepath.Join(h, "run")); err != nil {
+		t.Fatal(err)
+	}
 	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
 	e, stderr, _ := env("--profile", "p", "--home", h)
 	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
