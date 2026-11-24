@@ -198,6 +198,17 @@ func TestRenderResolvesPaths(t *testing.T) {
 	}
 }
 
+// A composition that stops prints no dump, not even the header of one: stdout carries
+// only what a command was asked to print, and a dump redirected to a file is the dump
+// alone (ADR-061 decision 11). The file that stopped it is on stderr, and it exits 1.
+func TestAStoppedCompositionPrintsNoDump(t *testing.T) {
+	w := newWorld(t, &stub{}, "/home")
+	if code := w.run(t.Context(), "profile", "render", "--profile", "stop", "--dump", "--dump-hooks"); code != 1 || w.out.String() != "" ||
+		!strings.Contains(w.err.String(), "profiles/stop/aiops.patch.yml:1: syntax: broken") {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, w.out.String(), w.err.String())
+	}
+}
+
 // profile init and profile sanitize call the library with the home, the profile and the
 // environment of the invocation, print its notes and the outcome on stderr and nothing
 // on stdout (ADR-061 decisions 17 and 41).
