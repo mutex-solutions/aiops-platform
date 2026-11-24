@@ -68,6 +68,41 @@ func TestVet(t *testing.T) {
 	}
 }
 
+// Vet also holds each config example of testdata/config/*.json to the configSchema of
+// the plugin's manifest, read as the launcher reads a row config (07-c4-plugin-sdk.md:1569).
+func TestVetConfigExamples(t *testing.T) {
+	dir := t.TempDir()
+	manifest := "manifestVersion: \"1.0\"\nid: acme/echo\nversion: 0.1.0\ntitle: Echo\nlicense: Apache-2.0\npublisher: {id: acme}\n" +
+		"stability: experimental\nscope: [process]\nruntimes: [inproc]\nuses: []\nprovides: []\nregisters: []\nhooks: []\n" +
+		"configSchema:\n  $schema: https://json-schema.org/draft/2020-12/schema\n  additionalProperties: false\n  properties:\n    name: {type: string}\n  type: object\n" +
+		"durable: []\nrequires: {pluginApi: \"0.3\", definitions: {}}\n"
+	for name, body := range map[string]string{
+		"go.mod":                    "module example.com/acme/echo\n\ngo 1.26.0\n",
+		"plugin.yaml":               manifest,
+		"plugin.go":                 "package echo\n",
+		"testdata/config/good.json": `{"name": "loud"}`,
+		"testdata/config/bad.json":  `{"name": 3, "extra": true}`,
+		"testdata/config/ugly.json": `[`,
+	} {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ds, err := Tools{}.Vet(t.Context(), dir)
+	if err != nil || len(ds) != 2 {
+		t.Fatalf("Vet = %+v, %v; want bad.json and ugly.json", ds, err)
+	}
+	for i, f := range []string{"testdata/config/bad.json", "testdata/config/ugly.json"} {
+		if ds[i].Check != "3" || ds[i].File != f {
+			t.Errorf("finding %d: %+v, want one of %s", i, ds[i], f)
+		}
+	}
+}
+
 // The lint data that aiopsctl hands to boot: the SPDX license list it embeds, licenses
 // and exceptions, at the version its register entry pins; the marks of
 // 00-decisions.md §8.1, each named in that paragraph; and the tier words of T7.
