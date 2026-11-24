@@ -244,6 +244,14 @@ func signatureOf(name, digest string) []byte {
 	return b
 }
 
+// pushBundle pushes the bundle b of a DSSE envelope as a referrer of subject in the
+// bundle form of cosign, its predicate type in the annotation that cosign writes
+// (ADR-020 decision 2).
+func pushBundle(ctx context.Context, dst content.Pusher, subject *ocispec.Descriptor, predicateType string, b []byte) (ocispec.Descriptor, error) {
+	return pushArtifact(ctx, dst, bundleType, subject, map[string]string{predicateKey: predicateType, "dev.sigstore.bundle.content": "dsse-envelope"},
+		blob{bundleType, b, nil})
+}
+
 func mustDecode(s string) []byte {
 	b, _ := hex.DecodeString(s)
 	return b
@@ -495,8 +503,7 @@ func (l Library) Sign(ctx context.Context, r def.SignRequest) (def.Written, erro
 		if err != nil {
 			return def.Written{}, refused("%v", err)
 		}
-		if _, err := pushArtifact(ctx, s, bundleType, &d, map[string]string{predicateKey: b.predicateType, "dev.sigstore.bundle.content": "dsse-envelope"},
-			blob{bundleType, signed, nil}); err != nil {
+		if _, err := pushBundle(ctx, s, &d, b.predicateType, signed); err != nil {
 			return def.Written{}, err
 		}
 	}

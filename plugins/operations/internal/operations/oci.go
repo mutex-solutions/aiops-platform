@@ -241,7 +241,9 @@ func distributions(ctx context.Context, r *remote.Repository, img ocispec.Descri
 }
 
 // SignDist is dist sign: the distribution manifest of the image signed as a blob and
-// pushed with its bundle as one referrer of the image (ADR-020 decisions 2 and 12).
+// pushed with its bundle as one referrer of the image, and the image's digest signed
+// as cosign sign signs an image, in its own referrer, since the manifest names no image
+// (ADR-020 decisions 2 and 12).
 func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Written, error) {
 	if err := absolute("the key file", r.Key); err != nil {
 		return def.Written{}, err
@@ -274,12 +276,23 @@ func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Writt
 	}
 	d, err := pushArtifact(ctx, repo, def.DistributionType, &img, nil, blob{mediaType: def.DistributionLayer, data: manifest},
 		blob{mediaType: bundleType, data: b})
+	ref := repo.Reference
+	var sig ocispec.Descriptor
+	if err == nil {
+		b, err = SignStatement(k, signatureOf(ref.Registry+"/"+ref.Repository, img.Digest.Encoded()))
+	}
+	if err == nil {
+		sig, err = pushBundle(ctx, repo, &img, signURI, b)
+	}
 	if err != nil {
 		return def.Written{}, err
 	}
-	ref := repo.Reference
-	ref.Reference = d.Digest.String()
-	return def.Written{Paths: []string{ref.String()}}, nil
+	var w def.Written
+	for _, p := range []ocispec.Descriptor{d, sig} {
+		ref.Reference = p.Digest.String()
+		w.Paths = append(w.Paths, ref.String())
+	}
+	return w, nil
 }
 
 // privateKey reads the private key file p with the password of the caller's
@@ -301,9 +314,10 @@ func privateKey(c def.Caller, p string) (*ecdsa.PrivateKey, error) {
 }
 
 // UseDist is dist use: the bundle of each distribution referrer of the image verified
-// with each key of distributions in trust.yaml, then the record of the manifest's
-// digest, verified/current and image.yaml, or nothing (ADR-020 decisions 10 and 12;
-// ADR-047 decision 13). The default release root is verified with the key that a
+// with each key of distributions in trust.yaml, and with the same key a signature of
+// the image's digest, which the manifest does not name; then the record of the
+// manifest's digest, verified/current and image.yaml, or nothing (ADR-020 decisions 10
+// and 12; ADR-047 decision 13). The default release root is verified with the key that a
 // release binary carries, which no binary built at S2a has, so only the keys trust.yaml
 // holds verify here.
 func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
@@ -320,8 +334,19 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 		return def.Change{}, err
 	}
 	dists, err := distributions(ctx, repo, img)
+	var sigs [][]byte
+	if err == nil {
+		sigs, err = bundles(ctx, repo, img, signURI)
+	}
 	if err != nil {
 		return def.Change{}, err
+	}
+	signs := func(k *ecdsa.PublicKey) bool {
+		return slices.ContainsFunc(sigs, func(b []byte) bool {
+			st, err := VerifyStatement(k, b, mustDecode(img.Digest.Encoded()))
+			_, pt := statementOf(st)
+			return err == nil && pt == signURI
+		})
 	}
 	ref := repo.Reference
 	ref.Reference = img.Digest.String()
@@ -333,7 +358,9 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 				return nil, err
 			}
 			for _, d := range dists {
-				i := slices.IndexFunc(t.distKeys, func(k trustKey) bool { return d.bundle != nil && VerifyBlob(k.pub, d.bundle, d.manifest) == nil })
+				i := slices.IndexFunc(t.distKeys, func(k trustKey) bool {
+					return d.bundle != nil && VerifyBlob(k.pub, d.bundle, d.manifest) == nil && signs(k.pub)
+				})
 				if i < 0 {
 					continue
 				}
@@ -346,7 +373,7 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 					{Path: "image.yaml", Data: fmt.Appendf(nil, "image: %s\n", ref)},
 				}, nil
 			}
-			return nil, refused("no key of distributions in trust.yaml verifies a distribution manifest of %s", r.Image)
+			return nil, refused("no key of distributions in trust.yaml verifies both a distribution manifest of %s and a signature of the image %s (ADR-020 decision 12)", r.Image, img.Digest)
 		},
 	})
 	if err != nil {

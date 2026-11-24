@@ -433,6 +433,23 @@
       (`08:401`). `dist use <image>` reads that referrer, verifies the bundle with each
       key of `distributions`, and writes the record and `current`, or refuses and writes
       nothing.
+    - Note of 2026-11-24: the distribution manifest names no image, and the subject of
+      its referrer is not signed, so a signed referrer copied onto another image verified
+      as well, and `dist use` wrote that image into `image.yaml`, from which the host
+      starts the kernel container with the home bound (ADR-047 decisions 13 and 15); a
+      check inside the image cannot help, since the image is the attacker's. `dist sign`
+      therefore also signs the image's digest as `plugin sign` signs an artifact's: a
+      DSSE envelope of an in-toto statement of predicate type
+      `https://sigstore.dev/cosign/sign/v1` whose one subject is the digest of the image
+      manifest, pushed as one more referrer of the image in the bundle form of cosign,
+      the form `cosign sign --key` writes, so the release pipeline signs the release
+      image with it. `dist use` writes nothing unless the key of `distributions` that
+      verifies the manifest's bundle also verifies such a signature over the digest of
+      the image it resolved. The record of decision 10 keeps the manifest's bundle only:
+      the signature of the image vouches for `image.yaml`, not for the manifest. An image
+      signed with the same key whose own embedded manifest is not the one `dist use`
+      made current boots no kernel, since boot trusts the embedded manifest only where
+      its digest is current.
 
 ### The default release root
 
@@ -478,7 +495,7 @@
     |---|---|---|
     | `plugin check` step 7, `plugin pack` | Signs with a throwaway key held in memory and verifies the bundle and the attestation against it (`07:1573`) | A failed step 7 |
     | `plugin install`, every kind | For each signer entry that covers the id and runtimes, the signature bundle against that key and the artifact's digest; the first that verifies gives the signer. Then the attestation bundle against the same key | No verifying signature: check 5. No verifying attestation: check 10, missing. One that verifies and names another digest: check 10, another subject (ADR-060 decision 30, step D2) |
-    | `dist use` | The manifest's bundle against each key of `distributions` | A refusal; no record is written |
+    | `dist use` | The manifest's bundle against each key of `distributions`, and with the key that verifies it a signature of the image's digest (decision 12, note of 2026-11-24) | A refusal; no record and no `image.yaml` is written |
     | `plugin gate --against` | No signature, since check 5 is not evaluated there (ADR-060 decision 17); it reads the statement from the attestation bundle's payload | Check 10, on the statement as read |
     | `dist build` | No signature; checks 5 and 10 are not evaluated there (ADR-060 decision 17) | None of this ADR |
     | Boot and every live generation | No signature (`08:404`): records, `trust.yaml` and the embedded manifest, as decisions 10 and 12 state | Check 5, 7 or 10 |

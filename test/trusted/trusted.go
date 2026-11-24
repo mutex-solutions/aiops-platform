@@ -5,7 +5,7 @@
 // decisions 1, 10, 12 and 13). Write mounts the operations row on a kernel of the test
 // and calls the key it provides, as every consumer does: key generate makes a
 // throwaway key pair inside the test, dist sign signs the manifest with it as the
-// referrer of an image in a registry inside the test, trust add
+// referrer of an image in a registry inside the test, and the image, trust add
 // lists the key under distributions, and dist use verifies the signature and writes the
 // record of the manifest's digest and verified/current. What it writes is what boot
 // reads (boot.ReadTrust, boot.ReadRecord, boot.ReadCurrent). No key is committed.
@@ -106,14 +106,16 @@ func Files(tb testing.TB, manifest []byte) map[string][]byte {
 }
 
 // signer is the throwaway key pair of the test process and the bundles it signed, one
-// per manifest, held in memory. Key generate and dist sign run once each: the password
+// per manifest, and the referrer that signs the image, whose digest every call shares,
+// with its bundle, held in memory. Key generate and dist sign run once each: the password
 // of the private key is stretched with scrypt, which takes seconds under the race
 // detector, and every test home trusts the same key. Each caller gets the files in a
 // temporary directory of its own test, which the testing package removes.
 var signer struct {
 	sync.Mutex
-	key, pub []byte
-	bundles  map[string][]byte // the digest of a manifest to the bundle of its signature
+	key, pub        []byte
+	bundles         map[string][]byte // the digest of a manifest to the bundle of its signature
+	image, imageSig []byte            // the referrer that signs the image, and its bundle
 }
 
 const password = "a throwaway key's password"
@@ -158,19 +160,27 @@ func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) 
 		layers = append(layers, ocitest.Layer{MediaType: bundleMedia, Data: b})
 	}
 	reg.Artifact("dist", "", def.DistributionType, &img, layers...)
-	if len(layers) == 1 {
-		w, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: ref, Key: key})
-		if err != nil {
-			tb.Fatal(err)
-		}
-		_, referrer, _ := strings.Cut(w.Paths[0], "@")
+	if len(layers) > 1 {
+		reg.Blob("dist", bundleMedia, signer.imageSig)
+		reg.Manifest("dist", "", ocitest.ManifestType, signer.image)
+		return ref, pub
+	}
+	w, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: ref, Key: key})
+	if err != nil || len(w.Paths) != 2 {
+		tb.Fatalf("dist sign: %v, %v", w, err)
+	}
+	var bundles [2][]byte
+	for i, p := range w.Paths {
+		_, referrer, _ := strings.Cut(p, "@")
 		raw, _ := reg.Fetch("dist", referrer)
 		var m struct{ Layers []struct{ Digest string } }
-		if err := json.Unmarshal(raw, &m); err != nil || len(m.Layers) != 2 {
+		if err := json.Unmarshal(raw, &m); err != nil || len(m.Layers) == 0 {
 			tb.Fatalf("the referrer that dist sign pushed: %s, %v", raw, err)
 		}
-		signer.bundles[d], _ = reg.Fetch("dist", m.Layers[1].Digest)
+		bundles[i], _ = reg.Fetch("dist", m.Layers[len(m.Layers)-1].Digest)
+		signer.image = raw
 	}
+	signer.bundles[d], signer.imageSig = bundles[0], bundles[1]
 	return ref, pub
 }
 

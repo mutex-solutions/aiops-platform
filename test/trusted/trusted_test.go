@@ -69,6 +69,12 @@ func TestWriteRecordsWhatBootReads(t *testing.T) {
 	img := reg.Artifact("site", "1", "application/vnd.example.image.v1", nil)
 	reg.Artifact("site", "", def.DistributionType, &img, ocitest.Layer{MediaType: def.DistributionLayer, Data: readFile(t, filepath.Join(dir, "manifest"))},
 		ocitest.Layer{MediaType: bundleMedia, Data: readFile(t, filepath.Join(dir, "manifest.sigstore.json"))})
+	// The signature of the image, which the record does not keep: it signs the image of
+	// the same digest that Write used, not the manifest.
+	signer.Lock()
+	reg.Blob("site", bundleMedia, signer.imageSig)
+	reg.Manifest("site", "", ocitest.ManifestType, signer.image)
+	signer.Unlock()
 	other := filepath.Join(t.TempDir(), "other")
 	if err := os.Mkdir(other, 0o700); err != nil {
 		t.Fatal(err)
