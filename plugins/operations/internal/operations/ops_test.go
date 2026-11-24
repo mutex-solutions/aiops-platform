@@ -5,6 +5,8 @@ package operations
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -162,5 +164,40 @@ func TestDistSignAndUseWriteTheRecord(t *testing.T) {
 	}
 	if b, err := os.ReadFile(filepath.Join(home, "verified", "current")); err != nil || string(b) != "sha256:"+d+"\n" {
 		t.Errorf("current: %q, %v", b, err)
+	}
+}
+
+// A public key file is one PEM block PUBLIC KEY and nothing else, as boot reads the key
+// of trust.yaml (boot.ReadTrust): trust add refuses a file with text, a comment or a
+// byte order mark before the block, and writes nothing, since a trust.yaml that boot
+// cannot read denies every Go module at the next boot.
+func TestAddTrustRefusesTextBeforeTheBlock(t *testing.T) {
+	l := Library{LockWait: time.Second}
+	dir, home := t.TempDir(), filepath.Join(t.TempDir(), "home")
+	pub, err := os.ReadFile(generate(t, l, dir, "site") + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, lead := range []string{"site key of acme\n", "# acme\n", "\xef\xbb\xbf"} {
+		data := append([]byte(lead), pub...)
+		f := filepath.Join(dir, "lead"+strconv.Itoa(i)+".pub")
+		if err := os.WriteFile(f, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := LoadPublicKey(data); err == nil {
+			t.Errorf("%q before the block: LoadPublicKey reads the key", lead)
+		}
+		for _, dist := range []bool{false, true} {
+			r := def.TrustRequest{Caller: caller(), Home: home, KeyFile: f, Distribution: dist}
+			if !dist {
+				r.IDs = []string{"acme/*"}
+			}
+			if _, err := l.AddTrust(t.Context(), r); !errors.Is(err, def.ErrRefused) {
+				t.Errorf("%q before the block, distribution %v: %v; want ErrRefused", lead, dist, err)
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "trust.yaml")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a refused trust add wrote trust.yaml: %v", err)
 	}
 }
