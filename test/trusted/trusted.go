@@ -98,14 +98,15 @@ func Files(tb testing.TB, manifest []byte) map[string][]byte {
 	return files
 }
 
-// signer is the throwaway key pair of the test process and the local images it
-// signed, one per manifest. Key generate and dist sign run once each: the password of
-// the private key is stretched with scrypt, which takes seconds under the race
-// detector, and every test home trusts the same key.
+// signer is the throwaway key pair of the test process and the bundles it signed, one
+// per manifest, held in memory. Key generate and dist sign run once each: the password
+// of the private key is stretched with scrypt, which takes seconds under the race
+// detector, and every test home trusts the same key. Each caller gets the files in a
+// temporary directory of its own test, which the testing package removes.
 var signer struct {
 	sync.Mutex
-	dir    string            // holds the key pair dist.key and dist.pub, and the images
-	images map[string]string // the digest of a manifest to its signed image
+	key, pub []byte
+	bundles  map[string][]byte // the digest of a manifest to the bundle of its signature
 }
 
 const password = "a throwaway key's password"
@@ -125,38 +126,46 @@ func mount(tb testing.TB) def.Operations {
 }
 
 // image returns the local image of manifest signed with the key of the process, and
-// the public key file.
+// the public key file, both in a temporary directory of tb.
 func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) {
 	tb.Helper()
 	signer.Lock()
 	defer signer.Unlock()
-	if signer.dir == "" {
-		dir, err := os.MkdirTemp("", "aiops-trusted-")
-		if err != nil {
-			tb.Fatal(err)
-		}
+	dir := tb.TempDir()
+	key, pub, img := filepath.Join(dir, "dist.key"), filepath.Join(dir, "dist.pub"), filepath.Join(dir, "image")
+	if signer.pub == nil {
 		if _, err := ops.GenerateKey(tb.Context(), def.KeyRequest{Caller: caller(), Prefix: filepath.Join(dir, "dist")}); err != nil {
 			tb.Fatal(err)
 		}
-		signer.dir, signer.images = dir, map[string]string{}
+		signer.key, signer.pub, signer.bundles = readFile(tb, key), readFile(tb, pub), map[string][]byte{}
+	} else if err := write(dir, map[string][]byte{"dist.key": signer.key, "dist.pub": signer.pub}); err != nil {
+		tb.Fatal(err)
 	}
-	pub := filepath.Join(signer.dir, "dist.pub")
 	d := digest(manifest)
-	if img, ok := signer.images[d]; ok {
-		return img, pub
+	files := map[string][]byte{"image/manifest": manifest}
+	if b, ok := signer.bundles[d]; ok {
+		files["image/manifest.sigstore.json"] = b
 	}
-	img := filepath.Join(signer.dir, strings.TrimPrefix(d, "sha256:"))
-	if err := os.Mkdir(img, 0o700); err != nil {
+	if err := write(dir, files); err != nil {
 		tb.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(img, "manifest"), manifest, 0o600); err != nil {
-		tb.Fatal(err)
+	if len(files) == 1 {
+		w, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: img, Key: key})
+		if err != nil {
+			tb.Fatal(err)
+		}
+		signer.bundles[d] = readFile(tb, w.Paths[0])
 	}
-	if _, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: img, Key: filepath.Join(signer.dir, "dist.key")}); err != nil {
-		tb.Fatal(err)
-	}
-	signer.images[d] = img
 	return img, pub
+}
+
+func readFile(tb testing.TB, p string) []byte {
+	tb.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return b
 }
 
 // With returns the distribution manifest signed with one more plugin in its module
