@@ -61,6 +61,7 @@ const (
 	lockFile    = "write.lock"
 	snapshotDir = "snapshot"
 	snapshotNew = "snapshot.new" // a snapshot being written, renamed to snapshotDir once synced
+	snapshotOld = "snapshot.old" // a snapshot being removed, renamed from snapshotDir first
 	// restoreBound is how long a restore runs after its write failed or its context
 	// ended: half the drain deadline of ADR-059 decision 30 (ADR-061 decision 17).
 	restoreBound = 5 * time.Second
@@ -116,7 +117,24 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 		}
 		return Done{Notes: append(done.Notes, "restored the home from its snapshot")}, err
 	}
-	return done, os.RemoveAll(h.path(snapshotDir))
+	return done, h.drop()
+}
+
+// drop removes the snapshot: it renames it aside first, so a kill while its files are
+// removed leaves no part of a snapshot for the next writer to read.
+func (h Home) drop() error {
+	err := os.RemoveAll(h.path(snapshotOld))
+	if err == nil {
+		err = os.Rename(h.path(snapshotDir), h.path(snapshotOld))
+	}
+	if err == nil {
+		err = syncDir(h.Dir)
+	}
+	if err != nil {
+		return err
+	}
+	h.step("trashed")
+	return os.RemoveAll(h.path(snapshotOld))
 }
 
 func (h Home) path(rel string) string { return filepath.Join(h.Dir, filepath.FromSlash(rel)) }
@@ -304,13 +322,18 @@ func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
 }
 
 // recover removes a snapshot that was never renamed into place, since no change was
-// renamed before it was, and restores one that was. It reports whether it restored.
+// renamed before it was, and one that was being removed, and restores one that was
+// renamed into place. A snapshot/ with no paths.json is part of a snapshot whose
+// removal an earlier version did not rename aside: paths.json is in place before the
+// snapshot is, so it is removed too. It reports whether it restored.
 func (h Home) recover() (bool, error) {
-	if err := os.RemoveAll(h.path(snapshotNew)); err != nil {
-		return false, err
+	for _, p := range []string{snapshotNew, snapshotOld} {
+		if err := os.RemoveAll(h.path(p)); err != nil {
+			return false, err
+		}
 	}
-	if _, err := os.Stat(h.path(snapshotDir)); errors.Is(err, fs.ErrNotExist) {
-		return false, nil
+	if _, err := os.Stat(h.path(snapshotDir + "/paths.json")); errors.Is(err, fs.ErrNotExist) {
+		return false, os.RemoveAll(h.path(snapshotDir))
 	} else if err != nil {
 		return false, err
 	}
@@ -367,7 +390,7 @@ func (h Home) restore(ctx context.Context) error {
 		}
 		h.step("restored")
 	}
-	return os.RemoveAll(snap)
+	return h.drop()
 }
 
 // copyTree copies the file or the directory src to dst, files with mode 0600 and
