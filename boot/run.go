@@ -328,7 +328,9 @@ func (r *run) run(ctx context.Context) int {
 	tie, tied := tieModules(signed, o.BuildInfo)
 
 	// 1. Compose layers 0 to 4 (03-c3-kernel.md:355).
-	opt := Options{Server: true, Modules: mods, Locks: lockDigests(o.Home, o.Profile)}
+	// The server rule holds for every run but that of aiopsctl, whose cli profile is no server
+	// profile and whose rows state no roles (ADR-061 decision 25).
+	opt := Options{Server: !o.Command, Modules: mods, Locks: lockDigests(o.Home, o.Profile)}
 	src := Sources{Profile: o.Profile, Home: o.Home, Bundles: o.Bundles, Patches: o.Patches}
 	comp, warns, err := Compose(src, opt)
 	if err != nil {
@@ -503,12 +505,18 @@ func (r *run) auditPlugin() kernel.Plugin {
 // key and hook names to values (03-c3-kernel.md:360; 07-c4-plugin-sdk.md:1358).
 func (r *run) kernelConfig(cat *catalog, dist DistManifest) (kernel.Config, error) {
 	l := r.o.Limits
+	// aiopsctl keeps the warnings and the errors of the rows on stderr, and not their
+	// progress (ADR-061 decision 25).
+	level := slog.LevelInfo
+	if r.o.Command {
+		level = slog.LevelWarn
+	}
 	cfg := kernel.Config{
 		LoadDeadline: l.LoadDeadline, DrainDeadline: l.DrainDeadline, DisposeDeadline: l.DisposeDeadline,
 		ArchiveLimit: l.ArchiveLimit, EventWindow: l.EventWindow, ObserverQueue: l.ObserverQueue,
 		OwnerInbox: l.OwnerInbox, TerminalLimit: l.TerminalLimit,
 		ObserverLog: func(err error) { fmt.Fprintf(r.errw, "warning: observer: %v\n", err) },
-		LogHandler:  slog.NewTextHandler(r.errw, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		LogHandler:  slog.NewTextHandler(r.errw, &slog.HandlerOptions{Level: level}),
 	}
 	var errs []error
 	resolve := func(side string, bs []Binding) kernel.Bindings {

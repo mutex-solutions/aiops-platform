@@ -78,11 +78,12 @@ func (t *toolbox) dir(p string) (fs.FS, error) {
 }
 
 // sources are the layers that a request composes. With no home they are the shipped
-// files alone. Given a home, a home whose current distribution is not the one this
-// binary embeds is refused: the binary's module table is not the one the server of
-// that home runs, so what it composes is not what that server would (ADR-061 decision
-// 26). Append is read from the home, as the bundle of an installed artifact is.
-func (t *toolbox) sources(q launch.RenderRequest) (Sources, error) {
+// files alone. Given a home, a home whose current distribution is not digest, the one
+// this binary embeds or the one rendered against, is refused: that module table is not
+// the one the server of that home runs, so what it composes is not what that server
+// would (ADR-061 decision 26). Append is read from the home, as the bundle of an
+// installed artifact is.
+func (t *toolbox) sources(q launch.RenderRequest, digest string) (Sources, error) {
 	src := Sources{Profile: q.Profile, Home: t.shipped}
 	if q.Home != "" {
 		h, err := t.dir(q.Home)
@@ -92,8 +93,8 @@ func (t *toolbox) sources(q launch.RenderRequest) (Sources, error) {
 		switch cur, err := ReadCurrent(h); {
 		case err != nil:
 			return Sources{}, err
-		case cur != "" && cur != t.p.signed.Digest:
-			return Sources{}, fmt.Errorf("the home runs the distribution %s, which dist use made current, and this binary embeds %s: run the aiopsctl that dist build wrote for %s (ADR-061 decision 26)", cur, t.p.signed.Digest, cur)
+		case cur != "" && cur != digest:
+			return Sources{}, fmt.Errorf("the home runs the distribution %s, which dist use made current, and this render admits with %s: run the aiopsctl that dist build wrote for %s (ADR-061 decision 26)", cur, digest, cur)
 		}
 		src.Home = overlay{h, t.shipped}
 	}
@@ -132,8 +133,11 @@ func dumpOf(flag string) func(Admission) string {
 	return nil
 }
 
-// Render composes and admits a profile as boot does, with this binary's module table and
-// the signed manifest it embeds, at EntryRender (08-profiles-roadmap-adrs.md:359, :366).
+// Render composes and admits a profile as boot does, at EntryRender, with this binary's
+// module table and the signed manifest it embeds, or with Against's, whose module table
+// is read from its manifests, as Render reads it (08-profiles-roadmap-adrs.md:359,
+// :366). A composition that stops on a file is a diagnostic of compose with the file and
+// the line, not an error.
 func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendered, error) {
 	if err := t.ready(ctx); err != nil {
 		return launch.Rendered{}, err
@@ -151,11 +155,24 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 			return launch.Rendered{}, fmt.Errorf("%q is not a dump of profile render", d)
 		}
 	}
-	src, err := t.sources(q)
+	d, mods, release, tie := t.p.signed, t.p.mods, t.p.release, t.p.tie
+	if q.Against != "" {
+		var err error
+		if d, _, err = t.against(q.Against); err != nil {
+			return launch.Rendered{}, err
+		}
+		mods, release, tie = d.Table(), nil, nil
+	}
+	src, err := t.sources(q, d.Digest)
 	if err != nil {
 		return launch.Rendered{}, err
 	}
-	c, warns, err := Compose(src, Options{Server: q.Server, Modules: t.p.mods, Locks: lockDigests(src.Home, q.Profile)})
+	c, warns, err := Compose(src, Options{Server: q.Server, Modules: mods, Locks: lockDigests(src.Home, q.Profile)})
+	var stop *Error
+	if errors.As(err, &stop) {
+		return launch.Rendered{Distribution: d.Digest,
+			Diagnostics: []launch.Diagnostic{{Check: "compose", File: stop.File, Line: stop.Line, Text: err.Error()}}}, nil
+	}
 	if err == nil {
 		err = CheckReserved(c)
 	}
@@ -163,13 +180,13 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 		return launch.Rendered{}, err
 	}
 	w := WithLoader(c)
-	in, prints := bootInput(src.Home, q.Profile, w, t.p.mods, t.p.signed, t.p.release, t.p.tie)
+	in, prints := bootInput(src.Home, q.Profile, w, mods, d, release, tie)
 	in.Entry = EntryRender
 	a := AdmitWith(w, in, roles)
 	out := launch.Rendered{Composition: launchComposition(c), Admission: launchAdmission(a), Dumps: map[string]string{},
 		Required: launch.RequiredSet{Rows: slices.DeleteFunc(slices.Clone(a.Required.Rows), func(id string) bool { return id == LoaderRowID }),
 			Keys: a.Required.Keys},
-		Distribution: t.p.signed.Digest}
+		Distribution: d.Digest}
 	for _, d := range q.Dumps {
 		out.Dumps[d] = dumpOf(d)(a)
 	}
@@ -241,7 +258,7 @@ func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdic
 		if q.Home == "" {
 			return launch.Verdict{}, errors.New("install names the home it writes")
 		}
-		src, err := t.sources(launch.RenderRequest{Home: q.Home, Profile: q.Profile, Append: launch.Bundle{ID: man.ID, Data: q.Bundle}})
+		src, err := t.sources(launch.RenderRequest{Home: q.Home, Profile: q.Profile, Append: launch.Bundle{ID: man.ID, Data: q.Bundle}}, t.p.signed.Digest)
 		if err == nil {
 			c, _, err = Compose(src, Options{Modules: t.p.mods, Locks: lockDigests(src.Home, q.Profile)})
 		}
@@ -385,6 +402,21 @@ func (t *toolbox) Shipped(ctx context.Context) (map[string][]byte, error) {
 	return out, err
 }
 
+// against reads the signed manifest at the absolute path p, and returns it with its
+// bytes.
+func (t *toolbox) against(p string) (Distribution, []byte, error) {
+	r, err := rel(p)
+	if err != nil {
+		return Distribution{}, nil, err
+	}
+	raw, err := fs.ReadFile(t.files, r)
+	if err != nil {
+		return Distribution{}, nil, err
+	}
+	d, err := ReadDistribution(p, raw)
+	return d, raw, err
+}
+
 // Release returns the signed manifest that the binary embeds, or the one at against,
 // with each instantiable plugin and the first example of its configSchema.
 func (t *toolbox) Release(ctx context.Context, against string) (launch.Release, error) {
@@ -393,14 +425,8 @@ func (t *toolbox) Release(ctx context.Context, against string) (launch.Release, 
 	}
 	d, raw := t.p.signed, t.signed
 	if against != "" {
-		r, err := rel(against)
-		if err == nil {
-			raw, err = fs.ReadFile(t.files, r)
-		}
-		if err == nil {
-			d, err = ReadDistribution(against, raw)
-		}
-		if err != nil {
+		var err error
+		if d, raw, err = t.against(against); err != nil {
 			return launch.Release{}, err
 		}
 	}
