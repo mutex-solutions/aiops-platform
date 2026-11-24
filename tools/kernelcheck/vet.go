@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -59,17 +60,54 @@ var forbiddenCalls = map[string][]string{
 var listenFuncs = map[string][]string{
 	"net": {"Listen", "ListenPacket", "ListenTCP", "ListenUDP", "ListenIP", "ListenUnix", "ListenUnixgram",
 		"ListenMulticastUDP", "FileListener", "FilePacketConn"},
-	"crypto/tls":            {"Listen"},
-	"net/http":              {"ListenAndServe", "ListenAndServeTLS"},
-	"net/http/httptest":     {"NewServer", "NewTLSServer", "NewUnstartedServer"},
-	"syscall":               {"Listen", "Bind"},
-	"golang.org/x/sys/unix": {"Listen", "Bind"},
+	"crypto/tls":        {"Listen"},
+	"net/http":          {"ListenAndServe", "ListenAndServeTLS"},
+	"net/http/httptest": {"NewServer", "NewTLSServer", "NewUnstartedServer"},
+	// A raw syscall can be bind(2) or listen(2), named by a constant or a number.
+	"syscall":               {"Listen", "Bind", "Syscall", "Syscall6", "RawSyscall", "RawSyscall6"},
+	"golang.org/x/sys/unix": {"Listen", "Bind", "Syscall", "Syscall6", "RawSyscall", "RawSyscall6"},
 }
 
 var listenMethods = map[string]bool{
 	"(*net.ListenConfig).Listen": true, "(*net.ListenConfig).ListenPacket": true,
 	"(*net/http.Server).ListenAndServe": true, "(*net/http.Server).ListenAndServeTLS": true,
 	"(*net/http/httptest.Server).Start": true, "(*net/http/httptest.Server).StartTLS": true,
+}
+
+// listenerTypes are the types that have the listenMethods, as pointers: a call of a
+// method of an interface or of a type parameter that one of them implements reaches
+// that type's method, so it is refused as that method is.
+var listenerTypes = sync.OnceValue(func() []types.Type {
+	var out []types.Type
+	for _, t := range [][2]string{{"net", "ListenConfig"}, {"net/http", "Server"}, {"net/http/httptest", "Server"}} {
+		if p, err := stdImporter.Import(t[0]); err == nil {
+			out = append(out, types.NewPointer(p.Scope().Lookup(t[1]).Type()))
+		}
+	}
+	return out
+})
+
+// listenMethod returns the full name of the method of listenMethods that the selection
+// s of fn reaches: fn itself, or for a method of an interface or a type parameter the
+// method of a listener type that implements it; "" when it reaches none.
+func listenMethod(s *types.Selection, fn *types.Func) string {
+	if listenMethods[fn.FullName()] {
+		return fn.FullName()
+	}
+	iface, ok := s.Recv().Underlying().(*types.Interface)
+	if !ok {
+		return ""
+	}
+	for _, t := range listenerTypes() {
+		sel := types.NewMethodSet(t).Lookup(nil, fn.Name())
+		if sel == nil {
+			continue
+		}
+		if m := sel.Obj().(*types.Func); listenMethods[m.FullName()] && types.Implements(t, iface) {
+			return m.FullName()
+		}
+	}
+	return ""
 }
 
 // listenAllow is the one list of ADR-062 decisions 13 and 14: each plugin id, under
@@ -217,8 +255,8 @@ func vetMethods(files map[string]string, imp types.Importer, boot bool, id strin
 		if goMethods[fn.FullName()] {
 			r.untracked(fset, byPath[pos.Filename], files[pos.Filename], sel.Sel.Pos(), fn.FullName()+" starts an untracked goroutine", boot)
 		}
-		if listenMethods[fn.FullName()] && listens(id, fn.FullName()) {
-			r.violations = append(r.violations, listenViolation(fmt.Sprintf("%s:%d", files[pos.Filename], pos.Line), fn.FullName(), id))
+		if m := listenMethod(s, fn); m != "" && listens(id, m) {
+			r.violations = append(r.violations, listenViolation(fmt.Sprintf("%s:%d", files[pos.Filename], pos.Line), m, id))
 		}
 	}
 	return r, nil
