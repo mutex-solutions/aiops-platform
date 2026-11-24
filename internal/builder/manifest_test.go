@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package builder
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
+	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
+)
+
+// The signed distribution manifest of the test binary is the builder's (ADR-060
+// decisions 20 and 28), and boot reads it: its module table is the binary's, each
+// plugin with its manifest byte for byte and a statement whose subject is that
+// manifest; a test plugin names its test definition at suite revision 0, with no half
+// (ADR-060 decision 55); every module of the repository is listed by its path with no
+// version and no sum (ADR-020 decision 28), under the licence the scan detects; and the
+// pins hold the toolchain module with its sum (ADR-044 decision 16).
+func TestDistributionOfTheTestBinary(t *testing.T) {
+	root := filepath.Join("..", "..")
+	input, err := os.ReadFile(filepath.Join(root, "test", "dist", "dist.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	out, err := Distribution(ctx, Go{Dir: root}, "./test/dist/cmd/aiops-test", input)
+	if err != nil || !bytes.Equal(out, testdist.Signed) {
+		t.Fatalf("%v: test/dist/distribution.yaml is not what the builder writes", err)
+	}
+	d, err := boot.ReadDistribution("distribution.yaml", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mods := testdist.Modules()
+	if len(d.Plugins) != len(mods) {
+		t.Fatalf("%d plugins in the manifest, %d in the module table", len(d.Plugins), len(mods))
+	}
+	for _, m := range mods {
+		p := d.Plugins[m.Plugin.ID]
+		st, err := boot.ReadAttestation(m.Plugin.ID, p.Attestation)
+		if err != nil || !bytes.Equal(p.Manifest, m.Manifest) || st.Digest != fmt.Sprintf("sha256:%x", sha256.Sum256(p.Manifest)) || !strings.Contains(p.Package, "/") {
+			t.Fatalf("%s: %v, statement %+v", m.Plugin.ID, err, st)
+		}
+	}
+	st, err := boot.ReadAttestation("aiops-test/toy-provider", d.Plugins["aiops-test/toy-provider"].Attestation)
+	if toy := st.Definitions["toy"]; err != nil || toy.Suite == nil || *toy.Suite != 0 || toy.Halves != nil {
+		t.Errorf("toy-provider attests %+v (%v)", toy, err)
+	}
+	for _, m := range d.Modules {
+		if strings.HasPrefix(m.Path, rootModule) && (m.Version != "" || m.Sum != "" || m.Licence != "Apache-2.0") {
+			t.Errorf("module %+v", m)
+		}
+	}
+	if p := pinOf(d.Pins, Toolchain, ToolchainVersion); p.Sum != ToolchainSum {
+		t.Errorf("the toolchain pin %+v", p)
+	}
+	for _, bad := range []struct{ input, main string }{{"bogus: 1", "./test/dist/cmd/aiops-test"}, {string(input), "./no/such/package"}} {
+		if _, err := Distribution(ctx, Go{Dir: root}, bad.main, []byte(bad.input)); err == nil {
+			t.Errorf("Distribution took %q", bad)
+		}
+	}
+}
+
+// What a site build adds, boot reads: the site's entries apart from the release's
+// bindings, a raised pin beside the release's version, a hash checked against nothing,
+// and the accepted licences (ADR-044 decisions 8, 10 and 13; ADR-060 decision 20).
+func TestManifestOfASite(t *testing.T) {
+	m := Module{Path: "example.test/site", Version: "v1.0.0", Sum: h1("site"), Dir: moduleDir(t, map[string]string{"x/x.go": "package x\n"})}
+	release := boot.DistManifest{Consumers: []boot.Binding{{Key: "operations", Plugins: []string{"aiops/command-dist"}}}, RequiredKeys: []string{"clock"}}
+	site := boot.DistManifest{Providers: []boot.Binding{{Key: "echoers", Plugins: []string{"acme/echo"}}},
+		SealedHooks: []boot.HookListeners{{Hook: "internal/status", Plugins: []string{"acme/echo"}}}, RequiredRows: []string{"echo"}}
+	pins := []boot.DistPin{{Path: Toolchain, Version: ToolchainVersion, Sum: ToolchainSum}, {Path: m.Path, Version: "v1.0.0", Sum: m.Sum, Release: "v0.9.0"},
+		{Path: "example.test/dep", Version: "v0.1.0", GoMod: h1("dep"), Unchecked: true}}
+	out, err := Manifest{Graph: []Package{pkg(m, "x")}, Licences: map[string]string{m.Path: "MPL-2.0"}, Pins: pins, Release: release, Site: site,
+		Accept: []string{"MPL-2.0"}}.Write()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := boot.ReadDistribution("distribution.yaml", out)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(d.Site.Providers) != 1 || len(d.Site.SealedHooks) != 1 || d.Site.RequiredRows[0] != "echo" || len(d.Release.Providers) != 0 || d.Release.RequiredKeys[0] != "clock" {
+		t.Errorf("bindings %+v, site %+v", d.Release, d.Site)
+	}
+	if p := pinOf(d.Pins, m.Path, "v1.0.0"); p.Release != "v0.9.0" || !pinOf(d.Pins, "example.test/dep", "v0.1.0").Unchecked || len(d.AcceptLicenses) != 1 {
+		t.Errorf("pins %+v, accepted %v", d.Pins, d.AcceptLicenses)
+	}
+	if _, err := (Manifest{Graph: []Package{pkg(m, "x")}}).Write(); err == nil || !strings.Contains(err.Error(), "no detected licence") {
+		t.Errorf("a module with no licence: %v", err)
+	}
+}
+
+// No binary of the repository links golang.org/x/net/trace, whose init registers
+// /debug/requests and /debug/events on http.DefaultServeMux: gRPC reaches every binary
+// through the signing library, and each build has the tag grpcnotrace (ADR-020
+// decisions 6 and 27; ADR-044 decision 21). The graphs of cmd/aiops and cmd/aiopsctl
+// hold no such package; make check and CI build with the tag in GOFLAGS; and the
+// builder refuses a graph that holds it, so no signed manifest records one.
+func TestReleaseBuildsLinkNoTrace(t *testing.T) {
+	root, ctx := filepath.Join("..", ".."), context.Background()
+	for _, main := range []string{"./cmd/aiops", "./cmd/aiopsctl"} {
+		if _, err := Graph(ctx, Go{Dir: root}, main); err != nil {
+			t.Errorf("%s: %v", main, err)
+		}
+	}
+	tags := regexp.MustCompile(`GOFLAGS\s*(\?=|:)\s*.*-tags=grpcnotrace`)
+	for _, f := range []string{"Makefile", ".github/workflows/ci.yml"} {
+		b, err := os.ReadFile(filepath.Join(root, f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !tags.Match(b) {
+			t.Errorf("%s sets no GOFLAGS with -tags=grpcnotrace", f)
+		}
+	}
+	defer func(f []string) { plugingen.BuildFlags = f }(plugingen.BuildFlags)
+	plugingen.BuildFlags = nil
+	if _, err := Graph(ctx, Go{Dir: root, Env: append(os.Environ(), "GOFLAGS=-mod=readonly")}, "./cmd/aiops"); err == nil || !strings.Contains(err.Error(), "grpcnotrace") {
+		t.Errorf("a graph with %s: %v, want a refusal that names the tag", tracePackage, err)
+	}
+}
+
+// h1 is a sum of the h1 form for the text s.
+func h1(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return "h1:" + base64.StdEncoding.EncodeToString(sum[:])
+}
