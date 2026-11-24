@@ -19,7 +19,8 @@ import (
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) (*kernel.Root, func()) {
 		l, p := fake.New()
-		l.ProfileName, l.RoleName, l.Argv, l.Flags, l.Environ = s.Profile, s.Role, s.Args, s.Flags, s.Env
+		l.ProfileName, l.RoleName, l.Argv, l.Flags, l.Environment = s.Profile, s.Role, s.Args, s.Flags, s.Env
+		l.In, l.Out, l.ErrOut, l.WorkDir = s.Stdin, s.Stdout, s.Stderr, s.Dir
 		l.Switches = map[string]bool{}
 		for _, n := range s.Switches {
 			l.Switches[n] = true
@@ -35,6 +36,7 @@ func TestConformance(t *testing.T) {
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)
+		l.Boot()
 		return root, func() { deftest.Dispose(t, root, f) }
 	})
 }

@@ -15,7 +15,9 @@
 package conformance
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -30,8 +32,14 @@ type Setup struct {
 	Profile, Role string
 	Args          []string
 	Flags         map[string]string
-	// Env is the environment of the process.
+	// Env is the environment of the process, which Cmdline.Environ lists as the launcher
+	// of aiopsctl does.
 	Env map[string]string
+	// Stdin, Stdout and Stderr are the streams of the process and Dir its working
+	// directory.
+	Stdin          io.Reader
+	Stdout, Stderr io.Writer
+	Dir            string
 	// Switches names the kill switches that are on.
 	Switches []string
 	// Consumer is the plugin that needs the six keys. The launcher lists it in its
@@ -40,9 +48,9 @@ type Setup struct {
 	Consumer kernel.Plugin
 }
 
-// Mount starts a launcher that provides the six keys as s says, and returns the root
-// on which the suite mounts s.Consumer and the function that releases the launcher,
-// which for a launcher is the stop of the process.
+// Mount starts a launcher that provides the six keys as s says, and returns, once the
+// launcher has booted, the root on which the suite mounts s.Consumer and the function
+// that releases the launcher, which for a launcher is the stop of the process.
 type Mount func(t *testing.T, s Setup) (root *kernel.Root, release func())
 
 const (
@@ -58,6 +66,9 @@ func setup(consumer kernel.Plugin) Setup {
 		Env:      map[string]string{refName: "ref-value", otherName: "other-value"},
 		Switches: []string{launch.AgentsPaused},
 		Consumer: consumer,
+		Stdin:    strings.NewReader("conformance input"),
+		Stdout:   &bytes.Buffer{}, Stderr: &bytes.Buffer{},
+		Dir: "/conformance/dir",
 	}
 }
 
@@ -184,6 +195,52 @@ func Run(t *testing.T, mount Mount) {
 			ex := use(t, mount).ex
 			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitGaveUp, Detail: "conformance"})
 			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitDisposeLeak, Detail: "conformance"})
+			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitCommand, Detail: "conformance", Code: 1})
+		})
+
+		t.Run("launch.O8 cmdline serves the streams, the working directory and the environment", func(t *testing.T) {
+			u := use(t, mount)
+			if r := u.cl.Stdin(); r == nil {
+				t.Error("Stdin = nil")
+			} else if in, err := io.ReadAll(r); err != nil || string(in) != "conformance input" {
+				t.Errorf("Stdin reads %q, %v; want the setup's input", in, err)
+			}
+			for name, w := range map[string]struct {
+				got  io.Writer
+				want io.Writer
+			}{"Stdout": {u.cl.Stdout(), u.s.Stdout}, "Stderr": {u.cl.Stderr(), u.s.Stderr}} {
+				if w.got == nil {
+					t.Errorf("%s = nil", name)
+					continue
+				}
+				if _, err := io.WriteString(w.got, name+" line"); err != nil {
+					t.Errorf("a write to %s = %v", name, err)
+				}
+				if got := w.want.(*bytes.Buffer).String(); got != name+" line" {
+					t.Errorf("the setup's %s holds %q after a write to %s", name, got, name)
+				}
+			}
+			if d := u.cl.Dir(); d != u.s.Dir {
+				t.Errorf("Dir = %q, want %q", d, u.s.Dir)
+			}
+			var want []string
+			for n, v := range u.s.Env {
+				want = append(want, n+"="+v)
+			}
+			got := u.cl.Environ()
+			slices.Sort(want)
+			if slices.Sort(got); !slices.Equal(got, want) {
+				t.Errorf("Environ = %q, want %q", got, want)
+			}
+		})
+
+		t.Run("launch.O9 Booted is closed once the launcher has booted", func(t *testing.T) {
+			rd := use(t, mount).rd
+			select {
+			case <-rd.Booted():
+			default:
+				t.Error("Booted is not closed once Mount returned")
+			}
 		})
 	})
 

@@ -18,7 +18,7 @@ import (
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) (*kernel.Root, *kernel.Fiber) {
 		l, lp := fake.New()
-		l.Environ = s.Env
+		l.Environment = s.Env
 		root := kerneltest.New(t)
 		kerneltest.Mount(root, lp)
 		f := root.Plugin(configrefs.Plugin, map[string]any{"maxFileBytes": int64(1 << 10)})

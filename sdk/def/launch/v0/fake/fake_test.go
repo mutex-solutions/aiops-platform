@@ -34,7 +34,7 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
-	l.Environ = map[string]string{"AIOPS_REF_X": "v", "AIOPS_AGENTS_PAUSED": "1"}
+	l.Environment = map[string]string{"AIOPS_REF_X": "v", "AIOPS_AGENTS_PAUSED": "1"}
 	l.Current = launch.Composition{Digest: launch.Digest{7}}
 	l.Needed = launch.RequiredSet{Rows: []string{"r"}, Keys: []string{"sql"}}
 	cand := launch.Composition{Rows: []launch.Row{{ID: "a"}}, Digest: launch.Digest{1}}
@@ -327,5 +327,35 @@ func TestSecondLauncherFails(t *testing.T) {
 	deftest.Active(t, root.Plugin(first, nil))
 	if err := deftest.Failure(t, root.Plugin(second, nil)); err == nil {
 		t.Fatal("no error")
+	}
+}
+
+// Boot closes Booted once, and a second Boot changes nothing.
+func TestBootClosesBootedOnce(t *testing.T) {
+	l, _ := fake.New()
+	select {
+	case <-l.Booted():
+		t.Fatal("Booted is closed before Boot")
+	default:
+	}
+	l.Boot()
+	l.Boot()
+	select {
+	case <-l.Booted():
+	default:
+		t.Fatal("Booted is not closed after Boot")
+	}
+}
+
+// Environ lists every variable of Environment, sorted, while Env serves only the names
+// with launch.EnvPrefix.
+func TestEnvironListsTheEnvironment(t *testing.T) {
+	l, _ := fake.New()
+	l.Environment = map[string]string{"HOME": "/h", "AIOPS_REF_A": "a"}
+	if got := l.Environ(); !slices.Equal(got, []string{"AIOPS_REF_A=a", "HOME=/h"}) {
+		t.Errorf("Environ = %q", got)
+	}
+	if _, ok := l.Env("HOME"); ok {
+		t.Error("Env served HOME")
 	}
 }

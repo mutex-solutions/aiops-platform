@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"sort"
 	"strings"
@@ -597,6 +598,12 @@ func (c cmdline) Env(name string) (string, bool) {
 	return v, v != ""
 }
 
+func (c cmdline) Stdin() io.Reader  { return nil }
+func (c cmdline) Stdout() io.Writer { return nil }
+func (c cmdline) Stderr() io.Writer { return nil }
+func (c cmdline) Dir() string       { return "" }
+func (c cmdline) Environ() []string { return nil }
+
 // latch is the ready service: a flag that readiness sets when the required set is
 // ACTIVE and drops while a provider restarts (03-c3-kernel.md:67). Every change
 // goes to changed, which the launcher publishes to the outside, under the latch's
@@ -630,6 +637,8 @@ func (l *latch) IsReady() bool {
 	defer l.mu.Unlock()
 	return l.on
 }
+
+func (l *latch) Booted() <-chan struct{} { return nil }
 
 // switches is the killSwitches service, layer 6, read once at boot from the
 // environment (08-profiles-roadmap-adrs.md:111, :126; ReadKillSwitches).

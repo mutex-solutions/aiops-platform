@@ -69,7 +69,7 @@ func TestResolvesEachScheme(t *testing.T) {
 		t.Fatal(err)
 	}
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_DB": "env-value"}
+	l.Environment = map[string]string{"AIOPS_REF_DB": "env-value"}
 	l.Flags = map[string]string{"site": "flag-value", "refs-dir": dir}
 	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(64)})
 
@@ -96,7 +96,7 @@ func TestResolvesEachScheme(t *testing.T) {
 // "aiops/config-refs", so it is inward).
 func TestInwardListenersRunAndTheirResultIsResolved(t *testing.T) {
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
+	l.Environment = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
 	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	inner := kernel.Define(kernel.Plugin{ID: "aiops/z-inner", Hooks: []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
 		Apply: func(c *kernel.Context, _ any) error {
@@ -124,7 +124,7 @@ func TestInwardListenersRunAndTheirResultIsResolved(t *testing.T) {
 
 func TestNestedMapsAndListsAreResolvedWithoutChangingTheRaw(t *testing.T) {
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
+	l.Environment = map[string]string{"AIOPS_REF_A": "a", "AIOPS_REF_B": "b"}
 	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	raw := map[string]any{
 		"outer": map[string]any{"list": []any{"x", ref("env", "AIOPS_REF_A"), map[string]any{"deep": ref("env", "AIOPS_REF_B")}}},
@@ -147,7 +147,7 @@ func TestNestedMapsAndListsAreResolvedWithoutChangingTheRaw(t *testing.T) {
 // references resolved, and unloads while config-refs is gone.
 func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_A": "a"}
+	l.Environment = map[string]string{"AIOPS_REF_A": "a"}
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, lp)
 	g := &target{}
@@ -180,7 +180,7 @@ func TestReadyKeyGatesTheRowsWithReferences(t *testing.T) {
 // (ADR-059 decision 16).
 func TestDryRunChecksWithoutReturningValues(t *testing.T) {
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
+	l.Environment = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
 	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	got := make(chan refsdef.DryRun, 1)
 	user := kernel.Define(kernel.Plugin{ID: "t/launcher", Inject: []kernel.Dep{kernel.Need(refsdef.Key)},
@@ -255,7 +255,7 @@ func TestUnresolvedReferencesFailTheRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
+	l.Environment = map[string]string{"AIOPS_REF_OK": secretValue, "HOME_SECRET": secretValue}
 	l.Flags = map[string]string{"refs-dir": dir}
 	cfg := map[string]any{"maxFileBytes": int64(32)}
 	root := mount(t, l, lp, cfg)
@@ -317,7 +317,7 @@ func TestUnreadableFileRootFails(t *testing.T) {
 
 func TestUpdateWithUnresolvedReferenceIsRefused(t *testing.T) {
 	l, lp := fake.New()
-	l.Environ = map[string]string{"AIOPS_REF_A": "a"}
+	l.Environment = map[string]string{"AIOPS_REF_A": "a"}
 	root := mount(t, l, lp, map[string]any{"maxFileBytes": int64(8)})
 	g := &target{}
 	f := root.Plugin(g.plugin(), map[string]any{"a": ref("env", "AIOPS_REF_A")})

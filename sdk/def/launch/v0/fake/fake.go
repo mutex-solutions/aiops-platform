@@ -10,6 +10,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -36,7 +37,10 @@ type Launcher struct {
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
-	Environ     map[string]string  // for Cmdline.Env, which serves only names with launch.EnvPrefix
+	Environment map[string]string  // the environment of the process: Cmdline.Env serves its names with launch.EnvPrefix, Environ lists every one
+	In          io.Reader          // for Cmdline.Stdin
+	Out, ErrOut io.Writer          // for Cmdline.Stdout and Stderr
+	WorkDir     string             // for Cmdline.Dir
 	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
 	Needed      launch.RequiredSet // the distribution's required rows and keys, for ProfileContext.Required
 
@@ -290,9 +294,15 @@ func (f *Launcher) Env(name string) (string, bool) {
 	if !strings.HasPrefix(name, launch.EnvPrefix) {
 		return "", false
 	}
-	v, ok := f.Environ[name]
+	v, ok := f.Environment[name]
 	return v, ok
 }
+
+func (f *Launcher) Stdin() io.Reader  { return nil }
+func (f *Launcher) Stdout() io.Writer { return nil }
+func (f *Launcher) Stderr() io.Writer { return nil }
+func (f *Launcher) Dir() string       { return "" }
+func (f *Launcher) Environ() []string { return nil }
 
 // Ready.
 
@@ -310,6 +320,11 @@ func (f *Launcher) IsReady() bool {
 	defer f.mu.Unlock()
 	return f.ready
 }
+
+// Boot closes the channel of Booted, as the launcher does once the tree has settled.
+func (f *Launcher) Boot() {}
+
+func (f *Launcher) Booted() <-chan struct{} { return nil }
 
 // Inventory lists what the callers left behind: "ready" while the latch is set
 // (ADR-060 decision 12).

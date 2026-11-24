@@ -176,7 +176,15 @@ type RunOptions struct {
 	// Signals delivers SIGINT and SIGTERM; any value starts a clean stop.
 	Signals <-chan os.Signal
 
+	// Stdout and Stderr are where the launcher writes its own lines. Stdio holds the
+	// streams of the process that cmdline serves (launch 0.2): in aiops they are the
+	// same, and aiopsctl discards what the launcher writes on stdout (ADR-061 decision
+	// 25). Dir and Environ are the working directory and the environment that cmdline
+	// serves, which only aiopsctl fills (ADR-061 decision 13).
 	Stdout, Stderr io.Writer
+	Stdio          Stdio
+	Dir            string
+	Environ        []string
 
 	Registry Registry
 	// Signed is the signed distribution manifest the binary embeds (ADR-060 decision
@@ -195,6 +203,12 @@ type RunOptions struct {
 	// anything is mounted: a seam of the test binary (test/dist/cmd/aiops-test), which
 	// records the kernel's fibers beside the state file. Nil in a release binary.
 	Kernel func(*kernel.Root)
+}
+
+// Stdio are the three streams of the process.
+type Stdio struct {
+	In       io.Reader
+	Out, Err io.Writer
 }
 
 // Run boots the composition and runs it until a signal, an exit request of a row

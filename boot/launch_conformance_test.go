@@ -28,9 +28,12 @@ func TestLaunchConformance(t *testing.T) {
 		f.files["profiles/"+s.Profile+"/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [b]")}
 		f.opt.Profile, f.opt.Role, f.opt.Args, f.opt.Flags = s.Profile, s.Role, s.Args, s.Flags
 		env := map[string]string{}
+		f.opt.Environ = nil
 		for n, v := range s.Env {
 			env[n] = v
+			f.opt.Environ = append(f.opt.Environ, n+"="+v)
 		}
+		f.opt.Stdio, f.opt.Dir = Stdio{In: s.Stdin, Out: s.Stdout, Err: s.Stderr}, s.Dir
 		for _, n := range s.Switches {
 			env[envOfSwitch[n]] = "1"
 		}
