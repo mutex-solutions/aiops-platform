@@ -4,6 +4,7 @@
 # copies the notice of each that a binary compiles into its THIRD_PARTY_LICENSES/, as
 # a notice file. TestStdNotices holds the list to the tree of the pin.
 src/crypto/internal/fips140/edwards25519/scalar.go
+src/debug/elf/elf.go
 src/internal/profile/graph.go
 src/math/acosh.go
 src/math/asinh.go

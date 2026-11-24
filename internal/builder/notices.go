@@ -152,6 +152,7 @@ var stdNotices string
 var (
 	copyrightLine = regexp.MustCompile(`(?i)\bcopyright\s*(?:\(c\)|©)?\s*[0-9]{4}`)
 	goAuthors     = regexp.MustCompile(`The Go Authors`)
+	blockComment  = regexp.MustCompile(`(?s)/\*.*?\*/`)
 )
 
 // StdNotices returns, sorted, the path from goroot of each .go and .s file under
@@ -180,13 +181,15 @@ func StdNotices(goroot string) ([]string, error) {
 	return out, err
 }
 
-// noticeOf returns the comment block of src that holds its first copyright line of
-// someone other than the Go Authors, "" for none: the run of // lines around it.
+// noticeOf returns the comment of src that holds a copyright line of someone other than
+// the Go Authors, "" for none: the run of // lines around the first such line, or else
+// the first /* */ block of the header, before the package clause, that holds one.
 func noticeOf(src []byte) string {
+	foreign := func(l string) bool { return copyrightLine.MatchString(l) && !goAuthors.MatchString(l) }
 	ls := strings.Split(string(src), "\n")
 	for i, l := range ls {
 		t := strings.TrimSpace(l)
-		if !strings.HasPrefix(t, "//") || !copyrightLine.MatchString(t) || goAuthors.MatchString(t) {
+		if !strings.HasPrefix(t, "//") || !foreign(t) {
 			continue
 		}
 		start, end := i, i
@@ -197,6 +200,12 @@ func noticeOf(src []byte) string {
 			end++
 		}
 		return strings.Join(ls[start:end+1], "\n") + "\n"
+	}
+	header, _, _ := strings.Cut(string(src), "\npackage ")
+	for _, b := range blockComment.FindAllString(header, -1) {
+		if slices.ContainsFunc(strings.Split(b, "\n"), foreign) {
+			return b + "\n"
+		}
 	}
 	return ""
 }
