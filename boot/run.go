@@ -159,6 +159,17 @@ type ProcessStatus struct {
 	Digest  string // hex of the composition the process booted
 	Exit    int    // set in PhaseStopped
 	Detail  string // why the process stopped, one line
+	// Rows is each mounted row's state and what it waits for, set at settle and at every
+	// committed generation (ADR-059 decision 31 as amended; ADR-061 decision 21).
+	Rows []RowStatus
+}
+
+// RowStatus is one row of ProcessStatus: its state, "" while it has no fiber, and the
+// keys it needs that have no ACTIVE provider, sorted.
+type RowStatus struct {
+	ID       string
+	State    State
+	WaitsFor []string
 }
 
 // RunOptions are the inputs of Run. They are values: nothing here is read from

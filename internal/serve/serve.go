@@ -178,10 +178,20 @@ type Status struct {
 	Digest  string `json:"digest"`
 	Exit    int    `json:"exit"`
 	Detail  string `json:"detail"`
+	// Rows is each row's state and what it waits for, absent until boot read them
+	// (ADR-059 decision 31 as amended).
+	Rows []StatusRow `json:"rows,omitempty"`
+}
+
+// StatusRow is one row of Status.
+type StatusRow struct {
+	ID       string   `json:"id"`
+	State    string   `json:"state"`
+	WaitsFor []string `json:"waitsFor,omitempty"`
 }
 
 func statusJSON(s boot.ProcessStatus) []byte {
-	b, _ := json.MarshalIndent(Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail}, "", "  ")
+	b, _ := json.MarshalIndent(Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail, nil}, "", "  ")
 	return append(b, '\n')
 }
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"syscall"
@@ -268,6 +269,25 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 	}
 }
 
+// The status file carries each row's state and what it waits for (ADR-059 decision 31
+// as amended), and leaves the field out before boot has read the rows.
+func TestStatusFileCarriesTheRows(t *testing.T) {
+	var got map[string]any
+	data := statusJSON(boot.ProcessStatus{Phase: boot.PhaseRunning, Rows: []boot.RowStatus{
+		{ID: "store", State: boot.StateActive}, {ID: "user", State: boot.StatePending, WaitsFor: []string{"store"}}}})
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []any{map[string]any{"id": "store", "state": "ACTIVE"},
+		map[string]any{"id": "user", "state": "PENDING", "waitsFor": []any{"store"}}}
+	if !reflect.DeepEqual(got["rows"], want) {
+		t.Errorf("rows = %#v, want %#v", got["rows"], want)
+	}
+	if err := json.Unmarshal(statusJSON(boot.ProcessStatus{Phase: boot.PhaseStarting}), &got); err != nil || got["rows"] != nil {
+		t.Errorf("rows before boot read them = %#v, %v", got["rows"], err)
+	}
+}
+
 // A server hands boot the streams of the process for cmdline, and neither a working
 // directory nor an environment (ADR-061 decision 13).
 func TestRunPassesTheStreamsAndNoEnviron(t *testing.T) {
@@ -346,7 +366,7 @@ func TestRunReplacesAStaleStatusBeforeBoot(t *testing.T) {
 	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	if seen != (Status{Phase: "starting", Profile: "p"}) {
+	if !reflect.DeepEqual(seen, Status{Phase: "starting", Profile: "p"}) {
 		t.Fatalf("status when boot starts %+v", seen)
 	}
 }
