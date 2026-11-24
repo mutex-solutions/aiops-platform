@@ -115,7 +115,7 @@ type tablePlugin struct {
 // Build runs one build on the local path.
 func Build(ctx context.Context, q Request) (Result, error) {
 	b := &build{q: q, recorded: map[string]string{}, progress: cmp.Or[io.Writer](q.Progress, io.Discard)}
-	if err := b.inputs(); err != nil {
+	if err := b.inputs(ctx); err != nil {
 		return Result{}, err
 	}
 	scratch, err := os.MkdirTemp("", "aiopsctl-build-")
@@ -176,16 +176,15 @@ func Build(ctx context.Context, q Request) (Result, error) {
 }
 
 // inputs reads the request: the site's dist.yaml with the release's signed manifest,
-// or the release input; and refuses what the local path cannot take.
-func (b *build) inputs() error {
+// whose release it holds to the one this aiopsctl embeds, or the release input; and
+// refuses what the local path cannot take.
+func (b *build) inputs(ctx context.Context) error {
 	q := b.q
 	switch {
 	case q.ModCache == "":
 		return errors.New("dist build needs --modcache: every module source is a directory until L14 clears, and no default proxy is asked (ADR-044 decision 7)")
 	case strings.Contains(q.Proxy, "://") && !strings.HasPrefix(q.Proxy, "file://"):
 		return fmt.Errorf("GOPROXY names %s: until L14 clears, every module source of the builder is a file:// directory and dist build refuses a proxy URL (ADR-044 decision 7; ADR-060 decision 21)", q.Proxy)
-	case len(q.Mirrors) > 0:
-		return errors.New("--mirror rewrites what the image path pulls, and the local path pulls nothing: it reads the release's manifest from this aiopsctl")
 	case !filepath.IsAbs(q.Out) || !filepath.IsAbs(q.ModCache) || !filepath.IsAbs(q.Cache):
 		return errors.New("the output directory, the module cache and the builder's cache are absolute paths")
 	}
@@ -216,11 +215,8 @@ func (b *build) inputs() error {
 		}
 		return errors.Join(errs...)
 	}
-	raw, err := os.ReadFile(q.DistYAML)
-	if err == nil {
-		b.site, err = ReadSite(raw)
-	}
-	if err != nil {
+	var err error
+	if b.site, err = readSite(q.DistYAML); err != nil {
 		return err
 	}
 	d, err := boot.ReadDistribution("the release's signed manifest", q.Release)
@@ -242,7 +238,7 @@ func (b *build) inputs() error {
 			b.recorded[p.Path+" "+p.Version+"/go.mod"] = p.GoMod
 		}
 	}
-	return nil
+	return b.sameRelease(ctx)
 }
 
 // releaseVersion returns the version at which the release's signed manifest records

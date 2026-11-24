@@ -5,6 +5,7 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -87,6 +88,15 @@ func ReadSite(data []byte) (Site, error) {
 		}
 	}
 	return s, nil
+}
+
+// readSite reads the dist.yaml at path.
+func readSite(path string) (Site, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Site{}, err
+	}
+	return ReadSite(raw)
 }
 
 func cmpMap(m map[string][]string) map[string][]string {

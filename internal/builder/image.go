@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -20,6 +21,7 @@ import (
 	"io/fs"
 	"maps"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -355,45 +357,22 @@ type ImageRequest struct {
 // read-write, and the Go environment of ADR-060 decision 21. It returns what the image's
 // aiopsctl wrote.
 func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
-	if q.Progress == nil {
-		q.Progress = io.Discard
-	}
+	q.Progress = cmp.Or[io.Writer](q.Progress, io.Discard)
 	if !filepath.IsAbs(q.DistYAML) || !filepath.IsAbs(q.ModCache) {
 		return Result{}, errors.New("dist build on the image path takes dist.yaml and --modcache, each an absolute path: every module source is a directory until L14 clears (ADR-044 decision 7)")
 	}
-	raw, err := os.ReadFile(q.DistYAML)
-	var site Site
-	if err == nil {
-		site, err = ReadSite(raw)
+	site, err := readSite(q.DistYAML)
+	if err != nil {
+		return Result{}, err
+	}
+	m, data, repo, err := releaseArtifact(ctx, site.Release, q.Mirrors)
+	if err == nil && m.Annotations[BuilderAnnotation] == "" {
+		err = fmt.Errorf("the release artifact %s names no builder image in the annotation %s (ADR-044 decision 1)", site.Release, BuilderAnnotation)
 	}
 	if err != nil {
 		return Result{}, err
 	}
-	ref := mirrored(strings.TrimPrefix(site.Release, "oci://"), q.Mirrors)
-	repo, err := remote.NewRepository(ref)
-	if err != nil {
-		return Result{}, err
-	}
-	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{})
-	if err != nil {
-		return Result{}, err
-	}
-	repo.Client = &auth.Client{Client: retry.DefaultClient, Cache: auth.NewCache(), Credential: credentials.Credential(store)}
-	host, _, err := net.SplitHostPort(repo.Reference.Registry)
-	if err != nil {
-		host = repo.Reference.Registry
-	}
-	ip := net.ParseIP(host)
-	repo.PlainHTTP = host == "localhost" || ip != nil && ip.IsLoopback()
-	_, data, err := oras.FetchBytes(ctx, repo, repo.Reference.Reference, oras.FetchBytesOptions{MaxBytes: 1 << 20})
-	if err != nil {
-		return Result{}, fmt.Errorf("the release artifact %s: %w", ref, err)
-	}
-	var m ocispec.Manifest
-	if json.Unmarshal(data, &m) != nil || m.ArtifactType != operations.DistributionType || m.Annotations[BuilderAnnotation] == "" {
-		return Result{}, fmt.Errorf("the release artifact %s names no builder image in the annotation %s (ADR-044 decision 1)", ref, BuilderAnnotation)
-	}
-	image := repo.Reference.Registry + "/" + repo.Reference.Repository + "@" + m.Annotations[BuilderAnnotation]
+	image := repo + "@" + m.Annotations[BuilderAnnotation]
 	out := filepath.Join(filepath.Dir(q.DistYAML), "build")
 	if entries, err := os.ReadDir(out); err == nil && len(entries) > 0 {
 		return Result{}, fmt.Errorf("%s exists and is not empty", out)
@@ -403,17 +382,21 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 		return Result{}, err
 	}
 	defer os.RemoveAll(scratch)
-	if err := os.MkdirAll(out, 0o755); err != nil {
+	// The image's aiopsctl, with no network, reads the release artifact from the scratch
+	// directory, through a mirror, and makes the check of the local path on it.
+	name, dg, _ := strings.Cut(strings.TrimPrefix(site.Release, "oci://"), "@")
+	blob := filepath.Join(scratch, "release", "blobs", "sha256", strings.TrimPrefix(dg, "sha256:"))
+	if err := errors.Join(os.MkdirAll(out, 0o755), os.MkdirAll(filepath.Dir(blob), 0o755), os.WriteFile(blob, data, 0o644)); err != nil {
 		return Result{}, err
 	}
 	args := []string{"run", "--rm", "--network", "none", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		"-v", q.DistYAML + ":/work/dist.yaml:ro", "-v", q.ModCache + ":/modcache:ro", "-v", out + ":/work/build", "-v", scratch + ":/scratch",
 		"-e", "TMPDIR=/scratch", "-e", "GOPROXY=file:///modcache", "-e", "GOSUMDB=off", "-e", "GOTOOLCHAIN=local", "-e", "GOFLAGS=-mod=readonly",
-		image, "dist", "build", "/work/dist.yaml", "--modcache", "/modcache", "--builder", "local"}
+		image, "dist", "build", "/work/dist.yaml", "--modcache", "/modcache", "--builder", "local", "--mirror", name + "=/scratch/release"}
 	for _, m := range q.AllowBump {
 		args = append(args, "--allow-bump", m)
 	}
-	fmt.Fprintf(q.Progress, "the builder image %s, which the release artifact %s names\n", image, ref)
+	fmt.Fprintf(q.Progress, "the builder image %s, which the release artifact %s names\n", image, site.Release)
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout, cmd.Stderr = q.Progress, q.Progress
 	if err := cmd.Run(); err != nil {
@@ -421,6 +404,69 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	}
 	manifest, err := os.ReadFile(filepath.Join(out, "distribution.yaml"))
 	return Result{Manifest: manifest, Aiops: filepath.Join(out, "aiops", "aiops"), Image: filepath.Join(out, "image"), Aiopsctl: filepath.Join(out, "aiopsctl", "aiopsctl")}, err
+}
+
+// releaseArtifact returns the release artifact that release names by digest, read
+// through mirrors (ADR-044 decision 9): its OCI manifest, as read and parsed, and the
+// repository that holds it. It reads it from the registry, or, where a mirror's site
+// prefix is an absolute directory, from blobs/sha256/ under it, as an OCI image layout
+// holds it: so the image path hands it to the image's aiopsctl. An object whose digest
+// differs fails.
+func releaseArtifact(ctx context.Context, release string, mirrors map[string]string) (ocispec.Manifest, []byte, string, error) {
+	ref := mirrored(strings.TrimPrefix(release, "oci://"), mirrors)
+	repo, dg, _ := strings.Cut(ref, "@")
+	var data []byte
+	var err error
+	if filepath.IsAbs(repo) {
+		data, err = os.ReadFile(filepath.Join(repo, "blobs", "sha256", strings.TrimPrefix(dg, "sha256:")))
+		if sum := fmt.Sprintf("sha256:%x", sha256.Sum256(data)); err == nil && sum != dg {
+			err = fmt.Errorf("its digest is %s", sum)
+		}
+	} else {
+		data, repo, err = pull(ctx, ref)
+	}
+	var m ocispec.Manifest
+	if err == nil && (json.Unmarshal(data, &m) != nil || m.ArtifactType != operations.DistributionType) {
+		err = fmt.Errorf("it is no artifact of type %s", operations.DistributionType)
+	}
+	if err != nil {
+		err = fmt.Errorf("the release artifact %s: %w", ref, err)
+	}
+	return m, data, repo, err
+}
+
+// pull fetches the manifest that ref names by digest from its registry, with the
+// caller's credentials and plain HTTP on the loopback interface, and returns it and
+// its repository.
+func pull(ctx context.Context, ref string) ([]byte, string, error) {
+	r, err := remote.NewRepository(ref)
+	var store credentials.Store
+	if err == nil {
+		store, err = credentials.NewStoreFromDocker(credentials.StoreOptions{})
+	}
+	if err != nil {
+		return nil, ref, err
+	}
+	r.Client = &auth.Client{Client: retry.DefaultClient, Cache: auth.NewCache(), Credential: credentials.Credential(store)}
+	u, _ := url.Parse("//" + r.Reference.Registry)
+	r.PlainHTTP = u.Hostname() == "localhost" || net.ParseIP(u.Hostname()).IsLoopback()
+	_, data, err := oras.FetchBytes(ctx, r, r.Reference.Reference, oras.FetchBytesOptions{MaxBytes: 1 << 20})
+	return data, r.Reference.Registry + "/" + r.Reference.Repository, err
+}
+
+// sameRelease refuses the release that dist.yaml names unless the signed manifest it
+// holds is, by digest, the one this aiopsctl embeds, and names the release to use: a
+// release builds only with its own builder (ADR-044 decision 1).
+func (b *build) sameRelease(ctx context.Context) error {
+	m, _, _, err := releaseArtifact(ctx, b.site.Release, b.q.Mirrors)
+	want := fmt.Sprintf("sha256:%x", sha256.Sum256(b.q.Release))
+	if err == nil && !slices.ContainsFunc(m.Layers, func(l ocispec.Descriptor) bool {
+		return l.MediaType == operations.DistributionLayer && l.Digest.String() == want
+	}) {
+		err = fmt.Errorf("dist.yaml names the release %s, whose signed manifest is not %s, the one this aiopsctl embeds, and a release builds only with its own builder: name the release artifact of %s, or run the aiopsctl of the release that dist.yaml names (ADR-044 decision 1)",
+			b.site.Release, want, b.releaseVersion(rootModule))
+	}
+	return err
 }
 
 // mirrored rewrites the registry and repository prefix of ref that the longest prefix

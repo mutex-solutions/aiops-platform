@@ -357,7 +357,8 @@ func TestSecondPhaseInputs(t *testing.T) {
 // the manifest that the image's aiopsctl writes into the bound output directory.
 const docker = `#!/bin/sh
 printf '%s\n' "$@" > "$DOCKER_ARGS"
-for a in "$@"; do case "$a" in *:/work/build) printf 'manifest\n' > "${a%:/work/build}/distribution.yaml";; esac; done
+for a in "$@"; do case "$a" in *:/work/build) printf 'manifest\n' > "${a%:/work/build}/distribution.yaml";;
+  *:/scratch) find "${a%:/scratch}" -type f > "$DOCKER_ARGS.scratch";; esac; done
 `
 
 // On the image path, dist build reads the release artifact that dist.yaml names, by
@@ -365,8 +366,10 @@ for a in "$@"; do case "$a" in *:/work/build) printf 'manifest\n' > "${a%:/work/
 // the same repository, and runs that image's aiopsctl with the same command and
 // --builder local: no network, the caller's user, dist.yaml and the module cache bound
 // read-only, the output directory bound read-write, and the Go environment of ADR-060
-// decision 21 (ADR-044 decisions 1, 9 and 17; ADR-061 decision 21). A release artifact
-// with no such annotation is refused.
+// decision 21 (ADR-044 decisions 1, 9 and 17; ADR-061 decision 21), with the release
+// artifact in its scratch directory, which a mirror names, so that it makes the check of
+// the local path with no network. A release artifact with no such annotation is
+// refused.
 func TestImagePath(t *testing.T) {
 	reg := ocitest.New(t, ocitest.Options{})
 	bin := t.TempDir()
@@ -413,13 +416,18 @@ func TestImagePath(t *testing.T) {
 	for _, want := range []string{"run --rm --network none", fmt.Sprintf("--user %d:%d", os.Getuid(), os.Getgid()),
 		"-v " + yaml + ":/work/dist.yaml:ro", "-v " + modcache + ":/modcache:ro", "-v " + out + ":/work/build ",
 		"-e GOPROXY=file:///modcache", "-e GOSUMDB=off", "-e GOTOOLCHAIN=local", "-e GOFLAGS=-mod=readonly",
-		reg.Host + "/aiops/release@" + builderDigest + " dist build /work/dist.yaml --modcache /modcache --builder local --allow-bump example.com/x"} {
+		reg.Host + "/aiops/release@" + builderDigest + " dist build /work/dist.yaml --modcache /modcache --builder local",
+		"--mirror registry.example/aiops/release=/scratch/release --allow-bump example.com/x"} {
 		if !strings.Contains(cmd+" ", want) {
 			t.Errorf("the container runtime ran without %q:\n%s", want, cmd)
 		}
 	}
-	if strings.Contains(cmd, "--mirror") || strings.Contains(cmd, "registry.example") {
-		t.Errorf("the image's aiopsctl is given the mirror or the release's registry:\n%s", cmd)
+	// The image's aiopsctl reads the release artifact from the scratch directory, through
+	// the one mirror it is given, and is given no registry (ADR-044 decision 1).
+	scratch, err := os.ReadFile(args + ".scratch")
+	if strings.Count(cmd, "--mirror") != 1 || strings.Contains(cmd, "registry.example/aiops=") || err != nil ||
+		!strings.Contains(string(scratch), "/release/blobs/sha256/"+strings.TrimPrefix(good, "sha256:")) {
+		t.Errorf("the image's aiopsctl is given another mirror, or no release artifact in the scratch directory (%v):\n%s\n%s", err, cmd, scratch)
 	}
 	for _, c := range []struct{ name, ref, want string }{
 		{"no annotation", reg.Host + "/aiops/release@" + release(nil), BuilderAnnotation},
