@@ -15,10 +15,7 @@ import (
 	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
-	"github.com/mutex-solutions/aiops-platform/plugins/operations"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
-	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
-	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
 const manifest = `manifestVersion: "1.0"
@@ -87,18 +84,7 @@ func TestWriteRecordsWhatBootReads(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(other, "trust.yaml"), b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	root := kerneltest.New(t)
-	f := root.Plugin(operations.Plugin, nil)
-	if err := f.Await(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	var ops def.Operations
-	c := root.Plugin(kernel.Define(kernel.Plugin{ID: "aiops-test/trusted-check", Inject: []kernel.Dep{kernel.Need(def.Key)},
-		Apply: func(c *kernel.Context, _ any) error { ops = def.Key.Of(c); return nil }}), nil)
-	if err := c.Await(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ops.UseDist(t.Context(), def.UseRequest{Home: other, Image: img}); err != nil {
+	if _, err := mount(t).UseDist(t.Context(), def.UseRequest{Home: other, Image: img}); err != nil {
 		t.Fatalf("dist use of the record's manifest and bundle in a home that trusts the same key: %v", err)
 	}
 }

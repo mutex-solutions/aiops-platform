@@ -30,18 +30,19 @@ type Home struct {
 	euid     func() int         // the effective user; os.Geteuid when nil
 }
 
-// Change is one path that a write replaces or creates: a file with Data, or a
-// directory written whole with Files.
+// Change is one path that a write replaces, creates or removes: a file with Data, a
+// directory written whole with Files, or with Remove a path removed.
 type Change struct {
-	Path  string            // the slash path under the home
-	Data  []byte            // the content of a file
-	Files map[string][]byte // the files of a directory, by name
+	Path   string            // the slash path under the home
+	Data   []byte            // the content of a file
+	Files  map[string][]byte // the files of a directory, by name
+	Remove bool              // the path is removed
 }
 
 // Write is one write of the home.
 type Write struct {
 	Command string                          // the holder's command, recorded in write.lock
-	Plan    func() ([]Change, error)        // reads the home under the lock: the changes, in rename order
+	Plan    func() ([]Change, error)        // reads the home under the lock: the changes, in rename order; none writes and submits nothing
 	Submit  func(ctx context.Context) error // the submission once the renames are done; an error restores
 }
 
@@ -97,7 +98,7 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 		return done, err
 	}
 	changes, err := w.Plan()
-	if err != nil {
+	if err != nil || len(changes) == 0 {
 		return done, err
 	}
 	if err := h.snapshot(changes); err != nil {
@@ -299,7 +300,9 @@ func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
 		}
 		tmp := filepath.Join(dir, "."+filepath.Base(dst)+".new")
 		err := os.RemoveAll(tmp)
-		if err == nil && c.Files != nil {
+		if c.Remove {
+			err = errors.Join(err, os.RemoveAll(dst))
+		} else if err == nil && c.Files != nil {
 			err = writeDir(tmp, c.Files)
 			if err == nil {
 				err = os.RemoveAll(dst)
@@ -307,7 +310,7 @@ func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
 		} else if err == nil {
 			err = writeFile(tmp, c.Data)
 		}
-		if err == nil {
+		if err == nil && !c.Remove {
 			err = os.Rename(tmp, dst)
 		}
 		if err == nil {

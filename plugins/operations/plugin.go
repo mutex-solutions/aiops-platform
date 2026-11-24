@@ -5,7 +5,9 @@
 // decisions 14 to 19; ADR-060 decision 41). The library writes a home under its one
 // write lock, signs and verifies with the signing library of ADR-020, writes the
 // records under verified/ that boot reads, and reads the environment only through the
-// caller of each request. It reaches no other row.
+// caller of each request. It reaches the launcher's toolbox through profileContext, the
+// one consumer of it among the command paths, as reload reaches compose, admit and plan
+// (ADR-061 decisions 20 and 33), and no other row.
 package operations
 
 import (
@@ -32,6 +34,7 @@ type Config struct {
 // holds it and the release manifest lists its consumers.
 var Plugin = plugin.Define(plugin.Spec[Config]{
 	ID:       "aiops/operations",
+	Inject:   []kernel.Dep{kernel.Need(launch.ProfileContextKey)},
 	Provides: []kernel.AnyKey{def.Key},
 	Validate: func(c *Config) error {
 		if c.LockWait < 0 {
@@ -40,7 +43,8 @@ var Plugin = plugin.Define(plugin.Spec[Config]{
 		return nil
 	},
 	Apply: func(c *kernel.Context, cfg *Config) error {
-		return def.Key.Provide(c, served{lib: ops.Library{LockWait: cfg.LockWait}, act: c})
+		lib := ops.Library{LockWait: cfg.LockWait, Box: launch.ProfileContextKey.Of(c).Toolbox()}
+		return def.Key.Provide(c, served{lib: lib, act: c})
 	},
 })
 

@@ -36,6 +36,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/plugins/operations"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -120,7 +121,8 @@ func mount(tb testing.TB) def.Operations {
 	tb.Helper()
 	root := kerneltest.New(tb)
 	var ops def.Operations
-	kerneltest.Mount(root, operations.Plugin, kernel.Define(kernel.Plugin{ID: "aiops-test/trusted",
+	_, launcher := launchfake.New() // the operations row needs profileContext; Write calls no part of its toolbox
+	kerneltest.Mount(root, launcher, operations.Plugin, kernel.Define(kernel.Plugin{ID: "aiops-test/trusted",
 		Inject: []kernel.Dep{kernel.Need(def.Key)}, Apply: func(c *kernel.Context, _ any) error { ops = def.Key.Of(c); return nil }}))
 	return ops
 }

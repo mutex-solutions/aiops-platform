@@ -59,6 +59,19 @@ func (o overlay) Open(name string) (fs.File, error) {
 	return f, err
 }
 
+// aside serves the files of a home but those set aside, which read as absent.
+type aside struct {
+	fs.FS
+	names []string
+}
+
+func (a aside) Open(name string) (fs.File, error) {
+	if slices.Contains(a.names, name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return a.FS.Open(name)
+}
+
 func (t *toolbox) ready(ctx context.Context) error { return cmp.Or(ctx.Err(), t.p.released()) }
 
 // rel returns the absolute path p as a path of Files.
@@ -95,6 +108,9 @@ func (t *toolbox) sources(q launch.RenderRequest, digest string) (Sources, error
 			return Sources{}, err
 		case cur != "" && cur != digest:
 			return Sources{}, fmt.Errorf("the home runs the distribution %s, which dist use made current, and this render admits with %s: run the aiopsctl that dist build wrote for %s (ADR-061 decision 26)", cur, digest, cur)
+		}
+		if len(q.Aside) > 0 {
+			h = aside{h, q.Aside}
 		}
 		src.Home = overlay{h, t.shipped}
 	}

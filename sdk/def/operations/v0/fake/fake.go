@@ -6,10 +6,11 @@
 // one that it did not make: a public key file of trust add, and the manifest of an
 // image. It takes from its config what it cannot compute without the libraries of the
 // operations row: a holder of every write lock, an interrupted write in every home,
-// and whether a process runs the profile. On that model it keeps the rules that do
-// not concern files: the forms and refusals of trust add, the default root, the
-// refusals of dist use, the restore of an interrupted write before the next one, and
-// a lock with its wait. It imports the standard library, sdk/kernel and its
+// whether a process runs the profile, and what the launcher's toolbox ships and
+// renders. On that model it keeps the rules that do not concern files: the forms and
+// refusals of trust add, the default root, the refusals of dist use, the copy of a
+// shipped profile, the restore of an interrupted write before the next one, and a lock
+// with its wait. It imports the standard library, sdk/kernel and its
 // definition only.
 package fake
 
@@ -74,10 +75,11 @@ type home struct {
 }
 
 type state struct {
-	signers []operations.Signer
-	dists   []string // nil when the field is absent
-	records []operations.Record
-	current string
+	profiles []string // the profiles copied into the home, sorted
+	signers  []operations.Signer
+	dists    []string // nil when the field is absent
+	records  []operations.Record
+	current  string
 }
 
 type key struct {
@@ -205,6 +207,7 @@ func (f *Fake) write(ctx context.Context, dir string, change func(*state) error)
 	}
 	next := h.state
 	next.signers, next.dists, next.records = slices.Clone(next.signers), slices.Clone(next.dists), slices.Clone(next.records)
+	next.profiles = slices.Clone(next.profiles)
 	if err := change(&next); err != nil {
 		return notes, err
 	}
@@ -225,7 +228,7 @@ func (s served) Home(_ context.Context, r operations.HomeRequest) (operations.Ho
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	h := f.home(r.Home)
-	out := operations.Home{Signers: slices.Clone(h.state.signers), Distributions: slices.Clone(h.state.dists),
+	out := operations.Home{Profiles: slices.Clone(h.state.profiles), Signers: slices.Clone(h.state.signers), Distributions: slices.Clone(h.state.dists),
 		Records: slices.Clone(h.state.records), Current: h.state.current, Snapshot: h.snapshot != nil}
 	if out.Distributions == nil {
 		out.Distributions = []string{operations.Release}
@@ -456,18 +459,136 @@ func okHook(s string) bool {
 	return true
 }
 
-func (s served) Render(context.Context, operations.RenderRequest) (launch.Rendered, error) {
-	return launch.Rendered{}, fmt.Errorf("not built")
+func (s served) Render(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
+	leave, err := s.enter("Render")
+	if err != nil {
+		return launch.Rendered{}, err
+	}
+	defer leave()
+	return s.f.render(ctx, r)
 }
 
-func (s served) VerifyProfile(context.Context, operations.RenderRequest) (launch.Rendered, error) {
-	return launch.Rendered{}, fmt.Errorf("not built")
+// render answers the Rendered of the config for the profile of r, the dumps of r only.
+func (f *Fake) render(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
+	if r.Home != "" {
+		if err := homeOf(r.Home); err != nil {
+			return launch.Rendered{}, err
+		}
+	}
+	if err := profileName(r.Profile); err != nil {
+		return launch.Rendered{}, err
+	}
+	out := f.cfg.Rendered[r.Profile]
+	if out.Dumps != nil {
+		dumps := map[string]string{}
+		for _, d := range r.Dumps {
+			dumps[d] = out.Dumps[d]
+		}
+		out.Dumps = dumps
+	}
+	return out, ctx.Err()
 }
 
-func (s served) InitProfile(context.Context, operations.ProfileRequest) (operations.Change, error) {
-	return operations.Change{}, fmt.Errorf("not built")
+func (s served) VerifyProfile(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
+	leave, err := s.enter("VerifyProfile")
+	if err != nil {
+		return launch.Rendered{}, err
+	}
+	defer leave()
+	if r.Profile == "" {
+		r.Profile = "cli"
+	}
+	r.Dumps = nil
+	return s.f.render(ctx, r)
 }
 
-func (s served) SanitizeProfile(context.Context, operations.ProfileRequest) (operations.Change, error) {
-	return operations.Change{}, fmt.Errorf("not built")
+func profileName(p string) error {
+	if p == "" || p == "." || p == ".." || strings.ContainsAny(p, `/\`) {
+		return usage("%q is not the name of a profile", p)
+	}
+	return nil
+}
+
+func (s served) InitProfile(ctx context.Context, r operations.ProfileRequest) (operations.Change, error) {
+	leave, err := s.enter("InitProfile")
+	if err != nil {
+		return operations.Change{}, err
+	}
+	defer leave()
+	if err := homeOf(r.Home); err != nil {
+		return operations.Change{}, err
+	}
+	if err := profileName(r.Profile); err != nil {
+		return operations.Change{}, err
+	}
+	rel := "profiles/" + r.Profile + "/profile.yaml"
+	if _, ok := s.f.cfg.Shipped[rel]; !ok {
+		return operations.Change{}, refused("no shipped profile %s", r.Profile)
+	}
+	kept := false
+	notes, err := s.f.write(ctx, r.Home, func(st *state) error {
+		kept = slices.Contains(st.profiles, r.Profile)
+		if !kept {
+			st.profiles = append(st.profiles, r.Profile)
+			slices.Sort(st.profiles)
+		}
+		return nil
+	})
+	ch := operations.Change{Notes: notes}
+	switch {
+	case err != nil:
+		return ch, err
+	case kept:
+		ch.Notes = append(ch.Notes, "the home holds "+rel+", which is kept")
+		return ch, nil
+	}
+	ch.Written = []string{filepath.Join(r.Home, filepath.FromSlash(rel))}
+	ch.Notes = append(ch.Notes, "copied the shipped profile "+r.Profile+" to "+rel)
+	ch.Outcome = operations.NotRunning
+	if s.f.cfg.Running {
+		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
+	}
+	return ch, nil
+}
+
+// SanitizeProfile sets aside each layer file that a compose diagnostic of the
+// Rendered of the config names, the profile layer and the site layer; the fake holds
+// no file, so it reports the paths it would write.
+func (s served) SanitizeProfile(ctx context.Context, r operations.ProfileRequest) (operations.Change, error) {
+	leave, err := s.enter("SanitizeProfile")
+	if err != nil {
+		return operations.Change{}, err
+	}
+	defer leave()
+	if err := homeOf(r.Home); err != nil {
+		return operations.Change{}, err
+	}
+	p := r.Profile
+	if p == "" {
+		p = "cli"
+	}
+	if err := profileName(p); err != nil {
+		return operations.Change{}, err
+	}
+	layers := []string{"profiles/" + p + "/aiops.patch.yml", "aiops.patch.yml"}
+	var written []string
+	notes, err := s.f.write(ctx, r.Home, func(*state) error {
+		for _, d := range s.f.cfg.Rendered[p].Diagnostics {
+			if !d.Warning && d.Check == "compose" && slices.Contains(layers, d.File) {
+				f := filepath.Join(r.Home, filepath.FromSlash(d.File))
+				written = append(written, f+".bak", f)
+			}
+		}
+		return nil
+	})
+	ch := operations.Change{Notes: notes, Written: written}
+	if err != nil || len(written) == 0 {
+		ch.Notes = append(ch.Notes, "no layer file of the home stops the composition of "+p)
+		return operations.Change{Notes: ch.Notes}, err
+	}
+	ch.Outcome = operations.NotRunning
+	if s.f.cfg.Running {
+		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
+	}
+	return ch, nil
 }

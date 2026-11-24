@@ -7,9 +7,13 @@ import (
 	"testing"
 
 	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/operations"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
-	cycle.Run(t, zzplugin.Plugin, nil, nil)
+	launchFake, launchPlugin := launchfake.New()
+	cycle.Run(t, zzplugin.Plugin, nil, nil,
+		cycle.Fake{Plugin: launchPlugin, Inventory: launchFake.Inventory},
+	)
 }

@@ -84,6 +84,10 @@ func (l Library) Home(_ context.Context, r def.HomeRequest) (def.Home, error) {
 		return def.Home{}, err
 	}
 	out := def.Home{Signers: t.signers, Distributions: t.dists, AllowUnsigned: t.allow}
+	profiles, _ := filepath.Glob(h.path("profiles/*/profile.yaml"))
+	for _, p := range profiles {
+		out.Profiles = append(out.Profiles, filepath.Base(filepath.Dir(p)))
+	}
 	if out.Distributions == nil {
 		out.Distributions = []string{def.Release}
 	}
@@ -145,7 +149,7 @@ func (l Library) AddTrust(ctx context.Context, r def.TrustRequest) (def.Change, 
 			data, err := appendTrust(h.path("trust.yaml"), e)
 			return []Change{{Path: "trust.yaml", Data: data}}, err
 		},
-		Submit: func(context.Context) error { ch.Outcome, ch.Reason = submission(h); return nil },
+		Submit: func(context.Context) error { ch.Outcome, ch.Reason = submission(h, ""); return nil },
 	})
 	ch.Written, ch.Notes = done.Written, done.Notes
 	return ch, err
@@ -153,12 +157,13 @@ func (l Library) AddTrust(ctx context.Context, r def.TrustRequest) (def.Change, 
 
 // submission is the outcome of a write of the home that version 1 of the wire of
 // ADR-062 does not carry, read from run/status.json alone (ADR-061 decision 17). With
-// no running process the change applies at its next start; with one, it is not
-// submitted and the process reads it at its next start.
-func submission(h Home) (def.Outcome, string) {
+// no running process of profile, of any profile when it is "", the change applies at
+// its next start; with one, it is not submitted and the process reads it at its next
+// start.
+func submission(h Home, profile string) (def.Outcome, string) {
 	var st struct{ Phase, Profile string }
 	b, err := os.ReadFile(h.path("run/status.json"))
-	if err != nil || json.Unmarshal(b, &st) != nil || st.Phase == "stopped" {
+	if err != nil || json.Unmarshal(b, &st) != nil || st.Phase == "stopped" || profile != "" && st.Profile != profile {
 		return def.NotRunning, ""
 	}
 	return def.RestartRequired, def.ReasonNotSubmitted
