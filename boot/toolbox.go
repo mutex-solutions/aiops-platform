@@ -403,6 +403,12 @@ func (t *toolbox) ReadManifest(ctx context.Context, q launch.ManifestRequest) (l
 	return m.Summary(), nil, nil
 }
 
+// ManifestLint is the data of the lints of step 1 of plugin check.
+type ManifestLint struct {
+	Licenses     map[string]bool
+	Marks, Tiers []string
+}
+
 // Summary returns the six fields of m that the toolbox's ReadManifest hands out.
 func (m Manifest) Summary() launch.ManifestSummary {
 	keys := func(ks []ManifestKey) []string {

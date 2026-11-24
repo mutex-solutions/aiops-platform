@@ -225,6 +225,9 @@ type RunOptions struct {
 	Tools   launch.Tools
 	Shipped fs.FS
 	Files   fs.FS
+	// Lint is the data of the lints of step 1 that the toolbox's ReadManifest runs, which
+	// only aiopsctl hands in (ADR-061 decision 21).
+	Lint ManifestLint
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)

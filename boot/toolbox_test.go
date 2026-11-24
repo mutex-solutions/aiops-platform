@@ -423,6 +423,102 @@ func TestToolboxReadManifest(t *testing.T) {
 	}
 }
 
+// The lints of step 1 of plugin check on the data that aiopsctl hands in (ADR-061
+// decision 21; ADR-048 decisions 15, 19 and 23; 07-c4-plugin-sdk.md:1567): the reserved
+// owners by the module path of the go.mod at or above the plugin, each id of license and
+// integrates[].license against the SPDX list, the marks in the id, the title, a content
+// path and a command path, and the forms of T7 for a third party that integrates.
+func TestToolboxReadManifestLints(t *testing.T) {
+	b := newBox(t)
+	b.opt.Lint = ManifestLint{Licenses: map[string]bool{"Apache-2.0": true, "MIT": true, "GPL-2.0-only": true, "Classpath-exception-2.0": true},
+		Marks: []string{"grafana"}, Tiers: []string{"official", "certified"}}
+	mod := func(dir, module string) {
+		b.extra[dir+"/go.mod"] = &fstest.MapFile{Data: []byte("module " + module + "\n\ngo 1.26.0\n")}
+	}
+	mod("m", "example.com/acme")
+	mod("repo", "github.com/mutex-solutions/aiops-platform")
+	mod("repo/contrib/zed", "github.com/mutex-solutions/aiops-platform/contrib/zed")
+	b.extra["m/ok/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/ok", "license: (Apache-2.0 OR MIT+) AND GPL-2.0-only WITH Classpath-exception-2.0 OR LicenseRef-x"))}
+	b.extra["m/lic/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/lic-zeta", "license: Apache-2.0 OR GPL-9.9",
+		"integrates: [{system: zeta, versions: any, tested: [\"1\"], credential: read-only, license: MIT WITH Nope-exception}]",
+		"title: Lic connector for Zeta"))}
+	b.extra["m/marked/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/grafana-echo", "title: Echo for Grafana"))}
+	b.extra["m/marked/content/dash/Grafana_board.json"] = &fstest.MapFile{Data: []byte("{}")}
+	b.extra["m/marked/fixtures/commands/paths.json"] = &fstest.MapFile{Data: []byte(`[{"path": "sync grafana"}]`)}
+	b.extra["m/badpaths/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/badpaths"))}
+	b.extra["m/badpaths/fixtures/commands/paths.json"] = &fstest.MapFile{Data: []byte(`{`)}
+	b.extra["m/first/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("aiops/first"))}
+	b.extra["m/contrib/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("contrib/x"))}
+	b.extra["repo/plugins/first/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("aiops/first"))}
+	b.extra["repo/contrib/zed/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("contrib/zed"))}
+	b.extra["repo/contrib/pack/plugin.yaml"] = &fstest.MapFile{Data: []byte(packManifestOf("contrib/pack"))}
+	b.extra["repo/plugins/pack/plugin.yaml"] = &fstest.MapFile{Data: []byte(packManifestOf("contrib/pack"))}
+	b.extra["nomod/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("aiops/nomod"))}
+	b.extra["m/t7ok/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/connector-zeta", "title: Acme connector for Zeta",
+		"integrates: [{system: zeta, versions: any, tested: [\"1\"], credential: read-only}]"))}
+	b.extra["m/t7bad/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/official-zeta-tools", "title: Certified tools",
+		"integrates: [{system: zeta, versions: any, tested: [\"1\"], credential: read-only}]"))}
+	b.extra["m/t7twice/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/zeta-connector-zeta", "title: Connector for Zeta",
+		"integrates: [{system: zeta, versions: any, tested: [\"1\"], credential: read-only}]"))}
+	tb := b.start(t, nil)
+	lint := func(dir string) []string {
+		t.Helper()
+		_, ds, err := tb.ReadManifest(t.Context(), launch.ManifestRequest{Dir: "/x/" + dir})
+		if err != nil {
+			t.Fatalf("%s: %v", dir, err)
+		}
+		var out []string
+		for _, d := range ds {
+			if d.Check != "1" || d.File == "" {
+				t.Errorf("%s: a diagnostic of no step 1 or no file: %+v", dir, d)
+			}
+			out = append(out, d.Text)
+		}
+		return out
+	}
+	for dir, want := range map[string][]string{
+		"m/ok":               {},
+		"m/lic":              {"GPL-9.9 is not an id of the SPDX license list", "Nope-exception is not an id of the SPDX license list"},
+		"m/marked":           {`the id "acme/grafana-echo" holds the mark grafana`, `the title "Echo for Grafana" holds the mark grafana`, `the content path "dash/Grafana_board.json" holds the mark grafana`, `the command path "sync grafana" holds the mark grafana`},
+		"m/badpaths":         {"fixtures/commands/paths.json"},
+		"m/first":            {"the owner aiops is reserved to the release pipeline"},
+		"m/contrib":          {"the owner contrib is reserved to the release pipeline"},
+		"repo/plugins/first": {},
+		"repo/contrib/zed":   {},
+		"repo/contrib/pack":  {},
+		"repo/plugins/pack":  {"the owner contrib is reserved to the release pipeline"},
+		"nomod":              {"no go.mod"},
+		"m/t7ok":             {},
+		"m/t7bad":            {`the name "official-zeta-tools" holds "official"`, `the title "Certified tools" holds "certified"`, `the name "official-zeta-tools" of a plugin that integrates zeta is not <contribution noun>-zeta or connector-zeta`, `the title "Certified tools" does not read "... for zeta"`},
+		"m/t7twice":          {`the name "zeta-connector-zeta" of a plugin that integrates zeta is not <contribution noun>-zeta or connector-zeta`},
+	} {
+		got := lint(dir)
+		if len(got) != len(want) {
+			t.Errorf("%s: %d diagnostics, want %d:\n%s", dir, len(got), len(want), strings.Join(got, "\n"))
+			continue
+		}
+		for _, w := range want {
+			if !slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, w) }) {
+				t.Errorf("%s: no diagnostic %q in:\n%s", dir, w, strings.Join(got, "\n"))
+			}
+		}
+	}
+	// With no lint data, as in aiops, only the reader and the reserved owners run.
+	b2 := newBox(t)
+	b2.extra["m/go.mod"] = &fstest.MapFile{Data: []byte("module example.com/acme\n")}
+	b2.extra["m/lic/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/grafana", "license: GPL-9.9"))}
+	if _, ds, err := b2.start(t, nil).ReadManifest(t.Context(), launch.ManifestRequest{Dir: "/x/m/lic"}); err != nil || len(ds) != 0 {
+		t.Errorf("no lint data: %+v, %v", ds, err)
+	}
+}
+
+// packManifestOf is a pack with no code under id.
+func packManifestOf(id string) string {
+	owner, _, _ := strings.Cut(id, "/")
+	return "manifestVersion: \"1.0\"\nid: " + id + "\nversion: 0.1.0\ntitle: Pack\nlicense: Apache-2.0\npublisher: {id: " + owner +
+		"}\nstability: experimental\nscope: [process]\nruntimes: []\nrequires:\n  definitions: {echoers: [\"0.1\"]}\n"
+}
+
 func TestToolboxShipped(t *testing.T) {
 	b := newBox(t)
 	tb := b.start(t, nil)
@@ -440,7 +536,8 @@ func TestToolboxShipped(t *testing.T) {
 func TestToolboxRelease(t *testing.T) {
 	b := newBox(t)
 	d := newTestDist().
-		add(manifestText("aiops/echo", "instantiable: true", "registers: [{key: echoers, major: 0}]", "configSchema: {$schema: \"https://json-schema.org/draft/2020-12/schema\", examples: [{greeting: hi}]}"), "").
+		add(manifestText("aiops/echo", "instantiable: true", "registers: [{key: echoers, major: 0}]", "configSchema: {$schema: \"https://json-schema.org/draft/2020-12/schema\", examples: [{greeting: hi}]}",
+			"uses: [{key: clock, major: 0, as: need}]", "requires: {pluginApi: \"0.1\", definitions: {clock: [\"0.1\"], echoers: [\"0.1\"]}}"), "").
 		add(manifestText("aiops/bare", "instantiable: true", "registers: [{key: echoers, major: 0}]"), "").
 		add(manifestText("aiops/plain"), "")
 	b.extra["dist.yaml"] = &fstest.MapFile{Data: d.text()}
@@ -453,7 +550,8 @@ func TestToolboxRelease(t *testing.T) {
 	}
 	r, err = tb.Release(ctx, "/x/dist.yaml")
 	if err != nil || len(r.Plugins) != 2 || r.Plugins[0].ID != "aiops/bare" || r.Plugins[0].Example != nil ||
-		r.Plugins[1].ID != "aiops/echo" || fmt.Sprint(r.Plugins[1].Example) != "map[greeting:hi]" {
+		r.Plugins[1].ID != "aiops/echo" || fmt.Sprint(r.Plugins[1].Example) != "map[greeting:hi]" ||
+		fmt.Sprint(r.Plugins[1].Feeds) != "map[echoers:[0.1]]" || len(r.Plugins[0].Feeds) != 0 {
 		t.Errorf("the release of --against = %+v, %v", r.Plugins, err)
 	}
 	for _, against := range []string{"x/dist.yaml", "/x/none.yaml", "/x/bad.yaml"} {
