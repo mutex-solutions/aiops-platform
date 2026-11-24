@@ -8,7 +8,7 @@ providers:
   # fault provides it too, and the gate denies that row (check 7).
   toy.policy: [aiops-test/toy-provider]
 consumers:
-  appExit: [aiops/restart-policy]
+  appExit: [aiops/restart-policy, aiops/cli]
   registry: [aiops/restart-policy]
   loader: [aiops/reload, aiops-test/test-state]
   # test-state composes a candidate through profileContext.

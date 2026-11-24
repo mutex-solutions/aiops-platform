@@ -27,7 +27,12 @@ import (
 	aiops "github.com/mutex-solutions/aiops-platform"
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/loader"
+	"github.com/mutex-solutions/aiops-platform/plugins/cli"
 	"github.com/mutex-solutions/aiops-platform/plugins/clock"
+	commanddist "github.com/mutex-solutions/aiops-platform/plugins/command-dist"
+	commandkey "github.com/mutex-solutions/aiops-platform/plugins/command-key"
+	commandplugin "github.com/mutex-solutions/aiops-platform/plugins/command-plugin"
+	commandtrust "github.com/mutex-solutions/aiops-platform/plugins/command-trust"
 	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
 	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
 	"github.com/mutex-solutions/aiops-platform/plugins/reload"
@@ -102,8 +107,9 @@ func Table(mods ...Module) (boot.Registry, error) {
 // Modules is the compiled-in list of plugins of the release distribution. ADD A
 // PLUGIN HERE: one Module per plugin, with the manifest beside its package, which the
 // root package embeds, and its bindings in dist.yaml; then go run ./tools/plugingen
-// --write . writes distribution.yaml again. The list holds the loader and the five
-// core rows of S1; the others arrive with their own steps.
+// --write . writes distribution.yaml again. The list holds the loader, the five
+// core rows of S1, and the cli row and the command rows of aiops-cli (ADR-061
+// decisions 24 and 30); the others arrive with their own steps.
 func Modules() []Module {
 	m := func(p kernel.Plugin, dir string) Module {
 		return Module{Plugin: p, Manifest: Manifest(aiops.Manifests, dir)}
@@ -115,6 +121,11 @@ func Modules() []Module {
 		m(readiness.New(), "plugins/readiness"),
 		m(reload.New(), "plugins/reload"),
 		m(restartpolicy.New(), "plugins/restart-policy"),
+		m(cli.Plugin, "plugins/cli"),
+		m(commandplugin.Plugin, "plugins/command-plugin"),
+		m(commandtrust.Plugin, "plugins/command-trust"),
+		m(commanddist.Plugin, "plugins/command-dist"),
+		m(commandkey.Plugin, "plugins/command-key"),
 	}
 }
 
