@@ -34,6 +34,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/vet"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/templates"
 )
 
@@ -166,6 +167,7 @@ func (Tools) Vet(ctx context.Context, dir string) ([]launch.Diagnostic, error) {
 		for _, f := range fs {
 			out = append(out, launch.Diagnostic{Check: "3", File: f.File, Line: f.Line, Text: f.Text})
 		}
+		out = append(out, examples(dir)...)
 	}
 	err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
 		if err == nil && !e.IsDir() && e.Name() == "plugin.json" {
@@ -176,6 +178,43 @@ func (Tools) Vet(ctx context.Context, dir string) ([]launch.Diagnostic, error) {
 		return err
 	})
 	return out, err
+}
+
+// examples holds each config example testdata/config/*.json of the plugin in dir to the
+// configSchema of its manifest, read as the launcher reads a row config: the validator
+// of sdk/plugin on the tree of boot.ParseConfig (07-c4-plugin-sdk.md:1569). A manifest
+// that does not read is step 1's to report.
+func examples(dir string) []launch.Diagnostic {
+	files, _ := filepath.Glob(filepath.Join(dir, "testdata", "config", "*.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
+	if len(files) == 0 || err != nil {
+		return nil
+	}
+	m, err := boot.ReadManifest("plugin.yaml", raw, boot.ManifestLenient)
+	if err != nil {
+		return nil
+	}
+	schema, _ := json.Marshal(m.ConfigSchema)
+	v, err := plugin.NewValidator(schema)
+	if err != nil {
+		return []launch.Diagnostic{{Check: "3", File: "plugin.yaml", Text: err.Error()}}
+	}
+	var out []launch.Diagnostic
+	for _, f := range files {
+		rel := "testdata/config/" + filepath.Base(f)
+		src, err := os.ReadFile(f)
+		var tree any
+		if err == nil {
+			tree, err = boot.ParseConfig(rel, src)
+		}
+		if err == nil {
+			err = v.Validate(tree)
+		}
+		if err != nil {
+			out = append(out, launch.Diagnostic{Check: "3", File: rel, Text: "a config example that does not validate against the derived schema: " + err.Error()})
+		}
+	}
+	return out
 }
 
 // event is one line of go test -json.
