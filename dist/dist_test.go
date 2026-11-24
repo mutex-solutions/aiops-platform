@@ -77,13 +77,13 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	// operations is consumer-bound: the release lists the command rows that call the
 	// operations library (ADR-061 decisions 15 and 20).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "operations" }); i < 0 ||
-		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-key") || !slices.Contains(man.Consumers[i].Plugins, "aiops/command-trust") {
+		!slices.Equal(man.Consumers[i].Plugins, []string{"aiops/command-dist", "aiops/command-key", "aiops/command-plugin", "aiops/command-profile", "aiops/command-trust"}) {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
-	// The operations library reaches the toolbox of the launcher through profileContext
-	// (ADR-061 decisions 20 and 33).
+	// The operations library reaches the toolbox of the launcher through profileContext,
+	// and no command row does (ADR-061 decisions 20 and 33).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "profileContext" }); i < 0 ||
-		!slices.Contains(man.Consumers[i].Plugins, "aiops/operations") {
+		!slices.Equal(man.Consumers[i].Plugins, []string{"aiops/loader", "aiops/operations", "aiops/readiness", "aiops/reload"}) {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
 }
