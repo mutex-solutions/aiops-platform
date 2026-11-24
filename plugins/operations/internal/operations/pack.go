@@ -5,8 +5,8 @@ package operations
 import (
 	"archive/tar"
 	"archive/zip"
-	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,13 +16,13 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/sumdb/dirhash"
 	modzip "golang.org/x/mod/zip"
@@ -101,19 +101,39 @@ func untar(b []byte, dir string) error {
 }
 
 // moduleOf returns module.json of the in-process code in dir at version, {"path",
-// "version", "sum"}: the path of go.mod and the h1 sum of the module zip of dir, as go
-// mod download records it, and adds the module and each requirement of go.mod with its
-// sum in go.sum to the SBOM, licences not asserted (ADR-047 decision 1).
-func moduleOf(dir, version string, doc *sbom) ([]byte, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-	if err != nil {
+// "version", "sum"}: the path of its main module and the h1 sum of the module zip of
+// dir, as go mod download records it, and adds the build list of the module to the
+// SBOM, each module with its path, its version with its replacement and its sum, as go
+// list -m -json all reads them with the author's toolchain, licences not asserted
+// (ADR-047 decision 1). The toolchain writes no go.mod or go.sum here (-mod=readonly).
+func moduleOf(ctx context.Context, dir, version string, doc *sbom) ([]byte, error) {
+	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
 		return nil, refused("in-process code is packed from the root of its module: %v", err)
 	}
-	f, err := modfile.ParseLax("go.mod", data, nil)
-	if err != nil || f.Module == nil {
-		return nil, refused("go.mod of %s names no module: %v", dir, err)
+	type listed struct {
+		Path, Version, Sum string
+		Main               bool
+		Replace            *listed
 	}
-	m := module.Version{Path: f.Module.Mod.Path, Version: version}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "go", "list", "-mod=readonly", "-m", "-json", "all")
+	cmd.Dir, cmd.Env, cmd.Stderr = dir, append(os.Environ(), "GOWORK=off"), &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, refused("go list -m -json all in %s, the build list of its SBOM: %v: %s", dir, err, bytes.TrimSpace(stderr.Bytes()))
+	}
+	var mods []listed
+	for d := json.NewDecoder(bytes.NewReader(out)); d.More(); {
+		var l listed
+		if err := d.Decode(&l); err != nil {
+			return nil, err
+		}
+		mods = append(mods, l)
+	}
+	if len(mods) == 0 || !mods[0].Main {
+		return nil, refused("go list -m -json all in %s names no main module first", dir)
+	}
+	m := module.Version{Path: mods[0].Path, Version: version}
 	var z bytes.Buffer
 	if err := modzip.CreateFromDir(&z, m, dir); err != nil {
 		return nil, refused("the module zip of %s: %v", dir, err)
@@ -131,17 +151,11 @@ func moduleOf(dir, version string, doc *sbom) ([]byte, error) {
 		return nil, err
 	}
 	doc.module(m.Path, m.Version, sum)
-	sums := map[string]string{}
-	if gosum, err := os.ReadFile(filepath.Join(dir, "go.sum")); err == nil {
-		s := bufio.NewScanner(bytes.NewReader(gosum))
-		for s.Scan() {
-			if f := strings.Fields(s.Text()); len(f) == 3 {
-				sums[f[0]+" "+f[1]] = f[2]
-			}
+	for _, l := range mods[1:] {
+		if r := l.Replace; r != nil {
+			l.Version, l.Sum = strings.TrimSpace(l.Version+" => "+r.Path+" "+r.Version), r.Sum
 		}
-	}
-	for _, r := range f.Require {
-		doc.module(r.Mod.Path, r.Mod.Version, sums[r.Mod.Path+" "+r.Mod.Version])
+		doc.module(l.Path, l.Version, l.Sum)
 	}
 	return json.Marshal(struct {
 		Path    string `json:"path"`
@@ -212,11 +226,16 @@ func newSBOM(id, version, license string) *sbom {
 	return s
 }
 
-// module adds a Go module with its path, version and sum, its licence not asserted:
-// the licence scan of a build list is the builder's (ADR-047 decision 1).
+// module adds a Go module with its path, version and sum, none for a replacement by a
+// directory, its licence not asserted: the licence scan of a build list is the
+// builder's (ADR-047 decision 1).
 func (s *sbom) module(path, version, sum string) {
-	s.Packages = append(s.Packages, sbomPackage{SPDXID: fmt.Sprintf("SPDXRef-Package-%d", len(s.Packages)), Name: path, VersionInfo: version,
-		DownloadLocation: noAssertion, LicenseConcluded: noAssertion, LicenseDeclared: noAssertion, CopyrightText: noAssertion, Comment: "sum " + sum})
+	p := sbomPackage{SPDXID: fmt.Sprintf("SPDXRef-Package-%d", len(s.Packages)), Name: path, VersionInfo: version,
+		DownloadLocation: noAssertion, LicenseConcluded: noAssertion, LicenseDeclared: noAssertion, CopyrightText: noAssertion}
+	if sum != "" {
+		p.Comment = "sum " + sum
+	}
+	s.Packages = append(s.Packages, p)
 }
 
 // file adds a file of the content or fixtures layer with its SHA-256, under license.

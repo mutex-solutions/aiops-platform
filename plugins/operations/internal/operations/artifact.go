@@ -145,7 +145,7 @@ func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSumm
 	p.layers = []blob{{layerManifest, p.manifest, title("plugin.yaml")}, {layerBundle, p.bundle, title("bundle.yaml")}}
 	doc := newSBOM(sum.ID, sum.Version, m.License)
 	if slices.Contains(sum.Runtimes, "inproc") {
-		mod, err := moduleOf(dir, "v"+sum.Version, doc)
+		mod, err := moduleOf(ctx, dir, "v"+sum.Version, doc)
 		if err != nil {
 			return p, err
 		}
