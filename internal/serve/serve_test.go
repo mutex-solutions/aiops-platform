@@ -376,6 +376,21 @@ func TestRunReplacesAStaleStatusBeforeBoot(t *testing.T) {
 	}
 }
 
+// Only the site user enters run/ (ADR-047 decision 14), which the socket of
+// reload-socket relies on (ADR-062 decisions 4 and 16).
+func TestRunCreatesTheRuntimeDirectoryWithMode0700(t *testing.T) {
+	h := home(t, "[]")
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	fi, err := os.Stat(filepath.Join(h, "run"))
+	if err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("run/ = %v, %v; want mode 0700", fi.Mode(), err)
+	}
+}
+
 func TestRunLimitsFailureReplacesAStaleStatus(t *testing.T) {
 	h := home(t, "[]")
 	staleStatus(t, h)
