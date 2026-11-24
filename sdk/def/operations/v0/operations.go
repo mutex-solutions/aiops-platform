@@ -4,6 +4,7 @@ package operations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 
@@ -280,6 +281,44 @@ type Step struct {
 type CheckReport struct {
 	Steps       []Step
 	Attestation []byte
+}
+
+// AttestationType is the predicate type of the conformance attestation (ADR-020
+// decisions 9 and 25).
+const AttestationType = "https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1"
+
+// Attested is what the attestation says of one definition: its version, and for a
+// definition whose suite ran the suite revision and the halves that ran (ADR-060
+// decisions 18 and 56).
+type Attested struct {
+	Version string   `json:"version"`
+	Suite   *int     `json:"suite,omitempty"`
+	Halves  []string `json:"halves,omitempty"`
+}
+
+// Scenario is the scenario a pack ran: its name, its version and its halves (ADR-060
+// decision 49).
+type Scenario struct {
+	Name    string   `json:"name"`
+	Version int      `json:"version"`
+	Halves  []string `json:"halves"`
+}
+
+// Statement returns the conformance attestation of the plugin id at version whose
+// subject has the sha256 digest hex: the definitions, the scenario of a pack, nil for
+// code, and the generated tests that did not run (ADR-020 decision 9).
+func Statement(id, version, hex string, defs map[string]Attested, scenario *Scenario, notRun []string) []byte {
+	pred := map[string]any{"definitions": defs}
+	if scenario != nil {
+		pred["scenario"] = scenario
+	}
+	if len(notRun) > 0 {
+		pred["notRun"] = notRun
+	}
+	b, _ := json.Marshal(map[string]any{"_type": "https://in-toto.io/Statement/v1", "predicateType": AttestationType,
+		"subject":   []any{map[string]any{"name": id + "@" + version, "digest": map[string]string{"sha256": hex}}},
+		"predicate": pred})
+	return b
 }
 
 // Passed reports whether no step failed.

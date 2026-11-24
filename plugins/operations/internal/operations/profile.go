@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strings"
 	"time"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -23,14 +22,6 @@ import (
 // boot's code and this binary's module table, and write nothing; profile init and
 // profile sanitize write the home through Home.Write, under its lock and its snapshot.
 
-// profileName refuses a profile that is not a name.
-func profileName(p string) error {
-	if p == "" || p == "." || p == ".." || strings.ContainsAny(p, `/\`) {
-		return usage("%q is not the name of a profile", p)
-	}
-	return nil
-}
-
 // Render is profile render: the request as the launcher's toolbox renders it. With no
 // home the toolbox composes the shipped profiles alone (ADR-061 decision 25).
 func (l Library) Render(ctx context.Context, r def.RenderRequest) (launch.Rendered, error) {
@@ -39,7 +30,7 @@ func (l Library) Render(ctx context.Context, r def.RenderRequest) (launch.Render
 			return launch.Rendered{}, err
 		}
 	}
-	if err := profileName(r.Profile); err != nil {
+	if err := def.ProfileName(r.Profile); err != nil {
 		return launch.Rendered{}, err
 	}
 	return l.Box.Render(ctx, r.RenderRequest)
@@ -60,7 +51,7 @@ func (l Library) InitProfile(ctx context.Context, r def.ProfileRequest) (def.Cha
 	if err != nil {
 		return def.Change{}, err
 	}
-	if err := profileName(r.Profile); err != nil {
+	if err := def.ProfileName(r.Profile); err != nil {
 		return def.Change{}, err
 	}
 	shipped, err := l.Box.Shipped(ctx)
@@ -106,7 +97,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 		return def.Change{}, err
 	}
 	p := cmp.Or(r.Profile, "cli")
-	if err := profileName(p); err != nil {
+	if err := def.ProfileName(p); err != nil {
 		return def.Change{}, err
 	}
 	layers := []string{"profiles/" + p + "/aiops.patch.yml", "aiops.patch.yml"}

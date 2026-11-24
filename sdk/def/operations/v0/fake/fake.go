@@ -79,6 +79,7 @@ type Fake struct {
 	keys      map[string]key       // the key files it generated, by path
 	images    map[string]signature // the images it signed, by reference
 	artifacts map[string]*artifact // the artifacts it packed, by layout and by spec
+	news      map[string]bool      // the directories plugin new wrote
 	calls     []string
 }
 
@@ -117,7 +118,7 @@ func NewWith(cfg Config) (*Fake, kernel.Plugin) {
 		cfg.LockWait = 2 * time.Minute
 	}
 	f := &Fake{cfg: cfg, homes: map[string]*home{}, keys: map[string]key{}, images: map[string]signature{},
-		artifacts: map[string]*artifact{}}
+		artifacts: map[string]*artifact{}, news: map[string]bool{}}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/operations-fake",
 		Provides: []kernel.AnyKey{operations.Key},
@@ -142,15 +143,19 @@ type served struct {
 	act *kernel.Context
 }
 
-func (s served) enter(name string) (func(), error) {
+// do runs f as the method name, refused with kernel.ErrInactive once the activation
+// is released.
+func do[T any](s served, name string, f func() (T, error)) (T, error) {
 	leave, ok := s.act.Enter()
 	if !ok {
-		return nil, kernel.ErrInactive
+		var zero T
+		return zero, kernel.ErrInactive
 	}
+	defer leave()
 	s.f.mu.Lock()
 	s.f.calls = append(s.f.calls, name)
 	s.f.mu.Unlock()
-	return leave, nil
+	return f()
 }
 
 func usage(format string, a ...any) error {
@@ -232,85 +237,60 @@ func (f *Fake) write(ctx context.Context, dir string, change func(*state) error)
 }
 
 func (s served) Home(_ context.Context, r operations.HomeRequest) (operations.Home, error) {
-	leave, err := s.enter("Home")
-	if err != nil {
-		return operations.Home{}, err
-	}
-	defer leave()
-	if err := homeOf(r.Home); err != nil {
-		return operations.Home{}, err
-	}
-	f := s.f
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	h := f.home(r.Home)
-	out := operations.Home{Profiles: slices.Clone(h.state.profiles), Signers: slices.Clone(h.state.signers), Distributions: slices.Clone(h.state.dists),
-		Records: slices.Clone(h.state.records), Current: h.state.current, Image: h.state.image, Snapshot: h.snapshot != nil}
-	if out.Distributions == nil {
-		out.Distributions = []string{operations.Release}
-	}
-	return out, nil
+	return do(s, "Home", func() (operations.Home, error) {
+		if err := homeOf(r.Home); err != nil {
+			return operations.Home{}, err
+		}
+		f := s.f
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		h := f.home(r.Home)
+		out := operations.Home{Profiles: slices.Clone(h.state.profiles), Signers: slices.Clone(h.state.signers), Distributions: slices.Clone(h.state.dists),
+			Records: slices.Clone(h.state.records), Current: h.state.current, Image: h.state.image, Snapshot: h.snapshot != nil}
+		if out.Distributions == nil {
+			out.Distributions = []string{operations.Release}
+		}
+		return out, nil
+	})
 }
 
 func (s served) AddTrust(ctx context.Context, r operations.TrustRequest) (operations.Change, error) {
-	leave, err := s.enter("AddTrust")
-	if err != nil {
-		return operations.Change{}, err
-	}
-	defer leave()
-	if err := homeOf(r.Home); err != nil {
-		return operations.Change{}, err
-	}
-	switch {
-	case r.Distribution && len(r.IDs)+len(r.Runtimes)+len(r.Signed) > 0:
-		return operations.Change{}, refused("a distribution root takes no ids, runtimes or signed entries")
-	case !r.Distribution && len(r.IDs) == 0:
-		return operations.Change{}, refused("trust add takes id patterns or a distribution root")
-	}
-	for _, p := range r.IDs {
-		owner, name, ok := strings.Cut(p, "/")
-		if !ok || !kebab(owner) || name != "*" && !kebab(name) || owner == "aiops" || owner == "contrib" {
-			return operations.Change{}, refused("%q is not an id pattern", p)
+	return do(s, "AddTrust", func() (operations.Change, error) {
+		if err := homeOf(r.Home); err != nil {
+			return operations.Change{}, err
 		}
-	}
-	for _, rt := range r.Runtimes {
-		if rt != "inproc" && rt != "remote" {
-			return operations.Change{}, refused("%q is not a runtime", rt)
+		if err := operations.TrustForm(r); err != nil {
+			return operations.Change{}, err
 		}
-	}
-	for _, sg := range r.Signed {
-		if !okHook(sg) {
-			return operations.Change{}, refused("%q names no signed key or hook", sg)
+		id, err := s.f.publicKey(r.KeyFile)
+		if err != nil {
+			return operations.Change{}, err
 		}
-	}
-	id, err := s.f.publicKey(r.KeyFile)
-	if err != nil {
-		return operations.Change{}, err
-	}
-	set := func(v []string) []string { return slices.Compact(slices.Sorted(slices.Values(v))) }
-	notes, err := s.f.write(ctx, r.Home, func(st *state) error {
-		if !r.Distribution {
-			st.signers = append(st.signers, operations.Signer{KeyID: id, IDs: set(r.IDs), Runtimes: set(r.Runtimes), Signed: set(r.Signed)})
+		set := func(v []string) []string { return slices.Compact(slices.Sorted(slices.Values(v))) }
+		notes, err := s.f.write(ctx, r.Home, func(st *state) error {
+			if !r.Distribution {
+				st.signers = append(st.signers, operations.Signer{KeyID: id, IDs: set(r.IDs), Runtimes: set(r.Runtimes), Signed: set(r.Signed)})
+				return nil
+			}
+			if st.dists == nil {
+				st.dists = []string{operations.Release}
+			}
+			if slices.Contains(st.dists, id) {
+				return refused("distributions lists the key %s already", id)
+			}
+			st.dists = append(st.dists, id)
 			return nil
+		})
+		ch := operations.Change{Notes: notes}
+		if err != nil {
+			return ch, err
 		}
-		if st.dists == nil {
-			st.dists = []string{operations.Release}
+		ch.Written, ch.Outcome = []string{filepath.Join(r.Home, "trust.yaml")}, operations.NotRunning
+		if s.f.cfg.Running {
+			ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
 		}
-		if slices.Contains(st.dists, id) {
-			return refused("distributions lists the key %s already", id)
-		}
-		st.dists = append(st.dists, id)
-		return nil
+		return ch, nil
 	})
-	ch := operations.Change{Notes: notes}
-	if err != nil {
-		return ch, err
-	}
-	ch.Written, ch.Outcome = []string{filepath.Join(r.Home, "trust.yaml")}, operations.NotRunning
-	if s.f.cfg.Running {
-		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
-	}
-	return ch, nil
 }
 
 // publicKey returns the id of the public key file p: one the fake generated, or a
@@ -342,62 +322,56 @@ func (f *Fake) publicKey(p string) (string, error) {
 }
 
 func (s served) GenerateKey(_ context.Context, r operations.KeyRequest) (operations.Written, error) {
-	leave, err := s.enter("GenerateKey")
-	if err != nil {
-		return operations.Written{}, err
-	}
-	defer leave()
-	if !filepath.IsAbs(r.Prefix) {
-		return operations.Written{}, usage("the prefix %q is not an absolute path", r.Prefix)
-	}
-	pw, err := password(r.Caller)
-	if err != nil {
-		return operations.Written{}, err
-	}
-	paths := []string{r.Prefix + ".key", r.Prefix + ".pub"}
-	f := s.f
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, p := range paths {
-		_, statErr := os.Lstat(p)
-		if _, ok := f.keys[p]; ok || statErr == nil {
-			return operations.Written{}, refused("%s exists", p)
+	return do(s, "GenerateKey", func() (operations.Written, error) {
+		if !filepath.IsAbs(r.Prefix) {
+			return operations.Written{}, usage("the prefix %q is not an absolute path", r.Prefix)
 		}
-	}
-	id := newID()
-	f.keys[paths[0]] = key{id: id, password: pw, private: true}
-	f.keys[paths[1]] = key{id: id}
-	return operations.Written{Paths: paths}, nil
+		pw, err := password(r.Caller)
+		if err != nil {
+			return operations.Written{}, err
+		}
+		paths := []string{r.Prefix + ".key", r.Prefix + ".pub"}
+		f := s.f
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for _, p := range paths {
+			_, statErr := os.Lstat(p)
+			if _, ok := f.keys[p]; ok || statErr == nil {
+				return operations.Written{}, refused("%s exists", p)
+			}
+		}
+		id := newID()
+		f.keys[paths[0]] = key{id: id, password: pw, private: true}
+		f.keys[paths[1]] = key{id: id}
+		return operations.Written{Paths: paths}, nil
+	})
 }
 
 func (s served) SignDist(_ context.Context, r operations.SignDistRequest) (operations.Written, error) {
-	leave, err := s.enter("SignDist")
-	if err != nil {
-		return operations.Written{}, err
-	}
-	defer leave()
-	if !filepath.IsAbs(r.Key) {
-		return operations.Written{}, usage("the key file %q is not an absolute path", r.Key)
-	}
-	pw, err := password(r.Caller)
-	if err != nil {
-		return operations.Written{}, err
-	}
-	f := s.f
-	f.mu.Lock()
-	k, ok := f.keys[r.Key]
-	f.mu.Unlock()
-	if !ok || !k.private || k.password != pw {
-		return operations.Written{}, refused("%s is no private key this fake made, or the password is not its own", r.Key)
-	}
-	ref, digest, err := f.image(r.Image)
-	if err != nil {
-		return operations.Written{}, err
-	}
-	f.mu.Lock()
-	f.images[ref] = signature{digest: digest, id: k.id}
-	f.mu.Unlock()
-	return operations.Written{Paths: []string{repository(ref) + "@" + digestOf(ref+k.id)}}, nil
+	return do(s, "SignDist", func() (operations.Written, error) {
+		if !filepath.IsAbs(r.Key) {
+			return operations.Written{}, usage("the key file %q is not an absolute path", r.Key)
+		}
+		pw, err := password(r.Caller)
+		if err != nil {
+			return operations.Written{}, err
+		}
+		f := s.f
+		f.mu.Lock()
+		k, ok := f.keys[r.Key]
+		f.mu.Unlock()
+		if !ok || !k.private || k.password != pw {
+			return operations.Written{}, refused("%s is no private key this fake made, or the password is not its own", r.Key)
+		}
+		ref, digest, err := f.image(r.Image)
+		if err != nil {
+			return operations.Written{}, err
+		}
+		f.mu.Lock()
+		f.images[ref] = signature{digest: digest, id: k.id}
+		f.mu.Unlock()
+		return operations.Written{Paths: []string{repository(ref) + "@" + digestOf(ref+k.id)}}, nil
+	})
 }
 
 // image returns the reference of an image of the config, oci:// trimmed, and the
@@ -425,39 +399,36 @@ func digestOf(s string) string {
 }
 
 func (s served) UseDist(ctx context.Context, r operations.UseRequest) (operations.Change, error) {
-	leave, err := s.enter("UseDist")
-	if err != nil {
-		return operations.Change{}, err
-	}
-	defer leave()
-	if err := homeOf(r.Home); err != nil {
-		return operations.Change{}, err
-	}
-	ref, digest, err := s.f.image(r.Image)
-	if err != nil {
-		return operations.Change{}, err
-	}
-	s.f.mu.Lock()
-	sig, signed := s.f.images[ref]
-	s.f.mu.Unlock()
-	notes, err := s.f.write(ctx, r.Home, func(st *state) error {
-		if !signed || sig.digest != digest || !slices.Contains(st.dists, sig.id) {
-			return refused("no key of distributions verifies a distribution manifest of %s", ref)
+	return do(s, "UseDist", func() (operations.Change, error) {
+		if err := homeOf(r.Home); err != nil {
+			return operations.Change{}, err
 		}
-		st.records = slices.DeleteFunc(st.records, func(x operations.Record) bool { return x.Digest == digest })
-		st.records = append(st.records, operations.Record{Digest: digest, Kind: "distribution", Signer: sig.id})
-		slices.SortFunc(st.records, func(a, b operations.Record) int { return strings.Compare(a.Digest, b.Digest) })
-		st.current, st.image = digest, repository(ref)+"@"+digestOf(ref)
-		return nil
+		ref, digest, err := s.f.image(r.Image)
+		if err != nil {
+			return operations.Change{}, err
+		}
+		s.f.mu.Lock()
+		sig, signed := s.f.images[ref]
+		s.f.mu.Unlock()
+		notes, err := s.f.write(ctx, r.Home, func(st *state) error {
+			if !signed || sig.digest != digest || !slices.Contains(st.dists, sig.id) {
+				return refused("no key of distributions verifies a distribution manifest of %s", ref)
+			}
+			st.records = slices.DeleteFunc(st.records, func(x operations.Record) bool { return x.Digest == digest })
+			st.records = append(st.records, operations.Record{Digest: digest, Kind: "distribution", Signer: sig.id})
+			slices.SortFunc(st.records, func(a, b operations.Record) int { return strings.Compare(a.Digest, b.Digest) })
+			st.current, st.image = digest, repository(ref)+"@"+digestOf(ref)
+			return nil
+		})
+		ch := operations.Change{Notes: notes}
+		if err != nil {
+			return ch, err
+		}
+		rec := filepath.Join(r.Home, "verified", strings.Replace(digest, ":", "-", 1))
+		ch.Written = []string{rec, filepath.Join(r.Home, "verified", "current"), filepath.Join(r.Home, "image.yaml")}
+		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonImage
+		return ch, nil
 	})
-	ch := operations.Change{Notes: notes}
-	if err != nil {
-		return ch, err
-	}
-	rec := filepath.Join(r.Home, "verified", strings.Replace(digest, ":", "-", 1))
-	ch.Written = []string{rec, filepath.Join(r.Home, "verified", "current"), filepath.Join(r.Home, "image.yaml")}
-	ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonImage
-	return ch, nil
 }
 
 // newID returns a key id: the base64 of 32 random bytes, as a real id is of the
@@ -468,35 +439,10 @@ func newID() string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func kebab(s string) bool {
-	for i, w := range strings.Split(s, "-") {
-		if w == "" || i == 0 && (w[0] < 'a' || w[0] > 'z') || strings.Trim(w, "abcdefghijklmnopqrstuvwxyz0123456789") != "" {
-			return false
-		}
-	}
-	return true
-}
-
-func okHook(s string) bool {
-	if s == "" || len(s) > 128 {
-		return false
-	}
-	for i, c := range s {
-		alnum := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
-		if !alnum && (i == 0 || !strings.ContainsRune("._-/", c)) {
-			return false
-		}
-	}
-	return true
-}
-
 func (s served) Render(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
-	leave, err := s.enter("Render")
-	if err != nil {
-		return launch.Rendered{}, err
-	}
-	defer leave()
-	return s.f.render(ctx, r)
+	return do(s, "Render", func() (launch.Rendered, error) {
+		return s.f.render(ctx, r)
+	})
 }
 
 // render answers the Rendered of the config for the profile of r, the dumps of r only.
@@ -506,7 +452,7 @@ func (f *Fake) render(ctx context.Context, r operations.RenderRequest) (launch.R
 			return launch.Rendered{}, err
 		}
 	}
-	if err := profileName(r.Profile); err != nil {
+	if err := operations.ProfileName(r.Profile); err != nil {
 		return launch.Rendered{}, err
 	}
 	out := f.cfg.Rendered[r.Profile]
@@ -521,105 +467,89 @@ func (f *Fake) render(ctx context.Context, r operations.RenderRequest) (launch.R
 }
 
 func (s served) VerifyProfile(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
-	leave, err := s.enter("VerifyProfile")
-	if err != nil {
-		return launch.Rendered{}, err
-	}
-	defer leave()
-	if r.Profile == "" {
-		r.Profile = "cli"
-	}
-	r.Dumps = nil
-	return s.f.render(ctx, r)
-}
-
-func profileName(p string) error {
-	if p == "" || p == "." || p == ".." || strings.ContainsAny(p, `/\`) {
-		return usage("%q is not the name of a profile", p)
-	}
-	return nil
+	return do(s, "VerifyProfile", func() (launch.Rendered, error) {
+		if r.Profile == "" {
+			r.Profile = "cli"
+		}
+		r.Dumps = nil
+		return s.f.render(ctx, r)
+	})
 }
 
 func (s served) InitProfile(ctx context.Context, r operations.ProfileRequest) (operations.Change, error) {
-	leave, err := s.enter("InitProfile")
-	if err != nil {
-		return operations.Change{}, err
-	}
-	defer leave()
-	if err := homeOf(r.Home); err != nil {
-		return operations.Change{}, err
-	}
-	if err := profileName(r.Profile); err != nil {
-		return operations.Change{}, err
-	}
-	rel := "profiles/" + r.Profile + "/profile.yaml"
-	if _, ok := s.f.cfg.Shipped[rel]; !ok {
-		return operations.Change{}, refused("no shipped profile %s", r.Profile)
-	}
-	kept := false
-	notes, err := s.f.write(ctx, r.Home, func(st *state) error {
-		kept = slices.Contains(st.profiles, r.Profile)
-		if !kept {
-			st.profiles = append(st.profiles, r.Profile)
-			slices.Sort(st.profiles)
+	return do(s, "InitProfile", func() (operations.Change, error) {
+		if err := homeOf(r.Home); err != nil {
+			return operations.Change{}, err
 		}
-		return nil
-	})
-	ch := operations.Change{Notes: notes}
-	switch {
-	case err != nil:
-		return ch, err
-	case kept:
-		ch.Notes = append(ch.Notes, "the home holds "+rel+", which is kept")
+		if err := operations.ProfileName(r.Profile); err != nil {
+			return operations.Change{}, err
+		}
+		rel := "profiles/" + r.Profile + "/profile.yaml"
+		if _, ok := s.f.cfg.Shipped[rel]; !ok {
+			return operations.Change{}, refused("no shipped profile %s", r.Profile)
+		}
+		kept := false
+		notes, err := s.f.write(ctx, r.Home, func(st *state) error {
+			kept = slices.Contains(st.profiles, r.Profile)
+			if !kept {
+				st.profiles = append(st.profiles, r.Profile)
+				slices.Sort(st.profiles)
+			}
+			return nil
+		})
+		ch := operations.Change{Notes: notes}
+		switch {
+		case err != nil:
+			return ch, err
+		case kept:
+			ch.Notes = append(ch.Notes, "the home holds "+rel+", which is kept")
+			return ch, nil
+		}
+		ch.Written = []string{filepath.Join(r.Home, filepath.FromSlash(rel))}
+		ch.Notes = append(ch.Notes, "copied the shipped profile "+r.Profile+" to "+rel)
+		ch.Outcome = operations.NotRunning
+		if s.f.cfg.Running {
+			ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
+		}
 		return ch, nil
-	}
-	ch.Written = []string{filepath.Join(r.Home, filepath.FromSlash(rel))}
-	ch.Notes = append(ch.Notes, "copied the shipped profile "+r.Profile+" to "+rel)
-	ch.Outcome = operations.NotRunning
-	if s.f.cfg.Running {
-		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
-	}
-	return ch, nil
+	})
 }
 
 // SanitizeProfile sets aside each layer file that a compose diagnostic of the
 // Rendered of the config names, the profile layer and the site layer; the fake holds
 // no file, so it reports the paths it would write.
 func (s served) SanitizeProfile(ctx context.Context, r operations.ProfileRequest) (operations.Change, error) {
-	leave, err := s.enter("SanitizeProfile")
-	if err != nil {
-		return operations.Change{}, err
-	}
-	defer leave()
-	if err := homeOf(r.Home); err != nil {
-		return operations.Change{}, err
-	}
-	p := r.Profile
-	if p == "" {
-		p = "cli"
-	}
-	if err := profileName(p); err != nil {
-		return operations.Change{}, err
-	}
-	layers := []string{"profiles/" + p + "/aiops.patch.yml", "aiops.patch.yml"}
-	var written []string
-	notes, err := s.f.write(ctx, r.Home, func(*state) error {
-		for _, d := range s.f.cfg.Rendered[p].Diagnostics {
-			if !d.Warning && d.Check == "compose" && slices.Contains(layers, d.File) {
-				f := filepath.Join(r.Home, filepath.FromSlash(d.File))
-				written = append(written, f+".bak", f)
-			}
+	return do(s, "SanitizeProfile", func() (operations.Change, error) {
+		if err := homeOf(r.Home); err != nil {
+			return operations.Change{}, err
 		}
-		return nil
+		p := r.Profile
+		if p == "" {
+			p = "cli"
+		}
+		if err := operations.ProfileName(p); err != nil {
+			return operations.Change{}, err
+		}
+		layers := []string{"profiles/" + p + "/aiops.patch.yml", "aiops.patch.yml"}
+		var written []string
+		notes, err := s.f.write(ctx, r.Home, func(*state) error {
+			for _, d := range s.f.cfg.Rendered[p].Diagnostics {
+				if !d.Warning && d.Check == "compose" && slices.Contains(layers, d.File) {
+					f := filepath.Join(r.Home, filepath.FromSlash(d.File))
+					written = append(written, f+".bak", f)
+				}
+			}
+			return nil
+		})
+		ch := operations.Change{Notes: notes, Written: written}
+		if err != nil || len(written) == 0 {
+			ch.Notes = append(ch.Notes, "no layer file of the home stops the composition of "+p)
+			return operations.Change{Notes: ch.Notes}, err
+		}
+		ch.Outcome = operations.NotRunning
+		if s.f.cfg.Running {
+			ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
+		}
+		return ch, nil
 	})
-	ch := operations.Change{Notes: notes, Written: written}
-	if err != nil || len(written) == 0 {
-		ch.Notes = append(ch.Notes, "no layer file of the home stops the composition of "+p)
-		return operations.Change{Notes: ch.Notes}, err
-	}
-	ch.Outcome = operations.NotRunning
-	if s.f.cfg.Running {
-		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
-	}
-	return ch, nil
 }

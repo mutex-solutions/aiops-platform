@@ -7,7 +7,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -30,48 +29,11 @@ type entry struct {
 	dist                  bool
 }
 
-func kebab(s string) bool { return regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`).MatchString(s) }
-
-// okHook reports whether s names a key or a hook, as boot reads the entries of signed.
-func okHook(s string) bool {
-	return regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`).MatchString(s)
-}
-
-// okPattern reports whether s is an id pattern, <owner>/<name> or <owner>/*, of an
-// owner other than aiops and contrib, which only the release table admits (ADR-020
-// decision 6).
-func okPattern(s string) bool {
-	owner, name, ok := strings.Cut(s, "/")
-	return ok && kebab(owner) && (name == "*" || kebab(name)) && owner != "aiops" && owner != "contrib"
-}
-
 // trustEntry checks the form of a trust add and reads its key file. A refusal writes
 // nothing.
 func trustEntry(r def.TrustRequest) (entry, error) {
-	switch {
-	case r.Distribution && len(r.IDs)+len(r.Runtimes)+len(r.Signed) > 0:
-		return entry{}, refused("a distribution root takes no ids, runtimes or signed entries (ADR-020 decision 5)")
-	case !r.Distribution && len(r.IDs) == 0:
-		return entry{}, refused("trust add takes the id patterns of a signer, or a distribution root (ADR-020 decision 5)")
-	}
-	for _, p := range r.IDs {
-		if !okPattern(p) {
-			return entry{}, refused("%q is not an id pattern: <owner>/<name> or <owner>/*, of an owner other than aiops and contrib (ADR-020 decision 6)", p)
-		}
-	}
-	for _, rt := range r.Runtimes {
-		switch rt {
-		case "inproc", "remote":
-		case "wasm":
-			return entry{}, refused("the runtime wasm is refused, since gate check 1 denies it (ADR-020 decision 6)")
-		default:
-			return entry{}, refused("%q is not a runtime: inproc or remote, and none for packs only (ADR-020 decision 6)", rt)
-		}
-	}
-	for _, s := range r.Signed {
-		if !okHook(s) {
-			return entry{}, refused("%q names no signed key or hook (ADR-020 decision 7)", s)
-		}
+	if err := def.TrustForm(r); err != nil {
+		return entry{}, err
 	}
 	b, err := os.ReadFile(r.KeyFile)
 	if err != nil {

@@ -3,18 +3,498 @@
 package operations
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 
+	"go.yaml.in/yaml/v3"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
-// New is plugin new.
-func (l Library) New(context.Context, def.NewRequest) (def.Written, error) {
-	return def.Written{}, errors.New("not built yet")
+// The authoring path: plugin new and plugin check (ADR-060 decisions 23 and 24;
+// 07-c4-plugin-sdk.md:1549-1574), each through the launcher's toolbox. They write no
+// home: plugin new writes the author's directory, and plugin check writes it only with
+// --write.
+
+// New is plugin new: the template of the toolbox written into r.Dir, and for a
+// connector pack its bundle, one disabled row per instantiable plugin of the release,
+// and its requires, the definitions of the registries the rows feed (ADR-047 decision
+// 12). Every refusal comes before the first write.
+func (l Library) New(ctx context.Context, r def.NewRequest) (def.Written, error) {
+	if err := absolute("the plugin directory", r.Dir); err != nil {
+		return def.Written{}, err
+	}
+	if r.Lang != "go" && r.Registry != def.Connector {
+		return def.Written{}, refused("no template in %q: plugin new writes Go, and the Python template arrives with the Python SDK at S2b", r.Lang)
+	}
+	switch es, err := os.ReadDir(r.Dir); {
+	case err == nil && len(es) > 0:
+		return def.Written{}, refused("%s holds files: plugin new writes into an empty or new directory", r.Dir)
+	case err != nil && !errors.Is(err, fs.ErrNotExist):
+		return def.Written{}, err
+	}
+	files, err := l.Box.Template(ctx, launch.TemplateRequest{Registry: r.Registry, ID: r.ID, Lang: r.Lang, Contrib: r.Contrib})
+	if err != nil {
+		if ctx.Err() != nil {
+			return def.Written{}, ctx.Err()
+		}
+		return def.Written{}, refused("%v", err)
+	}
+	if r.Registry == def.Connector {
+		rel, err := l.Box.Release(ctx, r.Against)
+		if err != nil {
+			return def.Written{}, err
+		}
+		bundle, feeds, err := connectorRows(rel, r.Plugins)
+		if err != nil {
+			return def.Written{}, err
+		}
+		files["bundle.yaml"] = bundle
+		files["plugin.yaml"] = withRequires(files["plugin.yaml"], feeds)
+	}
+	var out def.Written
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		dst := filepath.Join(r.Dir, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return out, err
+		}
+		if err := os.WriteFile(dst, files[p], 0o644); err != nil {
+			return out, err
+		}
+		out.Paths = append(out.Paths, dst)
+	}
+	return out, nil
 }
 
-// Check is plugin check.
-func (l Library) Check(context.Context, def.CheckRequest) (def.CheckReport, error) {
-	return def.CheckReport{}, errors.New("not built yet")
+// connectorRows returns the bundle of a connector pack, one disabled row per
+// instantiable plugin of rel, or of those that only names, and the definitions its rows
+// feed. A row's id is the plugin's name, its roles api and worker and never edge, and
+// its config the first example of the plugin's configSchema (ADR-047 decision 12).
+func connectorRows(rel launch.Release, only []string) ([]byte, map[string][]string, error) {
+	var plugins []launch.ReleasePlugin
+	for _, p := range rel.Plugins {
+		if len(only) == 0 || slices.Contains(only, p.ID) {
+			plugins = append(plugins, p)
+		}
+	}
+	for _, id := range only {
+		if !slices.ContainsFunc(plugins, func(p launch.ReleasePlugin) bool { return p.ID == id }) {
+			return nil, nil, refused("%s is not an instantiable plugin of the release %s", id, rel.Digest)
+		}
+	}
+	if len(plugins) == 0 {
+		return nil, nil, refused("the release %s serves no instantiable plugin, and a connector pack holds rows of one (ADR-047 decision 12)", rel.Digest)
+	}
+	var b bytes.Buffer
+	b.WriteString("# The rows of the pack, each disabled, one per instantiable plugin of the release that\n# plugin new ran against; a row's config is the first example of the plugin's\n# configSchema. plugin enable <pack name>:<row> enables a row once the pack is\n# installed.\n- insert:\n")
+	feeds := map[string][]string{}
+	for _, p := range plugins {
+		_, name, _ := strings.Cut(p.ID, "/")
+		fmt.Fprintf(&b, "    - {id: %s, plugin: %s, roles: [api, worker], enabled: false", name, p.ID)
+		if p.Example != nil {
+			cfg, err := json.Marshal(p.Example)
+			if err != nil {
+				return nil, nil, err
+			}
+			fmt.Fprintf(&b, ", config: %s", cfg)
+		}
+		b.WriteString("}\n")
+		for d, vs := range p.Feeds {
+			feeds[d] = union(feeds[d], vs)
+		}
+	}
+	return b.Bytes(), feeds, nil
+}
+
+func union(a, b []string) []string {
+	out := slices.Concat(a, b)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// packMarker heads the generated half of a pack, which plugin check --write writes from
+// the rows (ADR-048 decision 13).
+const packMarker = "# --- generated by plugin check --write from the rows; plugin check fails on a difference ---"
+
+// withRequires returns the manifest src of a pack with its generated half, requires,
+// set to the definitions defs: the lines from the marker on are replaced.
+func withRequires(src []byte, defs map[string][]string) []byte {
+	if i := bytes.Index(src, []byte(packMarker)); i >= 0 {
+		src = src[:i]
+	}
+	var b bytes.Buffer
+	b.Write(bytes.TrimRight(src, "\n"))
+	b.WriteString("\n" + packMarker + "\nrequires:\n  definitions:")
+	if len(defs) == 0 {
+		b.WriteString(" {}")
+	}
+	b.WriteString("\n")
+	for _, d := range slices.Sorted(maps.Keys(defs)) {
+		q, _ := json.Marshal(defs[d])
+		fmt.Fprintf(&b, "    %s: %s\n", d, strings.ReplaceAll(string(q), ",", ", "))
+	}
+	return b.Bytes()
+}
+
+// The entry point of the gate that step 7 evaluates (ADR-060 decision 17).
+const entryCheck = "plugin check"
+
+// The scenario that a pack attests at S2a (ADR-060 decision 49).
+const echoScenario = "echo"
+
+// checkRun is one run of plugin check.
+type checkRun struct {
+	l       Library
+	ctx     context.Context
+	r       def.CheckRequest
+	sum     launch.ManifestSummary
+	code    bool                    // the manifest lists a runtime: Go code; otherwise a pack with no code
+	gen     []launch.Diagnostic     // what Generate with --write found, before step 1
+	defs    map[string]def.Attested // what the attestation says of each definition
+	notRun  []string                // the generated tests that did not run
+	scene   *def.Scenario           // the scenario a pack ran
+	scenery []launch.Diagnostic     // its failures, step 8
+}
+
+func hasError(ds []launch.Diagnostic) bool {
+	return slices.ContainsFunc(ds, func(d launch.Diagnostic) bool { return !d.Warning })
+}
+
+// outcome is pass for ds with no error and fail for any.
+func outcome(ds []launch.Diagnostic) string {
+	if hasError(ds) {
+		return def.StepFail
+	}
+	return def.StepPass
+}
+
+// Check is plugin check: the eight steps of 07-c4-plugin-sdk.md:1565-1574, each
+// through the toolbox, as ADR-060 decision 23 has them. With r.Write the generated
+// half and the generated tests are written first. The check stops at the first failed
+// step and reports the steps after it as skipped; the attestation it would sign is in
+// the report when no step failed.
+func (l Library) Check(ctx context.Context, r def.CheckRequest) (def.CheckReport, error) {
+	if err := absolute("the plugin directory", r.Dir); err != nil {
+		return def.CheckReport{}, err
+	}
+	if r.Against != "" {
+		if err := absolute("the release of --against", r.Against); err != nil {
+			return def.CheckReport{}, err
+		}
+	}
+	c := &checkRun{l: l, ctx: ctx, r: r}
+	// With --write the generated half of Go code is written before step 1 reads it, since
+	// a fresh plugin has none (ADR-048 decision 15).
+	gos, err := filepath.Glob(filepath.Join(r.Dir, "*.go"))
+	if r.Write && len(gos) > 0 {
+		if c.gen, err = l.Box.Generate(ctx, launch.GenerateRequest{Dir: r.Dir, Write: true}); err != nil {
+			return def.CheckReport{}, err
+		}
+	}
+	steps := [8]func() (string, []launch.Diagnostic, error){c.manifest, c.parity, c.static, c.alone, c.conformance,
+		c.effects, c.packAndVerify, c.scenario}
+	var rep def.CheckReport
+	failed := false
+	for i, run := range steps {
+		st := def.Step{N: i + 1, Name: def.Steps[i], Outcome: def.StepSkipped}
+		if i == 6 && !failed && !c.code { // step 8 first: the attestation of a pack names its scenario
+			if c.scenery, err = c.runScenario(); err != nil {
+				return def.CheckReport{}, err
+			}
+			if hasError(c.scenery) { // step 7 has nothing to sign, and step 8 says why
+				rep.Steps = append(rep.Steps, st)
+				continue
+			}
+		}
+		if !failed {
+			if st.Outcome, st.Diagnostics, err = run(); err != nil {
+				return def.CheckReport{}, err
+			}
+			failed = st.Outcome == def.StepFail
+		}
+		rep.Steps = append(rep.Steps, st)
+	}
+	if !failed {
+		rep.Attestation = c.statement(c.digest())
+	}
+	return rep, nil
+}
+
+// manifest is step 1: boot's strict reader with the lints of step 1, through the
+// toolbox, and the refusal of remote until S2b, where step 5 can run in it (ADR-060
+// decision 23).
+func (c *checkRun) manifest() (string, []launch.Diagnostic, error) {
+	sum, ds, err := c.l.Box.ReadManifest(c.ctx, launch.ManifestRequest{Dir: c.r.Dir, Against: c.r.Against})
+	if err != nil {
+		return "", nil, err
+	}
+	c.sum, c.code = sum, len(sum.Runtimes) > 0
+	if slices.Contains(sum.Runtimes, "remote") {
+		ds = append(ds, launch.Diagnostic{Check: "1", File: "plugin.yaml", Text: "runtimes lists remote, which plugin check refuses until S2b: step 5 cannot run in a runtime that does not exist yet (ADR-060 decision 23)"})
+	}
+	return outcome(ds), ds, nil
+}
+
+// parity is step 2: the generated half against what plugingen writes now, through the
+// toolbox, or for a pack the requires that its rows feed.
+func (c *checkRun) parity() (string, []launch.Diagnostic, error) {
+	if !c.code {
+		return c.packParity()
+	}
+	if c.r.Write {
+		return outcome(c.gen), c.gen, nil
+	}
+	ds, err := c.l.Box.Generate(c.ctx, launch.GenerateRequest{Dir: c.r.Dir})
+	return outcome(ds), ds, err
+}
+
+// packParity derives requires.definitions of a pack from the registries its rows feed,
+// read from the release, and compares it with the manifest's; with --write it writes it.
+func (c *checkRun) packParity() (string, []launch.Diagnostic, error) {
+	rel, err := c.l.Box.Release(c.ctx, c.r.Against)
+	if err != nil {
+		return "", nil, err
+	}
+	src, err := os.ReadFile(filepath.Join(c.r.Dir, "bundle.yaml"))
+	if err != nil {
+		return "", nil, err
+	}
+	var items []struct {
+		Insert []struct{ Plugin string }
+	}
+	if err := yaml.Unmarshal(src, &items); err != nil {
+		return def.StepFail, []launch.Diagnostic{{Check: "2", File: "bundle.yaml", Text: err.Error()}}, nil
+	}
+	want, served := map[string][]string{}, map[string]launch.ReleasePlugin{}
+	for _, p := range rel.Plugins {
+		served[p.ID] = p
+	}
+	var ds []launch.Diagnostic
+	for _, it := range items {
+		for _, row := range it.Insert {
+			p, ok := served[row.Plugin]
+			if !ok {
+				ds = append(ds, launch.Diagnostic{Check: "2", File: "bundle.yaml", Text: fmt.Sprintf("a row of %s, which is not an instantiable plugin of the release %s", row.Plugin, rel.Digest)})
+			}
+			for d, vs := range p.Feeds {
+				want[d] = union(want[d], vs)
+			}
+		}
+	}
+	if len(ds) == 0 && !reflect.DeepEqual(want, c.sum.Definitions) && !(len(want) == 0 && len(c.sum.Definitions) == 0) {
+		if !c.r.Write {
+			ds = append(ds, launch.Diagnostic{Check: "2", File: "plugin.yaml", Text: fmt.Sprintf("requires.definitions is %v, and the rows feed %v; plugin check --write writes it", c.sum.Definitions, want)})
+		} else {
+			file := filepath.Join(c.r.Dir, "plugin.yaml")
+			m, err := os.ReadFile(file)
+			if err == nil {
+				err = os.WriteFile(file, withRequires(m, want), 0o644)
+			}
+			if err != nil {
+				return "", nil, err
+			}
+			c.sum.Definitions = want
+		}
+	}
+	return outcome(ds), ds, nil
+}
+
+// static is step 3, T0: the import analyzer and plugin vet through the toolbox, which
+// also refuses a dashboard-server plugin.json.
+func (c *checkRun) static() (string, []launch.Diagnostic, error) {
+	ds, err := c.l.Box.Vet(c.ctx, c.r.Dir)
+	return outcome(ds), ds, err
+}
+
+// alone is step 4, T1: the plugin's own tests under -race, the generated ones among
+// them. A test that skips is printed, never counts as a pass, and is named in the
+// attestation (ADR-060 decision 43). A pack has no T1 of its own.
+func (c *checkRun) alone() (string, []launch.Diagnostic, error) {
+	if !c.code {
+		return def.StepNotApplicable, nil, nil
+	}
+	rep, err := c.l.Box.Suite(c.ctx, launch.SuiteRequest{Dir: c.r.Dir})
+	if err != nil {
+		return "", nil, err
+	}
+	var ds []launch.Diagnostic
+	for _, res := range rep.Definitions {
+		for _, t := range res.Failed {
+			ds = append(ds, launch.Diagnostic{Check: "4", Text: t + " failed under -race"})
+		}
+		for _, t := range res.Skipped {
+			c.notRun = append(c.notRun, t)
+			ds = append(ds, launch.Diagnostic{Check: "4", Text: t + " skipped and did not run", Warning: true})
+		}
+	}
+	return outcome(ds), ds, nil
+}
+
+// suited returns the definitions whose suite step 5 runs, each at the version that
+// requires names: for code, those of the keys it provides or registers with; for a
+// pack, those its rows feed (ADR-060 decision 56).
+// ponytail: a key maps to the definition of the same name, as every registry of S2a
+// does; a definition with keys of other names, as launch, waits for its first
+// third-party contributor.
+func (c *checkRun) suited() map[string]string {
+	out := map[string]string{}
+	for name, vs := range c.sum.Definitions {
+		if !c.code || slices.Contains(c.sum.Provides, name) || slices.Contains(c.sum.Registers, name) {
+			out[name] = vs[len(vs)-1]
+		}
+	}
+	return out
+}
+
+// conformance is step 5, T2: the suite of each definition the plugin provides or
+// contributes to, or that a pack's rows feed, run by aiopsctl and not by the author's
+// tests, so the attestation names what ran (07-c4-plugin-sdk.md:1512, :1571). Each
+// failed obligation is one line with its id.
+func (c *checkRun) conformance() (string, []launch.Diagnostic, error) {
+	c.defs = map[string]def.Attested{}
+	for name, vs := range c.sum.Definitions {
+		c.defs[name] = def.Attested{Version: vs[len(vs)-1]}
+	}
+	suited := c.suited()
+	if len(suited) == 0 {
+		return def.StepNotApplicable, nil, nil
+	}
+	rep, err := c.l.Box.Suite(c.ctx, launch.SuiteRequest{Dir: c.r.Dir, Definitions: suited, Halves: []string{"obligations"},
+		Fixtures: filepath.Join(c.r.Dir, "fixtures")})
+	if err != nil {
+		return "", nil, err
+	}
+	var ds []launch.Diagnostic
+	for _, res := range rep.Definitions {
+		d := c.defs[res.Name]
+		n := res.Revision
+		d.Suite, d.Halves = &n, res.Halves
+		c.defs[res.Name] = d
+		for _, id := range res.Failed {
+			ds = append(ds, launch.Diagnostic{Check: id, Text: id + ": the obligation failed"})
+		}
+	}
+	for name := range suited {
+		if c.defs[name].Suite == nil {
+			ds = append(ds, launch.Diagnostic{Check: "5", Text: "the suite of " + name + " did not run"})
+		}
+	}
+	return outcome(ds), ds, nil
+}
+
+// effects is step 6: it runs for tools and executors contributions, and none exists
+// before S5 (ADR-060 decision 23).
+func (c *checkRun) effects() (string, []launch.Diagnostic, error) {
+	return def.StepNotApplicable, nil, nil
+}
+
+// digest is the subject of the attestation of step 7.
+// ponytail: the SHA-256 of plugin.yaml and bundle.yaml, until plugin pack writes the
+// OCI layout whose image manifest digest is the subject (ADR-047 decision 1).
+func (c *checkRun) digest() string {
+	h := sha256.New()
+	for _, f := range []string{"plugin.yaml", "bundle.yaml"} {
+		b, _ := os.ReadFile(filepath.Join(c.r.Dir, f))
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (c *checkRun) statement(digest string) []byte {
+	return def.Statement(c.sum.ID, c.sum.Version, digest, c.defs, c.scene, c.notRun)
+}
+
+// packAndVerify is step 7: the attestation signed with a throwaway key held in memory
+// and verified against it (ADR-020, the row of plugin check step 7), then the gate at
+// the entry point plugin check, against the release this binary embeds or --against:
+// signature, attestation and manifest digest must agree (07-c4-plugin-sdk.md:1573).
+func (c *checkRun) packAndVerify() (string, []launch.Diagnostic, error) {
+	digest := c.digest()
+	st := c.statement(digest)
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := SignStatement(k, st); err != nil {
+		return def.StepFail, []launch.Diagnostic{{Check: "7", Text: "the attestation does not verify: " + err.Error()}}, nil
+	}
+	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
+	if err != nil {
+		return "", nil, err
+	}
+	q := launch.GateRequest{Entry: entryCheck, Attestation: st, Digest: "sha256:" + digest, Signer: keyID(der)}
+	if q.Manifest, err = os.ReadFile(filepath.Join(c.r.Dir, "plugin.yaml")); err != nil {
+		return "", nil, err
+	}
+	if q.Bundle, err = os.ReadFile(filepath.Join(c.r.Dir, "bundle.yaml")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", nil, err
+	}
+	if c.r.Against != "" {
+		if q.Against, err = os.ReadFile(c.r.Against); err != nil {
+			return "", nil, err
+		}
+	}
+	v, err := c.l.Box.Gate(c.ctx, q)
+	if err != nil {
+		return "", nil, err
+	}
+	var ds []launch.Diagnostic
+	for _, cl := range v.Clauses {
+		switch cl.Outcome {
+		case launch.OutcomeDeny:
+			ds = append(ds, launch.Diagnostic{Check: strconv.Itoa(cl.Check), Text: fmt.Sprintf("check %d denies: %s", cl.Check, cl.Reason)})
+		case launch.OutcomeNotEvaluated:
+			ds = append(ds, launch.Diagnostic{Check: strconv.Itoa(cl.Check), Text: fmt.Sprintf("check %d %s is not evaluated: %s", cl.Check, cl.Clause, cl.Reason), Warning: true})
+		}
+	}
+	return outcome(ds), ds, nil
+}
+
+// runScenario runs the echo scenario of a pack, replayed from its fixtures, with its
+// kernel half (ADR-060 decision 49), and sets the scenario that the attestation names
+// when it passed.
+func (c *checkRun) runScenario() ([]launch.Diagnostic, error) {
+	rep, err := c.l.Box.Scenario(c.ctx, launch.ScenarioRequest{Dir: c.r.Dir, Name: echoScenario})
+	if err != nil {
+		return nil, err
+	}
+	var ds []launch.Diagnostic
+	for _, f := range rep.Failures {
+		ds = append(ds, launch.Diagnostic{Check: "8", Text: f})
+	}
+	v, err := strconv.Atoi(rep.Version)
+	switch {
+	case len(ds) > 0:
+	case err != nil:
+		ds = append(ds, launch.Diagnostic{Check: "8", Text: fmt.Sprintf("the scenario %s reports the version %q, which is no integer", rep.Name, rep.Version)})
+	default:
+		c.scene = &def.Scenario{Name: rep.Name, Version: v, Halves: rep.Halves}
+	}
+	return ds, nil
+}
+
+// scenario is step 8: for a pack the echo scenario, which ran before step 7.
+func (c *checkRun) scenario() (string, []launch.Diagnostic, error) {
+	if c.code {
+		return def.StepNotApplicable, nil, nil
+	}
+	return outcome(c.scenery), c.scenery, nil
 }
