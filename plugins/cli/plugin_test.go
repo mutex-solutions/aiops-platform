@@ -151,7 +151,7 @@ func TestRowsThatAreNotActive(t *testing.T) {
 	kerneltest.Mount(w.root, cli.Plugin)
 	w.l.Boot()
 	w.awaitExit(t)
-	if got := w.out.String(); !strings.Contains(got, "  command-key  PENDING, waits for operations\n") || strings.Contains(got, "other") ||
+	if got := w.out.String(); !strings.Contains(got, "  command-key  PENDING, waits for operations\n") || strings.Contains(got, "  other ") ||
 		!strings.Contains(got, "  aiops/command-gone  not mounted: disabled, detached by the gate, or of another role\n") ||
 		strings.Contains(got, "ghost") || strings.Contains(got, "command-profile ") {
 		t.Fatalf("help:\n%s", got)

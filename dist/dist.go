@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package dist is the distribution of the production server binary cmd/aiops: the
-// module table as Go values, the signed distribution manifest the binary embeds
-// (distribution.yaml), and the launcher's limits (limits.yaml)
+// Package dist is the distribution of the production binaries cmd/aiops and
+// cmd/aiopsctl, one module table for both (ADR-061 decision 24): the module table as Go
+// values, the signed distribution manifest the binaries embed (distribution.yaml), the
+// launcher's limits (limits.yaml) and the shipped bundles and profiles
 // (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233). dist.yaml is
 // the builder's input: the bindings and the required set of the release (ADR-060
 // decision 20); go run ./tools/plugingen --write . writes distribution.yaml from it
@@ -47,6 +48,12 @@ var signed []byte
 
 //go:embed limits.yaml
 var limitsYAML []byte
+
+// shipped holds the bundles and the profiles of the release: aiops-core, aiops-cli and the
+// cli profile (ADR-060 decision 27; ADR-061 decision 29).
+//
+//go:embed all:bundles all:profiles
+var shipped embed.FS
 
 // Module is one plugin of the module table: its value and its manifest, plugin.yaml
 // (07-c4-plugin-sdk.md:1344).
@@ -131,8 +138,10 @@ func Modules() []Module {
 	}
 }
 
-// Shipped returns the bundles and profiles of the release. Not built yet: it holds none.
-func Shipped() fs.FS { return embed.FS{} }
+// Shipped returns the bundles and profiles of the release, by their paths under the
+// home: bundles/<name>/bundle.yaml and profiles/<name>/profile.yaml. A file of the home
+// wins over a shipped one.
+func Shipped() fs.FS { return shipped }
 
 // Load returns the registry, the signed distribution manifest and the limits of the
 // release distribution.

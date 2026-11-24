@@ -183,6 +183,7 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 	in, prints := bootInput(src.Home, q.Profile, w, mods, d, release, tie)
 	in.Entry = EntryRender
 	a := AdmitWith(w, in, roles)
+	a.Prints = prints // the dump holds what boot prints at every boot, as Render's does
 	out := launch.Rendered{Composition: launchComposition(c), Admission: launchAdmission(a), Dumps: map[string]string{},
 		Required: launch.RequiredSet{Rows: slices.DeleteFunc(slices.Clone(a.Required.Rows), func(id string) bool { return id == LoaderRowID }),
 			Keys: a.Required.Keys},

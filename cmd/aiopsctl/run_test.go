@@ -114,8 +114,9 @@ func TestRunDumps(t *testing.T) {
 	if r := do(t, w, env, with()...); r.code != 0 || r.out != "" || r.errOut == "" {
 		t.Errorf("no dump: %+v", r)
 	}
-	// The same input gives the same bytes.
-	if again := do(t, w, env, with("--dump", "--dump-hooks", "--dump-config-schema")...); again != all {
+	// The same input gives the same bytes on stdout; stderr carries the time of the
+	// kernel's log lines.
+	if again := do(t, w, env, with("--dump", "--dump-hooks", "--dump-config-schema")...); again.out != all.out || again.code != all.code {
 		t.Error("two runs differ")
 	}
 }

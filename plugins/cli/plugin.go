@@ -87,11 +87,15 @@ func served(k string) bool {
 }
 
 // pending lists each row of the committed composition that needs commands and is not
-// ACTIVE, with the keys it needs that no ACTIVE row provides (ADR-061 decision 9).
+// ACTIVE, with the keys it needs that no ACTIVE row provides (ADR-061 decision 9). The
+// composition lists mounted rows only, so a plugin of the module table that needs
+// commands and has no mounted row, one that a layer disabled or the gate detached, is
+// listed by its id.
 func pending(rd composition.Reader, cat launch.Catalog) []commands.Pending {
 	g, _ := rd.Committed(composition.ScopeProcess)
-	provided := map[string]bool{}
+	provided, mounted := map[string]bool{}, map[string]bool{}
 	for _, r := range g.Rows {
+		mounted[r.Plugin] = true
 		if e, ok := cat.Lookup(r.Plugin); ok && r.State == kernel.Active {
 			for _, k := range e.Provides {
 				provided[k] = true
@@ -99,6 +103,11 @@ func pending(rd composition.Reader, cat launch.Catalog) []commands.Pending {
 		}
 	}
 	var out []commands.Pending
+	for _, e := range cat.Entries() {
+		if !mounted[e.ID] && slices.Contains(e.Needs, commands.Key.Name()) {
+			out = append(out, commands.Pending{Row: e.ID, State: "not mounted: disabled, detached by the gate, or of another role"})
+		}
+	}
 	for _, r := range g.Rows {
 		e, ok := cat.Lookup(r.Plugin)
 		if !ok || r.State == kernel.Active || !slices.Contains(e.Needs, commands.Key.Name()) {
