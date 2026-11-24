@@ -322,8 +322,8 @@ plugins:
           composition: ["0.1"]
           launch: ["0.2"]
           loader: ["0.2"]
-          reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"1a4df0e5128fec7d2ea24bd22abca800c648fe4ab5db51a2fb10761a5a747dbc"},"name":"aiops-test/test-state@0.1.0"}]}'
+          reload: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"86066f12959b036f697694dc1822e80da82e6ff7f7e756f6dd7c6fabd6e5beca"},"name":"aiops-test/test-state@0.1.0"}]}'
   aiops-test/test-submit:
     package: github.com/mutex-solutions/aiops-platform/test/dist/plugins/testsubmit
     manifest: |
@@ -357,8 +357,8 @@ plugins:
         definitions:
           clock: ["0.1"]
           launch: ["0.2"]
-          reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"649848cb21a4e9eca52bbd6329162392b1e0dbec42d94b135444eaf35a089e71"},"name":"aiops-test/test-submit@0.1.0"}]}'
+          reload: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"cc4a3f6bd4c95cdd40c3535551554d1266fde7385df3055bbd2f87ec3640eb60"},"name":"aiops-test/test-submit@0.1.0"}]}'
   aiops-test/toy-consumer:
     package: github.com/mutex-solutions/aiops-platform/test/dist/plugins/toy-consumer
     manifest: |
@@ -938,8 +938,8 @@ plugins:
         definitions:
           composition: ["0.1"]
           launch: ["0.2"]
-          reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"d15366ca51e06a82557124c8b317f801fa4d539fbe57ffeea73cf5ff728713c2"},"name":"aiops/readiness@0.1.0"}]}'
+          reload: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e36448d44e42d690441eef7e044d25be5d4e63efcf901f0081c700a753c17681"},"name":"aiops/readiness@0.1.0"}]}'
   aiops/reload:
     package: github.com/mutex-solutions/aiops-platform/plugins/reload
     manifest: |
@@ -980,8 +980,8 @@ plugins:
         definitions:
           launch: ["0.2"]
           loader: ["0.2"]
-          reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"8227b61442fb50a89281a4398d25b19525922a2ccd51de103818cb3a2980757c"},"name":"aiops/reload@0.1.0"}]}'
+          reload: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.2","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"bd492dbc85d184899525e7a58cc488c4cba1478635cec6a0e95170d87d69943d"},"name":"aiops/reload@0.1.0"}]}'
   aiops/restart-policy:
     package: github.com/mutex-solutions/aiops-platform/plugins/restart-policy
     manifest: |
@@ -1043,8 +1043,8 @@ plugins:
           clock: ["0.1"]
           composition: ["0.1"]
           launch: ["0.2"]
-          reload: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.1"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"d93690f896e5b266fdaf49d977943d46112beeaff238401d764c96f7f1d935a5"},"name":"aiops/restart-policy@0.1.0"}]}'
+          reload: ["0.2"]
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"344cb08353325b2de89fd0ef3d641996b4644d07dcb6c02d775603995637adba"},"name":"aiops/restart-policy@0.1.0"}]}'
 modules:
   - path: github.com/asaskevich/govalidator
     version: v0.0.0-20230301143203-a9d515a09cc2
@@ -2165,7 +2165,8 @@ serves:
             provider: open
             consumer: bound
     reload:
-      - version: "0.1"
+      - version: "0.2"
+        compatibleFrom: "0.1"
         suite: 1
         classes:
           reload:

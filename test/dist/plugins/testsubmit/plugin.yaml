@@ -28,4 +28,4 @@ requires:
   definitions:
     clock: ["0.1"]
     launch: ["0.2"]
-    reload: ["0.1"]
+    reload: ["0.2"]

@@ -2,7 +2,16 @@
 
 package reload
 
-import "errors"
+import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+
+	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
+)
 
 // The wire format of the socket <home>/run/reload.sock (ADR-062 decisions 6 to 8):
 // JSON lines on a stream socket, version 1. The client sends one request; the row
@@ -50,7 +59,9 @@ const (
 )
 
 // Commands returns the commands of version 1.
-func Commands() []string { return nil }
+func Commands() []string {
+	return []string{CommandEnable, CommandDisable, CommandRemove, CommandInstall}
+}
 
 // The causes of an error, a closed list. The first nine are the errors of this
 // definition, one for each that the error matches; the last four are the transport's.
@@ -75,6 +86,16 @@ const (
 	CauseVersion = "version"
 )
 
+// causes maps each error of this definition to its cause, in the order of the list.
+var causes = []struct {
+	err   error
+	cause string
+}{
+	{ErrQueueFull, CauseQueueFull}, {ErrClosed, CauseClosed}, {ErrNested, CauseNested},
+	{ErrUnknown, CauseUnknown}, {ErrAbandoned, CauseAbandoned}, {ErrVerdict, CauseVerdict},
+	{ErrDenied, CauseDenied}, {ErrRollback, CauseRollback}, {ErrStateUnknown, CauseStateUnknown},
+}
+
 // Request is the one request of a connection.
 type Request struct {
 	V       int    `json:"v"`
@@ -98,7 +119,17 @@ type WireError struct {
 }
 
 // Has reports whether cause is among e's causes.
-func (e *WireError) Has(cause string) bool { return false }
+func (e *WireError) Has(cause string) bool {
+	if e == nil {
+		return false
+	}
+	for _, c := range e.Causes {
+		if c == cause {
+			return true
+		}
+	}
+	return false
+}
 
 // WireResult is Result field for field. Digests are lowercase hex, and Previous is
 // the digest of the composition only: its rows hold row configs, which the client
@@ -188,21 +219,107 @@ type ProcessStatus struct {
 const PhaseStopped = "stopped"
 
 // NewError returns an error of the transport with its causes.
-func NewError(text string, causes ...string) *WireError { return nil }
+func NewError(text string, causes ...string) *WireError {
+	return &WireError{Text: text, Causes: append([]string{}, causes...)}
+}
 
 // EncodeError returns err with the causes it matches, nil for nil.
-func EncodeError(err error) *WireError { return nil }
+func EncodeError(err error) *WireError {
+	if err == nil {
+		return nil
+	}
+	e := &WireError{Text: err.Error(), Causes: []string{}}
+	for _, c := range causes {
+		if errors.Is(err, c.err) {
+			e.Causes = append(e.Causes, c.cause)
+		}
+	}
+	return e
+}
 
 // EncodeResult returns r as the wire carries it.
-func EncodeResult(r Result) WireResult { return WireResult{} }
+func EncodeResult(r Result) WireResult {
+	w := WireResult{
+		ID: r.ID, Source: r.Op.Source, Status: r.Status, Stage: r.Stage, Error: EncodeError(r.Err),
+		Generation: r.Generation, Digest: digest(r.Digest), Previous: digest(r.Previous.Digest),
+		Admission: WireAdmission{Denied: each(r.Admission.Denied, func(d launch.Denial) WireDenial {
+			return WireDenial{Row: d.Row, Check: d.Check, Reason: d.Reason}
+		})},
+		Plan: plan(r.Plan), Applied: applied(r.Applied), Report: report(r.Report),
+	}
+	if b := r.Rollback; b != nil {
+		w.Rollback = &WireRollback{Plan: plan(b.Plan), Applied: applied(b.Applied), Report: report(b.Report),
+			Generation: b.Generation, Error: EncodeError(b.Err)}
+	}
+	return w
+}
+
+func digest(d launch.Digest) string { return hex.EncodeToString(d[:]) }
+
+func plan(p launch.Plan) WirePlan {
+	return WirePlan{From: digest(p.From), To: digest(p.To), Closure: each(p.Closure, same),
+		Entries: each(p.Entries, func(e launch.PlanEntry) WirePlanEntry {
+			return WirePlanEntry{ID: e.ID, Action: string(e.Action), Changed: each(e.Changed, same), ConfigPaths: each(e.ConfigPaths, same)}
+		})}
+}
+
+func applied(rs []loader.Result) []WireApplied {
+	return each(rs, func(r loader.Result) WireApplied { return WireApplied{ID: r.ID, Outcome: string(r.Outcome)} })
+}
+
+func report(r composition.Report) WireReport {
+	return WireReport{Pass: r.Pass, Rows: each(r.Rows, func(w composition.RowReport) WireRow {
+		return WireRow{ID: w.ID, Outcome: w.Outcome, State: string(w.State), Detail: w.Detail}
+	})}
+}
+
+func same(s string) string { return s }
+
+// each maps in to a list that is never nil, so the wire carries [] and not null.
+func each[T, U any](in []T, f func(T) U) []U {
+	out := make([]U, 0, len(in))
+	for _, v := range in {
+		out = append(out, f(v))
+	}
+	return out
+}
 
 // Line returns v as one line of JSON ended by a newline.
-func Line(v any) []byte { return nil }
+func Line(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err) // the wire types hold strings, numbers and lists only
+	}
+	return append(b, '\n')
+}
 
-// DecodeRequest reads one request line.
-func DecodeRequest(line []byte) (Request, error) { return Request{}, errNotYet }
+// DecodeRequest reads one request line. It ignores a field it does not know and
+// leaves the checks of V, Op, Command and ID to the row.
+func DecodeRequest(line []byte) (Request, error) {
+	var r Request
+	return r, unmarshal(line, &r)
+}
 
 // DecodeReply reads one reply line, which holds a result or an error.
-func DecodeReply(line []byte) (Reply, error) { return Reply{}, errNotYet }
+func DecodeReply(line []byte) (Reply, error) {
+	var r Reply
+	if err := unmarshal(line, &r); err != nil {
+		return Reply{}, err
+	}
+	if (r.Result == nil) == (r.Error == nil) {
+		return Reply{}, errors.New("reload: a reply line holds a result or an error")
+	}
+	return r, nil
+}
 
-var errNotYet = errors.New("reload: the wire format is not built yet")
+// unmarshal reads one JSON object, its line ending included, and nothing after it.
+func unmarshal(line []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(line))
+	if err := d.Decode(v); err != nil {
+		return err
+	}
+	if d.More() {
+		return errors.New("reload: more than one JSON value on a line")
+	}
+	return nil
+}

@@ -19,7 +19,8 @@ import (
 )
 
 // Reload is an in-memory reload.Reload. Every submission is Passed at once unless
-// Next says otherwise.
+// Next says otherwise. A result that is not final stays as it stands until Finish
+// makes it final, and Await waits until then.
 type Reload struct {
 	// Next, when set before a Submit, is the result the submission gets; its ID and
 	// Op are overwritten. SubmitErr, when set, is what Submit returns.
@@ -28,6 +29,7 @@ type Reload struct {
 
 	mu        sync.Mutex
 	results   map[reload.ID]reload.Result
+	changed   chan struct{} // closed and replaced by each Finish
 	subs      []reload.Op
 	applied   kernel.EventDispatcher[composition.Applied]
 	operation kernel.EventDispatcher[reload.Result]
@@ -40,7 +42,7 @@ var _ reload.Reload = (*Reload)(nil)
 // provides the methods of reload.Reload only, as served: Publish, Progress and
 // Submissions are the test's (no side door, 07-c4-plugin-sdk.md §4.3).
 func New() (*Reload, kernel.Plugin) {
-	f := &Reload{results: map[reload.ID]reload.Result{}}
+	f := &Reload{results: map[reload.ID]reload.Result{}, changed: make(chan struct{})}
 	return f, kernel.Define(kernel.Plugin{
 		ID:       "aiops/reload-fake",
 		Provides: []kernel.AnyKey{reload.Key},
@@ -103,16 +105,43 @@ func (f *Reload) Result(id reload.ID) (reload.Result, bool) {
 	return r, ok
 }
 
-// Await returns the result of id at once.
+// Await returns the result of id once it is final, and ctx's error if ctx ends
+// first.
 func (f *Reload) Await(ctx context.Context, id reload.ID) (reload.Result, error) {
-	if err := ctx.Err(); err != nil {
-		return reload.Result{}, err
+	for {
+		if err := ctx.Err(); err != nil {
+			return reload.Result{}, err
+		}
+		f.mu.Lock()
+		r, ok := f.results[id]
+		changed := f.changed
+		f.mu.Unlock()
+		if !ok {
+			return reload.Result{}, reload.ErrUnknown
+		}
+		if r.Status.Done() {
+			return r, nil
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+		}
 	}
-	r, ok := f.Result(id)
+}
+
+// Finish replaces the result of a submitted id with r, keeping its ID and Op, and
+// wakes every Await. r need not be final. An id never submitted is left unknown.
+func (f *Reload) Finish(id reload.ID, r reload.Result) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, ok := f.results[id]
 	if !ok {
-		return reload.Result{}, reload.ErrUnknown
+		return
 	}
-	return r, nil
+	r.ID, r.Op = old.ID, old.Op
+	f.results[id] = r
+	close(f.changed)
+	f.changed = make(chan struct{})
 }
 
 // Publish emits composition/applied to every listener.
@@ -126,7 +155,3 @@ func (f *Reload) Publish(ctx context.Context, a composition.Applied) error {
 func (f *Reload) Progress(ctx context.Context, r reload.Result) error {
 	return f.operation.Emit(ctx, kernel.Unscoped, r)
 }
-
-// Finish replaces the result of a submitted id with r, keeping its ID and Op, and
-// wakes every Await.
-func (f *Reload) Finish(id reload.ID, r reload.Result) {}
