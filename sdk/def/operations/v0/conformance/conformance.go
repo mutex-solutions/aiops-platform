@@ -7,8 +7,9 @@
 // starts from is a Setup, which each subject's Mount makes. The obligations half holds
 // a provider to key generate, the forms and refusals of trust add, dist sign and dist
 // use on the images of a registry, the profile commands on the launcher's toolbox, the
-// outcomes they answer, and plugin pack, sign, push, inspect and verify of the pack of
-// the suite and their refusals. The guard half holds it to the write lock and the
+// outcomes they answer, plugin pack, sign, push, inspect and verify of the pack of the
+// suite and their refusals, and plugin install, enable, disable and remove with the
+// outcome of their submission and what they refuse. The guard half holds it to the write lock and the
 // snapshot: a write after an interrupted one restores first, a second writer fails
 // after its bound naming the holder, concurrent writers lose nothing; and to what it
 // refuses once released, with no side door. Each case has an id, the first word of its
@@ -33,6 +34,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -67,6 +69,11 @@ type Setup struct {
 	// fails the obligations of echoers in Failed, and the plugin's own tests skip the
 	// tests in Skipped; Generate, Vet and Gate find nothing.
 	Plugin Plugin
+	// Verdict is what the toolbox's Gate answers at plugin install, and Result the final
+	// result with which a process that runs the profile answers a submission over the
+	// socket of ADR-062; with no Result no process runs.
+	Verdict launch.Verdict
+	Result  *reload.WireResult
 }
 
 // Pack is the plugin directory of the cases of the artifact, by path: a pack whose
@@ -104,13 +111,25 @@ var Template = map[string][]byte{"plugin.go": []byte("package echo\n"), "interna
 var Echo = launch.ManifestSummary{ID: "acme/echo", Version: "0.1.0", Runtimes: []string{"inproc"},
 	Registers: []string{"echoers"}, Definitions: map[string][]string{"echoers": {"0.1"}}}
 
-// Shipped is the one shipped profile of the suite, cli.
-var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n")}
+// Shipped are the shipped profiles of the suite, cli and dev.
+var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n"),
+	"profiles/dev/profile.yaml": []byte("bundles: [aiops-core]\n")}
 
 // Rendered is what the toolbox of the suite renders: cli with one departure from the
-// release bindings and one dump, and no diagnostic.
+// release bindings and one dump, and dev with a required row, the one provider of a
+// bound key and the row of the pack; no diagnostic.
 var Rendered = map[string]launch.Rendered{"cli": {Departures: []string{"the site adds consumers of appExit: acme/x"},
-	Dumps: map[string]string{"--dump": "the dump of cli\n"}, Distribution: "sha256:ab"}}
+	Dumps: map[string]string{"--dump": "the dump of cli\n"}, Distribution: "sha256:ab"},
+	"dev": {Composition: launch.Composition{Rows: []launch.Row{{ID: "loader", Plugin: "aiops/loader", Required: true},
+		{ID: "store", Plugin: "acme/store"}, {ID: Row, Plugin: "aiops/echoer", Origin: "acme/connector-x"}}},
+		Keys: []launch.KeyProviders{{Name: "toy.policy", Provider: "bound", Consumer: "open", Rows: []string{"store"}}}}}
+
+// Row is the row of the pack once installed, under the group of its name.
+const Row = "connector-x:logs"
+
+// Passed is a final result that shows plugin enable of Row.
+var Passed = &reload.WireResult{ID: 7, Source: "aiopsctl plugin enable", Status: reload.Passed, Generation: 2, Digest: "ab",
+	Report: reload.WireReport{Pass: true, Rows: []reload.WireRow{{ID: Row, Outcome: "pass", State: "ACTIVE"}}}}
 
 // Subject is a mounted provider of operations.Key.
 type Subject struct {
@@ -476,6 +495,90 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("a relative directory: %v, want ErrUsage", err)
 			}
 		})
+
+		t.Run("operations.O16 plugin install keeps the artifact, locks a pack and submits", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			spec := u.signedPack()
+			in := u.inspect(spec)
+			q := operations.InstallRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", Spec: spec}
+			ch, err := u.ops.Install(t.Context(), q)
+			if err != nil || ch.Outcome != operations.NotRunning || !hasNote(ch, "copied") {
+				t.Fatalf("Install = %+v, %v; want not-running, with the shipped dev copied first", ch, err)
+			}
+			h := u.homeOf("dev")
+			lock := slices.IndexFunc(h.Locked, func(l operations.Locked) bool { return l.ID == in.ID && l.Digest == in.Digest })
+			if !slices.Equal(h.Bundles, []string{"aiops-core", in.ID}) || len(h.Locked) != 1 || lock < 0 ||
+				!slices.ContainsFunc(h.Records, func(r operations.Record) bool { return r.Digest == in.Digest && r.ID == in.ID }) {
+				t.Errorf("after install: %+v; want the bundle last, one lock entry and the record of %s", h, in.Digest)
+			}
+			if _, err := u.ops.Install(t.Context(), q); !errors.Is(err, operations.ErrRefused) || !reflect.DeepEqual(u.homeOf("dev"), h) {
+				t.Errorf("a second install of %s: %v; want ErrRefused and nothing written", in.ID, err)
+			}
+		})
+
+		t.Run("operations.O17 plugin install writes nothing on a denial, rebuild-required or a pack into cli", func(t *testing.T) {
+			deny := launch.Verdict{Clauses: []launch.Clause{{Check: 2, Outcome: launch.OutcomeDeny, Reason: "requires echoers 0.2"}}}
+			for why, c := range map[string]struct {
+				s       Setup
+				profile string
+				want    error
+			}{
+				"a denial":         {Setup{Verdict: deny}, "dev", operations.ErrRefused},
+				"rebuild-required": {Setup{Verdict: launch.Verdict{RebuildRequired: true}}, "dev", operations.ErrRebuildRequired},
+				"a pack into cli":  {Setup{}, "cli", operations.ErrRefused},
+			} {
+				u := use(t, mount, c.s)
+				spec := u.signedPack()
+				before := u.homeOf(c.profile)
+				ch, err := u.ops.Install(t.Context(), operations.InstallRequest{Caller: u.caller(), Home: u.s.Home, Profile: c.profile, Spec: spec})
+				if !errors.Is(err, c.want) || !reflect.DeepEqual(u.homeOf(c.profile), before) || why == "a denial" && len(ch.Verdict.Clauses) != 1 {
+					t.Errorf("%s: %+v, %v; want %v, the verdict, and nothing written", why, ch, err, c.want)
+				}
+			}
+		})
+
+		t.Run("operations.O18 plugin enable and disable write a departure and submit, and disable refuses what the manager cannot", func(t *testing.T) {
+			u := use(t, mount, Setup{Result: Passed})
+			ch, err := u.ops.Enable(t.Context(), u.row(Row))
+			if err != nil || ch.Result == nil || ch.Result.Status != reload.Passed || ch.Result.Generation != 2 || !u.homeOf("dev").Enabled[Row] {
+				t.Fatalf("Enable = %+v, %v; want the passed result and the departure", ch, err)
+			}
+			for _, row := range []string{"loader", "store"} { // a required row; the one provider of a bound key
+				before := u.homeOf("dev")
+				if _, err := u.ops.Disable(t.Context(), u.row(row)); !errors.Is(err, operations.ErrRefused) || !reflect.DeepEqual(u.homeOf("dev"), before) {
+					t.Errorf("disable %s: %v; want ErrRefused and nothing written", row, err)
+				}
+			}
+			// The result still holds the row ACTIVE: a pass that does not show the change
+			// keeps the files and fails.
+			ch, err = u.ops.Disable(t.Context(), u.row(Row))
+			if en, ok := u.homeOf("dev").Enabled[Row]; !errors.Is(err, operations.ErrSubmission) || ch.Result == nil || !ok || en {
+				t.Errorf("disable with the row still ACTIVE: %+v, %v; want ErrSubmission with the departure kept", ch, err)
+			}
+		})
+
+		t.Run("operations.O19 a result that does not pass restores the files, and plugin remove detaches", func(t *testing.T) {
+			u := use(t, mount, Setup{Result: &reload.WireResult{ID: 8, Status: reload.RolledBack, Generation: 3}})
+			before := u.home()
+			if ch, err := u.ops.Enable(t.Context(), u.row(Row)); !errors.Is(err, operations.ErrSubmission) || ch.Result == nil || !reflect.DeepEqual(u.home(), before) {
+				t.Errorf("enable rolled back: %+v, %v; want ErrSubmission and the home restored", ch, err)
+			}
+			u = use(t, mount, Setup{})
+			spec := u.signedPack()
+			if _, err := u.ops.Install(t.Context(), operations.InstallRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", Spec: spec}); err != nil {
+				t.Fatal(err)
+			}
+			q := operations.RemoveRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", ID: "acme/connector-x"}
+			if ch, err := u.ops.Remove(t.Context(), q); err != nil || ch.Outcome != operations.NotRunning {
+				t.Errorf("Remove = %+v, %v; want not-running", ch, err)
+			}
+			if h := u.homeOf("dev"); !slices.Equal(h.Bundles, []string{"aiops-core"}) || len(h.Locked) != 0 {
+				t.Errorf("after remove: %+v; want the bundle and the lock entry gone", h)
+			}
+			if _, err := u.ops.Remove(t.Context(), q); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("remove of what is not installed: %v, want ErrRefused", err)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -560,6 +663,11 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Verify"] = u.ops.Verify(ctx, operations.SpecRequest{Caller: c, Spec: out, Home: u.s.Home})
 			_, calls["New"] = u.ops.New(ctx, operations.NewRequest{Caller: c, Registry: "echoers", ID: "acme/echo", Lang: "go", Dir: filepath.Join(u.s.Dir, "late")})
 			_, calls["Check"] = u.ops.Check(ctx, operations.CheckRequest{Caller: c, Dir: u.s.Dir})
+			_, calls["Gate"] = u.ops.Gate(ctx, operations.GateRequest{Caller: c, Spec: out, Against: out})
+			_, calls["Install"] = u.ops.Install(ctx, operations.InstallRequest{Caller: c, Home: u.s.Home, Profile: "dev", Spec: out})
+			_, calls["Enable"] = u.ops.Enable(ctx, u.row(Row))
+			_, calls["Disable"] = u.ops.Disable(ctx, u.row(Row))
+			_, calls["Remove"] = u.ops.Remove(ctx, operations.RemoveRequest{Caller: c, Home: u.s.Home, Profile: "dev", ID: "acme/x"})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)
@@ -684,6 +792,37 @@ func (u *user) verified(spec, digest string) {
 	if v.Digest != digest || v.Signer != u.home().Signers[0].KeyID || v.Passed != passed {
 		u.t.Errorf("verify %s = %+v; want the digest %s, the signer of acme/* and the verdict of its steps", spec, v, digest)
 	}
+}
+
+// signedPack packs Pack, signs it with the key of an author whom trust.yaml lists for
+// acme/*, and returns its layout.
+func (u *user) signedPack() string {
+	u.t.Helper()
+	out := filepath.Join(u.plugin(), "artifact")
+	pub := u.key("author")
+	u.trust(operations.TrustRequest{KeyFile: pub, IDs: []string{"acme/*"}})
+	if _, err := u.ops.Pack(u.t.Context(), operations.PackRequest{Caller: u.caller(), Dir: filepath.Dir(out), Out: out}); err != nil {
+		u.t.Fatal(err)
+	}
+	if _, err := u.ops.Sign(u.t.Context(), operations.SignRequest{Caller: u.caller(), Out: out, Key: private(pub)}); err != nil {
+		u.t.Fatal(err)
+	}
+	return out
+}
+
+// row is a request for the row id of dev.
+func (u *user) row(id string) operations.RowRequest {
+	return operations.RowRequest{Caller: u.caller(), Home: u.s.Home, Profile: "dev", Row: id}
+}
+
+// homeOf is Home for the profile p.
+func (u *user) homeOf(p string) operations.Home {
+	u.t.Helper()
+	h, err := u.ops.Home(u.t.Context(), operations.HomeRequest{Caller: u.caller(), Home: u.s.Home, Profile: p})
+	if err != nil {
+		u.t.Fatal(err)
+	}
+	return h
 }
 
 func (u *user) home() operations.Home {

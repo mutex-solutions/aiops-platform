@@ -35,6 +35,7 @@ import (
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -69,6 +70,11 @@ type Config struct {
 	// generated tests that skip.
 	Summary         launch.ManifestSummary
 	Failed, Skipped []string
+	// Verdict is what the gate answers at plugin install, and Result the final result
+	// with which the running process of every home answers a submission; nil: no
+	// process runs.
+	Verdict launch.Verdict
+	Result  *reload.WireResult
 }
 
 // Fake is the in-memory engine.

@@ -119,7 +119,6 @@ func (s served) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected, 
 
 func (s served) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
 	return call(s, ctx, r, ops.Library.Verify)
-
 }
 
 func (s served) New(ctx context.Context, r def.NewRequest) (def.Written, error) {
@@ -128,4 +127,24 @@ func (s served) New(ctx context.Context, r def.NewRequest) (def.Written, error) 
 
 func (s served) Check(ctx context.Context, r def.CheckRequest) (def.CheckReport, error) {
 	return call(s, ctx, r, ops.Library.Check)
+}
+
+func (s served) Gate(ctx context.Context, r def.GateRequest) (launch.Verdict, error) {
+	return call(s, ctx, r, ops.Library.Gate)
+}
+
+func (s served) Install(ctx context.Context, r def.InstallRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.Install)
+}
+
+func (s served) Enable(ctx context.Context, r def.RowRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.Enable)
+}
+
+func (s served) Disable(ctx context.Context, r def.RowRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.Disable)
+}
+
+func (s served) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.Remove)
 }

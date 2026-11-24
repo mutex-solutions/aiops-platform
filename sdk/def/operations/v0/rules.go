@@ -5,7 +5,12 @@ package operations
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
 // The rules of a request that every provider keeps alike, so the row and the fake
@@ -65,4 +70,63 @@ func TrustForm(r TrustRequest) error {
 		}
 	}
 	return nil
+}
+
+// CannotDisable refuses a change that disables or removes the row id of the profile
+// that rd renders, which the manager cannot make (ADR-061 decision 17; ADR-062 decision
+// 12): a row of aiops-cli in the profile cli, the transport's rows reload-socket and
+// reload, a required row, and the last enabled provider of a provider-bound or
+// consumer-bound key, whose consumers would lose it. Each refusal says to edit the
+// profile layer and restart the process.
+func CannotDisable(rd launch.Rendered, profile, id string) error {
+	i := slices.IndexFunc(rd.Composition.Rows, func(r launch.Row) bool { return r.ID == id })
+	if i < 0 {
+		return refused("%s composes no row %q", profile, id)
+	}
+	r := rd.Composition.Rows[i]
+	why := ""
+	switch {
+	case profile == "cli" && (r.Plugin == "aiops/cli" || r.Plugin == "aiops/operations" || strings.HasPrefix(r.Plugin, "aiops/command-")):
+		why = "it is a row of aiops-cli, which runs this command"
+	case r.Plugin == "aiops/reload-socket" || r.Plugin == "aiops/reload":
+		why = "it carries the submission of this command (ADR-062 decision 12)"
+	case r.Required || slices.Contains(rd.Required.Rows, id):
+		why = "it is a required row"
+	}
+	for _, k := range rd.Keys {
+		if why == "" && slices.Equal(k.Rows, []string{id}) && (k.Provider == "bound" || k.Consumer == "bound") {
+			why = "it is the last enabled provider of the bound key " + k.Name
+		}
+	}
+	if why != "" {
+		return refused("the manager cannot disable or remove %s of %s: %s; edit profiles/%s/aiops.patch.yml and restart the process", id, profile, why, profile)
+	}
+	return nil
+}
+
+// Shows reports whether a final result passed and shows the change of command on
+// target (ADR-062 decision 11): its report holds the row of enable as ACTIVE, and holds
+// neither the row of disable nor a row of the group of the artifact that remove
+// removed; a pass of install shows its change.
+func Shows(r *reload.WireResult, command, target string) bool {
+	if r == nil || r.Status != reload.Passed {
+		return false
+	}
+	for _, row := range r.Report.Rows {
+		switch {
+		case command == reload.CommandEnable && row.ID == target:
+			return row.State == string(kernel.Active)
+		case command == reload.CommandDisable && row.ID == target,
+			command == reload.CommandRemove && strings.HasPrefix(row.ID, Group(target)+":"):
+			return false
+		}
+	}
+	return command != reload.CommandEnable
+}
+
+// Group is the group under which the rows of the artifact id mount: its name
+// (08:395, "a row id is <pack name>:<row>").
+func Group(id string) string {
+	_, name, _ := strings.Cut(id, "/")
+	return name
 }

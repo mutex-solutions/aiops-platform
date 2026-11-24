@@ -3,6 +3,7 @@
 package operations_test
 
 import (
+	"bufio"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -10,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0/conformance"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
@@ -34,6 +37,9 @@ import (
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
 		home := filepath.Join(t.TempDir(), "home")
+		if s.Result != nil {
+			home = serve(t, s.Result)
+		}
 		if s.Interrupted {
 			interrupted(t, home)
 		}
@@ -82,9 +88,13 @@ func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendere
 
 func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.s.Shipped, ctx.Err() }
 
-// Gate passes every clause that plugin check evaluates, and denies check 10 where the
-// attestation does not name the plugin of the Setup.
+// Gate answers the verdict of the Setup at plugin install; at plugin check it passes
+// every clause it evaluates, and denies check 10 where the attestation does not name the
+// plugin of the Setup.
 func (b box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
+	if q.Entry == "plugin install" {
+		return b.s.Verdict, ctx.Err()
+	}
 	v := launch.Verdict{Entry: q.Entry}
 	for _, n := range []int{1, 2, 5, 7, 8, 10} {
 		v.Clauses = append(v.Clauses, launch.Clause{Check: n, Outcome: launch.OutcomePass})
@@ -124,6 +134,45 @@ func (b box) Suite(ctx context.Context, q launch.SuiteRequest) (launch.SuiteRepo
 
 func (box) Release(context.Context, string) (launch.Release, error) {
 	return launch.Release{}, launch.ErrNotCarried
+}
+
+// serve makes a home in which a process runs dev and answers each submission on its
+// socket with the result queued, then res (ADR-062 decisions 6 and 9), and returns it.
+// The home is under the system's temporary directory, so its socket path stays under
+// the 107 bytes of Linux.
+func serve(t *testing.T, res *reload.WireResult) string {
+	t.Helper()
+	home, err := os.MkdirTemp("", "ops-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	run := filepath.Join(home, reload.RunDir)
+	if err := os.Mkdir(run, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(run, reload.StatusFile), reload.Line(reload.ProcessStatus{Phase: "running", Profile: "dev"}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(run, reload.SocketFile), Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_, _ = bufio.NewReader(c).ReadBytes('\n')
+			q := *res
+			q.Status = reload.Queued
+			_, _ = c.Write(append(reload.Line(reload.Reply{V: reload.WireVersion, Result: &q}), reload.Line(reload.Reply{V: reload.WireVersion, Result: res})...))
+			_ = c.Close()
+		}
+	}()
+	return home
 }
 
 func mkhome(t *testing.T, home string) {

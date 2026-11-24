@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"time"
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -35,6 +37,15 @@ var (
 	// bound; its text names the holder from the record in write.lock (ADR-061
 	// decision 19).
 	ErrLocked = errors.New("operations: write.lock is held by another writer")
+	// ErrRebuildRequired is an install of in-process code that every clause of its
+	// entry point passed, into a home whose distribution lacks its module: nothing is
+	// written, and the Change holds the dist.yaml lines (08:397; ADR-060 decision 23).
+	ErrRebuildRequired = errors.New("operations: rebuild-required")
+	// ErrSubmission is a write whose submission did not show the change: a final result
+	// other than passed, a pass that a later layer overrides, an error line, no final
+	// result, or a process that did not answer. The Change says what is kept or
+	// restored, and aiopsctl exits 1 (ADR-061 decision 17).
+	ErrSubmission = errors.New("operations: the submission does not show the change")
 )
 
 // The names of the environment that the library reads through Caller.Env only.
@@ -59,7 +70,8 @@ type Caller struct {
 // HomeRequest asks what a home holds. Every path of a request is absolute.
 type HomeRequest struct {
 	Caller
-	Home string
+	Home    string
+	Profile string // the profile whose bundles, departures and lock Home reports; "" for none
 }
 
 // Home is what a home holds, as its files are read without the lock (ADR-061
@@ -73,7 +85,16 @@ type Home struct {
 	Current       string   // verified/current: the digest of the distribution that dist use verified last
 	Image         string   // image.yaml: the image that dist use verified last, by digest
 	Snapshot      bool     // whether an interrupted write left its snapshot (ADR-061 decision 17)
+	// For the profile of the request: its bundle list, the enabled departures of its
+	// profile layer by row id, and the entries of its plugins.lock (ADR-047 decision 8).
+	Bundles []string
+	Enabled map[string]bool
+	Locked  []Locked
 }
+
+// Locked is one entry of plugins.lock: a plugin id, the digest of its artifact and
+// the digest of its content layer, "" for none. In-process code has no entry.
+type Locked struct{ ID, Digest, Content string }
 
 // Signer is one entry of signers of trust.yaml, its key by id (ADR-020 decisions 4
 // to 7).
@@ -331,15 +352,58 @@ func (r CheckReport) Passed() bool {
 	return len(r.Steps) > 0
 }
 
+// InstallRequest is plugin install (ADR-047 decisions 5 to 10 and 17): the artifact of
+// Spec, as SpecRequest names one, into Profile of Home. ConnectWait and Wait bound the
+// submission (ADR-062 decisions 9 and 10); zero takes 60 seconds and 10 minutes.
+type InstallRequest struct {
+	Caller
+	Home, Profile, Spec string
+	ConnectWait, Wait   time.Duration
+}
+
+// RowRequest is plugin enable and plugin disable: Row, a row id of the composition of
+// Profile, an installed row as <group>:<row>.
+type RowRequest struct {
+	Caller
+	Home, Profile, Row string
+	ConnectWait, Wait  time.Duration
+}
+
+// RemoveRequest is plugin remove: ID, the plugin id of an artifact installed into
+// Profile.
+type RemoveRequest struct {
+	Caller
+	Home, Profile, ID string
+	ConnectWait, Wait time.Duration
+}
+
+// GateRequest is plugin gate <spec> --against <dist.yaml>: the artifact of Spec gated
+// against the published signed manifest at the absolute path Against (08:493).
+type GateRequest struct {
+	Caller
+	Spec, Against string
+}
+
 // Written is the paths a method wrote outside the home.
 type Written struct{ Paths []string }
 
 // Change is what a method that writes the home did (ADR-061 decision 17).
 type Change struct {
 	Written []string // the home paths written, in rename order
-	Notes   []string // what the operator is told: a snapshot restored
-	Outcome Outcome  // the outcome of the submission
+	Notes   []string // what the operator is told: a snapshot restored, an item kept
+	Outcome Outcome  // NotRunning or RestartRequired, "" otherwise
 	Reason  string   // why, for RestartRequired
+	// The submission over the socket of ADR-062 by Install, Enable, Disable and Remove
+	// (ADR-061 decision 44): the final result as the wire carries it; or, with none, the
+	// error line before an id, or each operation id and the last status.
+	Result *reload.WireResult
+	Error  *reload.WireError
+	IDs    []reload.ID
+	Last   reload.Status
+	// Install: the clauses of the gate, and with rebuild-required the dist.yaml lines
+	// of the module (08:397).
+	Verdict   launch.Verdict
+	DistLines []string
 }
 
 // Outcome is the outcome of the submission that ends every write of the home
@@ -356,6 +420,16 @@ const (
 
 	ReasonNotSubmitted = "not-submitted" // a write the wire does not carry: the running process reads it at its next start
 	ReasonImage        = "image"         // a new image is a new process (07-c4-plugin-sdk.md:1869)
+	ReasonNoAnswer     = "no-answer"     // a process runs the profile and its socket did not answer within ConnectWait
+)
+
+// The names of the rows of the table of ADR-062 decision 11 that end with no final
+// result (ADR-061 decision 44). The text of ErrSubmission begins with one, or with
+// the status of a final result that does not show the change.
+const (
+	SubmitRefused  = "refused"         // an error line before an id: Error; the files are restored
+	NoFinalResult  = "no-final-result" // no final result on the second submission either: IDs and Last
+	VerdictUnknown = "verdict-unknown" // Wait elapsed, or the connection was lost, after the operation was accepted: IDs and Last; kept
 )
 
 // Operations is what the key serves (ADR-061 decision 16). Each method takes the
@@ -407,6 +481,24 @@ type Operations interface {
 	// carries. A signature or an attestation that does not verify is a refusal; a suite
 	// step not built is a step that did not pass.
 	Verify(ctx context.Context, r SpecRequest) (Verified, error)
+	// Gate is plugin gate --against: the clauses of that entry point on the artifact,
+	// with no signer verified. It writes nothing.
+	Gate(ctx context.Context, r GateRequest) (launch.Verdict, error)
+	// Install is plugin install. It verifies the signature and the attestation as
+	// Verify does, runs every clause of the entry point plugin install and the group
+	// rule of ADR-047 decision 17, and only then writes the kept files under
+	// bundles/<id>/ and content/<id>/, the record, plugins.lock for a pack and the
+	// bundle list, and submits. A denial writes nothing; so does rebuild-required.
+	Install(ctx context.Context, r InstallRequest) (Change, error)
+	// Enable and Disable write the row's enabled departure into the profile layer,
+	// keep it only when the changed profile renders, and submit. Disable refuses what
+	// CannotDisable refuses.
+	Enable(ctx context.Context, r RowRequest) (Change, error)
+	Disable(ctx context.Context, r RowRequest) (Change, error)
+	// Remove detaches the artifact's bundle and its lock entry, keeps the departures of
+	// its rows in the profile layer and names them, submits, and deletes bundles/<id>/
+	// and content/<id>/ when the change was kept and no other profile names the id.
+	Remove(ctx context.Context, r RemoveRequest) (Change, error)
 	// New is plugin new (added at 0.2). It writes the files of the template into Dir
 	// and returns their paths, sorted; it refuses a Dir that holds anything, a template
 	// that the toolbox has not and a language other than go, and writes nothing then.
