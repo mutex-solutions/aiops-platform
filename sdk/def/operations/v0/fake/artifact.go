@@ -45,8 +45,14 @@ func (s served) Pack(_ context.Context, r operations.PackRequest) (operations.Wr
 		if _, err := os.Stat(filepath.Join(r.Dir, "bundle.yaml")); err != nil {
 			return operations.Written{}, refused("every artifact carries a bundle: %v", err)
 		}
-		in := s.f.cfg.Artifact
-		in.Digest = digestOf(in.ID + "@" + in.Version)
+		in, parts := s.f.cfg.Artifact, []string{} // the digest is of the files too: other content, another digest
+		_ = filepath.Walk(r.Dir, func(p string, _ os.FileInfo, _ error) error {
+			if b, err := os.ReadFile(p); err == nil {
+				parts = append(parts, strings.TrimPrefix(p, r.Dir), string(b))
+			}
+			return nil
+		})
+		in.Digest = digestOf(in.ID + "@" + in.Version + strings.Join(parts, "\x00"))
 		s.f.mu.Lock()
 		s.f.artifacts[r.Out] = &artifact{in: in}
 		s.f.mu.Unlock()

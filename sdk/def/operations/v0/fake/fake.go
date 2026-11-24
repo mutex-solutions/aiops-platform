@@ -107,7 +107,8 @@ type state struct {
 	records  []operations.Record
 	current  string
 	image    string
-	layers   map[string]layer // by profile
+	layers   map[string]layer  // by profile
+	kept     map[string]string // bundles/<id>/: the digest of the kept artifact, by id
 }
 
 type key struct {
@@ -240,9 +241,9 @@ func (f *Fake) write(ctx context.Context, dir string, change func(*state) error)
 	}
 	next := h.state
 	next.signers, next.dists, next.records = slices.Clone(next.signers), slices.Clone(next.dists), slices.Clone(next.records)
-	next.profiles, next.layers = slices.Clone(next.profiles), maps.Clone(next.layers)
-	if next.layers == nil {
-		next.layers = map[string]layer{}
+	next.profiles, next.layers, next.kept = slices.Clone(next.profiles), maps.Clone(next.layers), maps.Clone(next.kept)
+	if next.layers == nil { // a home no write has kept: kept is nil too
+		next.layers, next.kept = map[string]layer{}, map[string]string{}
 	}
 	if err := change(&next); err != nil {
 		return notes, err

@@ -3,6 +3,7 @@
 package fake
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -57,17 +58,32 @@ func (s served) Install(ctx context.Context, r operations.InstallRequest) (opera
 			return ch, refused("into the profile cli only in-process code installs (ADR-061 decision 40)")
 		}
 		return s.f.change(ctx, r.Home, r.Profile, reload.CommandInstall, a.in.ID, &ch, func(l *layer, st *state) error {
-			if slices.ContainsFunc(l.bundles, func(b string) bool { return operations.Group(b) == operations.Group(a.in.ID) }) {
+			held, kept := st.holders(r.Profile, a.in.ID), st.kept[a.in.ID]
+			switch {
+			case len(held) > 0 && kept != a.in.Digest:
+				return refused("the profiles %s name %s at %s, and a site holds one digest of a plugin id (ADR-047 decision 7)",
+					strings.Join(held, ", "), a.in.ID, cmp.Or(kept, "no kept files"))
+			case slices.ContainsFunc(l.bundles, func(b string) bool { return operations.Group(b) == operations.Group(a.in.ID) }):
 				return refused("%s holds an artifact of the name %s", r.Profile, operations.Group(a.in.ID))
+			case kept != "" && len(held) == 0:
+				ch.Notes = append(ch.Notes, "removed the leftover bundles/"+a.in.ID+", which no profile names (ADR-047 decision 10)")
 			}
-			l.bundles = append(l.bundles, a.in.ID)
+			st.kept[a.in.ID], l.bundles = a.in.Digest, append(l.bundles, a.in.ID)
 			if len(a.in.Runtimes) == 0 {
 				l.locked = append(l.locked, operations.Locked{ID: a.in.ID, Digest: a.in.Digest})
 			}
-			st.records = append(st.records, operations.Record{Digest: a.in.Digest, Kind: "artifact", Signer: signer, ID: a.in.ID})
+			st.records = append(slices.DeleteFunc(st.records, func(x operations.Record) bool { return x.Digest == a.in.Digest }),
+				operations.Record{Digest: a.in.Digest, Kind: "artifact", Signer: signer, ID: a.in.ID})
 			return nil
 		})
 	})
+}
+
+// holders returns the profiles of the home but p whose bundle list names id. Each holds
+// the digest of the kept files, its lock entry's for a pack, since an install of
+// another digest is refused while one does (ADR-047 decisions 7 and 16).
+func (st *state) holders(p, id string) []string {
+	return slices.DeleteFunc(slices.Clone(st.profiles), func(q string) bool { return q == p || !slices.Contains(st.layers[q].bundles, id) })
 }
 
 func (s served) Enable(ctx context.Context, r operations.RowRequest) (operations.Change, error) {
@@ -100,26 +116,27 @@ func (f *Fake) row(ctx context.Context, r operations.RowRequest, on bool) (opera
 	})
 }
 
+// Remove takes an installed artifact only (ADR-047 decision 10; ADR-062 decision 12),
+// drops the enabled departures of its rows, so a later install leaves them disabled,
+// and the kept files once the change is kept and no profile names the id.
 func (s served) Remove(ctx context.Context, r operations.RemoveRequest) (operations.Change, error) {
 	return do(s, "Remove", func() (operations.Change, error) {
-		rd := s.f.cfg.Rendered[r.Profile]
-		for _, row := range rd.Composition.Rows {
-			if err := operations.CannotDisable(rd, r.Profile, row.ID); row.Origin == r.ID && err != nil {
-				return operations.Change{}, err
-			}
-		}
 		var ch operations.Change
-		return s.f.change(ctx, r.Home, r.Profile, reload.CommandRemove, r.ID, &ch, func(l *layer, _ *state) error {
-			i := slices.Index(l.bundles, r.ID)
-			if i < 0 {
-				return refused("%s is not installed into %s", r.ID, r.Profile)
+		return s.f.change(ctx, r.Home, r.Profile, reload.CommandRemove, r.ID, &ch, func(l *layer, st *state) error {
+			i, err := slices.Index(l.bundles, r.ID), operations.CannotRemove(s.f.cfg.Rendered[r.Profile], r.Profile, r.ID)
+			switch _, kept := st.kept[r.ID]; {
+			case i < 0:
+				return refused("%s does not install %s", r.Profile, r.ID)
+			case !kept:
+				return refused("%s is no installed artifact of %s: plugin remove takes the plugin id of one, with its kept files", r.ID, r.Profile)
+			case err != nil:
+				return err
 			}
 			l.bundles = slices.Delete(l.bundles, i, i+1)
 			l.locked = slices.DeleteFunc(l.locked, func(e operations.Locked) bool { return e.ID == r.ID })
-			for _, id := range slices.Sorted(maps.Keys(l.enabled)) {
-				if strings.HasPrefix(id, operations.Group(r.ID)+":") {
-					ch.Notes = append(ch.Notes, fmt.Sprintf("kept the departure {id: %s, enabled: %v}", id, l.enabled[id]))
-				}
+			maps.DeleteFunc(l.enabled, func(id string, _ bool) bool { return strings.HasPrefix(id, operations.Group(r.ID)+":") })
+			if len(st.holders(r.Profile, r.ID)) == 0 && (s.f.cfg.Result == nil || operations.Shows(s.f.cfg.Result, reload.CommandRemove, r.ID)) {
+				delete(st.kept, r.ID)
 			}
 			return nil
 		})
