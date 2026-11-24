@@ -121,8 +121,10 @@ jobs:
       - name: Import boundaries (U2)
         # docs/architecture/07-c4-plugin-sdk.md:27-48; the import boundary U2 of ADR-054
         # decision 13 reads the modules, plugins and importers of the upstream register.
-        # The closure of cmd/aiops holds no fake or sdk/testkit package and no part of the
-        # toolbox that aiopsctl alone links (ADR-061 decision 21), and the link guard
+        # The closure of cmd/aiops holds no fake or sdk/testkit package, no part of the
+        # toolbox that aiopsctl alone links (ADR-061 decision 21) and no package of
+        # golang.org/x/mod but semver and sumdb/note, which sigstore-go links, since the
+        # module zip is the toolbox's (ADR-044, Consequences), and the link guard
         # of ADR-060 decision 28 keeps every package under test/ and examples/ out of the
         # closures of cmd/aiops and cmd/aiopsctl.
         run: go run ./tools/kernelcheck imports . tools/upstream-components.yaml

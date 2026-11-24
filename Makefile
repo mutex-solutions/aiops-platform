@@ -76,7 +76,9 @@ check:
 	@# ADR-054 decision 13: the import boundary U2 reads the upstream register. ADR-060
 	@# decision 28: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl. ADR-061
 	@# decision 21: no part of the toolbox (plugingen, the analyzer, the templates, the
-	@# suites) in cmd/aiops.
+	@# suites) in cmd/aiops. ADR-044, Consequences: no package of golang.org/x/mod in
+	@# cmd/aiops but semver and sumdb/note, which sigstore-go links; the module zip is the
+	@# toolbox's.
 	$(KC) imports . tools/upstream-components.yaml
 	$(KC) pluginvet plugins loader boot
 	go run ./tools/deflint .

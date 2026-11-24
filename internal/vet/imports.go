@@ -34,6 +34,7 @@ const (
 	docLink    = "ADR-060 decision 28; ADR-059 decision 9"
 	docMain    = "ADR-061 decision 28"
 	docTools   = "ADR-061 decision 21; ADR-044, Consequences"
+	docModZip  = "ADR-044, Consequences; the owner's decision of 2026-11-24"
 )
 
 // toolbox are the packages that aiopsctl alone links and hands to boot (ADR-061
@@ -48,6 +49,13 @@ func isToolbox(p string) bool {
 		}
 	}
 	return false
+}
+
+// isModuleZip reports a package of golang.org/x/mod that the module zip of the toolbox
+// links, which enters no server binary: every package of the module but semver and
+// sumdb/note, which sigstore-go links into both binaries (ADR-047 decision 4).
+func isModuleZip(p string) bool {
+	return hasPath(p, "golang.org/x/mod") && p != "golang.org/x/mod/semver" && p != "golang.org/x/mod/sumdb/note"
 }
 
 // bootDefs are the only definitions boot/ and loader/ may import.
@@ -264,8 +272,9 @@ func GoListDeps(root, pkg string) ([]string, error) {
 }
 
 // Imports applies the import boundary table and U2, with the entries reg of the
-// upstream register, to every Go file under root; the fake rule and the toolbox rule to
-// the dependency closure of the server binary cmd/aiops; and the link guard of ADR-060 decision 28,
+// upstream register, to every Go file under root; the fake rule, the toolbox rule and
+// the rule of the module zip to the dependency closure of the server binary cmd/aiops;
+// and the link guard of ADR-060 decision 28,
 // no package under test/ or examples/, to the closures of cmd/aiops and cmd/aiopsctl,
 // each where the command exists.
 func Imports(root string, reg []Upstream, list ListDeps) error {
@@ -307,6 +316,9 @@ func Imports(root string, reg []Upstream, list ListDeps) error {
 			}
 			if bin == "aiops" && isToolbox(d) {
 				bad = append(bad, fmt.Sprintf("cmd/aiops: dependency closure contains %s: no part of the toolbox in a server binary (%s)", d, docTools))
+			}
+			if bin == "aiops" && isModuleZip(d) {
+				bad = append(bad, fmt.Sprintf("cmd/aiops: dependency closure contains %s: no package of golang.org/x/mod in a server binary but semver and sumdb/note, which sigstore-go links; the module zip is the toolbox's (%s)", d, docModZip))
 			}
 			if hasPath(d, modPath+"/test") || hasPath(d, modPath+"/examples") {
 				bad = append(bad, fmt.Sprintf("cmd/%s: dependency closure contains %s: no package under test/ or examples/ in cmd/aiops or cmd/aiopsctl (%s)", bin, d, docLink))

@@ -359,10 +359,10 @@ entries:
   # of in-process code (ADR-047 decision 1): the packages module, sumdb/dirhash and zip,
   # with modfile through zip, which the go command itself uses, so the sum is the one
   # go.sum records. They are the toolbox's, which aiopsctl alone links, and enter no
-  # server binary (ADR-044, Consequences, and the owner's decision of 2026-11-24). The
-  # module was in the package graph already, through sigstore-go, which links its packages
-  # semver and sumdb/note, at the same pin; its go.mod requires golang.org/x/tools for its
-  # own tests only.
+  # server binary (ADR-044, Consequences, and the owner's decision of 2026-11-24): the
+  # closure check of kernelcheck imports refuses every package of the module in cmd/aiops
+  # but semver and sumdb/note, which sigstore-go links, at the same pin, into both
+  # binaries. Its go.mod requires golang.org/x/tools for its own tests only.
   - id: x-mod
     names: [x-mod]
     form: library
