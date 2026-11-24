@@ -534,9 +534,10 @@ func field(n *yaml.Node, key string) *yaml.Node {
 // enabled providers of a bound or a required key (ADR-061 decision 17). It detaches the
 // bundle, then the lock entry, keeps the departures of the artifact's rows in the
 // profile layer and names them, keeps the change only when the changed profile renders
-// as boot would admit it, and submits. Once the submission kept the change, and no
-// other profile names the id, it deletes bundles/<id>/ and content/<id>/, so a restore
-// always finds them (ADR-062 decision 11).
+// as boot would admit it, and submits. After a final result that shows the change, or
+// with no process on the profile, once the snapshot is dropped and when no profile
+// names the id, it deletes bundles/<id>/ and content/<id>/, so a restore always finds
+// them, and names one that stays (ADR-062 decision 11).
 func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -598,17 +599,27 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 			if _, err := l.composes(ctx, h, r.Profile); err != nil {
 				return err
 			}
-			if err := submit(ctx); err != nil || res != nil {
-				return err
-			}
+			return submit(ctx)
+		},
+		// The directories go after the snapshot, so neither a failed deletion nor a kill
+		// restores a lock entry without its files; one that stays names no profile, and a
+		// later install removes it (ADR-047 decision 10).
+		After: func(d *Done) {
 			profiles, _ := filepath.Glob(h.path("profiles/*/profile.yaml"))
 			for _, p := range profiles {
 				var f struct{ Bundles []string }
 				if readYAML(p, &f) != nil || slices.Contains(f.Bundles, r.ID) {
-					return nil
+					return
 				}
 			}
-			return errors.Join(os.RemoveAll(h.path("bundles/"+r.ID)), os.RemoveAll(h.path("content/"+r.ID)))
+			if res != nil { // the verdict stays unknown, or the change waits for a start
+				return
+			}
+			for _, dir := range []string{h.path("bundles/" + r.ID), h.path("content/" + r.ID)} {
+				if err := os.RemoveAll(dir); err != nil {
+					d.Notes = append(d.Notes, fmt.Sprintf("%s stays, and no profile names %s; a later install removes it: %v", dir, r.ID, err))
+				}
+			}
 		},
 	})
 	return changed(done, ch, err, res)

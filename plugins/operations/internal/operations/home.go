@@ -44,6 +44,7 @@ type Write struct {
 	Command string                          // the holder's command, recorded in write.lock
 	Plan    func() ([]Change, error)        // reads the home under the lock: the changes, in rename order; none writes and submits nothing
 	Submit  func(ctx context.Context) error // the submission once the renames are done; an error restores
+	After   func(*Done)                     // runs under the lock once a kept write dropped its snapshot, so no restore undoes it
 }
 
 // Done is what a write did.
@@ -72,8 +73,8 @@ const (
 // Write runs one write of the home (ADR-061 decisions 17 and 19). It makes sure of
 // the home, takes write.lock, restores a snapshot that an interrupted write left,
 // runs the plan, writes into snapshot/ a copy of each path the plan replaces and the
-// list of those it creates, renames each change into place, submits, and removes the
-// snapshot. A failure after the snapshot, a failed submission and the end of ctx
+// list of those it creates, renames each change into place, submits, removes the
+// snapshot, and then runs After. A failure after the snapshot, a failed submission and the end of ctx
 // restore the snapshot under a context of their own, bounded to five seconds; when
 // the bound passes or the process dies, the snapshot stays for the next writer, which
 // restores what is left of it under its own context before anything else.
@@ -119,7 +120,13 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 		}
 		return Done{Notes: append(done.Notes, "restored the home from its snapshot")}, err
 	}
-	return done, h.drop()
+	if err := h.drop(); err != nil {
+		return done, err
+	}
+	if w.After != nil {
+		w.After(&done)
+	}
+	return done, nil
 }
 
 // drop removes the snapshot: it renames it aside first, so a kill while its files are
