@@ -10,3 +10,7 @@ cover-*.out
 
 # The socket directory that the tests of reload-socket create and remove.
 plugins/reload-socket/testdata/run/
+
+# Binaries that go build writes at the repository root.
+/aiops
+/aiopsctl
