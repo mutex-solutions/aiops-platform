@@ -369,8 +369,9 @@ const echoSum = "h1:CuDjptRJ5bw/sRPs2/bfnr6IGglsof5GyvlW0ys9gJs="
 
 // Pack refuses, and leaves no layout, where the gate denies a clause, where a content
 // entry is a link, where the manifest lists a remote runtime, and where the out
-// directory holds a file. A check 10 denial where no scenario ran is not evaluated,
-// since check 10 reads what the scenario records.
+// directory holds a file. A check 10 denial where the suites did not run refuses too,
+// naming the suite binaries this binary does not carry: install denies such an artifact
+// (ADR-060 decisions 17, 23, 46 and 56).
 func TestPackRefuses(t *testing.T) {
 	ctx := t.Context()
 	b := &packBox{sum: packSummary(), deny: []launch.Clause{{Check: 8, Clause: "installed", Outcome: launch.OutcomeDeny, Reason: "row logs is enabled"}}}
@@ -383,8 +384,12 @@ func TestPackRefuses(t *testing.T) {
 		t.Errorf("a refused pack left %s: %v", out, err)
 	}
 	b.deny = []launch.Clause{{Check: 10, Outcome: launch.OutcomeDeny, Reason: "the attestation of a pack names no scenario version"}}
-	if _, err := (Library{Box: b}).Pack(ctx, def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
-		t.Errorf("a denial of check 10 with no scenario run: %v", err)
+	if _, err := (Library{Box: b}).Pack(ctx, def.PackRequest{Caller: caller(), Dir: dir, Out: out}); !errors.Is(err, def.ErrRefused) ||
+		!strings.Contains(err.Error(), "no scenario version") || !strings.Contains(err.Error(), "suite binaries") {
+		t.Errorf("a denial of check 10 with no scenario run: %v, want ErrRefused naming the suite binaries", err)
+	}
+	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a pack refused by check 10 left %s: %v", out, err)
 	}
 	b.deny = nil
 	if err := os.Symlink("labels.yaml", filepath.Join(dir, "content", "link.yaml")); err != nil {
