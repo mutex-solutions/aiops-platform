@@ -74,9 +74,12 @@ func TestLicenceFiles(t *testing.T) {
 // The classifier names the SPDX ids of the corpus built from the pinned SPDX data
 // (ADR-044 decision 26): a text, its required form, two texts in one file, a twin text
 // read as one id, an exception with its licence; and a text it cannot name, or one
-// with a clause outside what it names, is unknown, which fails the build (L16).
+// with a clause outside what it names, however short, is unknown, which fails the build
+// (L16); a title of the text it names and "All rights reserved" are not clauses.
 func TestClassify(t *testing.T) {
 	apache := corpusFile(t, "License/Apache-2.0/text.txt")
+	mit := corpusFile(t, "License/MIT/text.txt")
+	bsd2 := corpusFile(t, "License/BSD-2-Clause/text.txt")
 	bsd := corpusFile(t, "License/BSD-3-Clause/text.txt")
 	gpl := corpusFile(t, "License/GPL-2.0-only/text.txt")
 	classpath := corpusFile(t, "Exception/Classpath-exception-2.0/text.txt")
@@ -97,6 +100,12 @@ func TestClassify(t *testing.T) {
 		{"GPL-2.0, one text for -only and -or-later", gpl, "GPL-2.0-only", ""},
 		{"GPL-2.0 with the Classpath exception", append(append(bytes.Clone(gpl), '\n'), classpath...), "GPL-2.0-only WITH Classpath-exception-2.0", ""},
 		{"Apache-2.0 with a clause of its own", append(bytes.Clone(apache), clause...), "", "words outside the texts it names"},
+		{"MIT under its title", append([]byte("The MIT License (MIT)\n\nCopyright (c) 2026 Example Authors\n\n"), mit...), "MIT", ""},
+		{"BSD-2-Clause under its title, all rights reserved", append([]byte("BSD 2-Clause License\n\nCopyright (c) 2026 Example Authors\nAll rights reserved.\n\n"), bsd2...), "BSD-2-Clause", ""},
+		{"MIT with a clause of ten words", append(bytes.Clone(mit), "\nYou may not use the Software for any commercial purpose whatsoever.\n"...), "", "words outside the texts it names"},
+		{"Apache-2.0 with a clause of nine words", append(bytes.Clone(apache), "\nThe Software shall not be used by any military organisation.\n"...), "", "words outside the texts it names"},
+		{"MIT with a clause of nine words", append(bytes.Clone(mit), "\nNo permission is granted to sell or host the Software.\n"...), "", "words outside the texts it names"},
+		{"MIT with a clause of two words", append(bytes.Clone(mit), "\nNon-commercial use.\n"...), "", "words outside the texts it names"},
 		{"a text of its own", []byte(clause), "", "names no licence"},
 		{"an exception alone", classpath, "", "no licence"},
 	} {
