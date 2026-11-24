@@ -3,11 +3,11 @@
 // Package fake is the in-memory engine of the operations definition (ADR-061
 // decision 18): it holds each home in memory, keeps the key pairs it generates and the
 // signatures it makes, and writes no file. It reads a file only where a request names
-// one that it did not make: a public key file of trust add, and the manifest of an
-// image. It takes from its config what it cannot compute without the libraries of the
-// operations row: a holder of every write lock, an interrupted write in every home,
-// whether a process runs the profile, and what the launcher's toolbox ships and
-// renders. On that model it keeps the rules that do not concern files: the forms and
+// one that it did not make: a public key file of trust add. It takes from its config
+// what it cannot compute without the libraries of the operations row: a holder of every
+// write lock, an interrupted write in every home, whether a process runs the profile,
+// what the launcher's toolbox ships and renders, and the distribution manifest of each
+// image a registry holds. On that model it keeps the rules that do not concern files: the forms and
 // refusals of trust add, the default root, the refusals of dist use, the copy of a
 // shipped profile, the restore of an interrupted write before the next one, and a lock
 // with its wait. It imports the standard library, sdk/kernel and its
@@ -67,7 +67,7 @@ type Fake struct {
 	mu     sync.Mutex
 	homes  map[string]*home
 	keys   map[string]key       // the key files it generated, by path
-	images map[string]signature // the images it signed, by directory
+	images map[string]signature // the images it signed, by reference
 	calls  []string
 }
 
@@ -83,6 +83,7 @@ type state struct {
 	dists    []string // nil when the field is absent
 	records  []operations.Record
 	current  string
+	image    string
 }
 
 type key struct {
@@ -232,7 +233,7 @@ func (s served) Home(_ context.Context, r operations.HomeRequest) (operations.Ho
 	defer f.mu.Unlock()
 	h := f.home(r.Home)
 	out := operations.Home{Profiles: slices.Clone(h.state.profiles), Signers: slices.Clone(h.state.signers), Distributions: slices.Clone(h.state.dists),
-		Records: slices.Clone(h.state.records), Current: h.state.current, Snapshot: h.snapshot != nil}
+		Records: slices.Clone(h.state.records), Current: h.state.current, Image: h.state.image, Snapshot: h.snapshot != nil}
 	if out.Distributions == nil {
 		out.Distributions = []string{operations.Release}
 	}
@@ -363,8 +364,8 @@ func (s served) SignDist(_ context.Context, r operations.SignDistRequest) (opera
 		return operations.Written{}, err
 	}
 	defer leave()
-	if !filepath.IsAbs(r.Image) || !filepath.IsAbs(r.Key) {
-		return operations.Written{}, usage("the image and the key file are absolute paths")
+	if !filepath.IsAbs(r.Key) {
+		return operations.Written{}, usage("the key file %q is not an absolute path", r.Key)
 	}
 	pw, err := password(r.Caller)
 	if err != nil {
@@ -377,24 +378,38 @@ func (s served) SignDist(_ context.Context, r operations.SignDistRequest) (opera
 	if !ok || !k.private || k.password != pw {
 		return operations.Written{}, refused("%s is no private key this fake made, or the password is not its own", r.Key)
 	}
-	digest, err := manifest(r.Image)
+	ref, digest, err := f.image(r.Image)
 	if err != nil {
 		return operations.Written{}, err
 	}
 	f.mu.Lock()
-	f.images[r.Image] = signature{digest: digest, id: k.id}
+	f.images[ref] = signature{digest: digest, id: k.id}
 	f.mu.Unlock()
-	return operations.Written{Paths: []string{filepath.Join(r.Image, "manifest.signature")}}, nil
+	return operations.Written{Paths: []string{repository(ref) + "@" + digestOf(ref+k.id)}}, nil
 }
 
-// manifest returns the digest of the manifest of the local image img.
-func manifest(img string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(img, "manifest"))
-	if err != nil {
-		return "", refused("the image %s holds no distribution manifest: %v", img, err)
+// image returns the reference of an image of the config, oci:// trimmed, and the
+// digest of its distribution manifest.
+func (f *Fake) image(ref string) (string, string, error) {
+	ref = strings.TrimPrefix(ref, "oci://")
+	m, ok := f.cfg.Images[ref]
+	if !ok {
+		return "", "", refused("the registry holds no %s", ref)
 	}
-	sum := sha256.Sum256(b)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return ref, digestOf(string(m)), nil
+}
+
+// repository returns ref without its tag.
+func repository(ref string) string {
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		return ref[:i]
+	}
+	return ref
+}
+
+func digestOf(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (s served) UseDist(ctx context.Context, r operations.UseRequest) (operations.Change, error) {
@@ -406,21 +421,21 @@ func (s served) UseDist(ctx context.Context, r operations.UseRequest) (operation
 	if err := homeOf(r.Home); err != nil {
 		return operations.Change{}, err
 	}
-	digest, err := manifest(r.Image)
+	ref, digest, err := s.f.image(r.Image)
 	if err != nil {
 		return operations.Change{}, err
 	}
 	s.f.mu.Lock()
-	sig, signed := s.f.images[r.Image]
+	sig, signed := s.f.images[ref]
 	s.f.mu.Unlock()
 	notes, err := s.f.write(ctx, r.Home, func(st *state) error {
 		if !signed || sig.digest != digest || !slices.Contains(st.dists, sig.id) {
-			return refused("no key of distributions verifies the signature of the manifest %s of %s", digest, r.Image)
+			return refused("no key of distributions verifies a distribution manifest of %s", ref)
 		}
 		st.records = slices.DeleteFunc(st.records, func(x operations.Record) bool { return x.Digest == digest })
 		st.records = append(st.records, operations.Record{Digest: digest, Kind: "distribution", Signer: sig.id})
 		slices.SortFunc(st.records, func(a, b operations.Record) int { return strings.Compare(a.Digest, b.Digest) })
-		st.current = digest
+		st.current, st.image = digest, repository(ref)+"@"+digestOf(ref)
 		return nil
 	})
 	ch := operations.Change{Notes: notes}
@@ -428,7 +443,8 @@ func (s served) UseDist(ctx context.Context, r operations.UseRequest) (operation
 		return ch, err
 	}
 	rec := filepath.Join(r.Home, "verified", strings.Replace(digest, ":", "-", 1))
-	ch.Written, ch.Outcome, ch.Reason = []string{rec, filepath.Join(r.Home, "verified", "current")}, operations.RestartRequired, operations.ReasonImage
+	ch.Written = []string{rec, filepath.Join(r.Home, "verified", "current"), filepath.Join(r.Home, "image.yaml")}
+	ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonImage
 	return ch, nil
 }
 

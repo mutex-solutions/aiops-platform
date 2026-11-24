@@ -127,15 +127,14 @@ type KeyRequest struct {
 // @sha256:<digest>, and optionally oci:// before it. The builder pushes the
 // distribution manifest beside its image as a referrer of it, of artifactType
 // DistributionType, whose one layer of DistributionLayer holds the manifest's bytes;
-// dist sign pushes one more referrer of that type, with the manifest and its bundle, a
-// layer of BundleType (ADR-020 decisions 2 and 12; ADR-044 decision 1). A request
-// reads the credentials of a registry from config.json under DOCKER_CONFIG, or under
-// .docker/ of HOME, of the caller's environment, and reaches a registry on the
-// loopback interface over plain HTTP.
+// dist sign pushes one more referrer of that type, with the manifest and a layer of
+// the bundle media type of ADR-020 decision 2, the manifest's bundle (ADR-020
+// decision 12; ADR-044 decision 1). A request reads the credentials of a registry from
+// config.json under DOCKER_CONFIG, or under .docker/ of HOME, of the caller's
+// environment, and reaches a registry on the loopback interface over plain HTTP.
 const (
 	DistributionType  = "application/vnd.aiops.distribution.v1"
 	DistributionLayer = "application/vnd.aiops.distribution.manifest.v1+yaml"
-	BundleType        = "application/vnd.dev.sigstore.bundle.v0.3+json"
 )
 
 // SignDistRequest is dist sign: the distribution manifest of Image signed with the

@@ -287,6 +287,64 @@ entries:
       - {dir: plugins/operations, decision: "ADR-020 decisions 4 and 20: dsse.PAE and the encrypted key format"}
     default: false
 
+  # The OCI client of ADR-047 decision 4, which the operations library alone imports
+  # (ADR-060 decision 41). Chosen over a client on the standard library by measurement
+  # at the pin: linking it adds 25 packages and 8,674 lines of Go to the package graph
+  # of aiopsctl and 717,301 bytes (2.3 per cent) to its binary, and the library's own
+  # client code is the repository, the referrers and the push of an artifact. What a
+  # client on the standard library would write again is the part of oras-go it uses:
+  # registry/remote (2,551 lines), its auth (1,564), with the bearer-token and Basic
+  # challenges, and its credentials (783), with config.json and the credential helpers,
+  # and the referrers tag schema of a registry with no referrers API, which the exit's
+  # registry needs (ADR-047 decision 4). Even a narrow copy of that is several hundred
+  # lines of protocol code in a library capped at 3,500 (ADR-060 decision 35), with none
+  # of upstream's tests, so writing it carries more risk than linking a pinned,
+  # Apache-2.0 module of three requirements, two of which the graph already holds.
+  - id: oras-go
+    names: [oras, oras-go]
+    form: library
+    behind: operations
+    modules: [oras.land/oras-go/v2]
+    pin: v2.7.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-047 decision 21; ADR-020 decision 30, reading 4)", row: L16}
+    evidence:
+      - {source: "oras.land/oras-go/v2@v2.7.0 LICENSE (Apache-2.0, Copyright 2021 ORAS Authors) and go.mod; the module has no NOTICE file", read: "2026-11-24", version: v2.7.0}
+      - {source: "github.com/opencontainers/go-digest@v1.0.0 LICENSE, LICENSE.docs and README.md; golang.org/x/sync@v0.24.0 LICENSE and PATENTS", read: "2026-11-24", version: v2.7.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-047 decision 4; ADR-060 decision 41"}
+    contains:
+      - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+    default: false
+
+  # The descriptor and manifest types of the OCI image specification, which the
+  # operations library imports beside oras-go (ADR-054 decision 18). Its go.mod also
+  # requires github.com/russross/blackfriday v1.6.0 (BSD-2-Clause) and
+  # github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 (Apache-2.0), which only its package
+  # schema imports: they enter no package graph, and the pruned module graph of the
+  # root module does not reach them, so go.sum lists neither (ADR-047 decision 4).
+  - id: oci-image-spec
+    names: [image-spec]
+    form: library
+    behind: operations
+    modules: [github.com/opencontainers/image-spec]
+    pin: v1.1.1
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/opencontainers/image-spec@v1.1.1 LICENSE (Apache-2.0, Copyright 2016 The Linux Foundation) and go.mod; the module has no NOTICE file", read: "2026-11-24", version: v1.1.1}
+      - {source: "github.com/russross/blackfriday@v1.6.0 LICENSE.txt and github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 LICENSE", read: "2026-11-24", version: v1.1.1}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-047 decisions 1 and 4: the types of the OCI client"}
+    default: false
+
   - id: goleak
     names: [goleak]
     form: library

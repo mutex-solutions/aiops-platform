@@ -68,7 +68,7 @@ func TestWriteRecordsWhatBootReads(t *testing.T) {
 	reg := ocitest.New(t, ocitest.Options{})
 	img := reg.Artifact("site", "1", "application/vnd.example.image.v1", nil)
 	reg.Artifact("site", "", def.DistributionType, &img, ocitest.Layer{MediaType: def.DistributionLayer, Data: readFile(t, filepath.Join(dir, "manifest"))},
-		ocitest.Layer{MediaType: def.BundleType, Data: readFile(t, filepath.Join(dir, "manifest.sigstore.json"))})
+		ocitest.Layer{MediaType: bundleMedia, Data: readFile(t, filepath.Join(dir, "manifest.sigstore.json"))})
 	other := filepath.Join(t.TempDir(), "other")
 	if err := os.Mkdir(other, 0o700); err != nil {
 		t.Fatal(err)

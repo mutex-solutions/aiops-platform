@@ -4,15 +4,12 @@ package operations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -214,94 +211,6 @@ func create(p string, data []byte, mode os.FileMode) error {
 		_ = os.Remove(p)
 	}
 	return err
-}
-
-// SignDist is dist sign on the local form of an image: the manifest's bundle written
-// beside it (ADR-020 decisions 2 and 12).
-func (l Library) SignDist(_ context.Context, r def.SignDistRequest) (def.Written, error) {
-	if err := errors.Join(absolute("the image", r.Image), absolute("the key file", r.Key)); err != nil {
-		return def.Written{}, err
-	}
-	pw, err := password(r.Caller)
-	if err != nil {
-		return def.Written{}, err
-	}
-	keyPEM, err := os.ReadFile(r.Key)
-	if err != nil {
-		return def.Written{}, refused("read the private key: %v", err)
-	}
-	k, err := LoadPrivateKey(keyPEM, pw)
-	if err != nil {
-		return def.Written{}, refused("%s: %v", r.Key, err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(r.Image, "manifest"))
-	if err != nil {
-		return def.Written{}, refused("the image %s holds no distribution manifest: %v", r.Image, err)
-	}
-	b, err := SignBlob(k, manifest)
-	if err != nil {
-		return def.Written{}, err
-	}
-	out := filepath.Join(r.Image, bundleFile)
-	tmp := out + ".new"
-	err = writeFile(tmp, b)
-	if err == nil {
-		err = os.Chmod(tmp, 0o644)
-	}
-	if err == nil {
-		err = os.Rename(tmp, out)
-	}
-	if err != nil {
-		return def.Written{}, errors.Join(err, os.Remove(tmp))
-	}
-	return def.Written{Paths: []string{out}}, nil
-}
-
-// UseDist is dist use on the local form of an image: the manifest's bundle verified
-// with each key of distributions in trust.yaml, then the record of the manifest's
-// digest and verified/current, or nothing (ADR-020 decisions 10 and 12). The default
-// release root is verified with the key that a release binary carries, which no
-// binary built at S2a has, so only the keys trust.yaml holds verify here.
-func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
-	h, err := l.home(r.Home)
-	if err != nil {
-		return def.Change{}, err
-	}
-	if err := absolute("the image", r.Image); err != nil {
-		return def.Change{}, err
-	}
-	manifest, err := os.ReadFile(filepath.Join(r.Image, "manifest"))
-	if err != nil {
-		return def.Change{}, refused("the image %s holds no distribution manifest: %v", r.Image, err)
-	}
-	bundle, err := os.ReadFile(filepath.Join(r.Image, bundleFile))
-	if err != nil {
-		return def.Change{}, refused("the image %s holds no signature: %v", r.Image, err)
-	}
-	sum := sha256.Sum256(manifest)
-	digest := "sha256:" + hex.EncodeToString(sum[:])
-	done, err := h.Write(ctx, Write{
-		Command: "dist use " + r.Image,
-		Plan: func() ([]Change, error) {
-			t, err := readTrust(h.path("trust.yaml"))
-			if err != nil {
-				return nil, err
-			}
-			i := slices.IndexFunc(t.distKeys, func(k trustKey) bool { return VerifyBlob(k.pub, bundle, manifest) == nil })
-			if i < 0 {
-				return nil, refused("no key of distributions in trust.yaml verifies the signature of the manifest %s of %s", digest, r.Image)
-			}
-			return []Change{
-				{Path: "verified/" + strings.Replace(digest, ":", "-", 1), Files: map[string][]byte{
-					"record.yaml": recordYAML("distribution", digest, t.distKeys[i].id), "manifest": manifest, bundleFile: bundle}},
-				{Path: "verified/current", Data: []byte(digest + "\n")},
-			}, nil
-		},
-	})
-	if err != nil {
-		return def.Change{Notes: done.Notes}, err
-	}
-	return def.Change{Written: done.Written, Notes: done.Notes, Outcome: def.RestartRequired, Reason: def.ReasonImage}, nil
 }
 
 // recordYAML is record.yaml of a record of a distribution, in the form boot reads

@@ -185,7 +185,7 @@ func TestDistSignAndUseWriteTheRecord(t *testing.T) {
 		Subject struct{ Digest string }
 	}
 	if err := json.Unmarshal(raw, &m); err != nil || len(m.Layers) != 2 || m.Layers[0].MediaType != def.DistributionLayer ||
-		m.Layers[1].MediaType != def.BundleType || m.Subject.Digest != img.Digest {
+		m.Layers[1].MediaType != bundleType || m.Subject.Digest != img.Digest {
 		t.Fatalf("the referrer %s: %s, %v", referrer, raw, err)
 	}
 	bundle, _ := reg.Fetch("site", m.Layers[1].Digest)
@@ -278,7 +278,7 @@ func TestDistUseRefusesWhatDoesNotVerify(t *testing.T) {
 	}
 	other := reg.Artifact("other", "1", "application/vnd.example.image.v1", nil)
 	reg.Artifact("other", "", def.DistributionType, &other, ocitest.Layer{MediaType: def.DistributionLayer, Data: []byte("distVersion: 2\n")},
-		ocitest.Layer{MediaType: def.BundleType, Data: bundle})
+		ocitest.Layer{MediaType: bundleType, Data: bundle})
 	reg.Artifact("bare", "1", "application/vnd.example.image.v1", nil)
 	before, _ := l.Home(t.Context(), def.HomeRequest{Home: home})
 	for _, ref := range []string{"other:1", "bare:1"} {

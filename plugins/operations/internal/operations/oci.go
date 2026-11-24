@@ -1,0 +1,328 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package operations
+
+import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
+	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/credentials"
+	"oras.land/oras-go/v2/registry/remote/retry"
+
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+)
+
+// The OCI client of ADR-047 decision 4, oras-go: the repository of a reference with
+// the credentials of the caller's config.json, the referrers of a manifest, and the
+// artifacts the library pushes, each an OCI image manifest with the empty config.
+
+// maxBlob bounds a blob that the library reads whole: a manifest, a bundle, a layer of
+// a plugin artifact.
+const maxBlob = 64 << 20
+
+// remoteRepo returns the repository of ref, an OCI reference with oci:// optional,
+// that reads the credentials of config.json under DOCKER_CONFIG, or under .docker/ of
+// HOME, of the caller's environment (ADR-061 decision 17). A registry on the loopback
+// interface is reached over plain HTTP, as Docker reaches one.
+func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
+	r, err := remote.NewRepository(strings.TrimPrefix(ref, "oci://"))
+	if err != nil {
+		return nil, usage("%q is not an OCI reference <registry>/<repository>[:<tag>|@<digest>]: %v", ref, err)
+	}
+	var store credentials.Store = credentials.NewMemoryStore()
+	if p := configJSON(c); p != "" {
+		if store, err = credentials.NewStore(p, credentials.StoreOptions{}); err != nil {
+			return nil, refused("the registry credentials: %v", err)
+		}
+	}
+	r.Client = &auth.Client{Client: retry.DefaultClient, Cache: auth.NewCache(), Credential: credentials.Credential(store)}
+	host, _, err := net.SplitHostPort(r.Reference.Registry)
+	if err != nil {
+		host = r.Reference.Registry
+	}
+	ip := net.ParseIP(host)
+	r.PlainHTTP = host == "localhost" || ip != nil && ip.IsLoopback()
+	return r, nil
+}
+
+// configJSON returns the path of the caller's config.json, "" with neither variable.
+func configJSON(c def.Caller) string {
+	for _, v := range []struct{ name, sub string }{{"DOCKER_CONFIG", ""}, {"HOME", ".docker"}} {
+		if c.Env != nil {
+			if dir, ok := c.Env(v.name); ok && dir != "" {
+				return filepath.Join(dir, v.sub, "config.json")
+			}
+		}
+	}
+	return ""
+}
+
+// resolve returns the descriptor of the manifest that the reference of r names.
+func resolve(ctx context.Context, r *remote.Repository) (ocispec.Descriptor, error) {
+	ref := r.Reference.String()
+	if r.Reference.Reference == "" {
+		return ocispec.Descriptor{}, usage("%s names no tag or digest", ref)
+	}
+	d, err := r.Resolve(ctx, r.Reference.Reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return d, refused("the registry holds no %s", ref)
+	}
+	return d, err
+}
+
+// fetch returns the blob or manifest d of src, checked against its digest and size.
+func fetch(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) ([]byte, error) {
+	if d.Size > maxBlob {
+		return nil, refused("%s is %d bytes, more than the %d a blob of an artifact may hold", d.Digest, d.Size, maxBlob)
+	}
+	return content.FetchAll(ctx, src, d)
+}
+
+// manifest returns the image manifest d of src.
+func manifest(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) (ocispec.Manifest, error) {
+	var m ocispec.Manifest
+	b, err := fetch(ctx, src, d)
+	if err == nil && (json.Unmarshal(b, &m) != nil || m.MediaType != ocispec.MediaTypeImageManifest) {
+		err = refused("%s is not an OCI image manifest", d.Digest)
+	}
+	return m, err
+}
+
+// layer returns the one layer of m of mediaType, nil when it has none.
+func layer(m ocispec.Manifest, mediaType string) *ocispec.Descriptor {
+	i := slices.IndexFunc(m.Layers, func(l ocispec.Descriptor) bool { return l.MediaType == mediaType })
+	if i < 0 {
+		return nil
+	}
+	return &m.Layers[i]
+}
+
+// referrers returns, sorted by digest, the image manifests of artifactType in src
+// whose subject is d.
+func referrers(ctx context.Context, src content.ReadOnlyGraphStorage, d ocispec.Descriptor, artifactType string) ([]ocispec.Manifest, error) {
+	refs, err := registry.Referrers(ctx, src, d, artifactType)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(refs, func(a, b ocispec.Descriptor) int { return strings.Compare(string(a.Digest), string(b.Digest)) })
+	var out []ocispec.Manifest
+	for _, r := range refs {
+		m, err := manifest(ctx, src, r)
+		if err != nil {
+			return nil, err
+		}
+		if m.Subject != nil && m.Subject.Digest == d.Digest && m.ArtifactType == artifactType {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// blob is one layer to push: its media type, bytes and annotations.
+type blob struct {
+	mediaType   string
+	data        []byte
+	annotations map[string]string
+}
+
+// pushBlob pushes data to dst unless it holds it, and returns its descriptor.
+func pushBlob(ctx context.Context, dst content.Pusher, mediaType string, data []byte) (ocispec.Descriptor, error) {
+	d := content.NewDescriptorFromBytes(mediaType, data)
+	if err := dst.Push(ctx, d, bytes.NewReader(data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return d, err
+	}
+	return d, nil
+}
+
+// pushArtifact pushes to dst an OCI image manifest of artifactType with the empty
+// config and the layers, a referrer of subject when it is not nil, and returns its
+// descriptor with its artifactType. It writes no time, so the same layers give the
+// same digest.
+func pushArtifact(ctx context.Context, dst content.Pusher, artifactType string, subject *ocispec.Descriptor, annotations map[string]string, layers ...blob) (ocispec.Descriptor, error) {
+	m := ocispec.Manifest{MediaType: ocispec.MediaTypeImageManifest, ArtifactType: artifactType, Config: ocispec.DescriptorEmptyJSON,
+		Layers: []ocispec.Descriptor{}, Subject: subject, Annotations: annotations}
+	m.SchemaVersion = 2
+	_, err := pushBlob(ctx, dst, ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
+	for _, l := range layers {
+		var d ocispec.Descriptor
+		if err == nil {
+			d, err = pushBlob(ctx, dst, l.mediaType, l.data)
+		}
+		d.Annotations = l.annotations
+		m.Layers = append(m.Layers, d)
+	}
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	d, err := pushBlob(ctx, dst, m.MediaType, b)
+	d.ArtifactType = artifactType
+	return d, err
+}
+
+// distribution is one distribution referrer of an image: the manifest's bytes and,
+// once signed, its bundle.
+type distribution struct{ manifest, bundle []byte }
+
+// distributions returns the distribution referrers of img in r.
+func distributions(ctx context.Context, r *remote.Repository, img ocispec.Descriptor) ([]distribution, error) {
+	ms, err := referrers(ctx, r, img, def.DistributionType)
+	if err != nil {
+		return nil, err
+	}
+	var out []distribution
+	for _, m := range ms {
+		var d distribution
+		if l := layer(m, def.DistributionLayer); l != nil {
+			d.manifest, err = fetch(ctx, r, *l)
+		}
+		if l := layer(m, bundleType); l != nil && err == nil {
+			d.bundle, err = fetch(ctx, r, *l)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if d.manifest != nil {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return nil, refused("the referrers of %s hold no distribution manifest", r.Reference)
+	}
+	return out, nil
+}
+
+// SignDist is dist sign: the distribution manifest of the image signed as a blob and
+// pushed with its bundle as one referrer of the image (ADR-020 decisions 2 and 12).
+func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Written, error) {
+	if err := absolute("the key file", r.Key); err != nil {
+		return def.Written{}, err
+	}
+	k, err := privateKey(r.Caller, r.Key)
+	if err != nil {
+		return def.Written{}, err
+	}
+	repo, err := remoteRepo(r.Caller, r.Image)
+	if err != nil {
+		return def.Written{}, err
+	}
+	img, err := resolve(ctx, repo)
+	if err != nil {
+		return def.Written{}, err
+	}
+	dists, err := distributions(ctx, repo, img)
+	if err != nil {
+		return def.Written{}, err
+	}
+	manifest := dists[0].manifest
+	for _, d := range dists[1:] {
+		if !bytes.Equal(d.manifest, manifest) {
+			return def.Written{}, refused("the referrers of %s hold two distribution manifests", r.Image)
+		}
+	}
+	b, err := SignBlob(k, manifest)
+	if err != nil {
+		return def.Written{}, err
+	}
+	d, err := pushArtifact(ctx, repo, def.DistributionType, &img, nil, blob{mediaType: def.DistributionLayer, data: manifest},
+		blob{mediaType: bundleType, data: b})
+	if err != nil {
+		return def.Written{}, err
+	}
+	ref := repo.Reference
+	ref.Reference = d.Digest.String()
+	return def.Written{Paths: []string{ref.String()}}, nil
+}
+
+// privateKey reads the private key file p with the password of the caller's
+// environment.
+func privateKey(c def.Caller, p string) (*ecdsa.PrivateKey, error) {
+	pw, err := password(c)
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := os.ReadFile(p)
+	if err != nil {
+		return nil, refused("read the private key: %v", err)
+	}
+	k, err := LoadPrivateKey(keyPEM, pw)
+	if err != nil {
+		return nil, refused("%s: %v", p, err)
+	}
+	return k, nil
+}
+
+// UseDist is dist use: the bundle of each distribution referrer of the image verified
+// with each key of distributions in trust.yaml, then the record of the manifest's
+// digest, verified/current and image.yaml, or nothing (ADR-020 decisions 10 and 12;
+// ADR-047 decision 13). The default release root is verified with the key that a
+// release binary carries, which no binary built at S2a has, so only the keys trust.yaml
+// holds verify here.
+func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
+	h, err := l.home(r.Home)
+	if err != nil {
+		return def.Change{}, err
+	}
+	repo, err := remoteRepo(r.Caller, r.Image)
+	if err != nil {
+		return def.Change{}, err
+	}
+	img, err := resolve(ctx, repo)
+	if err != nil {
+		return def.Change{}, err
+	}
+	dists, err := distributions(ctx, repo, img)
+	if err != nil {
+		return def.Change{}, err
+	}
+	ref := repo.Reference
+	ref.Reference = img.Digest.String()
+	done, err := h.Write(ctx, Write{
+		Command: "dist use " + r.Image,
+		Plan: func() ([]Change, error) {
+			t, err := readTrust(h.path("trust.yaml"))
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range dists {
+				i := slices.IndexFunc(t.distKeys, func(k trustKey) bool { return d.bundle != nil && VerifyBlob(k.pub, d.bundle, d.manifest) == nil })
+				if i < 0 {
+					continue
+				}
+				sum := sha256.Sum256(d.manifest)
+				dg := "sha256:" + hex.EncodeToString(sum[:])
+				return []Change{
+					{Path: "verified/sha256-" + hex.EncodeToString(sum[:]), Files: map[string][]byte{
+						"record.yaml": recordYAML("distribution", dg, t.distKeys[i].id), "manifest": d.manifest, bundleFile: d.bundle}},
+					{Path: "verified/current", Data: []byte(dg + "\n")},
+					{Path: "image.yaml", Data: fmt.Appendf(nil, "image: %s\n", ref)},
+				}, nil
+			}
+			return nil, refused("no key of distributions in trust.yaml verifies a distribution manifest of %s", r.Image)
+		},
+	})
+	if err != nil {
+		return def.Change{Notes: done.Notes}, err
+	}
+	return def.Change{Written: done.Written, Notes: done.Notes, Outcome: def.RestartRequired, Reason: def.ReasonImage}, nil
+}

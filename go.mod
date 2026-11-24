@@ -9,6 +9,7 @@ require (
 	github.com/mutex-solutions/aiops-platform/sdk v0.0.0
 	github.com/mutex-solutions/aiops-platform/sdk/kernel v0.0.0
 	github.com/mutex-solutions/aiops-platform/sdk/testkit v0.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/riverqueue/river v0.51.2
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.51.2
 	github.com/riverqueue/river/rivertype v0.51.2
@@ -17,6 +18,7 @@ require (
 	github.com/sigstore/sigstore v1.10.8
 	github.com/sigstore/sigstore-go v1.3.0
 	go.yaml.in/yaml/v3 v3.0.6
+	oras.land/oras-go/v2 v2.7.0
 )
 
 require (

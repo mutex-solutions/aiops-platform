@@ -64,6 +64,10 @@ func newKey() (string, string, error) {
 // plugin install lands: nothing is signed.
 var placeholder = []byte(`{"placeholder": "not a Sigstore bundle: Install signs nothing until plugin install lands (ADR-020 decision 10)"}` + "\n")
 
+// bundleMedia is the media type of a Sigstore bundle, the layer that holds the bundle
+// of a distribution manifest in its referrer (ADR-020 decision 2).
+const bundleMedia = "application/vnd.dev.sigstore.bundle.v0.3+json"
+
 // digest returns "sha256:" and the hex of the SHA-256 of b.
 func digest(b []byte) string {
 	sum := sha256.Sum256(b)
@@ -151,7 +155,7 @@ func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) 
 	img := reg.Artifact("dist", "1", "application/vnd.example.image.v1", nil)
 	layers := []ocitest.Layer{{MediaType: def.DistributionLayer, Data: manifest}}
 	if b, ok := signer.bundles[d]; ok {
-		layers = append(layers, ocitest.Layer{MediaType: def.BundleType, Data: b})
+		layers = append(layers, ocitest.Layer{MediaType: bundleMedia, Data: b})
 	}
 	reg.Artifact("dist", "", def.DistributionType, &img, layers...)
 	if len(layers) == 1 {

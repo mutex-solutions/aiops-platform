@@ -1234,6 +1234,10 @@ modules:
     version: v1.0.0
     sum: h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
     licence: Apache-2.0
+  - path: github.com/opencontainers/image-spec
+    version: v1.1.1
+    sum: h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
+    licence: Apache-2.0
   - path: github.com/pkg/errors
     version: v0.9.1
     sum: h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
@@ -1353,6 +1357,10 @@ modules:
   - path: k8s.io/klog/v2
     version: v2.140.0
     sum: h1:Tf+J3AH7xnUzZyVVXhTgGhEKnFqye14aadWv7bzXdzc=
+    licence: Apache-2.0
+  - path: oras.land/oras-go/v2
+    version: v2.7.0
+    sum: h1:0bXRBBSqYgPSjZRrhJbT71Rb465c+rdlft2xdQPxLtQ=
     licence: Apache-2.0
 packages:
   - github.com/asaskevich/govalidator
@@ -1494,6 +1502,8 @@ packages:
   - github.com/mutex-solutions/aiops-platform/test/dist/plugins/unsigned-row
   - github.com/oklog/ulid/v2
   - github.com/opencontainers/go-digest
+  - github.com/opencontainers/image-spec/specs-go
+  - github.com/opencontainers/image-spec/specs-go/v1
   - github.com/pkg/errors
   - github.com/secure-systems-lab/go-securesystemslib/cjson
   - github.com/secure-systems-lab/go-securesystemslib/dsse
@@ -1605,6 +1615,7 @@ packages:
   - golang.org/x/net/internal/httpcommon
   - golang.org/x/net/internal/httpsfv
   - golang.org/x/sync/errgroup
+  - golang.org/x/sync/semaphore
   - golang.org/x/sys/unix
   - golang.org/x/term
   - golang.org/x/text/currency
@@ -1733,6 +1744,26 @@ packages:
   - k8s.io/klog/v2/internal/serialize
   - k8s.io/klog/v2/internal/severity
   - k8s.io/klog/v2/internal/sloghandler
+  - oras.land/oras-go/v2/content
+  - oras.land/oras-go/v2/errdef
+  - oras.land/oras-go/v2/internal/cas
+  - oras.land/oras-go/v2/internal/descriptor
+  - oras.land/oras-go/v2/internal/docker
+  - oras.land/oras-go/v2/internal/httputil
+  - oras.land/oras-go/v2/internal/ioutil
+  - oras.land/oras-go/v2/internal/spec
+  - oras.land/oras-go/v2/internal/syncutil
+  - oras.land/oras-go/v2/registry
+  - oras.land/oras-go/v2/registry/remote
+  - oras.land/oras-go/v2/registry/remote/auth
+  - oras.land/oras-go/v2/registry/remote/credentials
+  - oras.land/oras-go/v2/registry/remote/credentials/internal/config
+  - oras.land/oras-go/v2/registry/remote/credentials/internal/executer
+  - oras.land/oras-go/v2/registry/remote/credentials/internal/ioutil
+  - oras.land/oras-go/v2/registry/remote/credentials/trace
+  - oras.land/oras-go/v2/registry/remote/errcode
+  - oras.land/oras-go/v2/registry/remote/internal/errutil
+  - oras.land/oras-go/v2/registry/remote/retry
 pins:
   - path: github.com/asaskevich/govalidator
     version: v0.0.0-20230301143203-a9d515a09cc2
@@ -1898,6 +1929,10 @@ pins:
     version: v1.0.0
     sum: h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
     gomod: h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
+  - path: github.com/opencontainers/image-spec
+    version: v1.1.1
+    sum: h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
+    gomod: h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
   - path: github.com/pkg/errors
     version: v0.9.1
     sum: h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
@@ -2018,6 +2053,10 @@ pins:
     version: v2.140.0
     sum: h1:Tf+J3AH7xnUzZyVVXhTgGhEKnFqye14aadWv7bzXdzc=
     gomod: h1:o+/RWfJ6PwpnFn7OyAG3QnO47BFsymfEfrz6XyYSSp0=
+  - path: oras.land/oras-go/v2
+    version: v2.7.0
+    sum: h1:0bXRBBSqYgPSjZRrhJbT71Rb465c+rdlft2xdQPxLtQ=
+    gomod: h1:imXEFiYkTZUVVYkfv/r5GVmWeiLkGtNQA8FU4F/sjKs=
 bindings:
   providers:
     configRefsDryRun:
