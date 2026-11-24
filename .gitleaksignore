@@ -1,0 +1,3 @@
+# A string literal that names the PEM header of an encrypted sigstore private key in
+# a test assertion of key generate; the file holds no key (cmd/aiopsctl/launcher_test.go).
+3dfcd1f6f33f8b4ac11b515a216f651e681028cd:cmd/aiopsctl/launcher_test.go:private-key:90
