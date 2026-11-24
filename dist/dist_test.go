@@ -77,7 +77,7 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	// operations is consumer-bound: the release lists the command rows that call the
 	// operations library (ADR-061 decisions 15 and 20).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "operations" }); i < 0 ||
-		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-key") {
+		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-key") || !slices.Contains(man.Consumers[i].Plugins, "aiops/command-trust") {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
 	// command-profile reaches the toolbox through profileContext until the operations

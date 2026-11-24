@@ -1,0 +1,3 @@
+[
+  {"argv": ["trust", "add", "k.pub", "--ids", "acme/*"], "delay": "0s"}
+]

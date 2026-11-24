@@ -1,0 +1,7 @@
+[
+  {"argv": ["trust", "add", "k.pub", "--ids", "acme/*"], "outcome": "ok", "stdout": "", "stderr": "not-running"},
+  {"argv": ["trust", "add", "k.pub", "--distribution"], "outcome": "ok", "stdout": "", "stderr": "not-running"},
+  {"argv": ["trust", "add"], "outcome": "usage", "stdout": ""},
+  {"argv": ["trust", "add", "a.pub", "b.pub"], "outcome": "usage", "stdout": ""},
+  {"argv": ["trust", "add", "k.pub", "--ids"], "outcome": "usage", "stdout": ""}
+]

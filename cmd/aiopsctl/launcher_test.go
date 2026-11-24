@@ -101,6 +101,41 @@ func TestKeyGenerateWritesThePair(t *testing.T) {
 	}
 }
 
+// trust add, answered by the row command-trust through the operations row, appends the
+// key to trust.yaml of the home in both forms, the default root first, and answers by
+// run/status.json: not-running with no process, and restart-required with the reason
+// not-submitted while one runs, since the socket of ADR-062 carries no trust add
+// (ADR-061 decisions 17 and 20; ADR-020 decisions 5 and 13).
+func TestTrustAddWritesTheHome(t *testing.T) {
+	dir, home := t.TempDir(), t.TempDir()
+	env := map[string]string{"PWD": dir, "AIOPS_HOME": home, "AIOPS_KEY_PASSWORD": "test"}
+	if r := do(t, os.DirFS("/"), env, "key", "generate", "site"); r.code != 0 {
+		t.Fatalf("key generate: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+	r := do(t, os.DirFS("/"), env, "trust", "add", "site.pub", "--ids", "acme/*", "--runtimes", "inproc")
+	if r.code != 0 || r.out != "" || !strings.Contains(r.errOut, "not-running") {
+		t.Fatalf("trust add --ids: exit %d, stdout %q; stderr:\n%s", r.code, r.out, r.errOut)
+	}
+	if err := os.MkdirAll(filepath.Join(home, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "run", "status.json"), []byte(`{"phase": "running", "profile": "dev"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = do(t, os.DirFS("/"), env, "trust", "add", filepath.Join(dir, "site.pub"), "--distribution")
+	if r.code != 0 || !strings.Contains(r.errOut, "restart-required: not-submitted") {
+		t.Fatalf("trust add --distribution: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+	data, err := os.ReadFile(filepath.Join(home, "trust.yaml"))
+	if err != nil || !strings.Contains(string(data), "acme/*") || !strings.Contains(string(data), "inproc") ||
+		!strings.Contains(string(data), "key: release") || strings.Count(string(data), "BEGIN PUBLIC KEY") != 2 {
+		t.Fatalf("trust.yaml: %v\n%s", err, data)
+	}
+	if r := do(t, os.DirFS("/"), env, "trust", "add", "site.pub", "--ids", "aiops/*"); r.code != 1 || !strings.Contains(r.errOut, "aiops") {
+		t.Errorf("a refused owner: exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+}
+
 // The launcher's code is mapped to the three of aiopsctl: 0 and 2 are the command's, 8 is
 // a signal, and every other code is a failure of the launcher (ADR-061 decisions 10 and
 // 13).
