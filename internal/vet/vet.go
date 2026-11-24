@@ -1,4 +1,6 @@
-package main
+// SPDX-License-Identifier: Apache-2.0
+
+package vet
 
 import (
 	"fmt"
@@ -7,6 +9,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -115,7 +118,7 @@ func listenMethod(s *types.Selection, fn *types.Func) string {
 // the calls it may make, named as "<import path>.<function>" or by a method's full
 // name. Vet reads the id from the plugin.yaml of the plugin that holds the file, so a
 // file with no manifest above it matches no entry. aiopsctl plugin check uses the
-// same list once vet moves into a package both share (ADR-060 decision 23); the
+// same list through Module, in the package both share (ADR-060 decision 23); the
 // http-server entry joins with its own ADR at S3.
 var listenAllow = map[string][]string{
 	"aiops/reload-socket": {"net.ListenUnix"},
@@ -501,10 +504,10 @@ func vetSkipped(p string) bool {
 	return false
 }
 
-// checkPluginVet reads the non-test Go files under each dir. A dir whose base
-// name is boot gets the allow-go relaxation for every goroutine starter. A file
-// belongs to the plugin whose root holds it (manifestID).
-func checkPluginVet(dirs []string) error {
+// PluginVet reads the non-test Go files under each dir and prints each exemption to w.
+// A dir whose base name is boot gets the allow-go relaxation for every goroutine
+// starter. A file belongs to the plugin whose root holds it (manifestID).
+func PluginVet(w io.Writer, dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
 		dir = filepath.Clean(dir)
@@ -540,9 +543,9 @@ func checkPluginVet(dirs []string) error {
 	}
 	sort.Strings(res.exemptions)
 	for _, e := range res.exemptions {
-		fmt.Println("exempt", e)
+		fmt.Fprintln(w, "exempt", e)
 	}
-	fmt.Printf("pluginvet: %d exemption(s)\n", len(res.exemptions))
+	fmt.Fprintf(w, "pluginvet: %d exemption(s)\n", len(res.exemptions))
 	if len(res.violations) > 0 {
 		sort.Strings(res.violations)
 		return fmt.Errorf("plugin vet violations:\n%s", strings.Join(res.violations, "\n"))

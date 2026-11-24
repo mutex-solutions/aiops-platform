@@ -1,4 +1,6 @@
-// Command kernelcheck enforces structural rules on the kernel module.
+// Command kernelcheck enforces structural rules on the kernel module. Its imports and
+// pluginvet commands run the package internal/vet, which aiopsctl plugin check shares
+// (ADR-060 decision 23).
 package main
 
 import (
@@ -18,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/mutex-solutions/aiops-platform/internal/vet"
 )
 
 func main() {
@@ -36,7 +40,7 @@ func run(args []string) error {
 		if len(args) < 2 {
 			return usage
 		}
-		return checkPluginVet(args[1:])
+		return vet.PluginVet(os.Stdout, args[1:])
 	}
 	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 3}
 	n, ok := need[args[0]]
@@ -65,11 +69,11 @@ func run(args []string) error {
 	case "testctor":
 		return checkTestCtor(args[1])
 	case "imports":
-		reg, err := readRegister(args[2])
+		reg, err := vet.ReadRegister(args[2])
 		if err != nil {
 			return err
 		}
-		return checkImports(args[1], reg, goListDeps)
+		return vet.Imports(args[1], reg, vet.GoListDeps)
 	default:
 		return checkCoverage(args[1], args[2])
 	}

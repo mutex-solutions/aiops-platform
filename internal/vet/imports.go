@@ -1,4 +1,6 @@
-package main
+// SPDX-License-Identifier: Apache-2.0
+
+package vet
 
 import (
 	"fmt"
@@ -36,27 +38,27 @@ const (
 // bootDefs are the only definitions boot/ and loader/ may import.
 var bootDefs = []string{"launch", "loader", "composition"}
 
-// upstream is what the import boundary U2 reads of an entry of the upstream register
+// Upstream is what the import boundary U2 reads of an entry of the upstream register
 // tools/upstream-components.yaml (ADR-054 decisions 3 and 13): the modules the upstream
 // publishes, and where they may be imported, the directories of its plugins and its
 // importers. The other clause of U2, the require lists of the SDK modules, is the
 // modfile check.
-type upstream struct {
+type Upstream struct {
 	ID        string
 	Modules   []string
 	Plugins   []string
-	Importers []importDir
+	Importers []ImportDir
 }
 
-type importDir struct{ Dir string }
+type ImportDir struct{ Dir string }
 
-// readRegister reads the entries of the upstream register at path.
-func readRegister(path string) ([]upstream, error) {
+// ReadRegister reads the entries of the upstream register at path.
+func ReadRegister(path string) ([]Upstream, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var r struct{ Entries []upstream }
+	var r struct{ Entries []Upstream }
 	if err := yaml.Unmarshal(b, &r); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -68,8 +70,8 @@ func readRegister(path string) ([]upstream, error) {
 // directory of rel among its plugins or its importers. A module in no entry fails, so
 // a module of another project that an entry brings in is imported only once it has an
 // entry of its own (ADR-054 decision 18).
-func upstreamReason(reg []upstream, rel, imp string) string {
-	var e *upstream
+func upstreamReason(reg []Upstream, rel, imp string) string {
+	var e *Upstream
 	n := 0
 	for i := range reg {
 		for _, m := range reg[i].Modules {
@@ -137,7 +139,7 @@ func isDef(p string, names ...string) bool {
 // slash path of the file below the repository root. An import from outside the
 // repository is U2's to judge in boot/ and in a plugin; the other rules refuse it
 // whatever the register lists.
-func importReasons(rel string, test bool, imp string, reg []upstream) []string {
+func importReasons(rel string, test bool, imp string, reg []Upstream) []string {
 	var out []string
 	std := isStd(imp)
 	third := !std && !hasPath(imp, modPath)
@@ -233,10 +235,10 @@ func walkGo(root string, fn func(p, rel string, test bool) error) error {
 	})
 }
 
-// listDeps returns the import paths in the dependency closure of pkg.
-type listDeps func(root, pkg string) ([]string, error)
+// ListDeps returns the import paths in the dependency closure of pkg.
+type ListDeps func(root, pkg string) ([]string, error)
 
-func goListDeps(root, pkg string) ([]string, error) {
+func GoListDeps(root, pkg string) ([]string, error) {
 	cmd := exec.Command("go", "list", "-deps", pkg)
 	cmd.Dir = root
 	out, err := cmd.Output()
@@ -246,12 +248,12 @@ func goListDeps(root, pkg string) ([]string, error) {
 	return strings.Fields(string(out)), nil
 }
 
-// checkImports applies the import boundary table and U2, with the entries reg of the
+// Imports applies the import boundary table and U2, with the entries reg of the
 // upstream register, to every Go file under root; the fake rule to the dependency
 // closure of the server binary cmd/aiops; and the link guard of ADR-060 decision 28,
 // no package under test/ or examples/, to the closures of cmd/aiops and cmd/aiopsctl,
 // each where the command exists.
-func checkImports(root string, reg []upstream, list listDeps) error {
+func Imports(root string, reg []Upstream, list ListDeps) error {
 	var bad []string
 	err := walkGo(root, func(p, rel string, test bool) error {
 		fset := token.NewFileSet()

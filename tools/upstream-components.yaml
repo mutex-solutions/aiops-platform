@@ -91,6 +91,7 @@ entries:
       - {dir: boot, decision: ADR-059 decision 6}
       - {dir: tools, decision: ADR-059 decision 6}
       - {dir: internal/plugingen, decision: ADR-060 decision 41}
+      - {dir: internal/vet, decision: "ADR-060 decision 23: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share"}
       - {dir: plugins/operations, decision: ADR-060 decision 41}
     default: true
 
