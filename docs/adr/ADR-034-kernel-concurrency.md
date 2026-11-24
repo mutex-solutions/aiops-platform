@@ -2263,3 +2263,24 @@ table of `08` §3 (`08:1166`). `00:484`, `07:192`, `07:1377`, `08:188`, ADR-059 
 10, 17 and 44, and ADR-060 decision 3, which this addition follows, stand as written. The
 dated designs under `docs/design/` other than the plugin record keep the text of their
 date. An option the owner did not choose edits nothing.
+
+### Verification of 2026-11-24
+
+On 2026-11-24 the verification plan passed on `b7071ed`, the commit of `s2a/integration`
+that carries G13 with the fixes of its review round. The differential corpus (item 2)
+passed at `GOMAXPROCS=8` and `GOMAXPROCS=2` with the per-test outcomes of
+`causal-main-merged`, as `g13-volatile-handoff-review` records with items 1 and 5 on
+`8b402cf`, whose `sdk/kernel` is byte-identical to that of `b7071ed`. The full frozen
+property workload (item 3) passed on the three backends under `-race` in 4,224.66 s, its
+criteria digest and every source under `test/spike/s0` as in `property-full-main-merged`
+(`property-full-g13`). The call-path gate (item 4) ran four full processes in one session
+on the measurement host, alternating `b7071ed` with `17283a8`, the `main` commit it merges
+into: both runs of `b7071ed` pass; the first run of `17283a8` is invalid by host noise,
+its timer-only control above 10 per cent at one caller, and the second, which repeats the
+unchanged protocol, passes. The highest owner Enter+Leave window p99 of any candidate is
+1,649 ns on `b7071ed` and 1,614 ns on `17283a8`, and the slow mode takes 18 of 40 kernel
+windows at 8 and 32 callers on `b7071ed` and 7 of 20 on `17283a8`, within the spread that
+the section "2026-11-22 call-path gate on the merge commit" describes
+(`callpath-full-g13-ab`). G13 may therefore merge into `main` with S2a, as the owner
+answers of 2026-11-23 allow; the second run of item 4, on the merge commit into `main`,
+follows that merge.

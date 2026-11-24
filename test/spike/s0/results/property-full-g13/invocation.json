@@ -1,0 +1,32 @@
+{
+ "classification": "PASS full frozen property workload on three backends, on b7071ed, the s2a/integration commit that carries G13 (ADR-034, G13 verification plan item 3 and decision 19); run in a frozen checkout",
+ "exitCode": 0,
+ "sourceSHA256": "bc84c3bfb51cc5877025dc7b4cb1b873c58826b0009cd6d895e2590357498f55",
+ "commit": "b7071ed",
+ "race": true,
+ "gomaxprocs": 8,
+ "elapsedSeconds": 4224.66,
+ "backendSeconds": {
+  "reconciler": 1312.57,
+  "graph-lock": 1227.08,
+  "kernel": 1684.73
+ },
+ "hostNote": "shared development host; elapsed time is not a performance observation",
+ "argv": [
+  "go",
+  "test",
+  "-race",
+  "-count=1",
+  "-timeout",
+  "6h",
+  "-v",
+  "-run",
+  "TestRuntimeProperties",
+  "./test/spike/s0/properties/"
+ ],
+ "environment": {
+  "S0_PROPERTY_FULL": "1",
+  "GOMAXPROCS": "8"
+ },
+ "note": "every source that summary.json lists (129 files) matches its file at b7071ed by sha256, and the source digest equals the one that the run wrote beside its log; the criteria digest and every source under test/spike/s0 equal those of ../property-full-main-merged/, as decision 19 runs the workload unchanged, and the source digest differs from it because the closure holds go.mod and the sdk/kernel files that G13 changes (config.go, key.go, owner.go, root.go, fuzz_test.go, lease_test.go, and s2a_handoff_test.go added); the commit that adds this file changes no kernel or test/spike source"
+}
