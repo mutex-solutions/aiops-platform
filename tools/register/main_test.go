@@ -107,6 +107,31 @@ func TestBasePasses(t *testing.T) {
 	if got := run(t, base, baseInputs()); len(got) != 0 {
 		t.Fatalf("U7 failed the base register:\n%s", strings.Join(got, "\n"))
 	}
+	// A tool that an image definition bakes in, with its entry of mode ship at that pin
+	// (ADR-054 decision 12).
+	ship := strings.Replace(base, "modes: [tool]", "role: builder\n    modes: [tool, ship]\n    sbom: the image SBOM\n    source: THIRD_PARTY_LICENSES/ of the image", 1)
+	in := baseInputs()
+	in.bakes = []baked{{Definition: "dist/builder/image.yaml", Entry: "tool", Version: "v8.0.0"}}
+	if got := run(t, ship, in); len(got) != 0 {
+		t.Fatalf("U7 failed a baked-in tool with its ship entry:\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// gather reads what each image definition under dist/ bakes in: at S2a, the toolchain
+// that the builder image holds (ADR-054 decision 12; ADR-044 decision 4).
+func TestGatherBakes(t *testing.T) {
+	root := filepath.Join("..", "..")
+	var bakes []baked
+	for _, f := range []string{"dist/builder/image.yaml"} {
+		b, err := readBakes(root, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bakes = append(bakes, b...)
+	}
+	if want := (baked{Definition: "dist/builder/image.yaml", Entry: "go-toolchain", Version: "go1.26.8"}); !slices.Contains(bakes, want) {
+		t.Errorf("the bakes of the builder image %+v lack %+v", bakes, want)
+	}
 }
 
 // Each case breaks one clause of ADR-054 decision 12 and U7 names it.
@@ -143,6 +168,15 @@ func TestEachClauseFails(t *testing.T) {
 		{name: "contains moved", src: base, in: func(i *inputs) { i.graph["example.org/dep"] = "v0.3.0" }, want: "example.org/dep: the build selects v0.3.0, the pin is v0.2.0"},
 		{name: "AGPL component outside the boundary list", src: base, in: func(i *inputs) { i.agplBoundary = nil }, want: "metrics-store: AGPL"},
 		{name: "AGPL from the licence record", src: base, in: func(i *inputs) { i.record["gateway"] = "AGPL-3.0-only; Apache-2.0 sub-trees" }, want: "gateway: AGPL"},
+		{name: "baked-in tool with no ship entry", src: base, in: func(i *inputs) {
+			i.bakes = []baked{{Definition: "dist/builder/image.yaml", Entry: "tool", Version: "v8.0.0"}}
+		}, want: "dist/builder/image.yaml bakes in tool v8.0.0: no entry of mode ship at that pin"},
+		{name: "baked-in tool at another pin", src: edit("modes: [tool]", "role: builder\n    modes: [tool, ship]\n    sbom: the image SBOM\n    source: THIRD_PARTY_LICENSES/ of the image"), in: func(i *inputs) {
+			i.bakes = []baked{{Definition: "dist/builder/image.yaml", Entry: "tool", Version: "v8.1.0"}}
+		}, want: "dist/builder/image.yaml bakes in tool v8.1.0: no entry of mode ship at that pin"},
+		{name: "baked-in tool with no entry", src: base, in: func(i *inputs) {
+			i.bakes = []baked{{Definition: "dist/builder/image.yaml", Entry: "absent", Version: "v1.0.0"}}
+		}, want: "dist/builder/image.yaml bakes in absent v1.0.0: no entry of mode ship at that pin"},
 	} {
 		in := baseInputs()
 		if c.in != nil {
