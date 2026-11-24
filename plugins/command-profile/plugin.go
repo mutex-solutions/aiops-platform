@@ -126,15 +126,12 @@ func rendered(inv commands.Invocation, r launch.Rendered) (refused bool) {
 
 func render(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
 	q := launch.RenderRequest{Profile: inv.Value("profile"), Home: abs(inv, inv.Value("home")), Bundles: abs(inv, inv.Value("bundles")),
-		Server: inv.Bool("server")}
+		Server: inv.Bool("server"), Patches: inv.List("patch"), Dir: inv.Dir}
 	if q.Home == "" {
 		q.Home = inv.Home
 	}
 	if d := inv.Value("dist"); d != "" {
 		q.Against = filepath.Join(abs(inv, d), "distribution.yaml")
-	}
-	for _, p := range inv.List("patch") {
-		q.Patches = append(q.Patches, abs(inv, p))
 	}
 	for _, r := range inv.List("role") {
 		for _, s := range strings.Split(r, ",") {

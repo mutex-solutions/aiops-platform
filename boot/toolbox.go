@@ -123,17 +123,33 @@ func (t *toolbox) sources(q launch.RenderRequest, digest string) (Sources, error
 		src.Bundles = overlay{b, t.shipped}
 	}
 	for _, p := range q.Patches {
-		r, err := rel(p)
+		f, err := t.patch(p, q.Dir)
 		if err != nil {
 			return Sources{}, err
 		}
-		src.Patches = append(src.Patches, File{FS: t.files, Path: r})
+		src.Patches = append(src.Patches, f)
 	}
 	if q.Append.ID != "" {
 		src.Home = overlay{fstest.MapFS{path.Join("bundles", q.Append.ID, "bundle.yaml"): {Data: q.Append.Data}}, src.Home}
 		src.Append = []string{q.Append.ID}
 	}
 	return src, nil
+}
+
+// patch returns the patch p of a request. A patch relative to dir, with no "..", is read
+// from dir and keeps the name the operator wrote in provenance, as S1's profile render
+// kept it, so a dump holds no absolute path the operator did not write; any other is
+// read by its path from the root.
+func (t *toolbox) patch(p, dir string) (File, error) {
+	if c := path.Clean(p); !path.IsAbs(p) && dir != "" {
+		if fs.ValidPath(c) {
+			d, err := t.dir(dir)
+			return File{FS: d, Path: c}, err
+		}
+		p = path.Join(dir, p)
+	}
+	r, err := rel(p)
+	return File{FS: t.files, Path: r}, err
 }
 
 // dumpOf returns the dump of profile render for its flag, nil for any other flag.
