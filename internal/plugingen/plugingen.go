@@ -192,25 +192,33 @@ func readTarget(dir string) (target, error) {
 		if err != nil {
 			return target{}, err
 		}
-		for _, d := range file.Decls {
-			switch d := d.(type) {
-			case *ast.GenDecl:
-				for _, s := range d.Specs {
-					if v, ok := s.(*ast.ValueSpec); ok && d.Tok == token.VAR && slices.ContainsFunc(v.Names, func(n *ast.Ident) bool { return n.Name == "Plugin" }) {
-						t.Accessor = "Plugin"
-					}
-				}
-			case *ast.FuncDecl:
-				if d.Recv == nil && d.Name.Name == "New" && d.Type.Params.NumFields() == 0 && d.Type.Results.NumFields() == 1 && t.Accessor == "" {
-					t.Accessor = "New()"
-				}
-			}
-		}
+		t.Accessor = Accessor(t.Accessor, file)
 	}
 	if t.Accessor == "" {
 		return target{}, fmt.Errorf("%s: the package declares neither var Plugin nor func New() kernel.Plugin", t.ImportPath)
 	}
 	return t, nil
+}
+
+// Accessor returns how a file of a plugin package gives its value, given have, what the
+// files read before give: "Plugin" for a package-level var Plugin, which wins, else
+// "New()" for a func New() with one result, else have.
+func Accessor(have string, file *ast.File) string {
+	for _, d := range file.Decls {
+		switch d := d.(type) {
+		case *ast.GenDecl:
+			for _, s := range d.Specs {
+				if v, ok := s.(*ast.ValueSpec); ok && d.Tok == token.VAR && slices.ContainsFunc(v.Names, func(n *ast.Ident) bool { return n.Name == "Plugin" }) {
+					return "Plugin"
+				}
+			}
+		case *ast.FuncDecl:
+			if d.Recv == nil && d.Name.Name == "New" && d.Type.Params.NumFields() == 0 && d.Type.Results.NumFields() == 1 && have == "" {
+				have = "New()"
+			}
+		}
+	}
+	return have
 }
 
 // reservedOwner is the clause of step 1 of plugin check on the reserved owners,

@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
@@ -40,6 +39,7 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/vet"
 )
 
@@ -382,7 +382,9 @@ func (b *build) plugin(p module.Version) error {
 			case name == "plugin.yaml":
 				manifest = data
 			case strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go"):
-				accessor = accessorOf(accessor, data)
+				if f, err := parser.ParseFile(token.NewFileSet(), "", data, parser.SkipObjectResolution); err == nil {
+					accessor = plugingen.Accessor(accessor, f)
+				}
 			}
 		}
 		if manifest == nil || strings.Contains("/"+dir+"/", "/testdata/") {
@@ -413,30 +415,6 @@ func readZip(f *zip.File) ([]byte, error) {
 	}
 	defer r.Close()
 	return io.ReadAll(io.LimitReader(r, boot.MaxDistBytes))
-}
-
-// accessorOf returns have, or how the Go file src gives its plugin, as plugingen
-// reads a plugin: Plugin for a package-level var Plugin, New() for a func New.
-func accessorOf(have string, src []byte) string {
-	f, err := parser.ParseFile(token.NewFileSet(), "", src, parser.SkipObjectResolution)
-	if have != "" || err != nil {
-		return have
-	}
-	for _, d := range f.Decls {
-		switch d := d.(type) {
-		case *ast.FuncDecl:
-			if d.Recv == nil && d.Name.Name == "New" {
-				return "New()"
-			}
-		case *ast.GenDecl:
-			for _, sp := range d.Specs {
-				if v, ok := sp.(*ast.ValueSpec); ok && d.Tok == token.VAR && slices.ContainsFunc(v.Names, func(n *ast.Ident) bool { return n.Name == "Plugin" }) {
-					return "Plugin"
-				}
-			}
-		}
-	}
-	return ""
 }
 
 // record adds one go.sum line that a source records, and fails when another source
@@ -651,23 +629,16 @@ func (b *build) gate(manifest []byte) error {
 		return err
 	}
 	mods := d.Table()
-	files := map[string][]byte{}
+	fsys := fstest.MapFS{"profiles/build/profile.yaml": {Data: []byte("bundles: []\n")}}
 	var ids []string
 	for _, p := range b.plugins {
 		man, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
 		if err != nil {
 			return err
 		}
-		dir := filepath.Join(b.moduleDir(p.pkg), "bundle.yaml")
-		if data, err := os.ReadFile(dir); err == nil {
-			files["bundles/"+man.ID+"/bundle.yaml"] = data
-			ids = append(ids, man.ID)
+		if data, err := os.ReadFile(filepath.Join(b.moduleDir(p.pkg), "bundle.yaml")); err == nil {
+			fsys["bundles/"+man.ID+"/bundle.yaml"], ids = &fstest.MapFile{Data: data}, append(ids, man.ID)
 		}
-	}
-	files["profiles/build/profile.yaml"] = []byte("bundles: []\n")
-	fsys := fstest.MapFS{}
-	for name, data := range files {
-		fsys[name] = &fstest.MapFile{Data: data}
 	}
 	c, _, err := boot.Compose(boot.Sources{Profile: "build", Home: fsys, Bundles: fsys, Append: ids}, boot.Options{Modules: mods})
 	if err != nil {
