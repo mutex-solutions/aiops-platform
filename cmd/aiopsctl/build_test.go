@@ -25,7 +25,6 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
-	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 	"github.com/mutex-solutions/aiops-platform/templates"
 )
@@ -267,8 +266,8 @@ func fill(t *testing.T, repo, download, src string) {
 // and returns its reference by digest.
 func releaseArtifact(reg *ocitest.Registry, manifest []byte, notes map[string]string) string {
 	const name = "aiops/release"
-	layer := reg.Blob(name, operations.DistributionLayer, manifest)
-	m, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ocitest.ManifestType, "artifactType": operations.DistributionType,
+	layer := reg.Blob(name, "application/vnd.aiops.distribution.manifest.v1+yaml", manifest)
+	m, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ocitest.ManifestType, "artifactType": "application/vnd.aiops.distribution.v1",
 		"config": reg.Blob(name, ocitest.EmptyType, []byte("{}")), "layers": []ocitest.Descriptor{layer}, "annotations": notes})
 	return reg.Host + "/" + name + "@" + reg.Manifest(name, "", ocitest.ManifestType, m).Digest
 }
