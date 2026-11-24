@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -50,6 +51,10 @@ type Config struct {
 	// Running says that a process runs the profile of every home, so a trust add
 	// answers restart-required with the reason not-submitted.
 	Running bool
+	// Shipped and Rendered stand for the launcher's toolbox: the shipped files by path,
+	// and what Render answers for each profile.
+	Shipped  map[string][]byte
+	Rendered map[string]launch.Rendered
 }
 
 // Fake is the in-memory engine.
@@ -449,4 +454,20 @@ func okHook(s string) bool {
 		}
 	}
 	return true
+}
+
+func (s served) Render(context.Context, operations.RenderRequest) (launch.Rendered, error) {
+	return launch.Rendered{}, fmt.Errorf("not built")
+}
+
+func (s served) VerifyProfile(context.Context, operations.RenderRequest) (launch.Rendered, error) {
+	return launch.Rendered{}, fmt.Errorf("not built")
+}
+
+func (s served) InitProfile(context.Context, operations.ProfileRequest) (operations.Change, error) {
+	return operations.Change{}, fmt.Errorf("not built")
+}
+
+func (s served) SanitizeProfile(context.Context, operations.ProfileRequest) (operations.Change, error) {
+	return operations.Change{}, fmt.Errorf("not built")
 }

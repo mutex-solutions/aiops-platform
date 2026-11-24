@@ -14,6 +14,7 @@ import (
 	"time"
 
 	ops "github.com/mutex-solutions/aiops-platform/plugins/operations/internal/operations"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
@@ -62,6 +63,22 @@ func call[R, Q any](s served, ctx context.Context, r Q, m func(ops.Library, cont
 
 func (s served) Home(ctx context.Context, r def.HomeRequest) (def.Home, error) {
 	return call(s, ctx, r, ops.Library.Home)
+}
+
+func (s served) Render(ctx context.Context, r def.RenderRequest) (launch.Rendered, error) {
+	return call(s, ctx, r, ops.Library.Render)
+}
+
+func (s served) VerifyProfile(ctx context.Context, r def.RenderRequest) (launch.Rendered, error) {
+	return call(s, ctx, r, ops.Library.VerifyProfile)
+}
+
+func (s served) InitProfile(ctx context.Context, r def.ProfileRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.InitProfile)
+}
+
+func (s served) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def.Change, error) {
+	return call(s, ctx, r, ops.Library.SanitizeProfile)
 }
 
 func (s served) AddTrust(ctx context.Context, r def.TrustRequest) (def.Change, error) {

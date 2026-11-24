@@ -80,10 +80,10 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-key") || !slices.Contains(man.Consumers[i].Plugins, "aiops/command-trust") {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
-	// command-profile reaches the toolbox through profileContext until the operations
-	// library carries Render, InitProfile and SanitizeProfile (ADR-061 decision 20).
+	// The operations library reaches the toolbox of the launcher through profileContext
+	// (ADR-061 decisions 20 and 33).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "profileContext" }); i < 0 ||
-		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-profile") {
+		!slices.Contains(man.Consumers[i].Plugins, "aiops/operations") {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
 }

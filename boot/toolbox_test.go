@@ -202,6 +202,15 @@ func TestToolboxRenderNamesTheFileThatStopsComposition(t *testing.T) {
 		{launch.RenderRequest{Home: "/x/broken", Profile: "p"}, "profiles/p/aiops.patch.yml"},
 		{launch.RenderRequest{Home: "/h", Profile: "nope"}, "profiles/nope/profile.yaml"},
 	} {
+		// The file that stopped the composition, set aside, is read as absent, as profile
+		// sanitize leaves it.
+		if c.q.Home == "/x/broken" {
+			aside := c.q
+			aside.Aside = []string{c.file}
+			if r, err := tb.Render(t.Context(), aside); err != nil || len(errorTexts(r.Diagnostics)) > 0 || len(r.Composition.Rows) == 0 {
+				t.Errorf("%s with %s aside: %+v, %v; want the profile composed", c.q.Home, c.file, r, err)
+			}
+		}
 		r, err := tb.Render(t.Context(), c.q)
 		i := slices.IndexFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return !d.Warning && d.File == c.file })
 		if err != nil || i < 0 || r.Diagnostics[i].Check != "compose" || len(r.Composition.Rows) > 0 || r.Distribution != digestOf(b.opt.Signed) {

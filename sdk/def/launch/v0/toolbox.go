@@ -130,7 +130,8 @@ type Bundle struct {
 // bundles as install appends it (ADR-047 decision 17); a zero ID appends none. Against is
 // the path of a signed distribution manifest to render against instead of the embedded
 // one, its module table read from the manifests it holds, "" for none: the flag --dist of
-// profile render.
+// profile render. Aside names layer files of the home, by slash path under it, that the
+// render reads as absent, as profile sanitize sets them aside.
 type RenderRequest struct {
 	Home, Profile, Bundles string
 	Patches                []string
@@ -139,6 +140,7 @@ type RenderRequest struct {
 	Dumps                  []string
 	Append                 Bundle
 	Against                string
+	Aside                  []string
 }
 
 // KeyProviders is one key of a rendered profile: its classes ("open" or "bound") and

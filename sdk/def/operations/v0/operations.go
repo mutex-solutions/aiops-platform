@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
@@ -20,14 +21,14 @@ var Key = kernel.NewKey[Operations]("operations", 0, kernel.ConsumerBound())
 // (07-c4-plugin-sdk.md:520).
 var (
 	// ErrUsage is a request that cannot run as asked: a method that needs a home
-	// without one ($AIOPS_HOME unset or empty), a path that is not absolute, or a key
-	// password that the environment does not set. Its text names what is missing, and
+	// without one ($AIOPS_HOME unset or empty), a path that is not absolute, a name that
+	// is not that of a profile, or a key password that the environment does not set. Its text names what is missing, and
 	// aiopsctl answers it as a usage error (ADR-061 decisions 10 and 17).
 	ErrUsage = errors.New("operations: usage")
 	// ErrRefused is a request that the rules refuse: a form of trust add that ADR-020
 	// decisions 5 and 6 do not allow, a key file of another kind, a key pair that
-	// exists, a signature that no trusted key verifies. A refused method writes
-	// nothing.
+	// exists, a signature that no trusted key verifies, a profile that the binary does
+	// not ship. A refused method writes nothing.
 	ErrRefused = errors.New("operations: refused")
 	// ErrLocked is a write that did not get the write lock of the home within its
 	// bound; its text names the holder from the record in write.lock (ADR-061
@@ -63,6 +64,7 @@ type HomeRequest struct {
 // Home is what a home holds, as its files are read without the lock (ADR-061
 // decision 19). A home that does not exist reads empty, with the default root.
 type Home struct {
+	Profiles      []string // the profiles of the home, each a profiles/<p>/profile.yaml, sorted
 	Signers       []Signer // signers of trust.yaml, in file order
 	Distributions []string // key ids of distributions, Release among them; [Release] when the field is absent
 	AllowUnsigned []string
@@ -83,6 +85,21 @@ type Signer struct {
 // distribution.
 type Record struct {
 	Digest, Kind, Signer, ID string
+}
+
+// RenderRequest is profile render and profile verify: a request of the launcher's
+// toolbox, with the caller. Its Home is "" for none, and then the shipped profiles are
+// composed alone (ADR-061 decision 25).
+type RenderRequest struct {
+	Caller
+	launch.RenderRequest
+}
+
+// ProfileRequest names a profile of a home: profile init and profile sanitize. A
+// profile is a name, not a path.
+type ProfileRequest struct {
+	Caller
+	Home, Profile string
 }
 
 // TrustRequest is trust add (ADR-020 decisions 5 and 6). With IDs it appends a
@@ -160,6 +177,21 @@ const (
 type Operations interface {
 	// Home reads what a home holds; it takes no lock.
 	Home(ctx context.Context, r HomeRequest) (Home, error)
+	// Render is profile render: it composes and admits a profile as the server would,
+	// with the toolbox of the launcher, and writes nothing.
+	Render(ctx context.Context, r RenderRequest) (launch.Rendered, error)
+	// VerifyProfile is profile verify: it renders a profile, cli when none is named,
+	// for its departures from the release bindings, with no dump, and writes nothing.
+	VerifyProfile(ctx context.Context, r RenderRequest) (launch.Rendered, error)
+	// InitProfile is profile init: it copies the shipped template of the profile into
+	// the home, unless the home holds the profile, which it keeps and says so, and
+	// submits the profile when it wrote it (ADR-060 decision 27).
+	InitProfile(ctx context.Context, r ProfileRequest) (Change, error)
+	// SanitizeProfile is profile sanitize: it renames each layer file of the home that
+	// stops the composition of the profile, cli when none is named, to
+	// <name>.bak-<time>, and submits the profile when it set one aside (ADR-061
+	// decision 41).
+	SanitizeProfile(ctx context.Context, r ProfileRequest) (Change, error)
 	// AddTrust is trust add. It writes trust.yaml and submits the profile that
 	// run/status.json names.
 	AddTrust(ctx context.Context, r TrustRequest) (Change, error)

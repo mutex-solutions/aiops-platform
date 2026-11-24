@@ -18,6 +18,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
@@ -25,7 +26,8 @@ import (
 // def.Operations over the write of the home, the signing library and the records
 // under verified/ (ADR-061 decisions 16 and 17; ADR-020 decisions 10 and 12).
 type Library struct {
-	LockWait time.Duration // how long a second writer waits for write.lock
+	LockWait time.Duration  // how long a second writer waits for write.lock
+	Box      launch.Toolbox // the launcher's toolbox, which renders and ships the profiles
 }
 
 // bundleFile is the name of the bundle of a distribution manifest: beside it in the

@@ -3,6 +3,7 @@
 package operations_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -15,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/operations"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
@@ -22,7 +25,8 @@ import (
 
 // The operations row passes the operations definition's suite, as its fake does (T2,
 // 07-c4-plugin-sdk.md §8.2; ADR-061 decision 18), on a home in a temporary directory
-// that each case's Setup prepares as the files a writer leaves.
+// that each case's Setup prepares as the files a writer leaves, with the launch fake's
+// toolbox answering as the Setup says.
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
 		home := filepath.Join(t.TempDir(), "home")
@@ -33,6 +37,9 @@ func TestConformance(t *testing.T) {
 			hold(t, home, s.Held)
 		}
 		root := kerneltest.New(t)
+		l, lp := launchfake.New()
+		l.Box = box{s: s}
+		kerneltest.Mount(root, lp)
 		f := root.Plugin(operations.Plugin, map[string]any{"lockWait": s.LockWait.String()})
 		if err := f.Await(t.Context()); err != nil {
 			t.Fatal(err)
@@ -42,6 +49,31 @@ func TestConformance(t *testing.T) {
 		}
 		return conformance.Subject{Root: root, Provider: f, Home: home, Dir: t.TempDir()}
 	})
+}
+
+// box is the launcher's toolbox of a case: Render answers the Rendered of the Setup for
+// the profile, and Shipped its shipped files.
+type box struct {
+	launch.NoTools
+	s conformance.Setup
+}
+
+func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendered, error) {
+	return b.s.Rendered[q.Profile], ctx.Err()
+}
+
+func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.s.Shipped, ctx.Err() }
+
+func (box) Gate(context.Context, launch.GateRequest) (launch.Verdict, error) {
+	return launch.Verdict{}, launch.ErrNotCarried
+}
+
+func (box) ReadManifest(context.Context, launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
+	return launch.ManifestSummary{}, nil, launch.ErrNotCarried
+}
+
+func (box) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{}, launch.ErrNotCarried
 }
 
 func mkhome(t *testing.T, home string) {

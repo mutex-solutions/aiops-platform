@@ -6,7 +6,8 @@
 // and their results, Home above all, and read no file of the home; the state a case
 // starts from is a Setup, which each subject's Mount makes. The obligations half holds
 // a provider to key generate, the forms and refusals of trust add, dist sign and dist
-// use, and the outcomes they answer. The guard half holds it to the write lock and the
+// use, the profile commands on the launcher's toolbox, and the outcomes they answer.
+// The guard half holds it to the write lock and the
 // snapshot: a write after an interrupted one restores first, a second writer fails
 // after its bound naming the holder, concurrent writers lose nothing; and to what it
 // refuses once released, with no side door. Each case has an id, the first word of its
@@ -14,6 +15,7 @@
 package conformance
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -27,6 +29,7 @@ import (
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -42,7 +45,20 @@ type Setup struct {
 	// left: a home with no trust.yaml before it, a trust.yaml with one signer for
 	// left/* after it, and the snapshot of that write.
 	Interrupted bool
+	// Shipped and Rendered are what the launcher's toolbox answers, the toolbox of the
+	// row and the config of the fake: the shipped files by path, and the result of
+	// Render for each profile. use sets Shipped and Rendered of the suite.
+	Shipped  map[string][]byte
+	Rendered map[string]launch.Rendered
 }
+
+// Shipped is the one shipped profile of the suite, cli.
+var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n")}
+
+// Rendered is what the toolbox of the suite renders: cli with one departure from the
+// release bindings and one dump, and no diagnostic.
+var Rendered = map[string]launch.Rendered{"cli": {Departures: []string{"the site adds consumers of appExit: acme/x"},
+	Dumps: map[string]string{"--dump": "the dump of cli\n"}, Distribution: "sha256:ab"}}
 
 // Subject is a mounted provider of operations.Key.
 type Subject struct {
@@ -148,6 +164,8 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Home"] = u.ops.Home(t.Context(), operations.HomeRequest{Caller: u.caller()})
 			_, calls["AddTrust"] = u.ops.AddTrust(t.Context(), operations.TrustRequest{Caller: u.caller(), KeyFile: a, IDs: []string{"acme/*"}})
 			_, calls["UseDist"] = u.ops.UseDist(t.Context(), operations.UseRequest{Caller: u.caller(), Image: u.s.Dir})
+			_, calls["InitProfile"] = u.ops.InitProfile(t.Context(), operations.ProfileRequest{Caller: u.caller(), Profile: "cli"})
+			_, calls["SanitizeProfile"] = u.ops.SanitizeProfile(t.Context(), operations.ProfileRequest{Caller: u.caller()})
 			for name, err := range calls {
 				if !errors.Is(err, operations.ErrUsage) || !strings.Contains(err.Error(), operations.HomeVar) {
 					t.Errorf("%s with no home: %v, want ErrUsage naming %s", name, err, operations.HomeVar)
@@ -207,6 +225,63 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("dist sign with no password in the environment: %v, want ErrUsage", err)
 			}
 		})
+
+		t.Run("operations.O8 profile init copies a shipped profile once", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			ch := u.profile(u.ops.InitProfile, "cli")
+			p := filepath.Join(u.s.Home, "profiles", "cli", "profile.yaml")
+			if !slices.Equal(ch.Written, []string{p}) || ch.Outcome != operations.NotRunning || !hasNote(ch, "copied") {
+				t.Errorf("profile init cli = %+v; want %s written, a note that says so, and not-running", ch, p)
+			}
+			if h := u.home(); !slices.Equal(h.Profiles, []string{"cli"}) {
+				t.Errorf("profiles %v; want cli", h.Profiles)
+			}
+			if ch := u.profile(u.ops.InitProfile, "cli"); len(ch.Written) != 0 || ch.Outcome != "" || !hasNote(ch, "kept") {
+				t.Errorf("a second profile init cli = %+v; want nothing written or submitted and a note that the profile is kept", ch)
+			}
+			before := u.home()
+			for p, want := range map[string]error{"nope": operations.ErrRefused, "": operations.ErrUsage, "..": operations.ErrUsage, "a/b": operations.ErrUsage} {
+				if _, err := u.ops.InitProfile(t.Context(), operations.ProfileRequest{Caller: u.caller(), Home: u.s.Home, Profile: p}); !errors.Is(err, want) {
+					t.Errorf("profile init %q: %v, want %v", p, err, want)
+				}
+			}
+			if after := u.home(); !reflect.DeepEqual(after, before) {
+				t.Errorf("a refused profile init changed the home: %+v, was %+v", after, before)
+			}
+		})
+
+		t.Run("operations.O9 render and verify answer what the toolbox renders", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			q := launch.RenderRequest{Home: u.s.Home, Profile: "cli", Dumps: []string{"--dump"}}
+			r, err := u.ops.Render(t.Context(), operations.RenderRequest{Caller: u.caller(), RenderRequest: q})
+			if err != nil || !reflect.DeepEqual(r, Rendered["cli"]) {
+				t.Errorf("Render = %+v, %v; want %+v", r, err, Rendered["cli"])
+			}
+			q.Home = ""
+			if _, err := u.ops.Render(t.Context(), operations.RenderRequest{Caller: u.caller(), RenderRequest: q}); err != nil {
+				t.Errorf("Render with no home, which composes the shipped profiles alone: %v", err)
+			}
+			v, err := u.ops.VerifyProfile(t.Context(), operations.RenderRequest{Caller: u.caller(), RenderRequest: launch.RenderRequest{Home: u.s.Home}})
+			if err != nil || !slices.Equal(v.Departures, Rendered["cli"].Departures) {
+				t.Errorf("VerifyProfile = %+v, %v; want the departures of cli", v, err)
+			}
+			q.Home = "relative"
+			if _, err := u.ops.Render(t.Context(), operations.RenderRequest{Caller: u.caller(), RenderRequest: q}); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("Render of a relative home: %v, want ErrUsage", err)
+			}
+		})
+
+		t.Run("operations.O10 profile sanitize of a profile that composes changes nothing", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			u.profile(u.ops.InitProfile, "cli")
+			before := u.home()
+			if ch := u.profile(u.ops.SanitizeProfile, ""); len(ch.Written) != 0 || ch.Outcome != "" || len(ch.Notes) == 0 {
+				t.Errorf("profile sanitize = %+v; want nothing written or submitted, and a note that says so", ch)
+			}
+			if after := u.home(); !reflect.DeepEqual(after, before) {
+				t.Errorf("profile sanitize changed the home: %+v, was %+v", after, before)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -221,6 +296,17 @@ func Run(t *testing.T, mount Mount) {
 			}
 			if h := u.home(); h.Snapshot || len(h.Signers) != 1 || !slices.Equal(h.Signers[0].IDs, []string{"acme/*"}) {
 				t.Errorf("home %+v; want the interrupted write undone, then the signer of acme/*", h)
+			}
+		})
+
+		t.Run("operations.G1b profile init after an interrupted write restores first", func(t *testing.T) {
+			u := use(t, mount, Setup{Interrupted: true})
+			ch := u.profile(u.ops.InitProfile, "cli")
+			if !hasNote(ch, "restored") {
+				t.Errorf("notes %q; want one that says the snapshot was restored", ch.Notes)
+			}
+			if h := u.home(); h.Snapshot || len(h.Signers) != 0 || !slices.Equal(h.Profiles, []string{"cli"}) {
+				t.Errorf("home %+v; want the interrupted write undone, then the profile cli", h)
 			}
 		})
 
@@ -267,6 +353,11 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["GenerateKey"] = u.ops.GenerateKey(ctx, operations.KeyRequest{Caller: c, Prefix: filepath.Join(u.s.Dir, "late")})
 			_, calls["SignDist"] = u.ops.SignDist(ctx, operations.SignDistRequest{Caller: c, Image: u.s.Dir, Key: private(a)})
 			_, calls["UseDist"] = u.ops.UseDist(ctx, operations.UseRequest{Caller: c, Home: u.s.Home, Image: u.s.Dir})
+			q := operations.RenderRequest{Caller: c, RenderRequest: launch.RenderRequest{Home: u.s.Home, Profile: "cli"}}
+			_, calls["Render"] = u.ops.Render(ctx, q)
+			_, calls["VerifyProfile"] = u.ops.VerifyProfile(ctx, q)
+			_, calls["InitProfile"] = u.ops.InitProfile(ctx, operations.ProfileRequest{Caller: c, Home: u.s.Home, Profile: "cli"})
+			_, calls["SanitizeProfile"] = u.ops.SanitizeProfile(ctx, operations.ProfileRequest{Caller: c, Home: u.s.Home})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)
@@ -295,6 +386,7 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
+	s.Shipped, s.Rendered = Shipped, Rendered
 	u := &user{t: t, s: mount(t, s)}
 	_, _, u.ops = deftest.Consume(t, u.s.Root, operations.Key)
 	return u
@@ -375,6 +467,20 @@ func (u *user) refused(r operations.TrustRequest, why string) {
 	if after := u.home(); !reflect.DeepEqual(after, before) {
 		u.t.Errorf("%s changed the home: %+v, was %+v", why, after, before)
 	}
+}
+
+// profile runs m, InitProfile or SanitizeProfile, on the profile p of the home.
+func (u *user) profile(m func(context.Context, operations.ProfileRequest) (operations.Change, error), p string) operations.Change {
+	u.t.Helper()
+	ch, err := m(u.t.Context(), operations.ProfileRequest{Caller: u.caller(), Home: u.s.Home, Profile: p})
+	if err != nil {
+		u.t.Fatalf("profile %q: %v", p, err)
+	}
+	return ch
+}
+
+func hasNote(ch operations.Change, word string) bool {
+	return slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, word) })
 }
 
 // norm reads an absent set and an empty one alike.

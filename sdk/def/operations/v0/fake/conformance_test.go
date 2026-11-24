@@ -15,7 +15,7 @@ import (
 // The fake passes the suite that the operations row passes (ADR-061 decision 18).
 func TestConformance(t *testing.T) {
 	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
-		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted})
+		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted, Shipped: s.Shipped, Rendered: s.Rendered})
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)
