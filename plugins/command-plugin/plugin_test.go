@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	row "github.com/mutex-solutions/aiops-platform/plugins/command-plugin"
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
@@ -20,6 +21,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/fake"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
@@ -35,6 +37,8 @@ type stub struct {
 	v   operations.Verified
 	w   operations.Written
 	rep operations.CheckReport
+	ch  operations.Change
+	vd  launch.Verdict
 	err error
 
 	mu     sync.Mutex
@@ -135,7 +139,8 @@ func dispatch(t *testing.T, rec *fake.Registry, argv ...string) (code int, out, 
 
 // built are the commands that run through the operations library (ADR-061 decision
 // 16; ADR-047 decision 1; ADR-060 decisions 23 and 24).
-var built = []string{"plugin check", "plugin inspect", "plugin new", "plugin pack", "plugin push", "plugin sign", "plugin verify"}
+var built = []string{"plugin check", "plugin disable", "plugin enable", "plugin gate", "plugin inspect", "plugin install", "plugin new",
+	"plugin pack", "plugin push", "plugin remove", "plugin sign", "plugin verify"}
 
 // Every other command answers that it is not built yet, with exit 1, on a command line
 // that its spec reads.
@@ -213,6 +218,18 @@ func strip(r any) any {
 		if q.Env != nil {
 			q.Caller = operations.Caller{}
 		}
+		return q
+	case operations.GateRequest:
+		q.Caller = operations.Caller{}
+		return q
+	case operations.InstallRequest:
+		q.Caller = operations.Caller{}
+		return q
+	case operations.RowRequest:
+		q.Caller = operations.Caller{}
+		return q
+	case operations.RemoveRequest:
+		q.Caller = operations.Caller{}
 		return q
 	}
 	return r
@@ -376,5 +393,85 @@ func TestExits(t *testing.T) {
 				t.Errorf("%q with %v: exit %d, stdout %q, stderr %q", argv, c.err, code, out, errOut)
 			}
 		}
+	}
+}
+
+func (s *stub) Gate(ctx context.Context, r operations.GateRequest) (launch.Verdict, error) {
+	return s.vd, s.record(ctx, r)
+}
+
+func (s *stub) Install(ctx context.Context, r operations.InstallRequest) (operations.Change, error) {
+	return s.ch, s.record(ctx, r)
+}
+
+func (s *stub) Enable(ctx context.Context, r operations.RowRequest) (operations.Change, error) {
+	return s.ch, s.record(ctx, r)
+}
+
+func (s *stub) Disable(ctx context.Context, r operations.RowRequest) (operations.Change, error) {
+	return s.ch, s.record(ctx, r)
+}
+
+func (s *stub) Remove(ctx context.Context, r operations.RemoveRequest) (operations.Change, error) {
+	return s.ch, s.record(ctx, r)
+}
+
+// install, enable, disable and remove pass the home, the profile, the spec, row or id,
+// and the bounds of --connect-wait and --wait to the library (ADR-062 decisions 9 and
+// 10); they print the final result on stdout and the paths and notes on stderr, and
+// exit 1 with the text of an error that matches ErrSubmission or ErrRebuildRequired,
+// whose dist.yaml lines are on stdout (ADR-061 decisions 17 and 44).
+func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
+	s := &stub{ch: operations.Change{Written: []string{"/site/profiles/dev/aiops.patch.yml"}, Notes: []string{"passed at generation 4, digest ab"},
+		Result: &reload.WireResult{ID: 3, Status: reload.Passed, Generation: 4, Digest: "ab"}}}
+	rec := world(t, s)
+	for _, c := range []struct {
+		argv []string
+		want any
+	}{
+		{[]string{"plugin", "install", "artifact", "--profile", "dev", "--connect-wait", "5s", "--wait", "2m"},
+			operations.InstallRequest{Home: "/site", Profile: "dev", Spec: "/work/artifact", ConnectWait: 5 * time.Second, Wait: 2 * time.Minute}},
+		{[]string{"plugin", "enable", "connector-x:logs", "--profile", "dev"}, operations.RowRequest{Home: "/site", Profile: "dev", Row: "connector-x:logs"}},
+		{[]string{"plugin", "disable", "connector-x:logs"}, operations.RowRequest{Home: "/site", Row: "connector-x:logs"}},
+		{[]string{"plugin", "remove", "acme/connector-x", "--profile", "dev"}, operations.RemoveRequest{Home: "/site", Profile: "dev", ID: "acme/connector-x"}},
+	} {
+		code, out, errOut := dispatch(t, rec, c.argv...)
+		if code != 0 || out != "result passed, generation 4, digest ab\n" || !strings.Contains(errOut, "wrote /site/profiles/dev/aiops.patch.yml\n") {
+			t.Errorf("%q: exit %d, stdout %q, stderr %q", c.argv, code, out, errOut)
+		}
+		if got := fmt.Sprintf("%+v", strip(s.last())); got != fmt.Sprintf("%+v", c.want) {
+			t.Errorf("%q: request %s, want %+v", c.argv, got, c.want)
+		}
+	}
+	if code, _, _ := dispatch(t, rec, "plugin", "enable", "x", "--wait", "soon"); code != 2 {
+		t.Errorf("--wait soon: exit %d, want a usage error", code)
+	}
+	s.ch = operations.Change{DistLines: []string{"modules:", "  - {path: example.com/echo, version: v0.1.0}"}}
+	s.err = fmt.Errorf("%w: acme/echo is in-process code", operations.ErrRebuildRequired)
+	if code, out, errOut := dispatch(t, rec, "plugin", "install", "oci://r.example/echo@sha256:ab"); code != 1 ||
+		out != "modules:\n  - {path: example.com/echo, version: v0.1.0}\n" || !strings.Contains(errOut, "rebuild-required") {
+		t.Errorf("rebuild-required: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	s.ch = operations.Change{IDs: []reload.ID{3, 4}, Last: reload.Running}
+	s.err = fmt.Errorf("%w: %s: operation [3 4], last status running", operations.ErrSubmission, operations.NoFinalResult)
+	if code, out, errOut := dispatch(t, rec, "plugin", "enable", "x", "--profile", "dev"); code != 1 || out != "operations 3, 4; last status running\n" ||
+		!strings.Contains(errOut, "no-final-result") {
+		t.Errorf("no final result: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+}
+
+// plugin gate prints each clause on stdout and exits 1 when one denies, with the
+// release of --against resolved against the working directory (08:493).
+func TestGatePrintsTheClauses(t *testing.T) {
+	s := &stub{vd: launch.Verdict{Entry: "plugin gate --against", Clauses: []launch.Clause{{Check: 1, Outcome: launch.OutcomePass},
+		{Check: 2, Clause: "unserved-definition", Outcome: launch.OutcomeDeny, Reason: "requires echoers 0.2"}}}}
+	rec := world(t, s)
+	code, out, errOut := dispatch(t, rec, "plugin", "gate", "oci://r.example/echo@sha256:ab", "--against", "rel/dist.yaml")
+	if code != 1 || !strings.Contains(out, "check 1: pass\n") || !strings.Contains(out, "check 2 unserved-definition: deny: requires echoers 0.2\n") ||
+		!strings.Contains(errOut, "check 2") {
+		t.Errorf("gate: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if q := strip(s.last()).(operations.GateRequest); q.Spec != "oci://r.example/echo@sha256:ab" || q.Against != "/work/rel/dist.yaml" {
+		t.Errorf("request %+v", q)
 	}
 }
