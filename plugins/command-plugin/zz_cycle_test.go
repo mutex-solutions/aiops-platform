@@ -8,12 +8,15 @@ import (
 
 	zzplugin "github.com/mutex-solutions/aiops-platform/plugins/command-plugin"
 	commandsfake "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0/fake"
+	operationsfake "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/cycle"
 )
 
 func TestCycle(t *testing.T) {
 	commandsFake, commandsPlugin := commandsfake.New()
+	operationsFake, operationsPlugin := operationsfake.New()
 	cycle.Run(t, zzplugin.Plugin, nil, []string{"commands"},
 		cycle.Fake{Plugin: commandsPlugin, Inventory: commandsFake.Inventory},
+		cycle.Fake{Plugin: operationsPlugin, Inventory: operationsFake.Inventory},
 	)
 }

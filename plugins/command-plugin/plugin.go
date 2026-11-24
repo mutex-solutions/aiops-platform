@@ -4,17 +4,24 @@
 // authoring path and of the plugins of a profile, plugin new, check, smoke, pack,
 // sign, push, inspect, verify, gate, install, enable, disable and remove (ADR-061
 // decision 30; 07-c4-plugin-sdk.md:1565, :1578; 08-profiles-roadmap-adrs.md:373-375).
-// The commands are declared with their synopses and flags, so the module table and the
-// name lint hold them, and answer that they are not built yet: each runs through one
-// method of the operations library, which lands with that library (ADR-061 decision
-// 16). plugin purge joins at S3 (ADR-060 decision 47).
+// pack, sign, push, inspect and verify call the methods of the operations library of
+// the same names on the OCI artifact of ADR-047 (ADR-061 decisions 16 and 20). The
+// other commands are declared with their synopses and flags, so the module table and
+// the name lint hold them, and answer that they are not built yet: each runs through
+// one method of the library, which lands with the parts it needs. plugin purge joins
+// at S3 (ADR-060 decision 47).
 package commandplugin
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
+	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
@@ -28,12 +35,27 @@ type Config struct{}
 // Plugin is the row.
 var Plugin = plugin.Define(plugin.Spec[Config]{
 	ID:        ID,
-	Inject:    []kernel.Dep{kernel.Need(commands.Key)},
+	Inject:    []kernel.Dep{kernel.Need(commands.Key), kernel.Need(operations.Key)},
 	Registers: []kernel.AnyKey{commands.Key},
 	Apply: func(c *kernel.Context, _ *Config) error {
-		r := commands.Key.Of(c)
+		r, ops := commands.Key.Of(c), operations.Key.Of(c)
+		runs := map[string]func(context.Context, operations.Operations, commands.Invocation) error{
+			"pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify}
 		for _, s := range specs() {
-			if err := r.Register(c, s, notBuilt(s.Name())); err != nil {
+			var cmd commands.Command = notBuilt(s.Name())
+			if run, ok := runs[s.Path[1]]; ok {
+				cmd = command(func(ctx context.Context, inv commands.Invocation) error {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
+					err := run(ctx, ops, inv)
+					if errors.Is(err, operations.ErrUsage) {
+						return fmt.Errorf("%w: %w", commands.ErrUsage, err)
+					}
+					return err
+				})
+			}
+			if err := r.Register(c, s, cmd); err != nil {
 				return err
 			}
 		}
@@ -80,7 +102,7 @@ func specs() []commands.Spec {
 	}
 }
 
-// notBuilt is a command whose operation lands with the operations library.
+// notBuilt is a command whose operation lands with the part of the library it needs.
 type notBuilt string
 
 func (n notBuilt) Run(ctx context.Context, _ commands.Invocation) error {
@@ -88,4 +110,111 @@ func (n notBuilt) Run(ctx context.Context, _ commands.Invocation) error {
 		return err
 	}
 	return fmt.Errorf("%s is not built yet: it arrives with the operations library (ADR-061 decision 16)", string(n))
+}
+
+type command func(ctx context.Context, inv commands.Invocation) error
+
+func (f command) Run(ctx context.Context, inv commands.Invocation) error { return f(ctx, inv) }
+
+// abs resolves p against the working directory of the invocation.
+func abs(inv commands.Invocation, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(inv.Dir, p)
+}
+
+// spec resolves an artifact's spec: oci:// and a reference as written, or a layout.
+func specOf(inv commands.Invocation, s string) string {
+	if strings.HasPrefix(s, "oci://") {
+		return s
+	}
+	return abs(inv, s)
+}
+
+// layout is the layout of --out, artifact/ of the working directory by default.
+func layout(inv commands.Invocation) string {
+	if o := inv.Value("out"); o != "" {
+		return abs(inv, o)
+	}
+	return abs(inv, "artifact")
+}
+
+func caller(inv commands.Invocation) operations.Caller {
+	return operations.Caller{Env: inv.Env, Progress: inv.Err}
+}
+
+// pack is plugin pack: the directory, the working directory by default, packed into
+// --out, or artifact/ beside its plugin.yaml.
+func pack(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	dir := inv.Dir
+	if len(inv.Args) > 0 {
+		dir = abs(inv, inv.Args[0])
+	}
+	out := filepath.Join(dir, "artifact")
+	if o := inv.Value("out"); o != "" {
+		out = abs(inv, o)
+	}
+	w, err := ops.Pack(ctx, operations.PackRequest{Caller: caller(inv), Dir: dir, Out: out})
+	for _, p := range w.Paths {
+		fmt.Fprintln(inv.Err, "wrote "+p)
+	}
+	return err
+}
+
+// sign is plugin sign: the artifact of the layout signed with the private key file.
+func sign(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	w, err := ops.Sign(ctx, operations.SignRequest{Caller: caller(inv), Out: layout(inv), Key: abs(inv, inv.Value("key"))})
+	for _, p := range w.Paths {
+		fmt.Fprintln(inv.Err, "signed "+p)
+	}
+	return err
+}
+
+// push is plugin push: the spec by digest on stdout, which a script reads.
+func push(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	p, err := ops.Push(ctx, operations.PushRequest{Caller: caller(inv), Out: layout(inv), Registry: inv.Args[0]})
+	if err == nil {
+		fmt.Fprintln(inv.Out, p.Spec)
+	}
+	return err
+}
+
+// inspect is plugin inspect: what the manifest and the bundle say, on stdout.
+func inspect(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	in, err := ops.Inspect(ctx, operations.SpecRequest{Caller: caller(inv), Spec: specOf(inv, inv.Args[0])})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(inv.Out, "digest: %s\nid: %s\nversion: %s\nruntimes: [%s]\n", in.Digest, in.ID, in.Version, strings.Join(in.Runtimes, ", "))
+	fmt.Fprintln(inv.Out, "signer: not verified") // install verifies the signature over the digest (ADR-047 decision 2)
+	for _, r := range in.Rows {
+		config, _ := json.Marshal(r.Config)
+		fmt.Fprintf(inv.Out, "row %s: plugin %s, config %s\n", r.ID, r.Plugin, config)
+	}
+	for _, p := range in.Content {
+		fmt.Fprintln(inv.Out, "content: "+p)
+	}
+	return nil
+}
+
+// verify is plugin verify: each step on stdout, and exit 1 naming the steps that did
+// not pass.
+func verify(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	v, err := ops.Verify(ctx, operations.SpecRequest{Caller: caller(inv), Spec: specOf(inv, inv.Args[0]), Home: inv.Home, Builder: inv.Value("builder")})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(inv.Out, "digest: %s\nsigner: %s\n", v.Digest, v.Signer)
+	var failed []string
+	for _, s := range v.Steps {
+		fmt.Fprintf(inv.Out, "step %s: %s: %s\n", s.Name, s.Outcome, s.Reason)
+		if s.Outcome != "pass" {
+			failed = append(failed, s.Name+" "+s.Outcome)
+		}
+	}
+	if !v.Passed {
+		return fmt.Errorf("plugin verify did not pass: %s", strings.Join(failed, ", "))
+	}
+	return nil
 }
