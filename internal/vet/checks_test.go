@@ -211,6 +211,30 @@ func TestImportsServerClosureLinksNoTestOrExample(t *testing.T) {
 	}
 }
 
+// The toolbox that aiopsctl alone carries (ADR-061 decision 21): plugingen, the import
+// analyzer and plugin vet, the templates and the embedded suites enter no server binary.
+func TestImportsServerClosureLinksNoToolbox(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "cmd/aiops/main.go", "package main\n")
+	write(t, d, "cmd/aiopsctl/main.go", "package main\n")
+	closure := func(deps map[string][]string) ListDeps {
+		return func(_, pkg string) ([]string, error) { return deps[pkg], nil }
+	}
+	tools := []string{mp + "/internal/plugingen", mp + "/internal/vet", mp + "/internal/authoring", mp + "/templates"}
+	if err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiopsctl": tools})); err != nil {
+		t.Fatalf("the toolbox in aiopsctl: %v", err)
+	}
+	for _, leak := range tools {
+		err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiops": {"fmt", leak}}))
+		if err == nil || !strings.Contains(err.Error(), "cmd/aiops: dependency closure contains "+leak+": no part of the toolbox in a server binary") {
+			t.Errorf("aiops links %s: %v", leak, err)
+		}
+	}
+	if err := Imports(d, testRegister, closure(map[string][]string{"./cmd/aiops": {mp + "/internal/vetx", mp + "/templatesx"}})); err != nil {
+		t.Errorf("a look-alike path: %v", err)
+	}
+}
+
 func TestImportsParseError(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "boot/a.go", "package")
