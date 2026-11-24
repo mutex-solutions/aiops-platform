@@ -5,6 +5,7 @@ package builder
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,23 +74,28 @@ func TestServedComparison(t *testing.T) {
 	}
 }
 
-// rest returns a go.mod without its replace lines and the lines that name a module of
-// the repository, so that a repository file and its served copy compare.
+// rest returns a go.mod as it parses, formatted, with no replace directive and the
+// version of each requirement of a module of the repository set to v0.0.0, so that a
+// repository file and its served copy compare in everything else: the module line,
+// the go and toolchain lines, every other requirement, exclude and retract, and the
+// comments.
 func rest(gomod string) string {
-	var out []string
-	inReplace := false
-	for _, l := range strings.Split(gomod, "\n") {
-		t := strings.TrimSpace(l)
-		switch {
-		case strings.HasPrefix(t, "replace ("):
-			inReplace = true
-		case inReplace && t == ")":
-			inReplace = false
-		case inReplace || strings.HasPrefix(t, "replace ") || strings.Contains(t, rootModule+"/") || strings.HasPrefix(t, "require "+rootModule+" "),
-			t == "":
-		default:
-			out = append(out, l)
+	f, err := modfile.Parse("go.mod", []byte(gomod), nil)
+	if err != nil {
+		return "does not parse: " + err.Error()
+	}
+	for _, r := range slices.Clone(f.Replace) {
+		_ = f.DropReplace(r.Old.Path, r.Old.Version)
+	}
+	for _, r := range f.Require {
+		if slices.Contains(sdkModules, r.Mod.Path) {
+			_ = f.AddRequire(r.Mod.Path, "v0.0.0")
 		}
 	}
-	return strings.Join(out, "\n")
+	f.Cleanup()
+	b, err := f.Format()
+	if err != nil {
+		return "does not format: " + err.Error()
+	}
+	return string(b)
 }
