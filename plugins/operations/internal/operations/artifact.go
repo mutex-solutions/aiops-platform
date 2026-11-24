@@ -571,7 +571,7 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 		return v, err
 	}
 	v.Steps = append(v.Steps, def.VerifyStep{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()})
-	st, err := l.verifySuites(ctx, r.Caller, src, m, len(pm.Runtimes) > 0)
+	st, err := l.verifySuites(ctx, r.Caller, src, m, pm)
 	v.Steps = append(v.Steps, st)
 	v.Passed = st.Outcome == "pass"
 	return v, err
@@ -579,10 +579,12 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 
 // verifySuites is the step suites of plugin verify: the suites of plugin check, run as
 // plugin check runs them on the pack that the artifact carries, its manifest, bundle
-// and fixtures unpacked into a directory of its own (ADR-060 decisions 46 and 49).
-func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m ocispec.Manifest, code bool) (def.VerifyStep, error) {
+// and fixtures unpacked into a directory of its own (ADR-060 decisions 46 and 49). It
+// fails where boot's strict reader refuses that manifest, or reads it as another plugin
+// than pm, the one that the signature and the attestation name.
+func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m ocispec.Manifest, pm pluginYAML) (def.VerifyStep, error) {
 	st := def.VerifyStep{Name: "suites", Outcome: "not-built"}
-	if code {
+	if len(pm.Runtimes) > 0 {
 		st.Reason = "the suites of in-process code run on its module, which plugin verify fetches with the builder of ADR-044, not built yet"
 		return st, nil
 	}
@@ -608,9 +610,16 @@ func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m o
 			return st, err
 		}
 	}
-	sum, _, err := l.Box.ReadManifest(ctx, launch.ManifestRequest{Dir: dir})
-	if err != nil {
+	sum, ds, err := l.Box.ReadManifest(ctx, launch.ManifestRequest{Dir: dir})
+	switch {
+	case err != nil:
 		return st, refused("plugin.yaml of the artifact: %v", err)
+	case hasError(ds):
+		st.Outcome, st.Reason = "fail", texts(ds)
+		return st, nil
+	case sum.ID != pm.ID || sum.Version != pm.Version:
+		st.Outcome, st.Reason = "fail", fmt.Sprintf("boot's reader reads plugin.yaml as %s@%s, and the artifact is %s@%s", sum.ID, sum.Version, pm.ID, pm.Version)
+		return st, nil
 	}
 	ran, ds, err := (&checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: c, Dir: dir}, sum: sum}).attested()
 	switch {
