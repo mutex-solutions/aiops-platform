@@ -48,7 +48,7 @@ type Config struct {
 	// write.
 	Interrupted bool
 	// Running says that a process runs the profile of every home, so a trust add
-	// answers restart-required for want of a transport.
+	// answers restart-required with the reason not-submitted.
 	Running bool
 }
 
@@ -284,7 +284,7 @@ func (s served) AddTrust(ctx context.Context, r operations.TrustRequest) (operat
 	}
 	ch.Written, ch.Outcome = []string{filepath.Join(r.Home, "trust.yaml")}, operations.NotRunning
 	if s.f.cfg.Running {
-		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNoTransport
+		ch.Outcome, ch.Reason = operations.RestartRequired, operations.ReasonNotSubmitted
 	}
 	return ch, nil
 }

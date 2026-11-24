@@ -140,22 +140,16 @@ type Change struct {
 // (ADR-061 decision 17).
 type Outcome string
 
-// The outcomes of a submission and the reasons of RestartRequired. Until the
-// transport of ADR-062 lands, a process that runs the profile answers
-// RestartRequired with ReasonNoTransport.
+// The outcomes of a write that submits nothing and the reasons of RestartRequired
+// (ADR-061 decision 17). Version 1 of the wire of ADR-062 carries plugin install,
+// enable, disable and remove only, whose methods return the outcome of its decision
+// 11 when they join; the writes of 0.1 submit nothing.
 const (
 	NotRunning      Outcome = "not-running"      // no run/status.json names a running process: the change applies at its next start
 	RestartRequired Outcome = "restart-required" // kept; the running process takes it at its next start
-	Applied         Outcome = "applied"          // the generation was applied and judged
-	Refused         Outcome = "refused"          // the generation was rejected; the files are restored
-	Unknown         Outcome = "unknown"          // no answer within the bound; the files stay
 
-	ReasonNoTransport = "no-transport"
-	ReasonNoReload    = "no-reload"
-	// ReasonNotSubmitted: a write that version 1 of the wire of ADR-062 does not carry,
-	// so the running process reads it at its next start (ADR-061 decision 17).
-	ReasonNotSubmitted = "not-submitted"
-	ReasonImage        = "image" // a new image is a new process (07-c4-plugin-sdk.md:1869)
+	ReasonNotSubmitted = "not-submitted" // a write the wire does not carry: the running process reads it at its next start
+	ReasonImage        = "image"         // a new image is a new process (07-c4-plugin-sdk.md:1869)
 )
 
 // Operations is what the key serves (ADR-061 decision 16). Each method takes the

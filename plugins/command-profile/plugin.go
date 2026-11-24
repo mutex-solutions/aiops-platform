@@ -379,10 +379,10 @@ func write(p string, data []byte) error {
 	return err
 }
 
-// submit tells the outcome of the submission that ends a write of the home (ADR-061
-// decision 17): not-running where run/status.json of the home names no running process
-// of profile, any profile where it is "", and restart-required with the reason
-// no-transport otherwise, until the transport of ADR-062 lands.
+// submit tells the outcome of a write of the home that version 1 of the wire of ADR-062
+// does not carry (ADR-061 decision 17): not-running where run/status.json of the home
+// names no running process of profile, any profile where it is "", and restart-required
+// with the reason not-submitted otherwise.
 func submit(inv commands.Invocation, h, profile string) {
 	var st struct{ Phase, Profile string }
 	b, err := os.ReadFile(filepath.Join(h, "run", "status.json"))
@@ -390,5 +390,5 @@ func submit(inv commands.Invocation, h, profile string) {
 		fmt.Fprintln(inv.Err, "not-running: the change applies at the next start")
 		return
 	}
-	fmt.Fprintln(inv.Err, "restart-required: no-transport")
+	fmt.Fprintln(inv.Err, "restart-required: not-submitted")
 }

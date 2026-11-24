@@ -149,17 +149,17 @@ func (l Library) AddTrust(ctx context.Context, r def.TrustRequest) (def.Change, 
 	return ch, err
 }
 
-// submission is the submission of a change of the home to the process that runs the
-// profile run/status.json names (ADR-061 decision 17). With no running process the
-// change applies at its next start; with one, it waits for the transport of ADR-062,
-// which is not built yet.
+// submission is the outcome of a write of the home that version 1 of the wire of
+// ADR-062 does not carry, read from run/status.json alone (ADR-061 decision 17). With
+// no running process the change applies at its next start; with one, it is not
+// submitted and the process reads it at its next start.
 func submission(h Home) (def.Outcome, string) {
 	var st struct{ Phase, Profile string }
 	b, err := os.ReadFile(h.path("run/status.json"))
 	if err != nil || json.Unmarshal(b, &st) != nil || st.Phase == "stopped" {
 		return def.NotRunning, ""
 	}
-	return def.RestartRequired, def.ReasonNoTransport
+	return def.RestartRequired, def.ReasonNotSubmitted
 }
 
 // GenerateKey is key generate: <prefix>.key with mode 0600 and <prefix>.pub with mode
