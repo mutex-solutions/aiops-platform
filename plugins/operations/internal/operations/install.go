@@ -691,7 +691,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 			}
 			rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile})
 			if err == nil {
-				err = cannotRemove(rd, r.Profile, r.ID)
+				err = def.CannotRemove(rd, r.Profile, r.ID)
 			}
 			lock, werr := withLock(h, r.Profile, r.ID, nil)
 			patch, kept, perr := withoutEnabled(h.path(layer), def.Group(r.ID))
@@ -738,29 +738,4 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 		},
 	})
 	return changed(done, ch, err, res)
-}
-
-// cannotRemove refuses the removal of the installed artifact id from the profile p that
-// rd renders, which takes away the rows whose origin is id, when one of them is a row
-// that CannotDisable refuses, or when they are every enabled provider of a bound or a
-// required key (ADR-061 decision 17).
-func cannotRemove(rd launch.Rendered, p, id string) error {
-	lost := map[string]bool{}
-	for _, row := range rd.Composition.Rows {
-		if row.Origin != id {
-			continue
-		}
-		if err := def.CannotDisable(rd, p, row.ID); err != nil {
-			return err
-		}
-		lost[row.ID] = true
-	}
-	for _, k := range rd.Keys {
-		bound := k.Provider == "bound" || k.Consumer == "bound" || slices.Contains(rd.Required.Keys, k.Name)
-		if bound && len(k.Rows) > 0 && !slices.ContainsFunc(k.Rows, func(row string) bool { return !lost[row] }) {
-			return refused("the manager cannot remove %s from %s: its rows are the last enabled providers of the key %s; edit profiles/%s/profile.yaml and restart the process",
-				id, p, k.Name, p)
-		}
-	}
-	return nil
 }

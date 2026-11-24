@@ -104,6 +104,31 @@ func CannotDisable(rd launch.Rendered, profile, id string) error {
 	return nil
 }
 
+// CannotRemove refuses the removal of the installed artifact id from the profile that
+// rd renders, which takes away the rows whose origin is id, when one of them is a row
+// that CannotDisable refuses, or when they are every enabled provider of a bound or a
+// required key (ADR-061 decision 17).
+func CannotRemove(rd launch.Rendered, profile, id string) error {
+	lost := map[string]bool{}
+	for _, row := range rd.Composition.Rows {
+		if row.Origin != id {
+			continue
+		}
+		if err := CannotDisable(rd, profile, row.ID); err != nil {
+			return err
+		}
+		lost[row.ID] = true
+	}
+	for _, k := range rd.Keys {
+		bound := k.Provider == "bound" || k.Consumer == "bound" || slices.Contains(rd.Required.Keys, k.Name)
+		if bound && len(k.Rows) > 0 && !slices.ContainsFunc(k.Rows, func(row string) bool { return !lost[row] }) {
+			return refused("the manager cannot remove %s from %s: its rows are the last enabled providers of the key %s; edit profiles/%s/profile.yaml and restart the process",
+				id, profile, k.Name, profile)
+		}
+	}
+	return nil
+}
+
 // Shows reports whether a final result passed and shows the change of command on
 // target (ADR-062 decision 11): its report holds the row of enable as ACTIVE, and holds
 // neither the row of disable nor a row of the group of the artifact that remove
