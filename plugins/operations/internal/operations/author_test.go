@@ -218,6 +218,31 @@ func TestCheckStep7Packs(t *testing.T) {
 	}
 }
 
+// The attestation that plugin pack records for in-process code names the generated
+// tests that did not run in step 4, as the one plugin check would sign does (ADR-060
+// decisions 18 and 43; ADR-020 decision 9).
+func TestPackOfCodeNamesWhatDidNotRun(t *testing.T) {
+	sum := packSummary()
+	sum.Runtimes = []string{"inproc"}
+	b := &packBox{sum: sum, suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Skipped: []string{"TestTenants"}}}}}
+	l := Library{Box: checkBox{b}}
+	dir := pluginDir(t, map[string]string{"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
+		"bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n\ngo 1.26\n", "echo.go": "package echo\n"})
+	out := filepath.Join(t.TempDir(), "artifact")
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := l.Check(t.Context(), def.CheckRequest{Caller: caller(), Dir: dir})
+	if err != nil || !strings.Contains(string(r.Attestation), `"notRun":["TestTenants"]`) {
+		t.Fatalf("Check = %v, %s, %v; want the attestation naming TestTenants", steps(r), r.Attestation, err)
+	}
+	desc, _, blob := layout(t, out)
+	if refs := layoutReferrers(t, out, desc, "application/vnd.in-toto+json"); len(refs) != 1 ||
+		!strings.Contains(string(blob(refs[0].Layers[0])), `"notRun":["TestTenants"]`) {
+		t.Errorf("the attestation that pack recorded does not name TestTenants as not run")
+	}
+}
+
 // Step 1 refuses a manifest that lists remote until S2b (ADR-060 decision 23).
 func TestCheckRefusesRemote(t *testing.T) {
 	b := &connectorBox{sum: launch.ManifestSummary{ID: "acme/x", Version: "0.1.0", Runtimes: []string{"inproc", "remote"}}}
