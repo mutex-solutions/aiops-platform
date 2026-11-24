@@ -51,16 +51,17 @@ func TestReadSite(t *testing.T) {
 // Strict versions (ADR-044 decisions 10 and 20): a pinned module raised by the build
 // fails unless --allow-bump names it, and passes with it, printed with the module that
 // requires it; the SDK modules and the root module fail with or without the flag, at
-// the release version whatever the pins hold of them; a module pinned by its go.mod
-// alone is pinned; a raise from v0 to v1, or across +incompatible, fails with it; a
-// flag that names an unchanged module fails.
+// the release version whatever the pins hold of them; a raise from v0 to v1, or across
+// +incompatible, fails with it; a flag that names an unchanged module fails. A pin of
+// a go.mod alone names no selected version, so a module the build list holds above it
+// passes, as a release's own build list does.
 func TestStrictVersions(t *testing.T) {
 	release := []boot.DistPin{{Path: "golang.org/x/sync", Version: "v0.24.0", Sum: h1("sync")}, {Path: rootModule + "/sdk", Version: "v0.3.0", Sum: h1("sdk")},
 		{Path: rootModule, Version: "v0.3.0", Sum: h1("root")},
 		{Path: "example.test/zero", Version: "v0.9.0", Sum: h1("zero")}, {Path: "example.test/same", Version: "v1.0.0", Sum: h1("same")},
 		{Path: "example.test/graph", Version: "v1.0.0", GoMod: h1("graph")}, {Path: Toolchain, Version: ToolchainVersion, Sum: ToolchainSum}}
 	graph := "example.test/echo@v0.1.0 golang.org/x/sync@v0.25.0\nexample.test/echo@v0.1.0 example.test/sdk@v0.4.0\n"
-	list := map[string]string{"golang.org/x/sync": "v0.25.0", "example.test/same": "v1.0.0", "example.test/graph": "v1.0.0", rootModule + "/sdk/testkit": "v0.3.0"}
+	list := map[string]string{"golang.org/x/sync": "v0.25.0", "example.test/same": "v1.0.0", "example.test/graph": "v1.1.0", rootModule + "/sdk/testkit": "v0.3.0"}
 	if _, _, err := strict(release, list, nil, graph); err == nil || !strings.Contains(err.Error(), "--allow-bump golang.org/x/sync admits the raise") {
 		t.Errorf("a raise without the flag: %v", err)
 	}
@@ -80,9 +81,6 @@ func TestStrictVersions(t *testing.T) {
 		{map[string]string{rootModule + "/sdk/testkit": "v0.4.0"}, nil, rootModule + "/sdk/testkit, pinned by the release at v0.3.0, is v0.4.0 in this build"},
 		{map[string]string{rootModule + "/sdk/testkit": "v0.4.0"}, []string{rootModule + "/sdk/testkit"}, "which --allow-bump never names"},
 		{map[string]string{rootModule: "v0.4.0"}, nil, "which --allow-bump never names"},
-		// A module that the release pins by its go.mod alone is pinned too: a raise of it
-		// is a bump (ADR-044 decision 10).
-		{map[string]string{"example.test/graph": "v1.1.0"}, nil, "--allow-bump example.test/graph admits the raise"},
 		{map[string]string{"example.test/zero": "v1.0.0"}, []string{"example.test/zero"}, "changes the major"},
 		{map[string]string{}, []string{"example.test/same"}, "--allow-bump example.test/same names a module whose version this build does not change"},
 	} {

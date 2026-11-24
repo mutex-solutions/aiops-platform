@@ -531,28 +531,30 @@ func (b *build) versions(ctx context.Context, list map[string]string, unchecked 
 }
 
 // strict compares the selected version of each module of list with the pins of the
-// release: a module the release compiles keeps its version, one pinned by its go.mod
-// alone is not raised, and each module the release pipeline builds is at the release
-// version, the root module's, whatever the pins hold of it. A raise passes only when
-// allow names it, it keeps the major, and the module is none the release pipeline
-// builds; a module of allow that list does not raise fails. It returns a line per
-// admitted raise, naming the modules whose go.mod requires it in graph, the output of
-// go mod graph, and the release's version of each.
+// release: each module the release compiles, which its pin with a zip sum names, keeps
+// its version, and each module the release pipeline builds is at the release version,
+// the root module's, whatever the pins hold of it. A pin of a go.mod alone names no
+// selected version: the module graph that go list -m all loads holds versions whose
+// go.mod no line of the release's go.sum records. A raise passes only when allow names
+// it, it keeps the major, and the module is none the release pipeline builds; a module
+// of allow that list does not raise fails. It returns a line per admitted raise, naming
+// the modules whose go.mod requires it in graph, the output of go mod graph, and the
+// release's version of each.
 func strict(release []boot.DistPin, list map[string]string, allow []string, graph string) ([]string, map[string]string, error) {
 	var errs []error
 	var bumps []string
 	raised, admitted, pinned := map[string]bool{}, map[string]string{}, map[string]boot.DistPin{}
 	for _, rp := range release {
-		if have, ok := pinned[rp.Path]; !ok || have.Sum == "" && (rp.Sum != "" || semver.Compare(rp.Version, have.Version) > 0) {
+		if rp.Sum != "" {
 			pinned[rp.Path] = rp
 		}
 	}
 	for _, m := range sdkModules {
-		pinned[m] = boot.DistPin{Path: m, Version: pinned[rootModule].Version, Sum: "the release version"}
+		pinned[m] = boot.DistPin{Path: m, Version: pinned[rootModule].Version}
 	}
 	for _, path := range sortedKeys(pinned) {
 		rp, got := pinned[path], list[path]
-		if rp.Path == Toolchain || got == rp.Version || got == "" || rp.Sum == "" && semver.Compare(got, rp.Version) < 0 {
+		if rp.Path == Toolchain || got == rp.Version || got == "" {
 			continue
 		}
 		raised[rp.Path] = true
