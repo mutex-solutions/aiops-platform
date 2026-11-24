@@ -30,6 +30,7 @@ const (
 	docU2      = "ADR-054 decision 13"
 	docFake    = "07-c4-plugin-sdk.md:33,47; 08-profiles-roadmap-adrs.md:1258"
 	docLink    = "ADR-060 decision 28; ADR-059 decision 9"
+	docMain    = "ADR-061 decision 28"
 )
 
 // bootDefs are the only definitions boot/ and loader/ may import.
@@ -179,6 +180,9 @@ func importReasons(rel string, test bool, imp string, reg []upstream) []string {
 		if !(std || isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || own || all || tk) {
 			add("an example imports the SDK and its own packages only (the other examples too in tests and in examples/examples.go); never internal, a plugin, boot, loader, cmd, test, dist", docExample)
 		}
+	}
+	if hasPath(rel, "cmd") && isDef(imp, "commands", "operations") {
+		add("no command code in a main: a package under cmd/ imports neither sdk/def/commands nor sdk/def/operations, tests included; every command is a row", docMain)
 	}
 	if third {
 		if r := upstreamReason(reg, rel, imp); r != "" {

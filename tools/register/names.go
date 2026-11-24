@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -59,7 +60,7 @@ func permitted(r register, e entry, n, key string) bool {
 			return true
 		}
 	}
-	if key == "ids" || key == "schemas" {
+	if key == "ids" || key == "schemas" || key == "commands" {
 		return false
 	}
 	for _, p := range e.Plugins {
@@ -143,7 +144,9 @@ func splitCamel(s string) []string {
 // under sdk/, boot/ and loader/, the SDK tree holding every definition, hook, fake and
 // suite; the id and the configSchema of every plugin under plugins/, which at S2a are
 // the rows of aiops-core and aiops-cli, the schema read as JSON, its property names,
-// keywords and string values; and the documentation places of 00-decisions.md. The
+// keywords and string values; each command path that a command row lists in
+// fixtures/commands/paths.json (ADR-061 decision 5), read as an id is; and the
+// documentation places of 00-decisions.md. The
 // dumps of the shipped profiles enter with their first file.
 func places(root string) ([]place, error) {
 	var out []place
@@ -189,6 +192,23 @@ func places(root string) ([]place, error) {
 		}
 		out = append(out, place{repoPath(root, m) + ": id", "ids", man.ID},
 			place{repoPath(root, m) + ": configSchema", "schemas", string(schema)})
+		// Each path that a command row registers, as its suite holds it (ADR-061
+		// decision 5), is read as an id is.
+		f := filepath.Join(filepath.Dir(m), "fixtures", "commands", "paths.json")
+		b, err = os.ReadFile(f)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		var paths []struct{ Path string }
+		if err == nil {
+			err = json.Unmarshal(b, &paths)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", repoPath(root, f), err)
+		}
+		for _, p := range paths {
+			out = append(out, place{repoPath(root, f) + ": " + p.Path, "commands", p.Path})
+		}
 	}
 	doc, err := os.ReadFile(filepath.Join(root, decisionsFile))
 	if err != nil {
