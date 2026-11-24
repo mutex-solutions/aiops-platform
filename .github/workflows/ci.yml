@@ -100,6 +100,10 @@ jobs:
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
+      - name: Operations line caps
+        # ADR-060 decision 35 and ADR-061: the operations library, the internal package of
+        # plugins/operations, 3,500 lines, provisional during S2a.
+        run: go run ./tools/kernelcheck lines plugins/operations/internal/operations 3500 provisional
       - name: pluginApi check
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
         # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.

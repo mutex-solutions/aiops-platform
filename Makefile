@@ -34,6 +34,9 @@ check:
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
+	@# ADR-060 decision 35 and ADR-061: the operations library, the internal package of
+	@# plugins/operations, 3,500 lines, provisional.
+	$(KC) lines plugins/operations/internal/operations 3500 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
