@@ -142,6 +142,14 @@ func TestToolboxRender(t *testing.T) {
 		!slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return d.Warning && d.File == "h/patch.yml" && d.Line == 2 }) {
 		t.Errorf("bundles and patches: %v, %+v, %v", rowIDs(r.Composition), r.Diagnostics, err)
 	}
+	// A patch relative to Dir keeps the name the operator wrote; one that leaves Dir is
+	// read by its path from the root, as S1's profile render read it.
+	for p, file := range map[string]string{"patch.yml": "patch.yml", "./patch.yml": "patch.yml", "../h/patch.yml": "h/patch.yml"} {
+		r, err = tb.Render(ctx, launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{p}, Dir: "/h"})
+		if err != nil || !slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return d.Warning && d.File == file && d.Line == 2 }) {
+			t.Errorf("patch %s in /h: %+v, %v; want a warning on %s", p, r.Diagnostics, err, file)
+		}
+	}
 
 	// A refused profile is a rendered one with an error diagnostic and its denial.
 	b.files["ghost.yml"] = &fstest.MapFile{Data: []byte("- insert:\n    - {id: ghost, plugin: t/none, required: true, roles: [api]}\n")}
@@ -173,6 +181,7 @@ func TestToolboxRenderRefuses(t *testing.T) {
 		"relative home":    {launch.RenderRequest{Home: "h", Profile: "p"}, "not an absolute path"},
 		"relative bundles": {launch.RenderRequest{Home: "/h", Profile: "p", Bundles: "x"}, "not an absolute path"},
 		"relative patch":   {launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{"patch.yml"}}, "not an absolute path"},
+		"relative dir":     {launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{"patch.yml"}, Dir: "w"}, "not an absolute path"},
 		"unknown dump":     {launch.RenderRequest{Home: "/h", Profile: "p", Dumps: []string{"--dump-all"}}, "not a dump"},
 		"bad role":         {launch.RenderRequest{Home: "/h", Profile: "p", Roles: []string{"root"}}, `role "root"`},
 		"reserved row":     {launch.RenderRequest{Home: "/h", Profile: "p", Patches: []string{"/h/reserved.yml"}}, "reserved"},

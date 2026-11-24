@@ -131,7 +131,10 @@ type Bundle struct {
 // the path of a signed distribution manifest to render against instead of the embedded
 // one, its module table read from the manifests it holds, "" for none: the flag --dist of
 // profile render. Aside names layer files of the home, by slash path under it, that the
-// render reads as absent, as profile sanitize sets them aside.
+// render reads as absent, as profile sanitize sets them aside. A patch may be relative
+// to Dir, the working directory of the command, and then keeps the name the operator
+// wrote in the provenance of a dump, as S1's profile render did; every other path of
+// the request is absolute.
 type RenderRequest struct {
 	Home, Profile, Bundles string
 	Patches                []string
@@ -141,6 +144,7 @@ type RenderRequest struct {
 	Append                 Bundle
 	Against                string
 	Aside                  []string
+	Dir                    string
 }
 
 // KeyProviders is one key of a rendered profile: its classes ("open" or "bound") and

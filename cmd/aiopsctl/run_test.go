@@ -151,10 +151,11 @@ func TestRunRolesPathsAndPatches(t *testing.T) {
 	if !strings.Contains(two.out, "\nroles api,worker\n") {
 		t.Errorf("repeated roles:\n%s", two.out)
 	}
-	// A relative patch is resolved against the working directory, as every path of a
-	// request is (ADR-061 decision 16), and an unknown id warns.
+	// A relative patch keeps its relative name in provenance, so a dump holds no absolute
+	// path that the operator did not write, as at S1 (ADR-061 decision 27); an unknown id
+	// warns.
 	r := do(t, w, env, with("--patch", "p/ok.yml", "--dump")...)
-	if r.code != 0 || !strings.Contains(r.out, "(patch:work/p/ok.yml) work/p/ok.yml:1") || !strings.Contains(r.errOut, `unknown id "ghost"`) {
+	if r.code != 0 || !strings.Contains(r.out, "(patch:p/ok.yml) p/ok.yml:1") || !strings.Contains(r.errOut, `unknown id "ghost"`) {
 		t.Errorf("relative patch: %+v", r)
 	}
 	// An absolute patch path and one that leaves the working directory.

@@ -170,17 +170,18 @@ func (w *world) run(ctx context.Context, argv ...string) int {
 }
 
 // profile render calls Render with each relative path resolved against the working
-// directory, --dist as the directory of distribution.yaml, the home of the invocation
-// unless --home names one, and the environment of the invocation (ADR-061 decisions 2,
-// 20 and 27).
+// directory but the patches, which it passes as written with the working directory, so
+// a dump names a relative patch as the operator wrote it; --dist as the directory of
+// distribution.yaml, the home of the invocation unless --home names one, and the
+// environment of the invocation (ADR-061 decisions 2, 20 and 27).
 func TestRenderResolvesPaths(t *testing.T) {
 	w := newWorld(t, &stub{}, "/home")
 	if code := w.run(t.Context(), "profile", "render", "--profile", "demo", "--bundles", "b", "--patch", "p.yml", "--patch", "/abs.yml",
 		"--dist", "d", "--server", "--role", "api,worker", "--role", "edge"); code != 0 {
 		t.Fatalf("exit %d: %s", code, w.err.String())
 	}
-	want := launch.RenderRequest{Home: "/home", Profile: "demo", Bundles: "/work/b", Patches: []string{"/work/p.yml", "/abs.yml"},
-		Roles: []string{"api", "worker", "edge"}, Server: true, Against: "/work/d/distribution.yaml"}
+	want := launch.RenderRequest{Home: "/home", Profile: "demo", Bundles: "/work/b", Patches: []string{"p.yml", "/abs.yml"},
+		Roles: []string{"api", "worker", "edge"}, Server: true, Against: "/work/d/distribution.yaml", Dir: "/work"}
 	got := w.s.lastRender()
 	if fmt.Sprint(got.RenderRequest) != fmt.Sprint(want) || got.Env == nil {
 		t.Errorf("request %+v, want %+v and the environment", got, want)
