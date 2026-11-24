@@ -144,6 +144,148 @@ entries:
       - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
     default: false
 
+  # The signature library of ADR-020: sigstore-go and the three modules that the operations
+  # library imports beside it, each at its pin (ADR-020 decisions 1, 16, 19 and 20). The
+  # licences are read in the module cache at these pins, from the licence file at the root
+  # of each module, classified by the texts it holds as ADR-020 decision 16 states; the
+  # other modules of the package graph are in the contains of sigstore-go.
+  - id: sigstore-go
+    names: [sigstore, sigstore-go]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/sigstore-go]
+    pin: v1.3.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked without its pkg/sign, which adds eleven modules, two of them MPL-2.0 (ADR-020 decision 20)", row: L7}
+      - {condition: "Every artifact that links it carries in THIRD_PARTY_LICENSES/ the NOTICE files of go-openapi/jsonpointer, go-openapi/jsonreference, go-openapi/runtime, go-tuf/v2 and grpc (NOTICE.txt), the PATENTS files of x/crypto, x/mod, x/net, x/sync, x/sys, x/term, x/text and protobuf, the full Apache-2.0 text beside the notices of json-canonicalization, in-toto/attestation and in-toto-golang, the licence files of the three OpenTelemetry modules whole, GO-LICENSE of go-pathspec beside its LICENSE, and the MIT file of go-openapi/runtime/middleware/denco (ADR-020 decision 16)", row: L7}
+      - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-020 decision 30, reading 4; ADR-047 decision 21)", row: L16}
+      - {condition: "The builder builds every binary with the tag grpcnotrace, which drops golang.org/x/net/trace and its two default-mux handlers, and its init deny-list exempts one registration, the codec of package google.golang.org/grpc/encoding/proto (RegisterCodecV2) at google.golang.org/grpc v1.82.1, read again at every version bump (ADR-020 decision 27; ADR-044 decision 21)", row: L16}
+    evidence:
+      - {source: "github.com/sigstore/sigstore-go@v1.3.0 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.3.0}
+      - {source: "the root licence files of each module of contains at its version, in the module cache; github.com/opencontainers/go-digest@v1.0.0 LICENSE.docs and README.md", read: "2026-11-24", version: v1.3.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decision 1; ADR-060 decision 41"}
+    contains:
+      - {module: github.com/asaskevich/govalidator, version: v0.0.0-20230301143203-a9d515a09cc2, licence: MIT}
+      - {module: github.com/blang/semver, version: v3.5.1+incompatible, licence: MIT}
+      - {module: github.com/cenkalti/backoff/v5, version: v5.0.3, licence: MIT}
+      - {module: github.com/cespare/xxhash/v2, version: v2.3.0, licence: MIT}
+      - {module: github.com/cyberphone/json-canonicalization, version: v0.0.0-20241213102144-19d51d7fe467, licence: Apache-2.0}
+      - {module: github.com/digitorus/pkcs7, version: v0.0.0-20230818184609-3a137a874352, licence: MIT}
+      - {module: github.com/digitorus/timestamp, version: v0.0.0-20231217203849-220c5c2851b7, licence: BSD-2-Clause}
+      - {module: github.com/go-logr/logr, version: v1.4.4, licence: Apache-2.0}
+      - {module: github.com/go-logr/stdr, version: v1.2.2, licence: Apache-2.0}
+      - {module: github.com/go-openapi/analysis, version: v0.25.5, licence: Apache-2.0}
+      - {module: github.com/go-openapi/errors, version: v0.22.8, licence: Apache-2.0}
+      - {module: github.com/go-openapi/jsonpointer, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/jsonreference, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/loads, version: v0.25.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/runtime, version: v0.33.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/runtime/server-middleware, version: v0.30.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/spec, version: v0.22.9, licence: Apache-2.0}
+      - {module: github.com/go-openapi/strfmt, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/cmdutils, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/conv, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/fileutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/jsonname, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/jsonutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/loading, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/mangling, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/netutils, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/pools, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/stringutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/typeutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/yamlutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/validate, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-viper/mapstructure/v2, version: v2.5.0, licence: MIT}
+      - {module: github.com/google/certificate-transparency-go, version: v1.3.3, licence: Apache-2.0}
+      - {module: github.com/google/go-containerregistry, version: v0.21.7, licence: Apache-2.0}
+      - {module: github.com/google/uuid, version: v1.6.0, licence: BSD-3-Clause}
+      - {module: github.com/grpc-ecosystem/grpc-gateway/v2, version: v2.29.0, licence: BSD-3-Clause}
+      - {module: github.com/in-toto/attestation, version: v1.2.0, licence: Apache-2.0}
+      - {module: github.com/in-toto/in-toto-golang, version: v0.11.0, licence: Apache-2.0}
+      - {module: github.com/oklog/ulid/v2, version: v2.1.1, licence: Apache-2.0}
+      - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/pkg/errors, version: v0.9.1, licence: BSD-2-Clause}
+      - {module: github.com/shibumi/go-pathspec, version: v1.3.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: github.com/sigstore/rekor, version: v1.5.3, licence: Apache-2.0}
+      - {module: github.com/sigstore/rekor-tiles/v2, version: v2.3.0, licence: Apache-2.0}
+      - {module: github.com/sigstore/timestamp-authority/v2, version: v2.1.3, licence: Apache-2.0}
+      - {module: github.com/theupdateframework/go-tuf/v2, version: v2.4.2, licence: Apache-2.0}
+      - {module: github.com/transparency-dev/formats, version: v0.1.1, licence: Apache-2.0}
+      - {module: github.com/transparency-dev/merkle, version: v0.0.2, licence: Apache-2.0}
+      - {module: github.com/youmark/pkcs8, version: v0.0.0-20240726163527-a2c0da244d78, licence: MIT}
+      - {module: go.opentelemetry.io/auto/sdk, version: v1.2.1, licence: Apache-2.0}
+      - {module: go.opentelemetry.io/otel, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: go.opentelemetry.io/otel/metric, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: go.opentelemetry.io/otel/trace, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: golang.org/x/crypto, version: v0.54.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/mod, version: v0.42.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/net, version: v0.57.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/sys, version: v0.47.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/term, version: v0.45.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
+      - {module: google.golang.org/genproto/googleapis/api, version: v0.0.0-20260526163538-3dc84a4a5aaa, licence: Apache-2.0}
+      - {module: google.golang.org/genproto/googleapis/rpc, version: v0.0.0-20260523011958-0a33c5d7ca68, licence: Apache-2.0}
+      - {module: google.golang.org/grpc, version: v1.82.1, licence: Apache-2.0}
+      - {module: google.golang.org/protobuf, version: v1.36.11, licence: BSD-3-Clause}
+      - {module: k8s.io/klog/v2, version: v2.140.0, licence: Apache-2.0}
+    default: false
+
+  - id: sigstore
+    names: [sigstore]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/sigstore]
+    pin: v1.10.8
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/sigstore/sigstore@v1.10.8 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.10.8}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 1 and 20: the signature package"}
+    default: false
+
+  - id: sigstore-protobuf-specs
+    names: [sigstore, protobuf-specs]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/protobuf-specs]
+    pin: v0.5.1
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/sigstore/protobuf-specs@v0.5.1 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v0.5.1}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 1 and 20: the bundle messages"}
+    default: false
+
+  - id: go-securesystemslib
+    names: [go-securesystemslib, securesystemslib]
+    form: library
+    behind: operations
+    modules: [github.com/secure-systems-lab/go-securesystemslib]
+    pin: v0.11.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/secure-systems-lab/go-securesystemslib@v0.11.0 LICENSE", read: "2026-11-24", version: v0.11.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 4 and 20: dsse.PAE and the encrypted key format"}
+    default: false
+
   - id: goleak
     names: [goleak]
     form: library

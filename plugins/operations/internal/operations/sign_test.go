@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/secure-systems-lab/go-securesystemslib/encrypted"
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
@@ -24,6 +25,8 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/verify"
 	"github.com/sigstore/sigstore/pkg/signature"
 )
+
+var timeZero time.Time
 
 func keyPair(t *testing.T, password string) (*ecdsa.PrivateKey, []byte, []byte) {
 	t.Helper()
