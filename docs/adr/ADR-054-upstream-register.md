@@ -751,7 +751,11 @@ to a question, the decision here settles it.
     other than the entry's own plugins needs an accepted decision. `sdk/kernel`, `loader/`
     and the definitions with their fakes and suites never appear, the pgx import of W2
     apart. `00:267`, `07:37`, `07:50` and harness:210 gain "or where its register entry
-    lists it by an accepted decision", for the name and for the import.
+    lists it by an accepted decision", for the name and for the import. The operations
+    plugin of ADR-060 decision 41, which the entries of the YAML library, the OCI client
+    and the signature library list as an importer, is a row of the `aiops-cli` bundle of
+    the `cli` profile at S2a, not of `aiops-core` (owner, 2026-11-23), so decision 23
+    holds unchanged.
 
 18. **A module of another project is listed in the `contains` of the entry that brings
     it in** (Q2 (b)). An entry's `modules` holds the modules its upstream publishes; each
@@ -798,7 +802,11 @@ to a question, the decision here settles it.
     `tracer` hand out neutral types of `sdk/def`, and the Prometheus client and the OTel
     SDK sit only in a row outside `aiops-core` that wraps them, on the allow-list as an
     OTLP provider or by an ADR that edits `00:267`. `03:69` and `:343` are edited. No
-    client-library type other than pgx v5 enters `sdk/def` (decision 13).
+    client-library type other than pgx v5 enters `sdk/def` (decision 13). The operations
+    plugin, which imports the signature library, the OCI client and the YAML library, is
+    a row of the `aiops-cli` bundle of the `cli` profile at S2a, not of `aiops-core`, so
+    this decision holds unchanged; where `plugin-manager` sits from S6a is decided by the
+    ADR of S6a (owner, 2026-11-23).
 
 24. **A row on the allow-list carries its suffix only when its entry is `suffix-ok`**
     (Q8 (a)), as `00:267` and the third sentence of `00:651` say; the allow-list exception

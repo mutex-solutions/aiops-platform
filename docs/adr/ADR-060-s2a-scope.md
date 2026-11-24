@@ -128,11 +128,10 @@ gaps:
    recording fake that exposes `Inventory()` (`07:494`); and a suite with an obligations
    half and a guard half, both on `conformance.Run(t, Mount)` (`07:1463`). Each
    obligation has an id, so `plugin check` and a fresh template print one line per
-   failed obligation with its id (`07:1561`, `:1563`). `Inventory()` lists the
-   registered names, and the fiber that owns each is the one whose ledger holds its
-   label (`kernel.Fiber.Effects`): a `*kernel.Context` gives a registry no fiber
-   identity to record, and decision 3 plans no kernel change, so this is the reading
-   of "registrations by owning fiber" (`07:519`) at S2a. Both definitions are `remote:
+   failed obligation with its id (`07:1561`, `:1563`). `Inventory()` of a toy registry
+   returns the registered names, and the owning fiber of each is read from the kernel
+   ledger, as the fiber whose ledger holds `Label(name)`; no kernel accessor is added
+   (owner, 2026-11-23). Both definitions are `remote:
    "no"` at S2a; S2b marks them `contrib` with the adapter generator, as a minor of each
    (plugin record §5; `08:643`, `:695`). The dispatcher `example-dispatch` provides both
    registries and the toy caller of question Q1 consumes both; these and the other toy
@@ -356,9 +355,10 @@ gaps:
     then `dist use` records the image reference in the site files and prints it.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
-    a command that writes a key pair in the format of ADR-020 decision 4, named by the
-    CLI spec (ADR-020 decision 21), `dist build`, `dist sign`, `dist use`, `profile
-    verify` and `profile init`
+    a command that writes a key pair in the format of ADR-020 decision 4, which the CLI
+    spec (ADR-020 decision 21) names `key generate` (ADR-061 decision 30), `dist build`,
+    `dist sign`, `dist use`, `profile verify`, `profile init` and `profile sanitize`
+    (ADR-061 decision 41)
     (`00:137`; `02:95`; `08:72` row 30, `:366`, `:694`, `:936`), on an operations library
     that `plugin-manager` later shares, under one profile write lock (`08:369`; `03:71`).
     Whether each command is a row of the `cli` profile or code of `cmd/aiopsctl` is
@@ -397,23 +397,23 @@ gaps:
       test-only profile (`07:1576`); what that profile holds at S2a and when smoke passes
       is a reading of question Q22. It needs a container runtime (`07:1530`).
     - The exit codes stay the three of ADR-059 decision 29: a denial, a failed step and
-      `rebuild-required` exit 1, with the reason on stderr. The usage text and the table
-      in `cmd/aiopsctl/run.go` say so.
+      `rebuild-required` exit 1, with the reason on stderr. The help of the `cli` row and
+      the exit mapping of `cmd/aiopsctl` say so (ADR-061 decision 10).
 24. **Templates** live in `templates/`, embedded in `aiopsctl` through a Go package; the
     template files carry names the Go tool does not build (`07:1549`; `08:1218`). S2a
-    writes a Go template for each registry that exists, `echoers` and `stampers`, with
-    the files of `07:1551-1559`, and the connector-pack template with `runtimes: []`
-    (`08:897`, `:1263`). The connector template names no plugin id: `plugin new
-    connector` writes rows of an instantiable plugin of the release it runs against
-    (`--against`, by default the release this `aiopsctl` was built from), with a config
-    taken from the examples of that plugin's `configSchema`. At S2a the template job and
-    step P1 run it against the exit's test release, whose one instantiable plugin is the
-    toy echoer of question Q2; from S8a the release table holds `tool-mcp` and the job
-    runs it against the release too. No shipped binary depends on a test-only id.
-    `--contrib` writes the `contrib` owner (`08:407`). The CI template job generates a
-    plugin from each template and asserts that it compiles, passes T0 and the generated
-    tests, and fails conformance with exactly one line per obligation (`08:1263`;
-    `07:1561`).
+    writes a Go template for each registry that exists, `echoers`, `stampers` and
+    `commands` (ADR-061 decision 6), with the files of `07:1551-1559`, and the
+    connector-pack template with `runtimes: []` (`08:897`, `:1263`). The connector
+    template names no plugin id: `plugin new connector` writes rows of an instantiable
+    plugin of the release it runs against (`--against`, by default the release this
+    `aiopsctl` was built from), with a config taken from the examples of that plugin's
+    `configSchema`. At S2a the template job and step P1 run it against the exit's test
+    release, whose one instantiable plugin is the toy echoer of question Q2; from S8a the
+    release table holds `tool-mcp` and the job runs it against the release too. No shipped
+    binary depends on a test-only id. `--contrib` writes the `contrib` owner (`08:407`).
+    The CI template job generates a plugin from each template and asserts that it
+    compiles, passes T0 and the generated tests, and fails conformance with exactly one
+    line per obligation (`08:1263`; `07:1561`).
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
@@ -429,7 +429,10 @@ gaps:
     the rows of the S1 core plugins (`clock`, `config-refs`, `restart-policy`, `reload`,
     `readiness`) and any row that question Q12 adds, and `profiles/dev/profile.yaml`
     (`08:1222`, `:1226`); with question Q17 (a) also `bundles/aiops-cli/bundle.yaml` and
-    `profiles/cli/profile.yaml`. They are embedded through `dist` into `cmd/aiops` as
+    `profiles/cli/profile.yaml`. The row of the operations plugin of decision 41 is in
+    `aiops-cli`, not in `aiops-core`, so ADR-054 decision 23 holds unchanged; where
+    `plugin-manager` sits from S6a is decided by the ADR of S6a (owner, 2026-11-23).
+    They are embedded through `dist` into `cmd/aiops` as
     `serve.Distribution.Shipped`, which `cmd/aiops` leaves nil at `491a518`, and into the
     test release; a file of the home wins over a shipped one (`internal/serve`). `install`,
     `enable`, `disable` and `remove` change a profile only under `$AIOPS_HOME`: when the
@@ -532,7 +535,9 @@ gaps:
     - **C4.** `plugin enable` enables the rows (question Q11) and they reach the running
       process (question Q12). The `teststate` row of the test release (question Q2)
       writes the committed state, and the step passes when every row of the composition
-      is ACTIVE in it.
+      is ACTIVE in it. It also passes only when the final result that `plugin enable`
+      prints is `passed`, shows the change as ADR-062 decision 11 says, and names the
+      generation that `teststate` reports (ADR-062 decision 18).
     - **C5.** Both are called (question Q1): each echoer answers through the dispatcher
       with the reply its code or its row config fixes.
     - **C6.** The composition holds no policy row and no tenant row (`08:694`).
@@ -636,8 +641,14 @@ gaps:
       `--allow-bump` is acceptable; the content of the `init` deny-list, which exempts by
       package and pinned version the codec registration of
       `google.golang.org/grpc/encoding/proto` in a build with the tag `grpcnotrace`
-      (ADR-020 decision 27); how the licence scan runs the same with a local toolchain;
-      where a self-built distribution lists
+      (ADR-020 decision 27); the release build in two phases, where the builder writes
+      the distribution manifest, the release pipeline signs it outside the builder and
+      the builder then links the release binaries with the manifest, its bundle and the
+      release public key embedded, while `dist build` for a site links in one phase
+      (ADR-020 decision 13); the site's `aiopsctl` as an output of `dist build`, for the
+      host's platform, the `cli` profile of the same module table, embedding the same
+      manifest (ADR-020 decision 29); how the licence scan runs the same with a local
+      toolchain; where a self-built distribution lists
       sealed-hook listeners and raises the required set, since `dist.yaml` has four
       fields and W3 allows a raise (`08:401`, `:403`).
     - ADR-047, its S2a part: the OCI layout and media types; the content layer and its
@@ -696,8 +707,9 @@ gaps:
 | the `plugin` package | new | 2,500, provisional |
 | each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |
 | `cmd/aiopsctl` | 210 (s1-report:75) | 2,500, provisional |
-| each command row's plugin, with question Q17 (a) | new | 1,500 each, provisional |
-| the operations library | new | 3,500, provisional |
+| each command row's plugin, with question Q17 (a), and `plugins/cli` (ADR-061) | new | 1,500 each, provisional |
+| `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional |
+| the operations library, `plugins/operations` (ADR-061) | new | 3,500, provisional |
 | the builder | new | 3,000, provisional |
 | `plugingen` | new | 1,500, provisional |
 
@@ -717,7 +729,9 @@ row 53), so it covers the new gate checks.
     directions, cosign verifying an `aiopsctl`-signed artifact and distribution manifest
     and `aiopsctl` verifying cosign-signed ones in key mode (`07:75`, `:1852`;
     `08:1379`); the `s2a-exit` job and its local-toolchain variant, race-built and
-    failing on any race report as `s1-suites` does; the caps of decision 35. None pushes,
+    failing on any race report as `s1-suites` does; the caps of decision 35; and, in the
+    `test` job, the peer-credential step of ADR-062 decision 18, whose Makefile target
+    `make check` does not run, since it needs passwordless `sudo`. None pushes,
     publishes or holds a long-lived key.
 
 ## Consequences
@@ -1225,7 +1239,11 @@ to a question, the decision here settles it.
     `plugin-manager` from S6a. Besides `boot/` and `tools/` (decision 6), the YAML library
     is allowed in that plugin, in `plugingen` and in the builder, and never in `sdk/`,
     `loader/` or any other plugin. `08:369` and `08:1255` both hold, and `boot` keeps
-    every read the gate needs.
+    every read the gate needs. That plugin, the library of the CLI, imports the signature
+    library, the OCI client and the YAML library, and is a row of the `aiops-cli` bundle
+    of the `cli` profile at S2a, not of `aiops-core`, so ADR-054 decision 23 ("no
+    row of `aiops-core` imports an upstream module") holds unchanged; where
+    `plugin-manager` sits from S6a is decided by the ADR of S6a (owner, 2026-11-23).
 
 42. **The handshake message is frozen as a proto file** (Q6 (a)). S2a commits
     `sdk/remote/handshake/handshake.proto` with the three fields of `07:1126-1130` and a
@@ -1276,7 +1294,10 @@ to a question, the decision here settles it.
     socket under `<home>/run/` that only the site's user can open; a row beside `reload`
     is not in the list of `00:275`, so that form edits it. The transport, its plugin vet
     rule and how it relates to `admin-api` at S4a are written in an ADR before the exit
-    test. Decision 27 keeps `dev` to `aiops-core` at S2a.
+    test. Decision 27 keeps `dev` to `aiops-core` at S2a. Note of 2026-11-23: ADR-062
+    settles the transport: the row `reload-socket` of `aiops-core`, a bound consumer of
+    `reload` beside it, serves `<home>/run/reload.sock` from S2a to S6a, and `00:275`
+    lists it.
 
 49. **A pack attests the echo scenario at S2a** (Q13 (a)). A scenario is a named,
     versioned script run inside `aiopsctl`, with its halves named. The S2a pack carries
@@ -1346,7 +1367,8 @@ to a question, the decision here settles it.
     1. **Smoke.** At S2a the test-only profile that `plugin smoke` boots is the release's
        `aiops-core` bundle plus the plugin's bundle with its rows enabled, and smoke
        passes when every row is ACTIVE or says what it waits for, the boot rule of `dev`
-       (`08:738`). It edits `07:1576`.
+       (`08:738`). It edits `07:1576`. Note of 2026-11-23: smoke boots that profile with
+       a `--patch` file that disables `reload-socket` (ADR-062 decision 27).
     2. **Inspect.** `inspect` fetches only the manifest and the bundle, never content,
        module or image, and runs nothing. It edits `08:373` and `07:1853`.
     3. **`wasm`.** Check 1 denies it, as a runtime this schema version does not serve,

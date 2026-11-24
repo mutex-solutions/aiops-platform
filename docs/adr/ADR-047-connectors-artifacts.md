@@ -343,7 +343,9 @@ gaps:
     snapshot of `08:374` never leaves a lock entry without its files. A failure between
     those steps can leave either directory with no profile that names the id; install
     removes such a leftover, and says so, after the checks of decision 7 and before it
-    writes.
+    writes. Note of 2026-11-23: `remove` deletes the two directories only after a final
+    result that shows the change, or when no process runs the profile, and keeps them
+    where the verdict stays unknown (ADR-062 decision 11).
 
 ### The gate rule
 
@@ -429,7 +431,9 @@ gaps:
     | `trust.yaml` | `aiopsctl` `trust add` | Read-only | `07:1840`; ADR-060 decision 26 |
     | The records of `dist use` and of install: the verified signer and the digest | `aiopsctl` `dist use`, `install` | Read-only; their names and form are ADR-020's, under the home and outside `run/` | ADR-060 decisions 26 and 33 |
     | `image.yaml`: one field, `image`, the reference by digest of the image that `dist use` verified | `aiopsctl` `dist use` | Read-only, and the kernel does not read it: the host starts the container from it (decision 15) | ADR-060 decision 22 |
-    | `run/` | The kernel: `status.json`, the files of the test control rows, and the submission socket if the transport ADR of ADR-060 decision 48 takes the candidate | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
+    | `write.lock`, the one write lock of the home | `aiopsctl`: every method of the operations library that writes the home holds it | Read-only; the kernel takes no lock and does not read it at S2a | ADR-061 decision 19 |
+    | `snapshot/`: a copy of every file a write replaces or deletes and the list of the paths it creates | `aiopsctl`: every method of the operations library that writes the home, which removes it after the submission or restores it | Read-only; the kernel does not read it at S2a | ADR-061 decisions 17 and 19 |
+    | `run/` | The kernel: `status.json`, the files of the test control rows, and `reload.sock` and `reload.lock` of `reload-socket` (ADR-062) | Read-write | ADR-059 decision 31; `internal/runfile/runfile.go` |
 
     At S2a the kernel writes nothing outside `run/`. Later paths join the table with their
     step: `tenants/` at S4b and `profiles/<p>/compatibility.yaml` at S6b (`08:508`). From
@@ -438,22 +442,23 @@ gaps:
 
 14. **Ownership.** One user of the host, the site user, owns the home and everything in
     it. `aiopsctl` creates the home and `run/` with mode 0700, writes each file with mode
-    0600 and replaces it by a rename in its directory, and refuses to write into a home
-    whose owner is not its effective user, so a run as another user cannot leave a file
-    that the kernel cannot read. The kernel, as a binary or as a container, runs with the
-    uid and gid of the home's owner as the host sees them. For a container that is a
-    property of the runtime's user mapping, not of the image: the container runtime of the
-    exit's clean machine (ADR-060 decision 30) is rootful Docker, run with `--user
-    <uid>:<gid>` of the owner, and any other runtime and mode qualifies whose mapping
-    gives the same, such as rootless Podman with
-    `--userns=keep-id`. A mapping to a subordinate uid of the host cannot read a 0600 file
-    of the home, and boot then fails on the first file it reads. On a host with SELinux
-    enforcing, each bind of decision 15 also needs a label the container may read (the
-    `z` option of the bind in Docker and Podman), which the exit does not test. Only the
-    site user can then open the socket in `run/` that ADR-060 decision 48 names as the
-    candidate transport, and no other unprivileged user of the host reads or changes a
-    file of the home between install and boot. Any protection of the records of install
-    and `dist use` beyond that is ADR-020's (`07:75` R17).
+    0600 and replaces it by a rename in its directory, except `write.lock`, which it
+    creates once with mode 0600 and never renames or deletes, since the lock binds to one
+    inode (ADR-061 decision 19), and refuses to write into a home whose owner is not its
+    effective user, so a run as another user cannot leave a file that the kernel cannot
+    read. The kernel, as a binary or as a container, runs with the uid and gid of the
+    home's owner as the host sees them. For a container that is a property of the
+    runtime's user mapping, not of the image: the container runtime of the exit's clean
+    machine (ADR-060 decision 30) is rootful Docker, run with `--user <uid>:<gid>` of the
+    owner, and any other runtime and mode qualifies whose mapping gives the same, such as
+    rootless Podman with `--userns=keep-id`. A mapping to a subordinate uid of the host
+    cannot read a 0600 file of the home, and boot then fails on the first file it reads.
+    On a host with SELinux enforcing, each bind of decision 15 also needs a label the
+    container may read (the `z` option of the bind in Docker and Podman), which the exit
+    does not test. Only the site user can then open `run/reload.sock`, the socket of
+    ADR-062, and no other unprivileged user of the host reads or changes a file of the
+    home between install and boot. Any protection of the records of install and `dist use`
+    beyond that is ADR-020's (`07:75` R17).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
     has on the host, read-only; `run/` bound over it at the same path, read-write; the
@@ -763,12 +768,16 @@ decision 16 names those of check 8): `00:478`; `07:1318`, `:1386`, `:1816`, `:18
 ADRs accepted on 2026-11-23 in the ADR table of `08` §3: the row of ADR-047. An option
 the owner did not choose edits nothing.
 
-**The lock entry of in-process code is open.** Decision 8 gives in-process code no entry
-in `plugins.lock`, and decision 18 starts its check of that code from the digest that
-install recorded, since the code has no lock entry. ADR-020 decision 10, accepted the
-same day, gives in-process code an entry that pins nothing and through which boot finds
-the record of a row with no origin artifact (ADR-020 decision 12). The owner accepted
-both, and only the owner settles which holds. One question goes to the owner: does
-in-process code get an entry in `plugins.lock`, as ADR-020 decision 10 states, or none,
-as decisions 8 and 18 state? Until the owner answers, `07:1841` and `:1855` state the
-point as open, and decisions 8 and 18 and `00:478` are not edited.
+**In-process code has no entry in `plugins.lock`** (owner, 2026-11-23). Decision 8 gives
+in-process code no entry in `plugins.lock`, and decision 18 starts its check of that code
+from the digest that install recorded, since the code has no lock entry. As accepted,
+ADR-020 decision 10 gave in-process code an entry that pins nothing, through which boot
+found the record of a row with no origin artifact (ADR-020 decision 12). The owner was
+asked which holds and answered on 2026-11-23: in-process code gets no entry, as
+decisions 8 and 18, `07:1841` and `00:478` state, so decisions 8 and 18 stand as written.
+ADR-020 decisions 10 and 12 change: boot finds the record of an in-process row by its
+plugin id in the records install wrote under `$AIOPS_HOME/verified/`, whose
+`record.yaml` carries the plugin id, and not through the lock. `07:1841` and `:1855`, the
+row `Lock` and the relationship from `Install` to `Lock` in `07` §9, say that in-process
+code has no entry; `00:478` locks only a remote plugin or a pack with no code and is not
+edited for this point.

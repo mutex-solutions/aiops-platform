@@ -170,7 +170,11 @@
    `trust.yaml` fixtures with a key from `crypto/ecdsa`. This answers R17 for signing
    (`07:75`) and keeps the homes of verification that `08:404` and `07:1839` state:
    `aiopsctl`, and from S6a the `plugin-manager` side, which consumes the same plugin.
-   `boot/` imports neither cosign
+   The operations plugin, which imports the signature library, the OCI client and the
+   YAML library, is a row of the `aiops-cli` bundle of the `cli` profile at S2a, not of
+   `aiops-core`, so ADR-054 decision 23 ("no row of `aiops-core` imports an upstream
+   module") holds unchanged; where `plugin-manager` sits from S6a is decided by the ADR
+   of S6a (owner, 2026-11-23). `boot/` imports neither cosign
    nor sigstore-go and verifies no signature (`08:404`; `07:1880`). Which sigstore-go
    packages the signing half imports is question Q2; how its `init` registrations meet the
    builder's deny-list is question Q9. cosign is never linked and never baked into an
@@ -315,7 +319,7 @@
 
    | Kind | Subject | Where the statement is | Signed by |
    |---|---|---|---|
-   | An OCI artifact of any runtime: in-process code, a remote plugin from S2b, a pack | Name `<id>@<version>`. The digests follow question Q6: under (a), one subject, the SHA-256 of the artifact's OCI manifest, the digest install pulls by and the lock names; under (b), one subject per other layer of the artifact | Under Q6 (a) an OCI referrer of the artifact, under Q6 (b) a layer of it | The artifact's signer, with `plugin sign` |
+   | An OCI artifact of any runtime: in-process code, a remote plugin from S2b, a pack | Name `<id>@<version>`. The digests follow question Q6: under (a), one subject, the SHA-256 of the artifact's OCI manifest, the digest install pulls by and, for a remote plugin or a pack, the lock names; under (b), one subject per other layer of the artifact | Under Q6 (a) an OCI referrer of the artifact, under Q6 (b) a layer of it | The artifact's signer, with `plugin sign` |
    | An entry of a release's module table: a first-party plugin (ADR-060 decision 50), or a plugin of a test distribution (ADR-060 decisions 28 and 55) | Name `<id>@<version>`; digest the SHA-256 of the plugin's generated manifest as the signed distribution manifest holds it | Inside the signed distribution manifest, beside that entry | The signer of that manifest |
 
    The artifact's own fields pin its code: the module path, version and sum of in-process
@@ -354,11 +358,14 @@
     The record of an in-process artifact is its attestation recorded until boot, as
     ADR-060 decision 33 asks. The first `plugin install` of in-process code changes no file
     and the run after `dist use` writes the record (ADR-060 decision 30, step C2).
-    `plugins.lock`, whose place ADR-047 fixes, names the digest of every installed
-    artifact, in-process ones included: their entry pins nothing, since the signed
-    manifest pins the module, and lets boot find the record of each row's origin artifact,
-    which the loader records (ADR-060 decision 19), or of the row's plugin id for a row
-    with no origin artifact (decision 12). Boot reads records and never writes
+    `plugins.lock`, whose place ADR-047 fixes, names the digest of every installed remote
+    plugin and pack with no code. In-process code has no entry in it, since the signed
+    manifest pins the module (ADR-047 decisions 8 and 18; owner, 2026-11-23). Boot finds
+    the record of an in-process row by its plugin id in the records install wrote under
+    `verified/`, since `record.yaml` carries the plugin id, and not through the lock: the
+    id of the row's origin artifact, which the loader records (ADR-060 decision 19), or
+    the row's own plugin id for a row with no origin artifact (decision 12). Boot reads
+    records and never writes
     them, and reads `trust.yaml` at every boot, so a key removed from it denies at the next
     boot without a record being touched.
 11. **How the records are protected until boot** is question Q5. Under its recommended
@@ -403,8 +410,9 @@
       digest, the current digest and `aiopsctl dist use <image>`, and prints the recovery
       of decision 13.
     - For a row of an installed in-process artifact, the record of its origin artifact, or
-      for a row with none the record that `plugins.lock` names for its plugin id, holds the
-      module path, version and sum the artifact pins (decision 10). They must equal the
+      for a row with none the record of its plugin id, each found by plugin id in the
+      records under `verified/` and not through `plugins.lock`, holds the module path,
+      version and sum the artifact pins (decision 10). They must equal the
       module that boot resolved for the row's module-table entry, which the trusted
       manifest lists. Otherwise the row is denied by check 10, as an attestation of another
       subject (`07:1893`): the statement covers the artifact, and the artifact pins other
@@ -1092,14 +1100,17 @@ entries of sigstore-go, cosign and go-digest, to the commit that writes
 `tools/upstream-components.yaml` (ADR-060 decision 51); and reading 3, to the S2a report.
 An option the owner did not choose edits nothing.
 
-**The lock entry of in-process code is open.** Decision 10 gives in-process code an entry
-in `plugins.lock` that pins nothing, and decision 12 has boot find, through that entry,
-the record of a row with no origin artifact. ADR-047 decision 8, accepted the same day,
-gives in-process code no entry, and ADR-047 decision 18 starts its check of that code
-from the digest that install recorded, since the code has no lock entry. The owner
-accepted both, and only the owner settles which holds. One question goes to the owner:
-does in-process code get an entry in `plugins.lock`, as decision 10 states, or none, as
-ADR-047 decisions 8 and 18 state? Until the owner answers, `07:1841` and `:1855` state
-the point as open, and `:1855` does not gain the entry that "Edits on acceptance" names
-for it. `00:478`, `01:282`, `02:206` and ADR-047 decision 8 wait for the owner's answer
-and do not go to the commit that lists the ADRs accepted on this date.
+**In-process code has no entry in `plugins.lock`** (owner, 2026-11-23). As accepted,
+decision 10 gave in-process code an entry in `plugins.lock` that pins nothing, and
+decision 12 had boot find, through that entry, the record of a row with no origin
+artifact, while ADR-047 decisions 8 and 18, accepted the same day, give that code no
+entry. The owner was asked which holds and answered on 2026-11-23: in-process code gets
+no entry in `plugins.lock`, as ADR-047 decisions 8 and 18, `07:1841` and `00:478` state.
+Decisions 10 and 12 are edited to that answer: boot finds the record of an in-process
+row by its plugin id in the records install wrote under `$AIOPS_HOME/verified/`, whose
+`record.yaml` carries the plugin id, and not through the lock. `07:1841` and `:1855`, the
+row `Lock` and the relationship from `Install` to `Lock` in `07` §9, say that in-process
+code has no entry, and neither `07:1841` nor `:1855` gains the lock entry of in-process
+code that "Edits on acceptance" names for them. `00:478`, `01:282` and `02:206` lock only a remote plugin or a pack with no code,
+so they already agree and are not edited, and ADR-047 decisions 8 and 18 stand as
+written.
