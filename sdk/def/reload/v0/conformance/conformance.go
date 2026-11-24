@@ -3,7 +3,9 @@
 // Package conformance is the suite of the reload definition: what every provider of
 // reload.Key and the fake must do (07-c4-plugin-sdk.md §8.2, T2 "every provider and
 // the fake behave the same"). The obligations half holds a provider to Submit, Result
-// and Await on a tree whose composition does not change. The guard half holds it to
+// and Await on a tree whose composition does not change, and, from 0.2, to results
+// that the wire format of reload-socket carries unchanged (ADR-062 decision 7). The
+// guard half holds it to
 // its release and its method set: after the provider's release the consumer it
 // served is released, a read of the key fails with kernel.ErrInactive, Submit on the
 // value it was given fails with ErrClosed, which matches kernel.ErrInactive, and the
@@ -14,6 +16,7 @@ package conformance
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
@@ -63,6 +66,22 @@ func Run(t *testing.T, mount Mount) {
 			}
 			if _, err := u.rl.Await(t.Context(), 99); !errors.Is(err, reload.ErrUnknown) {
 				t.Errorf("Await of an id never issued = %v, want ErrUnknown", err)
+			}
+		})
+
+		t.Run("reload.O4 a final result crosses the wire unchanged", func(t *testing.T) {
+			u := use(t, mount)
+			r, err := u.rl.Await(t.Context(), u.submit())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := reload.EncodeResult(r)
+			got, err := reload.DecodeReply(reload.Line(reload.Reply{V: reload.WireVersion, Result: &want}))
+			if err != nil || got.Result == nil || !reflect.DeepEqual(*got.Result, want) {
+				t.Errorf("result %+v read back as %+v, %v", want, got.Result, err)
+			}
+			if want.ID != r.ID || want.Source != op.Source || want.Status != reload.Passed || want.Error != nil {
+				t.Errorf("encoded %+v from %+v", want, r)
 			}
 		})
 	})

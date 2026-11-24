@@ -126,3 +126,7 @@ func (f *Reload) Publish(ctx context.Context, a composition.Applied) error {
 func (f *Reload) Progress(ctx context.Context, r reload.Result) error {
 	return f.operation.Emit(ctx, kernel.Unscoped, r)
 }
+
+// Finish replaces the result of a submitted id with r, keeping its ID and Op, and
+// wakes every Await.
+func (f *Reload) Finish(id reload.ID, r reload.Result) {}

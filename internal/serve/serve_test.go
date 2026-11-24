@@ -19,6 +19,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
@@ -388,6 +389,31 @@ func TestRunCreatesTheRuntimeDirectoryWithMode0700(t *testing.T) {
 	fi, err := os.Stat(filepath.Join(h, "run"))
 	if err != nil || fi.Mode().Perm() != 0o700 {
 		t.Fatalf("run/ = %v, %v; want mode 0700", fi.Mode(), err)
+	}
+}
+
+// The client of reload-socket reads phase and profile of the status file through
+// reload.ProcessStatus and imports no package of boot or internal/ (ADR-062 decision
+// 8): every status this package writes carries both, with the values boot gave.
+func TestEachStatusDecodesIntoTheWireType(t *testing.T) {
+	for _, p := range []boot.Phase{boot.PhaseStarting, boot.PhaseRunning, boot.PhaseStopping, boot.PhaseStopped} {
+		b := statusJSON(boot.ProcessStatus{Phase: p, Profile: "dev", Role: "api", Ready: true, Exit: 3, Detail: "d"})
+		var fields map[string]any
+		var s reload.ProcessStatus
+		if err := json.Unmarshal(b, &fields); err != nil {
+			t.Fatal(err)
+		}
+		_, hasPhase := fields["phase"]
+		_, hasProfile := fields["profile"]
+		if err := json.Unmarshal(b, &s); err != nil || !hasPhase || !hasProfile || s != (reload.ProcessStatus{Phase: string(p), Profile: "dev"}) {
+			t.Errorf("%s: %s reads as %+v, %v", p, b, s, err)
+		}
+	}
+	if boot.PhaseStopped != reload.PhaseStopped {
+		t.Errorf("the stopped phase is %q here and %q on the wire", boot.PhaseStopped, reload.PhaseStopped)
+	}
+	if StatusFile != reload.StatusFile {
+		t.Errorf("status file %q, wire %q", StatusFile, reload.StatusFile)
 	}
 }
 

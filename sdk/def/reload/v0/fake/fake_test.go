@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
@@ -49,6 +50,40 @@ func TestSubmitAwaitResult(t *testing.T) {
 	f.SubmitErr = reload.ErrQueueFull
 	if _, err := f.Submit(ctx, reload.Op{}); !errors.Is(err, reload.ErrQueueFull) {
 		t.Errorf("Submit scripted error = %v", err)
+	}
+}
+
+// A scripted result that is not final stays as it stands until Finish, and Await
+// waits for it or for its context (ADR-062 decision 8).
+func TestAwaitWaitsUntilFinish(t *testing.T) {
+	f, p := fake.New()
+	kerneltest.Mount(kerneltest.New(t), p)
+	f.Next = &reload.Result{Status: reload.Queued}
+	id, _ := f.Submit(t.Context(), reload.Op{Source: "a"})
+	short, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if r, err := f.Await(short, id); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Await of a queued result = %+v, %v; want it to wait past its context", r, err)
+	}
+	f.Finish(id, reload.Result{ID: 99, Status: reload.Running})
+	if r, ok := f.Result(id); !ok || r.Status != reload.Running || r.ID != id || r.Op.Source != "a" {
+		t.Fatalf("Result after Finish(Running) = %+v, %v", r, ok)
+	}
+	got := make(chan reload.Result, 1)
+	go func() {
+		r, err := f.Await(context.Background(), id)
+		if err != nil {
+			t.Error(err)
+		}
+		got <- r
+	}()
+	f.Finish(id, reload.Result{Status: reload.Passed, Generation: 3})
+	if r := <-got; r.Status != reload.Passed || r.Generation != 3 || r.ID != id {
+		t.Errorf("Await after Finish = %+v", r)
+	}
+	f.Finish(42, reload.Result{Status: reload.Passed})
+	if _, ok := f.Result(42); ok {
+		t.Error("Finish of an id never submitted made it known")
 	}
 }
 
