@@ -119,6 +119,11 @@ func TestImports(t *testing.T) {
 		{"fake in aiopsctl", "cmd/aiopsctl/x.go", imp(mp + "/sdk/def/clock/v0/fake"), ""},
 		{"fake in cmd/aiops", "cmd/aiops/x.go", imp(mp + "/sdk/def/clock/v0/fake"), "no fake or sdk/testkit"},
 		{"testkit in dist", "dist/x.go", imp(mp + "/sdk/testkit/kerneltest"), "no fake or sdk/testkit"},
+		{"commands in aiopsctl", "cmd/aiopsctl/x.go", imp(mp + "/sdk/def/commands/v0"), "no command code in a main"},
+		{"operations in aiops", "cmd/aiops/x.go", imp(mp + "/sdk/def/operations/v0"), "no command code in a main"},
+		{"commands fake in an aiopsctl test", "cmd/aiopsctl/x_test.go", imp(mp + "/sdk/def/commands/v0/fake"), "no command code in a main"},
+		{"launch in aiopsctl", "cmd/aiopsctl/x.go", imp(mp + "/sdk/def/launch/v0"), ""},
+		{"commands in a command row", "plugins/command-x/plugin.go", imp(mp + "/sdk/def/commands/v0"), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := t.TempDir()

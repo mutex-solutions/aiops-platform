@@ -78,6 +78,9 @@ func TestNameLint(t *testing.T) {
 		{"a schema of a core row", place{"plugins/clock/plugin.yaml: configSchema", "schemas", `{"properties":{"riverJob":{"type":"string"}}}`},
 			"plugins/clock/plugin.yaml: configSchema: U1: \"river\""},
 		{"a schema, though an item gives ids", place{"x", "schemas", `{"properties":{"s3":{}}}`}, "\"s3\""},
+		{"a command path", place{"plugins/command-x/fixtures/commands/paths.json: river sync", "commands", "river sync"},
+			"plugins/command-x/fixtures/commands/paths.json: river sync: U1: \"river\""},
+		{"a command path of the entry's plugin", place{"x", "commands", "jobs-river"}, "\"river\""},
 	} {
 		got := lint(r, []place{c.p})
 		switch {
@@ -153,6 +156,11 @@ func TestRepositoryNames(t *testing.T) {
 	}
 	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "ids" && p.text == "aiops/clock" }) {
 		t.Error("the id of plugins/clock is no place")
+	}
+	// U1 reads each path that a command row lists in fixtures/commands/paths.json, the
+	// file the suite holds its registrations to (ADR-061 decision 5).
+	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "commands" && p.text == "profile render" }) {
+		t.Error("the path profile render of plugins/command-profile is no place")
 	}
 	// U1 reads the schema of a row of aiops-core as it reads its id (decision 14).
 	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "schemas" && strings.Contains(p.text, "maxFailures") }) {
