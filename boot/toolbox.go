@@ -228,9 +228,14 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 		out.Diagnostics = append(out.Diagnostics, launch.Diagnostic{File: w.File, Line: w.Line, Text: w.String(), Warning: true})
 	}
 	// The lines that boot prints at every boot and the findings: a departure from the
-	// release bindings is a line of its own (08-profiles-roadmap-adrs.md:366).
+	// release bindings is a line of its own (08-profiles-roadmap-adrs.md:366), and so is
+	// one from the release pins (ADR-044 decision 10).
 	for _, l := range append(prints, a.Diagnostics()...) {
 		if d, ok := strings.CutPrefix(l, "bindings: "); ok {
+			out.Departures = append(out.Departures, d)
+			continue
+		}
+		if d, ok := strings.CutPrefix(l, "pins: "); ok {
 			out.Departures = append(out.Departures, d)
 			continue
 		}

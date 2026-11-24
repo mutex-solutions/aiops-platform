@@ -133,8 +133,8 @@ func TestToolboxRender(t *testing.T) {
 		t.Errorf("required %v, errors %v, denied %v", r.Required, errorTexts(r.Diagnostics), r.Admission.Denied)
 	}
 	if !slices.Equal(r.Departures, []string{"the site adds consumers of profileContext: t/probe",
-		"the site raises golang.org/x/text from v0.43.0, the release's pin, to v0.44.0, which --allow-bump admitted (ADR-044 decision 10)",
-		"example.test/dep v0.1.0 was checked against nothing: no source recorded its hash (ADR-044 decision 8)"}) ||
+		"example.test/dep v0.1.0 was checked against nothing: no source recorded its hash (ADR-044 decision 8)",
+		"the site raises golang.org/x/text from v0.43.0, the release's pin, to v0.44.0, which --allow-bump admitted (ADR-044 decision 10)"}) ||
 		!slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return d.Warning && strings.HasPrefix(d.Text, "trust: ") }) {
 		t.Errorf("departures %q, diagnostics %+v", r.Departures, r.Diagnostics)
 	}

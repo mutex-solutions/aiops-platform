@@ -202,6 +202,16 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 	if req := slices.Concat(site.RequiredKeys, site.RequiredRows); len(req) > 0 {
 		lines = append(lines, "bindings: the site raises the required set by "+strings.Join(req, ", "))
 	}
+	// The pins depart from the release where a site's build raised one with --allow-bump
+	// or took a hash that no source recorded (ADR-044 decisions 8 and 10).
+	for _, p := range d.Pins {
+		if p.Unchecked {
+			lines = append(lines, fmt.Sprintf("pins: %s %s was checked against nothing: no source recorded its hash (ADR-044 decision 8)", p.Path, p.Version))
+		}
+		if p.Release != "" {
+			lines = append(lines, fmt.Sprintf("pins: the site raises %s from %s, the release's pin, to %s, which --allow-bump admitted (ADR-044 decision 10)", p.Path, p.Release, p.Version))
+		}
+	}
 	lock, lerr := ReadLock(home, profile)
 	for id := range c.Unread {
 		in.Artifacts[id] = installedArtifact(home, profile, id, lock, lerr)
