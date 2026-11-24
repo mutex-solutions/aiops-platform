@@ -345,6 +345,28 @@ func TestTheEndOfTheContextEndsTheWait(t *testing.T) {
 	check(t, o, transport.Unknown, false, []reload.ID{8}, reload.Queued)
 }
 
+// A line of another form, or of another version, ends the wait: the verdict is
+// unknown, and no second submission follows.
+func TestALineOfAnotherFormKeepsTheFiles(t *testing.T) {
+	for name, line := range map[string]string{
+		"not JSON":  "passed\n",
+		"version 2": `{"v":2,"result":{"id":3,"status":"passed"}}` + "\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := newHome(t)
+			s := serve(t, home, turn{lines: []string{result(3, reload.Queued), line}})
+			o := submit(t, home)
+			check(t, o, transport.Unknown, false, []reload.ID{3}, reload.Queued)
+			if o.Error == nil || !strings.Contains(o.Error.Text, "another form") {
+				t.Errorf("error %+v", o.Error)
+			}
+			if got := s.sent(); !slices.Equal(got, []string{"submit plugin enable"}) {
+				t.Errorf("requests %v", got)
+			}
+		})
+	}
+}
+
 func TestARequestItCannotSendIsAnError(t *testing.T) {
 	long := filepath.Join(t.TempDir(), strings.Repeat("h", 120))
 	for _, r := range []transport.Request{
