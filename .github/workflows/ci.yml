@@ -107,7 +107,7 @@ jobs:
         # operations library, plugins/operations, provisional caps during S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
         # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
-        # 4,500 since the note of 2026-11-24, which raised them from 3,500.
+        # 4,500 since the second note of 2026-11-24, which raised them from 3,500.
         run: |
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
@@ -205,8 +205,8 @@ jobs:
       - name: Operations definition line caps
         # ADR-060 decision 35 and ADR-061: the operations definition, its fake and its
         # suite are packages of their own, provisional until the S2a exit: the definition
-        # 800 lines, the fake and the suite 1,000 each since the note of 2026-11-24, which
-        # raised them from 800.
+        # 800 lines, the fake and the suite 1,000 each since the second note of
+        # 2026-11-24, which raised them from 800.
         run: |
           go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
           go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1000 provisional

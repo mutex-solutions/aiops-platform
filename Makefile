@@ -64,8 +64,9 @@ check:
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
 	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
-	@# lines since the note of 2026-11-24, provisional: the row package, internal/ skipped,
-	@# and its internal package, with the client of reload-socket (ADR-062 decision 16), each.
+	@# lines since the second note of 2026-11-24, provisional: the row package, internal/
+	@# skipped, and its internal package, with the client of reload-socket (ADR-062
+	@# decision 16), each.
 	$(KC) lines plugins/operations 4500 provisional internal
 	$(KC) lines plugins/operations/internal/operations 4500 provisional
 	go run ./tools/pluginapi .
@@ -119,7 +120,7 @@ check:
 		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
 	done
 	@# ADR-060 decision 35 and ADR-061: the operations definition, 800 lines; its fake and
-	@# its suite, 1,000 each since the note of 2026-11-24.
+	@# its suite, 1,000 each since the second note of 2026-11-24.
 	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
 	$(KC) lines sdk/def/operations/v0/fake 1000 provisional
 	$(KC) lines sdk/def/operations/v0/conformance 1000 provisional
