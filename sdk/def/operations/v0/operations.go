@@ -154,6 +154,74 @@ type UseRequest struct {
 	Home, Image string
 }
 
+// PackRequest is plugin pack: the plugin directory Dir, which holds plugin.yaml and
+// bundle.yaml, go.mod for in-process code and content/ and fixtures/ for a pack,
+// written as one artifact into the OCI image layout Out, a directory that does not
+// exist or is empty, with its attestation as a referrer, unsigned (ADR-047 decisions 1
+// to 3; ADR-020 decisions 9 and 24).
+type PackRequest struct {
+	Caller
+	Dir, Out string
+}
+
+// SignRequest is plugin sign: the artifact of the layout Out and its attestation
+// signed with the private key file Key, each signature a referrer of the artifact
+// (ADR-020 decisions 2 and 9).
+type SignRequest struct {
+	Caller
+	Out, Key string
+}
+
+// PushRequest is plugin push: the artifact of the layout Out with its referrers copied
+// to Registry, <registry>/<repository>, and tagged with its version.
+type PushRequest struct {
+	Caller
+	Out, Registry string
+}
+
+// Pushed is the spec by digest of what plugin push pushed:
+// oci://<registry>/<repository>@sha256:<hex> (ADR-047 decision 1).
+type Pushed struct{ Spec string }
+
+// SpecRequest names an artifact by its spec: oci:// and a reference, or the absolute
+// path of an OCI image layout. Home is the home whose trust.yaml plugin verify reads,
+// and Builder the builder of its suites, image or local.
+type SpecRequest struct {
+	Caller
+	Spec, Home, Builder string
+}
+
+// Inspected is what plugin inspect read of an artifact, its manifest and its bundle
+// only (ADR-060 decision 58, reading 2): the digest of its OCI manifest, its id,
+// version and runtimes, each row of its bundle and the paths of its content. Signer is
+// "": inspect verifies no signer, and install verifies the signature over Digest
+// (ADR-047 decision 2).
+type Inspected struct {
+	Digest, ID, Version string
+	Runtimes            []string
+	Rows                []Row
+	Content             []string
+	Signer              string
+}
+
+// Row is one row that a bundle inserts: its id, plugin and config.
+type Row struct {
+	ID, Plugin string
+	Config     map[string]any
+}
+
+// Verified is what plugin verify found (ADR-060 decisions 31 and 46): the digest, the
+// signer whose signature verified, the steps in order, signature, attestation and
+// suites, and whether every step passed.
+type Verified struct {
+	Digest, Signer string
+	Steps          []Step
+	Passed         bool
+}
+
+// Step is one step of plugin verify with its outcome, pass, fail or not-built, and why.
+type Step struct{ Name, Outcome, Reason string }
+
 // Written is the paths a method wrote outside the home.
 type Written struct{ Paths []string }
 
@@ -215,4 +283,18 @@ type Operations interface {
 	// UseDist is dist use. It writes the record of the distribution, then
 	// verified/current, then image.yaml, and answers RestartRequired with ReasonImage.
 	UseDist(ctx context.Context, r UseRequest) (Change, error)
+	// Pack is plugin pack. It writes no home; Written names the layout.
+	Pack(ctx context.Context, r PackRequest) (Written, error)
+	// Sign is plugin sign. It writes no home; Written names the layout.
+	Sign(ctx context.Context, r SignRequest) (Written, error)
+	// Push is plugin push. It writes no home.
+	Push(ctx context.Context, r PushRequest) (Pushed, error)
+	// Inspect is plugin inspect: it fetches the manifest and the bundle of an artifact
+	// only, and installs and runs nothing.
+	Inspect(ctx context.Context, r SpecRequest) (Inspected, error)
+	// Verify is plugin verify: it verifies the signature with the signers of trust.yaml
+	// that cover the artifact, then the attestation with the same key, before it uses
+	// any other blob, then runs the suites. A signature or an attestation that does not
+	// verify is a refusal; a suite step not built is a step that did not pass.
+	Verify(ctx context.Context, r SpecRequest) (Verified, error)
 }

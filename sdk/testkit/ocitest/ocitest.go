@@ -42,6 +42,14 @@ type Registry struct {
 	opts  Options
 	mu    sync.Mutex
 	repos map[string]*repo
+	log   []string
+}
+
+// Requests returns each request served, "<method> <path>", in order.
+func (r *Registry) Requests() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.log...)
 }
 
 type repo struct {
@@ -196,6 +204,7 @@ func (r *Registry) serve(w http.ResponseWriter, q *http.Request) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.log = append(r.log, q.Method+" "+q.URL.Path)
 	for _, kind := range []string{"/blobs/uploads/", "/blobs/", "/manifests/", "/referrers/"} {
 		if name, ref, ok := strings.Cut(path, kind); ok {
 			r.route(w, q, kind, r.repo(name), ref)

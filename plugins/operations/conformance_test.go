@@ -67,7 +67,9 @@ func image(reg *ocitest.Registry, name, tag string, manifest []byte) ocitest.Des
 }
 
 // box is the launcher's toolbox of a case: Render answers the Rendered of the Setup for
-// the profile, and Shipped its shipped files.
+// the profile, Shipped its shipped files, ReadManifest its manifest, and the gate
+// passes every clause; the suites are not carried, as in an aiopsctl built before
+// they land.
 type box struct {
 	launch.NoTools
 	s conformance.Setup
@@ -79,12 +81,12 @@ func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendere
 
 func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.s.Shipped, ctx.Err() }
 
-func (box) Gate(context.Context, launch.GateRequest) (launch.Verdict, error) {
-	return launch.Verdict{}, launch.ErrNotCarried
+func (box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
+	return launch.Verdict{Entry: q.Entry}, ctx.Err()
 }
 
-func (box) ReadManifest(context.Context, launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
-	return launch.ManifestSummary{}, nil, launch.ErrNotCarried
+func (b box) ReadManifest(ctx context.Context, _ launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
+	return b.s.Manifest, nil, ctx.Err()
 }
 
 func (box) Release(context.Context, string) (launch.Release, error) {

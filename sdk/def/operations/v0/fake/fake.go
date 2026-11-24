@@ -59,6 +59,8 @@ type Config struct {
 	// Images stand for a registry: the distribution manifest of each image, by its
 	// reference.
 	Images map[string][]byte
+	// Artifact is what the fake packs of every plugin directory, its digest aside.
+	Artifact operations.Inspected
 }
 
 // Fake is the in-memory engine.

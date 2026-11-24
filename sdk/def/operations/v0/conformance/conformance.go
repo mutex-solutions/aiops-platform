@@ -6,8 +6,9 @@
 // and their results, Home above all, and read no file of the home; the state a case
 // starts from is a Setup, which each subject's Mount makes. The obligations half holds
 // a provider to key generate, the forms and refusals of trust add, dist sign and dist
-// use, the profile commands on the launcher's toolbox, and the outcomes they answer.
-// The guard half holds it to the write lock and the
+// use on the images of a registry, the profile commands on the launcher's toolbox, the
+// outcomes they answer, and plugin pack, sign, push, inspect and verify of the pack of
+// the suite and their refusals. The guard half holds it to the write lock and the
 // snapshot: a write after an interrupted one restores first, a second writer fails
 // after its bound naming the holder, concurrent writers lose nothing; and to what it
 // refuses once released, with no side door. Each case has an id, the first word of its
@@ -19,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -53,7 +55,30 @@ type Setup struct {
 	// dist and carries its distribution manifest as a referrer with no bundle, as the
 	// builder leaves it beside the image. use sets Images of the suite.
 	Images map[string][]byte
+	// Manifest is what the toolbox's ReadManifest reads of the manifest of Plugin, for
+	// the row, and Artifact what the fake packs of it. use sets both of the suite.
+	Manifest launch.ManifestSummary
+	Artifact operations.Inspected
 }
+
+// Plugin is the plugin directory of the suite, by path: a pack whose bundle inserts
+// one row, disabled, with content and a fixture (ADR-047 decision 1).
+var Plugin = map[string][]byte{
+	"plugin.yaml": []byte("manifestVersion: \"1.0\"\nid: acme/connector-x\nversion: 0.1.0\ntitle: Acme connector for X\nlicense: Apache-2.0\n" +
+		"publisher: {id: acme}\nstability: experimental\nscope: [process]\nruntimes: []\nrequires: {definitions: {}}\n"),
+	"bundle.yaml":                 []byte("- insert: [{id: logs, plugin: aiops/echoer, roles: [api], enabled: false, config: {endpoint: 'http://x.example.test'}}]\n"),
+	"content/runbooks/restart.md": []byte("# Restart\n"),
+	"content/labels.yaml":         []byte("service: x\n"),
+	"fixtures/echo.json":          []byte("{}\n"),
+}
+
+// Manifest is the summary of the manifest of Plugin.
+var Manifest = launch.ManifestSummary{ID: "acme/connector-x", Version: "0.1.0", Definitions: map[string][]string{}}
+
+// Artifact is what inspect reads of the artifact of Plugin, its digest aside.
+var Artifact = operations.Inspected{ID: "acme/connector-x", Version: "0.1.0",
+	Rows:    []operations.Row{{ID: "logs", Plugin: "aiops/echoer", Config: map[string]any{"endpoint": "http://x.example.test"}}},
+	Content: []string{"labels.yaml", "runbooks/restart.md"}}
 
 // Images are the images of the suite, each with its distribution manifest.
 var Images = map[string][]byte{"site": []byte("distVersion: 1\n"), "foreign": []byte("distVersion: 2\n"), "unsigned": []byte("distVersion: 3\n")}
@@ -286,6 +311,73 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("profile sanitize changed the home: %+v, was %+v", after, before)
 			}
 		})
+
+		t.Run("operations.O11 pack, sign and push an artifact that inspect and verify read", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			dir := u.plugin()
+			out := filepath.Join(dir, "artifact")
+			if w, err := u.ops.Pack(t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: out}); err != nil || !slices.Equal(w.Paths, []string{out}) {
+				t.Fatalf("Pack = %v, %v; want the layout %s", w, err, out)
+			}
+			in := u.inspect(out)
+			pub := u.key("author")
+			u.trust(operations.TrustRequest{KeyFile: pub, IDs: []string{"acme/*"}})
+			if _, err := u.verify(out); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("verify of an unsigned artifact: %v, want ErrRefused", err)
+			}
+			if w, err := u.ops.Sign(t.Context(), operations.SignRequest{Caller: u.caller(), Out: out, Key: private(pub)}); err != nil || !slices.Equal(w.Paths, []string{out}) {
+				t.Fatalf("Sign = %v, %v; want the layout %s", w, err, out)
+			}
+			u.verified(out, in.Digest)
+			repo := u.s.Registry + "/connector-x"
+			p, err := u.ops.Push(t.Context(), operations.PushRequest{Caller: u.caller(), Out: out, Registry: repo})
+			if err != nil || p.Spec != "oci://"+repo+"@"+in.Digest {
+				t.Fatalf("Push = %+v, %v; want the spec by the digest %s", p, err, in.Digest)
+			}
+			for _, spec := range []string{p.Spec, "oci://" + repo + ":0.1.0"} {
+				if got := u.inspect(spec); !reflect.DeepEqual(got, in) {
+					t.Errorf("inspect %s = %+v; want %+v, as of the layout", spec, got, in)
+				}
+				u.verified(spec, in.Digest)
+			}
+		})
+
+		t.Run("operations.O12 pack, sign, inspect and verify refuse", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			dir := u.plugin()
+			out := filepath.Join(dir, "artifact")
+			if _, err := u.ops.Pack(t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: out}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := u.ops.Pack(t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: out}); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("pack into a layout that is not empty: %v, want ErrRefused", err)
+			}
+			if _, err := u.ops.Pack(t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: "relative"}); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("pack into a relative layout: %v, want ErrUsage", err)
+			}
+			if err := os.Remove(filepath.Join(dir, "bundle.yaml")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := u.ops.Pack(t.Context(), operations.PackRequest{Caller: u.caller(), Dir: dir, Out: filepath.Join(dir, "other")}); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("pack of a directory with no bundle.yaml: %v, want ErrRefused", err)
+			}
+			if _, err := u.ops.Inspect(t.Context(), operations.SpecRequest{Caller: u.caller(), Spec: filepath.Join(dir, "none")}); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("inspect of a layout that does not exist: %v, want ErrRefused", err)
+			}
+			author, other := u.key("author"), u.key("other")
+			wrong := operations.Caller{Env: env(map[string]string{operations.KeyPasswordVar: "not the password"})}
+			if _, err := u.ops.Sign(t.Context(), operations.SignRequest{Caller: wrong, Out: out, Key: private(author)}); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("sign with a wrong password: %v, want ErrRefused", err)
+			}
+			u.trust(operations.TrustRequest{KeyFile: author, IDs: []string{"acme/*"}})
+			u.trust(operations.TrustRequest{KeyFile: other, IDs: []string{"beta/*"}})
+			if _, err := u.ops.Sign(t.Context(), operations.SignRequest{Caller: u.caller(), Out: out, Key: private(other)}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := u.verify(out); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("verify of an artifact signed by a key trust.yaml lists for other ids: %v, want ErrRefused", err)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -362,6 +454,12 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["VerifyProfile"] = u.ops.VerifyProfile(ctx, q)
 			_, calls["InitProfile"] = u.ops.InitProfile(ctx, operations.ProfileRequest{Caller: c, Home: u.s.Home, Profile: "cli"})
 			_, calls["SanitizeProfile"] = u.ops.SanitizeProfile(ctx, operations.ProfileRequest{Caller: c, Home: u.s.Home})
+			out := filepath.Join(u.s.Dir, "artifact")
+			_, calls["Pack"] = u.ops.Pack(ctx, operations.PackRequest{Caller: c, Dir: u.s.Dir, Out: out})
+			_, calls["Sign"] = u.ops.Sign(ctx, operations.SignRequest{Caller: c, Out: out, Key: private(a)})
+			_, calls["Push"] = u.ops.Push(ctx, operations.PushRequest{Caller: c, Out: out, Registry: u.s.Registry + "/x"})
+			_, calls["Inspect"] = u.ops.Inspect(ctx, operations.SpecRequest{Caller: c, Spec: out})
+			_, calls["Verify"] = u.ops.Verify(ctx, operations.SpecRequest{Caller: c, Spec: out, Home: u.s.Home})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)
@@ -390,7 +488,7 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
-	s.Shipped, s.Rendered, s.Images = Shipped, Rendered, Images
+	s.Shipped, s.Rendered, s.Images, s.Manifest, s.Artifact = Shipped, Rendered, Images, Manifest, Artifact
 	u := &user{t: t, s: mount(t, s)}
 	_, _, u.ops = deftest.Consume(t, u.s.Root, operations.Key)
 	return u
@@ -426,6 +524,62 @@ func (u *user) signed(name, pub string) {
 	u.t.Helper()
 	if _, err := u.ops.SignDist(u.t.Context(), operations.SignDistRequest{Caller: u.caller(), Image: u.image(name), Key: private(pub)}); err != nil {
 		u.t.Fatal(err)
+	}
+}
+
+// plugin writes the files of Plugin under Dir/plugin and returns that directory.
+func (u *user) plugin() string {
+	u.t.Helper()
+	dir := filepath.Join(u.s.Dir, "plugin")
+	for name, data := range Plugin {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			u.t.Fatal(err)
+		}
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			u.t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// inspect inspects spec and holds what it reads to Artifact, with a digest and no
+// signer.
+func (u *user) inspect(spec string) operations.Inspected {
+	u.t.Helper()
+	in, err := u.ops.Inspect(u.t.Context(), operations.SpecRequest{Caller: u.caller(), Spec: spec})
+	if err != nil {
+		u.t.Fatalf("inspect %s: %v", spec, err)
+	}
+	got := in
+	got.Digest, got.Runtimes = "", nil
+	if !strings.HasPrefix(in.Digest, "sha256:") || len(in.Runtimes) > 0 || !reflect.DeepEqual(got, Artifact) {
+		u.t.Errorf("inspect %s = %+v; want %+v with a digest, no runtime and no signer", spec, in, Artifact)
+	}
+	return in
+}
+
+func (u *user) verify(spec string) (operations.Verified, error) {
+	return u.ops.Verify(u.t.Context(), operations.SpecRequest{Caller: u.caller(), Spec: spec, Home: u.s.Home})
+}
+
+// verified holds a verify of spec to the digest, the signer that trust.yaml lists
+// first, a signature and an attestation that pass, and a verdict that is every step's.
+func (u *user) verified(spec, digest string) {
+	u.t.Helper()
+	v, err := u.verify(spec)
+	if err != nil {
+		u.t.Fatalf("verify %s: %v", spec, err)
+	}
+	passed := len(v.Steps) == 3
+	for i, s := range v.Steps {
+		passed = passed && s.Outcome == "pass"
+		if want := []string{"signature", "attestation", "suites"}[min(i, 2)]; s.Name != want || i < 2 && s.Outcome != "pass" {
+			u.t.Errorf("verify %s: step %d is %+v; want %s, and the first two passing", spec, i, s, want)
+		}
+	}
+	if v.Digest != digest || v.Signer != u.home().Signers[0].KeyID || v.Passed != passed {
+		u.t.Errorf("verify %s = %+v; want the digest %s, the signer of acme/* and the verdict of its steps", spec, v, digest)
 	}
 }
 

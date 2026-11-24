@@ -21,7 +21,7 @@ func TestConformance(t *testing.T) {
 			images[registry+"/"+name+":dist"] = manifest
 		}
 		_, p := fake.NewWith(fake.Config{LockWait: s.LockWait, Held: s.Held, Interrupted: s.Interrupted, Shipped: s.Shipped, Rendered: s.Rendered,
-			Images: images})
+			Images: images, Artifact: s.Artifact})
 		root := kerneltest.New(t)
 		f := root.Plugin(p, nil)
 		deftest.Active(t, f)

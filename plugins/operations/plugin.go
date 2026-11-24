@@ -100,3 +100,23 @@ func (s served) SignDist(ctx context.Context, r def.SignDistRequest) (def.Writte
 func (s served) UseDist(ctx context.Context, r def.UseRequest) (def.Change, error) {
 	return call(s, ctx, r, ops.Library.UseDist)
 }
+
+func (s served) Pack(ctx context.Context, r def.PackRequest) (def.Written, error) {
+	return call(s, ctx, r, ops.Library.Pack)
+}
+
+func (s served) Sign(ctx context.Context, r def.SignRequest) (def.Written, error) {
+	return call(s, ctx, r, ops.Library.Sign)
+}
+
+func (s served) Push(ctx context.Context, r def.PushRequest) (def.Pushed, error) {
+	return call(s, ctx, r, ops.Library.Push)
+}
+
+func (s served) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected, error) {
+	return call(s, ctx, r, ops.Library.Inspect)
+}
+
+func (s served) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
+	return call(s, ctx, r, ops.Library.Verify)
+}
