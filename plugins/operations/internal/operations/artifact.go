@@ -562,7 +562,11 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	id := pm.ID + "@" + pm.Version
 	var key *ecdsa.PublicKey
 	i := slices.IndexFunc(found, func(f verified) bool { return f.name == id && covers(t.signers[f.signer], pm.ID, pm.Runtimes) })
-	switch {
+	switch owner, _, _ := strings.Cut(pm.ID, "/"); {
+	case !slices.Contains(pm.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
+		// As the gate's check 5: only the release key signs such an artifact, and no
+		// binary built at S2a carries one (ADR-020 decision 13).
+		return v, refused("check 5: %s has no module and its id is under the reserved owner %s, which only the release key the binary carries signs (ADR-048 decision 14)", id, owner)
 	case i >= 0:
 		key, v.Signer = t.signerKeys[found[i].signer], t.signers[found[i].signer].KeyID
 	case slices.Contains(t.allow, pm.ID):
