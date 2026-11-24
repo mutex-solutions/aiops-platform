@@ -49,10 +49,12 @@ type Launcher struct {
 	PlanFn    func(context.Context, launch.Composition, launch.Composition) (launch.Plan, error)
 	CommitFn  func(launch.Composition) error // a non-nil error refuses the commit, before the digest is checked
 
-	mu    sync.Mutex
-	ready bool
-	exits []launch.ExitRequest
-	known map[launch.Digest]bool // composed or replaced by a commit
+	mu     sync.Mutex
+	ready  bool
+	boot   sync.Once
+	booted chan struct{}
+	exits  []launch.ExitRequest
+	known  map[launch.Digest]bool // composed or replaced by a commit
 }
 
 var (
@@ -71,7 +73,7 @@ var (
 // profileContext of an activation refuses its calls once that activation is
 // released, as served.
 func New() (*Launcher, kernel.Plugin) {
-	f := &Launcher{known: map[launch.Digest]bool{}}
+	f := &Launcher{known: map[launch.Digest]bool{}, booted: make(chan struct{})}
 	return f, kernel.Define(kernel.Plugin{
 		ID: "aiops/launch-fake",
 		Provides: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey,
@@ -298,11 +300,20 @@ func (f *Launcher) Env(name string) (string, bool) {
 	return v, ok
 }
 
-func (f *Launcher) Stdin() io.Reader  { return nil }
-func (f *Launcher) Stdout() io.Writer { return nil }
-func (f *Launcher) Stderr() io.Writer { return nil }
-func (f *Launcher) Dir() string       { return "" }
-func (f *Launcher) Environ() []string { return nil }
+func (f *Launcher) Stdin() io.Reader  { return f.In }
+func (f *Launcher) Stdout() io.Writer { return f.Out }
+func (f *Launcher) Stderr() io.Writer { return f.ErrOut }
+func (f *Launcher) Dir() string       { return f.WorkDir }
+
+// Environ lists Environment as "NAME=value", sorted.
+func (f *Launcher) Environ() []string {
+	var out []string
+	for n, v := range f.Environment {
+		out = append(out, n+"="+v)
+	}
+	slices.Sort(out)
+	return out
+}
 
 // Ready.
 
@@ -321,10 +332,11 @@ func (f *Launcher) IsReady() bool {
 	return f.ready
 }
 
-// Boot closes the channel of Booted, as the launcher does once the tree has settled.
-func (f *Launcher) Boot() {}
+// Boot closes the channel of Booted, as the launcher does once the tree has settled;
+// a second call changes nothing.
+func (f *Launcher) Boot() { f.boot.Do(func() { close(f.booted) }) }
 
-func (f *Launcher) Booted() <-chan struct{} { return nil }
+func (f *Launcher) Booted() <-chan struct{} { return f.booted }
 
 // Inventory lists what the callers left behind: "ready" while the latch is set
 // (ADR-060 decision 12).

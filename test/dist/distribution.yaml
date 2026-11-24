@@ -929,7 +929,7 @@ serves:
     launch:
       - version: "0.2"
         compatibleFrom: "0.1"
-        suite: 1
+        suite: 2
         classes:
           appExit:
             provider: bound

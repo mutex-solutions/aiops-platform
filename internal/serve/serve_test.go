@@ -268,6 +268,22 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 	}
 }
 
+// A server hands boot the streams of the process for cmdline, and neither a working
+// directory nor an environment (ADR-061 decision 13).
+func TestRunPassesTheStreamsAndNoEnviron(t *testing.T) {
+	h := home(t, "[]")
+	var got boot.RunOptions
+	stubBoot(t, func(_ context.Context, o boot.RunOptions) int { got = o; return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	e.Stdin = strings.NewReader("in")
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if got.Stdio != (boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr}) || got.Dir != "" || got.Environ != nil {
+		t.Errorf("Stdio %+v, Dir %q, Environ %q", got.Stdio, got.Dir, got.Environ)
+	}
+}
+
 // The distribution's Kernel seam reaches boot with the runtime directory of the home;
 // with none, boot gets none.
 // --refs-dir names an absolute directory that exists; anything else is a usage error,

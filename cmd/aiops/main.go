@@ -26,6 +26,6 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	os.Exit(serve.Run(context.Background(), "aiops", serve.Env{
-		Args: os.Args[1:], Getenv: os.Getenv, Stdout: os.Stdout, Stderr: os.Stderr, Signals: sigs,
+		Args: os.Args[1:], Getenv: os.Getenv, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Signals: sigs,
 	}, serve.Distribution{Registry: reg, Signed: signed, Limits: lim}))
 }

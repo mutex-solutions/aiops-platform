@@ -333,7 +333,7 @@ func (r *run) run(ctx context.Context) int {
 	committed.Rows = committed.Rows[1:]
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
 		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}}
-	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }}
+	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }, booted: make(chan struct{})}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {
 		return r.fail(ExitRefused, "distribution: %v", err)
@@ -402,7 +402,9 @@ func (r *run) run(ctx context.Context) int {
 		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)))
 	}
 	// The latch is the readiness row's, not boot's (03-c3-kernel.md:67): a distribution
-	// that links no readiness row is never ready, and says so by its required set.
+	// that links no readiness row is never ready, and says so by its required set. Boot
+	// has ended: Booted closes, and the cli row of aiopsctl dispatches (launch 0.2).
+	close(r.ready.booted)
 	r.pub.update(func(s *ProcessStatus) { s.Phase = PhaseRunning })
 	fmt.Fprintf(r.out, "aiops: booted profile=%s role=%s\n", o.Profile, role)
 	return r.loop(ctx)
@@ -522,7 +524,7 @@ func (r *run) prepare(pc *profileContext, cat *catalog) error {
 	return errors.Join(
 		launch.ProfileContextKey.Provide(c, pc),
 		launch.CatalogKey.Provide(c, cat),
-		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags, env: envOf(o.Env)}),
+		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags, env: envOf(o.Env), stdio: o.Stdio, dir: o.Dir, environ: o.Environ}),
 		launch.ReadyKey.Provide(c, r.ready),
 		launch.KillSwitchesKey.Provide(c, switches(ReadKillSwitches(envOf(o.Env)))),
 		launch.AppExitKey.Provide(c, appExit{reqs: r.exits}),

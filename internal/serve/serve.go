@@ -59,6 +59,7 @@ type Distribution struct {
 type Env struct {
 	Args    []string // program name excluded
 	Getenv  func(string) string
+	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Signals <-chan os.Signal
@@ -149,6 +150,9 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Flags: map[string]string{"profile": *profile, "home": *home, "bundles": *bundles, "role": *role, "refs-dir": *refsDir},
 		Home:  overlay{os.DirFS(*home), d.Shipped}, Bundles: overlay{os.DirFS(*bundles), d.Shipped},
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
+		// The streams of the process are the launcher's own; a server fills neither the
+		// working directory nor the environment that cmdline serves (ADR-061 decision 13).
+		Stdio:    boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr},
 		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: lim, Clock: boot.SystemClock(),
 		Publish: publish,
 	}

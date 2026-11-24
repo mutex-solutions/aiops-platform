@@ -572,11 +572,15 @@ func withoutRoot(in []string) []string {
 // cmdline is the cmdline service. Flag reads the flags the operator gave, plus the
 // home as "home" whether it came from --home or from AIOPS_HOME, so a row can read
 // where the process keeps its files (the documents name no flag but the references
-// ${flag:name}, 03-c3-kernel.md:68).
+// ${flag:name}, 03-c3-kernel.md:68). The streams, the directory and the environment
+// are what RunOptions holds (launch 0.2).
 type cmdline struct {
-	args  []string
-	flags map[string]string
-	env   func(string) string
+	args    []string
+	flags   map[string]string
+	env     func(string) string
+	stdio   Stdio
+	dir     string
+	environ []string
 }
 
 var _ launch.Cmdline = cmdline{}
@@ -598,22 +602,24 @@ func (c cmdline) Env(name string) (string, bool) {
 	return v, v != ""
 }
 
-func (c cmdline) Stdin() io.Reader  { return nil }
-func (c cmdline) Stdout() io.Writer { return nil }
-func (c cmdline) Stderr() io.Writer { return nil }
-func (c cmdline) Dir() string       { return "" }
-func (c cmdline) Environ() []string { return nil }
+func (c cmdline) Stdin() io.Reader  { return c.stdio.In }
+func (c cmdline) Stdout() io.Writer { return c.stdio.Out }
+func (c cmdline) Stderr() io.Writer { return c.stdio.Err }
+func (c cmdline) Dir() string       { return c.dir }
+func (c cmdline) Environ() []string { return slices.Clone(c.environ) }
 
 // latch is the ready service: a flag that readiness sets when the required set is
 // ACTIVE and drops while a provider restarts (03-c3-kernel.md:67). Every change
 // goes to changed, which the launcher publishes to the outside, under the latch's
 // lock, so that the outside reads what the latch holds. end drops it for good: after
 // a leak, and once the process stops, readiness has ended (ADR-059 decision 13) and
-// the readiness row's next Set changes nothing. changed must not call IsReady.
+// the readiness row's next Set changes nothing. changed must not call IsReady. booted
+// is the channel of Booted, which Run closes at the end of boot.
 type latch struct {
 	mu        sync.Mutex
 	on, ended bool
 	changed   func(bool)
+	booted    chan struct{}
 }
 
 var _ launch.Ready = (*latch)(nil)
@@ -638,7 +644,7 @@ func (l *latch) IsReady() bool {
 	return l.on
 }
 
-func (l *latch) Booted() <-chan struct{} { return nil }
+func (l *latch) Booted() <-chan struct{} { return l.booted }
 
 // switches is the killSwitches service, layer 6, read once at boot from the
 // environment (08-profiles-roadmap-adrs.md:111, :126; ReadKillSwitches).
