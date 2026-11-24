@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
@@ -153,6 +154,10 @@ func render(ctx context.Context, ops operations.Operations, inv commands.Invocat
 	refused := rendered(inv, r)
 	for _, d := range r.Departures {
 		fmt.Fprintln(inv.Err, "bindings: "+d)
+	}
+	// A composition that stopped on a file has no dump to print, not even its header.
+	if slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return !d.Warning && d.Check == "compose" }) {
+		q.Dumps = nil
 	}
 	for _, d := range q.Dumps {
 		if len(q.Dumps) > 1 {
