@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -302,7 +303,8 @@ func TestPluginVet(t *testing.T) {
 		{"Serve nil", "plugins/a/plugin.go", pk("import h \"net/http\"\n", "func f() { h.Serve(nil, nil) }\n"), "h.Serve with a nil handler"},
 		{"ServeTLS nil", "boot/a.go", pk("import \"net/http\"\n", "func f() { http.ServeTLS(nil, nil, \"c\", \"k\") }\n"), "http.ServeTLS with a nil handler"},
 		{"fcgi nil", "plugins/a/plugin.go", pk("import \"net/http/fcgi\"\n", "func f() { fcgi.Serve(nil, nil) }\n"), "fcgi.Serve with a nil handler"},
-		{"serve own mux fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServe(\":0\", http.NewServeMux()); http.ServeTLS(nil, http.NewServeMux(), \"\", \"\") }\n"), ""},
+		{"serve own mux fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.Serve(nil, http.NewServeMux()); http.ServeTLS(nil, http.NewServeMux(), \"\", \"\") }\n"), ""},
+		{"ListenAndServe own mux listens", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { http.ListenAndServe(\":0\", http.NewServeMux()) }\n"), "plugin.go:3: http.ListenAndServe opens a listener"},
 		{"Server without handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\"} }\n"), "http.Server without a Handler serves http.DefaultServeMux"},
 		{"Server nil handler", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = http.Server{Handler: nil} }\n"), "http.Server without a Handler"},
 		{"Server with handler fine", "plugins/a/plugin.go", pk("import \"net/http\"\n", "func f() { _ = &http.Server{Addr: \":0\", Handler: http.NewServeMux()} }\n"), ""},
@@ -326,6 +328,88 @@ func TestPluginVet(t *testing.T) {
 				t.Fatalf("want %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+// Plugin vet refuses every call that opens a listener or binds a socket, except those
+// that the one list allows a plugin id under the owner aiops (ADR-062 decisions 13
+// and 18). The id is that of the plugin.yaml of the plugin that holds the file.
+func TestPluginVetListeners(t *testing.T) {
+	manifest := func(id string) string { return "manifestVersion: \"1.0\"\nid: " + id + "\nversion: 0.1.0\n" }
+	for _, tc := range []struct {
+		name   string
+		id     string // the id of plugins/a/plugin.yaml; "" writes none
+		file   string
+		src    string
+		want   string
+		wantNo bool // no violation
+	}{
+		{"net.Listen", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.Listen(\"tcp\", \":0\") }\n", "a.go:3: net.Listen opens a listener", false},
+		{"net.ListenPacket", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenPacket(\"udp\", \":0\") }\n", "net.ListenPacket opens a listener", false},
+		{"net.ListenTCP", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenTCP(\"tcp\", nil) }\n", "net.ListenTCP opens", false},
+		{"net.ListenUDP", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUDP(\"udp\", nil) }\n", "net.ListenUDP opens", false},
+		{"net.ListenIP", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenIP(\"ip4:1\", nil) }\n", "net.ListenIP opens", false},
+		{"net.ListenUnixgram", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnixgram(\"unixgram\", nil) }\n", "net.ListenUnixgram opens", false},
+		{"net.ListenMulticastUDP", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenMulticastUDP(\"udp\", nil, nil) }\n", "net.ListenMulticastUDP opens", false},
+		{"net.FileListener", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.FileListener(nil) }\n", "net.FileListener opens", false},
+		{"net.FilePacketConn", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.FilePacketConn(nil) }\n", "net.FilePacketConn opens", false},
+		{"net.Listen as a value", "aiops/a", "plugins/a/a.go", "import n \"net\"\nvar _ = n.Listen\n", "n.Listen opens a listener", false},
+		{"tls.Listen", "aiops/a", "plugins/a/a.go", "import \"crypto/tls\"\nfunc f() { tls.Listen(\"tcp\", \":0\", nil) }\n", "tls.Listen opens a listener", false},
+		{"http.ListenAndServeTLS", "aiops/a", "plugins/a/a.go", "import \"net/http\"\nfunc f() { http.ListenAndServeTLS(\":0\", \"c\", \"k\", http.NewServeMux()) }\n", "http.ListenAndServeTLS opens a listener", false},
+		{"Server.ListenAndServe", "aiops/a", "plugins/a/a.go", "import \"net/http\"\nfunc f(s *http.Server) { s.ListenAndServe() }\n", "a.go:3: (*net/http.Server).ListenAndServe opens a listener", false},
+		{"Server.ListenAndServeTLS", "aiops/a", "plugins/a/a.go", "import \"net/http\"\nfunc f(s http.Server) { s.ListenAndServeTLS(\"c\", \"k\") }\n", "(*net/http.Server).ListenAndServeTLS opens", false},
+		{"httptest.NewServer outside a test", "aiops/a", "plugins/a/a.go", "import \"net/http/httptest\"\nfunc f() { httptest.NewServer(nil) }\n", "httptest.NewServer opens a listener", false},
+		{"httptest.NewTLSServer", "aiops/a", "plugins/a/a.go", "import \"net/http/httptest\"\nfunc f() { httptest.NewTLSServer(nil) }\n", "httptest.NewTLSServer opens", false},
+		{"httptest.NewUnstartedServer", "aiops/a", "plugins/a/a.go", "import \"net/http/httptest\"\nfunc f() { httptest.NewUnstartedServer(nil) }\n", "httptest.NewUnstartedServer opens", false},
+		{"httptest Server.Start", "aiops/a", "plugins/a/a.go", "import \"net/http/httptest\"\nfunc f(s *httptest.Server) { s.Start() }\n", "(*net/http/httptest.Server).Start opens", false},
+		{"httptest Server.StartTLS", "aiops/a", "plugins/a/a.go", "import \"net/http/httptest\"\nfunc f(s *httptest.Server) { s.StartTLS() }\n", "(*net/http/httptest.Server).StartTLS opens", false},
+		{"httptest in a test file is not read", "aiops/a", "plugins/a/a_test.go", "import \"net/http/httptest\"\nfunc f() { httptest.NewServer(nil).Start() }\n", "", true},
+		{"syscall.Listen", "aiops/a", "plugins/a/a.go", "import \"syscall\"\nfunc f() { syscall.Listen(0, 1) }\n", "syscall.Listen opens a listener", false},
+		{"syscall.Bind", "aiops/a", "plugins/a/a.go", "import \"syscall\"\nfunc f() { syscall.Bind(0, nil) }\n", "syscall.Bind opens a listener", false},
+		{"unix.Listen", "aiops/a", "plugins/a/a.go", "import \"golang.org/x/sys/unix\"\nfunc f() { unix.Listen(0, 1) }\n", "unix.Listen opens a listener", false},
+		{"unix.Bind", "aiops/a", "plugins/a/a.go", "import \"golang.org/x/sys/unix\"\nfunc f() { unix.Bind(0, nil) }\n", "unix.Bind opens a listener", false},
+		{"ListenConfig.Listen", "aiops/a", "plugins/a/a.go", "import (\"context\"; \"net\")\nfunc f(ctx context.Context) { var lc net.ListenConfig; lc.Listen(ctx, \"tcp\", \":0\") }\n", "(*net.ListenConfig).Listen opens a listener", false},
+		{"ListenConfig.ListenPacket", "aiops/a", "plugins/a/a.go", "import (\"context\"; \"net\")\nfunc f(ctx context.Context) { lc := &net.ListenConfig{}; lc.ListenPacket(ctx, \"udp\", \":0\") }\n", "(*net.ListenConfig).ListenPacket opens", false},
+		{"ListenUnix admitted for reload-socket", "aiops/reload-socket", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "", true},
+		{"ListenUnix admitted in a package below reload-socket", "aiops/reload-socket", "plugins/a/internal/x/x.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "", true},
+		{"reload-socket may not call net.Listen", "aiops/reload-socket", "plugins/a/a.go", "import \"net\"\nfunc f() { net.Listen(\"unix\", \"s\") }\n", "net.Listen opens a listener", false},
+		{"ListenUnix refused for another id", "aiops/other", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "a.go:3: net.ListenUnix opens a listener", false},
+		{"ListenUnix refused for a third party", "acme/reload-socket", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "net.ListenUnix opens a listener", false},
+		{"ListenUnix refused with no manifest", "", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "net.ListenUnix opens a listener", false},
+		{"ListenUnix refused in boot", "", "boot/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "boot/a.go:3: net.ListenUnix opens a listener", false},
+		{"the dial exception admits no listener", "aiops/operations", "plugins/a/a.go", "import \"net\"\nfunc f() { net.ListenUnix(\"unix\", nil) }\n", "net.ListenUnix opens a listener", false},
+		{"a dial is not a listener", "aiops/a", "plugins/a/a.go", "import \"net\"\nfunc f() { net.DialUnix(\"unix\", nil, nil); net.Dial(\"tcp\", \"x:1\") }\n", "", true},
+		{"a method of another type", "aiops/a", "plugins/a/a.go", "type T struct{}\nfunc (T) Listen() {}\nfunc (T) Start() {}\nfunc f(t T) { t.Listen(); t.Start() }\n", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := t.TempDir()
+			if tc.id != "" {
+				write(t, d, "plugins/a/plugin.yaml", manifest(tc.id))
+			}
+			write(t, d, tc.file, "package a\n"+tc.src)
+			err := checkPluginVet([]string{filepath.Join(d, strings.SplitN(tc.file, "/", 2)[0])})
+			switch {
+			case tc.wantNo && err != nil:
+				t.Fatal(err)
+			case !tc.wantNo && (err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "ADR-062 decision 13")):
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// The list holds one entry per plugin id, each under the reserved owner aiops: at S2a
+// net.ListenUnix for reload-socket and the named exception of the dial rule for the
+// operations plugin (ADR-062 decisions 13 and 14).
+func TestPluginVetListenList(t *testing.T) {
+	want := map[string][]string{"aiops/reload-socket": {"net.ListenUnix"}, "aiops/operations": {"net.DialUnix"}}
+	if !reflect.DeepEqual(listenAllow, want) {
+		t.Fatalf("list = %v, want %v", listenAllow, want)
+	}
+	for id := range listenAllow {
+		if !strings.HasPrefix(id, "aiops/") {
+			t.Errorf("%s is not under the reserved owner aiops", id)
+		}
 	}
 }
 

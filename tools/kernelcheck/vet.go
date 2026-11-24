@@ -46,6 +46,10 @@ var forbiddenCalls = map[string][]string{
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel":    {"WithCommit"},
 }
 
+// listenAllow is the list of ADR-062 decisions 13 and 14. The listener rule is not
+// built yet.
+var listenAllow map[string][]string
+
 // goFuncs start an untracked goroutine like a bare go statement does. Plugin
 // code may not call them; boot may, with an allow-go comment.
 var goFuncs = map[string]string{"time": "AfterFunc", "context": "AfterFunc"}
