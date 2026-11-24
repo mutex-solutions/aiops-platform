@@ -889,3 +889,13 @@ and `08:1390`, since the libraries of the licence scan are linked into `aiopsctl
 `08` §3, which the commit that updates that table for the ADRs accepted on 2026-11-23
 edits. The licence record keeps its date. An option the owner did not choose edits
 nothing.
+
+**Deviation recorded on 2026-11-25, for the owner's word.** Decision 15 names `go-spew`
+v1.1.1 and `go-diff` v1.1.0. The build list of the root module selects
+`github.com/sergi/go-diff` v1.4.0 and `github.com/davecgh/go-spew`
+v1.1.2-0.20180830191138-d8f796af33cc, which `certificate-transparency-go`, linked through
+sigstore-go (ADR-020 decision 16), requires; the builder links what the build list
+selects. Both licences were read again at those pins, MIT with the `APACHE-LICENSE-2.0`
+text of the ported library for go-diff and ISC for go-spew, and the register entry of the
+classifier and licence:57 record them. The text of decision 15 stays as accepted until
+the owner's word edits it to the selected versions.
