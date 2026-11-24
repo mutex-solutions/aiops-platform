@@ -12,7 +12,7 @@ consumers:
   registry: [aiops/restart-policy]
   loader: [aiops/reload, aiops-test/test-state]
   # test-state composes a candidate through profileContext.
-  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops-test/test-state]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile, aiops-test/test-state]
   # test-submit submits; test-state reads the results.
   reload: [aiops-test/test-submit, aiops-test/test-state]
 sealedHooks:

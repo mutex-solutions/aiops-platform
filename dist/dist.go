@@ -32,6 +32,7 @@ import (
 	commanddist "github.com/mutex-solutions/aiops-platform/plugins/command-dist"
 	commandkey "github.com/mutex-solutions/aiops-platform/plugins/command-key"
 	commandplugin "github.com/mutex-solutions/aiops-platform/plugins/command-plugin"
+	commandprofile "github.com/mutex-solutions/aiops-platform/plugins/command-profile"
 	commandtrust "github.com/mutex-solutions/aiops-platform/plugins/command-trust"
 	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
 	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
@@ -122,6 +123,7 @@ func Modules() []Module {
 		m(reload.New(), "plugins/reload"),
 		m(restartpolicy.New(), "plugins/restart-policy"),
 		m(cli.Plugin, "plugins/cli"),
+		m(commandprofile.Plugin, "plugins/command-profile"),
 		m(commandplugin.Plugin, "plugins/command-plugin"),
 		m(commandtrust.Plugin, "plugins/command-trust"),
 		m(commanddist.Plugin, "plugins/command-dist"),

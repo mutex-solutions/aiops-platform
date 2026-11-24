@@ -13,14 +13,16 @@ providers:
 # (the exit request), and so does the cli row, which requests the exit of aiopsctl with
 # the code of its command (ADR-061 decision 7); reload resolves loader
 # (07-c4-plugin-sdk.md:557); the loader, reload and readiness resolve profileContext,
-# which holds Commit. No row may resolve reload yet: those that submit are added with
-# their plugin. This file lists who is allowed; gate check 7 reads the classes from the
+# which holds Commit, and so does command-profile, for the toolbox, until the operations
+# library that ADR-061 decision 20 lists in its place carries the methods of its
+# commands. No row may resolve reload yet: those that submit are added with their
+# plugin. This file lists who is allowed; gate check 7 reads the classes from the
 # definitions (ADR-059 decision 20).
 consumers:
   appExit: [aiops/restart-policy, aiops/cli]
   registry: [aiops/restart-policy]
   loader: [aiops/reload]
-  profileContext: [aiops/loader, aiops/reload, aiops/readiness]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/command-profile]
 # Sealed hooks (07-c4-plugin-sdk.md:463): internal/status for the two rows that follow
 # the state of every fiber, internal/config for the references.
 sealedHooks:

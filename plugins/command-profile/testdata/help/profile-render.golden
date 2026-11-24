@@ -1,0 +1,20 @@
+usage: aiopsctl profile render --profile <p> [--home <dir>] [--bundles <dir>] [--dist <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]
+
+Compose a profile as the server would, admit it, and print the dumps asked for.
+
+Flags:
+  --profile <p>         the profile to compose
+  --home <dir>          the home with profiles/<p>/, trust.yaml and verified/ (default $AIOPS_HOME; none: the shipped profiles)
+  --bundles <dir>       the directory of bundles/<name>/bundle.yaml (default: the home)
+  --dist <dir>          render against distribution.yaml, the signed manifest of this directory (default: the one aiopsctl embeds)
+  --patch <file>        a layer 4 overlay
+  --role <role>         edge, api or worker, or several comma-separated (default: all)
+  --server              every inserted row must state roles
+  --dump                print the composed tree
+  --dump-hooks          print every hook chain
+  --dump-config-schema  print the merged config schema
+
+Exit codes:
+  0  success, or help that was asked for
+  1  a denial, a failed step, rebuild-required, an interrupt or a failed boot; the reason is on stderr
+  2  a usage error; a Go panic outside every fiber also exits 2, with the trace of the runtime
