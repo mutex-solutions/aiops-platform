@@ -33,7 +33,12 @@ entries:
     mark: needs-approval
     default: true
 
+  # The toolchain that CI runs, and the one the builder image bakes in (ADR-044
+  # decisions 4, 5 and 17; dist/builder/image.yaml): the module
+  # golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64, unmodified, extracted at its h1
+  # sum into the builder's cache inside the image, on no base layer.
   - id: go-toolchain
+    role: builder
     names: [go, golang]
     form: process
     behind: none
@@ -44,13 +49,16 @@ entries:
     # src/crypto/internal/boring/LICENSE.
     licence: BSD-3-Clause AND Apache-2.0 AND OpenSSL AND ISC
     verdict: ok-with-conditions
-    modes: [tool]
+    modes: [tool, ship]
     conditions:
       - {condition: "No binary links the BoringSSL objects: they need GOEXPERIMENT=boringcrypto and cgo, and every build runs with cgo off", row: L7}
-      - {condition: "The builder image that ships the toolchain carries every licence text of it, with the acknowledgments the OpenSSL and SSLeay licences ask", row: L7}
+      - {condition: "The builder image that ships the toolchain carries every licence text of it, with the acknowledgments the OpenSSL and SSLeay licences ask: a copy of each licence and notice file of the tree under THIRD_PARTY_LICENSES/, the module zips under lib/fips140/ opened, and the IANA statement of lib/time/README", row: L7}
+      - {condition: "Baked in unmodified at the h1 sum the release's signed manifest records, on no base layer, so the image holds no package under GPL, LGPL or AGPL and its source offer says so", row: L5}
     evidence:
       - {source: "golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64 LICENSE, PATENTS and the licence files under src/", read: "2026-11-23", version: go1.26.8}
     mark: needs-approval
+    sbom: "builder.spdx.json of the builder image: the toolchain module, the modules of its three modules.txt files, the two golang.org/fips140 modules, and aiopsctl with its build list (ADR-044 decision 5)"
+    source: "the module zip of golang.org/toolchain at its pin, unmodified; THIRD_PARTY_LICENSES/ and SOURCE-OFFER of the builder image (ADR-044 decisions 5 and 17)"
     default: false
 
   - id: cordis

@@ -16,10 +16,12 @@
 // container role, since a program CI runs and an item refused by name have none; and
 // a condition names the L or T row that enforces it in its row key.
 //
-// The clauses on images, baked-in tools and embedded data sets have no case until
-// the builder image, the server image and the SPDX list data merge, and the clause
-// on the base provider allow-list none before the first row of aiops-base (S3); each
-// lands with its first case (08-profiles-roadmap-adrs.md:678).
+// The clause on baked-in tools reads the definition of each image the repository
+// builds, dist/<image>/image.yaml: at S2a the builder image, which bakes in the Go
+// toolchain; the server image bakes in nothing. The clauses on images and embedded data
+// sets have no case until a shipped image is pulled and a data set lacks its entry, and
+// the clause on the base provider allow-list none before the first row of aiops-base
+// (S3); each lands with its first case (08-profiles-roadmap-adrs.md:678).
 package main
 
 import (
@@ -166,6 +168,24 @@ type inputs struct {
 	sec32        []string            // the ids of the table of 00 §3.2
 	agplBoundary []string            // the AGPL boundary list of 00:167
 	record       map[string]string   // a component id of the licence record to its "Licence as verified"
+	bakes        []baked             // what each image definition under dist/ bakes in
+}
+
+// baked is one item that an image definition bakes in: the register entry and the
+// version at which it does (ADR-054 decision 12).
+type baked struct{ Definition, Entry, Version string }
+
+// readBakes reads the bakes of the image definition file under root.
+func readBakes(root, file string) ([]baked, error) {
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
+	var d struct{ Bakes []baked }
+	if err == nil {
+		err = yaml.Unmarshal(data, &d)
+	}
+	for i := range d.Bakes {
+		d.Bakes[i].Definition = file
+	}
+	return d.Bakes, err
 }
 
 // check returns one line per finding.
@@ -282,6 +302,11 @@ func check(r register, in inputs) []string {
 			}
 		}
 	}
+	for _, b := range in.bakes {
+		if !slices.ContainsFunc(r.Entries, func(e entry) bool { return e.ID == b.Entry && e.Pin == b.Version && slices.Contains(e.Modes, "ship") }) {
+			bad = append(bad, fmt.Sprintf("%s bakes in %s %s: no entry of mode ship at that pin (ADR-054 decisions 5 and 12)", b.Definition, b.Entry, b.Version))
+		}
+	}
 	for _, m := range sortedKeys(in.graph) {
 		if _, ok := pins[m]; !ok {
 			bad = append(bad, fmt.Sprintf("%s %s: no entry has it in modules or contains (ADR-054 decisions 5 and 18)", m, in.graph[m]))
@@ -352,12 +377,20 @@ func gather(root string) (inputs, error) {
 		}
 	}
 	files, _ := filepath.Glob(filepath.Join(root, "dist", "*.yaml"))
-	for _, f := range files {
+	images, _ := filepath.Glob(filepath.Join(root, "dist", "*", "image.yaml"))
+	for _, f := range append(files, images...) {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			return in, err
 		}
 		in.dist[filepath.ToSlash(strings.TrimPrefix(f, filepath.Clean(root)+string(filepath.Separator)))] = string(b)
+	}
+	for _, f := range images {
+		bs, err := readBakes(root, filepath.ToSlash(strings.TrimPrefix(f, filepath.Clean(root)+string(filepath.Separator))))
+		if err != nil {
+			return in, err
+		}
+		in.bakes = append(in.bakes, bs...)
 	}
 	dec, err := os.ReadFile(filepath.Join(root, decisionsFile))
 	if err != nil {
