@@ -99,22 +99,23 @@ func listenViolation(where, call, id string) string {
 	return fmt.Sprintf("%s: %s opens a listener or binds a socket, which the list of plugin vet does not allow %s (%s)", where, call, id, docListen)
 }
 
-// manifestID returns the id of the plugin.yaml nearest above dir, up to root, and ""
-// when there is none or it does not read.
+// manifestID returns the id of the plugin that holds dir, a directory under root, the
+// directory given to vet: the id of the plugin.yaml at the root of that plugin, which
+// is root when it holds one and otherwise the directory under root that holds dir. It
+// returns "" when that manifest is missing or does not read. A plugin.yaml further
+// down names no plugin, so a directory of a plugin cannot claim another id.
 func manifestID(dir, root string) string {
-	for {
-		if b, err := os.ReadFile(filepath.Join(dir, "plugin.yaml")); err == nil {
-			var m struct{ ID string }
-			if yaml.Unmarshal(b, &m) != nil {
-				return ""
-			}
-			return m.ID
-		}
-		if dir == root || filepath.Dir(dir) == dir {
-			return ""
-		}
-		dir = filepath.Dir(dir)
+	b, err := os.ReadFile(filepath.Join(root, "plugin.yaml"))
+	if err != nil {
+		rel, _ := filepath.Rel(root, dir)
+		first, _, _ := strings.Cut(filepath.ToSlash(rel), "/")
+		b, err = os.ReadFile(filepath.Join(root, first, "plugin.yaml"))
 	}
+	var m struct{ ID string }
+	if err != nil || yaml.Unmarshal(b, &m) != nil {
+		return ""
+	}
+	return m.ID
 }
 
 // goFuncs start an untracked goroutine like a bare go statement does. Plugin
@@ -464,7 +465,7 @@ func vetSkipped(p string) bool {
 
 // checkPluginVet reads the non-test Go files under each dir. A dir whose base
 // name is boot gets the allow-go relaxation for every goroutine starter. A file
-// belongs to the plugin of the plugin.yaml nearest above it within dir.
+// belongs to the plugin whose root holds it (manifestID).
 func checkPluginVet(dirs []string) error {
 	var res vetResult
 	for _, dir := range dirs {
