@@ -17,6 +17,7 @@
 package fake
 
 import (
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -273,10 +274,7 @@ func (s served) Home(_ context.Context, r operations.HomeRequest) (operations.Ho
 
 func (s served) AddTrust(ctx context.Context, r operations.TrustRequest) (operations.Change, error) {
 	return do(s, "AddTrust", func() (operations.Change, error) {
-		if err := homeOf(r.Home); err != nil {
-			return operations.Change{}, err
-		}
-		if err := operations.TrustForm(r); err != nil {
+		if err := cmp.Or(homeOf(r.Home), operations.TrustForm(r)); err != nil {
 			return operations.Change{}, err
 		}
 		id, err := s.f.publicKey(r.KeyFile)
@@ -457,9 +455,7 @@ func newID() string {
 }
 
 func (s served) Render(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
-	return do(s, "Render", func() (launch.Rendered, error) {
-		return s.f.render(ctx, r)
-	})
+	return do(s, "Render", func() (launch.Rendered, error) { return s.f.render(ctx, r) })
 }
 
 // render answers the Rendered of the config for the profile of r, the dumps of r only.
@@ -485,20 +481,14 @@ func (f *Fake) render(ctx context.Context, r operations.RenderRequest) (launch.R
 
 func (s served) VerifyProfile(ctx context.Context, r operations.RenderRequest) (launch.Rendered, error) {
 	return do(s, "VerifyProfile", func() (launch.Rendered, error) {
-		if r.Profile == "" {
-			r.Profile = "cli"
-		}
-		r.Dumps = nil
+		r.Profile, r.Dumps = cmp.Or(r.Profile, "cli"), nil
 		return s.f.render(ctx, r)
 	})
 }
 
 func (s served) InitProfile(ctx context.Context, r operations.ProfileRequest) (operations.Change, error) {
 	return do(s, "InitProfile", func() (operations.Change, error) {
-		if err := homeOf(r.Home); err != nil {
-			return operations.Change{}, err
-		}
-		if err := operations.ProfileName(r.Profile); err != nil {
+		if err := cmp.Or(homeOf(r.Home), operations.ProfileName(r.Profile)); err != nil {
 			return operations.Change{}, err
 		}
 		rel := "profiles/" + r.Profile + "/profile.yaml"
@@ -540,10 +530,7 @@ func (s served) SanitizeProfile(ctx context.Context, r operations.ProfileRequest
 		if err := homeOf(r.Home); err != nil {
 			return operations.Change{}, err
 		}
-		p := r.Profile
-		if p == "" {
-			p = "cli"
-		}
+		p := cmp.Or(r.Profile, "cli")
 		if err := operations.ProfileName(p); err != nil {
 			return operations.Change{}, err
 		}
