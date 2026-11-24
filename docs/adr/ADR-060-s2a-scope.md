@@ -413,7 +413,16 @@ gaps:
     binary depends on a test-only id. `--contrib` writes the `contrib` owner (`08:407`).
     The CI template job generates a plugin from each template and asserts that it
     compiles, passes T0 and the generated tests, and fails conformance with exactly one
-    line per obligation (`08:1263`; `07:1561`).
+    line per obligation (`08:1263`; `07:1561`). Note of 2026-11-24: the connector
+    template's case is deferred until the release build embeds the suite and scenario
+    binaries (decision 46) and the exit's test release serves the instantiable toy
+    echoer of question Q2. Until then no aiopsctl built in the repository runs step 5 or
+    the echo scenario on a pack, which answer `launch.ErrNotCarried`, and `plugin new
+    connector` against the test release is refused, since it serves no instantiable
+    plugin. The job renders the connector template, holds it to T0, and asserts that
+    step 5 and the scenario answer `launch.ErrNotCarried`, so the template is never left
+    out unseen; once both land, it generates the pack against that release and asserts
+    one failed line per obligation of each registry its rows feed.
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and

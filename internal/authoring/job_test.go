@@ -3,6 +3,7 @@
 package authoring
 
 import (
+	"errors"
 	"io/fs"
 	"maps"
 	"os"
@@ -26,7 +27,8 @@ import (
 // SDK modules of this repository through replace lines that the job adds, as the exit
 // reaches them through its module proxy; the template itself holds none. It builds and
 // runs Go in a module of its own, so -short skips it: make templates and the CI job
-// templates run it.
+// templates run it. The case of the connector template is deferred, as the note of
+// 2026-11-24 to ADR-060 decision 24 records.
 func TestTemplateJob(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the template job builds three modules; make templates runs it")
@@ -58,6 +60,41 @@ func TestTemplateJob(t *testing.T) {
 			t.Errorf("the job runs a case of the templates %v, and the templates are %v", got, all)
 		}
 	}()
+	// The pack of the connector template passes T0, and step 5 and the echo scenario
+	// answer that this aiopsctl carries no suite binary: until the release build embeds
+	// them (ADR-060 decision 46) and the exit's test release serves an instantiable
+	// plugin for a row to name, the case asserts that. When both land, it generates the
+	// pack with plugin new connector against that release and asserts that step 5 fails
+	// each obligation of the registries its rows feed once.
+	t.Run(templates.Connector, func(t *testing.T) {
+		ran[templates.Connector] = true
+		dir := filepath.Join(t.TempDir(), templates.Connector)
+		files, err := tl.Template(t.Context(), launch.TemplateRequest{Registry: templates.Connector, ID: "acme/job-connector"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files["bundle.yaml"] = []byte("[]\n")
+		for name, b := range files {
+			p := filepath.Join(dir, filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if ds, err := tl.Vet(t.Context(), dir); err != nil || len(ds) != 0 {
+			t.Errorf("T0: %+v, %v", ds, err)
+		}
+		carried := New()
+		if _, err := carried.Suite(t.Context(), launch.SuiteRequest{Dir: dir, Definitions: map[string]string{"echoers": "0.1"}, Halves: []string{"obligations"},
+			Fixtures: filepath.Join(dir, "fixtures")}); !errors.Is(err, launch.ErrNotCarried) {
+			t.Errorf("step 5 of the pack: %v; want ErrNotCarried until the suite binaries are embedded, and then the case of ADR-060 decision 24", err)
+		}
+		if _, err := carried.Scenario(t.Context(), launch.ScenarioRequest{Dir: dir, Name: "echo"}); !errors.Is(err, launch.ErrNotCarried) {
+			t.Errorf("the echo scenario: %v; want ErrNotCarried until the scenario binary is embedded, and then the case of ADR-060 decision 24", err)
+		}
+	})
 	for _, reg := range templates.Registries {
 		t.Run(reg, func(t *testing.T) {
 			ran[reg] = true

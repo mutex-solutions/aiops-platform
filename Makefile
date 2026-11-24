@@ -23,10 +23,12 @@ s1-suites:
 
 # `make templates` is the templates job (ADR-060 decisions 24 and 36): a plugin
 # generated from the template of each registry compiles, passes T0 and the generated
-# tests, and fails conformance with exactly one line per obligation. It builds Go in
-# modules of its own, which reach the modules of this repository through the module
-# cache, so `make check` (-short) skips it. It fails, and does not skip, when the case
-# does not run.
+# tests, and fails conformance with exactly one line per obligation. The connector
+# template's case is deferred (ADR-060 decision 24, note of 2026-11-24): the job holds
+# its pack to T0 and asserts that step 5 and the echo scenario answer that the binary
+# carries no suite. It builds Go in modules of its own, which reach the modules of this
+# repository through the module cache, so `make check` (-short) skips it. It fails, and
+# does not skip, when the case does not run.
 .PHONY: templates
 templates:
 	go mod download
