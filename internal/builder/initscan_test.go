@@ -38,18 +38,28 @@ func scan(t *testing.T) map[string][]Finding {
 // The deny-list (ADR-044 decisions 11, 12, 24 and 25): per kind, a registration from
 // init fails, in the main package or in the package that declares the registry; a
 // registration reached through an interface method and one through a function value
-// fail, on the call graph of vta; a mux of its own is no default mux. The exceptions
-// table, keyed by package and version, admits gRPC's proto codec at its pin and gob's
-// own registration, which fail without it (ADR-044 decision 21; ADR-020 decision 27).
+// fail, on the call graph of vta; a mux of its own is no default mux. The default mux
+// and the default registry count however init reaches them: through an interface
+// value, a method value, a variable that holds them, a parameter, or a factory of
+// promauto; the default mux used after init does not. The exceptions table, keyed by
+// package and version, admits gRPC's proto codec at its pin and gob's own registration,
+// which fail without it (ADR-044 decision 21; ADR-020 decision 27).
 func TestInitDenyList(t *testing.T) {
 	got := scan(t)
+	const mux, reg = "a default-mux handler: net/http.DefaultServeMux in example.test/inits/cmd/", "a default-registry collector: github.com/prometheus/client_golang/prometheus.DefaultRegisterer in example.test/inits/cmd/"
 	for main, want := range map[string]string{
-		"sqldriver":  "a database/sql driver: database/sql.Register in example.test/inits/cmd/sqldriver.init#1",
-		"mux":        "a default-mux handler: net/http.HandleFunc in example.test/inits/cmd/mux.init#1",
-		"defaultmux": "a default-mux handler: (*net/http.ServeMux).Handle@net/http.DefaultServeMux in example.test/inits/cmd/defaultmux.init#1",
-		"promauto":   "a default-registry collector: github.com/prometheus/client_golang/prometheus/promauto.NewCounter in example.test/inits/cmd/promauto.init",
-		"iface":      "a database/sql driver: database/sql.Register in (example.test/inits/cmd/iface.viaMethod).do",
-		"funcval":    "a database/sql driver: database/sql.Register in example.test/inits/cmd/funcval.viaValue",
+		"sqldriver":   "a database/sql driver: database/sql.Register in example.test/inits/cmd/sqldriver.init#1",
+		"mux":         "a default-mux handler: net/http.HandleFunc in example.test/inits/cmd/mux.init#1",
+		"defaultmux":  mux + "defaultmux.init#1",
+		"promauto":    "a default-registry collector: github.com/prometheus/client_golang/prometheus/promauto.NewCounter in example.test/inits/cmd/promauto.init",
+		"iface":       "a database/sql driver: database/sql.Register in (example.test/inits/cmd/iface.viaMethod).do",
+		"funcval":     "a database/sql driver: database/sql.Register in example.test/inits/cmd/funcval.viaValue",
+		"ifacemux":    mux + "ifacemux.init#1",
+		"methodvalue": mux + "methodvalue.init",
+		"aliasmux":    mux + "aliasmux.init",
+		"parammux":    mux + "parammux.init#1",
+		"aliasreg":    reg + "aliasreg.init",
+		"promwith":    reg + "promwith.init",
 	} {
 		if !slices.ContainsFunc(got[main], func(f Finding) bool { return strings.HasPrefix(f.String(), want) }) {
 			t.Errorf("%s: %v, want %q", main, got[main], want)

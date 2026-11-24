@@ -7,4 +7,5 @@ var mux = http.NewServeMux()
 
 func init() { mux.HandleFunc("/z", func(http.ResponseWriter, *http.Request) {}) }
 
-func main() { _ = mux }
+// The default mux used after init is not the deny-list's.
+func main() { _, _ = mux, http.DefaultServeMux }
