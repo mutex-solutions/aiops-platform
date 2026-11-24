@@ -67,14 +67,19 @@ func kindOf(name string) int {
 	return kind
 }
 
-// threshold is the confidence below which the classifier names no licence, and
-// leftover the most words a licence file may hold outside the texts it names and
-// outside the lines of those texts that a match leaves out, such as a title: room for
-// a line that says which files a text covers, and none for a clause.
-const (
-	threshold = 0.9
-	leftover  = 12
-)
+// threshold is the confidence below which the classifier names no licence. A licence
+// file holds no word outside the texts it names and the lines of those texts that a
+// match leaves out, but on a line of titleWords and the words of the ids it names, such
+// as "The MIT License (MIT)", "BSD 2-Clause License" or "All rights reserved": no
+// clause, however short.
+const threshold = 0.9
+
+var titleWords = []string{"the", "license", "licence", "version", "all", "rights", "reserved"}
+
+// words returns the words of a normalized line, in lower case.
+func words(l string) []string {
+	return strings.FieldsFunc(strings.ToLower(l), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+}
 
 // twins are the ids of the SPDX list whose text is the text of another id, so that a
 // licence file alone cannot tell them apart, with the id the scan reads them as and
@@ -180,7 +185,7 @@ var corpusClassifier = sync.OnceValues(func() (*classifier.Classifier, error) {
 // licences, headers and exceptions of the corpus it holds, each id once, joined with
 // AND in the order they appear, an exception joined with WITH to the one licence of
 // the file. It fails, naming the file as unknown (L16), when the text names nothing,
-// holds more than leftover words outside what it names, matches two texts equally
+// holds a word outside what it names but on a title line, matches two texts equally
 // that twins does not join, or holds an exception beside no licence or two.
 func Classify(text []byte) (string, error) {
 	c, err := corpusClassifier()
@@ -198,17 +203,21 @@ func Classify(text []byte) (string, error) {
 			ms = append(ms, m)
 		}
 	}
+	title := slices.Clone(titleWords)
+	for _, m := range ms {
+		title = append(title, words(m.Name)...)
+	}
 	extra := 0
 	for i, l := range strings.Split(string(norm), "\n") {
 		own := slices.ContainsFunc(ms, func(m *classifier.Match) bool { return lines(c, m.Name)[l] })
-		if !covered[i+1] && !own {
-			extra += len(strings.FieldsFunc(l, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }))
+		if ws := words(l); !covered[i+1] && !own && slices.ContainsFunc(ws, func(w string) bool { return !slices.Contains(title, w) }) {
+			extra += len(ws)
 		}
 	}
 	if len(ms) == 0 {
 		return "", errors.New("unknown: the text names no licence of the corpus")
 	}
-	if extra > leftover {
+	if extra > 0 {
 		return "", fmt.Errorf("unknown: %d words outside the texts it names", extra)
 	}
 	// A match inside a longer one, such as the short form of an exception inside its
