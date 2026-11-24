@@ -2,7 +2,9 @@
 # the cli profile, and no other shipped profile lists it (ADR-061 decisions 29 and 30;
 # 00-decisions.md:277). cli is required, so a cli that is not ACTIVE stops the boot of
 # aiopsctl with a reason. No row states roles: the cli profile is no server profile.
-# The row operations joins with the operations library (ADR-061 decision 14).
+# The row operations joins with the operations library (ADR-061 decision 14). The patch
+# below disables reload-socket of aiops-core, so aiopsctl never listens (ADR-062
+# decision 2).
 - insert:
     - {id: cli, plugin: aiops/cli, required: true}
     - {id: command-profile, plugin: aiops/command-profile}
@@ -10,3 +12,4 @@
     - {id: command-trust, plugin: aiops/command-trust}
     - {id: command-dist, plugin: aiops/command-dist}
     - {id: command-key, plugin: aiops/command-key}
+- {id: reload-socket, enabled: false}
