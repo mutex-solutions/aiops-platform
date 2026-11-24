@@ -138,6 +138,6 @@ func (s served) Verify(_ context.Context, r operations.SpecRequest) (operations.
 	if i < 0 {
 		return operations.Verified{}, refused("check 5: no signer of the home that covers %s signed it", a.in.ID)
 	}
-	return operations.Verified{Digest: a.in.Digest, Signer: signers[i].KeyID, Steps: []operations.Step{{Name: "signature", Outcome: "pass"},
+	return operations.Verified{Digest: a.in.Digest, Signer: signers[i].KeyID, Steps: []operations.VerifyStep{{Name: "signature", Outcome: "pass"},
 		{Name: "attestation", Outcome: "pass"}, {Name: "suites", Outcome: "not-built", Reason: "the fake runs no suite"}}}, nil
 }

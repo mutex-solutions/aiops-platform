@@ -205,11 +205,14 @@ type Release struct {
 	Plugins  []ReleasePlugin
 }
 
-// ReleasePlugin is an instantiable plugin of a release: its id and the first entry of
-// the examples of its configSchema, nil when it has none (ADR-047 decision 12).
+// ReleasePlugin is an instantiable plugin of a release: its id, the first entry of the
+// examples of its configSchema, nil when it has none (ADR-047 decision 12), and the
+// definitions of the registries it registers with, from its requires.definitions, which
+// a pack of its rows feeds (07-c4-plugin-sdk.md:139).
 type ReleasePlugin struct {
 	ID      string
 	Example any
+	Feeds   map[string][]string
 }
 
 // BuildRequest is what the builder builds (ADR-044): dist.yaml, the module cache, the
@@ -250,7 +253,9 @@ type GenerateRequest struct {
 }
 
 // SuiteRequest is the plugin directory, the definitions with their versions, the
-// halves to run and the fixtures directory.
+// halves to run and the fixtures directory. With no definition it runs the plugin's own
+// tests under -race, step 4 of plugin check, and reports them as one result with no
+// name.
 type SuiteRequest struct {
 	Dir         string
 	Definitions map[string]string
@@ -264,12 +269,14 @@ type SuiteReport struct {
 	Definitions []SuiteResult
 }
 
-// SuiteResult is the run of one definition's suite.
+// SuiteResult is the run of one definition's suite, or of the plugin's own tests: each
+// failed obligation or test by its id, and each test that skipped by its name.
 type SuiteResult struct {
 	Name     string
 	Revision int
 	Halves   []string
 	Failed   []string
+	Skipped  []string
 }
 
 // TemplateRequest names a template: a registry or "connector", the plugin id, the

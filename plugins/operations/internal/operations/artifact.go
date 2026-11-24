@@ -596,12 +596,12 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	default:
 		return v, refused("check 5: no signature of %s verifies with a key that trust.yaml lists for %s and the runtimes %v, and allowUnsigned does not list it", d.Digest, id, pm.Runtimes)
 	}
-	v.Steps = append(v.Steps, def.Step{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer})
+	v.Steps = append(v.Steps, def.VerifyStep{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer})
 	if err := attestation(ctx, src, d, key, id); err != nil {
 		return v, err
 	}
-	v.Steps = append(v.Steps, def.Step{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()},
-		def.Step{Name: "suites", Outcome: "not-built", Reason: "the suites run in aiopsctl as embedded test binaries of package check, which is not built yet (ADR-060 decision 46)"})
+	v.Steps = append(v.Steps, def.VerifyStep{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()},
+		def.VerifyStep{Name: "suites", Outcome: "not-built", Reason: "the suites run in aiopsctl as embedded test binaries of package check, which is not built yet (ADR-060 decision 46)"})
 	return v, nil
 }
 

@@ -223,7 +223,7 @@ func TestInspectPrintsTheArtifact(t *testing.T) {
 // the steps that did not, the suites not built among them (ADR-060 decision 46); it
 // passes the home and the builder to the library, which refuses with exit 1.
 func TestVerifyPrintsTheSteps(t *testing.T) {
-	steps := []operations.Step{{Name: "signature", Outcome: "pass", Reason: "signer k"}, {Name: "attestation", Outcome: "pass"},
+	steps := []operations.VerifyStep{{Name: "signature", Outcome: "pass", Reason: "signer k"}, {Name: "attestation", Outcome: "pass"},
 		{Name: "suites", Outcome: "not-built", Reason: "package check is not built yet"}}
 	s := &stub{v: operations.Verified{Digest: "sha256:ab", Signer: "k", Steps: steps}}
 	rec := world(t, s)

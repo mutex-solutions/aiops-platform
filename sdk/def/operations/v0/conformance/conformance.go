@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -55,15 +56,22 @@ type Setup struct {
 	// dist and carries its distribution manifest as a referrer with no bundle, as the
 	// builder leaves it beside the image. use sets Images of the suite.
 	Images map[string][]byte
-	// Manifest is what the toolbox's ReadManifest reads of the manifest of Plugin, for
-	// the row, and Artifact what the fake packs of it. use sets both of the suite.
-	Manifest launch.ManifestSummary
+	// Artifact is what the fake packs of Pack. use sets the suite's.
 	Artifact operations.Inspected
+
+	// Template is what the toolbox's Template answers for the Go template of echoers,
+	// by path; it has no other template. use sets the suite's.
+	Template map[string][]byte
+	// Plugin is what the toolbox finds in the plugin of plugin check or plugin pack:
+	// ReadManifest answers its summary, PackSummary unless a case sets one, Suite
+	// fails the obligations of echoers in Failed, and the plugin's own tests skip the
+	// tests in Skipped; Generate, Vet and Gate find nothing.
+	Plugin Plugin
 }
 
-// Plugin is the plugin directory of the suite, by path: a pack whose bundle inserts
-// one row, disabled, with content and a fixture (ADR-047 decision 1).
-var Plugin = map[string][]byte{
+// Pack is the plugin directory of the cases of the artifact, by path: a pack whose
+// bundle inserts one row, disabled, with content and a fixture (ADR-047 decision 1).
+var Pack = map[string][]byte{
 	"plugin.yaml": []byte("manifestVersion: \"1.0\"\nid: acme/connector-x\nversion: 0.1.0\ntitle: Acme connector for X\nlicense: Apache-2.0\n" +
 		"publisher: {id: acme}\nstability: experimental\nscope: [process]\nruntimes: []\nrequires: {definitions: {}}\n"),
 	"bundle.yaml":                 []byte("- insert: [{id: logs, plugin: aiops/echoer, roles: [api], enabled: false, config: {endpoint: 'http://x.example.test'}}]\n"),
@@ -72,16 +80,29 @@ var Plugin = map[string][]byte{
 	"fixtures/echo.json":          []byte("{}\n"),
 }
 
-// Manifest is the summary of the manifest of Plugin.
-var Manifest = launch.ManifestSummary{ID: "acme/connector-x", Version: "0.1.0", Definitions: map[string][]string{}}
+// PackSummary is the summary of the manifest of Pack.
+var PackSummary = launch.ManifestSummary{ID: "acme/connector-x", Version: "0.1.0", Definitions: map[string][]string{}}
 
-// Artifact is what inspect reads of the artifact of Plugin, its digest aside.
+// Artifact is what inspect reads of the artifact of Pack, its digest aside.
 var Artifact = operations.Inspected{ID: "acme/connector-x", Version: "0.1.0",
 	Rows:    []operations.Row{{ID: "logs", Plugin: "aiops/echoer", Config: map[string]any{"endpoint": "http://x.example.test"}}},
 	Content: []string{"labels.yaml", "runbooks/restart.md"}}
 
 // Images are the images of the suite, each with its distribution manifest.
 var Images = map[string][]byte{"site": []byte("distVersion: 1\n"), "foreign": []byte("distVersion: 2\n"), "unsigned": []byte("distVersion: 3\n")}
+
+// Plugin is what plugin check finds in a Go plugin that contributes to echoers.
+type Plugin struct {
+	Summary         launch.ManifestSummary
+	Failed, Skipped []string
+}
+
+// Template is the Go template of echoers of the suite.
+var Template = map[string][]byte{"plugin.go": []byte("package echo\n"), "internal/echo/echo.go": []byte("package echo\n")}
+
+// Echo is the plugin of the suite: acme/echo, in process, contributing to echoers.
+var Echo = launch.ManifestSummary{ID: "acme/echo", Version: "0.1.0", Runtimes: []string{"inproc"},
+	Registers: []string{"echoers"}, Definitions: map[string][]string{"echoers": {"0.1"}}}
 
 // Shipped is the one shipped profile of the suite, cli.
 var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [aiops-core, aiops-cli]\n")}
@@ -378,6 +399,83 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("verify of an artifact signed by a key trust.yaml lists for other ids: %v, want ErrRefused", err)
 			}
 		})
+
+		t.Run("operations.O13 plugin new writes the template into a new directory, once", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			dir := filepath.Join(u.s.Dir, "echo")
+			q := operations.NewRequest{Caller: u.caller(), Registry: "echoers", ID: "acme/echo", Lang: "go", Dir: dir}
+			w, err := u.ops.New(t.Context(), q)
+			want := []string{filepath.Join(dir, "internal/echo/echo.go"), filepath.Join(dir, "plugin.go")}
+			if err != nil || !slices.Equal(w.Paths, want) {
+				t.Fatalf("New = %v, %v; want %v", w.Paths, err, want)
+			}
+			if _, err := u.ops.New(t.Context(), q); !errors.Is(err, operations.ErrRefused) {
+				t.Errorf("plugin new into a directory that holds a plugin: %v, want ErrRefused", err)
+			}
+			for why, r := range map[string]operations.NewRequest{
+				"a registry with no template": {Registry: "tools", ID: "acme/x", Lang: "go", Dir: filepath.Join(u.s.Dir, "x")},
+				"a language with no template": {Registry: "echoers", ID: "acme/y", Lang: "python", Dir: filepath.Join(u.s.Dir, "y")},
+			} {
+				r.Caller = u.caller()
+				if w, err := u.ops.New(t.Context(), r); !errors.Is(err, operations.ErrRefused) || len(w.Paths) != 0 {
+					t.Errorf("%s: %v, %v; want ErrRefused and nothing written", why, w, err)
+				}
+			}
+			if _, err := u.ops.New(t.Context(), operations.NewRequest{Caller: u.caller(), Registry: "echoers", ID: "acme/z", Lang: "go", Dir: "z"}); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("a relative directory: %v, want ErrUsage", err)
+			}
+		})
+
+		t.Run("operations.O14 plugin check reports eight steps and the attestation it would sign", func(t *testing.T) {
+			u := use(t, mount, Setup{Plugin: Plugin{Summary: Echo, Skipped: []string{"TestTwoTenants"}}})
+			r := u.check()
+			want := []string{operations.StepPass, operations.StepPass, operations.StepPass, operations.StepPass,
+				operations.StepPass, operations.StepNotApplicable, operations.StepPass, operations.StepNotApplicable}
+			if got := outcomes(r); !slices.Equal(got, want) || !r.Passed() {
+				t.Fatalf("steps %v, want %v", got, want)
+			}
+			var st struct {
+				Type    string `json:"_type"`
+				Subject []struct{ Name string }
+				Pred    struct {
+					Definitions map[string]struct {
+						Version string
+						Suite   int
+						Halves  []string
+					}
+					NotRun []string
+				} `json:"predicate"`
+			}
+			if err := json.Unmarshal(r.Attestation, &st); err != nil {
+				t.Fatalf("the attestation %s: %v", r.Attestation, err)
+			}
+			echo := st.Pred.Definitions["echoers"]
+			if st.Type != "https://in-toto.io/Statement/v1" || len(st.Subject) != 1 || st.Subject[0].Name != "acme/echo@0.1.0" ||
+				echo.Version != "0.1" || echo.Suite != 1 || !slices.Equal(echo.Halves, []string{"obligations"}) ||
+				!slices.Equal(st.Pred.NotRun, []string{"TestTwoTenants"}) {
+				t.Errorf("the attestation %s; want acme/echo@0.1.0 with echoers 0.1, suite 1, the obligations, and TestTwoTenants not run", r.Attestation)
+			}
+		})
+
+		t.Run("operations.O15 a failed step stops plugin check with one line per obligation", func(t *testing.T) {
+			u := use(t, mount, Setup{Plugin: Plugin{Summary: Echo, Failed: []string{"echoers/reply", "echoers/stable"}}})
+			r := u.check()
+			want := []string{operations.StepPass, operations.StepPass, operations.StepPass, operations.StepPass,
+				operations.StepFail, operations.StepSkipped, operations.StepSkipped, operations.StepSkipped}
+			if got := outcomes(r); !slices.Equal(got, want) || r.Passed() || r.Attestation != nil {
+				t.Fatalf("steps %v and attestation %s; want %v and none", got, r.Attestation, want)
+			}
+			var ids []string
+			for _, d := range r.Steps[4].Diagnostics {
+				ids = append(ids, d.Check)
+			}
+			if !slices.Equal(ids, []string{"echoers/reply", "echoers/stable"}) {
+				t.Errorf("step 5 says %+v; want one line per failed obligation, by its id", r.Steps[4].Diagnostics)
+			}
+			if _, err := u.ops.Check(t.Context(), operations.CheckRequest{Caller: u.caller(), Dir: "plugin"}); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("a relative directory: %v, want ErrUsage", err)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -460,6 +558,8 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Push"] = u.ops.Push(ctx, operations.PushRequest{Caller: c, Out: out, Registry: u.s.Registry + "/x"})
 			_, calls["Inspect"] = u.ops.Inspect(ctx, operations.SpecRequest{Caller: c, Spec: out})
 			_, calls["Verify"] = u.ops.Verify(ctx, operations.SpecRequest{Caller: c, Spec: out, Home: u.s.Home})
+			_, calls["New"] = u.ops.New(ctx, operations.NewRequest{Caller: c, Registry: "echoers", ID: "acme/echo", Lang: "go", Dir: filepath.Join(u.s.Dir, "late")})
+			_, calls["Check"] = u.ops.Check(ctx, operations.CheckRequest{Caller: c, Dir: u.s.Dir})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)
@@ -488,7 +588,10 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
-	s.Shipped, s.Rendered, s.Images, s.Manifest, s.Artifact = Shipped, Rendered, Images, Manifest, Artifact
+	s.Shipped, s.Rendered, s.Images, s.Artifact, s.Template = Shipped, Rendered, Images, Artifact, Template
+	if s.Plugin.Summary.ID == "" {
+		s.Plugin.Summary = PackSummary
+	}
 	u := &user{t: t, s: mount(t, s)}
 	_, _, u.ops = deftest.Consume(t, u.s.Root, operations.Key)
 	return u
@@ -527,11 +630,11 @@ func (u *user) signed(name, pub string) {
 	}
 }
 
-// plugin writes the files of Plugin under Dir/plugin and returns that directory.
+// plugin writes the files of Pack under Dir/plugin and returns that directory.
 func (u *user) plugin() string {
 	u.t.Helper()
 	dir := filepath.Join(u.s.Dir, "plugin")
-	for name, data := range Plugin {
+	for name, data := range Pack {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			u.t.Fatal(err)
@@ -623,6 +726,39 @@ func (u *user) profile(m func(context.Context, operations.ProfileRequest) (opera
 		u.t.Fatalf("profile %q: %v", p, err)
 	}
 	return ch
+}
+
+// check writes the plugin of plugin check, Dir/plugin with its plugin.yaml and its
+// bundle.yaml, and runs plugin check on it.
+func (u *user) check() operations.CheckReport {
+	u.t.Helper()
+	dir := filepath.Join(u.s.Dir, "plugin")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		u.t.Fatal(err)
+	}
+	for name, body := range map[string]string{"plugin.yaml": "id: acme/echo\n", "bundle.yaml": "- insert: []\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			u.t.Fatal(err)
+		}
+	}
+	r, err := u.ops.Check(u.t.Context(), operations.CheckRequest{Caller: u.caller(), Dir: dir})
+	if err != nil {
+		u.t.Fatalf("Check: %v", err)
+	}
+	for i, s := range r.Steps {
+		if s.N != i+1 || s.Name != operations.Steps[i] {
+			u.t.Errorf("step %d is %d %q; want %d %q", i+1, s.N, s.Name, i+1, operations.Steps[i])
+		}
+	}
+	return r
+}
+
+func outcomes(r operations.CheckReport) []string {
+	var out []string
+	for _, s := range r.Steps {
+		out = append(out, s.Outcome)
+	}
+	return out
 }
 
 func hasNote(ch operations.Change, word string) bool {

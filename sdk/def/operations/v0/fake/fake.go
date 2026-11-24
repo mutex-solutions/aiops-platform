@@ -62,6 +62,13 @@ type Config struct {
 	Images map[string][]byte
 	// Artifact is what the fake packs of every plugin directory, its digest aside.
 	Artifact operations.Inspected
+	// Template is the toolbox's Go template of echoers, its only template, by path.
+	Template map[string][]byte
+	// Summary, Failed and Skipped are what plugin check finds in any plugin: the
+	// summary that ReadManifest answers, the obligations of its suite that fail, and the
+	// generated tests that skip.
+	Summary         launch.ManifestSummary
+	Failed, Skipped []string
 }
 
 // Fake is the in-memory engine.

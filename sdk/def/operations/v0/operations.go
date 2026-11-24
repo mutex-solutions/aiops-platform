@@ -215,12 +215,82 @@ type Row struct {
 // suites, and whether every step passed.
 type Verified struct {
 	Digest, Signer string
-	Steps          []Step
+	Steps          []VerifyStep
 	Passed         bool
 }
 
-// Step is one step of plugin verify with its outcome, pass, fail or not-built, and why.
-type Step struct{ Name, Outcome, Reason string }
+// VerifyStep is one step of plugin verify with its outcome, pass, fail or not-built,
+// and why.
+type VerifyStep struct{ Name, Outcome, Reason string }
+
+// NewRequest is plugin new (ADR-060 decision 24): the template of Registry, a registry
+// of the release or Connector, for the plugin ID in Lang, written into Dir, which does
+// not exist or is empty. Contrib writes the owner contrib. For Connector, Against is the
+// signed manifest of the release whose instantiable plugins the pack's rows take, ""
+// for the one this binary embeds, and Plugins, when set, names the plugins whose rows
+// it writes (ADR-047 decision 12).
+type NewRequest struct {
+	Caller
+	Registry, ID, Lang string
+	Contrib            bool
+	Against            string
+	Plugins            []string
+	Dir                string
+}
+
+// Connector is the Registry of NewRequest that writes a connector pack.
+const Connector = "connector"
+
+// CheckRequest is plugin check on the plugin in Dir (07-c4-plugin-sdk.md:1565-1574).
+// Write writes the generated half of plugin.yaml and the generated tests first, as
+// plugingen does; Against is the signed manifest of the release that step 7 gates
+// against, "" for the one this binary embeds.
+type CheckRequest struct {
+	Caller
+	Dir     string
+	Write   bool
+	Against string
+}
+
+// The outcomes of a step of plugin check.
+const (
+	StepPass          = "pass"
+	StepFail          = "fail"
+	StepNotApplicable = "not applicable"
+	StepSkipped       = "skipped" // a step after a failed one: the check stops at the first
+)
+
+// Steps are the names of the steps of plugin check, step n at n-1
+// (07-c4-plugin-sdk.md:1565-1574).
+var Steps = [8]string{"manifest", "parity", "static", "alone", "conformance", "effects", "pack and verify", "scenario"}
+
+// Step is one step of plugin check: its number, 1 to 8, its name, its outcome and its
+// findings. A failed obligation is a diagnostic whose Check is the obligation id.
+type Step struct {
+	N           int
+	Name        string
+	Outcome     string
+	Diagnostics []launch.Diagnostic
+}
+
+// CheckReport is what plugin check found: the eight steps in order, and the
+// attestation it would sign, an in-toto Statement v1 of the conformance predicate
+// (ADR-020 decision 9), which is nil unless every step passed or does not apply. plugin
+// pack records the same statement, with the subject of the artifact it packs.
+type CheckReport struct {
+	Steps       []Step
+	Attestation []byte
+}
+
+// Passed reports whether no step failed.
+func (r CheckReport) Passed() bool {
+	for _, s := range r.Steps {
+		if s.Outcome == StepFail {
+			return false
+		}
+	}
+	return len(r.Steps) > 0
+}
 
 // Written is the paths a method wrote outside the home.
 type Written struct{ Paths []string }
@@ -297,4 +367,14 @@ type Operations interface {
 	// any other blob, then runs the suites. A signature or an attestation that does not
 	// verify is a refusal; a suite step not built is a step that did not pass.
 	Verify(ctx context.Context, r SpecRequest) (Verified, error)
+	// New is plugin new (added at 0.2). It writes the files of the template into Dir
+	// and returns their paths, sorted; it refuses a Dir that holds anything, a template
+	// that the toolbox has not and a language other than go, and writes nothing then.
+	// It writes no home.
+	New(ctx context.Context, r NewRequest) (Written, error)
+	// Check is plugin check (added at 0.2). It runs the eight steps through the
+	// toolbox, stops at the first failed step and reports the rest as skipped; a failed
+	// step is a report, not an error. It writes no home, and the author's directory only
+	// with Write.
+	Check(ctx context.Context, r CheckRequest) (CheckReport, error)
 }

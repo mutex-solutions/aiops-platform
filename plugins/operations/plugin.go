@@ -119,4 +119,13 @@ func (s served) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected, 
 
 func (s served) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
 	return call(s, ctx, r, ops.Library.Verify)
+
+}
+
+func (s served) New(ctx context.Context, r def.NewRequest) (def.Written, error) {
+	return call(s, ctx, r, ops.Library.New)
+}
+
+func (s served) Check(ctx context.Context, r def.CheckRequest) (def.CheckReport, error) {
+	return call(s, ctx, r, ops.Library.Check)
 }

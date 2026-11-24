@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,12 +82,44 @@ func (b box) Render(ctx context.Context, q launch.RenderRequest) (launch.Rendere
 
 func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.s.Shipped, ctx.Err() }
 
+// Gate passes every clause that plugin check evaluates, and needs the attestation of
+// the plugin to read.
 func (box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
-	return launch.Verdict{Entry: q.Entry}, ctx.Err()
+	v := launch.Verdict{Entry: q.Entry}
+	for _, n := range []int{1, 2, 5, 7, 8, 10} {
+		v.Clauses = append(v.Clauses, launch.Clause{Check: n, Outcome: launch.OutcomePass})
+	}
+	if !strings.Contains(string(q.Attestation), "acme/echo@0.1.0") {
+		v.Clauses[5].Outcome = launch.OutcomeDeny
+	}
+	return v, ctx.Err()
 }
 
-func (b box) ReadManifest(ctx context.Context, _ launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
-	return b.s.Manifest, nil, ctx.Err()
+func (b box) ReadManifest(ctx context.Context, q launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
+	return b.s.Plugin.Summary, nil, ctx.Err()
+}
+
+func (b box) Template(ctx context.Context, q launch.TemplateRequest) (map[string][]byte, error) {
+	if q.Registry != "echoers" || q.Lang != "go" {
+		return nil, fmt.Errorf("no template for %s in %s", q.Registry, q.Lang)
+	}
+	return b.s.Template, ctx.Err()
+}
+
+func (box) Generate(ctx context.Context, _ launch.GenerateRequest) ([]launch.Diagnostic, error) {
+	return nil, ctx.Err()
+}
+
+func (box) Vet(ctx context.Context, _ string) ([]launch.Diagnostic, error) { return nil, ctx.Err() }
+
+// Suite runs the plugin's own tests, which skip Skipped, or the suite of echoers, which
+// fails Failed.
+func (b box) Suite(ctx context.Context, q launch.SuiteRequest) (launch.SuiteReport, error) {
+	if len(q.Definitions) == 0 {
+		return launch.SuiteReport{Definitions: []launch.SuiteResult{{Skipped: b.s.Plugin.Skipped}}}, ctx.Err()
+	}
+	return launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 1, Halves: []string{"obligations"},
+		Failed: b.s.Plugin.Failed}}}, ctx.Err()
 }
 
 func (box) Release(context.Context, string) (launch.Release, error) {
