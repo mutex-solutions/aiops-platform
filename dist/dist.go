@@ -19,7 +19,7 @@
 package dist
 
 import (
-	_ "embed" // distribution.yaml and limits.yaml are embedded
+	"embed" // distribution.yaml, limits.yaml, bundles/ and profiles/ are embedded
 	"errors"
 	"fmt"
 	"io/fs"
@@ -130,6 +130,9 @@ func Modules() []Module {
 		m(commandkey.Plugin, "plugins/command-key"),
 	}
 }
+
+// Shipped returns the bundles and profiles of the release. Not built yet: it holds none.
+func Shipped() fs.FS { return embed.FS{} }
 
 // Load returns the registry, the signed distribution manifest and the limits of the
 // release distribution.

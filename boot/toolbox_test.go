@@ -212,7 +212,8 @@ func TestToolboxRenderNamesTheFileThatStopsComposition(t *testing.T) {
 
 // With Against a render reads the module table and the bindings from that signed
 // manifest, as `aiopsctl profile render --dist` does, and holds a home to that manifest's
-// digest instead of the embedded one (ADR-061 decision 26).
+// digest instead of the embedded one (ADR-061 decision 26). Its dump holds the lines that
+// boot prints at every boot, as the dump of Render does.
 func TestToolboxRenderAgainst(t *testing.T) {
 	b := newBox(t)
 	tb := b.start(t, nil)
@@ -234,7 +235,8 @@ func TestToolboxRenderAgainst(t *testing.T) {
 		t.Errorf("no home: distribution %s, departures %q, %v", r.Distribution, r.Departures, err)
 	}
 	r, err = tb.Render(ctx, launch.RenderRequest{Home: "/x/other", Profile: "p", Against: "/x/dist/distribution.yaml", Dumps: []string{"--dump"}})
-	if err != nil || len(errorTexts(r.Diagnostics)) > 0 || !slices.Equal(rowIDs(r.Composition), []string{"store", "user", "probe"}) || r.Dumps["--dump"] == "" {
+	if err != nil || len(errorTexts(r.Diagnostics)) > 0 || !slices.Equal(rowIDs(r.Composition), []string{"store", "user", "probe"}) ||
+		!strings.Contains(r.Dumps["--dump"], "\n## distribution\ntrust: ") {
 		t.Errorf("a home that runs it: rows %v, errors %v, %v", rowIDs(r.Composition), errorTexts(r.Diagnostics), err)
 	}
 	for name, tc := range map[string]struct {

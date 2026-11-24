@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"io/fs"
 	"maps"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
@@ -50,10 +53,29 @@ type result struct {
 	out, errOut string
 }
 
+// do runs aiopsctl as main runs it, on fsys rooted at "/" and with the environment env,
+// whose PWD is the working directory, the root when it is empty. It runs as a release
+// binary, which carries a release key, so its own boot trusts the manifest it embeds
+// without a home (ADR-061 decision 26; ADR-060 decision 50).
 func do(t *testing.T, fsys fs.FS, env map[string]string, args ...string) result {
 	t.Helper()
+	return doWith(t, fsys, env, &boot.Release{KeyID: "test-release"}, args...)
+}
+
+// doWith is do with the release key of the binary, nil for a binary built without one.
+func doWith(t *testing.T, fsys fs.FS, env map[string]string, release *boot.Release, args ...string) result {
+	t.Helper()
+	reg, signed, lim, err := dist.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var environ []string
+	for k, v := range env {
+		environ = append(environ, k+"="+v)
+	}
 	var out, errOut bytes.Buffer
-	code := run(args, strings.NewReader(""), &out, &errOut, fsys, func(k string) string { return env[k] })
+	code := run(t.Context(), args, process{In: strings.NewReader(""), Out: &out, Err: &errOut, Environ: environ, Dir: cmp.Or(env["PWD"], "/"), Files: fsys},
+		distribution{Registry: reg, Signed: signed, Release: release, Limits: lim, Shipped: dist.Shipped()})
 	return result{code, out.String(), errOut.String()}
 }
 
@@ -110,9 +132,10 @@ func TestRunRolesPathsAndPatches(t *testing.T) {
 	if !strings.Contains(two.out, "\nroles api,worker\n") {
 		t.Errorf("repeated roles:\n%s", two.out)
 	}
-	// A relative patch keeps its relative name in provenance, and an unknown id warns.
+	// A relative patch is resolved against the working directory, as every path of a
+	// request is (ADR-061 decision 16), and an unknown id warns.
 	r := do(t, w, env, with("--patch", "p/ok.yml", "--dump")...)
-	if r.code != 0 || !strings.Contains(r.out, "(patch:p/ok.yml) p/ok.yml:1") || !strings.Contains(r.errOut, `unknown id "ghost"`) {
+	if r.code != 0 || !strings.Contains(r.out, "(patch:work/p/ok.yml) work/p/ok.yml:1") || !strings.Contains(r.errOut, `unknown id "ghost"`) {
 		t.Errorf("relative patch: %+v", r)
 	}
 	// An absolute patch path and one that leaves the working directory.
@@ -121,11 +144,11 @@ func TestRunRolesPathsAndPatches(t *testing.T) {
 			t.Errorf("patch %s: exit %d %s", p, r.code, r.errOut)
 		}
 	}
-	// Home from the environment, bundles from another directory, an absolute dist.
-	env2 := map[string]string{"PWD": "/work/p", "AIOPS_HOME": "/work/home"}
-	r = do(t, w, env2, "profile", "render", "--profile", "demo", "--bundles", "../home", "--dist", "/work/dist", "--server", "--dump")
+	// Bundles from another directory and an absolute dist, from another working directory.
+	env2 := map[string]string{"PWD": "/work/p"}
+	r = do(t, w, env2, "profile", "render", "--profile", "demo", "--home", "../home", "--bundles", "../home", "--dist", "/work/dist", "--server", "--dump")
 	if r.code != 0 {
-		t.Errorf("env home: %+v", r)
+		t.Errorf("another directory: %+v", r)
 	}
 	// An empty or missing PWD means the root of the file system.
 	rootEnv := map[string]string{"PWD": ""}
@@ -185,29 +208,18 @@ func TestRunUsage(t *testing.T) {
 	for name, args := range map[string][]string{
 		"no arguments":       nil,
 		"one word":           {"profile"},
-		"unknown subcommand": {"profile", "verify"},
 		"unknown command":    {"plugin", "render"},
+		"unknown group":      {"nope"},
 		"unknown flag":       with("--nope"),
 		"flag without value": {"profile", "render", "--profile"},
 		"no profile":         {"profile", "render", "--home", "home", "--dist", "dist"},
-		"no dist":            {"profile", "render", "--profile", "demo", "--home", "home"},
-		"no home":            {"profile", "render", "--profile", "demo", "--dist", "dist"},
 		"stray argument":     with("extra"),
 		"unknown role":       with("--role", "api,boss"),
 	} {
 		r := do(t, w, env, args...)
-		if r.code != 2 || !strings.Contains(r.errOut, "usage: aiopsctl profile render") || r.out != "" {
+		if r.code != 2 || !strings.Contains(r.errOut, "usage: aiopsctl ") || r.out != "" {
 			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.out, r.errOut)
 		}
-	}
-}
-
-func TestListFlag(t *testing.T) {
-	var l list
-	_ = l.Set("a")
-	_ = l.Set("b")
-	if l.String() != "a,b" {
-		t.Errorf("String = %q", l.String())
 	}
 }
 

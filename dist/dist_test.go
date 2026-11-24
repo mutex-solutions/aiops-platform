@@ -77,6 +77,38 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	}
 }
 
+// The release ships aiops-core, aiops-cli and the cli profile, which lists the two in that
+// order (ADR-061 decision 29; ADR-060 decision 27). The cli profile composes from them
+// alone with every row a plugin of the module table and cli required, and it is no
+// server profile: its rows of aiops-cli state no roles.
+func TestShipsTheCLIProfile(t *testing.T) {
+	reg, _, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Shipped()
+	src := boot.Sources{Profile: "cli", Home: s, Bundles: s}
+	c, _, err := boot.Compose(src, boot.Options{Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range c.Rows {
+		ids = append(ids, r.ID)
+		if _, ok := reg.Modules[r.Plugin]; !ok || r.ID == "cli" && !r.Required {
+			t.Errorf("row %s: plugin %s in the table %v, required %v", r.ID, r.Plugin, ok, r.Required)
+		}
+	}
+	want := []string{"clock", "config-refs", "restart-policy", "reload", "readiness",
+		"cli", "command-profile", "command-plugin", "command-trust", "command-dist", "command-key"}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("rows %v, want %v", ids, want)
+	}
+	if _, _, err := boot.Compose(src, boot.Options{Server: true, Modules: reg.Modules}); err == nil || !strings.Contains(err.Error(), "roles") {
+		t.Fatalf("the server rule on the cli profile: %v", err)
+	}
+}
+
 // Gate check 7 on the release manifest detaches an optional row that the kernel would
 // refuse with ErrBinding or ErrSealed, instead of letting it fail and be given up on:
 // reload has no consumer yet, and the loader's hooks are sealed by their definition.

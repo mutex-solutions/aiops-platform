@@ -129,7 +129,9 @@ func TestNoDispatchBeforeBoot(t *testing.T) {
 
 // Help and a path that no row registered name each row of the composition that needs
 // commands and is not ACTIVE, with the keys it waits for: those that no ACTIVE row
-// provides, less the keys of the launcher and the loader (ADR-061 decision 9).
+// provides, less the keys of the launcher and the loader (ADR-061 decision 9). A plugin
+// of the module table that needs commands and has no mounted row, disabled or detached
+// by the gate, is named by its id, since the composition lists mounted rows only.
 func TestRowsThatAreNotActive(t *testing.T) {
 	w := newWorld(t, "help")
 	w.l.Modules = []launch.CatalogEntry{
@@ -137,6 +139,7 @@ func TestRowsThatAreNotActive(t *testing.T) {
 		{ID: "aiops/command-key", Needs: []string{"commands", "operations", "logger"}},
 		{ID: "aiops/command-profile", Needs: []string{"commands", "profileContext"}},
 		{ID: "aiops/other", Needs: []string{"elsewhere"}},
+		{ID: "aiops/command-gone", Needs: []string{"commands"}},
 	}
 	w.rd.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: []composition.Row{
 		{ID: "cli", Plugin: cli.ID, State: kernel.Active},
@@ -149,6 +152,7 @@ func TestRowsThatAreNotActive(t *testing.T) {
 	w.l.Boot()
 	w.awaitExit(t)
 	if got := w.out.String(); !strings.Contains(got, "  command-key  PENDING, waits for operations\n") || strings.Contains(got, "other") ||
+		!strings.Contains(got, "  aiops/command-gone  not mounted: disabled, detached by the gate, or of another role\n") ||
 		strings.Contains(got, "ghost") || strings.Contains(got, "command-profile ") {
 		t.Fatalf("help:\n%s", got)
 	}
