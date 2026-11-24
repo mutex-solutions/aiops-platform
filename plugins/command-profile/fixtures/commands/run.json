@@ -1,0 +1,18 @@
+[
+  {"argv": ["profile", "render", "--profile", "demo", "--dump"], "outcome": "ok", "stdout": "dump of demo\n"},
+  {"argv": ["profile", "render", "--dump", "--profile", "demo", "--dump-hooks", "--role", "api,worker"], "outcome": "ok",
+   "stdout": "=== --dump ===\ndump of demo\n=== --dump-hooks ===\ndump-hooks of demo\n"},
+  {"argv": ["profile", "render", "--profile", "demo"], "outcome": "ok", "stdout": "", "stderr": "warning: trust: the test trusts the distribution"},
+  {"argv": ["profile", "render", "--profile", "refused", "--dump"], "outcome": "error", "stdout": "dump of refused\n", "stderr": "the profile is refused"},
+  {"argv": ["profile", "render"], "outcome": "usage", "stdout": "", "stderr": "--profile is required"},
+  {"argv": ["profile", "render", "--profile", "demo", "--role", "boss"], "outcome": "usage", "stdout": "", "stderr": "edge, api, worker"},
+  {"argv": ["profile", "render", "--profile", "demo", "extra"], "outcome": "usage", "stdout": "", "stderr": "usage: aiopsctl profile render"},
+  {"argv": ["profile", "verify"], "outcome": "ok", "stdout": "the site adds consumers of appExit: acme/x\n"},
+  {"argv": ["profile", "verify", "extra"], "outcome": "usage", "stdout": ""},
+  {"argv": ["profile", "init", "cli"], "outcome": "ok", "stdout": "", "stderr": "copied the shipped profile cli"},
+  {"argv": ["profile", "init", "cli"], "outcome": "ok", "stdout": "", "stderr": "kept"},
+  {"argv": ["profile", "init", "nope"], "outcome": "error", "stdout": "", "stderr": "no shipped profile nope"},
+  {"argv": ["profile", "init"], "outcome": "usage", "stdout": ""},
+  {"argv": ["profile", "sanitize"], "outcome": "ok", "stdout": "", "stderr": "no layer file of the home stops the composition of cli"},
+  {"argv": ["profile", "sanitize", "a", "b"], "outcome": "usage", "stdout": ""}
+]

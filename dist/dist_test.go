@@ -43,12 +43,12 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	}
 	man := bindings(t, signed)
 	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy",
-		"aiops/cli", "aiops/command-plugin", "aiops/command-trust", "aiops/command-dist", "aiops/command-key"} {
+		"aiops/cli", "aiops/command-profile", "aiops/command-plugin", "aiops/command-trust", "aiops/command-dist", "aiops/command-key"} {
 		if _, ok := reg.Modules[id]; !ok {
 			t.Errorf("%s is missing from the module table", id)
 		}
 	}
-	if len(reg.Modules) != 11 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
+	if len(reg.Modules) != 12 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
 		t.Fatalf("%d modules, %d hooks", len(reg.Modules), len(reg.Hooks))
 	}
 	if !slices.Equal(man.RequiredRows, []string{"loader", "readiness", "reload", "restart-policy"}) || !slices.Equal(man.RequiredKeys, []string{"clock"}) {
@@ -67,6 +67,12 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	// appExit is consumer-bound, and the cli row requests the exit of aiopsctl with the
 	// code of its command (ADR-061 decision 7).
 	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "appExit" }); i < 0 || !slices.Contains(man.Consumers[i].Plugins, "aiops/cli") {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
+	// command-profile reaches the toolbox through profileContext until the operations
+	// library carries Render, InitProfile and SanitizeProfile (ADR-061 decision 20).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "profileContext" }); i < 0 ||
+		!slices.Contains(man.Consumers[i].Plugins, "aiops/command-profile") {
 		t.Fatalf("consumers %+v", man.Consumers)
 	}
 }

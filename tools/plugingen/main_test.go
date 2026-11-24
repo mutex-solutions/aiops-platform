@@ -39,6 +39,7 @@ var dirs = map[string]string{
 	"aiops/reload":                   "plugins/reload",
 	"aiops/restart-policy":           "plugins/restart-policy",
 	"aiops/cli":                      "plugins/cli",
+	"aiops/command-profile":          "plugins/command-profile",
 	"aiops/command-plugin":           "plugins/command-plugin",
 	"aiops/command-trust":            "plugins/command-trust",
 	"aiops/command-dist":             "plugins/command-dist",

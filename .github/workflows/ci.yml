@@ -182,7 +182,7 @@ jobs:
           go run ./tools/kernelcheck lines sdk/def/commands/v0 800 provisional fake conformance
           go run ./tools/kernelcheck lines sdk/def/commands/v0/fake 800 provisional
           go run ./tools/kernelcheck lines sdk/def/commands/v0/conformance 800 provisional
-          for p in cli command-plugin command-trust command-dist command-key; do
+          for p in cli command-profile command-plugin command-trust command-dist command-key; do
             go run ./tools/kernelcheck lines plugins/$p 1500 provisional
           done
 

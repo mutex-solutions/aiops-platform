@@ -151,7 +151,7 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Registry.Modules) != 26 {
+	if len(d.Registry.Modules) != 27 {
 		t.Fatalf("%d modules", len(d.Registry.Modules))
 	}
 	// The test table is the release table plus the test plugins, never the other way.

@@ -77,6 +77,6 @@ check:
 	$(KC) lines sdk/def/commands/v0 800 provisional fake conformance
 	$(KC) lines sdk/def/commands/v0/fake 800 provisional
 	$(KC) lines sdk/def/commands/v0/conformance 800 provisional
-	for p in cli command-plugin command-trust command-dist command-key; do \
+	for p in cli command-profile command-plugin command-trust command-dist command-key; do \
 		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
 	done

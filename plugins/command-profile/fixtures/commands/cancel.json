@@ -1,0 +1,6 @@
+[
+  {"argv": ["profile", "render", "--profile", "demo", "--dump"], "delay": "0s"},
+  {"argv": ["profile", "verify"], "delay": "0s"},
+  {"argv": ["profile", "init", "cli"], "delay": "0s"},
+  {"argv": ["profile", "sanitize"], "delay": "0s"}
+]
