@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -70,10 +71,30 @@ func doWith(t *testing.T, fsys fs.FS, env map[string]string, release *boot.Relea
 	for k, v := range env {
 		environ = append(environ, k+"="+v)
 	}
-	var out, errOut bytes.Buffer
+	var out, errOut syncBuffer
 	code := run(t.Context(), args, process{In: strings.NewReader(""), Out: &out, Err: &errOut, Environ: environ, Dir: cmp.Or(env["PWD"], "/"), Files: fsys},
 		distribution{Registry: reg, Signed: signed, Release: release, Limits: lim, Shipped: dist.Shipped()})
 	return result{code, out.String(), errOut.String()}
+}
+
+// syncBuffer is a buffer safe for concurrent writes, as the files of the process are:
+// boot writes its log to stderr from its own goroutines while a command writes to the
+// same stream.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
 
 var base = []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "dist", "--server"}
