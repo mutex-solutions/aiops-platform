@@ -86,3 +86,13 @@ func (s served) Check(_ context.Context, r operations.CheckRequest) (operations.
 		return rep, nil
 	})
 }
+
+// Build answers what the config says the builder built, and writes no home.
+func (s served) Build(_ context.Context, r operations.BuildRequest) (launch.Built, error) {
+	return do(s, "Build", func() (launch.Built, error) {
+		if !filepath.IsAbs(r.DistYAML) || r.ModCache != "" && !filepath.IsAbs(r.ModCache) {
+			return launch.Built{}, usage("dist.yaml %q and the module cache %q are absolute paths", r.DistYAML, r.ModCache)
+		}
+		return s.f.cfg.Built, nil
+	})
+}

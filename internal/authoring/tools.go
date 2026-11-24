@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/vet"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -53,12 +55,36 @@ var spdxList string
 //go:embed suites
 var suites embed.FS
 
-// Tools are the parts of the toolbox that aiopsctl links. Build stays launch.NoTools's
-// until the builder of ADR-044 lands.
+// Tools are the parts of the toolbox that aiopsctl links.
 type Tools struct {
 	launch.NoTools
-	SDK    string // the version of the SDK modules that a template requires
-	Suites fs.FS  // the embedded binaries, under suites/; nil for none
+	SDK      string    // the version of the SDK modules that a template requires
+	Suites   fs.FS     // the embedded binaries, under suites/; nil for none
+	Signed   []byte    // the signed manifest this binary embeds, the release dist build builds on
+	Progress io.Writer // where dist build prints, stderr in aiopsctl; nil drops it
+}
+
+// Build is dist build on the local path, the builder of internal/builder (ADR-044;
+// ADR-060 decision 22), with the release's signed manifest this binary embeds (ADR-044
+// decision 1): it writes into build/ beside dist.yaml, extracts the pinned toolchain
+// under the user's cache directory, and refuses a proxy URL in GOPROXY until L14
+// clears. The image path, which runs the builder image, and the builds of plugin smoke
+// and plugin verify are not built yet.
+func (t Tools) Build(ctx context.Context, q launch.BuildRequest) (launch.Built, error) {
+	switch {
+	case q.Builder != "local":
+		return launch.Built{}, fmt.Errorf("%w: the image path of the builder, which runs the builder image, is not built yet: run dist build --builder local", launch.ErrNotCarried)
+	case q.Plugin != "" || q.Module != "":
+		return launch.Built{}, fmt.Errorf("%w: the builds of plugin smoke and plugin verify are not built yet", launch.ErrNotCarried)
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return launch.Built{}, err
+	}
+	r, err := builder.Build(ctx, builder.Request{DistYAML: q.DistYAML, Release: t.Signed, ModCache: q.ModCache, Mirrors: q.Mirrors,
+		AllowBump: q.AllowBump, Proxy: os.Getenv("GOPROXY"), Out: filepath.Join(filepath.Dir(q.DistYAML), "build"),
+		Cache: filepath.Join(cache, "aiopsctl"), Progress: t.Progress})
+	return launch.Built{Image: r.Image, Manifest: r.Manifest, Aiopsctl: r.Aiopsctl}, err
 }
 
 // New returns the Tools of this binary: the SDK version it was built with and the

@@ -16,5 +16,6 @@
 // Remove (plugin gate --against and the plugins of a profile, which submit over the
 // socket of ADR-062). Pack and Verify run the suites of plugin check as Check runs
 // them, and a binary that does not carry them reports the suite step as not built
-// (ADR-060 decision 46). Build and Smoke join with the builder of ADR-044.
+// (ADR-060 decision 46). Build, added at 0.3, is dist build through the builder of
+// the toolbox (ADR-044); Smoke joins with the builder's image path.
 package operations

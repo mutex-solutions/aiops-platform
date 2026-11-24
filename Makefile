@@ -43,18 +43,20 @@ templates:
 # cases of the builder that read the tree of the pinned toolchain module, the licence
 # report of aiops and aiopsctl among them, with THIRD_PARTY_LICENSES/, the NOTICE texts
 # and the MPL-2.0 lines written for each as for an image, and the deny-list scan of the
-# whole program. Both modules come from the module proxy into the module cache, so
-# `make check` (-short) skips these cases; here they fail, and do not skip, when they
-# do not run.
+# whole program; and dist build on the local path, then dist sign and dist use of what
+# it wrote, which builds two binaries from nothing. Both modules come from the module
+# proxy into the module cache, so `make check` (-short) skips these cases; here they
+# fail, and do not skip, when they do not run.
 TOOLCHAIN := golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64
 SPDXDATA  := github.com/spdx/license-list-data@v3.29.0+incompatible
 .PHONY: builder
 builder:
 	go mod download $(TOOLCHAIN) $(SPDXDATA)
 	go run ./tools/spdxcorpus .
-	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag)$$' ./internal/builder 2>&1); s=$$?; \
+	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag)$$' ./internal/builder 2>&1 && \
+		go test -count=1 -v -timeout 30m -run '^TestDistBuildSignAndUse$$' ./cmd/aiopsctl 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && ! echo "$$out" | grep -q -- '--- SKIP' && \
-		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 4 ]
+		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 5 ]
 
 # `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
 # a client run as root is refused by reload-socket and one run as another user cannot
@@ -81,7 +83,9 @@ check:
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
 	$(KC) lines cmd/aiopsctl 2500 provisional
-	@# ADR-060 decision 35: the builder, 3,000 lines, provisional.
+	@# ADR-060 decision 35: the launcher of cmd/aiopsctl, which the aiopsctl that dist build
+	@# writes runs too, under the cap of cmd/aiopsctl; the builder, 3,000 lines, provisional.
+	$(KC) lines internal/aiopsctl 2500 provisional
 	$(KC) lines internal/builder 3000 provisional
 	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
 	@# lines since the second note of 2026-11-24, provisional: the row package, internal/

@@ -32,4 +32,4 @@ requires:
   pluginApi: "0.3"
   definitions:
     launch: ["0.2"]
-    operations: ["0.2"]
+    operations: ["0.3"]

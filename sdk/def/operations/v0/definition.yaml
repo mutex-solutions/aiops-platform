@@ -7,11 +7,14 @@
 # ADR-047, New and Check, plugin new and plugin check (ADR-060 decisions 23 and 24), and
 # Gate, Install, Enable, Disable and Remove, so a consumer built for 0.1 is admitted.
 # Suite revision 2: the suite adds their cases and those of dist sign and dist use on an
-# image reference inside the minor (ADR-060 decision 10).
+# image reference inside the minor (ADR-060 decision 10). 0.3 adds Build, dist build
+# through the toolbox's builder (ADR-044; ADR-061 decision 16), and the OCI image
+# layout as an image of dist sign and dist use; suite revision 3 adds the case of
+# Build.
 key: operations
-version: "0.2"
+version: "0.3"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
 compatibleFrom: "0.1"
-suite: 2
+suite: 3

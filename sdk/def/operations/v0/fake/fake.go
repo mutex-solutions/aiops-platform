@@ -77,6 +77,8 @@ type Config struct {
 	// process runs.
 	Verdict launch.Verdict
 	Result  *reload.WireResult
+	// Built is what dist build answers.
+	Built launch.Built
 }
 
 // Fake is the in-memory engine.

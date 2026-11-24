@@ -2,20 +2,22 @@
 
 // Package commanddist is the row command-dist of aiops-cli: the commands dist build,
 // dist sign and dist use (ADR-061 decision 30; 08-profiles-roadmap-adrs.md:402). dist
-// sign and dist use call the methods SignDist and UseDist of the operations library on
-// an OCI image reference, and print what was pushed or written and the outcome
-// (ADR-061 decisions 16 and 20; ADR-020 decision 12). dist build is declared with its synopsis
-// and flags, so the module table and the name lint hold it, and answers that it is not
-// built yet: it runs through the builder of the toolbox (ADR-044).
+// build calls the method Build of the operations library, which runs the builder of
+// the toolbox (ADR-044), and dist sign and dist use call SignDist and UseDist on an
+// image; each prints what was built, pushed or written and the outcome (ADR-061
+// decisions 16 and 20; ADR-020 decision 12).
 package commanddist
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
@@ -35,7 +37,7 @@ var Plugin = plugin.Define(plugin.Spec[Config]{
 	Apply: func(c *kernel.Context, _ *Config) error {
 		r, ops := commands.Key.Of(c), operations.Key.Of(c)
 		specs := specs()
-		for i, run := range []func(context.Context, operations.Operations, commands.Invocation) error{notBuilt, sign, use} {
+		for i, run := range []func(context.Context, operations.Operations, commands.Invocation) error{build, sign, use} {
 			if err := r.Register(c, specs[i], command(func(ctx context.Context, inv commands.Invocation) error {
 				if err := ctx.Err(); err != nil {
 					return err
@@ -89,9 +91,32 @@ func caller(inv commands.Invocation) operations.Caller {
 	return operations.Caller{Env: inv.Env, Progress: inv.Err}
 }
 
-// notBuilt is dist build, whose builder lands with ADR-044.
-func notBuilt(context.Context, operations.Operations, commands.Invocation) error {
-	return errors.New("dist build is not built yet: it runs through the builder of ADR-044")
+// build is dist build: dist.yaml and the module cache resolved against the working
+// directory, the mirrors by prefix, the bumps and the builder, through the builder of
+// the toolbox; it names what the builder wrote and the digest of the signed manifest.
+func build(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	q := launch.BuildRequest{DistYAML: abs(inv, inv.Args[0]), AllowBump: inv.List("allow-bump"), Builder: inv.Value("builder"), Mirrors: map[string]string{}}
+	if m := inv.Value("modcache"); m != "" {
+		q.ModCache = abs(inv, m)
+	}
+	for _, m := range inv.List("mirror") {
+		prefix, site, ok := strings.Cut(m, "=")
+		if !ok || prefix == "" || site == "" {
+			return fmt.Errorf("%w: --mirror %q is not <prefix>=<site prefix>", commands.ErrUsage, m)
+		}
+		q.Mirrors[prefix] = site
+	}
+	b, err := ops.Build(ctx, operations.BuildRequest{Caller: caller(inv), BuildRequest: q})
+	if err != nil {
+		return err
+	}
+	for _, p := range []string{b.Image, b.Aiopsctl} {
+		if p != "" {
+			fmt.Fprintln(inv.Err, "wrote "+p)
+		}
+	}
+	fmt.Fprintf(inv.Err, "the signed manifest sha256:%x: dist sign signs it with the site's key\n", sha256.Sum256(b.Manifest))
+	return nil
 }
 
 // sign is dist sign: the image's distribution manifest, signed with the private key

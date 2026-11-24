@@ -19,6 +19,7 @@ import (
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
@@ -212,8 +213,41 @@ func pushArtifact(ctx context.Context, dst content.Pusher, artifactType string, 
 // once signed, its bundle.
 type distribution struct{ manifest, bundle []byte }
 
-// distributions returns the distribution referrers of img in r.
-func distributions(ctx context.Context, r *remote.Repository, img ocispec.Descriptor) ([]distribution, error) {
+// imageStore is where an image is: a repository, or an OCI image layout.
+type imageStore interface {
+	source
+	content.Pusher
+}
+
+// openImage returns the store of the image ref, its descriptor and its name: an OCI
+// reference, oci:// optional, named by its repository, or the absolute path of the OCI
+// image layout of one image tagged latest, which dist build writes (ADR-044 decision
+// 1), named by its path.
+func openImage(ctx context.Context, c def.Caller, ref string) (imageStore, ocispec.Descriptor, string, error) {
+	if filepath.IsAbs(ref) {
+		if _, err := os.Stat(filepath.Join(ref, ocispec.ImageLayoutFile)); err != nil {
+			return nil, ocispec.Descriptor{}, "", refused("%s is not an OCI image layout: %v", ref, err)
+		}
+		s, err := oci.NewWithContext(ctx, ref)
+		if err != nil {
+			return nil, ocispec.Descriptor{}, "", err
+		}
+		d, err := s.Resolve(ctx, "latest")
+		if err != nil {
+			return nil, ocispec.Descriptor{}, "", refused("the layout %s holds no image tagged latest: %v", ref, err)
+		}
+		return s, d, ref, nil
+	}
+	repo, err := remoteRepo(c, ref)
+	if err != nil {
+		return nil, ocispec.Descriptor{}, "", err
+	}
+	d, err := resolve(ctx, repo)
+	return repo, d, repo.Reference.Registry + "/" + repo.Reference.Repository, err
+}
+
+// distributions returns the distribution referrers of img in r, the store of name.
+func distributions(ctx context.Context, r source, name string, img ocispec.Descriptor) ([]distribution, error) {
 	ms, err := referrers(ctx, r, img, def.DistributionType)
 	if err != nil {
 		return nil, err
@@ -235,7 +269,7 @@ func distributions(ctx context.Context, r *remote.Repository, img ocispec.Descri
 		}
 	}
 	if len(out) == 0 {
-		return nil, refused("the referrers of %s hold no distribution manifest", r.Reference)
+		return nil, refused("the referrers of %s hold no distribution manifest", name)
 	}
 	return out, nil
 }
@@ -252,15 +286,11 @@ func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Writt
 	if err != nil {
 		return def.Written{}, err
 	}
-	repo, err := remoteRepo(r.Caller, r.Image)
+	repo, img, name, err := openImage(ctx, r.Caller, r.Image)
 	if err != nil {
 		return def.Written{}, err
 	}
-	img, err := resolve(ctx, repo)
-	if err != nil {
-		return def.Written{}, err
-	}
-	dists, err := distributions(ctx, repo, img)
+	dists, err := distributions(ctx, repo, name, img)
 	if err != nil {
 		return def.Written{}, err
 	}
@@ -276,10 +306,9 @@ func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Writt
 	}
 	d, err := pushArtifact(ctx, repo, def.DistributionType, &img, nil, blob{mediaType: def.DistributionLayer, data: manifest},
 		blob{mediaType: bundleType, data: b})
-	ref := repo.Reference
 	var sig ocispec.Descriptor
 	if err == nil {
-		b, err = SignStatement(k, signatureOf(ref.Registry+"/"+ref.Repository, img.Digest.Encoded()))
+		b, err = SignStatement(k, signatureOf(name, img.Digest.Encoded()))
 	}
 	if err == nil {
 		sig, err = pushBundle(ctx, repo, &img, signURI, b)
@@ -289,8 +318,7 @@ func (l Library) SignDist(ctx context.Context, r def.SignDistRequest) (def.Writt
 	}
 	var w def.Written
 	for _, p := range []ocispec.Descriptor{d, sig} {
-		ref.Reference = p.Digest.String()
-		w.Paths = append(w.Paths, ref.String())
+		w.Paths = append(w.Paths, name+"@"+p.Digest.String())
 	}
 	return w, nil
 }
@@ -325,15 +353,11 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 	if err != nil {
 		return def.Change{}, err
 	}
-	repo, err := remoteRepo(r.Caller, r.Image)
+	repo, img, name, err := openImage(ctx, r.Caller, r.Image)
 	if err != nil {
 		return def.Change{}, err
 	}
-	img, err := resolve(ctx, repo)
-	if err != nil {
-		return def.Change{}, err
-	}
-	dists, err := distributions(ctx, repo, img)
+	dists, err := distributions(ctx, repo, name, img)
 	var sigs [][]byte
 	if err == nil {
 		sigs, err = bundles(ctx, repo, img, signURI)
@@ -348,8 +372,6 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 			return err == nil && pt == signURI
 		})
 	}
-	ref := repo.Reference
-	ref.Reference = img.Digest.String()
 	done, err := h.Write(ctx, Write{
 		Command: "dist use " + r.Image,
 		Plan: func() ([]Change, error) {
@@ -370,7 +392,7 @@ func (l Library) UseDist(ctx context.Context, r def.UseRequest) (def.Change, err
 					{Path: "verified/sha256-" + hex.EncodeToString(sum[:]), Files: map[string][]byte{
 						"record.yaml": recordYAML("distribution", dg, t.distKeys[i].id), "manifest": d.manifest, bundleFile: d.bundle}},
 					{Path: "verified/current", Data: []byte(dg + "\n")},
-					{Path: "image.yaml", Data: fmt.Appendf(nil, "image: %s\n", ref)},
+					{Path: "image.yaml", Data: fmt.Appendf(nil, "image: %s@%s\n", name, img.Digest)},
 				}, nil
 			}
 			return nil, refused("no key of distributions in trust.yaml verifies both a distribution manifest of %s and a signature of the image %s (ADR-020 decision 12)", r.Image, img.Digest)

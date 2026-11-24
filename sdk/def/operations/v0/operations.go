@@ -146,7 +146,8 @@ type KeyRequest struct {
 }
 
 // An image is an OCI image reference, <registry>/<repository> with :<tag> or
-// @sha256:<digest>, and optionally oci:// before it. The builder pushes the
+// @sha256:<digest>, and optionally oci:// before it, or, since 0.3, the absolute path of
+// the OCI image layout of one image, which dist build writes. The builder writes the
 // distribution manifest beside its image as a referrer of it, of artifactType
 // DistributionType, whose one layer of DistributionLayer holds the manifest's bytes;
 // dist sign pushes one more referrer of that type, with the manifest and a layer of
@@ -158,6 +159,13 @@ const (
 	DistributionType  = "application/vnd.aiops.distribution.v1"
 	DistributionLayer = "application/vnd.aiops.distribution.manifest.v1+yaml"
 )
+
+// BuildRequest is dist build (added at 0.3): the builder's request of the toolbox
+// (ADR-044; ADR-060 decision 22), whose dist.yaml path is absolute. It writes no home.
+type BuildRequest struct {
+	Caller
+	launch.BuildRequest
+}
 
 // SignDistRequest is dist sign: the distribution manifest of Image signed with the
 // private key file Key and pushed with its bundle as one referrer of the image. It
@@ -460,6 +468,10 @@ type Operations interface {
 	AddTrust(ctx context.Context, r TrustRequest) (Change, error)
 	// GenerateKey is key generate. It writes no home.
 	GenerateKey(ctx context.Context, r KeyRequest) (Written, error)
+	// Build is dist build (added at 0.3): what the toolbox's builder built, the image,
+	// the signed manifest and the site's aiopsctl. It writes no home; it refuses a
+	// dist.yaml path or a module cache that is not absolute.
+	Build(ctx context.Context, r BuildRequest) (launch.Built, error)
 	// SignDist is dist sign. It writes no home, and Written names the referrer it
 	// pushed by digest.
 	SignDist(ctx context.Context, r SignDistRequest) (Written, error)

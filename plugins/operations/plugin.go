@@ -129,6 +129,10 @@ func (s served) Check(ctx context.Context, r def.CheckRequest) (def.CheckReport,
 	return call(s, ctx, r, ops.Library.Check)
 }
 
+func (s served) Build(ctx context.Context, r def.BuildRequest) (launch.Built, error) {
+	return call(s, ctx, r, ops.Library.Build)
+}
+
 func (s served) Gate(ctx context.Context, r def.GateRequest) (launch.Verdict, error) {
 	return call(s, ctx, r, ops.Library.Gate)
 }

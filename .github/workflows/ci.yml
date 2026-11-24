@@ -103,9 +103,9 @@ jobs:
         # pgx v5 joins at S3 (ADR-060 decision 4).
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
       - name: Plugin package, plugingen, aiopsctl, builder and operations library line caps
-        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl, the builder
-        # (3,000) and the operations library, plugins/operations, provisional caps during
-        # S2a. The row
+        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl and its
+        # launcher internal/aiopsctl, the builder (3,000) and the operations library,
+        # plugins/operations, provisional caps during S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
         # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
         # 4,500 since the second note of 2026-11-24, which raised them from 3,500.
@@ -113,6 +113,7 @@ jobs:
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
+          go run ./tools/kernelcheck lines internal/aiopsctl 2500 provisional
           go run ./tools/kernelcheck lines internal/builder 3000 provisional
           go run ./tools/kernelcheck lines plugins/operations 4500 provisional internal
           go run ./tools/kernelcheck lines plugins/operations/internal/operations 4500 provisional
@@ -233,11 +234,12 @@ jobs:
       - run: make s1-suites
 
   builder:
-    name: Builder and licence report
+    name: Builder, licence report and dist build on the local path
     # ADR-060 decisions 22 and 36; ADR-044: the corpus of the licence classifier against
     # the pinned SPDX data; the cases of the builder on the tree of the pinned toolchain
     # module, the licence report of aiops and aiopsctl with THIRD_PARTY_LICENSES/, the
-    # NOTICE texts and the MPL-2.0 lines among them (see the builder target of the
+    # NOTICE texts and the MPL-2.0 lines among them; and dist build on the local path,
+    # then dist sign and dist use of what it wrote (see the builder target of the
     # Makefile). Nothing is pushed or published.
     runs-on: ubuntu-24.04
     timeout-minutes: 40

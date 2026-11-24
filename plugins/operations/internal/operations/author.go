@@ -498,3 +498,17 @@ func (c *checkRun) scenario() (string, []launch.Diagnostic, error) {
 	}
 	return outcome(c.scenery), c.scenery, nil
 }
+
+// Build is dist build: the request handed to the builder of the toolbox, whose result
+// it answers (ADR-061 decision 16; ADR-044). It writes no home.
+func (l Library) Build(ctx context.Context, r def.BuildRequest) (launch.Built, error) {
+	if err := absolute("dist.yaml", r.DistYAML); err != nil {
+		return launch.Built{}, err
+	}
+	if r.ModCache != "" {
+		if err := absolute("the module cache", r.ModCache); err != nil {
+			return launch.Built{}, err
+		}
+	}
+	return l.Box.Build(ctx, r.BuildRequest)
+}

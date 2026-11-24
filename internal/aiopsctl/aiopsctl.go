@@ -1,4 +1,9 @@
-package main
+// SPDX-License-Identifier: Apache-2.0
+
+// Package aiopsctl is the launcher of the cli profile (ADR-061 decisions 24 and 25):
+// cmd/aiopsctl runs it with the release's module table, and the aiopsctl that dist
+// build writes for a site runs it with the site's (ADR-020 decision 29).
+package aiopsctl
 
 import (
 	"context"
@@ -16,8 +21,8 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
-// aiopsctl is the launcher of the cli profile (ADR-061 decisions 24 and 25): it boots
-// the profile cli with the module table of aiops, in Command mode, and the cli row
+// The launcher boots the profile cli with the module table of its binary, in Command
+// mode, and the cli row
 // dispatches the command line, so every command is a row. It parses no flag of its own.
 // What it passes to boot:
 //
@@ -35,8 +40,8 @@ import (
 // with the shipped cli profile alone and the home still passed, and says which file
 // stopped the first boot, so profile sanitize can set it aside (ADR-061 decision 41).
 
-// process is everything run takes from the process. Files is rooted at "/".
-type process struct {
+// Process is everything Run takes from the process. Files is rooted at "/".
+type Process struct {
 	In       io.Reader
 	Out, Err io.Writer
 	Environ  []string
@@ -45,10 +50,10 @@ type process struct {
 	Signals  <-chan os.Signal
 }
 
-// distribution is what the binary links: the module table, the signed distribution
+// Distribution is what the binary links: the module table, the signed distribution
 // manifest it embeds, the release key of a release binary, the limits, the shipped
 // bundles and profiles, and the tools of the toolbox, nil for this binary's.
-type distribution struct {
+type Distribution struct {
 	Registry boot.Registry
 	Signed   []byte
 	Release  *boot.Release
@@ -57,8 +62,8 @@ type distribution struct {
 	Tools    launch.Tools
 }
 
-// run boots the cli profile in Command mode and returns the exit code of aiopsctl.
-func run(ctx context.Context, args []string, p process, d distribution) int {
+// Run boots the cli profile in Command mode and returns the exit code of aiopsctl.
+func Run(ctx context.Context, args []string, p Process, d Distribution) int {
 	env := map[string]string{}
 	for _, kv := range p.Environ {
 		if k, v, ok := strings.Cut(kv, "="); ok {
@@ -76,7 +81,7 @@ func run(ctx context.Context, args []string, p process, d distribution) int {
 			fmt.Fprintf(p.Err, "aiopsctl: AIOPS_HOME %q: %v\n", home, err)
 			return 1
 		}
-		layers = overlay{h, d.Shipped}
+		layers = Overlay{h, d.Shipped}
 		if err := brokenLayer(layers); err != nil {
 			fmt.Fprintf(p.Err, "aiopsctl: %v\naiopsctl: the layer stops the boot of the cli profile, so this run composes the shipped cli profile alone, with the home still passed: a command does not see the layers of the home for the cli profile; aiopsctl profile sanitize sets the file aside\n", err)
 			layers = shippedCLI{layers, d.Shipped}
@@ -92,10 +97,12 @@ func run(ctx context.Context, args []string, p process, d distribution) int {
 		Command: true, Shipped: d.Shipped, Files: p.Files, Tools: d.Tools, Lint: authoring.Lint(),
 	}
 	if o.Tools == nil {
-		o.Tools = authoring.New()
+		t := authoring.New()
+		t.Signed, t.Progress = d.Signed, p.Err // the release that dist build builds on, and where it prints
+		o.Tools = t
 	}
 	o.BuildInfo, _ = debug.ReadBuildInfo()
-	return exitCode(boot.Run(ctx, o), p.Err)
+	return ExitCode(boot.Run(ctx, o), p.Err)
 }
 
 // brokenLayer returns the error of a layer file of the home, the site layer or the
@@ -109,11 +116,11 @@ func brokenLayer(layers fs.FS) error {
 	return nil
 }
 
-// exitCode maps the code of the launcher under Command to the three of aiopsctl (ADR-061
+// ExitCode maps the code of the launcher under Command to the three of aiopsctl (ADR-061
 // decision 10): 0 and 2 are the command's; 8 is a signal before the command returned,
 // which exits 1; every other code is a failure of the launcher, whose reason boot wrote,
 // and exits 1. A Go panic outside every fiber exits 2 from the runtime.
-func exitCode(code int, stderr io.Writer) int {
+func ExitCode(code int, stderr io.Writer) int {
 	switch code {
 	case boot.ExitOK, boot.ExitUsage:
 		return code
@@ -123,14 +130,14 @@ func exitCode(code int, stderr io.Writer) int {
 	return 1
 }
 
-// overlay serves the files of first, and those of second where first has none: a file
+// Overlay serves the files of First, and those of Second where First has none: a file
 // of the home wins over a shipped one.
-type overlay struct{ first, second fs.FS }
+type Overlay struct{ First, Second fs.FS }
 
-func (o overlay) Open(name string) (fs.File, error) {
-	f, err := o.first.Open(name)
+func (o Overlay) Open(name string) (fs.File, error) {
+	f, err := o.First.Open(name)
 	if errors.Is(err, fs.ErrNotExist) {
-		return o.second.Open(name)
+		return o.Second.Open(name)
 	}
 	return f, err
 }
