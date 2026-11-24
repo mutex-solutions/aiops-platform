@@ -32,6 +32,20 @@ func TestLinesProvisionalAndTestdata(t *testing.T) {
 	}
 }
 
+// One cap may hold two directories, each one package, as the launcher's two do under
+// the one row of cmd/aiopsctl (ADR-060 decision 35): their lines add up.
+func TestLinesOfTwoDirectories(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	write(t, a, "a.go", "package a\n\n")
+	write(t, b, "b.go", "package b\n\n")
+	if err := run([]string{"lines", a + "," + b, "4", "provisional"}); err != nil {
+		t.Fatalf("two directories of two lines each under a cap of 4: %v", err)
+	}
+	if err := run([]string{"lines", a + "," + b, "3", "provisional"}); err == nil {
+		t.Fatal("two directories of two lines each under a cap of 3 passed")
+	}
+}
+
 // The imports command reads the register it is given, with every key of an entry, and
 // fails when it cannot.
 func TestRunImportsReadsTheRegister(t *testing.T) {

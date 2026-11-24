@@ -40,9 +40,18 @@ func TestLineCapsInStep(t *testing.T) {
 	if !slices.Equal(mk, ci) {
 		t.Errorf("the line caps differ:\nMakefile: %q\nci.yml:   %q", mk, ci)
 	}
-	for _, want := range []string{"plugins/operations 4500 provisional internal", "plugins/operations/internal/operations 4500 provisional"} {
+	for _, want := range []string{"plugins/operations 4500 provisional internal", "plugins/operations/internal/operations 4500 provisional",
+		"cmd/aiopsctl,internal/aiopsctl 2500 provisional"} {
 		if !slices.Contains(mk, want) || !slices.Contains(ci, want) {
 			t.Errorf("no cap %q in the Makefile and ci.yml", want)
+		}
+	}
+	// The launcher of internal/aiopsctl came out of cmd/aiopsctl, whose row of ADR-060
+	// decision 35 is the only one: the two share its 2,500 lines, and neither has a cap
+	// of its own.
+	for _, c := range slices.Concat(mk, ci) {
+		if strings.HasPrefix(c, "cmd/aiopsctl ") || strings.HasPrefix(c, "internal/aiopsctl ") {
+			t.Errorf("a cap of its own: %q", c)
 		}
 	}
 }
