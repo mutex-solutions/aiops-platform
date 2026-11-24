@@ -65,7 +65,7 @@ func Notices(dir, name string, pkgs []Package, l Licences, created time.Time) ([
 				m.Path, m.Version, m.Path, m.Version, m.Sum, name)
 		}
 	}
-	sbom, err := spdxOf(name, pkgs, l, created)
+	sbom, err := spdxOf(name, components(pkgs, l), created)
 	if err == nil {
 		err = errors.Join(os.WriteFile(filepath.Join(dir, "NOTICE"), notice.Bytes(), 0o644),
 			os.WriteFile(filepath.Join(dir, name+".spdx.json"), sbom, 0o644))
@@ -73,9 +73,26 @@ func Notices(dir, name string, pkgs []Package, l Licences, created time.Time) ([
 	return mpl, err
 }
 
-// spdxOf returns the SBOM of the binary name: one package for it, which it contains
-// and the document describes, and one per module of its graph.
-func spdxOf(name string, pkgs []Package, l Licences, created time.Time) ([]byte, error) {
+// components returns each module that pkgs link, the toolchain module among them, with
+// its detected licence, sorted by path.
+func components(pkgs []Package, l Licences) []component {
+	mods := modulesOf(pkgs)
+	for _, p := range pkgs {
+		if p.Standard {
+			mods[Toolchain] = p.Module
+		}
+	}
+	var out []component
+	for _, path := range sortedKeys(mods) {
+		m := mods[path]
+		out = append(out, component{name: path, version: m.Version, sum: m.Sum, licence: l.Modules[path]})
+	}
+	return out
+}
+
+// spdxOf returns the SBOM of name, a binary or an image: one package for it, which the
+// document describes and which contains one package per component of cs, each once.
+func spdxOf(name string, cs []component, created time.Time) ([]byte, error) {
 	type pkg struct {
 		SPDXID           string `json:"SPDXID"`
 		Name             string `json:"name"`
@@ -99,25 +116,21 @@ func spdxOf(name string, pkgs []Package, l Licences, created time.Time) ([]byte,
 		"creationInfo":      map[string]any{"created": created.UTC().Format(time.RFC3339), "creators": []string{"Tool: aiopsctl"}}}
 	packages := []pkg{{SPDXID: "SPDXRef-Package-0", Name: name, DownloadLocation: none, LicenseConcluded: none, LicenseDeclared: none, CopyrightText: none}}
 	rels := []rel{{"SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Package-0"}}
-	mods := modulesOf(pkgs)
-	for _, p := range pkgs {
-		if p.Standard {
-			mods[Toolchain] = p.Module
+	for i, c := range cs {
+		if slices.Contains(cs[:i], c) {
+			continue
 		}
-	}
-	for i, path := range sortedKeys(mods) {
-		m := mods[path]
-		p := pkg{SPDXID: fmt.Sprintf("SPDXRef-Package-%d", i+1), Name: path, VersionInfo: m.Version, DownloadLocation: none,
-			LicenseConcluded: cmp.Or(l.Modules[path], none), LicenseDeclared: none, CopyrightText: none}
-		if m.Version != "" {
-			if esc, err := module.EscapePath(path); err == nil {
-				p.DownloadLocation = "https://proxy.golang.org/" + esc + "/@v/" + m.Version + ".zip"
+		p := pkg{SPDXID: fmt.Sprintf("SPDXRef-Package-%d", len(packages)), Name: c.name, VersionInfo: c.version, DownloadLocation: none,
+			LicenseConcluded: cmp.Or(c.licence, none), LicenseDeclared: none, CopyrightText: none}
+		if c.version != "" {
+			if esc, err := module.EscapePath(c.name); err == nil {
+				p.DownloadLocation = "https://proxy.golang.org/" + esc + "/@v/" + c.version + ".zip"
 			}
 			p.ExternalRefs = []any{map[string]string{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl",
-				"referenceLocator": "pkg:golang/" + path + "@" + m.Version}}
+				"referenceLocator": "pkg:golang/" + c.name + "@" + c.version}}
 		}
-		if m.Sum != "" {
-			p.Comment = "sum " + m.Sum
+		if c.sum != "" {
+			p.Comment = "sum " + c.sum
 		}
 		packages = append(packages, p)
 		rels = append(rels, rel{"SPDXRef-Package-0", "CONTAINS", p.SPDXID})

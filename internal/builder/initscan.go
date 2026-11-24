@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"go/token"
+	"os"
 	"slices"
 	"strings"
 
@@ -84,6 +85,18 @@ func (f Finding) String() string {
 // registration reachable from an init that no exception names. A call through
 // reflection or unsafe is not followed (ADR-044 decision 12).
 func ScanInits(ctx context.Context, dir string, env []string, mains ...string) ([]Finding, error) {
+	// go/packages runs the go that the process's PATH names, not env's, so env's PATH
+	// stands for it while the graph loads: the builder's go is the pinned toolchain's,
+	// never the host's (ADR-044 decision 16), and the builder image has no other.
+	// ponytail: process-wide while it loads, which suits aiopsctl, one command per
+	// process; a go/packages driver of its own if the scan ever runs beside other work.
+	for _, kv := range env {
+		if p, ok := strings.CutPrefix(kv, "PATH="); ok {
+			old := os.Getenv("PATH")
+			defer os.Setenv("PATH", old)
+			os.Setenv("PATH", p)
+		}
+	}
 	cfg := &packages.Config{Context: ctx, Dir: dir, Env: env, BuildFlags: plugingen.BuildFlags,
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps |
 			packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedTypesSizes | packages.NeedModule}

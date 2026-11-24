@@ -64,26 +64,33 @@ type Tools struct {
 	Progress io.Writer // where dist build prints, stderr in aiopsctl; nil drops it
 }
 
-// Build is dist build on the local path, the builder of internal/builder (ADR-044;
-// ADR-060 decision 22), with the release's signed manifest this binary embeds (ADR-044
-// decision 1): it writes into build/ beside dist.yaml, extracts the pinned toolchain
-// under the user's cache directory, and refuses a proxy URL in GOPROXY until L14
-// clears. The image path, which runs the builder image, and the builds of plugin smoke
-// and plugin verify are not built yet.
+// Build is dist build, the builder of internal/builder (ADR-044; ADR-060 decision 22),
+// which writes into build/ beside dist.yaml. On the local path it builds on the
+// release's signed manifest this binary embeds (ADR-044 decision 1), extracts the
+// pinned toolchain under the user's cache directory, and refuses a proxy URL in GOPROXY
+// until L14 clears. On the image path it runs the builder image that the release
+// artifact names, whose aiopsctl takes the local path. The builds of plugin smoke and
+// plugin verify are not built yet.
 func (t Tools) Build(ctx context.Context, q launch.BuildRequest) (launch.Built, error) {
-	switch {
-	case q.Builder != "local":
-		return launch.Built{}, fmt.Errorf("%w: the image path of the builder, which runs the builder image, is not built yet: run dist build --builder local", launch.ErrNotCarried)
-	case q.Plugin != "" || q.Module != "":
+	if q.Plugin != "" || q.Module != "" {
 		return launch.Built{}, fmt.Errorf("%w: the builds of plugin smoke and plugin verify are not built yet", launch.ErrNotCarried)
 	}
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		return launch.Built{}, err
+	var r builder.Result
+	var err error
+	switch q.Builder {
+	case "image":
+		r, err = builder.RunImage(ctx, builder.ImageRequest{DistYAML: q.DistYAML, ModCache: q.ModCache, Mirrors: q.Mirrors, AllowBump: q.AllowBump, Progress: t.Progress})
+	case "local":
+		var cache string
+		if cache, err = os.UserCacheDir(); err != nil {
+			return launch.Built{}, err
+		}
+		r, err = builder.Build(ctx, builder.Request{DistYAML: q.DistYAML, Release: t.Signed, ModCache: q.ModCache, Mirrors: q.Mirrors,
+			AllowBump: q.AllowBump, Proxy: os.Getenv("GOPROXY"), Out: filepath.Join(filepath.Dir(q.DistYAML), "build"),
+			Cache: filepath.Join(cache, "aiopsctl"), Progress: t.Progress})
+	default:
+		return launch.Built{}, fmt.Errorf("the builder is image or local, not %q", q.Builder)
 	}
-	r, err := builder.Build(ctx, builder.Request{DistYAML: q.DistYAML, Release: t.Signed, ModCache: q.ModCache, Mirrors: q.Mirrors,
-		AllowBump: q.AllowBump, Proxy: os.Getenv("GOPROXY"), Out: filepath.Join(filepath.Dir(q.DistYAML), "build"),
-		Cache: filepath.Join(cache, "aiopsctl"), Progress: t.Progress})
 	return launch.Built{Image: r.Image, Manifest: r.Manifest, Aiopsctl: r.Aiopsctl}, err
 }
 

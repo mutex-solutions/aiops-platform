@@ -1,0 +1,48 @@
+# The builder image (ADR-044 decisions 4, 5 and 17; ADR-060 decisions 21 and 22;
+# 08-profiles-roadmap-adrs.md:1221). The second phase of the release build writes it
+# from this definition with the code that writes the server image (internal/builder),
+# as an image of one layer on no base layer, linux/amd64:
+#
+#   /aiopsctl                    the release aiopsctl, the entry point; dist build on the
+#                                image path runs it with the same command and
+#                                --builder local (ADR-061 decision 21)
+#   /cache/aiopsctl/toolchain/   the toolchain module at the release's pin, unmodified,
+#                                extracted where the builder's own cache keeps it, so the
+#                                local path inside the image runs the tree it ships
+#   /THIRD_PARTY_LICENSES/       those of aiopsctl, and a copy of every licence and notice
+#                                file of the toolchain tree, the module zips under
+#                                lib/fips140/ opened, with the IANA statement of
+#                                lib/time/README, each under the path it governs
+#   /NOTICE, /aiopsctl.spdx.json the NOTICE texts and the MPL-2.0 lines of aiopsctl, and
+#                                its SBOM, written as for an image
+#   /builder.spdx.json           the image SBOM: the toolchain module, the modules of its
+#                                three modules.txt files, the two fips140 modules, and
+#                                aiopsctl with its build list; no base layer
+#   /SOURCE-OFFER                the source offer below
+#
+# The image holds no shell, no CA bundle, no C compiler, no version control client and
+# no scanner or SBOM tool. A container runtime runs it with no network: the module
+# source is a file:// directory until L14 clears (ADR-044 decision 7).
+
+# What the image bakes in, each with its entry of mode ship in the upstream register
+# (ADR-054 decision 12) at this version; the builder refuses a definition whose
+# toolchain is not its pin.
+bakes:
+  - {entry: go-toolchain, version: go1.26.8}
+
+# The Go environment of the builder image (ADR-060 decision 21). GOPROXY names the
+# module source that dist build binds into the container and passes with these;
+# GOPRIVATE and GONOPROXY stay unset. The builder sets the same settings again for
+# every go it runs (ADR-044 decision 2).
+env:
+  - GOTOOLCHAIN=local
+  - GOSUMDB=off
+  - GOFLAGS=-mod=readonly
+
+# The source offer of ADR-044 decisions 5 and 17 (08-profiles-roadmap-adrs.md:1334 L5).
+sourceOffer: |
+  The builder image of the aiops platform has no base layer. It holds the Go toolchain
+  module golang.org/toolchain, unmodified, aiopsctl, and the licence, notice and SBOM
+  files beside them, and no package under GPL, LGPL or AGPL, so it carries no offer of
+  corresponding source. THIRD_PARTY_LICENSES/ holds the licence and notice files of
+  every component, under the path each governs, and builder.spdx.json lists each.

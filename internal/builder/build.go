@@ -19,6 +19,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -42,10 +43,12 @@ import (
 )
 
 // Request is one build. A site build names its dist.yaml and the release's signed
-// manifest; a release build (ADR-020 decision 13, its first phase) names the release
-// input in the form of dist/dist.yaml and the version of the root module, and stops at
-// the manifest.
+// manifest, and links in one phase. A release build names the release input in the
+// form of dist/dist.yaml and the version of the root module, and runs in two phases
+// (ADR-020 decision 13): the first writes the manifest and stops; the second, given it
+// back as Signed, links the release binaries with it.
 type Request struct {
+	Signed    *Signed           // a release build's second phase
 	DistYAML  string            // the site's dist.yaml
 	Release   []byte            // the release's signed manifest: the one this aiopsctl embeds
 	Input     []byte            // a release build: the release input
@@ -59,6 +62,16 @@ type Request struct {
 	Progress  io.Writer
 	Created   time.Time // the creation time of the SBOMs
 }
+
+// Signed is the second phase of a release build (ADR-020 decision 13): the manifest
+// that the first phase wrote, the bundle that the release pipeline signed it into with
+// cosign sign-blob, the release public key, PEM, and the definition of the builder
+// image, dist/builder/image.yaml. The release server and the release aiopsctl, for
+// linux/amd64, embed the manifest, the bundle and the key, with the manifest as their
+// built-in record; the layout holds the builder image too, and the release artifact.
+// The bundle is verified by the release pipeline before it publishes, with cosign
+// verify-blob, and by dist use of the release image; boot verifies none (08:404).
+type Signed struct{ Manifest, Bundle, Key, Definition []byte }
 
 // Result is what a build wrote: the signed manifest, and for a site build the paths of
 // the server binary, its OCI image layout and the site's aiopsctl; the hashes that no
@@ -84,6 +97,8 @@ type build struct {
 	site     Site
 	input    boot.DistManifest
 	g        Go
+	goroot   string
+	keyID    string // the release key's id, for a release's second phase
 	scratch  string
 	recorded map[string]string // go.sum line key ("<path> <version>[/go.mod]") to hash
 	plugins  []tablePlugin
@@ -111,11 +126,11 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	}
 	defer os.RemoveAll(scratch)
 	b.scratch = scratch
-	goroot, err := Tree(q.ModCache, q.Cache, b.toolchainSum())
+	b.goroot, err = Tree(q.ModCache, q.Cache, b.toolchainSum())
 	if err != nil {
 		return Result{}, err
 	}
-	b.g = Go{Bin: filepath.Join(goroot, "bin", "go"), Dir: scratch, Env: b.env(goroot)}
+	b.g = Go{Bin: filepath.Join(b.goroot, "bin", "go"), Dir: scratch, Env: b.env(b.goroot)}
 	if err := b.module(ctx); err != nil {
 		return Result{}, err
 	}
@@ -152,11 +167,15 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	if res.Manifest, err = m.Write(); err != nil {
 		return res, err
 	}
-	if b.release == nil {
-		return res, nil
-	}
-	if err := errors.Join(b.gate(res.Manifest), b.source(ctx)); err != nil {
-		return res, err
+	switch {
+	case b.release == nil && q.Signed == nil:
+		return res, nil // the first phase of a release stops at the manifest
+	case b.release == nil && !bytes.Equal(res.Manifest, q.Signed.Manifest):
+		return res, errors.New("the second phase writes another manifest than the first phase wrote: the inputs changed between the phases (ADR-020 decision 13)")
+	case b.release != nil:
+		if err := errors.Join(b.gate(res.Manifest), b.source(ctx)); err != nil {
+			return res, err
+		}
 	}
 	return b.link(ctx, res, pkgs, l)
 }
@@ -183,6 +202,19 @@ func (b *build) inputs() error {
 		b.input, err = boot.ParseDist("the release input", q.Input)
 		if err != nil || !semver.IsValid(q.Root) {
 			return errors.Join(err, fmt.Errorf("a release build names the version of the root module, not %q", q.Root))
+		}
+		if s := q.Signed; s != nil {
+			var bundle struct {
+				MediaType string `json:"mediaType"`
+			}
+			var kerr, berr error
+			b.keyID, kerr = keyID(s.Key)
+			_, derr := readDefinition(s.Definition)
+			_, merr := boot.ReadDistribution("the manifest of the first phase", s.Manifest)
+			if json.Unmarshal(s.Bundle, &bundle) != nil || bundle.MediaType != bundleType {
+				berr = fmt.Errorf("the bundle of the manifest is not a Sigstore bundle of media type %s (ADR-020 decision 2)", bundleType)
+			}
+			return errors.Join(kerr, derr, merr, berr)
 		}
 		return nil
 	}
@@ -275,8 +307,13 @@ func (b *build) module(ctx context.Context) error {
 	for _, k := range sortedKeys(b.recorded) {
 		fmt.Fprintf(&sum, "%s %s\n", k, b.recorded[k])
 	}
+	var key, bundle []byte
+	if s := b.q.Signed; s != nil {
+		key, bundle = s.Key, s.Bundle
+	}
 	files := map[string][]byte{"go.mod": gomod, "go.sum": sum.Bytes(), "site/distribution.yaml": nil, "LICENSE": apache(),
-		"site/site.go": siteGo(b.plugins), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain)}
+		"site/release.pub": key, "site/distribution.bundle": bundle,
+		"site/site.go": siteGo(b.plugins, b.keyID), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain)}
 	for i, p := range b.plugins {
 		files[fmt.Sprintf("site/manifests/%d.yaml", i)] = p.manifest
 	}
@@ -670,21 +707,25 @@ func (b *build) source(ctx context.Context) error {
 }
 
 // link writes the signed manifest into the module table, links the server for
-// linux/amd64 and the site's aiopsctl for the host, with -trimpath, writes beside each
-// its THIRD_PARTY_LICENSES/, NOTICE and SBOM, the zip of each MPL-2.0 module, and the
-// server's image (ADR-044 decision 6; ADR-020 decision 29).
+// linux/amd64 and aiopsctl, the site's for the host and the release's for linux/amd64,
+// with -trimpath, writes beside each its THIRD_PARTY_LICENSES/, NOTICE and SBOM, the zip
+// of each MPL-2.0 module, and the image layout (ADR-044 decision 6; ADR-020 decisions 13
+// and 29).
 func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences) (Result, error) {
 	if err := os.WriteFile(filepath.Join(b.scratch, "site", "distribution.yaml"), res.Manifest, 0o644); err != nil {
 		return res, err
 	}
 	out := b.q.Out
 	res.Aiops, res.Aiopsctl, res.Image = filepath.Join(out, "aiops", "aiops"), filepath.Join(out, "aiopsctl", "aiopsctl"), filepath.Join(out, "image")
-	g := b.g
+	g, ctlGo := b.g, b.g
 	g.Env = append(slices.Clone(g.Env), "GOOS=linux", "GOARCH=amd64")
+	if b.release == nil {
+		ctlGo = g // the release aiopsctl, which the builder image holds
+	}
 	if _, err := g.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiops, "./cmd/aiops"); err != nil {
 		return res, err
 	}
-	if _, err := b.g.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiopsctl, "./cmd/aiopsctl"); err != nil {
+	if _, err := ctlGo.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiopsctl, "./cmd/aiopsctl"); err != nil {
 		return res, err
 	}
 	created := b.q.Created
@@ -696,8 +737,8 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 		return res, err
 	}
 	ctl, err := b.graph(ctx, "./cmd/aiopsctl")
+	var cl Licences
 	if err == nil {
-		var cl Licences
 		cl, err = ScanLicences(ctl)
 		err = errors.Join(err, CheckLicences(cl, b.site.AcceptLicenses))
 		if err == nil {
@@ -724,5 +765,5 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 	if err := os.WriteFile(filepath.Join(out, "distribution.yaml"), res.Manifest, 0o644); err != nil {
 		return res, err
 	}
-	return res, image(ctx, res.Image, filepath.Join(out, "aiops"), res.Manifest)
+	return res, b.layout(ctx, res, ctl, cl, created)
 }
