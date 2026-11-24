@@ -102,6 +102,7 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	releaseRef := releaseArtifact(reg, rel.Manifest, nil)
 	site, home := t.TempDir(), filepath.Join(t.TempDir(), "home")
 	env := map[string]string{"PWD": site, "AIOPS_KEY_PASSWORD": "", "AIOPS_HOME": home}
+	var allow []string
 	build := func(dir string, p modulePin) (launch.Built, string, error) {
 		yaml := fmt.Sprintf("release: %s\nplugins:\n  - {module: %s, version: v0.1.0, sum: %s}\n", releaseRef, p.path, p.sum)
 		if err := os.WriteFile(filepath.Join(dir, "dist.yaml"), []byte(yaml), 0o644); err != nil {
@@ -110,7 +111,7 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		var progress bytes.Buffer
 		tools := authoring.New()
 		tools.Signed, tools.Progress = rel.Manifest, &progress
-		b, err := tools.Build(ctx, launch.BuildRequest{DistYAML: filepath.Join(dir, "dist.yaml"), ModCache: src, Builder: "local"})
+		b, err := tools.Build(ctx, launch.BuildRequest{DistYAML: filepath.Join(dir, "dist.yaml"), ModCache: src, Builder: "local", AllowBump: allow})
 		return b, progress.String(), err
 	}
 	if _, _, err := build(t.TempDir(), modulePin{echo.path, h1Of("another zip")}); err == nil || !strings.Contains(err.Error(), "dist.yaml lists") {
@@ -128,6 +129,23 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		"example.com/acme/rogue is under GPL-2.0-only"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("the rogue module: the refusal lacks %q: %v", want, err)
+		}
+	}
+	// A raise that --allow-bump admits passes only when every check passes on the raised
+	// build list, the suites of the first-party plugins among them, so that the
+	// first-party rows run their suites against what the binary links; without the flag
+	// the raise fails (ADR-044 decision 10).
+	bump := bumpPlugin(t, src, echo, "golang.org/x/mod", "v0.42.0", "v0.42.1")
+	if _, _, err := build(t.TempDir(), bump); err == nil || !strings.Contains(err.Error(), "--allow-bump golang.org/x/mod admits the raise") {
+		t.Errorf("a raise without --allow-bump: %v", err)
+	}
+	allow = []string{"golang.org/x/mod"}
+	_, printed, err := build(t.TempDir(), bump)
+	allow = nil
+	for _, want := range []string{"bump: golang.org/x/mod, pinned by the release at v0.42.0, is v0.42.1 in this build, required by ", "example.com/acme/bump@v0.1.0",
+		"suites: go test example.com/acme/bump/...", "suites: go test github.com/mutex-solutions/aiops-platform/plugins/clock "} {
+		if err != nil || !strings.Contains(printed, want) {
+			t.Errorf("a raise with --allow-bump: %v, the progress lacks %q:\n%s", err, want, printed)
 		}
 	}
 
@@ -390,6 +408,64 @@ func (e Echoer) Echo(ctx context.Context, msg string) (string, error) {
 		t.Fatal(err)
 	}
 	return zipModule(t, src, data.Module, dir)
+}
+
+// bumpPlugin writes into src the module path at the version raised, a copy of its zip at
+// version with another version, and example.com/acme/bump at v0.1.0: the echoer under
+// the id acme/bump, whose go.mod requires path at raised.
+func bumpPlugin(t *testing.T, src string, echo modulePin, path, version, raised string) modulePin {
+	t.Helper()
+	esc, _ := module.EscapePath(path)
+	at := filepath.Join(src, esc, "@v")
+	z, err := zip.OpenReader(filepath.Join(at, version+".zip"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer z.Close()
+	var b bytes.Buffer
+	zw := zip.NewWriter(&b)
+	for _, f := range z.File {
+		r, err := f.Open()
+		var w io.Writer
+		if err == nil {
+			w, err = zw.Create(strings.Replace(f.Name, "@"+version+"/", "@"+raised+"/", 1))
+		}
+		if err == nil {
+			_, err = io.Copy(w, r)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	gomod, err := os.ReadFile(filepath.Join(at, version+".mod"))
+	info, _ := json.Marshal(map[string]string{"Version": raised})
+	if err = errors.Join(err, zw.Close(), os.WriteFile(filepath.Join(at, raised+".zip"), b.Bytes(), 0o644), os.WriteFile(filepath.Join(at, raised+".mod"), gomod, 0o644),
+		os.WriteFile(filepath.Join(at, raised+".info"), info, 0o644)); err != nil {
+		t.Fatal(err)
+	}
+	eesc, _ := module.EscapePath(echo.path)
+	dir := t.TempDir()
+	if err := modzip.Unzip(dir, module.Version{Path: echo.path, Version: "v0.1.0"}, filepath.Join(src, eesc, "@v", "v0.1.0.zip")); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	err = filepath.WalkDir(dir, func(p string, e os.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		rel, _ := filepath.Rel(dir, p)
+		files[rel] = strings.ReplaceAll(strings.ReplaceAll(string(b), "example.com/acme/echo", "example.com/acme/bump"), "acme/echo", "acme/bump")
+		return errors.Join(err, os.Chmod(p, 0o644))
+	})
+	files["go.mod"] += "\nrequire " + path + " " + raised + "\n"
+	if err == nil {
+		err = writeFiles(dir, files)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return zipModule(t, src, "example.com/acme/bump", dir)
 }
 
 // roguePlugin writes example.com/acme/rogue at v0.1.0 into src: the echoer under the
