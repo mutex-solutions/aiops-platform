@@ -223,6 +223,10 @@ func TestRunLimitsFile(t *testing.T) {
 
 func TestRunRuntimeDirectoryFails(t *testing.T) {
 	h := home(t, "[]")
+	// aiopsctl creates run/ with the home (ADR-047 decision 15); a file stands there here.
+	if err := os.Remove(filepath.Join(h, "run")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(h, "run"), nil, 0o644); err != nil { // a file where the directory belongs
 		t.Fatal(err)
 	}

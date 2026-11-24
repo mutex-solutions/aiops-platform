@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package trusted writes into a test home what dist use writes once it has verified a
-// distribution manifest, so that a binary built inside the repository boots on it
-// (ADR-060 decision 28; ADR-020 decisions 10, 12 and 13): trust.yaml with a throwaway
-// key under distributions, the record of the manifest's digest with that key as its
-// signer, and verified/current. It also writes what plugin install keeps and records of
-// an in-process artifact (Install). Each record holds the files of ADR-020 decision 10,
-// in the format that boot reads (boot.Trust, boot.Record, boot.ReadCurrent,
-// boot.ReadKept).
+// Package trusted makes a test home trust a distribution manifest as a site does, so
+// that a binary built inside the repository boots on it (ADR-060 decision 28; ADR-020
+// decisions 1, 10, 12 and 13). Write mounts the operations row on a kernel of the test
+// and calls the key it provides, as every consumer does: key generate makes a
+// throwaway key pair inside the test, dist sign signs the manifest with it, trust add
+// lists the key under distributions, and dist use verifies the signature and writes the
+// record of the manifest's digest and verified/current. What it writes is what boot
+// reads (boot.ReadTrust, boot.ReadRecord, boot.ReadCurrent). No key is committed.
 //
-// It signs nothing: the key pair is made in the test and dropped, and boot verifies no
-// signature, so each Sigstore bundle of a record (manifest.sigstore.json,
-// signature.sigstore.json and attestation.sigstore.json) is a placeholder that says so.
-// The signing code of dist sign, dist use and plugin install replaces this package once
-// that code exists, so that the harness signs and records as those commands do. It is
-// test code: no shipped distribution links it.
+// Install writes what plugin install keeps and records of an in-process artifact, in
+// the format that boot reads (boot.ReadKept), by hand: until plugin install lands its
+// Sigstore bundles (signature.sigstore.json and attestation.sigstore.json) are
+// placeholders that say so, and boot verifies no signature. It is test code: no
+// shipped distribution links it.
 package trusted
 
 import (
@@ -28,12 +27,18 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/plugins/operations"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
 
 // newKey returns a throwaway ECDSA P-256 public key as a PEM block, indented for a key
@@ -52,8 +57,9 @@ func newKey() (string, string, error) {
 	return strings.ReplaceAll(pub, "\n", "\n      "), base64.StdEncoding.EncodeToString(id[:]), nil
 }
 
-// placeholder stands where a record holds a Sigstore bundle: nothing is signed.
-var placeholder = []byte(`{"placeholder": "not a Sigstore bundle: the test harness signs nothing (ADR-020 decision 10)"}` + "\n")
+// placeholder stands where the record of an artifact holds a Sigstore bundle until
+// plugin install lands: nothing is signed.
+var placeholder = []byte(`{"placeholder": "not a Sigstore bundle: Install signs nothing until plugin install lands (ADR-020 decision 10)"}` + "\n")
 
 // digest returns "sha256:" and the hex of the SHA-256 of b.
 func digest(b []byte) string {
@@ -69,34 +75,88 @@ func statement(m boot.Manifest, subject, definitions string) string {
 		m.ID, m.Version, subject, boot.AttestationType, definitions)
 }
 
-// Files returns the files, by slash path under the home, by which a home trusts the
-// distribution manifest: trust.yaml that lists a throwaway ECDSA P-256 key under
-// distributions, verified/sha256-<hex>/record.yaml of kind distribution whose signer
-// is that key, beside it the manifest as dist use keeps it and the placeholder of its
-// bundle, and verified/current.
+// Files returns the files, by slash path under the home, that Write writes into a
+// fresh home: trust.yaml, verified/sha256-<hex>/ with record.yaml, the manifest and its
+// bundle, verified/current, and write.lock.
 func Files(tb testing.TB, manifest []byte) map[string][]byte {
 	tb.Helper()
-	files, err := placeholders(manifest)
+	home := filepath.Join(tb.TempDir(), "home")
+	Write(tb, home, manifest)
+	files := map[string][]byte{}
+	err := filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		rel, _ := filepath.Rel(home, p)
+		files[filepath.ToSlash(rel)] = b
+		return err
+	})
 	if err != nil {
 		tb.Fatal(err)
 	}
 	return files
 }
 
-func placeholders(manifest []byte) (map[string][]byte, error) {
-	pub, id, err := newKey()
-	if err != nil {
-		return nil, err
+// signer is the throwaway key pair of the test process and the local images it
+// signed, one per manifest. Key generate and dist sign run once each: the password of
+// the private key is stretched with scrypt, which takes seconds under the race
+// detector, and every test home trusts the same key.
+var signer struct {
+	sync.Mutex
+	dir    string            // holds the key pair dist.key and dist.pub, and the images
+	images map[string]string // the digest of a manifest to its signed image
+}
+
+const password = "a throwaway key's password"
+
+func caller() def.Caller {
+	return def.Caller{Env: func(n string) (string, bool) { return password, n == def.KeyPasswordVar }}
+}
+
+// mount mounts the operations row on a kernel of tb and returns the key it serves.
+func mount(tb testing.TB) def.Operations {
+	tb.Helper()
+	root := kerneltest.New(tb)
+	var ops def.Operations
+	kerneltest.Mount(root, operations.Plugin, kernel.Define(kernel.Plugin{ID: "aiops-test/trusted",
+		Inject: []kernel.Dep{kernel.Need(def.Key)}, Apply: func(c *kernel.Context, _ any) error { ops = def.Key.Of(c); return nil }}))
+	return ops
+}
+
+// image returns the local image of manifest signed with the key of the process, and
+// the public key file.
+func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) {
+	tb.Helper()
+	signer.Lock()
+	defer signer.Unlock()
+	if signer.dir == "" {
+		dir, err := os.MkdirTemp("", "aiops-trusted-")
+		if err != nil {
+			tb.Fatal(err)
+		}
+		if _, err := ops.GenerateKey(tb.Context(), def.KeyRequest{Caller: caller(), Prefix: filepath.Join(dir, "dist")}); err != nil {
+			tb.Fatal(err)
+		}
+		signer.dir, signer.images = dir, map[string]string{}
 	}
+	pub := filepath.Join(signer.dir, "dist.pub")
 	d := digest(manifest)
-	dir := "verified/" + strings.Replace(d, ":", "-", 1)
-	return map[string][]byte{
-		"trust.yaml":                    []byte("distributions:\n  - key: |\n      " + pub + "\n"),
-		dir + "/record.yaml":            fmt.Appendf(nil, "kind: distribution\ndigest: %s\nsigner: %s\n", d, id),
-		dir + "/manifest":               manifest,
-		dir + "/manifest.sigstore.json": placeholder,
-		"verified/current":              []byte(d + "\n"),
-	}, nil
+	if img, ok := signer.images[d]; ok {
+		return img, pub
+	}
+	img := filepath.Join(signer.dir, strings.TrimPrefix(d, "sha256:"))
+	if err := os.Mkdir(img, 0o700); err != nil {
+		tb.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "manifest"), manifest, 0o600); err != nil {
+		tb.Fatal(err)
+	}
+	if _, err := ops.SignDist(tb.Context(), def.SignDistRequest{Caller: caller(), Image: img, Key: filepath.Join(signer.dir, "dist.key")}); err != nil {
+		tb.Fatal(err)
+	}
+	signer.images[d] = img
+	return img, pub
 }
 
 // With returns the distribution manifest signed with one more plugin in its module
@@ -123,10 +183,17 @@ func Rebind(signed []byte, bindings string) []byte {
 	return []byte(s[:i] + "\nbindings: " + bindings + s[j:])
 }
 
-// Write writes Files into the directory home.
+// Write makes home trust manifest through the operations row: dist sign of the
+// manifest with the throwaway key, trust add of the key as a distribution root, and
+// dist use, which writes the record and verified/current (ADR-060 decision 28).
 func Write(tb testing.TB, home string, manifest []byte) {
 	tb.Helper()
-	if err := write(home, Files(tb, manifest)); err != nil {
+	ops := mount(tb)
+	img, pub := image(tb, ops, manifest)
+	if _, err := ops.AddTrust(tb.Context(), def.TrustRequest{Caller: caller(), Home: home, KeyFile: pub, Distribution: true}); err != nil {
+		tb.Fatal(err)
+	}
+	if _, err := ops.UseDist(tb.Context(), def.UseRequest{Caller: caller(), Home: home, Image: img}); err != nil {
 		tb.Fatal(err)
 	}
 }
