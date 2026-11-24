@@ -592,17 +592,17 @@ func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m o
 	}
 	defer os.RemoveAll(dir)
 	for _, d := range m.Layers {
-		var b []byte
-		if b, err = fetch(ctx, src, d); err != nil {
-			return st, err
+		// No other layer is fetched: not the SBOM, which install never fetches either, nor
+		// a type this reader does not know (ADR-047 decisions 1 and 2).
+		name := map[string]string{layerManifest: "plugin.yaml", layerBundle: "bundle.yaml", layerFixtures: "fixtures"}[d.MediaType]
+		if name == "" {
+			continue
 		}
-		switch d.MediaType {
-		case layerManifest:
-			err = os.WriteFile(filepath.Join(dir, "plugin.yaml"), b, 0o600)
-		case layerBundle:
-			err = os.WriteFile(filepath.Join(dir, "bundle.yaml"), b, 0o600)
-		case layerFixtures:
-			err = untar(b, filepath.Join(dir, "fixtures"))
+		b, err := fetch(ctx, src, d)
+		if err == nil && name == "fixtures" {
+			err = untar(b, filepath.Join(dir, name))
+		} else if err == nil {
+			err = os.WriteFile(filepath.Join(dir, name), b, 0o600)
 		}
 		if err != nil {
 			return st, err
