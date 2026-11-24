@@ -533,6 +533,30 @@ func TestInspectFetchesTheManifestAndTheBundleOnly(t *testing.T) {
 	}
 }
 
+// verify fetches of the layers only those its suites run on, plugin.yaml, the bundle
+// and the fixtures, and never the SBOM, which install never fetches either, nor a layer
+// type it does not know (ADR-047 decisions 1 and 2).
+func TestVerifyFetchesNoSBOM(t *testing.T) {
+	l, out, home, _ := signed(t)
+	_, m, _ := layout(t, out)
+	reg := ocitest.New(t, ocitest.Options{})
+	p, err := l.Push(t.Context(), def.PushRequest{Caller: caller(), Out: out, Registry: reg.Host + "/connector-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(reg.Requests())
+	if _, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: p.Spec, Home: home}); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range reg.Requests()[before:] {
+		for _, layer := range m.Layers {
+			if layer.MediaType == "application/spdx+json" && strings.HasPrefix(r, "GET ") && strings.HasSuffix(r, layer.Digest.String()) {
+				t.Errorf("verify fetched %s, the %s layer", r, layer.MediaType)
+			}
+		}
+	}
+}
+
 // verify refuses an attestation that verifies with the signer's key over the digest
 // and names another subject, by check 10 (ADR-020 decision 14).
 func TestVerifyRefusesAnotherSubject(t *testing.T) {
