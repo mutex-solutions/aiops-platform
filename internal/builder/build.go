@@ -168,7 +168,7 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	case b.release == nil && !bytes.Equal(res.Manifest, q.Signed.Manifest):
 		return res, errors.New("the second phase writes another manifest than the first phase wrote: the inputs changed between the phases (ADR-020 decision 13)")
 	case b.release != nil:
-		if err := errors.Join(b.gate(res.Manifest), b.source(ctx)); err != nil {
+		if err := errors.Join(b.gate(res.Manifest), b.source(ctx, len(bumps) > 0)); err != nil {
 			return res, err
 		}
 	}
@@ -668,8 +668,12 @@ func (b *build) moduleDir(pkg string) string {
 // source runs on the site plugins' source what the build runs there (ADR-060 decision
 // 22): the import boundary and plugin vet of internal/vet on each plugin package, and
 // the tests of each plugin module, the suites among them, without -race, since the
-// builder has cgo off.
-func (b *build) source(ctx context.Context) error {
+// builder has cgo off. With a raise that --allow-bump admitted, it also runs the suites
+// and the generated tests of each first-party plugin of the module table on the raised
+// build list, so that the first-party rows run their suites against what the binary
+// links (ADR-044 decision 10); a go.mod and go.sum of their own take the lines of their
+// test dependencies, which the binary does not link.
+func (b *build) source(ctx context.Context, bumped bool) error {
 	var errs []error
 	for _, p := range b.plugins {
 		fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
@@ -683,6 +687,22 @@ func (b *build) source(ctx context.Context) error {
 		if _, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", p.Path+"/..."); err != nil {
 			errs = append(errs, fmt.Errorf("the suites of %s: %w", p.Path, err))
 		}
+	}
+	var first []string
+	for _, id := range sortedKeys(b.release.Plugins) {
+		if p := b.release.Plugins[id].Package; bumped && strings.HasPrefix(p, rootModule+"/") {
+			first = append(first, p)
+		}
+	}
+	if len(first) > 0 {
+		mod, err := os.ReadFile(filepath.Join(b.scratch, "go.mod"))
+		sum, serr := os.ReadFile(filepath.Join(b.scratch, "go.sum"))
+		err = errors.Join(err, serr, os.WriteFile(filepath.Join(b.scratch, "suites.mod"), mod, 0o644), os.WriteFile(filepath.Join(b.scratch, "suites.sum"), sum, 0o644))
+		fmt.Fprintf(b.progress, "suites: go test %s, on the raised build list (ADR-044 decision 10)\n", strings.Join(first, " "))
+		if err == nil {
+			_, err = b.g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace", "-modfile=suites.mod", "-mod=mod", "-run", "^(TestConformance|TestCycle|TestTwoTenants)$"}, first)...)
+		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
