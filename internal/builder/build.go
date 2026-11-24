@@ -687,7 +687,7 @@ func (b *build) moduleDir(pkg string) string {
 func (b *build) source(ctx context.Context) error {
 	var errs []error
 	for _, p := range b.plugins {
-		fs, err := vet.Module(b.moduleDir(p.pkg))
+		fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
 		errs = append(errs, err)
 		for _, f := range fs {
 			errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))

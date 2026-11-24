@@ -57,7 +57,7 @@ func init() {}
 		"echo/plugin_test.go":            "package echo_test\n\nimport _ \"" + sdk + "/sdk/def/echoers/v0/fake\"\n",
 		"echo/testdata/x/x.go":           "package x\n\nfunc init() {}\n",
 	})
-	got, err := Module(filepath.Join(root, "echo"))
+	got, err := Module(filepath.Join(root, "echo"), Std{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ var ErrX = errors.New("x")
 		"internal/client/client.go": "package client\n",
 		"plugin_test.go":            "package echo_test\n\nimport _ \"" + sdk + "/sdk/testkit/kerneltest\"\n",
 	})
-	got, err := Module(root)
+	got, err := Module(root, Std{})
 	if err != nil || len(got) != 0 {
 		t.Errorf("Module = %v, %v; want no finding", got, err)
 	}
@@ -123,8 +123,9 @@ var ErrX = errors.New("x")
 // Plugin vet type-checks the standard library to find a goMethods call such as
 // (*sync.WaitGroup).Go. In a binary built with -trimpath, as the release aiopsctl that
 // the builder runs is, build.Default.GOROOT is empty unless the environment sets it:
-// the check still finds the call, or Module fails, and never skips it in silence
-// (ADR-044 decisions 2 and 16).
+// the check still finds the call, or Module fails, and never skips it in silence. Std
+// names the go that type-checks it, the builder's pinned toolchain in the builder, and
+// one that cannot fails Module (ADR-044 decisions 2 and 16).
 func TestModuleTypeChecksTheStandardLibrary(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, map[string]string{
@@ -140,9 +141,12 @@ func Run(wg *sync.WaitGroup, f func()) { wg.Go(f) }
 	})
 	defer func(g string) { build.Default.GOROOT = g }(build.Default.GOROOT)
 	build.Default.GOROOT = "" // as in a binary built with -trimpath and no GOROOT set
-	got, err := Module(root)
+	got, err := Module(root, Std{})
 	if err == nil && (len(got) != 1 || !strings.Contains(got[0].Text, "(*sync.WaitGroup).Go starts an untracked goroutine")) {
 		t.Errorf("Module = %v, %v; want the WaitGroup.Go finding or an error", got, err)
+	}
+	if got, err := Module(root, Std{Go: filepath.Join(root, "no", "go")}); err == nil || !strings.Contains(err.Error(), "type-checks no standard library") {
+		t.Errorf("Module with a go that does not run = %v, %v", got, err)
 	}
 }
 
@@ -151,18 +155,18 @@ func Run(wg *sync.WaitGroup, f func()) { wg.Go(f) }
 func TestModuleErrors(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, map[string]string{"p/plugin.go": "package p\n"})
-	if _, err := Module(filepath.Join(root, "p")); err == nil || !strings.Contains(err.Error(), "go.mod") {
+	if _, err := Module(filepath.Join(root, "p"), Std{}); err == nil || !strings.Contains(err.Error(), "go.mod") {
 		t.Errorf("no go.mod: %v", err)
 	}
 	put(t, root, map[string]string{"go.mod": "go 1.26.0\n"})
-	if _, err := Module(filepath.Join(root, "p")); err == nil || !strings.Contains(err.Error(), "module") {
+	if _, err := Module(filepath.Join(root, "p"), Std{}); err == nil || !strings.Contains(err.Error(), "module") {
 		t.Errorf("a go.mod with no module line: %v", err)
 	}
 	put(t, root, map[string]string{"go.mod": "module example.com/p\n", "p/bad.go": "package"})
-	if _, err := Module(filepath.Join(root, "p")); err == nil {
+	if _, err := Module(filepath.Join(root, "p"), Std{}); err == nil {
 		t.Error("a file that does not parse is no error")
 	}
-	if got, err := Module(filepath.Join(root, "missing")); err == nil {
+	if got, err := Module(filepath.Join(root, "missing"), Std{}); err == nil {
 		t.Errorf("a missing directory: %v", got)
 	}
 }

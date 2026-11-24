@@ -3,6 +3,7 @@
 package vet
 
 import (
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/importer"
@@ -11,6 +12,7 @@ import (
 	"go/types"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -193,20 +195,57 @@ func (s stdOnly) Import(p string) (*types.Package, error) {
 
 var stdImporter = stdOnly{importer.Default()}
 
-// treeImporter imports the standard library and the packages of the vetted tree, type-
-// checked from their source, so that a WaitGroup reached through a type or a function
-// of another package of the plugin has its type. An import path names a package of the
-// tree when it holds "/<base of root>/"; what follows is its directory under root. Any
-// other import fails, as with stdOnly.
+// Std is the go command whose export data plugin vet type-checks the standard library
+// with: Go names its binary, "go" on PATH where empty, Env its environment, the
+// process's where nil, and Dir where it runs. The builder passes its pinned toolchain
+// with its own environment and scratch module (ADR-044 decisions 2 and 16), never what
+// build.Default.GOROOT names, which is empty in a binary built with -trimpath.
+type Std struct {
+	Go  string
+	Env []string
+	Dir string
+}
+
+// importer returns an importer of the standard library from the export data that
+// go list -export of s writes, each package listed once with its dependencies.
+func (s Std) importer() types.Importer {
+	exports := map[string]string{}
+	return stdOnly{importer.ForCompiler(token.NewFileSet(), "gc", func(p string) (io.ReadCloser, error) {
+		if _, ok := exports[p]; !ok {
+			cmd := exec.Command(cmp.Or(s.Go, "go"), "list", "-export", "-deps", "-f", "{{.ImportPath}} {{.Export}}", p)
+			cmd.Env, cmd.Dir = s.Env, s.Dir
+			out, err := cmd.Output()
+			if err != nil {
+				return nil, fmt.Errorf("%s list -export %s: %w", cmd.Path, p, err)
+			}
+			for _, l := range strings.Split(string(out), "\n") {
+				if path, file, ok := strings.Cut(l, " "); ok {
+					exports[path] = file
+				}
+			}
+		}
+		if exports[p] == "" {
+			return nil, fmt.Errorf("%s: no export data", p)
+		}
+		return os.Open(exports[p])
+	})}
+}
+
+// treeImporter imports the standard library with std and the packages of the vetted
+// tree, type-checked from their source, so that a WaitGroup reached through a type or a
+// function of another package of the plugin has its type. An import path names a
+// package of the tree when it holds "/<base of root>/"; what follows is its directory
+// under root. Any other import fails, as with stdOnly.
 type treeImporter struct {
 	root string
 	pkgs map[string]*types.Package
+	std  types.Importer
 }
 
 func (t *treeImporter) Import(p string) (*types.Package, error) {
 	_, rest, ok := strings.Cut(p, "/"+filepath.Base(t.root)+"/")
 	if isStd(p) || !ok {
-		return stdImporter.Import(p)
+		return t.std.Import(p)
 	}
 	if pkg, ok := t.pkgs[p]; ok {
 		return pkg, nil
@@ -531,7 +570,7 @@ func PluginVet(w io.Writer, dirs []string) error {
 		if err != nil {
 			return err
 		}
-		imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}}
+		imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}, std: stdImporter}
 		for d, files := range pkgs {
 			r, err := vetMethods(files, imp, boot, manifestID(d, dir))
 			if err != nil {

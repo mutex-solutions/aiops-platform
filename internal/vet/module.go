@@ -94,8 +94,10 @@ func moduleImport(root, mod, dir string, test bool, imp string) []string {
 // Module runs step 3 on the plugin in dir, a directory of any Go module: the import rule
 // of a plugin, read against the path of the module that holds dir, the layout rule, and
 // plugin vet with the listener list of the plugin's id, on every Go file under dir
-// outside testdata. A file that does not parse is an error.
-func Module(dir string) ([]Finding, error) {
+// outside testdata, the standard library type-checked with std. A file that does not
+// parse is an error, and so is a standard library that std cannot type-check, which
+// would leave the goMethods check silent.
+func Module(dir string, std Std) ([]Finding, error) {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
@@ -103,6 +105,10 @@ func Module(dir string) ([]Finding, error) {
 	root, mod, err := moduleOf(dir)
 	if err != nil {
 		return nil, err
+	}
+	imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}, std: std.importer()}
+	if _, err := imp.Import("sync"); err != nil {
+		return nil, fmt.Errorf("plugin vet type-checks no standard library: %w", err)
 	}
 	id := manifestID(dir, dir)
 	var out []Finding
@@ -139,7 +145,6 @@ func Module(dir string) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	imp := &treeImporter{root: dir, pkgs: map[string]*types.Package{}}
 	for _, files := range pkgs {
 		r, err := vetMethods(files, imp, false, id)
 		if err != nil {

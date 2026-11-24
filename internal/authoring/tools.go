@@ -194,7 +194,7 @@ func (Tools) Vet(ctx context.Context, dir string) ([]launch.Diagnostic, error) {
 	}
 	var out []launch.Diagnostic
 	if hasGo(dir) {
-		fs, err := vet.Module(dir)
+		fs, err := vet.Module(dir, vet.Std{})
 		if err != nil {
 			return nil, err
 		}
