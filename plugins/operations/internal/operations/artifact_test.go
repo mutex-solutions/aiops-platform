@@ -69,13 +69,14 @@ func pluginDir(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// packBox is the launcher's toolbox of these tests: ReadManifest answers sum, the gate
+// packBox is the launcher's toolbox of these tests: ReadManifest answers sum and diags, the gate
 // answers the clauses of deny and records each request, and Suite and Scenario answer
 // suite and scenario, or that they are not carried when nil, as in an aiopsctl built
 // without the suite binaries; each records whether its directory held the fixtures.
 type packBox struct {
 	launch.NoTools
 	sum      launch.ManifestSummary
+	diags    []launch.Diagnostic
 	deny     []launch.Clause
 	suite    *launch.SuiteReport
 	scenario *launch.ScenarioReport
@@ -98,7 +99,7 @@ func (b *packBox) ReadManifest(_ context.Context, q launch.ManifestRequest) (lau
 	if _, err := os.Stat(filepath.Join(q.Dir, "plugin.yaml")); err != nil {
 		return launch.ManifestSummary{}, nil, err
 	}
-	return b.sum, nil, nil
+	return b.sum, b.diags, nil
 }
 
 func (b *packBox) Gate(_ context.Context, q launch.GateRequest) (launch.Verdict, error) {
@@ -648,6 +649,27 @@ func TestVerifyRunsTheSuitesOfPluginCheck(t *testing.T) {
 	refs := layoutReferrers(t, out2, desc, "application/vnd.in-toto+json")
 	if len(refs) != 1 || !strings.Contains(string(blob(refs[0].Layers[0])), `"echoers":{"version":"0.1","suite":3,"halves":["obligations"]}`) {
 		t.Errorf("the attestation of pack does not record the suite revision 3 that step 5 reports")
+	}
+}
+
+// The suites step of verify fails, and runs no suite, where boot's strict reader
+// refuses the plugin.yaml of the artifact, as it refuses a manifest of a higher minor
+// with a field it does not know, and where what it reads is another plugin than the one
+// the signature and the attestation name (ADR-048 decision 15; ADR-060 decision 46).
+func TestVerifyFailsWhatTheStrictReaderRefuses(t *testing.T) {
+	l, out, home, _ := signed(t)
+	b := l.Box.(*packBox)
+	b.suite = &launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 1, Failed: []string{"echoers/reply"}}}}
+	b.scenario = &launch.ScenarioReport{Name: "echo", Version: "1", Halves: []string{"kernel"}}
+	b.sum, b.diags = launch.ManifestSummary{}, []launch.Diagnostic{{Check: "1", File: "plugin.yaml", Text: "x-unknown is not a field of manifest version 1.0"}}
+	v, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
+	if err != nil || v.Passed || v.Steps[2].Outcome != "fail" || !strings.Contains(v.Steps[2].Reason, "x-unknown") {
+		t.Errorf("Verify of a manifest the strict reader refuses = %+v, %v; want the suites failing with its diagnostic", v, err)
+	}
+	b.sum, b.diags = launch.ManifestSummary{ID: "acme/other", Version: "0.1.0"}, nil
+	v, err = l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home})
+	if err != nil || v.Passed || v.Steps[2].Outcome != "fail" || !strings.Contains(v.Steps[2].Reason, "acme/other") {
+		t.Errorf("Verify where the reader reads another plugin = %+v, %v; want the suites failing", v, err)
 	}
 }
 
