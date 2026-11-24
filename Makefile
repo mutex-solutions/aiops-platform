@@ -100,10 +100,10 @@ check:
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
 	$(KC) lines sdk/plugin 2500 provisional
 	$(KC) lines internal/plugingen 1500 provisional
-	$(KC) lines cmd/aiopsctl 2500 provisional
-	@# ADR-060 decision 35: the launcher of cmd/aiopsctl, which the aiopsctl that dist build
-	@# writes runs too, under the cap of cmd/aiopsctl; the builder, 3,000 lines, provisional.
-	$(KC) lines internal/aiopsctl 2500 provisional
+	@# ADR-060 decision 35: cmd/aiopsctl and its launcher, internal/aiopsctl, which the
+	@# aiopsctl that dist build writes runs too, share the one 2,500 lines of the row of
+	@# cmd/aiopsctl; the builder, 3,000 lines, provisional.
+	$(KC) lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
 	$(KC) lines internal/builder 3000 provisional
 	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
 	@# lines since the second note of 2026-11-24, provisional: the row package, internal/

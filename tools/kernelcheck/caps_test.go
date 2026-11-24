@@ -41,7 +41,7 @@ func TestLineCapsInStep(t *testing.T) {
 		t.Errorf("the line caps differ:\nMakefile: %q\nci.yml:   %q", mk, ci)
 	}
 	for _, want := range []string{"plugins/operations 4500 provisional internal", "plugins/operations/internal/operations 4500 provisional",
-		"cmd/aiopsctl,internal/aiopsctl 2500 provisional"} {
+		"cmd/aiopsctl:internal/aiopsctl 2500 provisional"} {
 		if !slices.Contains(mk, want) || !slices.Contains(ci, want) {
 			t.Errorf("no cap %q in the Makefile and ci.yml", want)
 		}

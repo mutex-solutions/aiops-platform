@@ -38,10 +38,10 @@ func TestLinesOfTwoDirectories(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	write(t, a, "a.go", "package a\n\n")
 	write(t, b, "b.go", "package b\n\n")
-	if err := run([]string{"lines", a + "," + b, "4", "provisional"}); err != nil {
+	if err := run([]string{"lines", a + string(filepath.ListSeparator) + b, "4", "provisional"}); err != nil {
 		t.Fatalf("two directories of two lines each under a cap of 4: %v", err)
 	}
-	if err := run([]string{"lines", a + "," + b, "3", "provisional"}); err == nil {
+	if err := run([]string{"lines", a + string(filepath.ListSeparator) + b, "3", "provisional"}); err == nil {
 		t.Fatal("two directories of two lines each under a cap of 3 passed")
 	}
 }

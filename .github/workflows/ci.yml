@@ -110,8 +110,9 @@ jobs:
         # pgx v5 joins at S3 (ADR-060 decision 4).
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
       - name: Plugin package, plugingen, aiopsctl, builder and operations library line caps
-        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl and its
-        # launcher internal/aiopsctl, the builder (3,000) and the operations library,
+        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl with its
+        # launcher internal/aiopsctl under the one 2,500 of its row, the builder (3,000)
+        # and the operations library,
         # plugins/operations, provisional caps during S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
         # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
@@ -119,8 +120,7 @@ jobs:
         run: |
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
-          go run ./tools/kernelcheck lines cmd/aiopsctl 2500 provisional
-          go run ./tools/kernelcheck lines internal/aiopsctl 2500 provisional
+          go run ./tools/kernelcheck lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
           go run ./tools/kernelcheck lines internal/builder 3000 provisional
           go run ./tools/kernelcheck lines plugins/operations 4500 provisional internal
           go run ./tools/kernelcheck lines plugins/operations/internal/operations 4500 provisional

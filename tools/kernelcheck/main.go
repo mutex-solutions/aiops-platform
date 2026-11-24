@@ -32,7 +32,7 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> <register> | pluginvet <dir>...")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir>[:<dir>] <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> <register> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
@@ -311,27 +311,32 @@ func checkVocab(dir, wordlist string) error {
 // printed as such: it stands until the budget is fixed by ADR-059 decision 11.
 // Each of subs names a direct subdirectory that is a package of its own with a cap
 // of its own, as the fake and the suite of a definition are (ADR-060 decision 35):
-// it is neither counted nor refused.
-func checkLines(dir string, limit int, provisional bool, subs ...string) error {
-	clean := filepath.Clean(dir)
-	err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
+// it is neither counted nor refused. dirs may name more than one directory, a list of
+// paths as PATH is, each held to one package, whose lines add up under the one cap.
+func checkLines(dirs string, limit int, provisional bool, subs ...string) error {
+	var files []string
+	for _, dir := range filepath.SplitList(dirs) {
+		clean := filepath.Clean(dir)
+		err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() && (d.Name() == "testdata" || filepath.Dir(p) == clean && slices.Contains(subs, d.Name())) {
+				return filepath.SkipDir
+			}
+			if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
+				return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && (d.Name() == "testdata" || filepath.Dir(p) == clean && slices.Contains(subs, d.Name())) {
-			return filepath.SkipDir
+		fs, err := sourceFiles(dir)
+		if err != nil {
+			return err
 		}
-		if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
-			return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	files, err := sourceFiles(dir)
-	if err != nil {
-		return err
+		files = append(files, fs...)
 	}
 	total := 0
 	for _, p := range files {
