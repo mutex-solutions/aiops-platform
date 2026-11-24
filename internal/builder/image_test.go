@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -37,19 +38,37 @@ var definitionFile = filepath.Join("..", "..", "dist", "builder", "image.yaml")
 
 // The tree the builder extracted is used again with no module source, as the builder
 // image ships it, extracted where the builder's cache keeps it; an extraction recorded
-// with another sum is not (ADR-044 decisions 4 and 16).
+// with another sum is not, and neither is one whose files no longer hash to the sum: a
+// toolchain tree that does not match the recorded hash is refused, and extracted again
+// where the module source serves the module (ADR-044 decisions 4, 14 and 16).
 func TestTreeReusesExtraction(t *testing.T) {
+	if runtime.GOOS+"-"+runtime.GOARCH != "linux-amd64" {
+		t.Skip("the pin is the toolchain of linux-amd64, and TestTree covers another host")
+	}
+	modcache, sum := toolchainZip(t)
 	cache, empty := t.TempDir(), t.TempDir()
-	dir := filepath.Join(cache, "toolchain", ToolchainVersion)
-	if err := errors.Join(os.MkdirAll(filepath.Join(dir, "bin"), 0o755), os.WriteFile(filepath.Join(dir, "bin", "go"), nil, 0o555),
-		os.WriteFile(dir+".sum", []byte("h1:x="), 0o644)); err != nil {
+	dir, err := Tree(modcache, cache, sum)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := Tree(empty, cache, "h1:x="); err != nil || got != dir {
+	if got, err := Tree(empty, cache, sum); err != nil || got != dir {
 		t.Errorf("Tree with the extraction of the sum: %q, %v", got, err)
 	}
 	if _, err := Tree(empty, cache, "h1:y="); err == nil {
 		t.Error("Tree took an extraction recorded with another sum")
+	}
+	licence := filepath.Join(dir, "LICENSE")
+	if err := errors.Join(os.Chmod(licence, 0o644), os.WriteFile(licence, []byte("not the Go licence\n"), 0o644)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Tree(empty, cache, sum); err == nil {
+		t.Errorf("Tree took an extraction whose LICENSE changed: %q", got)
+	}
+	if got, err := Tree(modcache, cache, sum); err != nil || got != dir {
+		t.Errorf("Tree with the module source again: %q, %v", got, err)
+	}
+	if b, err := os.ReadFile(licence); err != nil || string(b) != "a licence\n" {
+		t.Errorf("the extraction again holds %q, %v", b, err)
 	}
 }
 

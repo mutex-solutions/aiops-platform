@@ -103,7 +103,29 @@ func TestTree(t *testing.T) {
 		}
 		return
 	}
-	modcache, cache := t.TempDir(), t.TempDir()
+	modcache, sum := toolchainZip(t)
+	cache := t.TempDir()
+	if _, err := Tree(modcache, cache, h1("another tree")); err == nil || !strings.Contains(err.Error(), "refused") {
+		t.Errorf("another sum: %v", err)
+	}
+	goroot, err := Tree(modcache, cache, sum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Go{Bin: filepath.Join(goroot, "bin", "go")}.Run(context.Background())
+	if err != nil || string(out) != "go\n" {
+		t.Errorf("the extracted go: %q, %v", out, err)
+	}
+	if again, err := Tree(modcache, cache, sum); err != nil || again != goroot {
+		t.Errorf("a second extraction: %v", err)
+	}
+}
+
+// toolchainZip writes into a module source of its own a toolchain module of three files
+// at the pinned version, and returns the source and the sum of the zip.
+func toolchainZip(t *testing.T) (string, string) {
+	t.Helper()
+	modcache := t.TempDir()
 	dir := filepath.Join(modcache, "golang.org", "toolchain", "@v")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -125,18 +147,5 @@ func TestTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Tree(modcache, cache, h1("another tree")); err == nil || !strings.Contains(err.Error(), "refused") {
-		t.Errorf("another sum: %v", err)
-	}
-	goroot, err := Tree(modcache, cache, sum)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := Go{Bin: filepath.Join(goroot, "bin", "go")}.Run(context.Background())
-	if err != nil || string(out) != "go\n" {
-		t.Errorf("the extracted go: %q, %v", out, err)
-	}
-	if again, err := Tree(modcache, cache, sum); err != nil || again != goroot {
-		t.Errorf("a second extraction: %v", err)
-	}
+	return modcache, sum
 }
