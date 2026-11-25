@@ -380,8 +380,10 @@ gaps:
     verify` of in-process code, which build through it, print the same), and a denial
     names its check, or the module table lookup. The source pass of a release applies the
     import boundary of the repository, with the register of the served tree, to each
-    package of its table, and runs their suites and generated tests. A `GOPROXY` that
-    names a proxy URL in any element of its list is refused.
+    package of its table; their tests, the suites and generated tests among them, have
+    run by then in each phase, since the statement of each first-party plugin names the
+    suites that ran (decision 50). A `GOPROXY` that names a proxy URL in any element of
+    its list is refused.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
     a command that writes a key pair in the format of ADR-020 decision 4, which the CLI
