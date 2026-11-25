@@ -1,0 +1,5 @@
+# The row of aiops/restart-policy as an artifact carries it: one row, disabled
+# (ADR-060 decision 19). Step 7 of plugin check packs it, and a distribution
+# composes the row from bundles of its own.
+- insert:
+    - {id: restart-policy, plugin: aiops/restart-policy, roles: [api, worker], enabled: false, config: {maxFailures: 5, window: 1m, backoffMin: 100ms, backoffMax: 10s, factor: 2, infrastructure: [clock]}}

@@ -73,14 +73,16 @@ func moduleOf(dir string) (root, path string, err error) {
 func moduleImport(root, mod, dir string, test bool, imp string) []string {
 	var out []string
 	add := func(rule, doc string) { out = append(out, rule+" ("+doc+")") }
+	pkg := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(imp, mod)))
+	own := hasPath(imp, mod) && (pkg == dir || strings.HasPrefix(pkg, dir+string(filepath.Separator)))
 	other := false
 	switch {
+	case own: // the plugin's own packages, in this repository too
 	case hasPath(imp, modPath):
 		other = !(isKernel(imp) || isDef(imp) || isSDKPlugin(imp) || test && isTestkit(imp))
 	case hasPath(imp, mod):
-		pkg := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(imp, mod)))
 		_, err := os.Stat(filepath.Join(pkg, "plugin.yaml"))
-		other = err == nil && pkg != dir && !strings.HasPrefix(pkg, dir+string(filepath.Separator))
+		other = err == nil
 	}
 	if other {
 		add("a plugin imports the SDK, its own packages and modules outside the platform only; never another plugin, boot, loader, cmd, test, dist", docPlugin)

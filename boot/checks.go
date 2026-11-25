@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"maps"
@@ -548,8 +549,11 @@ func (g *gate) suites(s *subject) map[string]int {
 func (g *gate) installed(c Composition) []RowResult {
 	var out []RowResult
 	for _, id := range slices.Sorted(maps.Keys(g.feeds)) {
-		_, name, _ := strings.Cut(id, "/")
-		if slices.Contains(g.in.Bindings.RequiredRows, name) {
+		owner, name, _ := strings.Cut(id, "/")
+		// An artifact of the release's own module, its manifest byte for byte the one of the
+		// module table, stands in for nothing: plugin check packs each first-party plugin so.
+		own := owner == "aiops" && g.in.Dist != nil && bytes.Equal(g.in.Dist.Plugins[id].Manifest, g.in.Artifacts[id].Kept.Manifest)
+		if slices.Contains(g.in.Bindings.RequiredRows, name) && !own {
 			out = append(out, g.fail(CheckLayerRules, Row{ID: name}, RuleGroupClash, false,
 				"the group %q of the installed artifact %s takes the id of a required row, which no artifact stands in for (ADR-047 decision 6)", name, id))
 		}

@@ -346,13 +346,14 @@ func (c *checkRun) alone() (string, []launch.Diagnostic, error) {
 // suited returns the definitions whose suite step 5 runs, each at the version that
 // requires names: for code, those of the keys it provides or registers with; for a
 // pack, those its rows feed (ADR-060 decision 56).
-// ponytail: a key maps to the definition of the same name, as every registry of S2a
-// does; a definition with keys of other names, as launch, waits for its first
-// third-party contributor.
+// ponytail: a key maps to the definition whose name it is or, in lower case, begins
+// with, as configRefsDryRun of configrefs; a key of another name fails check 10 of step
+// 7 and passes nothing. The classes of the release's serves would map every key.
 func (c *checkRun) suited() map[string]string {
+	keys := slices.Concat(c.sum.Provides, c.sum.Registers)
 	out := map[string]string{}
 	for name, vs := range c.sum.Definitions {
-		if !c.code || slices.Contains(c.sum.Provides, name) || slices.Contains(c.sum.Registers, name) {
+		if !c.code || slices.ContainsFunc(keys, func(k string) bool { return strings.HasPrefix(strings.ToLower(k), name) }) {
 			out[name] = vs[len(vs)-1]
 		}
 	}

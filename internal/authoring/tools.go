@@ -24,6 +24,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"io/fs"
 	"maps"
@@ -255,10 +258,11 @@ type event struct {
 	Action, Test, Output string
 }
 
-// goTest runs go test with args in dir and returns its events.
-func goTest(ctx context.Context, dir string, args ...string) ([]event, error) {
+// goTest runs go test with args in dir, with env added to the environment, and returns
+// its events.
+func goTest(ctx context.Context, dir string, env []string, args ...string) ([]event, error) {
 	cmd := exec.CommandContext(ctx, "go", append([]string{"test", "-count=1", "-json"}, args...)...)
-	cmd.Dir = dir
+	cmd.Dir, cmd.Env = dir, append(os.Environ(), env...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -283,7 +287,7 @@ func goTest(ctx context.Context, dir string, args ...string) ([]event, error) {
 // own is step 4, T1 alone: the plugin's own tests under -race, the generated ones among
 // them, but the suite that step 5 runs itself (07-c4-plugin-sdk.md:1570).
 func own(ctx context.Context, dir string) (launch.SuiteReport, error) {
-	evs, err := goTest(ctx, dir, "-race", "-skip", "^TestConformance$", "./...")
+	evs, err := goTest(ctx, dir, nil, "-race", "-skip", "^TestConformance$", "./...")
 	if err != nil {
 		return launch.SuiteReport{}, err
 	}
@@ -305,11 +309,12 @@ func own(ctx context.Context, dir string) (launch.SuiteReport, error) {
 	return launch.SuiteReport{Definitions: []launch.SuiteResult{r}}, nil
 }
 
-// conformance runs the obligations of the suite of the definition name at version on
-// the plugin in dir, through the toolchain in the author's module: a test written into
-// a go build overlay, never onto disk, mounts the plugin's value as a contribution.
-// Each failed obligation is its id.
-func conformance(ctx context.Context, dir, name, version string, halves []string) (launch.SuiteResult, error) {
+// conformance runs the suite of the definition name at version on the plugin in dir,
+// through the toolchain in the author's module: a test written into a go build overlay,
+// never onto disk, mounts the plugin's value as a contribution, or with the mount that
+// the plugin's tests declare (mountOf). The halves are those that the suite records it
+// ran (builder.RecordVar), and each failed obligation is its id.
+func conformance(ctx context.Context, dir, name, version string) (launch.SuiteResult, error) {
 	major, _, _ := strings.Cut(version, ".")
 	def := modPath + "/sdk/def/" + name + "/v" + major
 	var pkg struct{ ImportPath, Name string }
@@ -341,16 +346,21 @@ func conformance(ctx context.Context, dir, name, version string, halves []string
 		return launch.SuiteResult{}, err
 	}
 	defer os.RemoveAll(tmp)
-	file, overlay := filepath.Join(tmp, "suite_test.go"), filepath.Join(tmp, "overlay.json")
+	file, overlay, rec := filepath.Join(tmp, "suite_test.go"), filepath.Join(tmp, "overlay.json"), filepath.Join(tmp, "ran")
 	ovl, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(dir, "zz_aiopsctl_"+name+"_test.go"): file}})
-	if err := errors.Join(os.WriteFile(file, builder.ConformanceTest(pkg.Name, pkg.ImportPath, name, version, "fixtures"), 0o600), os.WriteFile(overlay, ovl, 0o600)); err != nil {
+	test := builder.ConformanceTest(pkg.Name, pkg.ImportPath, name, version, "fixtures")
+	if mount := mountOf(dir, pkg.Name, name); mount != "" {
+		test = fmt.Appendf(nil, "package %s_test\n\nimport (\n\t\"testing\"\n\n\t%q\n)\n\nfunc TestAiopsctl(t *testing.T) { conformance.Run(t, %s) }\n",
+			pkg.Name, def+"/conformance", mount)
+	}
+	if err := errors.Join(os.WriteFile(file, test, 0o600), os.WriteFile(overlay, ovl, 0o600), os.Mkdir(rec, 0o700)); err != nil {
 		return launch.SuiteResult{}, err
 	}
-	evs, err := goTest(ctx, dir, "-overlay", overlay, "-run", "^TestAiopsctl$", ".")
+	evs, err := goTest(ctx, dir, []string{builder.RecordVar + "=" + rec}, "-overlay", overlay, "-run", "^TestAiopsctl$", ".")
 	if err != nil {
 		return launch.SuiteResult{}, err
 	}
-	r := launch.SuiteResult{Name: name, Revision: d.Suite, Halves: halves}
+	r := launch.SuiteResult{Name: name, Revision: d.Suite, Halves: recorded(rec, name)}
 	ran := false
 	var out []string
 	for _, e := range evs {
@@ -364,10 +374,43 @@ func conformance(ctx context.Context, dir, name, version string, halves []string
 			out = append(out, strings.TrimSpace(e.Output))
 		}
 	}
-	if !ran {
+	if !ran || len(r.Failed) == 0 && len(r.Halves) == 0 {
 		return launch.SuiteResult{}, fmt.Errorf("the suite of %s did not run on %s: %s", name, pkg.ImportPath, strings.Join(out, "; "))
 	}
 	return r, nil
+}
+
+// mountOf returns Mount and the definition's name with its first letter in upper case,
+// MountEchoers for echoers, where the external test package pkg_test of the plugin in
+// dir declares that function: the mount of the suite's Mount type that step 5 runs the
+// suite on, for a plugin that the generic mount of a contribution cannot set up, a
+// provider or a contribution that needs more keys than the registry; "" otherwise.
+// ponytail: a definition's name of one word, as every definition of S2a has.
+func mountOf(dir, pkg, name string) string {
+	want := "Mount" + strings.ToUpper(name[:1]) + name[1:]
+	files, _ := filepath.Glob(filepath.Join(dir, "*_test.go"))
+	for _, f := range files {
+		file, err := parser.ParseFile(token.NewFileSet(), f, nil, parser.SkipObjectResolution)
+		for i := 0; err == nil && file.Name.Name == pkg+"_test" && i < len(file.Decls); i++ {
+			if fd, ok := file.Decls[i].(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == want {
+				return want
+			}
+		}
+	}
+	return ""
+}
+
+// recorded returns the halves of the suite of name that the records in dir say ran.
+func recorded(dir, name string) []string {
+	var have []string
+	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	for _, f := range files {
+		var r []string // the package's directory, the definition and the halves
+		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &r) == nil && len(r) > 1 && r[1] == name {
+			have = append(have, r[2:]...)
+		}
+	}
+	return slices.DeleteFunc([]string{"obligations", "guard"}, func(h string) bool { return !slices.Contains(have, h) })
 }
 
 // Suite runs step 4, with no definition, or step 5 on the definitions of q: in the
@@ -389,7 +432,7 @@ func (t Tools) Suite(ctx context.Context, q launch.SuiteRequest) (launch.SuiteRe
 	}
 	var rep launch.SuiteReport
 	for _, name := range slices.Sorted(maps.Keys(q.Definitions)) {
-		r, err := conformance(ctx, q.Dir, name, q.Definitions[name], q.Halves)
+		r, err := conformance(ctx, q.Dir, name, q.Definitions[name])
 		if err != nil {
 			return launch.SuiteReport{}, err
 		}

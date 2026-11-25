@@ -1,0 +1,5 @@
+# The row of aiops/command-key as an artifact carries it: one row, disabled
+# (ADR-060 decision 19). Step 7 of plugin check packs it, and a distribution
+# composes the row from bundles of its own.
+- insert:
+    - {id: command-key, plugin: aiops/command-key, roles: [api, worker], enabled: false}

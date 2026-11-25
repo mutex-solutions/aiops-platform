@@ -31,9 +31,14 @@ import (
 // go.sum here (-mod=readonly). The packages of the module zip are linked here, in the
 // toolbox, and enter no server binary (ADR-044, Consequences).
 func (Tools) Module(ctx context.Context, q launch.ModuleRequest) (launch.Module, error) {
-	if _, err := os.Stat(filepath.Join(q.Dir, "go.mod")); err != nil {
-		return launch.Module{}, fmt.Errorf("in-process code is packed from the root of its module: %v", err)
+	root := q.Dir
+	for !fileExists(filepath.Join(root, "go.mod")) {
+		if filepath.Dir(root) == root {
+			return launch.Module{}, fmt.Errorf("in-process code is packed with its module: no go.mod at or above %s", q.Dir)
+		}
+		root = filepath.Dir(root)
 	}
+	q.Dir = root
 	type listed struct {
 		Path, Version, Sum string
 		Main               bool
