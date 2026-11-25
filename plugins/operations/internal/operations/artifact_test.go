@@ -356,9 +356,13 @@ func TestPackWritesOneArtifact(t *testing.T) {
 }
 
 // Pack names on its progress each clause that the gate at its entry does not evaluate,
-// with the reason, as every entry point reports it (ADR-060 decision 17).
+// with the reason, as every entry point reports it (ADR-060 decision 17), and the
+// warning of a deprecated major, the reason of a pass, which never denies (ADR-060
+// decision 9).
 func TestPackNamesWhatTheGateDoesNotEvaluate(t *testing.T) {
-	b := &packBox{sum: packSummary(), deny: []launch.Clause{{Check: 4, Clause: "stability", Outcome: launch.OutcomeNotEvaluated, Reason: "no profile is composed"}}}
+	warn := "warning: row echo uses echoers 0, deprecated since 0.2.0"
+	b := &packBox{sum: packSummary(), deny: []launch.Clause{{Check: 4, Clause: "stability", Outcome: launch.OutcomeNotEvaluated, Reason: "no profile is composed"},
+		{Check: 2, Outcome: launch.OutcomePass, Reason: warn}, {Check: 1, Outcome: launch.OutcomePass}}}
 	dir := pluginDir(t, pack)
 	var progress bytes.Buffer
 	c := caller()
@@ -366,8 +370,13 @@ func TestPackNamesWhatTheGateDoesNotEvaluate(t *testing.T) {
 	if _, err := (Library{Box: b}).Pack(t.Context(), def.PackRequest{Caller: c, Dir: dir, Out: filepath.Join(dir, "artifact")}); err != nil {
 		t.Fatal(err)
 	}
-	if want := "pack: check 4 stability is not evaluated: no profile is composed\n"; !strings.Contains(progress.String(), want) {
-		t.Errorf("progress %q; want %q", progress.String(), want)
+	for _, want := range []string{"pack: check 4 stability is not evaluated: no profile is composed\n", "pack: check 2 passes: " + warn + "\n"} {
+		if !strings.Contains(progress.String(), want) {
+			t.Errorf("progress %q; want %q", progress.String(), want)
+		}
+	}
+	if strings.Contains(progress.String(), "check 1") {
+		t.Errorf("progress %q names a clause that passed with no reason", progress.String())
 	}
 }
 
