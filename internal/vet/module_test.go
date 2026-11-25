@@ -91,6 +91,29 @@ func init() {}
 	}
 }
 
+// A plugin of this repository, which make check and CI hold to plugin check (ADR-060
+// decision 32, standing rule 2), imports its own packages, as its external tests do,
+// and no other plugin.
+func TestModuleOfAPluginOfThisRepository(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, map[string]string{
+		"go.mod":                       "module " + sdk + "\n\ngo 1.26.0\n",
+		"plugins/echo/plugin.yaml":     "id: aiops/echo\n",
+		"plugins/echo/plugin.go":       "package echo\n\nimport _ \"" + sdk + "/plugins/echo/internal/x\"\n",
+		"plugins/echo/internal/x/x.go": "package x\n",
+		"plugins/echo/plugin_test.go":  "package echo_test\n\nimport (\n\t_ \"" + sdk + "/plugins/echo\"\n\t_ \"" + sdk + "/plugins/other\"\n)\n",
+		"plugins/other/plugin.yaml":    "id: aiops/other\n",
+		"plugins/other/plugin.go":      "package other\n",
+	})
+	got, err := Module(filepath.Join(root, "plugins", "echo"), Std{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].String() != "plugin_test.go:5: imports "+sdk+"/plugins/other: a plugin imports the SDK, its own packages and modules outside the platform only; never another plugin, boot, loader, cmd, test, dist (07-c4-plugin-sdk.md:34,46; 08-profiles-roadmap-adrs.md:1255)" {
+		t.Errorf("findings %v, want the import of plugins/other alone", got)
+	}
+}
+
 // A plugin at its module root, as plugin new writes it, with every import the rules
 // allow, has no finding.
 func TestModuleOfACleanPlugin(t *testing.T) {

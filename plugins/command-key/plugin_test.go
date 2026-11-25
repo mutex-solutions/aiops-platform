@@ -30,7 +30,9 @@ func (stub) GenerateKey(ctx context.Context, r operations.KeyRequest) (operation
 	return operations.Written{Paths: []string{r.Prefix + ".key", r.Prefix + ".pub"}}, ctx.Err()
 }
 
-func mount(t *testing.T) (conformance.Subject, *kernel.Root) {
+// MountCommands mounts the row on a root of its own for the obligations of commands,
+// as step 5 of plugin check does.
+func MountCommands(t *testing.T) (conformance.Subject, *kernel.Root) {
 	root := kerneltest.New(t)
 	kerneltest.Mount(root, kernel.Define(kernel.Plugin{ID: "test/operations", Provides: []kernel.AnyKey{operations.Key},
 		Apply: func(c *kernel.Context, _ any) error { return operations.Key.Provide(c, stub{}) }}))
@@ -39,10 +41,10 @@ func mount(t *testing.T) (conformance.Subject, *kernel.Root) {
 
 // The row keeps the obligations of a command on the cases of its fixtures (ADR-061
 // decision 5).
-func TestObligations(t *testing.T) { conformance.Run(t, mount) }
+func TestObligations(t *testing.T) { conformance.Run(t, MountCommands) }
 
 // The help of each command is the CLI spec (ADR-061 decision 30).
-func TestHelp(t *testing.T) { conformance.Help(t, mount, *update) }
+func TestHelp(t *testing.T) { conformance.Help(t, MountCommands, *update) }
 
 // world mounts the operations fake, the recording dispatcher with the working directory
 // /work and env, and the row on a root of its own.

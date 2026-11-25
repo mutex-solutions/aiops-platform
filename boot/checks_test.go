@@ -352,6 +352,18 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			[]string{"8 acme/loader group-clash stop=false"}},
 		{"a group that takes the id of a required row", func(fx *gateFix) { fx.dist.bindings = "{required: {rows: [pack]}}" },
 			[]string{"8 pack group-clash stop=true"}},
+		// An artifact of the release's own first-party module, as step 7 of plugin check packs
+		// one, stands in for nothing; one whose manifest differs from the module's does.
+		{"an artifact of the release's own module whose group takes the id of its required row", func(fx *gateFix) {
+			fx.reserve("aiops/pack")
+			fx.dist.add(packManifestText("aiops/pack"), `{"echoers": {"version": "0.1"}}`)
+			fx.dist.bindings = "{required: {rows: [pack]}}"
+		}, []string{"5 pack:e1 signer stop=false"}},
+		{"an artifact of a first-party id whose manifest is not the module's, whose group takes the id of a required row", func(fx *gateFix) {
+			fx.reserve("aiops/pack")
+			fx.dist.add(manifestText("aiops/pack"), "")
+			fx.dist.bindings = "{required: {rows: [pack]}}"
+		}, []string{"5 pack:e1 signer stop=false", "8 pack group-clash stop=true"}},
 		// ADR-047 decisions 6 and 18: a kept bundle that does not compose inserts no row,
 		// and the artifact is denied by the check its kept files fail.
 		{"a kept bundle.yaml that differs from the artifact and does not compose", func(fx *gateFix) {

@@ -34,35 +34,37 @@ import (
 // that each case's Setup prepares as the files a writer leaves, with the launch fake's
 // toolbox answering as the Setup says, and a registry inside the test that holds the
 // images of the Setup.
-func TestConformance(t *testing.T) {
-	conformance.Run(t, func(t *testing.T, s conformance.Setup) conformance.Subject {
-		home := filepath.Join(t.TempDir(), "home")
-		if s.Result != nil {
-			home = serve(t, s.Result)
-		}
-		if s.Interrupted {
-			interrupted(t, home)
-		}
-		if s.Held != "" {
-			hold(t, home, s.Held)
-		}
-		root := kerneltest.New(t)
-		l, lp := launchfake.New()
-		l.Box = box{s: s}
-		kerneltest.Mount(root, lp)
-		f := root.Plugin(operations.Plugin, map[string]any{"lockWait": s.LockWait.String()})
-		if err := f.Await(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		if st, err := f.State(t.Context()); err != nil || st != kernel.Active {
-			t.Fatalf("the operations row is %v, %v", st, err)
-		}
-		reg := ocitest.New(t, ocitest.Options{})
-		for name, manifest := range s.Images {
-			image(reg, name, "dist", manifest)
-		}
-		return conformance.Subject{Root: root, Provider: f, Home: home, Dir: t.TempDir(), Registry: reg.Host}
-	})
+func TestConformance(t *testing.T) { conformance.Run(t, MountOperations) }
+
+// MountOperations mounts the operations row on a root of its own for the suite of operations, as step 5 of plugin
+// check does.
+func MountOperations(t *testing.T, s conformance.Setup) conformance.Subject {
+	home := filepath.Join(t.TempDir(), "home")
+	if s.Result != nil {
+		home = serve(t, s.Result)
+	}
+	if s.Interrupted {
+		interrupted(t, home)
+	}
+	if s.Held != "" {
+		hold(t, home, s.Held)
+	}
+	root := kerneltest.New(t)
+	l, lp := launchfake.New()
+	l.Box = box{s: s}
+	kerneltest.Mount(root, lp)
+	f := root.Plugin(operations.Plugin, map[string]any{"lockWait": s.LockWait.String()})
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := f.State(t.Context()); err != nil || st != kernel.Active {
+		t.Fatalf("the operations row is %v, %v", st, err)
+	}
+	reg := ocitest.New(t, ocitest.Options{})
+	for name, manifest := range s.Images {
+		image(reg, name, "dist", manifest)
+	}
+	return conformance.Subject{Root: root, Provider: f, Home: home, Dir: t.TempDir(), Registry: reg.Host}
 }
 
 // image pushes an image to the repository name under tag, with its distribution

@@ -54,18 +54,20 @@ func (w *world) awaitExit(t *testing.T) {
 // The cli row passes the guard half of the commands suite (ADR-061 decision 5). A row
 // that the guard names as not ACTIVE is a row of the composition whose plugin needs
 // commands and the keys it waits for.
-func TestGuard(t *testing.T) {
-	conformance.Run(t, func(t *testing.T) (conformance.Subject, *kernel.Root) {
-		w := newWorld(t)
-		var rows []composition.Row
-		pend := func(p commands.Pending) {
-			id := "test/" + p.Row
-			w.l.Modules = append(w.l.Modules, launch.CatalogEntry{ID: id, Needs: append([]string{commands.Key.Name()}, p.WaitsFor...)})
-			rows = append(rows, composition.Row{ID: p.Row, Plugin: id, State: kernel.State(p.State)})
-			w.rd.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: rows})
-		}
-		return conformance.Dispatcher(w.root.Plugin(cli.Plugin, nil), pend), w.root
-	})
+func TestGuard(t *testing.T) { conformance.Run(t, MountCommands) }
+
+// MountCommands mounts the cli row, the dispatcher, on a root of its own for the suite of commands, as step 5 of plugin
+// check does.
+func MountCommands(t *testing.T) (conformance.Subject, *kernel.Root) {
+	w := newWorld(t)
+	var rows []composition.Row
+	pend := func(p commands.Pending) {
+		id := "test/" + p.Row
+		w.l.Modules = append(w.l.Modules, launch.CatalogEntry{ID: id, Needs: append([]string{commands.Key.Name()}, p.WaitsFor...)})
+		rows = append(rows, composition.Row{ID: p.Row, Plugin: id, State: kernel.State(p.State)})
+		w.rd.Commit(composition.Generation{Scope: composition.ScopeProcess, Rows: rows})
+	}
+	return conformance.Dispatcher(w.root.Plugin(cli.Plugin, nil), pend), w.root
 }
 
 type runFunc func(ctx context.Context, inv commands.Invocation) error

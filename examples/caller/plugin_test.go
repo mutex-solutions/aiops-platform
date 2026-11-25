@@ -3,24 +3,44 @@
 package caller_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/examples/caller"
-	"github.com/mutex-solutions/aiops-platform/examples/dispatch"
-	"github.com/mutex-solutions/aiops-platform/examples/echoer"
-	"github.com/mutex-solutions/aiops-platform/examples/stamper"
 	clockfake "github.com/mutex-solutions/aiops-platform/sdk/def/clock/v0/fake"
+	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
+	echofake "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/fake"
 	launchfake "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0/fake"
+	stampers "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0"
+	stampfake "github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/fake"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
+
+// reply is an echoer and a stamper of the test, which answers its prefix and the message.
+type reply string
+
+func (r reply) Echo(_ context.Context, msg string) (string, error) { return string(r) + msg, nil }
+func (r reply) Stamp(_ context.Context, body string) (string, error) {
+	return string(r) + strings.ToUpper(body), nil
+}
+
+// contribution registers r under name with the registry of k, as a contribution row does;
+// a plugin imports no other plugin, so the caller's tests call through the fakes of the
+// two dispatchers (07-c4-plugin-sdk.md:34).
+func contribution[T any](id string, k kernel.Key[T], register func(T, *kernel.Context) error) kernel.Plugin {
+	return kernel.Define(kernel.Plugin{ID: id, Inject: []kernel.Dep{kernel.Need(k)},
+		Apply: func(c *kernel.Context, _ any) error { return register(k.Of(c), c) }})
+}
 
 // When the control file changes, the caller calls every echoer and every stamper
 // through the dispatcher and writes what each answered (ADR-060 decision 37).
@@ -32,8 +52,12 @@ func TestCallsBothRegistriesWhenAsked(t *testing.T) {
 	l, lp := launchfake.New()
 	l.Flags = map[string]string{"home": home}
 	clk, cp := clockfake.NewAt(time.Unix(0, 0))
-	kerneltest.Mount(root, lp, cp, dispatch.Plugin, echoer.Plugin, stamper.Plugin)
-	f := root.Plugin(echoer.Plugin, map[string]any{"name": "loud", "prefix": "LOUD "})
+	_, ep := echofake.New()
+	_, sp := stampfake.New()
+	kerneltest.Mount(root, lp, cp, ep, sp,
+		contribution("test/echo", echoers.Key, func(r echoers.Registry, c *kernel.Context) error { return r.Register(c, "example", reply("example: ")) }),
+		contribution("test/stamp", stampers.Key, func(r stampers.Registry, c *kernel.Context) error { return r.Register(c, "example", reply("example:")) }))
+	f := root.Plugin(contribution("test/loud", echoers.Key, func(r echoers.Registry, c *kernel.Context) error { return r.Register(c, "loud", reply("LOUD ")) }), nil)
 	if err := f.Await(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +66,7 @@ func TestCallsBothRegistriesWhenAsked(t *testing.T) {
 	got := result(t, run, clk, "hi")
 	want := caller.Outcome{Request: sum("hi"),
 		Echoers:  map[string]caller.Reply{"example": {Reply: "example: hi"}, "loud": {Reply: "LOUD hi"}},
-		Stampers: map[string]caller.Reply{"example": {Reply: "example:d8932aac"}}}
+		Stampers: map[string]caller.Reply{"example": {Reply: "example:HI"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("result %+v, want %+v", got, want)
 	}

@@ -60,17 +60,19 @@ func mountRow(t *testing.T, s *stub) (*kernel.Root, *kernel.Fiber) {
 	return root, root.Plugin(row.Plugin, nil)
 }
 
-func mount(t *testing.T) (conformance.Subject, *kernel.Root) {
+// MountCommands mounts the row on a root of its own for the obligations of commands,
+// as step 5 of plugin check does.
+func MountCommands(t *testing.T) (conformance.Subject, *kernel.Root) {
 	root, f := mountRow(t, &stub{ch: operations.Change{Outcome: operations.NotRunning}})
 	return conformance.Contribution(f, "fixtures"), root
 }
 
 // The row keeps the obligations of a command on the cases of its fixtures (ADR-061
 // decision 5).
-func TestObligations(t *testing.T) { conformance.Run(t, mount) }
+func TestObligations(t *testing.T) { conformance.Run(t, MountCommands) }
 
 // The help of each command is the CLI spec (ADR-061 decision 30).
-func TestHelp(t *testing.T) { conformance.Help(t, mount, *update) }
+func TestHelp(t *testing.T) { conformance.Help(t, MountCommands, *update) }
 
 // world is the row mounted on s, with the recording dispatcher in the working directory
 // /work and the home /home.

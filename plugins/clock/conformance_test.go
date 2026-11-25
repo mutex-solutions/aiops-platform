@@ -13,13 +13,15 @@ import (
 
 // The clock row passes the clock definition's suite, as its fake does (T2,
 // 07-c4-plugin-sdk.md §8.2).
-func TestConformance(t *testing.T) {
-	conformance.Run(t, func(t *testing.T) (*kernel.Root, *kernel.Fiber) {
-		root := kerneltest.New(t)
-		f := root.Plugin(clock.Plugin, nil)
-		if err := f.Await(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		return root, f
-	})
+func TestConformance(t *testing.T) { conformance.Run(t, MountClock) }
+
+// MountClock mounts the clock row on a root of its own for the suite of clock, as step 5 of plugin
+// check does.
+func MountClock(t *testing.T) (*kernel.Root, *kernel.Fiber) {
+	root := kerneltest.New(t)
+	f := root.Plugin(clock.Plugin, nil)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	return root, f
 }

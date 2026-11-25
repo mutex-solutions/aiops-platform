@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -55,6 +56,28 @@ func TestDistributionOfTheTestBinary(t *testing.T) {
 	st, err := boot.ReadAttestation("aiops-test/toy-provider", d.Plugins["aiops-test/toy-provider"].Attestation)
 	if toy := st.Definitions["toy"]; err != nil || toy.Suite == nil || *toy.Suite != 0 || toy.Halves != nil {
 		t.Errorf("toy-provider attests %+v (%v)", toy, err)
+	}
+	// The statement of a first-party plugin names exactly the suites and the halves that
+	// ran on its package (ADR-060 decisions 18 and 50): the guard half on a dispatcher,
+	// the obligations half on a contribution, both halves of a provider's suite.
+	for id, want := range map[string]map[string][]string{
+		"aiops/example-echoer":   {"echoers": {"obligations"}},
+		"aiops/example-dispatch": {"echoers": {"guard"}, "stampers": {"guard"}},
+		"aiops/cli":              {"commands": {"guard"}},
+		"aiops/command-plugin":   {"commands": {"obligations"}},
+		"aiops/clock":            {"clock": {"obligations", "guard"}},
+		"aiops/readiness":        {},
+	} {
+		st, err := boot.ReadAttestation(id, d.Plugins[id].Attestation)
+		got := map[string][]string{}
+		for name, a := range st.Definitions {
+			if a.Suite != nil {
+				got[name] = a.Halves
+			}
+		}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s attests the halves %v, and the suites that ran on it %v (%v)", id, got, want, err)
+		}
 	}
 	for _, m := range d.Modules {
 		if strings.HasPrefix(m.Path, rootModule) && (m.Version != "" || m.Sum != "" || m.Licence != "Apache-2.0") {

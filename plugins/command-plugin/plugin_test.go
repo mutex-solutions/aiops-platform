@@ -110,18 +110,20 @@ func mountRow(t *testing.T, s *stub) (*kernel.Root, *kernel.Fiber) {
 	return root, root.Plugin(row.Plugin, nil)
 }
 
-func mount(t *testing.T) (conformance.Subject, *kernel.Root) {
-	root, f := mountRow(t, &stub{})
+// MountCommands mounts the row on a root of its own for the obligations of commands,
+// as step 5 of plugin check does, on a stub whose verify passes.
+func MountCommands(t *testing.T) (conformance.Subject, *kernel.Root) {
+	root, f := mountRow(t, &stub{v: operations.Verified{Passed: true}})
 	return conformance.Contribution(f, "fixtures"), root
 }
 
-// The row registers the paths that fixtures/commands/paths.json lists, which the name
-// lint reads (ADR-061 decision 5). Most of its commands are not built yet, so
-// commands/run and commands/cancel wait for them.
-func TestPaths(t *testing.T) { conformance.Paths(t, mount) }
+// The row keeps the obligations of a command on the cases of its fixtures: the paths
+// that fixtures/commands/paths.json lists, which the name lint reads, a case of outcome
+// ok for each of its thirteen commands and the cancel cases (ADR-061 decision 5).
+func TestObligations(t *testing.T) { conformance.Run(t, MountCommands) }
 
 // The help of each command is the CLI spec (ADR-061 decision 30).
-func TestHelp(t *testing.T) { conformance.Help(t, mount, *update) }
+func TestHelp(t *testing.T) { conformance.Help(t, MountCommands, *update) }
 
 // world is the row mounted on s, with the recording dispatcher in the working directory
 // /work and the home /site.

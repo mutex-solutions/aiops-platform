@@ -56,4 +56,12 @@ func TestModule(t *testing.T) {
 	if _, err := (Tools{}).Module(t.Context(), launch.ModuleRequest{Dir: root, Version: "v0.1.0"}); err == nil {
 		t.Error("Module of a directory with no go.mod = nil error")
 	}
+	// A plugin whose package sits below its module root, as each plugin of this repository
+	// does, packs with the module that holds it (ADR-060 decision 32, standing rule 2).
+	if err := os.Mkdir(filepath.Join(root, "echo", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := (Tools{}).Module(t.Context(), launch.ModuleRequest{Dir: filepath.Join(root, "echo", "sub"), Version: "v0.1.0"}); err != nil || n.Path != m.Path || n.Sum != m.Sum {
+		t.Errorf("Module of a package below its module root = %+v, %v; want the module %s at %s", n, err, m.Path, m.Sum)
+	}
 }
