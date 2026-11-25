@@ -422,7 +422,9 @@ gaps:
     plugin. The job renders the connector template, holds it to T0, and asserts that
     step 5 and the scenario answer `launch.ErrNotCarried`, so the template is never left
     out unseen; once both land, it generates the pack against that release and asserts
-    one failed line per obligation of each registry its rows feed.
+    one failed line per obligation of each registry its rows feed. Note of 2026-11-25:
+    the release build embeds the binaries (decision 46, note of 2026-11-25); the case
+    stays deferred until the exit's test release serves the instantiable toy echoer.
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
@@ -1302,7 +1304,23 @@ to a question, the decision here settles it.
     `aiopsctl` embeds and runs as a child process with the pack as input; its JSON output
     is the report. `plugin verify` of in-process code compiles the pulled module with its
     suites through the builder image or a local toolchain, as `plugin smoke` does, and
-    fails with that reason where it has neither.
+    fails with that reason where it has neither. Note of 2026-11-25, as built: the
+    release build writes, in both phases, a test file per registry suite (`commands`,
+    `echoers`, `stampers`) and one for the echo scenario into its scratch module, so
+    their build list is in the release's pins; its second phase compiles each with `go
+    test -c`, with the first-party instantiable plugins that the first phase's manifest
+    records (none at S2a), into `suites/` beside the main of the release `aiopsctl`,
+    which embeds them. Each runs `internal/packsuite` as a child process for step 5,
+    step 8, `plugin pack` and `plugin verify`: an obligation whose recorded case
+    `fixtures/<registry>/<name>.json` is missing fails with its id, and the scenario
+    reads `fixtures/scenario/echo.json`. Their packages enter the licence report,
+    `THIRD_PARTY_LICENSES/` and the SBOM of `aiopsctl`, and the builder image's SBOM
+    names each binary (ADR-044 decision 5). An `aiopsctl` built in the repository, or by
+    a site's build, embeds none and reports the step as not built. `plugin verify` of
+    in-process code takes `--against` (the release artifact by digest) and `--modcache`,
+    and builds a throwaway site distribution of that release and the module at the
+    version and sum of its `module.json`, whose tests, the suites among them, the
+    builder runs; with neither flag the step is not built.
 
 47. **`enable`, `disable` and `remove` are built at S2a, `purge` at S3** (Q11 (a)). The
     three run on the operations library; `enable` and `disable` write only a departure
@@ -1391,7 +1409,23 @@ to a question, the decision here settles it.
        `aiops-core` bundle plus the plugin's bundle with its rows enabled, and smoke
        passes when every row is ACTIVE or says what it waits for, the boot rule of `dev`
        (`08:738`). It edits `07:1576`. Note of 2026-11-23: smoke boots that profile with
-       a `--patch` file that disables `reload-socket` (ADR-062 decision 27).
+       a `--patch` file that disables `reload-socket` (ADR-062 decision 27). Note of
+       2026-11-25, as built: `plugin smoke <dir> --against <release> --modcache <dir>`
+       writes the module of `<dir>` at the zero pseudo-version into a module source of
+       the builder's scratch directory, ahead of `--modcache`, and builds the throwaway
+       distribution of the release artifact and that module (ADR-044 decision 1). The
+       home it boots holds the release's `aiops-core` bundle, which `aiopsctl` ships,
+       since the server binary ships none, and the plugin's bundle as a plain bundle of
+       the profile, so its rows are not those of an installed artifact; the `--patch`
+       file also enables each of them. The home trusts the distribution it built with a
+       record under a throwaway key, as `dist use` writes one; boot verifies no
+       signature. Gate check 10 of the boot asks the plugin's attestation, which no
+       artifact carries yet: the builder runs step 5 of `plugin check` on the module
+       with its own toolchain, and the throwaway manifest records that statement for
+       the plugin, as a release records its own; a failed obligation fails smoke. A row
+       of the plugin that does not mount fails smoke. On the image path
+       the builder image's `aiopsctl` runs smoke on the local path and boots the server
+       inside its container, so the boot needs no second container runtime call.
     2. **Inspect.** `inspect` fetches only the manifest and the bundle, never content,
        module or image, and runs nothing. It edits `08:373` and `07:1853`.
     3. **`wasm`.** Check 1 denies it, as a runtime this schema version does not serve,

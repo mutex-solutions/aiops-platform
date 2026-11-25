@@ -151,7 +151,12 @@ Registration in `init`, read in the same cache:
      the zip's hash in the scratch `go.sum` and in the smoke output, so the directory
      enters the build as every module does (decision 8). `plugin verify` takes the
      module path, version and sum from the pulled artifact (ADR-060 decision 19) and
-     resolves the module through the module source against that sum.
+     resolves the module through the module source against that sum. Note of
+     2026-11-25, as built: the pseudo-version is the zero pseudo-version of the module's
+     major, `v0.0.0-00010101000000-000000000000` at major 0; both commands take the
+     release artifact as `--against` and the module source as `--modcache`, and on the
+     image path the image's `aiopsctl` runs `plugin smoke` on the local path, or `dist
+     build` of the throwaway `dist.yaml` that `plugin verify` writes.
 
    Both paths of one release run one builder.
 2. **The builder sets the Go environment itself, on both paths.** It starts `go` with an
