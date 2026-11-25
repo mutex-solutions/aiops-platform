@@ -390,6 +390,9 @@ func (c *checkRun) conformance() (string, []launch.Diagnostic, error) {
 		for _, id := range res.Failed {
 			ds = append(ds, launch.Diagnostic{Check: id, Text: id + ": the obligation failed"})
 		}
+		for _, id := range res.Skipped { // the suite records no half (ADR-060 decision 50)
+			ds = append(ds, launch.Diagnostic{Check: id, Text: id + ": the case skipped and did not run"})
+		}
 	}
 	for name := range suited {
 		if c.defs[name].Suite == nil {

@@ -159,9 +159,9 @@ type Mount func(t *testing.T, s Setup) Subject
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "operations", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("operations.O1 key generate writes a pair once, with the password of the environment", func(t *testing.T) {
+	rec := deftest.Ran(t, "operations", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "operations.O1 key generate writes a pair once, with the password of the environment", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			prefix := filepath.Join(u.s.Dir, "author")
 			w, err := u.ops.GenerateKey(t.Context(), operations.KeyRequest{Caller: u.caller(), Prefix: prefix})
@@ -180,7 +180,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O2 trust add appends a signer with sorted sets", func(t *testing.T) {
+		rec.Run(t, "operations.O2 trust add appends a signer with sorted sets", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			a, b := u.key("a"), u.key("b")
 			ch := u.trust(operations.TrustRequest{KeyFile: a, IDs: []string{"acme/x", "acme/*", "acme/x"}, Runtimes: []string{"remote", "inproc"}, Signed: []string{"identities"}})
@@ -199,7 +199,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O3 trust add of a distribution keeps the default root", func(t *testing.T) {
+		rec.Run(t, "operations.O3 trust add of a distribution keeps the default root", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			a, b := u.key("a"), u.key("b")
 			u.trust(operations.TrustRequest{KeyFile: a, Distribution: true})
@@ -212,7 +212,7 @@ func Run(t *testing.T, mount Mount) {
 			u.refused(operations.TrustRequest{KeyFile: a, Distribution: true}, "a distribution key listed twice")
 		})
 
-		t.Run("operations.O4 each refused form of trust add writes nothing", func(t *testing.T) {
+		rec.Run(t, "operations.O4 each refused form of trust add writes nothing", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			a := u.key("a")
 			u.trust(operations.TrustRequest{KeyFile: a, IDs: []string{"acme/*"}})
@@ -239,7 +239,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O5 no home is a usage error, and a missing home reads empty", func(t *testing.T) {
+		rec.Run(t, "operations.O5 no home is a usage error, and a missing home reads empty", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			if h := u.home(); len(h.Signers) != 0 || !slices.Equal(h.Distributions, []string{operations.Release}) || len(h.Records) != 0 ||
 				h.Current != "" || h.Snapshot {
@@ -259,7 +259,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O6 dist sign and dist use record a distribution and its image", func(t *testing.T) {
+		rec.Run(t, "operations.O6 dist sign and dist use record a distribution and its image", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			pub := u.key("site")
 			u.trust(operations.TrustRequest{KeyFile: pub, Distribution: true})
@@ -281,7 +281,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O7 dist use refuses what no trusted key verifies, and writes nothing", func(t *testing.T) {
+		rec.Run(t, "operations.O7 dist use refuses what no trusted key verifies, and writes nothing", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			site, other := u.key("site"), u.key("other")
 			u.trust(operations.TrustRequest{KeyFile: site, Distribution: true})
@@ -309,7 +309,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O8 profile init copies a shipped profile once", func(t *testing.T) {
+		rec.Run(t, "operations.O8 profile init copies a shipped profile once", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			ch := u.profile(u.ops.InitProfile, "cli")
 			p := filepath.Join(u.s.Home, "profiles", "cli", "profile.yaml")
@@ -333,7 +333,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O9 render and verify answer what the toolbox renders", func(t *testing.T) {
+		rec.Run(t, "operations.O9 render and verify answer what the toolbox renders", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			q := launch.RenderRequest{Home: u.s.Home, Profile: "cli", Dumps: []string{"--dump"}}
 			r, err := u.ops.Render(t.Context(), operations.RenderRequest{Caller: u.caller(), RenderRequest: q})
@@ -354,7 +354,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O10 profile sanitize of a profile that composes changes nothing", func(t *testing.T) {
+		rec.Run(t, "operations.O10 profile sanitize of a profile that composes changes nothing", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			u.profile(u.ops.InitProfile, "cli")
 			before := u.home()
@@ -366,7 +366,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O11 pack, sign and push an artifact that inspect and verify read", func(t *testing.T) {
+		rec.Run(t, "operations.O11 pack, sign and push an artifact that inspect and verify read", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			dir := u.plugin()
 			out := filepath.Join(dir, "artifact")
@@ -396,7 +396,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O12 pack, sign, inspect and verify refuse", func(t *testing.T) {
+		rec.Run(t, "operations.O12 pack, sign, inspect and verify refuse", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			dir := u.plugin()
 			out := filepath.Join(dir, "artifact")
@@ -433,7 +433,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O13 plugin new writes the template into a new directory, once", func(t *testing.T) {
+		rec.Run(t, "operations.O13 plugin new writes the template into a new directory, once", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			dir := filepath.Join(u.s.Dir, "echo")
 			q := operations.NewRequest{Caller: u.caller(), Registry: "echoers", ID: "acme/echo", Lang: "go", Dir: dir}
@@ -459,7 +459,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O14 plugin check reports eight steps and the attestation it would sign", func(t *testing.T) {
+		rec.Run(t, "operations.O14 plugin check reports eight steps and the attestation it would sign", func(t *testing.T) {
 			u := use(t, mount, Setup{Plugin: Plugin{Summary: Echo, Skipped: []string{"TestTwoTenants"}}})
 			r := u.check()
 			want := []string{operations.StepPass, operations.StepPass, operations.StepPass, operations.StepPass,
@@ -490,7 +490,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O15 a failed step stops plugin check with one line per obligation", func(t *testing.T) {
+		rec.Run(t, "operations.O15 a failed step stops plugin check with one line per obligation", func(t *testing.T) {
 			u := use(t, mount, Setup{Plugin: Plugin{Summary: Echo, Failed: []string{"echoers/reply", "echoers/stable"}}})
 			r := u.check()
 			want := []string{operations.StepPass, operations.StepPass, operations.StepPass, operations.StepPass,
@@ -510,7 +510,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O16 plugin install keeps the artifact, locks a pack and submits", func(t *testing.T) {
+		rec.Run(t, "operations.O16 plugin install keeps the artifact, locks a pack and submits", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			spec := u.signedPack()
 			in := u.inspect(spec)
@@ -530,7 +530,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O17 plugin install writes nothing on a denial, rebuild-required or a pack into cli", func(t *testing.T) {
+		rec.Run(t, "operations.O17 plugin install writes nothing on a denial, rebuild-required or a pack into cli", func(t *testing.T) {
 			deny := launch.Verdict{Clauses: []launch.Clause{{Check: 2, Outcome: launch.OutcomeDeny, Reason: "requires echoers 0.2"}}}
 			for why, c := range map[string]struct {
 				s       Setup
@@ -555,7 +555,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O18 plugin enable and disable write a departure and submit, and disable refuses what the manager cannot", func(t *testing.T) {
+		rec.Run(t, "operations.O18 plugin enable and disable write a departure and submit, and disable refuses what the manager cannot", func(t *testing.T) {
 			u := use(t, mount, Setup{Result: Passed})
 			ch, err := u.ops.Enable(t.Context(), u.row(Row))
 			if err != nil || ch.Result == nil || ch.Result.Status != reload.Passed || ch.Result.Generation != 2 || !u.homeOf("dev").Enabled[Row] {
@@ -575,7 +575,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.O19 a result that does not pass restores the files, and plugin remove detaches", func(t *testing.T) {
+		rec.Run(t, "operations.O19 a result that does not pass restores the files, and plugin remove detaches", func(t *testing.T) {
 			u := use(t, mount, Setup{Result: &reload.WireResult{ID: 8, Status: reload.RolledBack, Generation: 3}})
 			before := u.home()
 			if ch, err := u.ops.Enable(t.Context(), u.row(Row)); !errors.Is(err, operations.ErrSubmission) || ch.Result == nil || !reflect.DeepEqual(u.home(), before) {
@@ -596,7 +596,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("remove of what is not installed: %v, want ErrRefused", err)
 			}
 		})
-		t.Run("operations.O20 dist build answers what the toolbox builds and refuses a relative path", func(t *testing.T) {
+		rec.Run(t, "operations.O20 dist build answers what the toolbox builds and refuses a relative path", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			q := operations.BuildRequest{Caller: u.caller(), BuildRequest: launch.BuildRequest{DistYAML: filepath.Join(u.s.Dir, "dist.yaml"),
 				ModCache: filepath.Join(u.s.Dir, "modcache"), Builder: "local"}}
@@ -611,7 +611,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("dist build wrote the home: %+v", h)
 			}
 		})
-		t.Run("operations.O21 plugin remove takes an installed artifact only, and drops the enabled departures of its rows", func(t *testing.T) {
+		rec.Run(t, "operations.O21 plugin remove takes an installed artifact only, and drops the enabled departures of its rows", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			if err := u.install(u.signedPack(), "dev"); err != nil {
 				t.Fatal(err)
@@ -630,7 +630,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("after remove the departure {id: %s, enabled: %v} stays; want it dropped, so a later install leaves the row disabled", Row, en)
 			}
 		})
-		t.Run("operations.O22 a site holds one digest of a plugin id", func(t *testing.T) {
+		rec.Run(t, "operations.O22 a site holds one digest of a plugin id", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			v1 := u.signedPack()
 			if err := os.WriteFile(filepath.Join(filepath.Dir(v1), "content", "labels.yaml"), []byte("service: y\n"), 0o644); err != nil {
@@ -659,7 +659,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("install of %s once no profile names acme/connector-x: %v", d2, err)
 			}
 		})
-		t.Run("operations.O23 plugin smoke answers the rows the toolbox booted and fails one that is neither ACTIVE nor waiting", func(t *testing.T) {
+		rec.Run(t, "operations.O23 plugin smoke answers the rows the toolbox booted and fails one that is neither ACTIVE nor waiting", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			q := operations.BuildRequest{Caller: u.caller(), BuildRequest: launch.BuildRequest{Plugin: filepath.Join(u.s.Dir, "plugin"),
 				Against: "oci://registry.test/aiops/release@sha256:" + strings.Repeat("ab", 32), ModCache: filepath.Join(u.s.Dir, "modcache"), Builder: "local"}}
@@ -679,7 +679,7 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("plugin smoke wrote the home: %+v", h)
 			}
 		})
-		t.Run("operations.O24 plugin enable and disable write nothing while the profile does not compose", func(t *testing.T) {
+		rec.Run(t, "operations.O24 plugin enable and disable write nothing while the profile does not compose", func(t *testing.T) {
 			dev := Rendered["dev"]
 			dev.Diagnostics = append(slices.Clone(dev.Diagnostics), launch.Diagnostic{Check: "compose", File: "profiles/dev/aiops.patch.yml", Line: 2, Text: "acme/gone is no plugin"})
 			u := use(t, mount, Setup{Rendered: map[string]launch.Rendered{"dev": dev}})
@@ -690,7 +690,7 @@ func Run(t *testing.T, mount Mount) {
 				}
 			}
 		})
-		t.Run("operations.O25 plugin remove refuses to take away every enabled provider of a bound or a required key", func(t *testing.T) {
+		rec.Run(t, "operations.O25 plugin remove refuses to take away every enabled provider of a bound or a required key", func(t *testing.T) {
 			bound, required := Rendered["dev"], Rendered["dev"] // the rows of the pack, none the last provider of a key alone
 			bound.Composition.Rows = append(slices.Clone(bound.Composition.Rows), launch.Row{ID: "connector-x:metrics", Plugin: "aiops/echoer", Origin: "acme/connector-x"})
 			bound.Keys = append(slices.Clone(bound.Keys), launch.KeyProviders{Name: "toy.sink", Provider: "bound", Consumer: "open", Rows: []string{Row, "connector-x:metrics"}})
@@ -709,8 +709,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("operations.G1 a write after an interrupted one restores first", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "operations.G1 a write after an interrupted one restores first", func(t *testing.T) {
 			u := use(t, mount, Setup{Interrupted: true})
 			if h := u.home(); !h.Snapshot || len(h.Signers) != 1 || !slices.Equal(h.Signers[0].IDs, []string{"left/*"}) {
 				t.Fatalf("the interrupted home reads %+v; want its snapshot and the signer it left", h)
@@ -724,7 +724,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.G1b profile init after an interrupted write restores first", func(t *testing.T) {
+		rec.Run(t, "operations.G1b profile init after an interrupted write restores first", func(t *testing.T) {
 			u := use(t, mount, Setup{Interrupted: true})
 			ch := u.profile(u.ops.InitProfile, "cli")
 			if !hasNote(ch, "restored") {
@@ -735,7 +735,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.G2 a second writer fails after its bound, naming the holder", func(t *testing.T) {
+		rec.Run(t, "operations.G2 a second writer fails after its bound, naming the holder", func(t *testing.T) {
 			const holder = "a holder of the suite"
 			u := use(t, mount, Setup{Held: holder, LockWait: 50 * time.Millisecond})
 			before := u.home() // a read takes no lock
@@ -748,7 +748,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.G3 concurrent writers lose nothing", func(t *testing.T) {
+		rec.Run(t, "operations.G3 concurrent writers lose nothing", func(t *testing.T) {
 			u := use(t, mount, Setup{LockWait: time.Minute})
 			keys := []string{u.key("a"), u.key("b"), u.key("c"), u.key("d")}
 			var wg sync.WaitGroup
@@ -767,7 +767,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.G4 after release every method fails with ErrInactive", func(t *testing.T) {
+		rec.Run(t, "operations.G4 after release every method fails with ErrInactive", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			a := u.key("a")
 			deftest.Dispose(t, u.s.Root, u.s.Provider)
@@ -806,7 +806,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("operations.G5 no side door", func(t *testing.T) {
+		rec.Run(t, "operations.G5 no side door", func(t *testing.T) {
 			u := use(t, mount, Setup{})
 			if doors := deftest.SideDoors[operations.Operations](u.ops); len(doors) > 0 {
 				t.Errorf("the provided value has methods outside operations.Operations: %v", doors)

@@ -331,7 +331,8 @@ func own(ctx context.Context, dir string) (launch.SuiteReport, error) {
 // through the toolchain in the author's module: a test written into a go build overlay,
 // never onto disk, mounts the plugin's value as a contribution, or with the mount that
 // the plugin's tests declare (mountOf). The halves are those that the suite records it
-// ran (builder.RecordVar), and each failed obligation is its id.
+// ran (builder.RecordVar), each failed obligation is its id, and so is each case that
+// skipped, which leaves the suite unrecorded.
 func conformance(ctx context.Context, dir, name, version string) (launch.SuiteResult, error) {
 	major, _, _ := strings.Cut(version, ".")
 	def := modPath + "/sdk/def/" + name + "/v" + major
@@ -386,13 +387,15 @@ func conformance(ctx context.Context, dir, name, version string) (launch.SuiteRe
 		switch {
 		case isSub && e.Action == "fail":
 			r.Failed = append(r.Failed, name+"/"+sub)
+		case isSub && e.Action == "skip": // a case that did not run, and the suite records no half (deftest.Ran)
+			r.Skipped = append(r.Skipped, name+"/"+sub)
 		case e.Test == "TestAiopsctl" && e.Action == "run":
 			ran = true
 		case e.Action == "output":
 			out = append(out, strings.TrimSpace(e.Output))
 		}
 	}
-	if !ran || len(r.Failed) == 0 && len(r.Halves) == 0 {
+	if !ran || len(r.Failed)+len(r.Halves)+len(r.Skipped) == 0 {
 		return launch.SuiteResult{}, fmt.Errorf("the suite of %s did not run on %s: %s", name, pkg.ImportPath, strings.Join(out, "; "))
 	}
 	return r, nil

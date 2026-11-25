@@ -34,9 +34,9 @@ var op = reload.Op{Source: "conformance"}
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "reload", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("reload.O1 ids count from one", func(t *testing.T) {
+	rec := deftest.Ran(t, "reload", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "reload.O1 ids count from one", func(t *testing.T) {
 			u := use(t, mount)
 			for want := reload.ID(1); want <= 3; want++ {
 				if id := u.submit(); id != want {
@@ -45,7 +45,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("reload.O2 result and await answer for a submitted operation", func(t *testing.T) {
+		rec.Run(t, "reload.O2 result and await answer for a submitted operation", func(t *testing.T) {
 			u := use(t, mount)
 			id := u.submit()
 			if r, ok := u.rl.Result(id); !ok || r.ID != id || r.Op != op {
@@ -60,7 +60,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("reload.O3 an unknown operation", func(t *testing.T) {
+		rec.Run(t, "reload.O3 an unknown operation", func(t *testing.T) {
 			u := use(t, mount)
 			if r, ok := u.rl.Result(99); ok {
 				t.Errorf("Result of an id never issued = %+v, true", r)
@@ -70,7 +70,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("reload.O4 a final result crosses the wire unchanged", func(t *testing.T) {
+		rec.Run(t, "reload.O4 a final result crosses the wire unchanged", func(t *testing.T) {
 			u := use(t, mount)
 			r, err := u.rl.Await(t.Context(), u.submit())
 			if err != nil {
@@ -87,8 +87,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("reload.G1 after release the key and Submit fail with ErrInactive", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "reload.G1 after release the key and Submit fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
 			id := u.submit()
 			if _, err := u.rl.Await(t.Context(), id); err != nil {
@@ -106,7 +106,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("reload.G2 no side door", func(t *testing.T) {
+		rec.Run(t, "reload.G2 no side door", func(t *testing.T) {
 			if doors := deftest.SideDoors[reload.Reload](use(t, mount).rl); len(doors) > 0 {
 				t.Errorf("the provided value has methods outside reload.Reload: %v", doors)
 			}

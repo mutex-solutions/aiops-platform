@@ -71,9 +71,9 @@ var errDecode = errors.New("conformance: decode refused")
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "configrefs", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("configrefs.O1 a tree whose references resolve passes", func(t *testing.T) {
+	rec := deftest.Ran(t, "configrefs", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "configrefs.O1 a tree whose references resolve passes", func(t *testing.T) {
 			dr := use(t, mount).dr
 			for _, tree := range resolving() {
 				if err := dr.Check(t.Context(), tree, nil); err != nil {
@@ -82,7 +82,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("configrefs.O2 decode gets the resolved tree and its error is the result", func(t *testing.T) {
+		rec.Run(t, "configrefs.O2 decode gets the resolved tree and its error is the result", func(t *testing.T) {
 			dr := use(t, mount).dr
 			for i, tree := range resolving() {
 				var got any
@@ -99,7 +99,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("configrefs.O3 a reference that does not resolve fails with ErrUnresolved", func(t *testing.T) {
+		rec.Run(t, "configrefs.O3 a reference that does not resolve fails with ErrUnresolved", func(t *testing.T) {
 			dr := use(t, mount).dr
 			for _, tree := range failing() {
 				called := false
@@ -114,8 +114,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("configrefs.G1 after release the key and Check fail with ErrInactive", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "configrefs.G1 after release the key and Check fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
 			deftest.Dispose(t, u.root, u.provider)
 			if err := deftest.ReadError(func() { configrefs.Key.Of(u.c) }); !errors.Is(err, kernel.ErrInactive) {
@@ -126,7 +126,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("configrefs.G2 no side door", func(t *testing.T) {
+		rec.Run(t, "configrefs.G2 no side door", func(t *testing.T) {
 			if doors := deftest.SideDoors[configrefs.DryRun](use(t, mount).dr); len(doors) > 0 {
 				t.Errorf("the provided value has methods outside configrefs.DryRun: %v", doors)
 			}

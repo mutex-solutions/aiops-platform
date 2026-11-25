@@ -78,16 +78,16 @@ var keys = []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.C
 
 // Run runs the suite, each case on a launcher of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "launch", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("launch.O1 profileContext names the process", func(t *testing.T) {
+	rec := deftest.Ran(t, "launch", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "launch.O1 profileContext names the process", func(t *testing.T) {
 			u := use(t, mount)
 			if p, r := u.pc.Profile(), u.pc.Role(); p != u.s.Profile || r != u.s.Role {
 				t.Errorf("Profile, Role = %q, %q; want %q, %q", p, r, u.s.Profile, u.s.Role)
 			}
 		})
 
-		t.Run("launch.O2 a composed candidate is admitted, planned and committed", func(t *testing.T) {
+		rec.Run(t, "launch.O2 a composed candidate is admitted, planned and committed", func(t *testing.T) {
 			pc, ctx := use(t, mount).pc, t.Context()
 			c, err := pc.Compose(ctx)
 			if err != nil {
@@ -111,7 +111,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O3 the catalog lists its entries and the keys they name", func(t *testing.T) {
+		rec.Run(t, "launch.O3 the catalog lists its entries and the keys they name", func(t *testing.T) {
 			u := use(t, mount)
 			es := u.cat.Entries()
 			if !slices.IsSortedFunc(es, func(a, b launch.CatalogEntry) int { return strings.Compare(a.ID, b.ID) }) {
@@ -143,7 +143,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O4 cmdline serves argv, flags and only prefixed environment names", func(t *testing.T) {
+		rec.Run(t, "launch.O4 cmdline serves argv, flags and only prefixed environment names", func(t *testing.T) {
 			u := use(t, mount)
 			args := u.cl.Args()
 			if !slices.Equal(args, u.s.Args) {
@@ -171,7 +171,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O5 the ready latch follows Set and Drop", func(t *testing.T) {
+		rec.Run(t, "launch.O5 the ready latch follows Set and Drop", func(t *testing.T) {
 			rd := use(t, mount).rd
 			for _, step := range []struct {
 				do   func()
@@ -184,7 +184,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O6 the kill switches are the setup's", func(t *testing.T) {
+		rec.Run(t, "launch.O6 the kill switches are the setup's", func(t *testing.T) {
 			ks := use(t, mount).ks
 			for name, want := range map[string]bool{launch.AgentsPaused: true, launch.TelemetryDisabled: false, "conformance-none": false} {
 				if got := ks.On(name); got != want {
@@ -193,14 +193,14 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O7 an exit request returns at once", func(t *testing.T) {
+		rec.Run(t, "launch.O7 an exit request returns at once", func(t *testing.T) {
 			ex := use(t, mount).ex
 			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitGaveUp, Detail: "conformance"})
 			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitDisposeLeak, Detail: "conformance"})
 			ex.RequestExit(launch.ExitRequest{Reason: launch.ExitCommand, Detail: "conformance", Code: 1})
 		})
 
-		t.Run("launch.O8 cmdline serves the streams, the working directory and the environment", func(t *testing.T) {
+		rec.Run(t, "launch.O8 cmdline serves the streams, the working directory and the environment", func(t *testing.T) {
 			u := use(t, mount)
 			if r := u.cl.Stdin(); r == nil {
 				t.Error("Stdin = nil")
@@ -236,7 +236,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O10 the parts of Tools answer ErrNotCarried where the launcher carries none", func(t *testing.T) {
+		rec.Run(t, "launch.O10 the parts of Tools answer ErrNotCarried where the launcher carries none", func(t *testing.T) {
 			tb, ctx := toolbox(t, use(t, mount).pc), t.Context()
 			_, errBuild := tb.Build(ctx, launch.BuildRequest{})
 			_, errGenerate := tb.Generate(ctx, launch.GenerateRequest{})
@@ -252,7 +252,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.O9 Booted is closed once the launcher has booted", func(t *testing.T) {
+		rec.Run(t, "launch.O9 Booted is closed once the launcher has booted", func(t *testing.T) {
 			rd := use(t, mount).rd
 			select {
 			case <-rd.Booted():
@@ -262,8 +262,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("launch.G1 a composition the launcher did not compose is refused", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "launch.G1 a composition the launcher did not compose is refused", func(t *testing.T) {
 			pc := use(t, mount).pc
 			before := pc.Committed().Digest
 			foreign := launch.Composition{Rows: []launch.Row{{ID: "foreign", Plugin: "conformance/none", Enabled: true}}, Digest: launch.Digest{0xc0, 0xff, 0xee}}
@@ -278,7 +278,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.G2 after release the keys fail with ErrInactive", func(t *testing.T) {
+		rec.Run(t, "launch.G2 after release the keys fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
 			ctx := t.Context()
 			c, err := u.pc.Compose(ctx)
@@ -310,7 +310,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("launch.G3 no side door", func(t *testing.T) {
+		rec.Run(t, "launch.G3 no side door", func(t *testing.T) {
 			u := use(t, mount)
 			for name, doors := range map[string][]string{
 				"profileContext": deftest.SideDoors[launch.ProfileContext](u.pc),

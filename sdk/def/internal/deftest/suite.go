@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -22,19 +23,21 @@ import (
 const RecordVar = "AIOPS_SUITE_RECORD"
 
 // Ran records, when RecordVar names a directory, that the suite of definition ran the
-// halves on t: once t and its subtests end with no skip, a file of that directory holds
-// a JSON list of the working directory of the test binary, which go test sets to the
-// directory of the package under test, the definition and the halves. A suite that
-// failed ran too, so step 5 names the half that failed; its failed test fails go test,
-// and nothing attests it.
-func Ran(t *testing.T, definition string, halves ...string) {
+// halves on t: once t ends with no skip, and no case that the suite runs through the
+// Record it returns skipped, a file of that directory holds a JSON list of the working
+// directory of the test binary, which go test sets to the directory of the package
+// under test, the definition and the halves. A suite that failed ran too, so step 5
+// names the half that failed; its failed test fails go test, and nothing attests it.
+// A suite with a case that skipped did not run all of it, and nothing records it.
+func Ran(t *testing.T, definition string, halves ...string) *Record {
+	r := &Record{}
 	dir := os.Getenv(RecordVar)
 	if dir == "" {
-		return
+		return r
 	}
 	t.Cleanup(func() {
 		wd, err := os.Getwd()
-		if t.Skipped() || err != nil {
+		if t.Skipped() || r.void.Load() || err != nil {
 			return
 		}
 		f, err := os.CreateTemp(dir, "ran-*.json")
@@ -45,6 +48,23 @@ func Ran(t *testing.T, definition string, halves ...string) {
 		if err != nil {
 			t.Errorf("the record of the suite of %s: %v", definition, err)
 		}
+	})
+	return r
+}
+
+// Record is a suite that Ran records: void once a case of it skipped.
+type Record struct{ void atomic.Bool }
+
+// Run runs the case name of the suite as a subtest of t, as t.Run does, and voids the
+// record when the case skipped.
+func (r *Record) Run(t *testing.T, name string, f func(t *testing.T)) bool {
+	return t.Run(name, func(t *testing.T) {
+		t.Cleanup(func() {
+			if t.Skipped() {
+				r.void.Store(true)
+			}
+		})
+		f(t)
 	})
 }
 

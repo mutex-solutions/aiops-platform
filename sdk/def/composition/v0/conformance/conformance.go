@@ -83,9 +83,9 @@ var want = []row{
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "composition", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("composition.O1 committed lists the rows in order, ACTIVE, with their hooks", func(t *testing.T) {
+	rec := deftest.Ran(t, "composition", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "composition.O1 committed lists the rows in order, ACTIVE, with their hooks", func(t *testing.T) {
 			rd := use(t, mount).rd
 			g, ok := rd.Committed(composition.ScopeProcess)
 			if !ok || g.Scope != composition.ScopeProcess {
@@ -99,14 +99,14 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("composition.O2 declaring lists the rows that declare the hook", func(t *testing.T) {
+		rec.Run(t, "composition.O2 declaring lists the rows that declare the hook", func(t *testing.T) {
 			rd := use(t, mount).rd
 			same(t, "Declaring(first)", rd.Declaring(composition.ScopeProcess, first.Name()), []row{want[0], want[2]})
 			same(t, "Declaring(second)", rd.Declaring(composition.ScopeProcess, second.Name()), want[2:])
 			same(t, "Declaring of a hook no row declares", rd.Declaring(composition.ScopeProcess, "conformance/none"), nil)
 		})
 
-		t.Run("composition.O3 the tenant scope has no generation", func(t *testing.T) {
+		rec.Run(t, "composition.O3 the tenant scope has no generation", func(t *testing.T) {
 			rd := use(t, mount).rd
 			if g, ok := rd.Committed(composition.ScopeTenant); ok {
 				t.Errorf("Committed(tenant) = %+v, true", g)
@@ -114,7 +114,7 @@ func Run(t *testing.T, mount Mount) {
 			same(t, "Declaring in the tenant scope", rd.Declaring(composition.ScopeTenant, first.Name()), nil)
 		})
 
-		t.Run("composition.O4 what it returns is a copy the caller may keep", func(t *testing.T) {
+		rec.Run(t, "composition.O4 what it returns is a copy the caller may keep", func(t *testing.T) {
 			rd := use(t, mount).rd
 			g, _ := rd.Committed(composition.ScopeProcess)
 			d := rd.Declaring(composition.ScopeProcess, second.Name())
@@ -132,8 +132,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("composition.G1 after release the key fails with ErrInactive", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "composition.G1 after release the key fails with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
 			deftest.Dispose(t, u.root, u.provider)
 			if err := deftest.ReadError(func() { composition.Key.Of(u.c) }); !errors.Is(err, kernel.ErrInactive) {
@@ -141,7 +141,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("composition.G2 no side door", func(t *testing.T) {
+		rec.Run(t, "composition.G2 no side door", func(t *testing.T) {
 			if doors := deftest.SideDoors[composition.Reader](use(t, mount).rd); len(doors) > 0 {
 				t.Errorf("the provided value has methods outside composition.Reader: %v", doors)
 			}

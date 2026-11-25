@@ -28,16 +28,16 @@ type Mount func(t *testing.T) (*kernel.Root, *kernel.Fiber)
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
-	deftest.Ran(t, "clock", "obligations", "guard")
-	t.Run("obligations", func(t *testing.T) {
-		t.Run("clock.O1 now does not go back", func(t *testing.T) {
+	rec := deftest.Ran(t, "clock", "obligations", "guard")
+	rec.Run(t, "obligations", func(t *testing.T) {
+		rec.Run(t, "clock.O1 now does not go back", func(t *testing.T) {
 			u := use(t, mount)
 			if a, b := u.clk.Now(), u.clk.Now(); a.IsZero() || b.Before(a) {
 				t.Errorf("Now = %v, then %v", a, b)
 			}
 		})
 
-		t.Run("clock.O2 a timer of zero or less fires at once", func(t *testing.T) {
+		rec.Run(t, "clock.O2 a timer of zero or less fires at once", func(t *testing.T) {
 			u := use(t, mount)
 			for _, d := range []time.Duration{0, -time.Second} {
 				start := u.clk.Now()
@@ -56,7 +56,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("clock.O3 stop cancels a pending timer once", func(t *testing.T) {
+		rec.Run(t, "clock.O3 stop cancels a pending timer once", func(t *testing.T) {
 			u := use(t, mount)
 			tm := u.after(time.Hour)
 			if !tm.Stop() {
@@ -72,7 +72,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("clock.O4 the ledger holds the pending timers only", func(t *testing.T) {
+		rec.Run(t, "clock.O4 the ledger holds the pending timers only", func(t *testing.T) {
 			u := use(t, mount)
 			tm := u.after(time.Hour)
 			u.effects(1)
@@ -83,8 +83,8 @@ func Run(t *testing.T, mount Mount) {
 		})
 	})
 
-	t.Run("guard", func(t *testing.T) {
-		t.Run("clock.G1 a timer leaves with its fiber", func(t *testing.T) {
+	rec.Run(t, "guard", func(t *testing.T) {
+		rec.Run(t, "clock.G1 a timer leaves with its fiber", func(t *testing.T) {
 			u := use(t, mount)
 			tm := u.after(time.Hour)
 			u.effects(1) // the stop is recorded on the fiber's lane before the dispose
@@ -94,7 +94,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("clock.G2 after release the key and After fail with ErrInactive", func(t *testing.T) {
+		rec.Run(t, "clock.G2 after release the key and After fail with ErrInactive", func(t *testing.T) {
 			u := use(t, mount)
 			live, lc := hold(t, u.root)
 			deftest.Dispose(t, u.root, u.provider)
@@ -112,7 +112,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		t.Run("clock.G3 no side door", func(t *testing.T) {
+		rec.Run(t, "clock.G3 no side door", func(t *testing.T) {
 			u := use(t, mount)
 			if doors := deftest.SideDoors[clock.Clock](u.clk); len(doors) > 0 {
 				t.Errorf("the provided value has methods outside clock.Clock: %v", doors)

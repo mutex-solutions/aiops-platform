@@ -87,8 +87,8 @@ func Run(t *testing.T, mount Mount) {
 	if !s.guard {
 		cases = obligations
 	}
-	deftest.Ran(t, "commands", deftest.Half(s.guard))
-	run(t, mount, s, root, cases)
+	rec := deftest.Ran(t, "commands", deftest.Half(s.guard))
+	run(t, rec, mount, s, root, cases)
 }
 
 // Paths runs the obligation commands/paths alone, on a command row whose commands are
@@ -97,7 +97,7 @@ func Run(t *testing.T, mount Mount) {
 func Paths(t *testing.T, mount Mount) {
 	t.Helper()
 	s, root := mount(t)
-	run(t, mount, s, root, obligations[:1])
+	run(t, new(deftest.Record), mount, s, root, obligations[:1])
 }
 
 // Help holds the help of each command of a command row, aiopsctl help <path>, to the
@@ -130,10 +130,10 @@ func Help(t *testing.T, mount Mount, update bool) {
 	}
 }
 
-func run(t *testing.T, mount Mount, s Subject, root *kernel.Root, cases []check) {
+func run(t *testing.T, rec *deftest.Record, mount Mount, s Subject, root *kernel.Root, cases []check) {
 	t.Helper()
 	for i, c := range cases {
-		t.Run(strings.TrimPrefix(c.id, "commands/"), func(t *testing.T) {
+		rec.Run(t, strings.TrimPrefix(c.id, "commands/"), func(t *testing.T) {
 			if i > 0 {
 				s, root = mount(t)
 			}
