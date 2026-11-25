@@ -145,8 +145,8 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	_, printed, err := build(t.TempDir(), bump)
 	allow = nil
 	for _, want := range []string{"bump: golang.org/x/mod, pinned by the release at v0.42.0, is v0.42.1 in this build, required by ", "example.com/acme/bump@v0.1.0",
-		"suites: go test example.com/acme/bump/...", "suites: go test github.com/mutex-solutions/aiops-platform/loader github.com/mutex-solutions/aiops-platform/plugins/",
-		"aiops-platform/plugins/clock ", "aiops-platform/plugins/operations ", "on the raised build list (ADR-044 decision 10)"} {
+		"suites: go test example.com/acme/bump/...", "suites: go test github.com/mutex-solutions/aiops-platform/loader ",
+		"aiops-platform/plugins/clock ", "aiops-platform/plugins/operations ", ", on the raised build list (ADR-044 decision 10)"} {
 		if err != nil || !strings.Contains(printed, want) {
 			t.Errorf("a raise with --allow-bump: %v, the progress lacks %q:\n%s", err, want, printed)
 		}
