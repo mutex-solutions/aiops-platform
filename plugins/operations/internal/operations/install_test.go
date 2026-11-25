@@ -232,6 +232,51 @@ func TestRemoveDropsTheEnabledOfItsRows(t *testing.T) {
 	}
 }
 
+// enableBox renders a profile as composing the row echo, and as not composing once the
+// profile layer it reads enables echo; it records each home it read that layer in.
+type enableBox struct {
+	installBox
+	refusedIn []string
+}
+
+func (b *enableBox) Render(_ context.Context, q launch.RenderRequest) (launch.Rendered, error) {
+	layer, _ := os.ReadFile(filepath.Join(q.Home, "profiles", q.Profile, "aiops.patch.yml"))
+	if strings.Contains(string(layer), "enabled: true") {
+		b.refusedIn = append(b.refusedIn, q.Home)
+		return launch.Rendered{Diagnostics: []launch.Diagnostic{{Check: "compose", Text: "echo needs a key that no row provides"}}}, nil
+	}
+	return launch.Rendered{Composition: launch.Composition{Rows: []launch.Row{{ID: "echo", Plugin: "acme/echo"}}}}, nil
+}
+
+// Enable and Disable render the changed profile before they rename anything, so a
+// change that boot would refuse is never in the home, not even until a restore, and
+// writes nothing; one that boot admits is kept (ADR-061 decision 17). The view they
+// render is gone when they return.
+func TestEnableWritesNothingThatBootRefuses(t *testing.T) {
+	box := &enableBox{installBox: installBox{&packBox{sum: packSummary()}}}
+	l := Library{Box: box, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/dev/profile.yaml", "bundles: [aiops-core]\n")
+	before := tree(t, h)
+	if _, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "echo"}); !errors.Is(err, def.ErrRefused) || !reflect.DeepEqual(tree(t, h), before) {
+		t.Errorf("an enable that boot refuses: %v; want ErrRefused and nothing written", err)
+	}
+	if len(box.refusedIn) == 0 || slices.Contains(box.refusedIn, h.Dir) {
+		t.Errorf("the changed profile was rendered in %q: want a view outside the home %s, never the home", box.refusedIn, h.Dir)
+	}
+	for _, dir := range box.refusedIn {
+		if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("the view %s is left behind: %v", dir, err)
+		}
+	}
+	if _, err := l.Disable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "echo"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tree(t, h)["profiles/dev/aiops.patch.yml"]; !strings.Contains(got, "{id: echo, enabled: false}") {
+		t.Errorf("the profile layer after a disable that boot admits: %q", got)
+	}
+}
+
 // One digest of a plugin id per site (ADR-047 decisions 7 and 16): an install of an id
 // that another profile names at another digest, by its lock entry or, as in-process
 // code does, by the kept files alone, refuses, names that digest and those profiles,
