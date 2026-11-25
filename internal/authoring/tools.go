@@ -10,15 +10,17 @@
 // attestation names the suites that plugin check ran and not those an author's test
 // happens to call (07-c4-plugin-sdk.md:1512). The suites and the scenario of a pack run
 // from the test binaries that the release build compiles with the first-party plugins
-// they run on and embeds under suites/, each a child process with the pack as input
-// (ADR-060 decision 46); a binary built without them answers launch.ErrNotCarried.
+// they run on, which the release aiopsctl embeds under suites/ and hands in as
+// Tools.Suites, each a child process with the pack as input (ADR-060 decision 46;
+// internal/packsuite); a binary built without them, as every aiopsctl built in the
+// repository, answers launch.ErrNotCarried.
 package authoring
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	"embed"
+	_ "embed" // spdx.txt
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,17 +51,11 @@ const SPDXVersion = "3.29.0"
 //go:embed spdx.txt
 var spdxList string
 
-// suites holds the suite and scenario binaries that the release build embeds:
-// suites/<definition>.test and suites/scenario-<name>.test.
-//
-//go:embed suites
-var suites embed.FS
-
 // Tools are the parts of the toolbox that aiopsctl links.
 type Tools struct {
 	launch.NoTools
 	SDK      string    // the version of the SDK modules that a template requires
-	Suites   fs.FS     // the embedded binaries, under suites/; nil for none
+	Suites   fs.FS     // the embedded binaries, suites/<definition>.test and suites/scenario-<name>.test; nil for none
 	Signed   []byte    // the signed manifest this binary embeds, the release dist build builds on
 	Progress io.Writer // where dist build prints, stderr in aiopsctl; nil drops it
 }
@@ -94,10 +90,10 @@ func (t Tools) Build(ctx context.Context, q launch.BuildRequest) (launch.Built, 
 	return launch.Built{Image: r.Image, Manifest: r.Manifest, Aiopsctl: r.Aiopsctl}, err
 }
 
-// New returns the Tools of this binary: the SDK version it was built with and the
-// binaries it embeds.
+// New returns the Tools of this binary: the SDK version it was built with, and no
+// suite binary, which the launcher of a release's aiopsctl hands in.
 func New() Tools {
-	t := Tools{SDK: "v0.0.0", Suites: suites}
+	t := Tools{SDK: "v0.0.0"}
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		for _, d := range bi.Deps {
 			if d.Path == modPath+"/sdk" {

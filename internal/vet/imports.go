@@ -38,11 +38,12 @@ const (
 )
 
 // toolbox are the packages that aiopsctl alone links and hands to boot (ADR-061
-// decision 21): plugingen, the import analyzer and plugin vet, the suites and the
-// templates, the builder, and the launcher of aiopsctl; builderLibs are the modules
+// decision 21): plugingen, the import analyzer and plugin vet, the suites, the runner
+// of the suite binaries it embeds (ADR-060 decision 46) and the templates, the
+// builder, and the launcher of aiopsctl; builderLibs are the modules
 // that only the builder links (ADR-044, Consequences).
 var (
-	toolbox     = []string{"internal/plugingen", "internal/vet", "internal/authoring", "templates", "internal/builder", "internal/aiopsctl"}
+	toolbox     = []string{"internal/plugingen", "internal/vet", "internal/authoring", "internal/packsuite", "templates", "internal/builder", "internal/aiopsctl"}
 	builderLibs = []string{"golang.org/x/tools", "github.com/google/licenseclassifier/v2", "github.com/sergi/go-diff", "github.com/davecgh/go-spew"}
 )
 

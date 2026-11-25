@@ -70,16 +70,17 @@ type Package struct {
 }
 
 // Graph returns the package graph of the main package main, go list -deps of it with
-// the build flags of every binary (plugingen.BuildFlags), the standard library with
-// the toolchain module at the GOROOT of g. It refuses a graph that links
-// golang.org/x/net/trace, whose init serves two handlers on http.DefaultServeMux, so no
-// manifest records a build without the tag grpcnotrace (ADR-020 decision 27).
-func Graph(ctx context.Context, g Go, main string) ([]Package, error) {
+// the build flags of every binary (plugingen.BuildFlags) and flags, -test for a test
+// binary, the standard library with the toolchain module at the GOROOT of g. It refuses
+// a graph that links golang.org/x/net/trace, whose init serves two handlers on
+// http.DefaultServeMux, so no manifest records a build without the tag grpcnotrace
+// (ADR-020 decision 27).
+func Graph(ctx context.Context, g Go, main string, flags ...string) ([]Package, error) {
 	root, err := g.Run(ctx, "env", "GOROOT")
 	if err != nil {
 		return nil, err
 	}
-	out, err := g.Run(ctx, slices.Concat([]string{"list", "-deps", "-json"}, plugingen.BuildFlags, []string{main})...)
+	out, err := g.Run(ctx, slices.Concat([]string{"list", "-deps", "-json"}, plugingen.BuildFlags, flags, []string{main})...)
 	if err != nil {
 		return nil, err
 	}

@@ -458,7 +458,7 @@ func (c *checkRun) runScenario() ([]launch.Diagnostic, error) {
 }
 
 // notCarried says why a suite did not run.
-const notCarried = "the suite binaries of internal/authoring/suites are not built into this binary (ADR-060 decision 46)"
+const notCarried = "the suite binaries are not built into this aiopsctl; the release build compiles them into the release aiopsctl (ADR-060 decision 46)"
 
 // attested runs what the attestation records, as plugin check runs them, for plugin
 // pack and plugin verify: for code step 4, whose tests that did not run it names, then

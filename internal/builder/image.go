@@ -319,9 +319,13 @@ func builderImage(ctx context.Context, s *oci.Store, def []byte, goroot, ctl str
 	if err == nil {
 		cs, err = treeComponents(goroot, files)
 	}
+	bins := []component{{name: "aiopsctl"}} // and the test binaries it embeds, whose graphs pkgs holds
+	for _, s := range SuiteBinaries() {
+		bins = append(bins, component{name: "aiopsctl/suites/" + s + ".test"})
+	}
 	var sbom []byte
 	if err == nil {
-		sbom, err = spdxOf("builder", slices.Concat(cs, []component{{name: "aiopsctl"}}, components(pkgs, l)), created)
+		sbom, err = spdxOf("builder", slices.Concat(cs, bins, components(pkgs, l)), created)
 	}
 	root, y := "cache/aiopsctl/toolchain/"+ToolchainVersion, layer{}
 	if err == nil {

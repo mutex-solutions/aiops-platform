@@ -52,7 +52,9 @@ type Process struct {
 
 // Distribution is what the binary links: the module table, the signed distribution
 // manifest it embeds, the release key of a release binary, the limits, the shipped
-// bundles and profiles, and the tools of the toolbox, nil for this binary's.
+// bundles and profiles, the tools of the toolbox, nil for this binary's, and the suite
+// binaries under suites/ that a release's aiopsctl embeds, nil for none (ADR-060
+// decision 46).
 type Distribution struct {
 	Registry boot.Registry
 	Signed   []byte
@@ -60,6 +62,7 @@ type Distribution struct {
 	Limits   boot.Limits
 	Shipped  fs.FS
 	Tools    launch.Tools
+	Suites   fs.FS
 }
 
 // Run boots the cli profile in Command mode and returns the exit code of aiopsctl.
@@ -98,7 +101,7 @@ func Run(ctx context.Context, args []string, p Process, d Distribution) int {
 	}
 	if o.Tools == nil {
 		t := authoring.New()
-		t.Signed, t.Progress = d.Signed, p.Err // the release that dist build builds on, and where it prints
+		t.Signed, t.Progress, t.Suites = d.Signed, p.Err, d.Suites // the release that dist build builds on, where it prints
 		o.Tools = t
 	}
 	o.BuildInfo, _ = debug.ReadBuildInfo()

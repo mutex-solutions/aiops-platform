@@ -102,6 +102,7 @@ entries:
       - {dir: internal/vet, decision: "ADR-060 decision 23: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share"}
       - {dir: plugins/operations, decision: ADR-060 decision 41}
       - {dir: internal/builder, decision: "ADR-060 decision 41: the builder reads the site's dist.yaml and writes the signed distribution manifest"}
+      - {dir: internal/packsuite, decision: "ADR-060 decision 46: the suite binaries that aiopsctl embeds read the rows of a pack's bundle.yaml"}
     default: true
 
   - id: river

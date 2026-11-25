@@ -26,6 +26,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -268,7 +269,7 @@ func (b *build) module(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	for _, d := range []string{"home", "tmp", "site/manifests", "cmd/aiops", "cmd/aiopsctl"} {
+	for _, d := range []string{"home", "tmp", "site/manifests", "cmd/aiops", "cmd/aiopsctl/suites"} {
 		if err := os.MkdirAll(filepath.Join(b.scratch, d), 0o755); err != nil {
 			return err
 		}
@@ -306,12 +307,21 @@ func (b *build) module(ctx context.Context) error {
 	}
 	files := map[string][]byte{"go.mod": gomod, "go.sum": sum.Bytes(), "site/distribution.yaml": nil, "LICENSE": apache(),
 		"site/release.pub": key, "site/distribution.bundle": bundle,
-		"site/site.go": siteGo(b.plugins, b.keyID), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain)}
+		"site/site.go": siteGo(b.plugins, b.keyID), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain),
+		"cmd/aiopsctl/suites/README": suitesReadme}
 	for i, p := range b.plugins {
 		files[fmt.Sprintf("site/manifests/%d.yaml", i)] = p.manifest
 	}
+	if b.release == nil { // a release's aiopsctl embeds the suite binaries (ADR-060 decision 46)
+		suites, err := b.suites()
+		if err != nil {
+			return err
+		}
+		maps.Copy(files, suites)
+	}
 	for name, data := range files {
-		if err := os.WriteFile(filepath.Join(b.scratch, name), data, 0o644); err != nil {
+		p := filepath.Join(b.scratch, filepath.FromSlash(name))
+		if err := errors.Join(os.MkdirAll(filepath.Dir(p), 0o755), os.WriteFile(p, data, 0o644)); err != nil {
 			return err
 		}
 	}
@@ -356,17 +366,26 @@ func (b *build) plugin(p module.Version) error {
 	if err := errors.Join(b.record(p.Path+" "+p.Version, got, "dist.yaml"), b.goSum(p)); err != nil {
 		return err
 	}
+	ps, err := tablePackages(file, p.Path, p.Version)
+	b.plugins = append(b.plugins, ps...)
+	return err
+}
+
+// tablePackages returns each package of the module zip file of path at version that holds a
+// plugin.yaml outside testdata/, with its accessor and its manifest.
+func tablePackages(file, path, version string) ([]tablePlugin, error) {
 	z, err := zip.OpenReader(file)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer z.Close()
-	prefix := p.Path + "@" + p.Version + "/"
+	prefix := path + "@" + version + "/"
 	dirs := map[string][]*zip.File{}
 	for _, f := range z.File {
 		rel := strings.TrimPrefix(f.Name, prefix)
 		dirs[filepath.ToSlash(filepath.Dir(rel))] = append(dirs[filepath.ToSlash(filepath.Dir(rel))], f)
 	}
+	var out []tablePlugin
 	for _, dir := range sortedKeys(dirs) {
 		var manifest []byte
 		accessor := ""
@@ -374,7 +393,7 @@ func (b *build) plugin(p module.Version) error {
 			name := filepath.Base(f.Name)
 			switch data, err := readZip(f); {
 			case err != nil:
-				return err
+				return nil, err
 			case name == "plugin.yaml":
 				manifest = data
 			case strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go"):
@@ -387,15 +406,15 @@ func (b *build) plugin(p module.Version) error {
 			continue
 		}
 		if accessor == "" {
-			return fmt.Errorf("%s/%s holds a plugin.yaml and declares neither var Plugin nor func New()", p.Path, dir)
+			return nil, fmt.Errorf("%s/%s holds a plugin.yaml and declares neither var Plugin nor func New()", path, dir)
 		}
-		pkg := p.Path
+		pkg := path
 		if dir != "." {
 			pkg += "/" + dir
 		}
-		b.plugins = append(b.plugins, tablePlugin{pkg: pkg, accessor: accessor, manifest: manifest})
+		out = append(out, tablePlugin{pkg: pkg, accessor: accessor, manifest: manifest})
 	}
-	return nil
+	return out, nil
 }
 
 // zip returns the file of the module zip of m in the module source.
@@ -570,8 +589,8 @@ func strict(release []boot.DistPin, list map[string]string, allow []string, grap
 
 // graph is Graph of main in the scratch module, the standard library at the sum of the
 // toolchain module, which the SBOM records.
-func (b *build) graph(ctx context.Context, main string) ([]Package, error) {
-	pkgs, err := Graph(ctx, b.g, main)
+func (b *build) graph(ctx context.Context, main string, flags ...string) ([]Package, error) {
+	pkgs, err := Graph(ctx, b.g, main, flags...)
 	for i := range pkgs {
 		if pkgs[i].Standard {
 			pkgs[i].Module.Sum = b.toolchainSum()
@@ -726,6 +745,13 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 	if _, err := g.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiops, "./cmd/aiops"); err != nil {
 		return res, err
 	}
+	var suites [][]Package // the graphs of the suite binaries that the release aiopsctl embeds
+	if b.release == nil {
+		var err error
+		if suites, err = b.compileSuites(ctx, ctlGo); err != nil {
+			return res, err
+		}
+	}
 	if _, err := ctlGo.Run(ctx, "build", "-trimpath", "-tags=grpcnotrace", "-o", res.Aiopsctl, "./cmd/aiopsctl"); err != nil {
 		return res, err
 	}
@@ -735,6 +761,7 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 		return res, err
 	}
 	ctl, err := b.graph(ctx, "./cmd/aiopsctl")
+	ctl = union(append([][]Package{ctl}, suites...)...) // each test binary it embeds is linked on its own (ADR-044 decision 5)
 	var cl Licences
 	if err == nil {
 		cl, err = ScanLicences(ctl)
