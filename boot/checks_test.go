@@ -718,7 +718,7 @@ func TestLicensed(t *testing.T) {
 }
 
 // An admitted row that uses a deprecated major gets a warning, never a denial
-// (08-profiles-roadmap-adrs.md:508; ADR-060 decision 9, owner answer of 2026-11-25): at
+// (08-profiles-roadmap-adrs.md:510; ADR-060 decision 9, owner answer of 2026-11-25): at
 // boot and profile render as a diagnostic, at the other entry points in the reason of
 // check 2's pass. A row that another check denies gets none.
 func TestGateWarnsOfADeprecatedMajor(t *testing.T) {

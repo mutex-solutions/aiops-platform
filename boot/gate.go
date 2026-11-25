@@ -186,7 +186,8 @@ type Slot struct {
 // check, which the launcher's copy disables, and those artifacts; Inactive lists the
 // optional rows whose plugin is not in the module table. Unevaluated lists the disabled
 // rows that no installed artifact's bundle inserted: they mount no code, and only check
-// 8, which runs on every row, evaluates them.
+// 8, which runs on every row, evaluates them. Warnings are those of the rows no check
+// denies: each use of a deprecated major (RuleDeprecated), which never denies.
 type GateResult struct {
 	Entry       Entry
 	Slots       []Slot
@@ -197,6 +198,7 @@ type GateResult struct {
 	Refused     bool
 	Detached    []string
 	Inactive    []string
+	Warnings    []RowResult
 }
 
 // Result returns the result of one check on one row: pass or fail with a
@@ -405,6 +407,11 @@ func GateWith(c Composition, in GateInput) GateResult {
 	res.Rows = append(slices.Concat(res.Rows, c.Clashes), slices.Collect(maps.Keys(c.Unread))...)
 	sort.Strings(res.Rows)
 	res.finish()
+	for _, w := range g.warns {
+		if _, denied := res.Denial(w.Row); !denied {
+			res.Warnings = append(res.Warnings, w)
+		}
+	}
 	return res
 }
 
@@ -457,6 +464,7 @@ type gate struct {
 	signed   map[string]bool     // the keys and hooks that served data puts in the signed class
 	faults   []binaryFault       // the denials of every row that the signed manifest decides (binaryFaults)
 	min      string              // the profile's minStability
+	warns    []RowResult         // each use of a deprecated major, kept for a row no check denies
 }
 
 // classesOf returns, by name, the provider-bound and the consumer-bound keys and the

@@ -85,6 +85,9 @@ const (
 	RuleAuthorAPI Rule = "author-api"
 	// RuleUnserved: gate check 2, a definition version of requires is not served.
 	RuleUnserved Rule = "unserved-definition"
+	// RuleDeprecated: a warning of gate check 2, never a denial: an admitted row uses a
+	// deprecated major (08-profiles-roadmap-adrs.md:510; ADR-060 decision 9).
+	RuleDeprecated Rule = "deprecated-major"
 	// RuleStability: gate check 4, a manifest below the profile's minStability.
 	RuleStability Rule = "stability"
 	// RuleModule: gate check 5, a Go module absent from a trusted distribution

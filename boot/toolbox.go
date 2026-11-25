@@ -373,7 +373,13 @@ func verdictOf(g GateResult, mine map[string]bool, rebuild bool) launch.Verdict 
 			}
 		}
 		if pass {
-			add(s.N, "", launch.OutcomePass, "")
+			var warned []string // a deprecated major warns in the reason of the pass (RuleDeprecated)
+			for _, w := range g.Warnings {
+				if mine[w.Row] && w.Check == s.N {
+					warned = append(warned, "warning: "+w.Reason)
+				}
+			}
+			add(s.N, "", launch.OutcomePass, strings.Join(warned, "; "))
 		}
 		denied = denied || !pass
 	}

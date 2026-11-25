@@ -171,7 +171,14 @@ gaps:
    keys with their classes and the six hooks of the kernel with their stage and seal,
    written by the builder from `sdk/kernel` (ADR-048 decision 12). A pack's
    `requires.definitions` is derived by `plugin check --write` from the registries its
-   rows feed (`07:139`; community:134).
+   rows feed (`07:139`; community:134). Note of 2026-11-25: on the owner's word, the
+   deprecation warning is built at S2a. For each row that no check denies, the gate
+   keeps one warning per definition version of a subject's `requires` whose served major
+   carries `deprecated`, naming its `since`, `removeNotBefore` and `successor`
+   (`boot.RuleDeprecated`). Boot and `profile render` print it with the diagnostics; the
+   other entry points give it as the reason of the pass of check 2, which `plugin gate
+   --against` prints and `plugin check` shows as a warning. It never denies (`08:510`).
+   No definition is deprecated at S2a, so no shipped profile prints one.
 10. **The suite revision** is the integer `suite` of `definition.yaml`, raised when a
     suite adds tests inside a minor (`07:540`). The attestation names it (decision 18).
 11. **`plugingen` writes the generated half of `plugin.yaml`.** It is a package of the

@@ -430,6 +430,10 @@ func (c *checkRun) packAndVerify() (string, []launch.Diagnostic, error) {
 			ds = append(ds, launch.Diagnostic{Check: strconv.Itoa(cl.Check), Text: fmt.Sprintf("check %d denies: %s", cl.Check, cl.Reason)})
 		case launch.OutcomeNotEvaluated:
 			ds = append(ds, launch.Diagnostic{Check: strconv.Itoa(cl.Check), Text: fmt.Sprintf("check %d %s is not evaluated: %s", cl.Check, cl.Clause, cl.Reason), Warning: true})
+		case launch.OutcomePass:
+			if cl.Reason != "" { // a deprecated major warns and never denies (08:510)
+				ds = append(ds, launch.Diagnostic{Check: strconv.Itoa(cl.Check), Text: fmt.Sprintf("check %d passes: %s", cl.Check, cl.Reason), Warning: true})
+			}
 		}
 	}
 	return outcome(ds), ds, nil

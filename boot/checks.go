@@ -247,8 +247,13 @@ func (g *gate) versions(r ComposedRow, s *subject, what string) []RowResult {
 	}
 	for _, name := range slices.Sorted(maps.Keys(q.Definitions)) {
 		for _, v := range q.Definitions[name] {
-			if !slices.ContainsFunc(serves.Definitions[name], func(sd ServedDefinition) bool { return minorServed(v, sd.Version, sd.CompatibleFrom) }) {
+			i := slices.IndexFunc(serves.Definitions[name], func(sd ServedDefinition) bool { return minorServed(v, sd.Version, sd.CompatibleFrom) })
+			if i < 0 {
 				f(CheckDefinitions, RuleUnserved, "requires %s %s, and the distribution serves %s", name, v, servedList(serves.Definitions[name]))
+			} else if dep := serves.Definitions[name][i].Deprecated; dep != nil {
+				g.warns = append(g.warns, RowResult{Check: CheckDefinitions, Row: r.ID, Status: StatusPass, Rule: RuleDeprecated,
+					Reason: fmt.Sprintf("row %q: %s: requires %s %s, of a major deprecated since %s and removed not before %s; its successor is %s",
+						r.ID, what, name, v, dep["since"], dep["removeNotBefore"], dep["successor"])})
 			}
 		}
 	}
