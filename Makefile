@@ -1,6 +1,6 @@
 # `make check` runs locally what the `test` job of .github/workflows/ci.yml runs.
-# Keep the two in step. (The docs also call `make check` the plugin check; that
-# part arrives with aiopsctl at S2a.)
+# Keep the two in step. The docs also call `make check` the plugin check: its last
+# step, `make plugin-check`, runs the built aiopsctl's plugin check on every plugin.
 MOD := github.com/mutex-solutions/aiops-platform
 KC  := go run ./tools/kernelcheck
 # Every build has the tag grpcnotrace, which drops golang.org/x/net/trace and the two
@@ -101,6 +101,19 @@ peer-check:
 	out=$$(AIOPS_PEER_SUDO=1 go test -count=1 -v -run '^TestPeerCredentialsAcrossUsers$$' ./plugins/reload-socket 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestPeerCredentialsAcrossUsers'
 
+# `make plugin-check` is standing rule 2 (ADR-060 decisions 32 and 36; ADR-020 decision
+# 13; ADR-061 decision 23), which `make check` runs last and the `test` job runs as a
+# step: a Go test builds aiopsctl, makes a throwaway $AIOPS_HOME trust the manifest it
+# embeds through a key made in the test, and runs plugin check on every plugin under
+# plugins/ and examples/; a T3 boot runs a row of each, in the test binary or in the cli
+# profile of that aiopsctl. -short skips both cases, so this target fails, and does not
+# skip, when they do not run.
+.PHONY: plugin-check
+plugin-check:
+	out=$$(go test -count=1 -v -timeout 20m -run '^(TestPluginCheckOnEveryPlugin|TestBootOfEachPluginsRow)$$' ./cmd/aiopsctl 2>&1); s=$$?; \
+	echo "$$out"; [ $$s -eq 0 ] && ! echo "$$out" | grep -q -- '--- SKIP' && \
+		[ $$(echo "$$out" | grep -c -- '^--- PASS: Test') -eq 2 ]
+
 .PHONY: check
 check:
 	test -z "$$(gofmt -l . | tee /dev/stderr)"
@@ -185,3 +198,5 @@ check:
 	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
 	$(KC) lines sdk/def/operations/v0/fake 1300 provisional
 	$(KC) lines sdk/def/operations/v0/conformance 1300 provisional
+	@# ADR-060 decision 32, standing rule 2: plugin check and a T3 boot of every plugin.
+	$(MAKE) --no-print-directory plugin-check

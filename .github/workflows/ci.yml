@@ -43,7 +43,7 @@ jobs:
   test:
     name: Build, vet, race tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -223,6 +223,15 @@ jobs:
           go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
           go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1300 provisional
           go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1300 provisional
+      - name: plugin check and T3 boot of every plugin
+        # ADR-060 decision 32, standing rule 2, and decision 36; ADR-020 decision 13;
+        # ADR-061 decision 23: a Go test builds aiopsctl, makes a throwaway home trust the
+        # manifest it embeds through a key made in the test, and runs plugin check on every
+        # plugin under plugins/ and examples/, the five core plugins of S1 included; a T3
+        # boot runs a row of each, in the test binary or in the cli profile of that
+        # aiopsctl. The race tests skip both cases (-short); the step fails, and does not
+        # skip, when they do not run (see the plugin-check target of the Makefile).
+        run: make plugin-check
 
   s1-suites:
     name: S1 exit suites on the built binary
