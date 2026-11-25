@@ -65,8 +65,8 @@ var exceptions = []exception{
 	// basic types, which counts (ADR-044 decision 24), and two go-openapi packages
 	// register the generic map and slice types from init. Each enters only gob's own
 	// type registry, which no row of a server uses. The owner approved the three on
-	// 2026-11-25, at these versions only (ADR-044 decision 21; ADR-020 decision 27).
-	{"encoding/gob", Toolchain, ToolchainVersion, "encoding/gob.Register",
+	// 2026-11-25 at these literal versions only (ADR-044 decision 21; ADR-020 decision 27).
+	{"encoding/gob", Toolchain, "v0.0.1-go1.26.8.linux-amd64", "encoding/gob.Register",
 		"gob's init registers its basic types with its own type registry (registerBasics), in every binary that links gob"},
 	{"github.com/go-openapi/loads", "github.com/go-openapi/loads", "v0.25.0", "encoding/gob.Register",
 		"its init registers map[string]any and []any with gob's type registry (spec.go)"},
