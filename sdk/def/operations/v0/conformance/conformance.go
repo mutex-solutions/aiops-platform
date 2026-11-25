@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -681,6 +682,23 @@ func Run(t *testing.T, mount Mount) {
 				before := u.homeOf("dev")
 				if _, err := m(t.Context(), u.row(Row)); !errors.Is(err, operations.ErrRefused) || !reflect.DeepEqual(u.homeOf("dev"), before) {
 					t.Errorf("%s %s of a profile that does not compose: %v; want ErrRefused and nothing written", name, Row, err)
+				}
+			}
+		})
+		t.Run("operations.O25 plugin remove refuses to take away every enabled provider of a bound or a required key", func(t *testing.T) {
+			bound, required := Rendered["dev"], Rendered["dev"] // the rows of the pack, none the last provider of a key alone
+			bound.Composition.Rows = append(slices.Clone(bound.Composition.Rows), launch.Row{ID: "connector-x:metrics", Plugin: "aiops/echoer", Origin: "acme/connector-x"})
+			bound.Keys = append(slices.Clone(bound.Keys), launch.KeyProviders{Name: "toy.sink", Provider: "bound", Consumer: "open", Rows: []string{Row, "connector-x:metrics"}})
+			required.Keys = append(slices.Clone(required.Keys), launch.KeyProviders{Name: "toy.logs", Provider: "open", Consumer: "open", Rows: []string{Row}})
+			required.Required.Keys = []string{"toy.logs"}
+			for key, dev := range map[string]launch.Rendered{"toy.sink": bound, "toy.logs": required} {
+				u := use(t, mount, Setup{Rendered: map[string]launch.Rendered{"dev": dev}})
+				if err := u.install(u.signedPack(), "dev"); err != nil {
+					t.Fatal(err)
+				}
+				before := u.homeOf("dev")
+				if err := u.remove("dev", "acme/connector-x"); !errors.Is(err, operations.ErrRefused) || !strings.Contains(fmt.Sprint(err), key) || !reflect.DeepEqual(u.homeOf("dev"), before) {
+					t.Errorf("remove of the last providers of %s: %v; want ErrRefused naming the key, and nothing written", key, err)
 				}
 			}
 		})
