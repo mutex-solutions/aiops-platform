@@ -185,7 +185,11 @@
    go-securesystemslib v0.11.1, gRPC v1.84.0 and protobuf v1.36.12
    (`cosign/v3@v3.1.4/go.mod:35-39`, `:60`, `:288`), and `aiopsctl` the versions of
    decision 16. CI installs cosign's published release binary, pinned by checksum, because
-   its `go.mod` needs go 1.27; its licence is read in decision 16.
+   its `go.mod` needs go 1.27; its licence is read in decision 16. Note of 2026-11-25:
+   CI builds cosign v3.1.4 from its module with `go install` instead, by the toolchain
+   go1.27.4 that its `go.mod` needs, each fetched through the module proxy and checked
+   against the checksum database, so the job and `make cosign` build the same binary
+   (ADR-060 decision 36, its note of 2026-11-25).
 2. **One signature format: a Sigstore bundle v0.3 in key mode.** Every signature is a
    bundle of media type `application/vnd.dev.sigstore.bundle.v0.3+json` whose
    verification material is the key hint of decision 4, with no certificate, no

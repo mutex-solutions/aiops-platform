@@ -276,6 +276,24 @@ jobs:
           go-version: "1.26.8" # toolchain directive in go.mod
       - run: make builder-image
 
+  cosign:
+    name: cosign and aiopsctl, both ways in key mode
+    # ADR-060 decision 36; ADR-020 decisions 1, 2 and 4 (07-c4-plugin-sdk.md:75, :1852):
+    # cosign verifies an artifact and a distribution manifest that aiopsctl signs, and
+    # aiopsctl verifies ones that cosign signs, on a registry inside the case, with keys
+    # made in it (see the cosign target of the Makefile). cosign v3.1.4 is built from its
+    # module with go install, by the toolchain go1.27.4 that its go.mod needs, each
+    # checked against the checksum database; it is never baked into an image
+    # (ADR-060 decision 34). Nothing is pushed or published, and no key outlives the case.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: make cosign
+
   templates:
     name: Templates of plugin new
     # ADR-060 decisions 24 and 36 (08-profiles-roadmap-adrs.md:1263; 07-c4-plugin-sdk.md:1563):

@@ -137,9 +137,10 @@ type TrustRequest struct {
 	Distribution          bool
 }
 
-// KeyRequest is key generate: the key pair <Prefix>.key and <Prefix>.pub in cosign's
-// format, the private key encrypted with the password of KeyPasswordVar (ADR-020
-// decisions 4 and 21). It refuses a prefix whose files exist.
+// KeyRequest is key generate: the key pair <Prefix>.key and <Prefix>.pub in the format
+// of the release pipeline's signing tool, the private key encrypted with the password
+// of KeyPasswordVar (ADR-020 decisions 4 and 21). It refuses a prefix whose files
+// exist.
 type KeyRequest struct {
 	Caller
 	Prefix string

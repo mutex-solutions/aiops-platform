@@ -73,6 +73,23 @@ builder-image:
 	out=$$(go test -count=1 -v -timeout 40m -run '^TestReleaseAndBuilderImage$$' ./cmd/aiopsctl 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestReleaseAndBuilderImage'
 
+# `make cosign` is the cosign job (ADR-060 decision 36; ADR-020 decisions 1, 2 and 4):
+# cosign verifies an artifact and a distribution manifest that aiopsctl signs, and
+# aiopsctl verifies ones that cosign signs, in key mode, on a registry inside the case.
+# cosign is a CI tool that no artifact carries (ADR-060 decision 34): it is built from
+# its module at the pin with go install, by the toolchain that the go 1.27 of its go.mod
+# needs, each fetched through the module proxy and checked against the checksum
+# database, into a temporary directory that the target removes. `make check` skips the
+# case, which needs the binary; here it fails, and does not skip, when it does not run.
+COSIGN           := github.com/sigstore/cosign/v3/cmd/cosign@v3.1.4
+COSIGN_TOOLCHAIN := go1.27.4
+.PHONY: cosign
+cosign:
+	b=$$(mktemp -d); s=0; \
+	GOFLAGS= GOTOOLCHAIN=$(COSIGN_TOOLCHAIN) GOBIN=$$b go install -trimpath $(COSIGN) || s=$$?; \
+	out=$$(AIOPS_COSIGN=$$b/cosign go test -count=1 -v -run '^TestCosignInterop$$' ./cmd/aiopsctl 2>&1) || s=$$?; \
+	echo "$$out"; rm -rf $$b; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestCosignInterop'
+
 # `make peer-check` is the peer-credential step of the `test` job (ADR-062 decision 18):
 # a client run as root is refused by reload-socket and one run as another user cannot
 # open its socket. It needs passwordless sudo, so `make check` does not run it. It fails,

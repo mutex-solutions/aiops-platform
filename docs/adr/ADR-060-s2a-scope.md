@@ -757,7 +757,20 @@ row 53), so it covers the new gate checks.
     failing on any race report as `s1-suites` does; the caps of decision 35; and, in the
     `test` job, the peer-credential step of ADR-062 decision 18, whose Makefile target
     `make check` does not run, since it needs passwordless `sudo`. None pushes,
-    publishes or holds a long-lived key.
+    publishes or holds a long-lived key. Note of 2026-11-25: the cosign case is
+    `TestCosignInterop` of `cmd/aiopsctl`, which the CI job `cosign` and `make cosign`
+    run and which fails them when it skips. cosign v3.1.4 is built for it from its module
+    with `go install`, by the toolchain go1.27.4 that the `go 1.27` of its `go.mod`
+    needs, each fetched through the module proxy and checked against the checksum
+    database, into a temporary directory; its register entry has mode `tool`, and its
+    licence is read again at that pin in the licence record (decision 34). The case signs
+    with keys of both tools: `aiopsctl` reads the private key of `cosign
+    generate-key-pair`, and cosign the public key of `key generate`. It found that
+    `plugin verify` and `plugin install` took a signature only where its one subject
+    named `<id>@<version>`, which cosign sign does not write; they take a subject with no
+    name too, since the digest it signs fixes `plugin.yaml`. The attestation stays
+    `aiopsctl`'s alone (ADR-020 decision 2), so the case writes it with `plugin sign` and
+    cosign's key and replaces the signature beside it with cosign's.
 
 ## Consequences
 

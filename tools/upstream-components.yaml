@@ -527,6 +527,29 @@ entries:
     mark: needs-approval
     default: false
 
+  # The signing tool of the release pipeline, which CI runs against aiopsctl in both
+  # directions in key mode and no artifact carries (ADR-060 decisions 34 and 36; ADR-020
+  # decisions 1 and 16). The cosign job builds it from its module at the pin with go
+  # install, by the toolchain go1.27.4 that the go 1.27 of its go.mod needs, each fetched
+  # through the module proxy and checked against the checksum database. Its go.mod
+  # requires ten MPL-2.0 HashiCorp modules (ADR-020 decision 16); since it is in no
+  # artifact, L7 and L8 do not reach its graph.
+  - id: cosign
+    names: [cosign]
+    form: process
+    behind: none
+    pin: v3.1.4
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Built by CI from its module at the pin and run in CI only, never baked into an image or shipped (08:1379)", row: L5}
+    evidence:
+      - {source: "github.com/sigstore/cosign/v3@v3.1.4 LICENSE (Apache-2.0) and COPYRIGHT.txt, and go.mod, h1:d3UHS8oJebMf6XUhPtWv9weU1ZYRyXq9HJ7QPccmqvY=", read: "2026-11-25", version: v3.1.4}
+      - {source: "golang.org/toolchain@v0.0.1-go1.27.4.linux-amd64 LICENSE and PATENTS, the toolchain that builds it, each equal to that of go1.26.8", read: "2026-11-25", version: v3.1.4}
+    mark: needs-approval
+    default: false
+
   - id: postgresql
     names: [postgres, postgresql]
     form: process

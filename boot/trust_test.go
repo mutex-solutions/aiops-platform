@@ -93,9 +93,9 @@ func TestReadAttestation(t *testing.T) {
 	}
 }
 
-// keyP256 is an ECDSA P-256 public key as cosign writes it, and keyP256ID its id, the
-// base64 of the SHA-256 of its DER form (ADR-020 decision 4). keyP384 is of another
-// curve.
+// keyP256 is an ECDSA P-256 public key as key generate writes it, and keyP256ID its
+// id, the base64 of the SHA-256 of its DER form (ADR-020 decision 4). keyP384 is of
+// another curve.
 const (
 	keyP256 = `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDPUA/g3IPqH6QTcfQ0jRwcMFM0tN
