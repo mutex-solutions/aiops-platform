@@ -4,6 +4,7 @@ package authoring
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,6 +52,18 @@ func TestBoot(t *testing.T) {
 	}
 	if _, err := Boot(t.Context(), aiops, manifest, dir, filepath.Join(t.TempDir(), "home"), &progress); err == nil || !strings.Contains(err.Error(), "ghost") {
 		t.Errorf("Boot with a row of a plugin the distribution does not link: %v", err)
+	}
+}
+
+// plugin verify of in-process code runs step 5 of plugin check on the local path, and the
+// builder image's aiopsctl takes no request of it, so on the image path it builds nothing
+// and answers that the step is not carried, never a pass of the module's own tests
+// (ADR-060 decision 46, note of 2026-11-25).
+func TestVerifyOnTheImagePath(t *testing.T) {
+	_, err := Tools{}.Build(t.Context(), launch.BuildRequest{Module: "example.test/echo", Version: "v0.1.0", Sum: "h1:" + strings.Repeat("A", 43) + "=",
+		Against: "oci://registry.test/aiops/release@sha256:" + strings.Repeat("ab", 32), ModCache: "modcache", Builder: "image"})
+	if !errors.Is(err, launch.ErrNotCarried) || !strings.Contains(err.Error(), "--builder local") {
+		t.Errorf("plugin verify of in-process code on the image path: %v; want that it is not carried, naming --builder local", err)
 	}
 }
 

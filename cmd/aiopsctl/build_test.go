@@ -222,8 +222,10 @@ func TestDistBuildSignAndUse(t *testing.T) {
 // waits for echoers, which nothing provides, so smoke passes (ADR-060 decision 58,
 // reading 1; ADR-062 decision 27); so does smoke of a command row, whose suite reads the
 // cases of its fixtures/commands/. On the local path verify builds the module at the
-// version and sum of echo and runs its tests, its suites among them, and fails a sum
-// that the module source does not serve (ADR-060 decision 46).
+// version and sum of echo and runs its tests and step 5 of plugin check on it, as smoke
+// does, whose statement the throwaway manifest records; it fails a module whose echoer
+// breaks an obligation of echoers though its own tests call no suite, and a sum that the
+// module source does not serve (ADR-060 decision 46; 07-c4-plugin-sdk.md:1512).
 func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, echo modulePin, builderPath string) {
 	t.Helper()
 	var progress bytes.Buffer
@@ -243,7 +245,7 @@ func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, ech
 		t.Errorf("plugin smoke --builder %s: %v, rows %v, want %v\n%s", builderPath, err, got, want, progress.String())
 	}
 	for _, want := range []string{"smoke: " + echo.path + " at v0.0.0-00010101000000-000000000000, sum h1:",
-		"smoke: the suite of echoers on " + echo.path + ", step 5 of plugin check"} {
+		"suites: the suite of echoers on " + echo.path + ", step 5 of plugin check"} {
 		if !strings.Contains(progress.String(), want) {
 			t.Errorf("plugin smoke --builder %s printed no %q:\n%s", builderPath, want, progress.String())
 		}
@@ -262,16 +264,32 @@ func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, ech
 	for _, r := range b.Rows {
 		got[r.ID] = string(r.State) + " " + strings.Join(r.WaitsFor, " ")
 	}
-	if err != nil || got["cmdy"] != "PENDING commands" || !strings.Contains(progress.String(), "smoke: the suite of commands on example.com/acme/cmdy") {
+	if err != nil || got["cmdy"] != "PENDING commands" || !strings.Contains(progress.String(), "suites: the suite of commands on example.com/acme/cmdy") {
 		t.Errorf("plugin smoke --builder %s of a command row: %v, rows %v\n%s", builderPath, err, got, progress.String())
 	}
 	if builderPath != "local" {
 		return
 	}
 	progress.Reset()
-	if _, err := tools.Build(t.Context(), launch.BuildRequest{Module: echo.path, Version: "v0.1.0", Sum: echo.sum, Against: release, ModCache: src, Builder: builderPath}); err != nil ||
-		!strings.Contains(progress.String(), "suites: go test "+echo.path+"/...") {
-		t.Errorf("plugin verify of %s: %v\n%s", echo.path, err, progress.String())
+	b, err = tools.Build(t.Context(), launch.BuildRequest{Module: echo.path, Version: "v0.1.0", Sum: echo.sum, Against: release, ModCache: src, Builder: builderPath})
+	var statement []byte
+	if err == nil {
+		var d boot.Distribution
+		d, err = boot.ReadDistribution("the manifest of plugin verify", b.Manifest)
+		statement = d.Plugins["acme/echo"].Attestation
+	}
+	if err != nil || !strings.Contains(progress.String(), "suites: go test "+echo.path+"/...") || !strings.Contains(progress.String(), "suites: the suite of echoers on "+echo.path) ||
+		!strings.Contains(string(statement), `"echoers":{"version":"0.1","suite":1,"halves":["obligations"]}`) {
+		t.Errorf("plugin verify of %s: %v, the statement %s\n%s", echo.path, err, statement, progress.String())
+	}
+	badDir := filepath.Join(filepath.Dir(dir), "badecho")
+	bad := zipModule(t, src, render(t, src, badDir, "acme/badecho", "echoers", func(files map[string]string) {
+		files["internal/echo/echo.go"] = strings.Replace(echoGo, `"echo: " + msg`, `"nope"`, 1)
+		files["plugin_test.go"] = "package badecho_test\n\nimport \"testing\"\n\nfunc TestNothing(t *testing.T) {}\n"
+	}), badDir)
+	if _, err := tools.Build(t.Context(), launch.BuildRequest{Module: bad.path, Version: "v0.1.0", Sum: bad.sum, Against: release, ModCache: src, Builder: builderPath}); err == nil ||
+		!strings.Contains(err.Error(), "echoers/reply") {
+		t.Errorf("plugin verify of a module that breaks echoers/reply and calls no suite: %v", err)
 	}
 	if _, err := tools.Build(t.Context(), launch.BuildRequest{Module: echo.path, Version: "v0.1.0", Sum: h1Of("another zip"), Against: release, ModCache: src,
 		Builder: builderPath}); err == nil || !strings.Contains(err.Error(), "dist.yaml lists") {

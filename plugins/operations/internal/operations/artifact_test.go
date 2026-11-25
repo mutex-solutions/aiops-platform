@@ -21,6 +21,7 @@ import (
 	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"go.yaml.in/yaml/v3"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
 
@@ -418,19 +419,23 @@ const echoSum = "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="
 
 // The suites step of verify builds in-process code with the builder of the toolbox: the
 // module that module.json of the artifact records, at its version and sum, on the
-// release artifact and from the module cache of the request, whose tests, the suites
-// among them, the builder runs (ADR-060 decision 46; ADR-044 decision 1). With no
-// release or no module cache it builds nothing and is not built; a build that fails is
-// a step that fails with its reason, and one that the toolbox does not carry is not
-// built.
+// release artifact and from the module cache of the request, whose tests and step 5 of
+// plugin check the builder runs, and whose manifest records the statement of the suites
+// that ran (ADR-060 decision 46; ADR-044 decision 1). The step passes, naming those
+// suites, only when that manifest holds the artifact's plugin.yaml byte for byte and its
+// statement names the definitions, suite revisions and halves that the artifact's
+// attestation names (07-c4-plugin-sdk.md:1512). With no release or no module cache it
+// builds nothing and is not built; a build that fails is a step that fails with its
+// reason, and one that the toolbox does not carry is not built.
 func TestVerifyBuildsInProcessCode(t *testing.T) {
 	sum := packSummary()
-	sum.Runtimes = []string{"inproc"}
-	b := &packBox{sum: sum, mod: launch.Module{Path: "example.test/echo", Sum: echoSum}}
+	sum.Runtimes, sum.Registers = []string{"inproc"}, []string{"echoers"}
+	b := &packBox{sum: sum, mod: launch.Module{Path: "example.test/echo", Sum: echoSum},
+		suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 1, Halves: []string{"obligations"}}}}}
 	l := Library{Box: b, LockWait: time.Second}
 	out := filepath.Join(t.TempDir(), "artifact")
-	dir := pluginDir(t, map[string]string{"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
-		"bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n", "echo.go": "package echo\n"})
+	manifest := strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1)
+	dir := pluginDir(t, map[string]string{"plugin.yaml": manifest, "bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n", "echo.go": "package echo\n"})
 	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
 		t.Fatal(err)
 	}
@@ -446,12 +451,35 @@ func TestVerifyBuildsInProcessCode(t *testing.T) {
 	if err != nil || v.Passed || v.Steps[2].Outcome != "not-built" || !strings.Contains(v.Steps[2].Reason, "--against") || len(b.builds) != 0 {
 		t.Fatalf("Verify of in-process code with no release = %+v, %v (%d builds); want the suites not built", v, err, len(b.builds))
 	}
+	// The manifest that the build writes: the module table holds the plugin, with the
+	// statement of the suites that step 5 ran on the build.
+	built := func(manifest string, suite int) []byte {
+		st := def.Statement("acme/connector-x", "0.1.0", strings.Repeat("cd", 32), map[string]def.Attested{"echoers": {Version: "0.1", Suite: &suite, Halves: []string{"obligations"}}}, nil, nil)
+		m, _ := yaml.Marshal(map[string]any{"distVersion": 1, "plugins": map[string]any{"acme/connector-x": map[string]string{"package": "example.test/echo", "manifest": manifest, "attestation": string(st)}}})
+		return m
+	}
+	b.built.Manifest = built(manifest, 1)
 	q.Against, q.ModCache, q.Mirrors = "oci://registry.test/aiops/release@sha256:"+strings.Repeat("ab", 32), "/modcache", map[string]string{"registry.test": "/mirror"}
 	v, err = l.Verify(t.Context(), q)
 	want := launch.BuildRequest{Module: "example.test/echo", Version: "v0.1.0", Sum: echoSum, Against: q.Against, ModCache: "/modcache", Mirrors: q.Mirrors, Builder: "local"}
-	if err != nil || !v.Passed || v.Steps[2].Outcome != "pass" || len(b.builds) != 1 || !reflect.DeepEqual(b.builds[0], want) {
+	if err != nil || !v.Passed || v.Steps[2].Outcome != "pass" || !strings.Contains(v.Steps[2].Reason, "echoers at revision 1, obligations") || len(b.builds) != 1 || !reflect.DeepEqual(b.builds[0], want) {
 		t.Errorf("Verify of in-process code = %+v, %v; builds %+v, want one of %+v", v, err, b.builds, want)
 	}
+	for _, c := range []struct {
+		name     string
+		manifest []byte
+		reason   string
+	}{
+		{"a build that records no plugin, as a module whose own tests ran alone", nil, "acme/connector-x"},
+		{"a build of another plugin.yaml", built(manifest+"# another\n", 1), "plugin.yaml"},
+		{"a build that ran another suite revision", built(manifest, 2), `"suite":2`},
+	} {
+		b.built.Manifest = c.manifest
+		if v, err := l.Verify(t.Context(), q); err != nil || v.Passed || v.Steps[2].Outcome != "fail" || !strings.Contains(v.Steps[2].Reason, c.reason) {
+			t.Errorf("Verify of %s = %+v, %v; want the suites failing on %q", c.name, v, err, c.reason)
+		}
+	}
+	b.built.Manifest = built(manifest, 1)
 	for _, c := range []struct {
 		err     error
 		outcome string
