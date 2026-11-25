@@ -89,22 +89,29 @@ func TestGoldenDumpsOfTheTestDistribution(t *testing.T) {
 	}
 }
 
-// The goldens of the shipped cli profile (ADR-061 decisions 27 and 31; ADR-062 decision
-// 18): the dump and the hook dump of `aiopsctl profile render --profile cli`, as a
-// release aiopsctl with no home composes the profile from the files it ships, with the
-// module table of the release, aiops-core then aiops-cli, and reload-socket disabled by
-// aiops-cli. The files are in testdata/cli and `go test -update` rewrites them; a
-// change to a shipped bundle, a row's config or a hook of the cli profile is a change
-// of these files.
-func TestGoldenDumpsOfTheCLIProfile(t *testing.T) {
-	for _, dump := range []struct{ flag, ext string }{{"--dump", "dump"}, {"--dump-hooks", "hooks"}} {
-		t.Run("cli."+dump.ext, func(t *testing.T) {
-			r := do(t, fstest.MapFS{}, nil, "profile", "render", "--profile", "cli", dump.flag)
-			if r.code != 0 {
-				t.Fatalf("exit %d; stderr:\n%s", r.code, r.errOut)
-			}
-			golden(t, filepath.Join("testdata", "cli", "cli."+dump.ext+".golden"), r.out)
-		})
+// The goldens of the shipped profiles, cli and dev (ADR-061 decisions 27 and 31;
+// ADR-062 decision 18; ADR-060 decision 27; ADR-054 decision 14): the dump and the hook
+// dump of `aiopsctl profile render --profile <p>`, as a release aiopsctl with no home
+// composes each profile from the files it ships, with the module table of the release:
+// cli, aiops-core then aiops-cli, with reload-socket disabled by aiops-cli; dev,
+// aiops-core, with reload-socket enabled. The files are in testdata/<p>, where the name
+// lint U1 reads them, and `go test -update` rewrites them; a change to a shipped
+// bundle, a row's config or a hook of a shipped profile is a change of these files.
+func TestGoldenDumpsOfTheShippedProfiles(t *testing.T) {
+	socket := map[string]string{"cli": "enabled=false", "dev": "enabled=true"}
+	for _, p := range []string{"cli", "dev"} {
+		for _, dump := range []struct{ flag, ext string }{{"--dump", "dump"}, {"--dump-hooks", "hooks"}} {
+			t.Run(p+"."+dump.ext, func(t *testing.T) {
+				r := do(t, fstest.MapFS{}, nil, "profile", "render", "--profile", p, dump.flag)
+				if r.code != 0 {
+					t.Fatalf("exit %d; stderr:\n%s", r.code, r.errOut)
+				}
+				if want := "row reload-socket plugin=aiops/reload-socket " + socket[p] + " "; dump.ext == "dump" && !strings.Contains(r.out, want) {
+					t.Errorf("the dump of %s holds no %q:\n%s", p, want, r.out)
+				}
+				golden(t, filepath.Join("testdata", p, p+"."+dump.ext+".golden"), r.out)
+			})
+		}
 	}
 }
 
