@@ -224,6 +224,11 @@
      join at S4a with a raised suite revision, as for the toy registries (ADR-060
      decision 43), once S4a decides what `admin-api` may dispatch (decision 32).
      `commands` holds no tenant data, and the S2a revision holds no skipped case.
+   - Note of 2026-11-25: each of the five command rows runs `conformance.Run` on the
+     cases of its `fixtures/commands/`; `command-plugin` gained `run.json`, a case of
+     outcome `ok` for each of its thirteen commands, and `cancel.json`, so `plugin
+     check` passes step 5 on it and its attestation names the obligations half that ran
+     (ADR-060 decisions 32 and 50).
 
 6. **A template.** S2a writes the Go template of `commands` in `templates/`, and `plugin
    new commands <id> --lang go` writes it, because CI generates a plugin from the
@@ -764,7 +769,9 @@
     output. A Go plugin needs a Go toolchain for it, as the check does (`07:1531`); a pack
     does not. In this repository `tools/plugingen` runs the same package for the parity
     check of CI (`tools/plugingen/main.go` at `502a355`), and `make check` runs the built
-    `aiopsctl` (ADR-060 decisions 11 and 32).
+    `aiopsctl` (ADR-060 decisions 11 and 32). Note of 2026-11-25: `make plugin-check`,
+    the last step of `make check`, runs the built `aiopsctl`'s `plugin check` on every
+    plugin under `plugins/` and `examples/` (ADR-060 decision 32, standing rule 2).
 
 ### `aiopsctl` as the launcher of the `cli` profile
 

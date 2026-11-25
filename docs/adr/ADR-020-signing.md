@@ -483,7 +483,11 @@
       `trust.yaml` that lists the key under `distributions` and the record and `current`
       into a throwaway `$AIOPS_HOME`, and runs that `aiopsctl` against it. No exemption
       narrows checks 5 or 10; the tie of such a binary is the in-repository form of
-      decision 12.
+      decision 12. Note of 2026-11-25: `TestPluginCheckOnEveryPlugin` and
+      `TestBootOfEachPluginsRow` of `cmd/aiopsctl`, which `make plugin-check` and the CI
+      step of that name run, build it so and write the home with `test/trusted`; check 10
+      at its boot reads statements that name the suites that ran (ADR-060 decision 50).
+      The template job still runs the toolbox in its own test process.
     - When no trusted root covers the embedded manifest, boot prints the recovery beside
       the refusal: `- key: release` under `distributions` restores the default root, and an
       `aiopsctl` built from the current distribution boots on its record (question Q11).

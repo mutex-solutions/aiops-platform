@@ -545,7 +545,10 @@ gaps:
     - **A2.** With the stubs filled in from the test's fixture, an in-process Go echoer
       (`08:694`; community:59; plugin record §16), `plugin check` passes steps 1 to 5
       and 7, reports the cases of question Q7 that did not run, and reports steps 6 and 8
-      as not applicable. Its `--json` report is kept.
+      as not applicable. Its `--json` report is kept. Note of 2026-11-25: until
+      `test/authoring/` runs the step, `TestPluginCheckOnEveryPlugin` of `cmd/aiopsctl`
+      holds the built `aiopsctl`, with the real toolbox, to exactly that on the fixture
+      echoer, `examples/echoer`, filled in.
     - **A3.** `plugin pack` and `plugin sign` with the author's key write one artifact.
       Its manifest carries the generated `requires`, its bundle holds one disabled row,
       and its attestation names the module's digest and `echoers` at the served version
@@ -650,7 +653,28 @@ gaps:
          is not an error. The suites prove `ErrInactive`.
       2. No plugin merges without `aiopsctl plugin check` and a T3 test: `make check` and
          CI run `plugin check` on every plugin under `plugins/` and `examples/`, and a T3
-         suite boots each plugin's row.
+         suite boots each plugin's row. Note of 2026-11-25, on the owner's answer of that
+         date, as built: `make plugin-check`, the last step of `make check` and a step of
+         the `test` job, runs `TestPluginCheckOnEveryPlugin` and `TestBootOfEachPluginsRow`
+         of `cmd/aiopsctl` and fails when they skip. The first builds `aiopsctl` and makes
+         a throwaway home trust the manifest it embeds with a key made in the test
+         (ADR-020 decision 13), and every plugin under `plugins/` and `examples/`, the
+         five core plugins included, passes every step that applies to it; an example is
+         checked `--against` the test distribution. The second boots the test binary with
+         a row of each plugin that a server runs, each ACTIVE, and the `cli` profile of
+         that `aiopsctl`, whose `help` lists every command, so each row of `aiops-cli` is
+         ACTIVE. It needed: step 3 reads a plugin's own packages as its own inside this
+         repository too; step 5 runs a suite on the mount that the plugin's external test
+         package declares as `Mount<Definition>` (`MountClock`, `MountEchoers`), where the
+         mount of a contribution cannot set it up, takes the halves from what the suite
+         records, and maps a key to the definition whose name it begins with in lower
+         case, as `configRefsDryRun` of `configrefs`; step 7 packs a plugin with the
+         module that holds it; each plugin directory holds a `bundle.yaml` of its one row,
+         disabled; check 8 no longer denies the group of an artifact under `aiops/` whose
+         manifest is byte for byte the one of the release's module table, which stands in
+         for nothing, the case of `readiness`, `reload` and `restart-policy`, whose rows
+         are required; and the tests of `examples/caller` call through the fakes of the
+         two dispatchers, since a plugin imports no other plugin.
       3. Nothing outside the closed vocabularies merges into `sdk/kernel`, `boot/` or
          `loader/`, checked as question Q9 decides.
       4. Whoever changes a `v0` definition fixes every plugin under `plugins/` and
@@ -1404,6 +1428,21 @@ to a question, the decision here settles it.
     key; boot prints it at every boot, and a site removes it in `trust.yaml`. Checks 5
     and 10 run on every row, and the release starts as `08:398` and `01:292` state.
     `07:1861` and `08:404` gain that default, and the answer goes into ADR-020.
+    Note of 2026-11-25, on the owner's answer of that date, as built: the attestation of
+    a first-party row comes from real suite runs. Each suite records, when
+    `AIOPS_SUITE_RECORD` names a directory, the definition and the halves it ran on a
+    package whose test passed (`sdk/def/internal/deftest.Ran`): a provider's suite both
+    halves, a registry's the guard half on a dispatcher and the obligations half on a
+    contribution. The release build runs the tests of each first-party plugin of the
+    module table in both phases, on a `go.mod` and `go.sum` of their own that take the
+    lines of their test dependencies, and the statement of each names exactly the
+    suites and halves that its package recorded, with no suite revision for a suite
+    that did not run; a failed test fails the build. The manifests that the parity
+    check of `make check` holds, `dist/` and `test/dist/`, are written the same way, a
+    site's build keeps the release's statement of each first-party plugin, and the
+    rows of `plugins/command-plugin` run the obligations half on the cases of its
+    `fixtures/commands/` (ADR-061 decision 5). Before, the builder wrote both halves for
+    every first-party definition with a suite, run or not.
 
 51. **The upstream register starts at S2a** (Q15 (a)). S2a writes
     `tools/upstream-components.yaml` with an entry for every module, image and tool that
