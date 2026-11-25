@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
 // The S2a clauses of the gate (ADR-060 decisions 14 to 17 and 31): one table case per
@@ -712,6 +714,44 @@ func TestLicensed(t *testing.T) {
 	}
 	if !Licensed("LicenseRef-x OR GPL-3.0-only", []string{"LicenseRef-x"}) {
 		t.Error("an accepted id is refused")
+	}
+}
+
+// An admitted row that uses a deprecated major gets a warning, never a denial
+// (08-profiles-roadmap-adrs.md:508; ADR-060 decision 9, owner answer of 2026-11-25): at
+// boot and profile render as a diagnostic, at the other entry points in the reason of
+// check 2's pass. A row that another check denies gets none.
+func TestGateWarnsOfADeprecatedMajor(t *testing.T) {
+	fx := newGateFix()
+	fx.dist.definitions = strings.Replace(servedDefs, `{echoers: [{version: "0.1",`,
+		`{echoers: [{version: "0.1", deprecated: {since: "0.2.0", removeNotBefore: "2027-06-01", successor: v1},`, 1)
+	fx.art("acme/echoer", func(a *Artifact) { a.Err = &Error{Rule: RuleKept, Msg: "x"} })
+	g := fx.run(t)
+	if f, denied := g.Denial("pack:e1"); denied || len(g.Slots[CheckDefinitions-1].Fails) > 0 {
+		t.Fatalf("a deprecated major denies: %+v", f)
+	}
+	var rows []string
+	for _, w := range g.Warnings {
+		rows = append(rows, w.Row)
+		for _, s := range []string{"echoers 0.1", "deprecated since 0.2.0", "not before 2027-06-01", "successor is v1"} {
+			if w.Check != CheckDefinitions || w.Rule != RuleDeprecated || !strings.Contains(w.Reason, s) {
+				t.Errorf("warning %+v: want check 2, rule %s and %q", w, RuleDeprecated, s)
+			}
+		}
+	}
+	if !slices.Equal(slices.Compact(rows), []string{"pack:e1"}) {
+		t.Errorf("warned rows %v: want pack:e1 alone, since check 5 denies echoer:e2 and the other rows use no deprecated major", rows)
+	}
+	if d := (Admission{Gate: g}).Diagnostics(); !slices.ContainsFunc(d, func(l string) bool {
+		return strings.HasPrefix(l, `warning: row "pack:e1" uses a deprecated major: gate check 2`)
+	}) {
+		t.Errorf("the diagnostics hold no warning of pack:e1:\n%s", strings.Join(d, "\n"))
+	}
+	v := verdictOf(g, map[string]bool{"pack:e1": true}, false)
+	if !slices.ContainsFunc(v.Clauses, func(c launch.Clause) bool {
+		return c.Check == CheckDefinitions && c.Outcome == launch.OutcomePass && strings.Contains(c.Reason, "deprecated since 0.2.0")
+	}) {
+		t.Errorf("the verdict %+v: want check 2 to pass with the warning as its reason", v.Clauses)
 	}
 }
 
