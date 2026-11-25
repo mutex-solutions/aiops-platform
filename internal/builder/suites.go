@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"golang.org/x/mod/module"
@@ -203,8 +204,9 @@ func union(graphs ...[]Package) []Package {
 // ConformanceTest returns the test that step 5 of plugin check writes into the package
 // pkgName at importPath, never onto disk, to run the obligations of the suite of the
 // registry name at the major of version on the package's plugin value, mounted as a
-// contribution: TestAiopsctl, whose subtests are the obligations (07-c4-plugin-sdk.md:1571).
-func ConformanceTest(pkgName, importPath, name, version string) []byte {
+// contribution with the fixtures directory where the suite takes one: TestAiopsctl,
+// whose subtests are the obligations (07-c4-plugin-sdk.md:1571).
+func ConformanceTest(pkgName, importPath, name, version, fixtures string) []byte {
 	major, _, _ := strings.Cut(version, ".")
 	return fmt.Appendf(nil, `package %s_test
 
@@ -223,7 +225,7 @@ func TestAiopsctl(t *testing.T) {
 		return conformance.Contribution(root.Plugin(zzplugin.Plugin, nil)%s), root
 	})
 }
-`, pkgName, importPath, rootModule, name, major, rootModule, rootModule, strings.Replace(registries[name], "fixtures", `"fixtures"`, 1)) // the package's own fixtures
+`, pkgName, importPath, rootModule, name, major, rootModule, rootModule, strings.Replace(registries[name], "fixtures", strconv.Quote(fixtures), 1))
 }
 
 // smokeSuite is a suite that step 5 of plugin check runs on a plugin of the module under
@@ -254,12 +256,12 @@ func (b *build) smokeSuites() ([]smokeSuite, error) {
 
 // smokeTests returns the test of each suite of smokeSuites, a package of the scratch
 // module that imports the plugin's package, since go overlays no file of the module
-// cache.
+// cache, with the fixtures of the plugin's directory there.
 func (b *build) smokeTests() (map[string][]byte, error) {
 	suites, err := b.smokeSuites()
 	out := map[string][]byte{}
 	for _, s := range suites {
-		out[s.dir+"/doc.go"], out[s.dir+"/suite_test.go"] = []byte("package zz\n"), ConformanceTest("zz", s.pkg, s.name, s.version)
+		out[s.dir+"/doc.go"], out[s.dir+"/suite_test.go"] = []byte("package zz\n"), ConformanceTest("zz", s.pkg, s.name, s.version, filepath.Join(b.moduleDir(s.pkg), "fixtures"))
 	}
 	return out, err
 }
@@ -292,8 +294,8 @@ func (b *build) attest(ctx context.Context) (map[string]string, error) {
 			return nil, err
 		}
 		fmt.Fprintf(b.progress, "smoke: the suite of %s on %s, step 5 of plugin check\n", s.name, s.pkg)
-		if _, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", "-run", "^TestAiopsctl$", "./"+s.dir); err != nil {
-			return nil, fmt.Errorf("the suite of %s fails on %s: %w", s.name, s.pkg, err)
+		if out, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", "-run", "^TestAiopsctl$", "./"+s.dir); err != nil {
+			return nil, fmt.Errorf("the suite of %s fails on %s: %w\n%s", s.name, s.pkg, err, strings.TrimSpace(string(out)))
 		}
 		ran[s.pkg+" "+s.name] = dd.Suite
 	}

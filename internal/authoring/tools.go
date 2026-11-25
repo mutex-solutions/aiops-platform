@@ -343,7 +343,7 @@ func conformance(ctx context.Context, dir, name, version string, halves []string
 	defer os.RemoveAll(tmp)
 	file, overlay := filepath.Join(tmp, "suite_test.go"), filepath.Join(tmp, "overlay.json")
 	ovl, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(dir, "zz_aiopsctl_"+name+"_test.go"): file}})
-	if err := errors.Join(os.WriteFile(file, builder.ConformanceTest(pkg.Name, pkg.ImportPath, name, version), 0o600), os.WriteFile(overlay, ovl, 0o600)); err != nil {
+	if err := errors.Join(os.WriteFile(file, builder.ConformanceTest(pkg.Name, pkg.ImportPath, name, version, "fixtures"), 0o600), os.WriteFile(overlay, ovl, 0o600)); err != nil {
 		return launch.SuiteResult{}, err
 	}
 	evs, err := goTest(ctx, dir, "-overlay", overlay, "-run", "^TestAiopsctl$", ".")

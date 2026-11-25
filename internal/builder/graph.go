@@ -37,7 +37,7 @@ type Go struct {
 	Env      []string
 }
 
-// Run runs go with args and returns its standard output.
+// Run runs go with args and returns its standard output, on a failure too.
 func (g Go) Run(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, cmp.Or(g.Bin, "go"), args...)
 	cmd.Dir, cmd.Env = g.Dir, g.Env
@@ -45,7 +45,7 @@ func (g Go) Run(ctx context.Context, args ...string) ([]byte, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("go %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return out, fmt.Errorf("go %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return out, nil
 }
