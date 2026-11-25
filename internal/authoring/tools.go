@@ -161,11 +161,20 @@ func lines(check string, err error) []launch.Diagnostic {
 
 // Generate is plugingen on the plugin in q.Dir: with q.Write it writes the generated
 // half of plugin.yaml and the generated tests; otherwise it is step 2, the parity check.
+// A fresh plugin has a go.mod and no go.sum, and plugingen builds the plugin's package,
+// so with q.Write the modules of that package are first resolved into go.mod and
+// go.sum through the author's GOPROXY, as -mod=mod resolves them; go mod tidy then
+// adds those of the tests (ADR-060 decision 30, step A1 as edited on 2026-11-25).
 func (Tools) Generate(ctx context.Context, q launch.GenerateRequest) ([]launch.Diagnostic, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if q.Write {
+		cmd := exec.CommandContext(ctx, "go", "list", "-mod=mod", "-deps", ".")
+		cmd.Dir = q.Dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return lines("2", fmt.Errorf("go list -mod=mod -deps . in %s, which resolves the modules of the plugin's package: %v: %s", q.Dir, err, bytes.TrimSpace(out))), nil
+		}
 		return lines("2", plugingen.Write(q.Dir)), nil
 	}
 	return lines("2", plugingen.Check(q.Dir)), nil

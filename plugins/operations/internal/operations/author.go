@@ -242,6 +242,9 @@ func (c *checkRun) manifest() (string, []launch.Diagnostic, error) {
 		return "", nil, err
 	}
 	c.sum, c.code = sum, len(sum.Runtimes) > 0
+	if hasError(ds) && hasError(c.gen) { // the manifest lacks what --write failed to write: say why
+		ds = append(ds, c.gen...)
+	}
 	if slices.Contains(sum.Runtimes, "remote") {
 		ds = append(ds, launch.Diagnostic{Check: "1", File: "plugin.yaml", Text: "runtimes lists remote, which plugin check refuses until S2b: step 5 cannot run in a runtime that does not exist yet (ADR-060 decision 23)"})
 	}
