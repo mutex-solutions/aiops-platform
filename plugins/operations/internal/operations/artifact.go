@@ -103,8 +103,11 @@ func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, erro
 	v, err := c.seal(r.Out)
 	var denied []string
 	for _, c := range v.Clauses {
-		if c.Outcome == launch.OutcomeDeny {
+		switch c.Outcome {
+		case launch.OutcomeDeny:
 			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
+		case launch.OutcomeNotEvaluated: // ADR-060 decision 17
+			say(r.Caller, "pack: check %d %s is not evaluated: %s", c.Check, c.Clause, c.Reason)
 		}
 	}
 	if err == nil && len(denied) > 0 {

@@ -351,14 +351,7 @@ func gate(ctx context.Context, ops operations.Operations, inv commands.Invocatio
 	}
 	var denied []string
 	for _, c := range v.Clauses {
-		line := fmt.Sprintf("check %d", c.Check)
-		if c.Clause != "" {
-			line += " " + c.Clause
-		}
-		line += ": " + c.Outcome
-		if c.Reason != "" {
-			line += ": " + shown(c.Reason)
-		}
+		line := clauseLine(c)
 		fmt.Fprintln(inv.Out, line)
 		if c.Outcome == launch.OutcomeDeny {
 			denied = append(denied, line)
@@ -368,6 +361,19 @@ func gate(ctx context.Context, ops operations.Operations, inv commands.Invocatio
 		return fmt.Errorf("the gate at plugin gate --against denies: %s", strings.Join(denied, "; "))
 	}
 	return nil
+}
+
+// clauseLine is a clause of a verdict as plugin gate and plugin install print it.
+func clauseLine(c launch.Clause) string {
+	line := fmt.Sprintf("check %d", c.Check)
+	if c.Clause != "" {
+		line += " " + c.Clause
+	}
+	line += ": " + c.Outcome
+	if c.Reason != "" {
+		line += ": " + shown(c.Reason)
+	}
+	return line
 }
 
 // waits returns the bounds of --connect-wait and --wait, zero for the library's
@@ -434,6 +440,11 @@ func changed(inv commands.Invocation) func(operations.Change, error) error {
 		}
 		for _, n := range ch.Notes {
 			fmt.Fprintln(inv.Err, shown(n))
+		}
+		for _, c := range ch.Verdict.Clauses { // what the gate at plugin install does not evaluate (ADR-060 decision 17)
+			if c.Outcome == launch.OutcomeNotEvaluated {
+				fmt.Fprintln(inv.Err, clauseLine(c))
+			}
 		}
 		for _, l := range ch.DistLines {
 			fmt.Fprintln(inv.Out, shown(l))
