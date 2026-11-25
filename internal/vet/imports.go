@@ -268,6 +268,53 @@ func walkGo(root string, fn func(p, rel string, test bool) error) error {
 	})
 }
 
+// Boundary applies the import boundary table, U2 with the upstream register of the tree
+// of the root module at root, tools/upstream-components.yaml, and the layout rule to
+// every Go file under each directory dirs of that tree, each file by its path in it: what
+// Imports checks of the files, which a release build runs on the source of each package
+// of its module table (ADR-060 decision 22). It fails with every violation.
+func Boundary(root string, dirs []string) error {
+	reg, err := ReadRegister(filepath.Join(root, "tools", "upstream-components.yaml"))
+	var bad []string
+	if err == nil {
+		bad, err = boundary(root, dirs, reg)
+	}
+	if err == nil && len(bad) > 0 {
+		err = fmt.Errorf("import boundary violations:\n%s", strings.Join(bad, "\n"))
+	}
+	return err
+}
+
+// boundary returns the violations of the files under dirs of root, sorted (Boundary).
+func boundary(root string, dirs []string, reg []Upstream) ([]string, error) {
+	var bad []string
+	for _, dir := range dirs {
+		err := walkGo(filepath.Join(root, dir), func(p, rel string, test bool) error {
+			rel = path.Join(filepath.ToSlash(dir), rel)
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, p, nil, parser.ImportsOnly|parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			if m := pluginLayout(rel); m != "" && !test {
+				bad = append(bad, fmt.Sprintf("%s:1: %s", rel, m))
+			}
+			for _, im := range f.Imports {
+				imp, _ := strconv.Unquote(im.Path.Value)
+				for _, r := range importReasons(rel, test, imp, reg) {
+					bad = append(bad, fmt.Sprintf("%s:%d: imports %s: %s", rel, fset.Position(im.Pos()).Line, imp, r))
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	sort.Strings(bad)
+	return bad, nil
+}
+
 // ListDeps returns the import paths in the dependency closure of pkg.
 type ListDeps func(root, pkg string) ([]string, error)
 
@@ -288,28 +335,10 @@ func GoListDeps(root, pkg string) ([]string, error) {
 // no package under test/ or examples/, to the closures of cmd/aiops and cmd/aiopsctl,
 // each where the command exists.
 func Imports(root string, reg []Upstream, list ListDeps) error {
-	var bad []string
-	err := walkGo(root, func(p, rel string, test bool) error {
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, p, nil, parser.ImportsOnly|parser.SkipObjectResolution)
-		if err != nil {
-			return err
-		}
-		if m := pluginLayout(rel); m != "" && !test {
-			bad = append(bad, fmt.Sprintf("%s:1: %s", rel, m))
-		}
-		for _, im := range f.Imports {
-			path, _ := strconv.Unquote(im.Path.Value)
-			for _, r := range importReasons(rel, test, path, reg) {
-				bad = append(bad, fmt.Sprintf("%s:%d: imports %s: %s", rel, fset.Position(im.Pos()).Line, path, r))
-			}
-		}
-		return nil
-	})
+	bad, err := boundary(root, []string{"."}, reg)
 	if err != nil {
 		return err
 	}
-	sort.Strings(bad)
 	for _, bin := range []string{"aiops", "aiopsctl"} {
 		if st, e := os.Stat(filepath.Join(root, "cmd", bin)); e != nil || !st.IsDir() {
 			fmt.Printf("imports: cmd/%s does not exist; its closure check skipped\n", bin)

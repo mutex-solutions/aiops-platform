@@ -300,8 +300,10 @@ type HookListeners struct {
 // DistManifest is the part of the signed distribution manifest that the
 // launcher reads (08-profiles-roadmap-adrs.md:451; 07-c4-plugin-sdk.md:1340).
 // No layer can change it. RequiredKeys must have an ACTIVE provider;
-// RequiredRows are named by id.
+// RequiredRows are named by id. Modules is the module table that a release input
+// lists, which only dist.yaml holds (ADR-060 decision 20).
 type DistManifest struct {
+	Modules      []string
 	Providers    []Binding
 	Consumers    []Binding
 	SealedHooks  []HookListeners

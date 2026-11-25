@@ -7,11 +7,13 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// dist.yaml is the builder's input: the bindings and the required set of a
-// distribution, from which the builder writes them into the signed distribution
-// manifest (ADR-060 decision 20; Distribution). It is read through the same strict
-// reader as the layers (ADR-059 decision 6):
+// dist.yaml is the builder's input for a release: its module table, the bindings and
+// the required set of a distribution, from which the builder generates the table and
+// writes the rest into the signed distribution manifest (ADR-060 decision 20;
+// Distribution). It is read through the same strict reader as the layers (ADR-059
+// decision 6):
 //
+//	modules:       [<import path>, ...]          each package that declares a plugin
 //	providers:     {<key>: [<plugin id>, ...]}   provider-bound keys
 //	consumers:     {<key>: [<plugin id>, ...]}   consumer-bound keys
 //	sealedHooks:   {<hook>: [<plugin id>, ...]}  who may listen on a sealed hook
@@ -32,6 +34,8 @@ func ParseDist(file string, data []byte) (DistManifest, error) {
 	var d DistManifest
 	for _, pr := range prs {
 		switch pr.key {
+		case "modules":
+			d.Modules, err = p.set(pr.v, "", "modules", okPath)
 		case "providers":
 			d.Providers, err = p.bindings(pr.v, "providers", okIdent)
 		case "consumers":

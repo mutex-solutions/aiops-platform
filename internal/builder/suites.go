@@ -116,9 +116,8 @@ func TestScenario(t *testing.T) {
 
 // suites returns the test files of the suite binaries of a release build: the
 // revision of each registry's suite from its definition.yaml in the zip of the SDK
-// module, and in the second phase the first-party instantiable plugins of the module
-// table, which the manifest of the first phase records, read from the zip of the root
-// module.
+// module, and in the second phase the first-party instantiable plugins of its module
+// table, which the manifest of the first phase records.
 func (b *build) suites() (map[string][]byte, error) {
 	sdk := module.Version{Path: rootModule + "/sdk", Version: b.q.Root}
 	z, err := zip.OpenReader(b.zip(sdk))
@@ -144,26 +143,16 @@ func (b *build) suites() (map[string][]byte, error) {
 		revisions[reg] = d.Suite
 	}
 	var ps []SuitePlugin
-	if s := b.q.Signed; s != nil {
-		d, err := boot.ReadDistribution("the manifest of the first phase", s.Manifest)
-		var table []tablePlugin
-		if err == nil {
-			table, err = tablePackages(b.zip(module.Version{Path: rootModule, Version: b.q.Root}), rootModule, b.q.Root)
+	for _, p := range b.plugins {
+		m, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
+		if b.q.Signed == nil || err != nil || !m.Instantiable || !strings.HasPrefix(m.ID, "aiops/") {
+			continue
 		}
-		if err != nil {
-			return nil, err
+		sp := SuitePlugin{Package: p.pkg, Accessor: p.accessor}
+		for _, k := range m.Registers {
+			sp.Registers = append(sp.Registers, k.Key)
 		}
-		for _, p := range table {
-			m, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
-			if err != nil || !m.Instantiable || !strings.HasPrefix(m.ID, "aiops/") || d.Plugins[m.ID].Package != p.pkg {
-				continue
-			}
-			sp := SuitePlugin{Package: p.pkg, Accessor: p.accessor}
-			for _, k := range m.Registers {
-				sp.Registers = append(sp.Registers, k.Key)
-			}
-			ps = append(ps, sp)
-		}
+		ps = append(ps, sp)
 	}
 	return SuitesGo(revisions, ps), nil
 }

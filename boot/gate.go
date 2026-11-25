@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -251,6 +252,47 @@ func (g GateResult) Denial(row string) (RowResult, bool) {
 		}
 	}
 	return RowResult{}, false
+}
+
+// NotEvaluated returns a line for each clause that the entry point of g does not
+// evaluate, with the reason, as every entry point reports it (ADR-060 decision 17): a
+// check of a later step, a check or a clause that its inputs do not decide, a row
+// result such a clause would have given, and the clauses that a later step adds.
+func (g GateResult) NotEvaluated() []string {
+	var out []string
+	for _, s := range g.Slots {
+		head := fmt.Sprintf("check %d %s: not evaluated", s.N, s.Name)
+		switch {
+		case s.Until != "":
+			out = append(out, head+" until "+s.Until)
+		case !s.Evaluated:
+			out = append(out, fmt.Sprintf("%s at %s: %s", head, g.Entry, s.Reason))
+		case s.Partial != "":
+			out = append(out, head+" until a later step: "+s.Partial)
+		}
+		for _, c := range s.Clauses {
+			out = append(out, fmt.Sprintf("%s at %s: %s", head, g.Entry, c))
+		}
+		for _, f := range s.Open {
+			out = append(out, fmt.Sprintf("%s on row %s: %s", head, f.Row, f.Reason))
+		}
+	}
+	return out
+}
+
+// Denied returns an error that lists each denial of g, naming the row and the check
+// that denied, the module table lookup included (ADR-060 decision 17); nil for none.
+func (g GateResult) Denied() error {
+	var errs []error
+	for _, f := range g.Unresolved {
+		errs = append(errs, fmt.Errorf("the gate at %s denies row %s by the module table lookup, which runs before the ten checks: %s", g.Entry, f.Row, f.Reason))
+	}
+	for _, s := range g.Slots {
+		for _, f := range s.Fails {
+			errs = append(errs, fmt.Errorf("the gate at %s denies row %s by check %d %s (%s): %s", g.Entry, f.Row, s.N, s.Name, f.Rule, f.Reason))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Admitted returns the launcher's copy of a composition: every row with a

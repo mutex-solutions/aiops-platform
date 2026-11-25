@@ -108,11 +108,12 @@ type build struct {
 	scratch  string
 	recorded map[string]string // go.sum line key ("<path> <version>[/go.mod]") to hash
 	served   map[string]string // a release build: the go.sum lines of the modules it serves
-	plugins  []tablePlugin
+	base     []tablePlugin     // a site build: the release's module table
+	plugins  []tablePlugin     // what the build builds: the site's plugins, or the release's table
 	progress io.Writer
 }
 
-// tablePlugin is a plugin of a site module that the module table gains.
+// tablePlugin is a plugin of the module table: package, accessor and manifest.
 type tablePlugin struct {
 	pkg, accessor string
 	manifest      []byte
@@ -172,8 +173,8 @@ func Build(ctx context.Context, q Request) (Result, error) {
 		return res, err
 	}
 	switch {
-	case b.release == nil && q.Signed == nil:
-		return res, nil // the first phase of a release stops at the manifest
+	case b.release == nil && q.Signed == nil: // the first phase of a release stops at the manifest
+		return res, errors.Join(b.gate(res.Manifest), b.source(ctx, false))
 	case b.release == nil && !bytes.Equal(res.Manifest, q.Signed.Manifest):
 		return res, errors.New("the second phase writes another manifest than the first phase wrote: the inputs changed between the phases (ADR-020 decision 13)")
 	case b.release != nil:
@@ -192,7 +193,7 @@ func (b *build) inputs(ctx context.Context) error {
 	switch {
 	case q.ModCache == "":
 		return errors.New("dist build needs --modcache: every module source is a directory until L14 clears, and no default proxy is asked (ADR-044 decision 7)")
-	case strings.Contains(q.Proxy, "://") && !strings.HasPrefix(q.Proxy, "file://"):
+	case strings.Contains(strings.ReplaceAll(q.Proxy, "file://", ""), "://"): // in any element of the list
 		return fmt.Errorf("GOPROXY names %s: until L14 clears, every module source of the builder is a file:// directory and dist build refuses a proxy URL (ADR-044 decision 7; ADR-060 decision 21)", q.Proxy)
 	case !filepath.IsAbs(q.Out) || !filepath.IsAbs(q.ModCache) || !filepath.IsAbs(q.Cache):
 		return errors.New("the output directory, the module cache and the builder's cache are absolute paths")
@@ -202,9 +203,11 @@ func (b *build) inputs(ctx context.Context) error {
 	}
 	if q.DistYAML == "" && q.Smoke == "" {
 		var err error
-		b.input, err = boot.ParseDist("the release input", q.Input)
-		if err != nil || !semver.IsValid(q.Root) {
+		switch b.input, err = boot.ParseDist("the release input", q.Input); {
+		case err != nil || !semver.IsValid(q.Root):
 			return errors.Join(err, fmt.Errorf("a release build names the version of the root module, not %q", q.Root))
+		case len(b.input.Modules) == 0:
+			return errors.New("the release input lists no module: a release names its module table (ADR-060 decision 20)")
 		}
 		var errs []error
 		for _, m := range sdkModules {
@@ -290,6 +293,9 @@ func (b *build) module(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := b.table(); err != nil {
+		return err
+	}
 	f := &modfile.File{}
 	_ = f.AddModuleStmt(scratchModule)
 	_ = f.AddGoStmt("1.26.0")
@@ -321,11 +327,12 @@ func (b *build) module(ctx context.Context) error {
 	if s := b.q.Signed; s != nil {
 		key, bundle = s.Key, s.Bundle
 	}
+	table := slices.Concat(b.base, b.plugins)
 	files := map[string][]byte{"go.mod": gomod, "go.sum": sum.Bytes(), "site/distribution.yaml": nil, "LICENSE": apache(),
 		"site/release.pub": key, "site/distribution.bundle": bundle,
-		"site/site.go": siteGo(b.plugins, b.keyID), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain),
+		"site/site.go": siteGo(table, b.keyID), "cmd/aiops/main.go": []byte(aiopsMain), "cmd/aiopsctl/main.go": []byte(aiopsctlMain),
 		"cmd/aiopsctl/suites/README": suitesReadme}
-	for i, p := range b.plugins {
+	for i, p := range table {
 		files[fmt.Sprintf("site/manifests/%d.yaml", i)] = p.manifest
 	}
 	if b.release == nil { // a release's aiopsctl embeds the suite binaries (ADR-060 decision 46)
@@ -412,14 +419,17 @@ func tablePackages(file, path, version string) ([]tablePlugin, error) {
 	for _, dir := range sortedKeys(dirs) {
 		var manifest []byte
 		accessor := ""
-		for _, f := range dirs[dir] {
+		for _, f := range dirs[dir] { // a plugin.yaml and the Go files, the rest unread
 			name := filepath.Base(f.Name)
+			if name != "plugin.yaml" && (!strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go")) {
+				continue
+			}
 			switch data, err := readZip(f); {
 			case err != nil:
 				return nil, err
 			case name == "plugin.yaml":
 				manifest = data
-			case strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go"):
+			default:
 				if f, err := parser.ParseFile(token.NewFileSet(), "", data, parser.SkipObjectResolution); err == nil {
 					accessor = plugingen.Accessor(accessor, f)
 				}
@@ -438,6 +448,27 @@ func tablePackages(file, path, version string) ([]tablePlugin, error) {
 		out = append(out, tablePlugin{pkg: pkg, accessor: accessor, manifest: manifest})
 	}
 	return out, nil
+}
+
+// table reads the release's module table from the zip of the root module (ADR-060
+// decision 20): what a release builds, the packages its input lists, or the start of a
+// site's, those its release records. ponytail: contrib modules (S6a) add their zips.
+func (b *build) table() error {
+	pkgs, version, out := b.input.Modules, b.q.Root, &b.plugins
+	if b.release != nil {
+		pkgs, version, out = nil, b.releaseVersion(rootModule), &b.base
+		for _, p := range b.release.Plugins {
+			pkgs = append(pkgs, p.Package)
+		}
+	}
+	all, err := tablePackages(b.zip(module.Version{Path: rootModule, Version: version}), rootModule, version)
+	*out = slices.DeleteFunc(all, func(p tablePlugin) bool { return !slices.Contains(pkgs, p.pkg) })
+	for _, pkg := range pkgs {
+		if !slices.ContainsFunc(*out, func(p tablePlugin) bool { return p.pkg == pkg }) && err == nil {
+			err = fmt.Errorf("the module table lists %s, which declares no plugin in %s %s", pkg, rootModule, version)
+		}
+	}
+	return err
 }
 
 // zip returns the file of the module zip of m in the module source, in that of plugin
@@ -707,41 +738,34 @@ func fakes(pkgs []Package) error {
 	return errors.Join(errs...)
 }
 
-// gate runs the clauses of the entry point dist build on the module table of the
-// build, with each site plugin's bundle.yaml in a profile of its own (ADR-060
-// decision 17): a denial fails the build and names its check.
+// gate runs the clauses of dist build on the manifests of what the build builds, an
+// enabled row of each plugin (ADR-060 decisions 17 and 22): it prints each clause it does
+// not evaluate with the reason, and a denial fails the build and names its check.
 func (b *build) gate(manifest []byte) error {
 	d, err := boot.ReadDistribution("the signed manifest of the build", manifest)
 	if err != nil {
 		return err
 	}
-	mods := d.Table()
-	fsys := fstest.MapFS{"profiles/build/profile.yaml": {Data: []byte("bundles: []\n")}}
-	var ids []string
+	var rows []string
 	for _, p := range b.plugins {
-		man, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
-		if err != nil {
+		switch man, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient); {
+		case err != nil:
 			return err
-		}
-		if data, err := os.ReadFile(filepath.Join(b.moduleDir(p.pkg), "bundle.yaml")); err == nil {
-			fsys["bundles/"+man.ID+"/bundle.yaml"], ids = &fstest.MapFile{Data: data}, append(ids, man.ID)
+		case man.ID != boot.LoaderID: // boot mounts the loader's row
+			rows = append(rows, fmt.Sprintf("{id: %s, plugin: %s}", strings.ReplaceAll(man.ID, "/", "."), man.ID))
 		}
 	}
-	c, _, err := boot.Compose(boot.Sources{Profile: "build", Home: fsys, Bundles: fsys, Append: ids}, boot.Options{Modules: mods})
+	mods, fsys := d.Table(), fstest.MapFS{"profiles/build/profile.yaml": {Data: []byte("bundles: [build]\n")},
+		"bundles/build/bundle.yaml": {Data: []byte("- insert: [" + strings.Join(rows, ", ") + "]\n")}}
+	c, _, err := boot.Compose(boot.Sources{Profile: "build", Home: fsys, Bundles: fsys}, boot.Options{Modules: mods})
 	if err != nil {
 		return err
 	}
 	g := boot.GateWith(boot.WithLoader(c), boot.GateInput{Entry: boot.EntryBuild, Mods: mods, Bindings: d.Bindings(), Dist: &d, Artifacts: map[string]boot.Artifact{}})
-	var errs []error
-	for _, s := range g.Slots {
-		for _, f := range s.Fails {
-			errs = append(errs, fmt.Errorf("the gate at dist build denies row %s by check %d (%s): %s", f.Row, s.N, f.Rule, f.Reason))
-		}
+	for _, l := range g.NotEvaluated() {
+		fmt.Fprintln(b.progress, "gate: "+l)
 	}
-	for _, f := range g.Unresolved {
-		errs = append(errs, fmt.Errorf("the gate at dist build denies row %s: %s", f.Row, f.Reason))
-	}
-	return errors.Join(errs...)
+	return g.Denied()
 }
 
 // moduleDir returns the directory of the package pkg of a site plugin in the scratch
@@ -756,21 +780,36 @@ func (b *build) moduleDir(pkg string) string {
 	return ""
 }
 
-// source runs on the site plugins' source what the build runs there (ADR-060 decision
-// 22): the import boundary and plugin vet of internal/vet on each plugin package, and
-// the tests of each plugin module, the suites among them, without -race, since the
-// builder has cgo off. With a raise that --allow-bump admitted, it also runs the suites
-// and the generated tests of each first-party plugin of the module table on the raised
-// build list, so that the first-party rows run their suites against what the binary
-// links (ADR-044 decision 10); a go.mod and go.sum of their own take the lines of their
-// test dependencies, which the binary does not link.
+// source runs on the source of what the build builds what the build runs there (ADR-060
+// decision 22), without -race, since the builder has cgo off: on each site plugin's
+// package, the import boundary and plugin vet of internal/vet, and the tests of each
+// site module, the suites among them; on each package of a release's table, the import
+// boundary of the repository, and its suites and generated tests. With a raise that
+// --allow-bump admitted, a site build runs those of each plugin of the release's table
+// on the raised build list, so that the first-party rows run their suites against what
+// the binary links (ADR-044 decision 10). A go.mod and go.sum of their own take the lines
+// of their test dependencies, which the binary does not link.
 func (b *build) source(ctx context.Context, bumped bool) error {
 	var errs []error
-	for _, p := range b.plugins {
-		fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
-		errs = append(errs, err)
-		for _, f := range fs {
-			errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
+	first, why := b.base, "on the raised build list (ADR-044 decision 10)"
+	if b.release == nil {
+		first, why = b.plugins, "the release's own (ADR-060 decision 22)"
+		var dirs []string
+		for _, p := range b.plugins {
+			fmt.Fprintf(b.progress, "boundary: the import boundary of %s\n", p.pkg)
+			dirs = append(dirs, strings.TrimPrefix(p.pkg, rootModule+"/"))
+		}
+		errs = append(errs, vet.Boundary(filepath.Join(b.scratch, "mod", rootModule+"@"+b.q.Root), dirs)) // its path needs no escape
+	} else {
+		for _, p := range b.plugins {
+			fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
+			errs = append(errs, err)
+			for _, f := range fs {
+				errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
+			}
+		}
+		if !bumped {
+			first = nil
 		}
 	}
 	for _, p := range b.site.Plugins {
@@ -779,19 +818,17 @@ func (b *build) source(ctx context.Context, bumped bool) error {
 			errs = append(errs, fmt.Errorf("the suites of %s: %w", p.Path, err))
 		}
 	}
-	var first []string
-	for _, id := range sortedKeys(b.release.Plugins) {
-		if p := b.release.Plugins[id].Package; bumped && strings.HasPrefix(p, rootModule+"/") {
-			first = append(first, p)
-		}
+	var pkgs []string
+	for _, p := range first {
+		pkgs = append(pkgs, p.pkg)
 	}
-	if len(first) > 0 {
+	if len(pkgs) > 0 {
 		mod, err := os.ReadFile(filepath.Join(b.scratch, "go.mod"))
 		sum, serr := os.ReadFile(filepath.Join(b.scratch, "go.sum"))
 		err = errors.Join(err, serr, os.WriteFile(filepath.Join(b.scratch, "suites.mod"), mod, 0o644), os.WriteFile(filepath.Join(b.scratch, "suites.sum"), sum, 0o644))
-		fmt.Fprintf(b.progress, "suites: go test %s, on the raised build list (ADR-044 decision 10)\n", strings.Join(first, " "))
+		fmt.Fprintf(b.progress, "suites: go test %s, %s\n", strings.Join(pkgs, " "), why)
 		if err == nil {
-			_, err = b.g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace", "-modfile=suites.mod", "-mod=mod", "-run", "^(TestConformance|TestCycle|TestTwoTenants)$"}, first)...)
+			_, err = b.g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace", "-modfile=suites.mod", "-mod=mod", "-run", "^(TestConformance|TestCycle|TestTwoTenants)$"}, pkgs)...)
 		}
 		errs = append(errs, err)
 	}

@@ -297,3 +297,34 @@ func TestGateSlotsAndResult(t *testing.T) {
 		t.Errorf("verdict %+v", g)
 	}
 }
+
+// Every entry point reports each clause it does not evaluate with the reason, and a
+// denial names the row and the check that denied (ADR-060 decision 17): a check of a
+// later step, a check or a clause that the entry point's inputs do not decide, a row
+// result such a clause would have given, and the clauses a later step adds; a denial by
+// a check and one by the module table lookup. A result with no denial is no error.
+func TestGateReportsWhatItDoesNotEvaluateAndWhoDenied(t *testing.T) {
+	c := comp(t, rows("id: a, plugin: o/other", "id: b, plugin: o/open", "id: m, plugin: x/none"))
+	g := Gate(c, mustMods(t, gateMods), mustDist(t, gateDist))
+	g.Slots[CheckLicence-1].Open = []RowResult{{Check: CheckLicence, Row: "b", Reason: "its clause is not evaluated"}}
+	got := strings.Join(g.NotEvaluated(), "\n")
+	for _, want := range []string{"check 3 Remote protocol: not evaluated until S2b\n",
+		"check 1 Manifest schema and author API: not evaluated at profile render: no signed distribution manifest is given\n",
+		"check 7 Key and hook classes: not evaluated at profile render: signed: no signed distribution manifest is given\n",
+		"check 8 Layer rules: not evaluated until a later step: the tenant overlay is S4b",
+		"check 6 Licence: not evaluated on row b: its clause is not evaluated\n"} {
+		if !strings.Contains(got+"\n", want) {
+			t.Errorf("the report lacks %q:\n%s", want, got)
+		}
+	}
+	err := g.Denied()
+	for _, want := range []string{"the gate at profile render denies row m by the module table lookup, which runs before the ten checks: ",
+		"the gate at profile render denies row a by check 7 Key and hook classes (provider-binding): "} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("the denial lacks %q: %v", want, err)
+		}
+	}
+	if err := (GateResult{Slots: g.Slots[CheckLayerRules-1:]}).Denied(); err != nil {
+		t.Errorf("no denial: %v", err)
+	}
+}

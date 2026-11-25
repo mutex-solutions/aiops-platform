@@ -5,14 +5,12 @@
 // values, the signed distribution manifest the binaries embed (distribution.yaml), the
 // launcher's limits (limits.yaml) and the shipped bundles and profiles
 // (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233). dist.yaml is
-// the builder's input: the bindings and the required set of the release (ADR-060
-// decision 20); go run ./tools/plugingen --write . writes distribution.yaml from it
-// and from the binary's package graph, and make check fails when they differ.
-//
-// The module table is written by hand, each plugin with its manifest, which the root
-// package embeds; the distribution builder of S2a generates it once it lands
-// (08-profiles-roadmap-adrs.md:402; ADR-060 decision 20). There is no init()
-// registry: Table builds the table when called, from the list in Modules below.
+// the builder's input: the module list, the bindings and the required set of the
+// release (ADR-060 decision 20); go run ./tools/plugingen --write . generates from it
+// the module table, Modules in modules.go, each plugin with its manifest, which the root
+// package embeds, and writes distribution.yaml from it and from the binary's package
+// graph; make check fails when either differs. There is no init() registry: Table
+// builds the table when called, from the list in Modules.
 //
 // This package, like cmd/aiops, must never import a test plugin, a fake or
 // sdk/testkit (07-c4-plugin-sdk.md:47, :564). test/dist is the separate
@@ -25,22 +23,8 @@ import (
 	"fmt"
 	"io/fs"
 
-	aiops "github.com/mutex-solutions/aiops-platform"
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/loader"
-	"github.com/mutex-solutions/aiops-platform/plugins/cli"
-	"github.com/mutex-solutions/aiops-platform/plugins/clock"
-	commanddist "github.com/mutex-solutions/aiops-platform/plugins/command-dist"
-	commandkey "github.com/mutex-solutions/aiops-platform/plugins/command-key"
-	commandplugin "github.com/mutex-solutions/aiops-platform/plugins/command-plugin"
-	commandprofile "github.com/mutex-solutions/aiops-platform/plugins/command-profile"
-	commandtrust "github.com/mutex-solutions/aiops-platform/plugins/command-trust"
-	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
-	"github.com/mutex-solutions/aiops-platform/plugins/operations"
-	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
-	"github.com/mutex-solutions/aiops-platform/plugins/reload"
-	reloadsocket "github.com/mutex-solutions/aiops-platform/plugins/reload-socket"
-	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
 	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -112,35 +96,6 @@ func Table(mods ...Module) (boot.Registry, error) {
 			return loader.Config{Rows: rows, Batch: batch, Plugins: plugins}
 		},
 	}, nil
-}
-
-// Modules is the compiled-in list of plugins of the release distribution. ADD A
-// PLUGIN HERE: one Module per plugin, with the manifest beside its package, which the
-// root package embeds, and its bindings in dist.yaml; then go run ./tools/plugingen
-// --write . writes distribution.yaml again. The list holds the loader, the five
-// core rows of S1, reload-socket (ADR-062), and the cli row, the command rows and the
-// operations row of aiops-cli (ADR-061 decisions 14, 24 and 30); the others arrive with
-// their own steps.
-func Modules() []Module {
-	m := func(p kernel.Plugin, dir string) Module {
-		return Module{Plugin: p, Manifest: Manifest(aiops.Manifests, dir)}
-	}
-	return []Module{
-		m(loader.New(), "loader"),
-		m(clock.Plugin, "plugins/clock"),
-		m(configrefs.Plugin, "plugins/config-refs"),
-		m(readiness.New(), "plugins/readiness"),
-		m(reload.New(), "plugins/reload"),
-		m(reloadsocket.New(), "plugins/reload-socket"),
-		m(restartpolicy.New(), "plugins/restart-policy"),
-		m(cli.Plugin, "plugins/cli"),
-		m(commandprofile.Plugin, "plugins/command-profile"),
-		m(commandplugin.Plugin, "plugins/command-plugin"),
-		m(commandtrust.Plugin, "plugins/command-trust"),
-		m(commanddist.Plugin, "plugins/command-dist"),
-		m(commandkey.Plugin, "plugins/command-key"),
-		m(operations.Plugin, "plugins/operations"),
-	}
 }
 
 // Shipped returns the bundles and profiles of the release, by their paths under the

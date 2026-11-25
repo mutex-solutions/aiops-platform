@@ -1,7 +1,28 @@
-# The release distribution manifest, the part the launcher reads
-# (08-profiles-roadmap-adrs.md:451, :1233). At S1 it holds the loader and the five core
-# rows of the launcher's own step; the bindings and the required set of each later
-# plugin are added with the plugin.
+# The builder's input for the release (ADR-060 decision 20; 08-profiles-roadmap-adrs.md:451,
+# :1220): its module list, both binding maps, the sealed-hook listeners and the required
+# set. The bindings and the required set of each later plugin are added with the plugin.
+#
+# The module list: the import path of each package that declares a plugin. ADD A PLUGIN
+# HERE, with its bindings below; then go run ./tools/plugingen --write . generates the
+# release module table dist/modules.go and writes distribution.yaml again, and make check
+# fails when either differs. The list holds the loader, the five core rows of S1,
+# reload-socket (ADR-062), and the cli row, the command rows and the operations row of
+# aiops-cli (ADR-061 decisions 14, 24 and 30); the others arrive with their own steps.
+modules:
+  - github.com/mutex-solutions/aiops-platform/loader
+  - github.com/mutex-solutions/aiops-platform/plugins/cli
+  - github.com/mutex-solutions/aiops-platform/plugins/clock
+  - github.com/mutex-solutions/aiops-platform/plugins/command-dist
+  - github.com/mutex-solutions/aiops-platform/plugins/command-key
+  - github.com/mutex-solutions/aiops-platform/plugins/command-plugin
+  - github.com/mutex-solutions/aiops-platform/plugins/command-profile
+  - github.com/mutex-solutions/aiops-platform/plugins/command-trust
+  - github.com/mutex-solutions/aiops-platform/plugins/config-refs
+  - github.com/mutex-solutions/aiops-platform/plugins/operations
+  - github.com/mutex-solutions/aiops-platform/plugins/readiness
+  - github.com/mutex-solutions/aiops-platform/plugins/reload
+  - github.com/mutex-solutions/aiops-platform/plugins/reload-socket
+  - github.com/mutex-solutions/aiops-platform/plugins/restart-policy
 #
 # Provider-bound keys: only config-refs provides configRefsReady, the key that every row
 # whose config holds a reference injects (ADR-059, "configRefsReady"), and the dry run of

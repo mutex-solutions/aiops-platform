@@ -164,6 +164,28 @@ func TestImportsReportFormatAndOrder(t *testing.T) {
 	}
 }
 
+// The import boundary of a release build reads only the directories of its module table,
+// each file by its path in the tree of the root module, with the register of that tree
+// (ADR-060 decision 22): a plugin that imports another fails, a file outside the
+// directories is not read, and a tree with no register fails.
+func TestBoundaryOfTheDirectoriesOfATable(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "tools/upstream-components.yaml", "entries: []\n")
+	write(t, d, "plugins/b/plugin.go", imp(mp+"/plugins/a"))
+	write(t, d, "plugins/b/internal/x/x.go", imp("fmt"))
+	write(t, d, "boot/a.go", imp(mp+"/loader"))
+	err := Boundary(d, []string{"plugins/b"})
+	if err == nil || !strings.Contains(err.Error(), "\nplugins/b/plugin.go:4: imports "+mp+"/plugins/a: a plugin imports") || strings.Contains(err.Error(), "boot/a.go") {
+		t.Errorf("the boundary of plugins/b: %v", err)
+	}
+	if err := Boundary(d, []string{"plugins/b/internal"}); err != nil {
+		t.Errorf("a clean directory: %v", err)
+	}
+	if err := Boundary(t.TempDir(), []string{"."}); err == nil {
+		t.Error("a tree with no register passes")
+	}
+}
+
 func TestImportsServerClosure(t *testing.T) {
 	d := t.TempDir()
 	write(t, d, "cmd/aiops/main.go", "package main\n")

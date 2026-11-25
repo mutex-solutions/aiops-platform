@@ -13,9 +13,9 @@ import (
 	"oras.land/oras-go/v2/content/oci"
 )
 
-// siteGo returns the package site of the scratch module: the module table of the
-// release, dist.Modules, then each plugin of the site with the manifest of its module,
-// and the signed manifest that both binaries embed (07:1344; ADR-020 decision 12); for
+// siteGo returns the package site of the scratch module: the module table, plugins,
+// each with the manifest of its module, the release's then the site's, and the signed
+// manifest that both binaries embed (07:1344; ADR-020 decision 12); for
 // the second phase of a release, the release key's id, keyID, with the key and the
 // bundle of the manifest (ADR-020 decision 13). It holds no init and no plugin of its
 // own.
@@ -62,8 +62,8 @@ var Release *boot.Release%s
 
 %s// Modules is the module table: the release's, then the site's plugins.
 func Modules() []dist.Module {
-	return append(dist.Modules(),
-%s	)
+	return []dist.Module{
+%s	}
 }
 
 // Load returns the registry, the signed manifest and the release's limits.
