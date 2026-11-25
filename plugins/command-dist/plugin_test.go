@@ -75,10 +75,10 @@ func mount(t *testing.T) (conformance.Subject, *kernel.Root) {
 	return conformance.Contribution(f, "fixtures"), root
 }
 
-// The row registers the paths that fixtures/commands/paths.json lists, which the name
-// lint reads (ADR-061 decision 5). dist build is not built yet, so commands/run and
-// commands/cancel, which need a case of outcome ok for every command, wait for it.
-func TestPaths(t *testing.T) { conformance.Paths(t, mount) }
+// The row keeps the obligations of a command on the cases of its fixtures, whose
+// paths.json the name lint reads (ADR-061 decision 5); the stub of the library answers
+// each of its three commands.
+func TestObligations(t *testing.T) { conformance.Run(t, mount) }
 
 // The help of each command is the CLI spec (ADR-061 decision 30).
 func TestHelp(t *testing.T) { conformance.Help(t, mount, *update) }
