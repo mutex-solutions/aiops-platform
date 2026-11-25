@@ -257,7 +257,14 @@ gaps:
    exit reaches a referrer form, if ADR-020 picks one, through the tag schema. The image
    that runs it is pinned by digest, with its register entry and the licences of its
    layers, in the commit that adds the `s2a-exit` job, before S2a ends (ADR-060 decision
-   34).
+   34). Note of 2026-11-25: it is pinned ahead of that job. The register entry
+   `distribution-registry`, mode `tool`, pins the Docker Official Image
+   `registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c`,
+   whose `/bin/registry` reports v3.1.2; the module's licence was read again that day,
+   and the licences of the layers, Alpine 3.24.4 packages, in the image's
+   `/lib/apk/db/installed`, as the licence record row "Test registry of the S2a exit"
+   lists them. The layers hold GPL-2.0 packages, so the image is pulled in CI only and
+   never shipped (L5).
 
 ### The install
 

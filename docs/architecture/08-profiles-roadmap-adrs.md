@@ -1387,6 +1387,7 @@ These tools are deployed in no profile and appear in no container inventory (`00
 | shepherd, testcontainers-go, embedded PostgreSQL, Helm, Compose | A conformance oracle for the fleet protocol; test containers; the database of a solo test; packaging | CI and tests. testcontainers-go, the embedded PostgreSQL wrapper and goleak are also linked into `aiopsctl` through `sdk/testkit`, so its licence scan and `THIRD_PARTY_LICENSES/` cover them (L7) | Apache-2.0 or MIT | S2a to S7 |
 | Node.js v24.22.1, by archive checksum | Runs the vendored Cordis oracle of the differential test | CI | MIT, with the bundled components under their own terms in the complete licence file (licence record §2.1) | S0 |
 | gitleaks v8.18.4 | The secret scan of the hygiene job | CI | MIT | S0 |
+| The registry program of `github.com/distribution/distribution/v3` v3.1.2, in the Docker Official Image `registry:3.1.2` pinned by digest | The test registry of the S2a exit, which runs as a separate process inside the `s2a-exit` job (ADR-047 decision 4) | CI | Apache-2.0; its Alpine layers hold GPL-2.0 packages, so it is pulled by digest and never shipped (L5; licence record §2.1) | S2a |
 | `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, each pinned by commit | Check out the repository, install the pinned Go toolchain, keep the evidence of a long run | CI | MIT | S0 |
 
 Rules for the list:

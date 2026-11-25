@@ -61,6 +61,32 @@ entries:
     source: "the module zip of golang.org/toolchain at its pin, unmodified; THIRD_PARTY_LICENSES/ and SOURCE-OFFER of the builder image (ADR-044 decisions 5 and 17)"
     default: false
 
+  # The builder image itself, an entry of its own as ADR-044 decision 5 asks of a
+  # shipped image (licence record §2.1, the builder row). The second phase of the
+  # release build writes it from dist/builder/image.yaml as one layer on no base layer,
+  # so it holds no upstream layer and no upstream name: what it bakes in is the entry
+  # go-toolchain, and aiopsctl is first-party, its build list under the entries of its
+  # modules. Its licence is that of the toolchain tree with aiopsctl's own Apache-2.0;
+  # its digest is each release's, which the release artifact names (ADR-044 decision 1),
+  # so the register pins none.
+  - id: builder-image
+    role: builder
+    names: []
+    form: process
+    behind: none
+    licence: BSD-3-Clause AND Apache-2.0 AND OpenSSL AND ISC
+    verdict: ok-with-conditions
+    modes: [ship]
+    conditions:
+      - {condition: "One layer on no base layer, holding the toolchain module unmodified at the release's pin, aiopsctl, and no shell, scanner, SBOM tool, C compiler or version control client", row: L5}
+      - {condition: "Carries THIRD_PARTY_LICENSES/ with every licence and notice file of the toolchain tree and of aiopsctl's build list, the NOTICE texts and MPL-2.0 lines of aiopsctl, builder.spdx.json and a source offer stating it holds no GPL, LGPL or AGPL package", row: L7}
+    evidence:
+      - {source: "dist/builder/image.yaml and the entry go-toolchain, read at golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64", read: "2026-11-25", version: go1.26.8}
+    mark: needs-approval
+    sbom: "builder.spdx.json of the image: the toolchain module, the modules of its three modules.txt files, the two golang.org/fips140 modules, aiopsctl with its build list and each embedded suite binary (ADR-044 decision 5)"
+    source: "SOURCE-OFFER and THIRD_PARTY_LICENSES/ of the image; the module zip of golang.org/toolchain at its pin, unmodified (ADR-044 decisions 5 and 17)"
+    default: false
+
   - id: cordis
     names: [cordis, deepseek, dsh]
     form: port
@@ -567,6 +593,35 @@ entries:
       - {condition: "Pulled by digest in CI only, never shipped or mirrored, since its base layers are not read", row: L5}
     evidence:
       - {source: "s0-reference-pins.md:92-97, the core COPYRIGHT and the packaging LICENSE, each recorded by its hash", read: "2026-11-23", version: 16.15-trixie}
+    mark: needs-approval
+    default: false
+
+  # The registry that the s2a-exit job runs (ADR-060 decisions 30 and 34; ADR-047
+  # decision 4): the Docker Official Image of the registry program of
+  # github.com/distribution/distribution/v3, pinned by the digest of its index. The
+  # program is Apache-2.0; the image's layers are Alpine 3.24.4 packages, each licence
+  # read in /lib/apk/db/installed of its linux/amd64 image: GPL-2.0-only (busybox,
+  # apk-tools, alpine-baselayout, scanelf, ssl_client), MIT (musl, alpine-keys),
+  # MIT AND BSD-2-Clause AND GPL-2.0-or-later (musl-utils), MPL-2.0 AND MIT
+  # (ca-certificates), Apache-2.0 (OpenSSL 3) and Zlib (zlib). The project's own names,
+  # distribution and registry, are words the repository's files must carry, so they go
+  # to the owner before U1 reads them (ADR-054 decision 8); until then the entry names
+  # it by the name it was published under before, docker-distribution.
+  - id: distribution-registry
+    names: [docker-distribution]
+    form: process
+    behind: none
+    images:
+      - {ref: "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c", key: the test registry of the s2a-exit job}
+    pin: v3.1.2
+    licence: Apache-2.0 AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND BSD-2-Clause AND MPL-2.0 AND Zlib
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Pulled by digest in CI only, run as a separate process inside the exit job, never shipped, mirrored or baked into an image of ours, since its layers hold GPL-2.0 packages", row: L5}
+    evidence:
+      - {source: "github.com/distribution/distribution/v3@v3.1.2 LICENSE, the Apache License 2.0 with its appendix left as the template, SHA-256 cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14, and no NOTICE; module h1:/Bv2YIqqSR00HiO49FT93hovy6r9IlrzwUDsJjCN5qg=", read: "2026-11-25", version: v3.1.2}
+      - {source: "/lib/apk/db/installed of the linux/amd64 image sha256:52b489ad8e6f40d1a676702e3ce398ec796ce38f08fbb786e1f324baa12d84b8 of that index, on alpine:3.24, whose /bin/registry reports github.com/distribution/distribution/v3 3.1.2", read: "2026-11-25", version: v3.1.2}
     mark: needs-approval
     default: false
 
