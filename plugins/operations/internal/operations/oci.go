@@ -94,7 +94,9 @@ func resolve(ctx context.Context, r *remote.Repository) (ocispec.Descriptor, err
 }
 
 // fetch returns the blob or manifest d of src, checked against its digest and size,
-// and refuses one larger than its media type may be before it fetches it.
+// and refuses one larger than its media type may be before it fetches it. A failure
+// names d, so that a blob changed after signing is named by its media type and the
+// digest that the signed manifest records.
 func fetch(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) ([]byte, error) {
 	limit := int64(maxBlob)
 	if d.MediaType == layerManifest || d.MediaType == layerBundle {
@@ -103,7 +105,11 @@ func fetch(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) ([]by
 	if d.Size > limit {
 		return nil, refused("%s is %d bytes, more than the %d a %s may hold", d.Digest, d.Size, limit, d.MediaType)
 	}
-	return content.FetchAll(ctx, src, d)
+	b, err := content.FetchAll(ctx, src, d)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", d.MediaType, d.Digest, err)
+	}
+	return b, nil
 }
 
 // manifest returns the image manifest d of src.
