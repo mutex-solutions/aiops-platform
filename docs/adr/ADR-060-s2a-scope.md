@@ -456,6 +456,14 @@ gaps:
     one failed line per obligation of each registry its rows feed. Note of 2026-11-25:
     the release build embeds the binaries (decision 46, note of 2026-11-25); the case
     stays deferred until the exit's test release serves the instantiable toy echoer.
+    Second note of 2026-11-25, as built: the test release serves it, and step P1 of the
+    exit generates the pack with `plugin new connector` against that release, on the
+    pack author's machine, and asserts that `plugin check` fails each obligation of
+    `echoers` once; the template job, which builds no release, keeps the case above.
+    `plugingen` writes the config examples `testdata/config/*.json` of a plugin as the
+    root `examples` of its `configSchema`, which it did not, and step 3 refuses an
+    instantiable plugin with none or with a reference in one (ADR-047 decision 12);
+    `examples/echoer` has one.
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
@@ -610,6 +618,52 @@ gaps:
 
     The exit texts of `08:620`, `08:694`, `00:571`, community:59 and plugin record §16
     are edited to one text with the answer to question Q1.
+
+    Note of 2026-11-25, as built: the exit is `TestS2aExit` of `test/authoring/`. `make
+    s2a-exit` runs it on each path of the clean machine's builds in turn, the builder
+    image and the local toolchain (`EXIT_BUILDERS`), and the jobs `s2a-exit` and
+    `s2a-exit-local` run one each; the test binary is race-built, and a race report or a
+    skip fails each. The test is the release pipeline: `builder.Serve` writes the root and
+    SDK modules at `v0.2.0-s2a.exit` into a directory that is the module proxy, with the
+    modules of their build list and a list file for each module; since `go mod tidy` also
+    reads the tests of a plugin's dependencies, whose imports the release's build list
+    need not hold, the pipeline runs `plugin check --write` and `go mod tidy` on each Go
+    template once, through the host's module cache and module proxy, and adds what they
+    fetched. It builds `test/release/dist.yaml` in two phases, signs its manifest with a
+    throwaway key with the code of `dist sign`, and pushes its layout to the registry of
+    the job, the pinned image with its port on the loopback interface. Each environment is
+    a directory of its own outside the checkout whose `bin/` is its whole `PATH`: the
+    author's holds Go and the test release's `aiopsctl`, beside the host's programs, a C
+    compiler for `-race` among them; the pack author's holds that `aiopsctl` alone; the
+    clean machine's that `aiopsctl` and `docker`. Each has the Go environment of decision
+    21 with a home and an empty module cache of its own, and `HTTP_PROXY` and
+    `HTTPS_PROXY` name a closed port, so a Go program reaches only the loopback interface,
+    where the registry is, and the go command only the module proxy, through `file://`;
+    the containers of the clean machine have no network. The clean machine runs the
+    release `aiopsctl` until `dist use` and the site's after it (ADR-061 decision 26). The
+    rows of the toy dispatcher, the toy caller and `teststate` enter `dev` through its
+    profile layer in the home, since the site layer also reaches the `cli` profile that
+    each `aiopsctl` command boots. D1 and D2 run after C1 and before `dist use`, where
+    install evaluates every clause above but the module clause of check 5. D1's copy is
+    the layout of A3 with `plugin.yaml`, `module.json`, the SBOM and the recorded statement
+    edited, signed with `plugin sign`, and its module is served from a copy of the module
+    proxy for `dist build`; D2's copy is the artifact and the signature of A3 with the
+    author's signed attestation of an artifact whose SBOM alone differs. The attestation
+    of A3 names the digest of the artifact, which fixes its `module.json` and so the sum
+    of the module. The kernel of C3 to C6 runs in the container form of ADR-047 decision
+    15, from the image that `image.yaml` names, which the host pushes from the layout of
+    `dist build` to the registry and runs by digest. The changed copy of decision 31 is the
+    layout of P1 with one byte of its fixtures layer changed, which `plugin verify` names
+    by its digest; the departing build of decision 31 adds a consumer of `reload` and
+    accepts GPL-2.0-only for a site plugin, and the check 6 denial of a distribution
+    whose manifest does not record the acceptance stays with the cases of `boot`. The exit
+    found, and its commits fix: `plugin check --write` could not build a fresh skeleton,
+    which has no `go.sum` (it now resolves the plugin's package with `-mod=mod` first, and
+    step 1 prints why `--write` failed); `plugin new connector` wrote no config (decision
+    24, second note of 2026-11-25); `plugin install` printed the `dist.yaml` lines of
+    `rebuild-required` as `modules:`, which `dist build` refuses, and now prints them
+    under `plugins:` with the sum (decision 20); a blob that fails its digest is named;
+    and a failed build on the image path no longer leaves the `build/` it made.
 31. **The other refusals and the commands the exit does not reach** are cases of the
     tests of `boot`, `test/failure-matrix` and `test/authoring/`:
     - Every denial clause of checks 1, 2, 4, 5, 6 and 10 and of the S2a parts of checks 7
@@ -1592,4 +1646,5 @@ in plugin record §5 ("Modules and import boundary"). The ADR table of `08` §3 
 this ADR, and the next free number is ADR-061. Left to later commits: the `go.mod` lines
 of decision 54, with the code that moves the module root; the one exit text of decision
 30; and the one gate text of decision 16, which carries the check 8 clause of decision
-57. An option the owner did not choose edits nothing.
+57. An option the owner did not choose edits nothing. Note of 2026-11-25: the one exit
+text of decision 30 is written with the exit test (decision 30, note of 2026-11-25).
