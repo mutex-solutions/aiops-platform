@@ -306,6 +306,13 @@ gaps:
     A release publishes the signed file for `plugin gate --against` (`08:936`). The
     release module table is generated into `dist/` and committed, CI fails when it differs
     from the generator's output, and `go build ./...` keeps building `cmd/aiops`.
+    Note of 2026-11-25, as built (owner answer (1) of 2026-11-25): `dist/dist.yaml`
+    holds the module list, `modules`, the import path of each package that declares a
+    plugin; `go run ./tools/plugingen --write .` generates the release module table
+    `dist/modules.go` from it, and `make check` and CI fail when the committed file
+    differs. The builder takes any release input in that form: a release build's module
+    table is the one its input lists, and a site's begins with the one its release's
+    signed manifest records, so a site builds on the test release of decision 38 too.
 21. **SDK module versions outside the repository.** Inside the repository the three SDK
     modules require each other at `v0.0.0` through `replace` lines, and the root module
     reaches them the same way; that stays, for work inside the repository only.
@@ -353,6 +360,16 @@ gaps:
     <image>` verifies it and records its signer and digest (`07:1861-1862`). Rewriting a
     compose file or `image.tag` arrives with `deploy/compose` and `deploy/helm`; until
     then `dist use` records the image reference in the site files and prints it.
+
+    Note of 2026-11-25, as built: the first phase of a release build runs the gate and
+    the source pass as a site build does. The gate composes an enabled row of each plugin
+    that the build builds, the release's table or the site's plugins, prints each clause
+    that `dist build` does not evaluate with the reason (`plugin smoke` and `plugin
+    verify` of in-process code, which build through it, print the same), and a denial
+    names its check, or the module table lookup. The source pass of a release applies the
+    import boundary of the repository, with the register of the served tree, to each
+    package of its table, and runs their suites and generated tests. A `GOPROXY` that
+    names a proxy URL in any element of its list is refused.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
     a command that writes a key pair in the format of ADR-020 decision 4, which the CLI
@@ -1255,7 +1272,11 @@ to a question, the decision here settles it.
     `dev` composition through the site's profile layer (`08:131`). The shipped `aiops`
     table gains nothing, the instantiable plugins at `0.1.0` stay the three of `07:132`,
     and the link guard of decision 28 keeps every `examples/` and `test/` package out of
-    `cmd/aiops` and `cmd/aiopsctl`.
+    `cmd/aiops` and `cmd/aiopsctl`. Note of 2026-11-25, as built: the input of the test
+    release is `test/release/dist.yaml`, in the form of `dist/dist.yaml` (decision 20);
+    the case `TestTestRelease` of the job `builder` builds it in two phases with a
+    throwaway release key, and the `aiopsctl` of that distribution boots on its built-in
+    record.
 
 39. **The toy definitions are `sdk/def/echoers/v0` and `sdk/def/stampers/v0`** (Q3 (a)),
     in the SDK module, at stability `experimental`; `examples/` keeps the toy plugins of
