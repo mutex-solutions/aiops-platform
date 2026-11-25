@@ -229,8 +229,9 @@ func abs(t *testing.T, p string) string {
 // cache, what a site that builds on the release fills its module cache with (ADR-044
 // decision 9): the .info and .mod of every module version of the repository's module
 // graph, since go list -m all of a build reads them for whichever version that build
-// selects; the zip of every module of the build list; and the toolchain module. It
-// fails, naming them, when the module cache lacks any.
+// selects; the zip of every module of the build list; and the toolchain module, which
+// the case found there. It fetches the others into the module cache first, from the
+// module proxy when the cache is cold, and fails, naming them, when it still lacks any.
 func fill(t *testing.T, repo, download, src string) {
 	t.Helper()
 	repoGo := func(args ...string) []string {
@@ -246,17 +247,29 @@ func fill(t *testing.T, repo, download, src string) {
 				mvs = append(mvs, f)
 			}
 		}
-		return mvs
+		slices.Sort(mvs)
+		return slices.Compact(mvs)
+	}
+	graph, list := repoGo("mod", "graph"), repoGo("list", "-m", "-f", "{{.Path}}@{{.Version}}", "all")
+	// go mod download writes the three files of each module of the build list, and go
+	// list -m the .info and .mod of each module version of the graph; both run outside
+	// the module, so that the repository's go.sum is never written.
+	for _, args := range [][]string{append([]string{"mod", "download"}, list...), append([]string{"list", "-m"}, graph...)} {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = t.TempDir()
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("go %s fails (%v): the case needs the modules of the build list in the module cache or a module proxy that serves them; the CI jobs builder and builder-image have one\n%s", args[0]+" "+args[1], err, out)
+		}
 	}
 	type file struct{ mv, ext string }
 	want := map[file]bool{}
 	for _, ext := range []string{".info", ".mod", ".zip"} {
 		want[file{builder.Toolchain + "@" + builder.ToolchainVersion, ext}] = true
 	}
-	for _, mv := range repoGo("mod", "graph") {
+	for _, mv := range graph {
 		want[file{mv, ".info"}], want[file{mv, ".mod"}] = true, true
 	}
-	for _, mv := range repoGo("list", "-m", "-f", "{{.Path}}@{{.Version}}", "all") {
+	for _, mv := range list {
 		want[file{mv, ".zip"}] = true
 	}
 	var missing []string
