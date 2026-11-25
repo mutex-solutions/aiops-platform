@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -52,7 +53,8 @@ type Setup struct {
 	Interrupted bool
 	// Shipped and Rendered are what the launcher's toolbox answers, the toolbox of the
 	// row and the config of the fake: the shipped files by path, and the result of
-	// Render for each profile. use sets Shipped and Rendered of the suite.
+	// Render for each profile. use sets Shipped of the suite, and Rendered of the suite
+	// for each profile that a case's Rendered does not name.
 	Shipped  map[string][]byte
 	Rendered map[string]launch.Rendered
 	// Images are the images of the registry of the case, by repository: each is tagged
@@ -126,12 +128,13 @@ var Shipped = map[string][]byte{"profiles/cli/profile.yaml": []byte("bundles: [a
 
 // Rendered is what the toolbox of the suite renders: cli with one departure from the
 // release bindings and one dump, and dev with a required row, the one provider of a
-// bound key and the row of the pack; no diagnostic.
+// bound key, the row of the pack and a warning, which refuses nothing.
 var Rendered = map[string]launch.Rendered{"cli": {Departures: []string{"the site adds consumers of appExit: acme/x"},
 	Dumps: map[string]string{"--dump": "the dump of cli\n"}, Distribution: "sha256:ab"},
 	"dev": {Composition: launch.Composition{Rows: []launch.Row{{ID: "loader", Plugin: "aiops/loader", Required: true},
 		{ID: "store", Plugin: "acme/store"}, {ID: Row, Plugin: "aiops/echoer", Origin: "acme/connector-x"}}},
-		Keys: []launch.KeyProviders{{Name: "toy.policy", Provider: "bound", Consumer: "open", Rows: []string{"store"}}}}}
+		Keys:        []launch.KeyProviders{{Name: "toy.policy", Provider: "bound", Consumer: "open", Rows: []string{"store"}}},
+		Diagnostics: []launch.Diagnostic{{Check: "compose", File: "profiles/dev/aiops.patch.yml", Line: 1, Text: "a departure of no effect", Warning: true}}}}
 
 // Row is the row of the pack once installed, under the group of its name.
 const Row = "connector-x:logs"
@@ -543,6 +546,10 @@ func Run(t *testing.T, mount Mount) {
 				if !errors.Is(err, c.want) || !reflect.DeepEqual(u.homeOf(c.profile), before) || why == "a denial" && len(ch.Verdict.Clauses) != 1 {
 					t.Errorf("%s: %+v, %v; want %v, the verdict, and nothing written", why, ch, err, c.want)
 				}
+				// The lines a site adds to the modules of its dist.yaml (08:397).
+				if l := ch.DistLines; why == "rebuild-required" && (len(l) != 2 || l[0] != "modules:" || !strings.HasPrefix(l[1], "  - {path: ")) {
+					t.Errorf("rebuild-required: the dist.yaml lines %q; want modules: and one {path, version} of its module", l)
+				}
 			}
 		})
 
@@ -666,6 +673,17 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("plugin smoke wrote the home: %+v", h)
 			}
 		})
+		t.Run("operations.O24 plugin enable and disable write nothing while the profile does not compose", func(t *testing.T) {
+			dev := Rendered["dev"]
+			dev.Diagnostics = append(slices.Clone(dev.Diagnostics), launch.Diagnostic{Check: "compose", File: "profiles/dev/aiops.patch.yml", Line: 2, Text: "acme/gone is no plugin"})
+			u := use(t, mount, Setup{Rendered: map[string]launch.Rendered{"dev": dev}})
+			for name, m := range map[string]func(context.Context, operations.RowRequest) (operations.Change, error){"enable": u.ops.Enable, "disable": u.ops.Disable} {
+				before := u.homeOf("dev")
+				if _, err := m(t.Context(), u.row(Row)); !errors.Is(err, operations.ErrRefused) || !reflect.DeepEqual(u.homeOf("dev"), before) {
+					t.Errorf("%s %s of a profile that does not compose: %v; want ErrRefused and nothing written", name, Row, err)
+				}
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -786,7 +804,9 @@ func use(t *testing.T, mount Mount, s Setup) *user {
 	if s.LockWait == 0 {
 		s.LockWait = time.Minute
 	}
-	s.Shipped, s.Rendered, s.Images, s.Artifact, s.Template, s.Built = Shipped, Rendered, Images, Artifact, Template, Built
+	rendered := maps.Clone(Rendered)
+	maps.Copy(rendered, s.Rendered)
+	s.Shipped, s.Rendered, s.Images, s.Artifact, s.Template, s.Built = Shipped, rendered, Images, Artifact, Template, Built
 	if s.Plugin.Summary.ID == "" {
 		s.Plugin.Summary = PackSummary
 	}
