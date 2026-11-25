@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +26,6 @@ import (
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
-	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
@@ -134,9 +132,10 @@ func ParseRows(out string) []launch.RowWait {
 const smokeBound = 2 * time.Minute
 
 // Boot boots the test-only profile of plugin smoke with the server aiops in a new home:
-// the release's aiops-core bundle, as this aiopsctl ships it, and the bundle of the plugin
-// in dir, each of whose rows a --patch file enables and which disables reload-socket,
-// as nothing submits in smoke (ADR-060 decision 58, reading 1; ADR-062 decision 27). It
+// the aiops-core bundle that the server ships (ADR-060 decision 27), the release's, and
+// the bundle of the plugin in dir, each of whose rows a --patch file enables and which
+// disables reload-socket, as nothing submits in smoke (ADR-060 decision 58, reading 1;
+// ADR-062 decision 27). It
 // returns each row's state and what it waits for once the boot settled, from
 // run/status.json, and stops the server; a row of the plugin that did not mount, as one
 // the gate denied, fails it. The home trusts the distribution whose signed manifest
@@ -167,12 +166,8 @@ func Boot(ctx context.Context, aiops string, manifest []byte, dir, home string, 
 	for _, r := range c.Rows {
 		patch += fmt.Sprintf("- {id: %q, enabled: true}\n", r.ID)
 	}
-	core, err := fs.ReadFile(dist.Shipped(), "bundles/aiops-core/bundle.yaml") // the release's, which this aiopsctl ships
-	if err != nil {
-		return nil, err
-	}
-	files := map[string][]byte{"profiles/smoke/profile.yaml": []byte("bundles: [aiops-core, plugin]\n"), "bundles/aiops-core/bundle.yaml": core,
-		"bundles/plugin/bundle.yaml": bundle, "smoke.patch.yml": []byte(patch), "trust.yaml": []byte(trust),
+	files := map[string][]byte{"profiles/smoke/profile.yaml": []byte("bundles: [aiops-core, plugin]\n"), "bundles/plugin/bundle.yaml": bundle,
+		"smoke.patch.yml": []byte(patch), "trust.yaml": []byte(trust),
 		fmt.Sprintf("verified/sha256-%x/record.yaml", digest): []byte(record), "verified/current": fmt.Appendf(nil, "sha256:%x\n", digest)}
 	for name, data := range files {
 		p := filepath.Join(home, filepath.FromSlash(name))

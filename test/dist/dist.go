@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"testing/fstest"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
@@ -41,10 +42,11 @@ import (
 	unsignedrow "github.com/mutex-solutions/aiops-platform/test/dist/plugins/unsigned-row"
 )
 
-// Shipped is what the test binary carries: limits.yaml and the bundles and profiles of
-// the test distribution, so that the binary and its fixtures cannot drift. The layer 4
-// patches in patches/ are not embedded: --patch reads a file by path, and the harness
-// names the files of this directory.
+// shipped is what the test binary carries: limits.yaml and the bundles and profiles of
+// the test distribution, so that the binary and its fixtures cannot drift; Distribution
+// ships them over the release's, as the test release does (ADR-060 decision 27). The
+// layer 4 patches in patches/ are not embedded: --patch reads a file by path, and the
+// harness names the files of this directory.
 //
 //go:embed limits.yaml all:bundles all:profiles
 var shipped embed.FS
@@ -113,5 +115,20 @@ func Distribution() (serve.Distribution, error) {
 	if err != nil {
 		return serve.Distribution{}, fmt.Errorf("testdist: %w", err)
 	}
-	return serve.Distribution{Registry: reg, Signed: Signed, Limits: lim, Shipped: shipped, Kernel: teststate.RecordKernel}, nil
+	// One file system whose walk lists both, as the launcher's toolbox walks it.
+	files := fstest.MapFS{}
+	for _, fsys := range []fs.FS{dist.Shipped(), shipped} {
+		err := fs.WalkDir(fsys, ".", func(p string, e fs.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				f := &fstest.MapFile{}
+				f.Data, err = fs.ReadFile(fsys, p)
+				files[p] = f
+			}
+			return err
+		})
+		if err != nil {
+			return serve.Distribution{}, err
+		}
+	}
+	return serve.Distribution{Registry: reg, Signed: Signed, Limits: lim, Shipped: files, Kernel: teststate.RecordKernel}, nil
 }

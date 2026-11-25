@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command aiops is the server binary: the launcher (boot) and the module table of
-// the release distribution (dist). It must never link a test plugin or a fake
+// the release distribution (dist), with its shipped bundles and profiles, which a file
+// of the home overrides (ADR-060 decision 27). It must never link a test plugin or a fake
 // (07-c4-plugin-sdk.md:47); test/dist/cmd/aiops-test is the separate binary that does.
 package main
 
@@ -27,5 +28,5 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	os.Exit(serve.Run(context.Background(), "aiops", serve.Env{
 		Args: os.Args[1:], Getenv: os.Getenv, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Signals: sigs,
-	}, serve.Distribution{Registry: reg, Signed: signed, Limits: lim}))
+	}, serve.Distribution{Registry: reg, Signed: signed, Limits: lim, Shipped: dist.Shipped()}))
 }

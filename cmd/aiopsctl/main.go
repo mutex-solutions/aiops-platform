@@ -34,7 +34,6 @@ func main() {
 type (
 	process      = aiopsctl.Process
 	distribution = aiopsctl.Distribution
-	overlay      = aiopsctl.Overlay
 )
 
 func run(ctx context.Context, args []string, p process, d distribution) int {

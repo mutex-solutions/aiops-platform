@@ -36,7 +36,7 @@ var signed []byte
 var limitsYAML []byte
 
 // shipped holds the bundles and the profiles of the release: aiops-core, aiops-cli and the
-// cli profile (ADR-060 decision 27; ADR-061 decision 29).
+// profiles dev and cli (ADR-060 decision 27; ADR-061 decision 29).
 //
 //go:embed all:bundles all:profiles
 var shipped embed.FS
@@ -99,8 +99,8 @@ func Table(mods ...Module) (boot.Registry, error) {
 }
 
 // Shipped returns the bundles and profiles of the release, by their paths under the
-// home: bundles/<name>/bundle.yaml and profiles/<name>/profile.yaml. A file of the home
-// wins over a shipped one.
+// home: bundles/<name>/bundle.yaml and profiles/<name>/profile.yaml. Both binaries embed
+// them, and a file of the home wins over a shipped one.
 func Shipped() fs.FS { return shipped }
 
 // Load returns the registry, the signed distribution manifest and the limits of the

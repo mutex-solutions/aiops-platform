@@ -469,7 +469,14 @@ gaps:
     lists only bundles that hold a built row: at S2a `aiops-core`, and `aiops-dev` only if
     question Q12 is answered (a) (`08:687`; `00:275`, `:291`). Each later step adds its
     bundle to `dev` with its first row. The S2a and S2b exits install into `dev`
-    (`08:687`).
+    (`08:687`). Note of 2026-11-25, as built, on the owner's word: `dist` ships
+    `aiops-core` with `reload-socket` (ADR-062 decision 2), `aiops-cli`, and the
+    profiles `dev`, which lists `aiops-core` alone, and `cli`. `cmd/aiops`, `cmd/aiopsctl`
+    and both mains that `dist build` writes, the test release's included, pass them as
+    `Shipped`; `test/dist` ships its own files over them. A file of the home wins.
+    `plugin install`, `enable` and `disable` copy the shipped `dev` into a home that
+    holds none and say so, as `profile init dev` does; `plugin remove` reads the home's
+    copy, which an install made.
 28. **Test distributions pass the same gate.** Once checks 1, 2, 4, 5, 6 and 10 run at
     boot, `test/dist` and the exit's test release pass them as a site distribution does,
     and the gate code is the same in every binary.
@@ -1457,12 +1464,13 @@ to a question, the decision here settles it.
        writes the module of `<dir>` at the zero pseudo-version into a module source of
        the builder's scratch directory, ahead of `--modcache`, and builds the throwaway
        distribution of the release artifact and that module (ADR-044 decision 1). The
-       home it boots holds the release's `aiops-core` bundle, which `aiopsctl` ships,
-       since the server binary ships none, and the plugin's bundle as a plain bundle of
-       the profile, so its rows are not those of an installed artifact; the `--patch`
-       file also enables each of them. The home trusts the distribution it built with a
-       record under a throwaway key, as `dist use` writes one; boot verifies no
-       signature. Gate check 10 of the boot asks the plugin's attestation, which no
+       server of that distribution ships the release's `aiops-core` bundle, as every
+       server binary does (decision 27), and the home it boots holds the profile and the
+       plugin's bundle as a plain bundle of the profile, so its rows are not those of an
+       installed artifact; the `--patch` file also enables each of them. The home trusts
+       the distribution it built with a record under a throwaway key, as `dist use`
+       writes one; boot verifies no signature. Gate check 10 of the boot asks the
+       plugin's attestation, which no
        artifact carries yet: the builder runs step 5 of `plugin check` on the module
        with its own toolchain, and the throwaway manifest records that statement for
        the plugin, as a release records its own; a failed obligation fails smoke. A row
