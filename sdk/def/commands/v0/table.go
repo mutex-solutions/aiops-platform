@@ -12,8 +12,11 @@ import (
 	"regexp"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
@@ -148,7 +151,7 @@ func (t *Table) Dispatch(ctx context.Context, argv []string, s Streams) (int, er
 	}
 	inv, err := parse(e.spec, rest)
 	if err != nil {
-		fmt.Fprintf(s.Err, "aiopsctl: %s: %v\nusage: aiopsctl %s\n", e.spec.Name(), err, synopsis(e.spec))
+		fmt.Fprintf(s.Err, "aiopsctl: %s: %s\nusage: aiopsctl %s\n", e.spec.Name(), shown(err), synopsis(e.spec))
 		return 2, err
 	}
 	inv.Streams, inv.Dir, inv.Home, inv.Env = s, t.env.Dir, t.env.Home, t.env.Env
@@ -169,11 +172,25 @@ func (t *Table) Dispatch(ctx context.Context, argv []string, s Streams) (int, er
 		fmt.Fprintf(s.Err, "aiopsctl: %s: %v\n", e.spec.Name(), err)
 		return 1, err
 	case errors.Is(err, ErrUsage):
-		fmt.Fprintf(s.Err, "aiopsctl: %s: %v\nusage: aiopsctl %s\n", e.spec.Name(), err, synopsis(e.spec))
+		fmt.Fprintf(s.Err, "aiopsctl: %s: %s\nusage: aiopsctl %s\n", e.spec.Name(), shown(err), synopsis(e.spec))
 		return 2, err
 	}
-	fmt.Fprintf(s.Err, "aiopsctl: %s: %v\n", e.spec.Name(), err)
+	fmt.Fprintf(s.Err, "aiopsctl: %s: %s\n", e.spec.Name(), shown(err))
 	return 1, err
+}
+
+// shown returns the text of err line by line, each line quoted where it is not UTF-8
+// or holds a control character: a library's error can carry what an artifact
+// supplies, which the terminal shows and never runs, as plugin inspect and verify show
+// it. The lines of an errors.Join stay lines.
+func shown(err error) string {
+	lines := strings.Split(err.Error(), "\n")
+	for i, l := range lines {
+		if !utf8.ValidString(l) || strings.ContainsFunc(l, unicode.IsControl) {
+			lines[i] = strconv.Quote(l)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // run calls cmd and answers a panic of its Run as an error with the stack, so a

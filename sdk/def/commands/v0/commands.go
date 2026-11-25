@@ -122,7 +122,8 @@ type Registry interface {
 	// Dispatch parses argv by the rules of decision 8, prints help by decision 9, calls
 	// the command inside a lease on the fiber that registered it, recovers a panic of
 	// its Run, and returns the exit code of decision 10 with the error that decided it,
-	// nil for code 0.
+	// nil for code 0. It prints each line of that error quoted where it holds a control
+	// character, since a library's error can carry what an artifact supplies.
 	Dispatch(ctx context.Context, argv []string, s Streams) (code int, err error)
 	// Inventory lists the registered paths, sorted. The fiber that owns each is the one
 	// whose ledger holds its Label (07-c4-plugin-sdk.md:521; ADR-060 decision 5). It is
