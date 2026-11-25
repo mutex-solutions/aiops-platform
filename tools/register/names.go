@@ -145,9 +145,9 @@ func splitCamel(s string) []string {
 // suite; the id and the configSchema of every plugin under plugins/, which at S2a are
 // the rows of aiops-core and aiops-cli, the schema read as JSON, its property names,
 // keywords and string values; each command path that a command row lists in
-// fixtures/commands/paths.json (ADR-061 decision 5), read as an id is; and the
-// documentation places of 00-decisions.md. The
-// dumps of the shipped profiles enter with their first file.
+// fixtures/commands/paths.json (ADR-061 decision 5), read as an id is; the row ids and
+// the golden dumps of the shipped profiles (shippedPlaces); and the documentation
+// places of 00-decisions.md.
 func places(root string) ([]place, error) {
 	var out []place
 	for _, d := range []string{"sdk", "boot", "loader"} {
@@ -210,11 +210,67 @@ func places(root string) ([]place, error) {
 			out = append(out, place{repoPath(root, f) + ": " + p.Path, "commands", p.Path})
 		}
 	}
+	shipped, err := shippedPlaces(root)
+	if err != nil {
+		return nil, err
+	}
 	doc, err := os.ReadFile(filepath.Join(root, decisionsFile))
 	if err != nil {
 		return nil, err
 	}
-	return append(out, docPlaces(string(doc))...), nil
+	return append(append(out, shipped...), docPlaces(string(doc))...), nil
+}
+
+// shippedPlaces returns, for each shipped profile dist/profiles/<p>/profile.yaml, the id
+// of each row of each bundle under dist/bundles/ that it lists, read as an id is, and
+// each line of its golden dumps, cmd/*/testdata/<p>/*.golden, keyed by the dump's path
+// (decision 14; 00-decisions.md:651; 08-profiles-roadmap-adrs.md:1266).
+func shippedPlaces(root string) ([]place, error) {
+	var out []place
+	profiles, _ := filepath.Glob(filepath.Join(root, "dist", "profiles", "*", "profile.yaml"))
+	for _, pf := range profiles {
+		var prof struct{ Bundles []string }
+		b, err := os.ReadFile(pf)
+		if err == nil {
+			err = yaml.Unmarshal(b, &prof)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", repoPath(root, pf), err)
+		}
+		for _, name := range prof.Bundles {
+			f := filepath.Join(root, "dist", "bundles", name, "bundle.yaml")
+			var items []struct {
+				ID     string `yaml:"id"`
+				Insert []struct {
+					ID string `yaml:"id"`
+				} `yaml:"insert"`
+			}
+			b, err := os.ReadFile(f)
+			if err == nil {
+				err = yaml.Unmarshal(b, &items)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", repoPath(root, f), err)
+			}
+			for _, it := range items {
+				for _, r := range it.Insert {
+					out = append(out, place{repoPath(root, f) + ": row " + r.ID, "ids", r.ID})
+				}
+			}
+		}
+		dumps, _ := filepath.Glob(filepath.Join(root, "cmd", "*", "testdata", filepath.Base(filepath.Dir(pf)), "*.golden"))
+		for _, d := range dumps {
+			b, err := os.ReadFile(d)
+			if err != nil {
+				return nil, err
+			}
+			rel := repoPath(root, d)
+			for i, l := range strings.Split(string(b), "\n") {
+				out = append(out, place{fmt.Sprintf("%s:%d", rel, i+1), rel, l})
+			}
+		}
+	}
+	return out, nil
 }
 
 func repoPath(root, p string) string {
