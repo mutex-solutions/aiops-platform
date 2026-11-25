@@ -108,6 +108,10 @@ func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, erro
 			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
 		case launch.OutcomeNotEvaluated: // ADR-060 decision 17
 			say(r.Caller, "pack: check %d %s is not evaluated: %s", c.Check, c.Clause, c.Reason)
+		case launch.OutcomePass: // a deprecated major warns and never denies (ADR-060 decision 9)
+			if c.Reason != "" {
+				say(r.Caller, "pack: check %d passes: %s", c.Check, c.Reason)
+			}
 		}
 	}
 	if err == nil && len(denied) > 0 {
