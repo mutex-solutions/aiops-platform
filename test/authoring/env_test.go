@@ -183,7 +183,7 @@ func startRegistry(t *testing.T) string {
 		}
 	})
 	id := docker(t, "run", "-d", "-p", "127.0.0.1::5000", registryImage)
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", id).Run() })
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", "-v", id).Run() })
 	if volumes = docker(t, "inspect", "-f", "{{range .Mounts}}{{.Name}} {{end}}", id); volumes == "" {
 		t.Errorf("the registry's container mounts no volume: the pinned image declares /var/lib/registry one")
 	}

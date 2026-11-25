@@ -85,7 +85,8 @@ builder-image:
 # variant s2a-exit-local. The test binary is race-built, GORACE writes every race report
 # of a race-built process to a file, and any report fails the target, as s1-suites does;
 # so does a skip. It needs a container runtime and the module cache of the builder job,
-# so `make check` (-short) skips it. It removes the containers and the images it pulls.
+# so `make check` (-short) skips it. It removes the containers, with their volumes, and
+# the images it pulls.
 EXIT_BUILDERS ?= image local
 .PHONY: s2a-exit
 s2a-exit:

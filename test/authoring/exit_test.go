@@ -12,7 +12,7 @@
 // decision 13); and the registry of the exit, the pinned distribution image run inside
 // the job, which receives the release image, the builder image and the release
 // artifact (ADR-047 decision 4). Nothing is published outside the test, and every key,
-// container and image it makes is removed with it (ADR-057 decision 5).
+// container, volume and image it makes is removed with it (ADR-057 decision 5).
 //
 // It then drives three environments, each a directory of its own outside the
 // repository (machine): the author's repository, with a Go toolchain and the aiopsctl
@@ -964,7 +964,7 @@ func (x *exit) startKernel(t *testing.T, home string) kernelContainer {
 		if t.Failed() {
 			t.Logf("the kernel container:\n%s", k.logs(t))
 		}
-		_ = exec.Command("docker", "rm", "-f", id).Run()
+		_ = exec.Command("docker", "rm", "-f", "-v", id).Run()
 	})
 	return k
 }
