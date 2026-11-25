@@ -470,7 +470,12 @@
     - **Enable and Disable.** They write only a departure from the bundle layers into the
       profile layer, with no `--tenant` (`08:375`; ADR-060 decision 47), and only after
       `Render` has admitted the changed profile as boot would (ADR-060 decision 17, boot
-      row), so a change that boot would refuse writes nothing.
+      row), so a change that boot would refuse writes nothing. Note of 2026-11-25, as
+      built: under the lock they render the changed profile in a view of the home, a
+      temporary directory that holds the changed files and links every other entry into
+      the home, and rename nothing until that render admits it; the view is removed
+      before they return. Until that date they renamed the change first and restored the
+      snapshot on a refusal, so a refused layer stood in the home until the restore.
     - **What the manager cannot disable.** `Disable` and `Remove` refuse, and write
       nothing for, a change that disables or removes: a row of `aiops-cli` in the profile
       `cli`, or that bundle itself, since that is the manager, and without the rule one
@@ -479,7 +484,12 @@
       last enabled provider in the profile of a provider-bound or consumer-bound key
       (`00:245`). Both are read from the `Rendered` of the changed profile, since
       disabling the last provider of a key that is not required leaves its consumers
-      PENDING (`08:471`) and is no refusal of admission. An operation changes only the
+      PENDING (`08:471`) and is no refusal of admission. Note of 2026-11-25, as built, a
+      departure: `CannotDisable` and `CannotRemove` read the `Rendered` of the current
+      profile, in which the row is still enabled, and count the row, or the artifact's
+      rows, as gone, which decides each of these clauses as the changed profile would
+      with no second render; the render of the changed profile then decides admission.
+      An operation changes only the
       profile its request names, which is the reading of "another profile" for a CLI
       that writes any profile of the home; from S6a `plugin-manager` names only the
       profile of its own process, and the ADR of S6a says so (decision 32). An operator

@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -496,9 +497,9 @@ func (l Library) Disable(ctx context.Context, r def.RowRequest) (def.Change, err
 
 // row is plugin enable and plugin disable (08:375; ADR-061 decision 17): under the
 // lock it renders the profile, refuses a row it does not compose and a disable that
-// CannotDisable refuses, writes the departure into the profile layer, copying the
-// shipped profile first where the home holds none, and keeps it only when the changed
-// profile renders as boot would admit it; then it submits.
+// CannotDisable refuses, renders the changed profile in a view of the home, and only
+// when boot would admit it writes the departure into the profile layer, copying the
+// shipped profile first where the home holds none; then it submits.
 func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -532,16 +533,74 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			if copied {
 				changes = append([]Change{{Path: "profiles/" + r.Profile + "/profile.yaml", Data: profile}}, changes...)
 			}
+			if err == nil { // nothing is renamed before boot would admit the change
+				var dir string
+				if dir, err = view(h, changes); err == nil {
+					_, err = l.composes(ctx, Home{Dir: dir}, r.Profile)
+				}
+				err = errors.Join(err, os.RemoveAll(dir))
+			}
 			return changes, err
 		},
-		Submit: func(ctx context.Context) error {
-			if _, err := l.composes(ctx, h, r.Profile); err != nil {
-				return err
-			}
-			return submitted(h, r.Profile, command, r.Row, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res)(ctx)
-		},
+		Submit: submitted(h, r.Profile, command, r.Row, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res),
 	})
 	return changed(done, ch, err, res)
+}
+
+// view returns a directory that reads as the home h once the files of cs hold their
+// Data, for a render before any rename (ADR-061 decision 17): each directory on the
+// path of a change is a directory of the view, whose other entries are symbolic links
+// into the home. The caller removes it.
+func view(h Home, cs []Change) (string, error) {
+	dir, err := os.MkdirTemp("", "aiops-view-")
+	if err != nil {
+		return "", err
+	}
+	made := map[string]bool{}
+	var open func(rel string) error
+	open = func(rel string) error {
+		at := filepath.Join(dir, filepath.FromSlash(rel))
+		switch {
+		case made[rel]:
+			return nil
+		case rel != ".":
+			err := open(path.Dir(rel))
+			if err == nil {
+				err = os.Remove(at) // the link to the home's directory
+			}
+			if err == nil || errors.Is(err, fs.ErrNotExist) {
+				err = os.Mkdir(at, 0o700)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		made[rel] = true
+		es, err := os.ReadDir(h.path(rel))
+		for _, e := range es {
+			if err == nil {
+				err = os.Symlink(filepath.Join(h.path(rel), e.Name()), filepath.Join(at, e.Name()))
+			}
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, c := range cs {
+		p := filepath.Join(dir, filepath.FromSlash(c.Path))
+		err = open(path.Dir(c.Path))
+		if err == nil {
+			err = os.Remove(p)
+		}
+		if err == nil || errors.Is(err, fs.ErrNotExist) {
+			err = os.WriteFile(p, c.Data, 0o600)
+		}
+		if err != nil {
+			return dir, err
+		}
+	}
+	return dir, nil
 }
 
 // composes renders the profile p of the home as boot would, and refuses it when it does
