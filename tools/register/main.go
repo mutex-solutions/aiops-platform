@@ -124,7 +124,13 @@ type entry struct {
 type image struct{ Ref, Key string }
 type condition struct{ Condition, Row string }
 type evidence struct{ Source, Read, Version string }
-type importer struct{ Dir, Decision string }
+
+// importer is a directory where an entry's modules may be imported and its names may
+// appear, or with tests the test files of one (ADR-060 decision 41).
+type importer struct {
+	Dir, Decision string
+	Tests         bool
+}
 
 // contained is a module, package, nested chart or image layer an upstream brings in.
 type contained struct{ Module, Package, Chart, Layer, Version, Licence string }

@@ -83,7 +83,12 @@ type Upstream struct {
 	Importers []ImportDir
 }
 
-type ImportDir struct{ Dir string }
+// ImportDir is an importer of an entry: a directory, or with Tests the test files of
+// one (ADR-060 decision 41).
+type ImportDir struct {
+	Dir   string
+	Tests bool
+}
 
 // ReadRegister reads the entries of the upstream register at path.
 func ReadRegister(path string) ([]Upstream, error) {
@@ -122,7 +127,7 @@ func upstreamReason(reg []Upstream, rel, imp string) string {
 		}
 	}
 	for _, i := range e.Importers {
-		if hasPath(rel, i.Dir) {
+		if hasPath(rel, i.Dir) && (!i.Tests || strings.HasSuffix(rel, "_test.go")) {
 			return ""
 		}
 	}

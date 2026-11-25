@@ -68,7 +68,9 @@ func permitted(r register, e entry, n, key string) bool {
 			return true
 		}
 	}
-	return slices.ContainsFunc(e.Importers, func(i importer) bool { return strings.HasPrefix(key, i.Dir+"/") })
+	return slices.ContainsFunc(e.Importers, func(i importer) bool {
+		return strings.HasPrefix(key, i.Dir+"/") && (!i.Tests || strings.HasSuffix(key, "_test.go"))
+	})
 }
 
 // within reports whether the place key sits in the place s of an item of exceptions:

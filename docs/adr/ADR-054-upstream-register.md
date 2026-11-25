@@ -755,7 +755,11 @@ to a question, the decision here settles it.
     plugin of ADR-060 decision 41, which the entries of the YAML library, the OCI client
     and the signature library list as an importer, is a row of the `aiops-cli` bundle of
     the `cli` profile at S2a, not of `aiops-core` (owner, 2026-11-23), so decision 23
-    holds unchanged.
+    holds unchanged. Note of 2026-11-25: an importer may carry `tests: true`, and then
+    names the test files of its directory only, for U2 and U1 alike, so a golden dump
+    under it is no place of its names. The YAML library's importers are the list of
+    ADR-060 decision 41 as the owner amended it that day: with `internal/vet`,
+    `internal/packsuite` and, with `tests: true`, `cmd/aiopsctl`.
 
 18. **A module of another project is listed in the `contains` of the entry that brings
     it in** (Q2 (b)). An entry's `modules` holds the modules its upstream publishes; each

@@ -1342,7 +1342,13 @@ to a question, the decision here settles it.
     with a fake and a suite; the command rows of decision 53 consume it from S2a and
     `plugin-manager` from S6a. Besides `boot/` and `tools/` (decision 6), the YAML library
     is allowed in that plugin, in `plugingen` and in the builder, and never in `sdk/`,
-    `loader/` or any other plugin. `08:369` and `08:1255` both hold, and `boot` keeps
+    `loader/` or any other plugin. Note of 2026-11-25: on the owner's word, the list
+    gains `internal/vet`, the import analyzer and plugin vet of decision 23, which read
+    the upstream register; `internal/packsuite`, the suite binaries of decision 46,
+    which read the rows of a pack's `bundle.yaml`; and the test files of `cmd/aiopsctl`,
+    never its other files. The register lists each as an importer of the YAML library,
+    the last with `tests: true`, which U2 and U1 read as the directory's test files
+    only (ADR-054 decision 17). `08:369` and `08:1255` both hold, and `boot` keeps
     every read the gate needs. That plugin, the library of the CLI, imports the signature
     library, the OCI client and the YAML library, and is a row of the `aiops-cli` bundle
     of the `cli` profile at S2a, not of `aiops-core`, so ADR-054 decision 23 ("no

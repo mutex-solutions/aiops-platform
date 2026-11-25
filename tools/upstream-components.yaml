@@ -125,10 +125,11 @@ entries:
       - {dir: boot, decision: ADR-059 decision 6}
       - {dir: tools, decision: ADR-059 decision 6}
       - {dir: internal/plugingen, decision: ADR-060 decision 41}
-      - {dir: internal/vet, decision: "ADR-060 decision 23: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share"}
+      - {dir: internal/vet, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share (decision 23) read the register"}
       - {dir: plugins/operations, decision: ADR-060 decision 41}
       - {dir: internal/builder, decision: "ADR-060 decision 41: the builder reads the site's dist.yaml and writes the signed distribution manifest"}
-      - {dir: internal/packsuite, decision: "ADR-060 decision 46: the suite binaries that aiopsctl embeds read the rows of a pack's bundle.yaml"}
+      - {dir: internal/packsuite, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the suite binaries that aiopsctl embeds (decision 46) read the rows of a pack's bundle.yaml"}
+      - {dir: cmd/aiopsctl, tests: true, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the test files of cmd/aiopsctl, never its other files"}
     default: true
 
   - id: river
