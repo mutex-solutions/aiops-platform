@@ -156,7 +156,12 @@ Registration in `init`, read in the same cache:
      major, `v0.0.0-00010101000000-000000000000` at major 0; both commands take the
      release artifact as `--against` and the module source as `--modcache`, and on the
      image path the image's `aiopsctl` runs `plugin smoke` on the local path, or `dist
-     build` of the throwaway `dist.yaml` that `plugin verify` writes.
+     build` of the throwaway `dist.yaml` that `plugin verify` writes. Second note of
+     2026-11-25: `plugin verify` runs step 5 of `plugin check` on the module, which `dist
+     build` does not, so it takes the local path; on the image path it builds nothing and
+     its step is not built (ADR-060 decision 46). On the image path `plugin smoke` refuses
+     a release that `--against` does not name by digest before it runs the image, as the
+     local path does.
 
    Both paths of one release run one builder.
 2. **The builder sets the Go environment itself, on both paths.** It starts `go` with an

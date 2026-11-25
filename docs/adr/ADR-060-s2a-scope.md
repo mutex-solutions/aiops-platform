@@ -1333,7 +1333,16 @@ to a question, the decision here settles it.
     in-process code takes `--against` (the release artifact by digest) and `--modcache`,
     and builds a throwaway site distribution of that release and the module at the
     version and sum of its `module.json`, whose tests, the suites among them, the
-    builder runs; with neither flag the step is not built.
+    builder runs; with neither flag the step is not built. Second note of 2026-11-25: the
+    builder also runs on that module step 5 of `plugin check`, as `plugin smoke` does, the
+    suite of each registry that a plugin of the module provides or registers with, on the
+    plugin's own fixtures, and the throwaway manifest records the statement of the suites
+    that ran. The step passes only when that manifest holds the artifact's `plugin.yaml`
+    byte for byte and its statement names the definitions, suite revisions and halves that
+    the artifact's attestation names, and its reason names those suites (`07:1512`). On
+    the image path the step is not built and says so: the builder image's `aiopsctl` runs
+    `dist build`, which runs no suite of a registry, so `--builder local` runs them until
+    the image takes a request of verify.
 
 47. **`enable`, `disable` and `remove` are built at S2a, `purge` at S3** (Q11 (a)). The
     three run on the operations library; `enable` and `disable` write only a departure
@@ -1438,7 +1447,13 @@ to a question, the decision here settles it.
        the plugin, as a release records its own; a failed obligation fails smoke. A row
        of the plugin that does not mount fails smoke. On the image path
        the builder image's `aiopsctl` runs smoke on the local path and boots the server
-       inside its container, so the boot needs no second container runtime call.
+       inside its container, so the boot needs no second container runtime call. Second
+       note of 2026-11-25: step 5 reads the cases of the plugin's own `fixtures/`, from
+       its directory in the builder's module cache, so a command row that passes `plugin
+       check` passes it too; a failed obligation fails smoke with the lines that `go test`
+       prints for it; and `--against` names the release artifact by digest on both paths,
+       as `dist.yaml` names its release (`08:401`), so the image path refuses a tag before
+       it runs any image.
     2. **Inspect.** `inspect` fetches only the manifest and the bundle, never content,
        module or image, and runs nothing. It edits `08:373` and `07:1853`.
     3. **`wasm`.** Check 1 denies it, as a runtime this schema version does not serve,
