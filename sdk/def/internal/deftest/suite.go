@@ -22,10 +22,11 @@ import (
 const RecordVar = "AIOPS_SUITE_RECORD"
 
 // Ran records, when RecordVar names a directory, that the suite of definition ran the
-// halves on t and passed: once t and its subtests end with no failure and no skip, a
-// file of that directory holds a JSON list of the working directory of the test binary,
-// which go test sets to the directory of the package under test, the definition and
-// the halves.
+// halves on t: once t and its subtests end with no skip, a file of that directory holds
+// a JSON list of the working directory of the test binary, which go test sets to the
+// directory of the package under test, the definition and the halves. A suite that
+// failed ran too, so step 5 names the half that failed; its failed test fails go test,
+// and nothing attests it.
 func Ran(t *testing.T, definition string, halves ...string) {
 	dir := os.Getenv(RecordVar)
 	if dir == "" {
@@ -33,7 +34,7 @@ func Ran(t *testing.T, definition string, halves ...string) {
 	}
 	t.Cleanup(func() {
 		wd, err := os.Getwd()
-		if t.Failed() || t.Skipped() || err != nil {
+		if t.Skipped() || err != nil {
 			return
 		}
 		f, err := os.CreateTemp(dir, "ran-*.json")

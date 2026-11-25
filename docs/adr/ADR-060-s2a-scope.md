@@ -1431,7 +1431,7 @@ to a question, the decision here settles it.
     Note of 2026-11-25, on the owner's answer of that date, as built: the attestation of
     a first-party row comes from real suite runs. Each suite records, when
     `AIOPS_SUITE_RECORD` names a directory, the definition and the halves it ran on a
-    package whose test passed (`sdk/def/internal/deftest.Ran`): a provider's suite both
+    package, unless it skipped (`sdk/def/internal/deftest.Ran`): a provider's suite both
     halves, a registry's the guard half on a dispatcher and the obligations half on a
     contribution. The release build runs the tests of each first-party plugin of the
     module table in both phases, on a `go.mod` and `go.sum` of their own that take the

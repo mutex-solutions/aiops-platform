@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Ran records a suite that ran and passed into the directory that RecordVar names, the
+// Ran records a suite that ran into the directory that RecordVar names, the
 // record that the release build and step 5 of plugin check attest (ADR-060 decisions 18
 // and 50): the directory of the package, the definition and the halves. With no
 // directory it records nothing, and a suite that skipped is not recorded.
