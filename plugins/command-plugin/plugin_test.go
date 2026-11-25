@@ -493,14 +493,18 @@ func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 	}
 }
 
-// plugin install prints on stderr each clause that the gate at its entry point does not
-// evaluate, with the reason, as every entry point reports it (ADR-060 decision 17).
-func TestInstallPrintsWhatTheGateDoesNotEvaluate(t *testing.T) {
+// plugin install prints on stderr every clause of the gate at its entry point, as plugin
+// gate prints them: each that passed, the warning of a deprecated major as the reason of
+// its pass, and each that it does not evaluate, with the reason, as every entry point
+// reports it (ADR-060 decisions 9 and 17).
+func TestInstallPrintsEveryClause(t *testing.T) {
+	warn := "warning: row echo uses echoers 0, deprecated since 0.2.0, removed not before 2027-06-01; its successor is v1"
 	s := &stub{ch: operations.Change{Verdict: launch.Verdict{Entry: "plugin install", Clauses: []launch.Clause{{Check: 1, Outcome: launch.OutcomePass},
+		{Check: 2, Outcome: launch.OutcomePass, Reason: warn},
 		{Check: 4, Clause: "stability", Outcome: launch.OutcomeNotEvaluated, Reason: "no profile is composed"}}}}}
 	code, out, errOut := dispatch(t, world(t, s), "plugin", "install", "artifact")
-	if code != 0 || !strings.Contains(errOut, "check 4 stability: not-evaluated: no profile is composed\n") || strings.Contains(out+errOut, "check 1") {
-		t.Errorf("install: exit %d, stdout %q, stderr %q", code, out, errOut)
+	if want := "check 1: pass\ncheck 2: pass: " + warn + "\ncheck 4 stability: not-evaluated: no profile is composed\n"; code != 0 || out != "" || errOut != want {
+		t.Errorf("install: exit %d, stdout %q, stderr %q; want stderr %q", code, out, errOut, want)
 	}
 }
 
