@@ -78,6 +78,7 @@ var keys = []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.C
 
 // Run runs the suite, each case on a launcher of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "launch", "obligations", "guard")
 	t.Run("obligations", func(t *testing.T) {
 		t.Run("launch.O1 profileContext names the process", func(t *testing.T) {
 			u := use(t, mount)

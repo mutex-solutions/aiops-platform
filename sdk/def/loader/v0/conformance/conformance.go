@@ -49,6 +49,7 @@ const group = loader.GroupPlugin
 
 // Run runs the suite, each case on a loader of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "loader", "obligations", "guard")
 	t.Run("mount states", func(t *testing.T) {
 		s := start(t, mount, nil)
 		off, other, h := row("off", p), row("w", p), row("h", group)

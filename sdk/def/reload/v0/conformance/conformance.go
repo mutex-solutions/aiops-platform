@@ -34,6 +34,7 @@ var op = reload.Op{Source: "conformance"}
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "reload", "obligations", "guard")
 	t.Run("obligations", func(t *testing.T) {
 		t.Run("reload.O1 ids count from one", func(t *testing.T) {
 			u := use(t, mount)

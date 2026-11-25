@@ -71,6 +71,7 @@ var errDecode = errors.New("conformance: decode refused")
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "configrefs", "obligations", "guard")
 	t.Run("obligations", func(t *testing.T) {
 		t.Run("configrefs.O1 a tree whose references resolve passes", func(t *testing.T) {
 			dr := use(t, mount).dr

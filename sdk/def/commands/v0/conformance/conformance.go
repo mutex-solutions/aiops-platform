@@ -87,6 +87,7 @@ func Run(t *testing.T, mount Mount) {
 	if !s.guard {
 		cases = obligations
 	}
+	deftest.Ran(t, "commands", deftest.Half(s.guard))
 	run(t, mount, s, root, cases)
 }
 

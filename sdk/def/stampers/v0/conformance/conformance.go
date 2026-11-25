@@ -73,6 +73,7 @@ func Run(t *testing.T, mount Mount) {
 	if !s.guard {
 		cases, setup = obligations, (*env).obligation
 	}
+	deftest.Ran(t, "stampers", deftest.Half(s.guard))
 	for i, c := range cases {
 		t.Run(strings.TrimPrefix(c.id, "stampers/"), func(t *testing.T) {
 			if i > 0 {

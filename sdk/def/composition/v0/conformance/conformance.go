@@ -83,6 +83,7 @@ var want = []row{
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "composition", "obligations", "guard")
 	t.Run("obligations", func(t *testing.T) {
 		t.Run("composition.O1 committed lists the rows in order, ACTIVE, with their hooks", func(t *testing.T) {
 			rd := use(t, mount).rd

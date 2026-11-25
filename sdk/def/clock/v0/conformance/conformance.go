@@ -28,6 +28,7 @@ type Mount func(t *testing.T) (*kernel.Root, *kernel.Fiber)
 
 // Run runs the suite, each case on a provider of its own.
 func Run(t *testing.T, mount Mount) {
+	deftest.Ran(t, "clock", "obligations", "guard")
 	t.Run("obligations", func(t *testing.T) {
 		t.Run("clock.O1 now does not go back", func(t *testing.T) {
 			u := use(t, mount)
