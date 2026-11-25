@@ -240,7 +240,12 @@
    on its missing file (`07:1541`). ADR-060 decision 24 gains it. The template serves the
    authors of first-party and `contrib/` command rows, which reach the `cli` profile
    through `aiops-cli` (decision 29), and the author of any other plugin as far as
-   question Q8 lets its rows reach that profile.
+   question Q8 lets its rows reach that profile. Note of 2026-11-25, a departure
+   recorded as built: `fixtures/commands/` holds the README, which names the three case
+   files, and `run.json` and `cancel.json` with one case each of `example`, which the
+   stub fails with "not implemented"; `paths.json` is the author's to write, so
+   `commands/paths` fails on its missing file. Each obligation still fails once, as the
+   template job holds (ADR-060 decision 24), and the two case files show their form.
 
 ### The `cli` row, the dispatcher
 
@@ -384,7 +389,7 @@
         SanitizeProfile(ctx context.Context, r ProfileRequest) (Change, error)
         New(ctx context.Context, r NewRequest) (Written, error)
         Check(ctx context.Context, r CheckRequest) (CheckReport, error)
-        Smoke(ctx context.Context, r SmokeRequest) (SmokeReport, error)
+        Smoke(ctx context.Context, r BuildRequest) (launch.Built, error)
         Pack(ctx context.Context, r PackRequest) (Written, error)
         Sign(ctx context.Context, r SignRequest) (Written, error)
         Push(ctx context.Context, r PushRequest) (Pushed, error)
@@ -414,9 +419,9 @@
     | `RenderRequest` | `launch.RenderRequest` with `Caller` |
     | `NewRequest` | `Registry` (a registry or `connector`), `ID`, `Lang`, `Contrib`, `Against`, `Plugins`, `Dir` |
     | `CheckRequest`, `CheckReport` | `Dir`, `Write`, `Against`; per step of `07:1565`-`1576` its number, `pass`, `fail`, `not applicable` or `skipped`, and its `launch.Diagnostic`s, and the attestation it would sign |
-    | `SmokeRequest`, `SmokeReport` | `Dir`, `Against`, `Builder` (`image` or `local`); each row of the test-only profile with its state and what it waits for, and whether smoke passed (ADR-060 decision 58, reading 1) |
+    | `Smoke` takes `BuildRequest` and returns `launch.Built` | `Plugin`, the plugin directory, `Against`, the release artifact by digest, `ModCache`, `Mirrors` and `Builder` (`image` or `local`); `Built.Rows`, each row of the test-only profile with its state and what it waits for, and its error says why smoke did not pass (ADR-060 decision 58, reading 1) |
     | `PackRequest`, `SignRequest`, `PushRequest`, `Pushed` | `Dir`, `Out`; `Out`, `Key`; `Out`, `Registry`; the spec by digest (ADR-047 decision 1) |
-    | `SpecRequest`, `GateRequest` | `Spec`, and `Builder` for `Verify`; `Spec`, `Against` |
+    | `SpecRequest`, `GateRequest` | `Spec`, and for `Verify` `Home`, whose `trust.yaml` it reads, `Builder`, and `Against`, `ModCache` and `Mirrors`, the release artifact by digest and the module source that in-process code builds on (ADR-060 decision 46); `Spec`, `Against` |
     | `Inspected` | The digest; id, version and runtimes; each row with its config and content paths; that no signer was verified (ADR-047 decision 2) |
     | `Verified` | The digest, the verified signer, each suite that ran with its result, and the verdict |
     | `InstallRequest`, `RowRequest`, `RemoveRequest` | `Home`, `Profile` and `Spec`, `Row` or `ID`; `ConnectWait` and `Wait`, the bounds of ADR-062 decisions 9 and 10 |
@@ -451,6 +456,14 @@
     | `UseDist` | `dist use <image>` | Yes | None | None | `07:1869`; ADR-020 decision 12; ADR-047 decision 13 |
 
     `Purge` joins at S3 with `durable` (ADR-060 decision 47).
+
+    Note of 2026-11-25: the sketch and the tables above are edited to the definition as
+    built. `Build` and `BuildRequest` arrived at its minor 0.3; at 0.4 `Smoke` takes
+    `BuildRequest` and returns `launch.Built`, since smoke is a build of the toolbox's
+    builder that also boots the test-only profile, so `SmokeRequest` and `SmokeReport`
+    do not exist, and `SpecRequest` gains `Against`, `ModCache` and `Mirrors` for
+    `plugin verify` of in-process code. `sdk/def/operations/v0` declares the methods in
+    another order, with `ctx` first in each, and its `definition.yaml` records each minor.
 
 17. **Rules every provider keeps.** `08:369` reads, as plugin record §12 does: "Every
     operation is a submission to the reload queue, is audited and emits
@@ -707,6 +720,7 @@
         Suite(ctx context.Context, r SuiteRequest) (SuiteReport, error)
         Template(ctx context.Context, r TemplateRequest) (map[string][]byte, error)
         Scenario(ctx context.Context, r ScenarioRequest) (ScenarioReport, error)
+        Module(ctx context.Context, r ModuleRequest) (Module, error)
     }
     ```
 
@@ -724,6 +738,7 @@
     | `SuiteRequest`, `SuiteReport` | `Dir`, the definitions with their versions, the halves and the fixtures directory; per definition its suite revision, the halves that ran and each failed obligation by id |
     | `TemplateRequest` | `Registry`, `ID`, `Lang`, `Contrib` |
     | `ScenarioRequest`, `ScenarioReport` | `Dir`, `Name`; the scenario's name and version, the halves that ran and each failure (ADR-060 decision 49) |
+| `ModuleRequest`, `Module` | `Dir`, the root of the module of in-process code, and `Version`, the version it is packed at; its `Path`, `Version` and h1 `Sum`, and `Deps`, the rest of its build list as `go list -m -json all` reads it with the author's toolchain |
 
     `launch` gains no type of the manifest schema. `ManifestSummary` holds six fields
     copied from boot's own reading, so the reader stays boot's and there is no second
@@ -744,6 +759,12 @@
     | `Suite` | Runs a suite: an embedded test binary, or a module compiled with the toolchain | `cmd/aiopsctl` | `Check`, `Pack`, `Verify` | ADR-060 decision 46 |
     | `Template` | The templates | `cmd/aiopsctl` | `New` | ADR-060 decision 24 |
     | `Scenario` | Runs a named, versioned scenario, the echo scenario at S2a, on a pack's rows replayed from its fixtures | `cmd/aiopsctl` | `Check`, as step 8; `Pack`, for the attestation | ADR-060 decision 49; `07:1576` |
+| `Module` | Reads the module of in-process code for the module layer and the SBOM of `plugin pack`: the h1 sum of its module zip and its build list | `cmd/aiopsctl` | `Pack` | ADR-047 decision 1 |
+
+    Note of 2026-11-25: the sketch and the two tables are edited to launch 0.2 as built,
+    whose `Tools` has a seventh method, `Module`, which `plugin pack` of in-process code
+    calls for the module layer and the SBOM (ADR-047 decision 1); in `aiops` it answers
+    `ErrNotCarried` as the other six do.
 
     `cmd/aiopsctl` passes one value of `Tools` to `boot` in its run options, and `boot`
     hands it on without importing what implements it (`08:1256`). In `aiops` it is
@@ -1392,7 +1413,13 @@ it.
     and the home still passed, prints which file stopped the first boot, and dispatches.
     The first boot stops as `08:465` says; the second composes no layer of the home, so a
     command in it does not see the site's patches of the `cli` profile, and stderr says
-    so. ADR-060 decision 23 gains the command.
+    so. ADR-060 decision 23 gains the command. Note of 2026-11-25, a departure recorded
+    as built: the first boot is predicted, not run. Before it boots, the launcher of
+    `internal/aiopsctl` composes the `cli` profile of the home with `boot.Compose`,
+    which is what boot runs first, and when that stops on the site layer or the profile
+    layer of `cli` it boots once, with the shipped `cli` profile alone and the home
+    still passed, and prints the file and the stop; so the output and the outcome are
+    those of a first boot that stops as `08:465` says, with one boot less.
 
 **Edits made with this record.** `00` is edited in the commit that records the answers
 (`08:997`), and that commit makes the edits that "Edits on acceptance" names for the

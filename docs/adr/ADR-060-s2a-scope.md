@@ -255,7 +255,12 @@ gaps:
     holds it and `07` §9 links to it. The same commit checks every copy of checks 8 and
     10 and of the instantiable list (`00` §6.1, `07` §8.4 and §9, community §6.4 and
     §6.5, harness §5.3) against W9, which `07:132` and `08:391` already follow, so the
-    wording for `tool-mcp` is done before S2a ends (harness:21, :335).
+    wording for `tool-mcp` is done before S2a ends (harness:21, :335). Note of
+    2026-11-25, a departure recorded as built: the gate was built in `e28dd3e`, and the
+    one gate text and the check of the copies were written in two companion commits,
+    `d1b9396` and `e8557b5`, the second a descendant of `e28dd3e`. Only the placement in
+    commits differs; `08` §1.6 holds the one text and `07` §9 links to it, as this
+    decision says.
 17. **Where each clause runs.** The gate runs at build, at `plugin check`, at install, at
     boot, at every recomposition and offline (`08:493`), and each entry point evaluates
     the clauses its inputs decide. Every entry point reports each clause it does not
@@ -547,8 +552,11 @@ gaps:
 
     Each step passes only as stated:
     - **A1.** `aiopsctl plugin new echoers --lang go` in an empty directory writes the
-      skeleton; it compiles, and `plugin check` fails with one line per obligation of the
-      `echoers` suite.
+      skeleton; `plugin check --write` writes its generated half and `go mod tidy`
+      completes its `go.mod` and `go.sum` through the exit's proxy; then `plugin check`
+      fails with one line per obligation of the `echoers` suite. (Edited on the owner's
+      word of 2026-11-25: a fresh skeleton has no generated half, so a `plugin check`
+      straight after `plugin new` fails step 1 and skips the steps after it.)
     - **A2.** With the stubs filled in from the test's fixture, an in-process Go echoer
       (`08:694`; community:59; plugin record §16), `plugin check` passes steps 1 to 5
       and 7, reports the cases of question Q7 that did not run, and reports steps 6 and 8
@@ -784,7 +792,14 @@ gaps:
     rest of S2a, with `ci.yml` and the Makefile changed in the same commit. The two main
     packages that the builder generates are written from Go code again, not from
     embedded text files kept out of the count. At `07daf83` the builder measures 2,983
-    lines, the fake 995 and the suite 999.
+    lines, the fake 995 and the suite 999. Second note of 2026-11-25, a departure
+    recorded as built: `ci.yml` and the Makefile measure `cmd/aiopsctl` and
+    `internal/aiopsctl`, its launcher, which the `aiopsctl` that `dist build` writes for
+    a site runs too (ADR-061 decisions 24 and 25; ADR-020 decision 29), as one budget,
+    the 2,500 lines of the row of `cmd/aiopsctl` (`kernelcheck lines
+    cmd/aiopsctl:internal/aiopsctl`), not as one directory each: the launcher left the
+    `main` so that a site's binary links it, and its lines stay inside the budget the
+    `main` had. The two measure 201 lines at `9c4f6d5`.
 
 | Package | Measured at `491a518` | Cap during S2a |
 |---|---|---|
@@ -793,7 +808,7 @@ gaps:
 | `loader` | 1,100 | 1,300, unchanged |
 | the `plugin` package | new | 2,500, provisional |
 | each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |
-| `cmd/aiopsctl` | 210 (s1-report:75) | 2,500, provisional |
+| `cmd/aiopsctl`, with its launcher `internal/aiopsctl` in the same budget (second note of 2026-11-25) | 210 (s1-report:75) | 2,500, provisional, shared by the two |
 | each command row's plugin, with question Q17 (a), and `plugins/cli` (ADR-061) | new | 1,500 each, provisional |
 | `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional; the fake and the suite of `sdk/def/operations/v0` 1,300 each (1,000 until the note of 2026-11-25, 800 until the second note of 2026-11-24) |
 | the operations library, `plugins/operations` (ADR-061) | new | 4,500, provisional (3,500 until the second note of 2026-11-24) |

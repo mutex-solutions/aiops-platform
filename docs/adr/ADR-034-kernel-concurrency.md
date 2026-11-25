@@ -1246,28 +1246,32 @@ func CommitOp(f *Fiber, cfg any) BatchOp
 target it resolves `cfg` through `internal/config` and `Decode`, then it runs
 `internal/commit`, which fails closed (a veto is `ErrCommitVetoed`). Only a
 commit that completes retains `cfg`. It runs no `internal/update` and does not
-restart the fiber: the running activation keeps the value it was applied with
-and its `Apply` is not called again. A plugin learns the new value from whoever
-commits it (the loader dispatches `loader/volatile-update`), and the next
+restart the fiber, and its `Apply` is not called again: for a plugin without a
+hand-off the running activation keeps the value it was applied with; with one
+(G13), the running activation's `Volatile` fields read the committed values. A
+plugin learns the new value from whoever commits it (the loader dispatches
+`loader/volatile-update`) and from its `Volatile` fields, and the next
 activation of the fiber, whatever starts it (a provider's epoch change, a
-retry, an `UpdateOp`), resolves the retained `cfg`. A fiber mounted with `When`
-takes no config and `Commit` ignores `cfg`. `CommitOp` is the same operation in
-a batch, handled with `UpdateOpWith` before the batch is admitted; the config is
-retained in the owner turn that admits the batch, and a refused batch retains
-nothing.
+retry, an `UpdateOp`), resolves the retained `cfg`. A fiber mounted with
+`When` takes no config and `Commit` ignores `cfg`. `CommitOp` is the same
+operation in a batch, handled with `UpdateOpWith` before the batch is admitted;
+the config is retained in the owner turn that admits the batch, and a refused
+batch retains nothing. (Edited with G13 on 2026-11-25.)
 
 **G7, config changes of one fiber are serialised.** This closes the open point
 of G2: a batch retained its configs before the core admitted it and restored the
 old ones when the core refused it, so a concurrent `Update` or `Commit` of the
 same fiber in that window could be overwritten by the restore. Each fiber's
-config now has a change lock. `Update` and `Commit` take it only to retain. A
-batch takes the locks of the fibers it changes in ascending fiber id (a fiber
-named twice once), from before its first `internal/update` until the core has
-admitted or refused it, and releases them after the restore. So a restore never
-overwrites a newer value: the newer change waits and retains after it. The lock
-is held across the `internal/update` hooks of the batch, so such a hook must
-not change the config of a fiber of its own batch; no other plugin code runs
-under it. Two `Update`s of one fiber race as before (the last retain wins, as
+config now has a change lock. `Update` takes it only to retain, and `Commit` to
+retain and to hand off, the hand-off running under it (G13). A batch takes the
+locks of the fibers it changes in ascending fiber id (a fiber named twice once),
+from before its first `internal/update` until the core has admitted or refused
+it, and releases them after the restore. So a restore never overwrites a newer
+value: the newer change waits and retains after it. The lock is held across the
+`internal/update` hooks of the batch, so such a hook must not change the config
+of a fiber of its own batch; no other plugin code runs under it but the hand-off
+of G13, a function of `sdk/plugin` that changes no config (edited with G13 on
+2026-11-25). Two `Update`s of one fiber race as before (the last retain wins, as
 if they ran in that order, and each restart applies the retained config).
 
 The S1 review found that the restore was not enough: a restart that takes no lock
@@ -2284,3 +2288,30 @@ the section "2026-11-22 call-path gate on the merge commit" describes
 (`callpath-full-g13-ab`). G13 may therefore merge into `main` with S2a, as the owner
 answers of 2026-11-23 allow; the second run of item 4, on the merge commit into `main`,
 follows that merge.
+
+### As merged, recorded 2026-11-25
+
+The shape and the line counts of G13 as merged on `s2a/integration`, as the section "S1
+additions to the kernel API (ADR-059)" records G1 to G12 and as the last item of "Edits
+that come with the code" asks.
+
+- `sdk/kernel`: `func WithCommit(p Plugin, fn func(applied, committed any)) Plugin`, in
+  `key.go`, stamps the unexported field `commit` of `Plugin` (decision 16). `Fiber.Commit`
+  hands `cfg` off after the retain and before it returns, and a `CommitOp` hands off once
+  `Root.Batch` has admitted its batch (point 1); the hand-off runs on the committer's
+  goroutine under the fiber's config change lock (concurrency contract, and G7 as edited
+  above). The documentation of `Commit`, `CommitOp` and the cell is in `config.go` and
+  `key.go`. Built in `7ec0716`, with the fix `d3f5973` and the race test `633b5c1`.
+- `sdk/plugin`: `plugin.Define` calls `kernel.WithCommit` for a config type that has a
+  `Volatile` field (`0a53836`), and `Decode` is described under the hand-off (`c752485`).
+  Plugin vet refuses `kernel.WithCommit` in plugin code (`internal/vet/vet.go`).
+  `pluginApi` (`plugin.APIVersion`) is `0.3`, and the toy consumer of the test
+  distribution and every generated `plugin.yaml` require it.
+- `sdk/def/loader/v0/volatile.go` says that config-refs resolves a reference when a fiber
+  activates and again when a commit hands a `Volatile` value off (decision 20), and the
+  loader restarts on a key change of a map of `Volatile` values (`b7071ed`).
+- Measured with `tools/kernelcheck lines` at `b7071ed`, and unchanged at `9c4f6d5`:
+  `sdk/kernel` has 8,175 physical lines of production Go, 25 under its cap of 8,200 and
+  132 more than the 8,043 of `502a355`, against an estimate of about 100; the `plugin`
+  package has 1,183, under its provisional cap of 2,500 and 99 more than the 1,084 of
+  `502a355`, against an estimate of 50 to 80.
