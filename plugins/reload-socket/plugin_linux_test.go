@@ -48,10 +48,24 @@ func newWorld(t *testing.T, opts ...kerneltest.Option) *world {
 	return w
 }
 
+// shortTemp is a new directory under the system's temporary directory that the test
+// removes. Its name holds no test name, so a socket path under it stays within the 107
+// bytes of Linux where TMPDIR is long, as the builder sets it under its scratch directory
+// when the release build runs the tests of each first-party plugin (ADR-060 decision 50).
+func shortTemp(t *testing.T) string {
+	t.Helper()
+	d, err := os.MkdirTemp("", "rs-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(d) })
+	return d
+}
+
 // privateDir is a new directory of mode 0700 under the test's temporary directory.
 func privateDir(t *testing.T) string {
 	t.Helper()
-	d := filepath.Join(t.TempDir(), "run")
+	d := filepath.Join(shortTemp(t), "run")
 	if err := os.Mkdir(d, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -310,14 +324,14 @@ func TestTheDirectoryMustBeMode0700AndOwnedByTheProcess(t *testing.T) {
 		t.Errorf("mode 0750: %s", got)
 	}
 	target := privateDir(t)
-	link := filepath.Join(t.TempDir(), "link")
+	link := filepath.Join(shortTemp(t), "link")
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.fails(map[string]any{"dir": link}); !strings.Contains(got, link+" is a symlink") {
 		t.Errorf("symlink: %s", got)
 	}
-	file := filepath.Join(t.TempDir(), "file")
+	file := filepath.Join(shortTemp(t), "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +397,7 @@ func TestASocketLeftBehindIsReplaced(t *testing.T) {
 
 func TestASocketPathOver107BytesFailsTheRow(t *testing.T) {
 	w := newWorld(t)
-	base := t.TempDir()
+	base := shortTemp(t)
 	at := func(n int) string { // a directory of mode 0700 whose socket path is n bytes
 		d := filepath.Join(base, strings.Repeat("d", n-len(base)-2-len(reload.SocketFile)))
 		if err := os.Mkdir(d, 0o700); err != nil {
