@@ -763,9 +763,9 @@ gaps:
     2026-11-25: the registry image the exit runs is read and pinned by digest, with its
     register entry `distribution-registry` of mode `tool` and its licence record row
     (ADR-047 decision 4); the builder image has its entry `builder-image` of mode `ship`
-    beside `go-toolchain` (ADR-044 decision 5); and its base layer and SBOM tool are
-    settled, since it has none and `aiopsctl` writes the SBOM (ADR-044 decisions 15 and
-    17). The owner's word is still due on the names `distribution` and `registry`
+    beside `go-toolchain` (ADR-044 decision 5); and the builder image's base layer and
+    SBOM tool are settled, since it has no base layer and `aiopsctl` writes the SBOM
+    (ADR-044 decisions 15 and 17). The owner's word is still due on the names `distribution` and `registry`
     (ADR-054 decision 8).
 
 ### Line budgets
