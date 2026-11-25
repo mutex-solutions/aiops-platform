@@ -602,8 +602,11 @@ type trusted struct {
 // attestation with the key that verified it, before any other blob but plugin.yaml,
 // which names the runtimes the signer must cover and is fetched only once a signature
 // verified or where allowUnsigned lists an id; an id that allowUnsigned lists may carry
-// neither and is read with the statement that pack recorded. An artifact with no module
-// under a reserved owner is refused (ADR-047 decision 2; ADR-020 decisions 8, 13 and 14).
+// neither and is read with the statement that pack recorded. A signature's one subject
+// names <id>@<version>, as plugin sign writes it, or nothing, as cosign sign writes it;
+// the digest it signs fixes plugin.yaml either way (ADR-020 decision 2). An artifact
+// with no module under a reserved owner is refused (ADR-047 decision 2; ADR-020
+// decisions 8, 13 and 14).
 func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (trusted, error) {
 	var a trusted
 	t, err := readTrust(h.path("trust.yaml"))
@@ -642,7 +645,9 @@ func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (tr
 	}
 	id := a.ID + "@" + a.Version
 	var key *ecdsa.PublicKey
-	i := slices.IndexFunc(found, func(f signed) bool { return f.name == id && covers(t.signers[f.signer], a.ID, a.Runtimes) })
+	i := slices.IndexFunc(found, func(f signed) bool {
+		return (f.name == id || f.name == "") && covers(t.signers[f.signer], a.ID, a.Runtimes)
+	})
 	switch owner, _, _ := strings.Cut(a.ID, "/"); {
 	case !slices.Contains(a.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
 		// As the gate's check 5: only the release key signs such an artifact, and no
