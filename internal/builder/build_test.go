@@ -14,20 +14,21 @@ import (
 
 // The builder refuses what the local path cannot take before it reads a module (ADR-044
 // decision 7; ADR-060 decisions 20 and 21): a GOPROXY that names a proxy URL, in any
-// element of its list, since every module source of the builder is a file:// directory
-// until L14 clears, where a file:// source, direct and off pass that check; and a
-// release input that lists no module, since a release names its module table.
+// element of its list, with a scheme or with none, which the go command reads as
+// https://, since every module source of the builder is a file:// directory until L14
+// clears, where a file:// source, direct and off pass that check; and a release input
+// that lists no module, since a release names its module table.
 func TestRequestRefusals(t *testing.T) {
 	dir := t.TempDir()
 	q := Request{ModCache: dir, Cache: dir, Out: filepath.Join(dir, "out"), Input: []byte("requiredKeys: [clock]\n"), Root: "v0.2.0"}
 	for _, proxy := range []string{"https://proxy.golang.org", "http://proxy.example.test,direct", "file://" + dir + ",https://proxy.example.test",
-		"off|https://proxy.example.test"} {
+		"off|https://proxy.example.test", "proxy.golang.org", "file://" + dir + ",proxy.golang.org", "goproxy.io|direct"} {
 		q.Proxy = proxy
 		if _, err := Build(t.Context(), q); err == nil || !strings.Contains(err.Error(), "GOPROXY names "+proxy+": until L14 clears") {
 			t.Errorf("GOPROXY=%s: %v", proxy, err)
 		}
 	}
-	for _, proxy := range []string{"", "file://" + dir, "direct", "off"} {
+	for _, proxy := range []string{"", "file://" + dir, "direct", "off", "file://" + dir + "|off,direct"} {
 		q.Proxy = proxy
 		if _, err := Build(t.Context(), q); err == nil || strings.Contains(err.Error(), "GOPROXY") || !strings.Contains(err.Error(), "the release input lists no module") {
 			t.Errorf("GOPROXY=%q: %v", proxy, err)
@@ -41,8 +42,9 @@ func TestRequestRefusals(t *testing.T) {
 // rogue-provider, which provides a provider-bound key outside its binding, and the module
 // table lookup denies a plugin that the manifest does not hold, each denial naming its
 // check, while the row of toy-provider passes. Every clause that dist build does not
-// evaluate is printed with the reason. The release table on the release's manifest
-// passes.
+// evaluate is printed with the reason, and every check that passes on every row as
+// passing. The release table on the release's manifest passes. A row that uses a
+// deprecated major passes with a warning, never a denial (ADR-060 decision 9).
 func TestGateAtDistBuild(t *testing.T) {
 	read := func(p string) []byte {
 		b, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(p)))
@@ -73,7 +75,25 @@ func TestGateAtDistBuild(t *testing.T) {
 		"gate: check 5 Trust: not evaluated at dist build: the manifest it would read is the build's output",
 		"gate: check 7 Key and hook classes: not evaluated at dist build: signed: no signer is recorded",
 		"gate: check 10 Attestation: not evaluated at dist build: dist.yaml lists {module, version, sum} and no artifact",
-		"gate: check 1 Manifest schema and author API: not evaluated until a later step: exemptions"} {
+		"gate: check 1 Manifest schema and author API: not evaluated until a later step: exemptions",
+		"gate: check 1 Manifest schema and author API: pass\n", "gate: check 2 Definition versions: pass\n", "gate: check 6 Licence: pass\n"} {
+		if !strings.Contains(progress.String(), want) {
+			t.Errorf("dist build printed no %q:\n%s", want, progress.String())
+		}
+	}
+	if strings.Contains(progress.String(), "check 7 Key and hook classes: pass") {
+		t.Errorf("dist build printed check 7 as passing, which denies rogue-provider:\n%s", progress.String())
+	}
+
+	progress.Reset()
+	b.plugins = []tablePlugin{plugin("test/dist/plugins/toy-provider")}
+	deprecated := strings.Replace(string(read("test/dist/distribution.yaml")), "    toy:\n      - version: \"0.1\"\n",
+		"    toy:\n      - version: \"0.1\"\n        deprecated: {since: \"0.2.0\", removeNotBefore: \"2027-06-01\", successor: v1}\n", 1)
+	if err := b.gate([]byte(deprecated)); err != nil {
+		t.Errorf("a deprecated major denies: %v", err)
+	}
+	for _, want := range []string{"gate: check 2 Definition versions: pass\n", "gate: check 2 Definition versions: warning: row \"aiops-test.toy-provider\": ",
+		"of a major deprecated since 0.2.0 and removed not before 2027-06-01; its successor is v1\n"} {
 		if !strings.Contains(progress.String(), want) {
 			t.Errorf("dist build printed no %q:\n%s", want, progress.String())
 		}
@@ -88,7 +108,13 @@ func TestGateAtDistBuild(t *testing.T) {
 	for _, p := range d.Plugins {
 		b.plugins = append(b.plugins, tablePlugin{pkg: p.Package, manifest: p.Manifest})
 	}
+	progress.Reset()
 	if err := b.gate(release); err != nil {
 		t.Errorf("the release table: %v", err)
+	}
+	for _, n := range []string{"1 Manifest schema and author API", "2 Definition versions", "6 Licence", "7 Key and hook classes"} {
+		if want := "gate: check " + n + ": pass\n"; !strings.Contains(progress.String(), want) {
+			t.Errorf("dist build of the release table printed no %q:\n%s", want, progress.String())
+		}
 	}
 }

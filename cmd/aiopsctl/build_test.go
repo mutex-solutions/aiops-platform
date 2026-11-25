@@ -126,11 +126,17 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		t.Errorf("a release whose manifest this aiopsctl does not embed: %v", err)
 	}
 	releaseRef = releaseArtifact(reg, rel.Manifest, nil)
-	_, _, err = build(t.TempDir(), rogue)
+	_, printed, err := build(t.TempDir(), rogue)
 	for _, want := range []string{"declares the id aiops/rogue", "a fake or sdk/testkit package", "init deny-list: a default-mux handler: net/http.HandleFunc",
 		"example.com/acme/rogue is under GPL-2.0-only"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("the rogue module: the refusal lacks %q: %v", want, err)
+		}
+	}
+	for _, want := range []string{"manifest: the module table and the ids of its plugins: fail\n", "graph: no fake, sdk/testkit or testdata package: fail\n",
+		"init: the deny-list scan: fail\n", "licences: the licence scan of aiops: fail\n"} {
+		if !strings.Contains(printed, want) {
+			t.Errorf("the rogue module: dist build printed no %q:\n%s", want, printed)
 		}
 	}
 	// A raise that --allow-bump admits passes only when every check passes on the raised
@@ -142,7 +148,7 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		t.Errorf("a raise without --allow-bump: %v", err)
 	}
 	allow = []string{"golang.org/x/mod"}
-	_, printed, err := build(t.TempDir(), bump)
+	_, printed, err = build(t.TempDir(), bump)
 	allow = nil
 	for _, want := range []string{"bump: golang.org/x/mod, pinned by the release at v0.42.0, is v0.42.1 in this build, required by ", "example.com/acme/bump@v0.1.0",
 		"suites: go test example.com/acme/bump/...", "suites: go test github.com/mutex-solutions/aiops-platform/loader ",
@@ -156,6 +162,19 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	out := filepath.Join(site, "build")
 	if err != nil || built.Image != filepath.Join(out, "image") || built.Aiopsctl != filepath.Join(out, "aiopsctl", "aiopsctl") {
 		t.Fatalf("dist build: %+v, %v\n%s", built, err, printed)
+	}
+	// dist build prints the outcome of each check of ADR-060 decision 22 that it runs:
+	// each clause of its gate, each check of the build list and the graph, the licence
+	// scan of each binary, and the import boundary, plugin vet and suites of each site
+	// module.
+	for _, want := range []string{"gate: check 1 Manifest schema and author API: pass\n", "gate: check 2 Definition versions: pass\n",
+		"gate: check 6 Licence: pass\n", "gate: check 7 Key and hook classes: pass\n", "versions: the strict-version check: pass\n",
+		"manifest: the module table and the ids of its plugins: pass\n", "graph: no fake, sdk/testkit or testdata package: pass\n",
+		"init: the deny-list scan: pass\n", "licences: the licence scan of aiops: pass\n", "licences: the licence scan of aiopsctl: pass\n",
+		"boundary: the import boundary and plugin vet of " + echo.path + ": pass\n", "suites: go test " + echo.path + "/...: pass\n"} {
+		if !strings.Contains(printed, want) {
+			t.Errorf("dist build printed no %q:\n%s", want, printed)
+		}
 	}
 	// plugin smoke and plugin verify of in-process code on the local path (ADR-044
 	// decision 1; ADR-060 decisions 46 and 58).
