@@ -1055,7 +1055,14 @@ to a question, the decision here settles it.
     codec table. The register entry records the exemption, and it is read again at every
     version bump. The deny-list stays whole for every other package. `08:402` and
     `07:1860`, with the deny-list content that ADR-060 decision 33 gives ADR-044, gain
-    the exemption by package and version.
+    the exemption by package and version. Note of 2026-11-25: on the owner's word, the
+    deny-list also exempts the three registrations with `encoding/gob.Register` that
+    sigstore-go brings in through go-openapi (decision 16): the `init` of `encoding/gob`
+    itself at the toolchain pin, and the `init` of `github.com/go-openapi/loads` v0.25.0
+    and of `github.com/go-openapi/spec` v0.22.9. Each fills only gob's own type registry
+    and is keyed by package and version in the reviewed exceptions table of ADR-044
+    decision 21, whose note of the same date records them, and a version change needs a
+    new review. The register entry of sigstore-go records them.
 
 28. **Boot ties a module with no recorded sum by path** (Q10 (b)). For the main module
     and a replaced module the manifest records the path, and for a replaced module its

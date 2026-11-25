@@ -64,7 +64,8 @@ var exceptions = []exception{
 	// sigstore-go links go-openapi, which links encoding/gob: gob's own init registers its
 	// basic types, which counts (ADR-044 decision 24), and two go-openapi packages
 	// register the generic map and slice types from init. Each enters only gob's own
-	// type registry, which no row of a server uses.
+	// type registry, which no row of a server uses. The owner approved the three on
+	// 2026-11-25, at these versions only (ADR-044 decision 21; ADR-020 decision 27).
 	{"encoding/gob", Toolchain, ToolchainVersion, "encoding/gob.Register",
 		"gob's init registers its basic types with its own type registry (registerBasics), in every binary that links gob"},
 	{"github.com/go-openapi/loads", "github.com/go-openapi/loads", "v0.25.0", "encoding/gob.Register",

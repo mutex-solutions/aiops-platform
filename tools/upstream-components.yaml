@@ -174,11 +174,12 @@ entries:
       - {condition: "Every artifact that links it carries in THIRD_PARTY_LICENSES/ the NOTICE files of go-openapi/jsonpointer, go-openapi/jsonreference, go-openapi/runtime, go-tuf/v2 and grpc (NOTICE.txt), the PATENTS files of x/crypto, x/mod, x/net, x/sync, x/sys, x/term, x/text and protobuf, the full Apache-2.0 text beside the notices of json-canonicalization, in-toto/attestation and in-toto-golang, the licence files of the three OpenTelemetry modules whole, GO-LICENSE of go-pathspec beside its LICENSE, and the MIT file of go-openapi/runtime/middleware/denco (ADR-020 decision 16)", row: L7}
       - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-020 decision 30, reading 4; ADR-047 decision 21)", row: L16}
       - {condition: "The builder builds every binary with the tag grpcnotrace, which drops golang.org/x/net/trace and its two default-mux handlers, and its init deny-list exempts the codec of package google.golang.org/grpc/encoding/proto (RegisterCodecV2) at google.golang.org/grpc v1.82.1, read again at every version bump (ADR-020 decision 27; ADR-044 decision 21)", row: L16}
-      - {condition: "The deny-list scan finds three gob registrations that sigstore-go brings in through go-openapi: gob's own basic types (encoding/gob at the toolchain pin), and map[string]any and []any from the init of github.com/go-openapi/loads v0.25.0 and github.com/go-openapi/spec v0.22.9; the exceptions table of the builder names each by package and version, for the owner's review (ADR-044 decisions 21 and 24)", row: L16}
+      - {condition: "The deny-list scan finds three gob registrations that sigstore-go brings in through go-openapi: gob's own basic types (encoding/gob at the toolchain pin), and map[string]any and []any from the init of github.com/go-openapi/loads v0.25.0 and github.com/go-openapi/spec v0.22.9; the exceptions table of the builder names each by package and version, which the owner approved on 2026-11-25, and a version change of the toolchain or of either module needs a new review (ADR-044 decisions 21 and 24; ADR-020 decision 27)", row: L16}
     evidence:
       - {source: "github.com/sigstore/sigstore-go@v1.3.0 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.3.0}
       - {source: "the root licence files of each module of contains at its version, in the module cache; github.com/opencontainers/go-digest@v1.0.0 LICENSE.docs and README.md", read: "2026-11-24", version: v1.3.0}
       - {source: "golang.org/x/crypto@v0.57.0, golang.org/x/net@v0.59.0, golang.org/x/sys@v0.48.0 and golang.org/x/term@v0.46.0 LICENSE and PATENTS, each equal to the toolchain's, read again at the versions that x/tools raises them to", read: "2026-11-25", version: v1.3.0}
+      - {source: "the init of github.com/go-openapi/loads@v0.25.0 spec.go and of github.com/go-openapi/spec@v0.22.9 operation.go, each gob.Register of map[string]any and []any; registerBasics in src/encoding/gob/type.go of the toolchain at its pin", read: "2026-11-25", version: v1.3.0}
     mark: needs-approval
     importers:
       - {dir: plugins/operations, decision: "ADR-020 decision 1; ADR-060 decision 41"}
@@ -424,7 +425,8 @@ entries:
   # (spdx-license-list, ADR-044 decision 26). Its root package imports go-diff and
   # go-spew, at the versions the build list selects: certificate-transparency-go, which
   # sigstore-go links, requires go-diff v1.4.0 and a go-spew commit after v1.1.1, above
-  # the v1.1.0 and v1.1.1 that the classifier's go.mod names and ADR-044 read.
+  # the v1.1.0 and v1.1.1 that the classifier's go.mod names and ADR-044 read; ADR-044
+  # decision 15 names the selected versions since the owner's word of 2026-11-25.
   - id: licenseclassifier
     names: [licenseclassifier]
     form: library

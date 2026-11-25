@@ -759,10 +759,12 @@ settles it.
 
 15. **The licence scan and the SBOM writer live in the builder package** (Q1 (a)).
     Detection links `github.com/google/licenseclassifier/v2` at v2.0.0, with `go-spew`
-    v1.1.1 and `go-diff` v1.1.0, over the corpus of decision 26. The SBOM is SPDX 2.3 in
-    JSON, written with the standard library from the build list and the layer inputs.
-    Both paths and the CI licence report (`08:1245`; ADR-060 decision 36) run the same
-    code, and the builder image holds no scanner and no SBOM tool.
+    v1.1.2-0.20180830191138-d8f796af33cc and `go-diff` v1.4.0, the versions the build
+    list selects, whose licences were read at those versions (owner, 2026-11-25), over
+    the corpus of decision 26. The SBOM is SPDX 2.3 in JSON, written with the standard
+    library from the build list and the layer inputs. Both paths and the CI licence
+    report (`08:1245`; ADR-060 decision 36) run the same code, and the builder image
+    holds no scanner and no SBOM tool.
 
 16. **The local path runs the pinned toolchain module, never the host's** (Q2 (a)). It
     takes `golang.org/toolchain` at the pinned version for the host's system and
@@ -806,7 +808,17 @@ settles it.
     reviewed pull request; a site adds none, and the table is empty at S2a. When gRPC
     enters the server binary, the builder builds every server binary with `-tags
     grpcnotrace`, and the table gains `google.golang.org/grpc/encoding/proto` with
-    `RegisterCodecV2`; `grpc.EnableTracing` then does nothing in a server binary.
+    `RegisterCodecV2`; `grpc.EnableTracing` then does nothing in a server binary. Note
+    of 2026-11-25: on the owner's word, the table also holds the three registrations
+    with `encoding/gob.Register` that sigstore-go brings in through go-openapi (ADR-020
+    decision 16): the `init` of `encoding/gob`, which registers gob's basic types
+    (`registerBasics` in `type.go`), at the toolchain pin, and the `init` of
+    `github.com/go-openapi/loads` at v0.25.0 (`spec.go`) and of
+    `github.com/go-openapi/spec` at v0.22.9 (`operation.go`), each registering
+    `map[string]any` and `[]any`. Each is keyed by package and version, fills only gob's
+    own type registry, which no row of a server uses, and counts under decision 24; a
+    version change of the toolchain or of either module needs a new review. The register
+    entry of sigstore-go records them, and ADR-020 decision 27 carries the same note.
 
 22. **A self-built distribution lists sealed-hook listeners and its raise of the required
     set in `bindings`** (Q8 (a)). `bindings` gains `sealedHooks`, the listeners a site
@@ -872,7 +884,8 @@ following of this ADR (ADR-020 decision 18), and this record carries it as decid
   its `go.mod` holds no `replace` line, and every module of the table, the root module
   included, is reached at a version, so that build information records a sum for each.
 - *The one exemption of the `init` deny-list* is that of ADR-020 decision 27, as the
-  paragraph above states.
+  paragraph above states; the note of 2026-11-25 to decision 21 adds the three gob
+  registrations that the owner approved.
 - *The licence scan* honours the record of ADR-020 decision 30, reading 4: CC-BY-SA-4.0
   for `README.md` and `CONTRIBUTING.md` of `github.com/opencontainers/go-digest@v1.0.0`
   only, by module, version and file.
@@ -890,12 +903,13 @@ and `08:1390`, since the libraries of the licence scan are linked into `aiopsctl
 edits. The licence record keeps its date. An option the owner did not choose edits
 nothing.
 
-**Deviation recorded on 2026-11-25, for the owner's word.** Decision 15 names `go-spew`
-v1.1.1 and `go-diff` v1.1.0. The build list of the root module selects
-`github.com/sergi/go-diff` v1.4.0 and `github.com/davecgh/go-spew`
+**The classifier's versions, edited on the owner's word of 2026-11-25.** Decision 15
+named `go-spew` v1.1.1 and `go-diff` v1.1.0 as accepted. The build list of the root
+module selects `github.com/sergi/go-diff` v1.4.0 and `github.com/davecgh/go-spew`
 v1.1.2-0.20180830191138-d8f796af33cc, which `certificate-transparency-go`, linked through
 sigstore-go (ADR-020 decision 16), requires; the builder links what the build list
 selects. Both licences were read again at those pins, MIT with the `APACHE-LICENSE-2.0`
 text of the ported library for go-diff and ISC for go-spew, and the register entry of the
-classifier and licence:57 record them. The text of decision 15 stays as accepted until
-the owner's word edits it to the selected versions.
+classifier and licence:57 record them. The owner answered on 2026-11-25 that decision 15
+names the selected versions, and it is edited to them, with `08:1386`, which restates
+it.
