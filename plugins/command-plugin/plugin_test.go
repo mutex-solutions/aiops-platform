@@ -493,6 +493,17 @@ func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 	}
 }
 
+// plugin install prints on stderr each clause that the gate at its entry point does not
+// evaluate, with the reason, as every entry point reports it (ADR-060 decision 17).
+func TestInstallPrintsWhatTheGateDoesNotEvaluate(t *testing.T) {
+	s := &stub{ch: operations.Change{Verdict: launch.Verdict{Entry: "plugin install", Clauses: []launch.Clause{{Check: 1, Outcome: launch.OutcomePass},
+		{Check: 4, Clause: "stability", Outcome: launch.OutcomeNotEvaluated, Reason: "no profile is composed"}}}}}
+	code, out, errOut := dispatch(t, world(t, s), "plugin", "install", "artifact")
+	if code != 0 || !strings.Contains(errOut, "check 4 stability: not-evaluated: no profile is composed\n") || strings.Contains(out+errOut, "check 1") {
+		t.Errorf("install: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+}
+
 // plugin gate prints each clause on stdout and exits 1 when one denies, with the
 // release of --against resolved against the working directory (08:493).
 func TestGatePrintsTheClauses(t *testing.T) {

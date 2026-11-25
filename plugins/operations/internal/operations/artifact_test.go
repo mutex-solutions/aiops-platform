@@ -355,6 +355,22 @@ func TestPackWritesOneArtifact(t *testing.T) {
 	}
 }
 
+// Pack names on its progress each clause that the gate at its entry does not evaluate,
+// with the reason, as every entry point reports it (ADR-060 decision 17).
+func TestPackNamesWhatTheGateDoesNotEvaluate(t *testing.T) {
+	b := &packBox{sum: packSummary(), deny: []launch.Clause{{Check: 4, Clause: "stability", Outcome: launch.OutcomeNotEvaluated, Reason: "no profile is composed"}}}
+	dir := pluginDir(t, pack)
+	var progress bytes.Buffer
+	c := caller()
+	c.Progress = &progress
+	if _, err := (Library{Box: b}).Pack(t.Context(), def.PackRequest{Caller: c, Dir: dir, Out: filepath.Join(dir, "artifact")}); err != nil {
+		t.Fatal(err)
+	}
+	if want := "pack: check 4 stability is not evaluated: no profile is composed\n"; !strings.Contains(progress.String(), want) {
+		t.Errorf("progress %q; want %q", progress.String(), want)
+	}
+}
+
 // The module layer of in-process code holds the path, the version of the manifest and
 // the h1 sum that the module zip of the toolbox reads; its SBOM lists that module and
 // its build list, each module with its path, its version with its replacement and its
