@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -225,39 +226,54 @@ func abs(t *testing.T, p string) string {
 }
 
 // fill copies into the module source src, from the download cache of the Go module
-// cache, the files of every module version of the repository's module graph and of the
-// toolchain module: what a site that builds on the release fills its module cache with
-// (ADR-044 decision 9).
+// cache, what a site that builds on the release fills its module cache with (ADR-044
+// decision 9): the .info and .mod of every module version of the repository's module
+// graph, since go list -m all of a build reads them for whichever version that build
+// selects; the zip of every module of the build list; and the toolchain module. It
+// fails, naming them, when the module cache lacks any.
 func fill(t *testing.T, repo, download, src string) {
 	t.Helper()
-	cmd := exec.Command("go", "mod", "graph")
-	cmd.Dir, cmd.Env = repo, append(os.Environ(), "GOFLAGS=-mod=readonly")
-	graph, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := map[string]bool{builder.Toolchain + "@" + builder.ToolchainVersion: true}
-	for _, f := range strings.Fields(string(graph)) {
-		if p, _, ok := strings.Cut(f, "@"); ok && strings.Contains(p, ".") && !strings.HasPrefix(p, "github.com/mutex-solutions/aiops-platform") {
-			seen[f] = true
-		}
-	}
-	for mv := range seen {
-		path, version, _ := strings.Cut(mv, "@")
-		esc, err := module.EscapePath(path)
+	repoGo := func(args ...string) []string {
+		cmd := exec.Command("go", args...)
+		cmd.Dir, cmd.Env = repo, append(os.Environ(), "GOFLAGS=-mod=readonly")
+		out, err := cmd.Output()
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, ext := range []string{".mod", ".info", ".zip"} {
-			from := filepath.Join(download, esc, "@v", version+ext)
-			if _, err := os.Stat(from); err != nil {
-				continue
-			}
-			to := filepath.Join(src, esc, "@v", version+ext)
-			if err := errors.Join(os.MkdirAll(filepath.Dir(to), 0o755), link(from, to)); err != nil {
-				t.Fatal(err)
+		var mvs []string
+		for _, f := range strings.Fields(string(out)) {
+			if p, _, ok := strings.Cut(f, "@"); ok && strings.Contains(p, ".") && !strings.HasPrefix(p, "github.com/mutex-solutions/aiops-platform") {
+				mvs = append(mvs, f)
 			}
 		}
+		return mvs
+	}
+	type file struct{ mv, ext string }
+	want := map[file]bool{}
+	for _, ext := range []string{".info", ".mod", ".zip"} {
+		want[file{builder.Toolchain + "@" + builder.ToolchainVersion, ext}] = true
+	}
+	for _, mv := range repoGo("mod", "graph") {
+		want[file{mv, ".info"}], want[file{mv, ".mod"}] = true, true
+	}
+	for _, mv := range repoGo("list", "-m", "-f", "{{.Path}}@{{.Version}}", "all") {
+		want[file{mv, ".zip"}] = true
+	}
+	var missing []string
+	for f := range want {
+		path, version, _ := strings.Cut(f.mv, "@")
+		esc, err := module.EscapePath(path)
+		from, to := filepath.Join(download, esc, "@v", version+f.ext), filepath.Join(src, esc, "@v", version+f.ext)
+		if _, serr := os.Stat(from); serr != nil {
+			missing = append(missing, f.mv+f.ext)
+			continue
+		}
+		if err := errors.Join(err, os.MkdirAll(filepath.Dir(to), 0o755), link(from, to)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if slices.Sort(missing); len(missing) > 0 {
+		t.Fatalf("the module cache lacks %d files of the module source: %s", len(missing), strings.Join(missing, ", "))
 	}
 }
 
