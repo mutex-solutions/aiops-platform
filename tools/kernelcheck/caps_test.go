@@ -33,7 +33,9 @@ func capsOf(t *testing.T, file, call string) []string {
 // in step"), and the row package of the operations library has a cap of its own beside
 // the library's: ADR-060 decision 35 and ADR-061, Consequences, cap "the operations
 // library, plugins/operations" at 4,500 lines since the second note of 2026-11-24 to
-// decision 35, and the library's cap measures internal/operations only.
+// decision 35, and the library's cap measures internal/operations only. The note of
+// 2026-11-25 caps the builder at 3,500 lines and the operations fake and suite at 1,300
+// each.
 func TestLineCapsInStep(t *testing.T) {
 	mk := capsOf(t, "../../Makefile", "$(KC)")
 	ci := capsOf(t, "../../.github/workflows/ci.yml", "go run ./tools/kernelcheck")
@@ -41,7 +43,8 @@ func TestLineCapsInStep(t *testing.T) {
 		t.Errorf("the line caps differ:\nMakefile: %q\nci.yml:   %q", mk, ci)
 	}
 	for _, want := range []string{"plugins/operations 4500 provisional internal", "plugins/operations/internal/operations 4500 provisional",
-		"cmd/aiopsctl:internal/aiopsctl 2500 provisional"} {
+		"cmd/aiopsctl:internal/aiopsctl 2500 provisional", "internal/builder 3500 provisional",
+		"sdk/def/operations/v0/fake 1300 provisional", "sdk/def/operations/v0/conformance 1300 provisional"} {
 		if !slices.Contains(mk, want) || !slices.Contains(ci, want) {
 			t.Errorf("no cap %q in the Makefile and ci.yml", want)
 		}
