@@ -76,6 +76,31 @@ builder-image:
 	out=$$(go test -count=1 -v -timeout 40m -run '^TestReleaseAndBuilderImage$$' ./cmd/aiopsctl 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && echo "$$out" | grep -q -- '--- PASS: TestReleaseAndBuilderImage'
 
+# `make s2a-exit` is the S2a exit (ADR-060 decisions 30, 31 and 36): test/authoring builds
+# the test release of test/release/dist.yaml in two phases with a throwaway release key,
+# from the modules it serves at a pre-release version in a file-based module proxy, runs
+# the pinned registry image, and drives the author's repository, the pack author's
+# machine and the clean machine. EXIT_BUILDERS names the path of the clean machine's
+# builds, each run in turn: image, the CI job s2a-exit, and local, its local-toolchain
+# variant s2a-exit-local. The test binary is race-built, GORACE writes every race report
+# of a race-built process to a file, and any report fails the target, as s1-suites does;
+# so does a skip. It needs a container runtime and the module cache of the builder job,
+# so `make check` (-short) skips it. It removes the containers and the images it pulls.
+EXIT_BUILDERS ?= image local
+.PHONY: s2a-exit
+s2a-exit:
+	go mod download $(TOOLCHAIN)
+	r=$$(mktemp -d); s=0; \
+	for b in $(EXIT_BUILDERS); do \
+		out=$$(AIOPS_EXIT_BUILDER=$$b GOFLAGS='$(GOFLAGS) -race' GORACE="log_path=$$r/report" \
+			go test -count=1 -v -timeout 120m -run '^TestS2aExit$$' ./test/authoring 2>&1); c=$$?; \
+		echo "$$out"; \
+		if [ $$c -ne 0 ] || echo "$$out" | grep -q -- '--- SKIP' || ! echo "$$out" | grep -q -- '^--- PASS: TestS2aExit'; then \
+			echo "s2a-exit: the exit on the $$b path did not pass"; s=1; fi; \
+	done; \
+	if ls $$r/report.* >/dev/null 2>&1; then cat $$r/report.*; echo 's2a-exit: a race-built process reported a data race'; s=1; fi; \
+	rm -rf $$r; exit $$s
+
 # `make cosign` is the cosign job (ADR-060 decision 36; ADR-020 decisions 1, 2 and 4):
 # cosign verifies an artifact and a distribution manifest that aiopsctl signs, and
 # aiopsctl verifies ones that cosign signs, in key mode, on a registry inside the case.

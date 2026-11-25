@@ -288,6 +288,39 @@ jobs:
           go-version: "1.26.8" # toolchain directive in go.mod
       - run: make builder-image
 
+  s2a-exit:
+    name: S2a exit, the clean machine on the builder image
+    # ADR-060 decisions 30, 31 and 36; ADR-047 decision 15: test/authoring builds the
+    # test release in two phases with a throwaway release key from the modules it serves
+    # at a pre-release version in a file-based module proxy, runs the pinned registry
+    # image inside the job, and drives the author's repository, the pack author's machine
+    # and the clean machine, whose builds run on the builder image and whose kernel runs
+    # as a container on the home it bound read-only (see the s2a-exit target of the
+    # Makefile). Race-built; a race report or a skip fails the job. Nothing is pushed or
+    # published outside the job, and no key outlives it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: make s2a-exit EXIT_BUILDERS=image
+
+  s2a-exit-local:
+    name: S2a exit, the clean machine on a local toolchain
+    # ADR-060 decision 30: the second job runs the clean machine's steps with a local
+    # toolchain, the pinned toolchain module that the module proxy serves; the rest is the
+    # s2a-exit job's.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.8" # toolchain directive in go.mod
+      - run: make s2a-exit EXIT_BUILDERS=local
+
   cosign:
     name: cosign and aiopsctl, both ways in key mode
     # ADR-060 decision 36; ADR-020 decisions 1, 2 and 4 (07-c4-plugin-sdk.md:75, :1852):
