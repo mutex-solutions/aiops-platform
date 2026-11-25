@@ -271,6 +271,16 @@ Registration in `init`, read in the same cache:
      obligations), and `dist build` prints it. Whether a site's module source can stand
      in for the archive is not decided here; it waits for the licence record's Q7.
 
+   Note of 2026-11-25, as built: the release check is `go run ./tools/mplsources <dir>`
+   on the output directory of a release's second phase. It reads the signed manifest
+   there, whose `modules` record what the release image links with its sum and detected
+   licence, and fails, naming the module, when a module under MPL-2.0 has a sum that is
+   the h1 hash of no zip under `mpl-sources/`. `TestReleaseAndBuilderImage`, which the
+   CI job `builder-image` runs, runs it on the release it builds, and its own test holds
+   the MPL-2.0 case of decision 14. It is a tool beside the builder, not builder code,
+   since the builder is at its provisional cap (ADR-060 decision 35). The offline case of
+   decision 14 still waits for L14 (decision 19).
+
 ### Modules on one VM and on an air-gapped site
 
 7. **The module cache format.** `--modcache <dir>` (`08:402`; plugin record §11) names a

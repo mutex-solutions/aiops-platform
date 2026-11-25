@@ -115,6 +115,13 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 			t.Errorf("the second phase wrote no %s: %v", f, err)
 		}
 	}
+	// The release check of ADR-044 decision 6: each MPL-2.0 module that the release image
+	// links has a zip of its pin in the archive beside it.
+	check := exec.Command("go", "run", "./tools/mplsources", q.Out)
+	check.Dir = repo
+	if b, err := check.CombinedOutput(); err != nil {
+		t.Errorf("the MPL-2.0 release check: %v\n%s", err, b)
+	}
 	// The release server and the release aiopsctl embed the manifest, its bundle and the
 	// release public key (ADR-020 decision 13), so that dist use of the release image
 	// verifies it with the key the binary carries.

@@ -64,9 +64,10 @@ builder:
 # decisions 1, 3 to 6 and 17; ADR-020 decision 13): the release built in two phases from
 # the served modules, the builder image written from dist/builder/image.yaml on no base
 # layer, the licence report of the release image and of the release aiopsctl, with
-# THIRD_PARTY_LICENSES/, the NOTICE texts and the MPL-2.0 lines, and a site's dist build
-# on the image path, which runs that builder image in a container runtime, compared with
-# the local path. It needs docker and the module cache of the builder job, so `make
+# THIRD_PARTY_LICENSES/, the NOTICE texts and the MPL-2.0 lines, the MPL-2.0 release
+# check of ADR-044 decision 6 (tools/mplsources), and a site's dist build on the image
+# path, which runs that builder image in a container runtime, compared with the local
+# path. It needs docker and the module cache of the builder job, so `make
 # check` (-short) skips it; here it fails, and does not skip, when it does not run. It
 # removes the image it pulls and pushes nothing outside the job.
 .PHONY: builder-image

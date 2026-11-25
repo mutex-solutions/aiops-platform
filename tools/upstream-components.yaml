@@ -395,6 +395,7 @@ entries:
       - {dir: internal/builder, decision: "ADR-044 decisions 7, 8, 10, 16 and 23: the scratch go.mod, the module zips and their h1 sums, the strict versions, the toolchain module and the served go.mod copies"}
       - {dir: cmd/aiopsctl, decision: "ADR-044 decision 9: the case of dist build fills a module source with module zips, as a site does"}
       - {dir: tools/spdxcorpus, decision: "ADR-044 decision 26: the h1 sum of the SPDX data that the corpus is written from"}
+      - {dir: tools/mplsources, decision: "ADR-044 decision 6: the h1 hash of each zip of the MPL-2.0 archive of a release, for its release check"}
     default: false
 
   # The call graph of the init deny-list scan (ADR-044 decisions 12 and 25): go/packages,
