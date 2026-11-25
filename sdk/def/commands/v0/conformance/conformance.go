@@ -296,6 +296,10 @@ func hold() func() string {
 var (
 	errDenied = errors.New("conformance: denied")
 	errUse    = fmt.Errorf("%w: conformance: no such color", commands.ErrUsage)
+	// What a library can carry from an artifact: a control character, which the
+	// dispatcher prints quoted, as plugin inspect and verify show it.
+	errEsc    = errors.New("conformance: denied\nconformance: \x1b[2J")
+	errEscUse = fmt.Errorf("%w: conformance: \x1b[2J", commands.ErrUsage)
 )
 
 // parsed is the spec of the parsing case: two arguments of which one is optional, and a
@@ -399,11 +403,14 @@ var guards = []check{
 			{"use", errUse, 2, "usage: aiopsctl use"},
 			{"fail", errDenied, 1, "aiopsctl: fail: conformance: denied"},
 			{"boom", nil, 1, "goroutine"},
+			{"esc", errEsc, 1, "aiopsctl: esc: conformance: denied\n\"conformance: \\x1b[2J\"\n"},
+			{"esc-use", errEscUse, 2, "aiopsctl: esc-use: \"usage: conformance: \\x1b[2J\"\nusage: aiopsctl esc-use"},
 		} {
 			e.contribute(commands.Spec{Path: []string{c.name}, Summary: c.name}, &recorder{err: c.err, panics: c.name == "boom"})
 			code, err := e.dispatch([]string{c.name})
-			if code != c.code || (code == 0) != (err == nil) || !strings.Contains(e.err.String(), c.stderr) || e.out.Len() > 0 {
-				e.fail("%s: exit %d, %v, stderr %q; want exit %d with %q on stderr", c.name, code, err, e.err.String(), c.code, c.stderr)
+			if code != c.code || (code == 0) != (err == nil) || !strings.Contains(e.err.String(), c.stderr) || e.out.Len() > 0 ||
+				strings.Contains(e.err.String(), "\x1b") {
+				e.fail("%s: exit %d, %q, stderr %q; want exit %d with %q on stderr", c.name, code, fmt.Sprint(err), e.err.String(), c.code, c.stderr)
 			}
 		}
 		for _, argv := range [][]string{{"nope"}, {"ok", "extra"}} {
