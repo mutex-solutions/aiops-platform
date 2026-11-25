@@ -74,8 +74,8 @@ func ReadSite(data []byte) (Site, error) {
 		s.Plugins, s.Sums[v.Path] = append(s.Plugins, v), p.Sum
 	}
 	b := raw.Bindings
-	flat, err := yaml.Marshal(map[string]any{"providers": cmpMap(b.Providers), "consumers": cmpMap(b.Consumers),
-		"sealedHooks": cmpMap(b.SealedHooks), "requiredKeys": cmpList(b.Required.Keys), "requiredRows": cmpList(b.Required.Rows)})
+	flat, err := yaml.Marshal(map[string]any{"providers": b.Providers, "consumers": b.Consumers, // nil writes {} and []
+		"sealedHooks": b.SealedHooks, "requiredKeys": b.Required.Keys, "requiredRows": b.Required.Rows})
 	if err == nil {
 		s.Bindings, err = boot.ParseDist("dist.yaml bindings", flat)
 	}
@@ -97,18 +97,4 @@ func readSite(path string) (Site, error) {
 		return Site{}, err
 	}
 	return ReadSite(raw)
-}
-
-func cmpMap(m map[string][]string) map[string][]string {
-	if m == nil {
-		return map[string][]string{}
-	}
-	return m
-}
-
-func cmpList(l []string) []string {
-	if l == nil {
-		return []string{}
-	}
-	return l
 }

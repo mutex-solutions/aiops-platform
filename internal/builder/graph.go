@@ -88,26 +88,17 @@ func Graph(ctx context.Context, g Go, main string, flags ...string) ([]Package, 
 	var pkgs []Package
 	for dec := json.NewDecoder(bytes.NewReader(out)); ; {
 		var p struct {
-			ImportPath, Dir string
-			Standard        bool
-			GoFiles, SFiles []string
-			Module          *struct {
-				Path, Version, Sum, GoModSum, Dir string
-				Main                              bool
-				Replace                           *struct{ Path, Version, Sum, GoModSum, Dir string }
-			}
+			Package
+			Module *Module // go list's, which shadows Package.Module
 		}
 		if err := dec.Decode(&p); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return nil, err
 		}
-		pkg := Package{ImportPath: p.ImportPath, Dir: p.Dir, Standard: p.Standard, GoFiles: p.GoFiles, SFiles: p.SFiles, Module: std}
-		if m := p.Module; m != nil {
-			pkg.Module = Module{Path: m.Path, Version: m.Version, Sum: m.Sum, GoModSum: m.GoModSum, Dir: m.Dir, Main: m.Main}
-			if r := m.Replace; r != nil {
-				pkg.Module.Replace = &Module{Path: r.Path, Version: r.Version, Sum: r.Sum, GoModSum: r.GoModSum, Dir: r.Dir}
-			}
+		pkg := p.Package
+		if pkg.Module = std; p.Module != nil {
+			pkg.Module = *p.Module
 		} else if !p.Standard {
 			return nil, fmt.Errorf("package %s of %s is in no module", p.ImportPath, main)
 		}

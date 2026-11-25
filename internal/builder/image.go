@@ -295,12 +295,9 @@ func referrer(ctx context.Context, s *oci.Store, subject ocispec.Descriptor, man
 		}
 		layers = append(layers, d)
 	}
-	notes = maps.Clone(notes)
-	if notes == nil {
-		notes = map[string]string{}
-	}
-	notes[ocispec.AnnotationCreated] = epoch
-	_, err := oras.PackManifest(ctx, s, oras.PackManifestVersion1_1, operations.DistributionType, oras.PackManifestOptions{Subject: &subject, Layers: layers, ManifestAnnotations: notes})
+	ann := map[string]string{ocispec.AnnotationCreated: epoch}
+	maps.Copy(ann, notes)
+	_, err := oras.PackManifest(ctx, s, oras.PackManifestVersion1_1, operations.DistributionType, oras.PackManifestOptions{Subject: &subject, Layers: layers, ManifestAnnotations: ann})
 	return err
 }
 
