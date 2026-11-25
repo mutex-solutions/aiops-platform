@@ -130,6 +130,34 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 	if want := fmt.Sprintf("the default release root, key %s, is trusted; the built-in record of %s is in use", keyID, d.Digest); err != nil || !strings.Contains(string(b), want) {
 		t.Errorf("the release aiopsctl with no trust.yaml: %v, want %q\n%s", err, want, b)
 	}
+	// The release aiopsctl embeds the suite binaries, which the second phase compiles
+	// with go test -c (ADR-060 decision 46): the suite of a registry that a pack's rows
+	// feed runs on the pack, and fails each obligation whose recorded case is missing;
+	// the echo scenario runs on it, and fails with no recorded script. Their licences
+	// are aiopsctl's: sdk/testkit, which only the test binaries link, has its licence beside
+	// aiopsctl and its entry in the SBOM, which lists each binary (ADR-044 decision 5).
+	for what, pack := range map[string]map[string]string{
+		"echoers/register: the obligation failed": {"plugin.yaml": echoPack["plugin.yaml"], "bundle.yaml": "[]\n"},
+		"no recorded scenario in ":                {"plugin.yaml": strings.Replace(echoPack["plugin.yaml"], `{echoers: ["0.1"]}`, "{}", 1), "bundle.yaml": "[]\n"},
+	} {
+		dir := t.TempDir()
+		if err := writeFiles(dir, pack); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(filepath.Join(q.Out, "aiopsctl", "aiopsctl"), "plugin", "pack", "--out", filepath.Join(t.TempDir(), "out"))
+		cmd.Dir, cmd.Env = dir, []string{"HOME=" + scratch, "PATH=" + os.Getenv("PATH")}
+		b, err := cmd.CombinedOutput()
+		if err == nil || !strings.Contains(string(b), what) || strings.Contains(string(b), "embeds no") || strings.Contains(string(b), "not built") {
+			t.Errorf("plugin pack with the release aiopsctl: %v, want %q from an embedded binary\n%s", err, what, b)
+		}
+	}
+	const testkit = "github.com/mutex-solutions/aiops-platform/sdk/testkit"
+	if _, err := os.Stat(filepath.Join(q.Out, "aiopsctl", "THIRD_PARTY_LICENSES", testkit, "LICENSE")); err != nil {
+		t.Errorf("the licences beside the release aiopsctl lack the module of the suite binaries: %v", err)
+	}
+	if b, err := os.ReadFile(filepath.Join(q.Out, "aiopsctl", "aiopsctl.spdx.json")); err != nil || !bytes.Contains(b, []byte(`"`+testkit+`"`)) {
+		t.Errorf("the SBOM of the release aiopsctl lacks the module of the suite binaries: %v", err)
+	}
 
 	layout := filepath.Join(q.Out, "image")
 	reg := ocitest.New(t, ocitest.Options{})
@@ -155,8 +183,15 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 		}
 		names := layerNames(t, layout, c.m.layerDigests[0])
 		for _, w := range c.want {
-			if !names[w] {
+			if names[w] == nil {
 				t.Errorf("the image %s holds no %s", c.m.digest, w)
+			}
+		}
+		if c.m.digest == bld.digest {
+			for _, w := range []string{`"aiopsctl/suites/echoers.test"`, `"aiopsctl/suites/scenario-echo.test"`, `"` + testkit + `"`} {
+				if !bytes.Contains(names["builder.spdx.json"], []byte(w)) {
+					t.Errorf("the SBOM of the builder image lists no %s", w)
+				}
 			}
 		}
 	}
@@ -280,24 +315,29 @@ func pushLayout(t *testing.T, reg *ocitest.Registry, name, dir string) map[strin
 	return out
 }
 
-// layerNames returns the names of the entries of the layer digest of the layout dir.
-func layerNames(t *testing.T, dir, digest string) map[string]bool {
+// layerNames returns the entries of the layer digest of the layout dir by name: the
+// bytes of each .json file, and an empty slice for every other entry.
+func layerNames(t *testing.T, dir, digest string) map[string][]byte {
 	t.Helper()
 	f, err := os.Open(filepath.Join(dir, "blobs", "sha256", strings.TrimPrefix(digest, "sha256:")))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	names := map[string]bool{}
+	names := map[string][]byte{}
 	for tr := tar.NewReader(f); ; {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			return names
 		}
+		data := []byte{}
+		if err == nil && strings.HasSuffix(h.Name, ".json") {
+			data, err = io.ReadAll(tr)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		names[strings.TrimSuffix(h.Name, "/")] = true
+		names[strings.TrimSuffix(h.Name, "/")] = data
 	}
 }
 

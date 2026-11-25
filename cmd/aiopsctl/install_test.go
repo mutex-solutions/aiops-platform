@@ -33,7 +33,7 @@ var echoPack = map[string]string{
 }
 
 // standIn is a stand-in for an embedded suite or scenario binary of the release build:
-// a script that writes report as its JSON report (internal/authoring/suites/README.md).
+// a script that writes report as its JSON report, as internal/packsuite does.
 func standIn(report string) *fstest.MapFile {
 	return &fstest.MapFile{Data: []byte("#!/bin/sh\nprintf '%s' '" + report + "' > \"$AIOPS_REPORT\"\n"), Mode: 0o755}
 }
