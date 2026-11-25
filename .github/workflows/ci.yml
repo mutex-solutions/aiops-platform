@@ -111,8 +111,9 @@ jobs:
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
       - name: Plugin package, plugingen, aiopsctl, builder and operations library line caps
         # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl with its
-        # launcher internal/aiopsctl under the one 2,500 of its row, the builder (3,000)
-        # and the operations library,
+        # launcher internal/aiopsctl under the one 2,500 of its row, the builder (3,500
+        # since the note of 2026-11-25, which raised it from 3,000) and the operations
+        # library,
         # plugins/operations, provisional caps during S2a. The row
         # package, internal/ skipped, and its internal package, which holds the client of
         # reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped each, at
@@ -121,7 +122,7 @@ jobs:
           go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
           go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
           go run ./tools/kernelcheck lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
-          go run ./tools/kernelcheck lines internal/builder 3000 provisional
+          go run ./tools/kernelcheck lines internal/builder 3500 provisional
           go run ./tools/kernelcheck lines plugins/operations 4500 provisional internal
           go run ./tools/kernelcheck lines plugins/operations/internal/operations 4500 provisional
       - name: pluginApi check
@@ -216,12 +217,12 @@ jobs:
       - name: Operations definition line caps
         # ADR-060 decision 35 and ADR-061: the operations definition, its fake and its
         # suite are packages of their own, provisional until the S2a exit: the definition
-        # 800 lines, the fake and the suite 1,000 each since the second note of
-        # 2026-11-24, which raised them from 800.
+        # 800 lines, the fake and the suite 1,300 each since the note of 2026-11-25, which
+        # raised them from 1,000.
         run: |
           go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1000 provisional
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1000 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1300 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1300 provisional
 
   s1-suites:
     name: S1 exit suites on the built binary

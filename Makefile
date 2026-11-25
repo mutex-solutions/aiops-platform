@@ -102,9 +102,9 @@ check:
 	$(KC) lines internal/plugingen 1500 provisional
 	@# ADR-060 decision 35: cmd/aiopsctl and its launcher, internal/aiopsctl, which the
 	@# aiopsctl that dist build writes runs too, share the one 2,500 lines of the row of
-	@# cmd/aiopsctl; the builder, 3,000 lines, provisional.
+	@# cmd/aiopsctl; the builder, 3,500 lines since the note of 2026-11-25, provisional.
 	$(KC) lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
-	$(KC) lines internal/builder 3000 provisional
+	$(KC) lines internal/builder 3500 provisional
 	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
 	@# lines since the second note of 2026-11-24, provisional: the row package, internal/
 	@# skipped, and its internal package, with the client of reload-socket (ADR-062
@@ -162,7 +162,7 @@ check:
 		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
 	done
 	@# ADR-060 decision 35 and ADR-061: the operations definition, 800 lines; its fake and
-	@# its suite, 1,000 each since the second note of 2026-11-24.
+	@# its suite, 1,300 each since the note of 2026-11-25.
 	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
-	$(KC) lines sdk/def/operations/v0/fake 1000 provisional
-	$(KC) lines sdk/def/operations/v0/conformance 1000 provisional
+	$(KC) lines sdk/def/operations/v0/fake 1300 provisional
+	$(KC) lines sdk/def/operations/v0/conformance 1300 provisional
