@@ -428,11 +428,12 @@ func remove(ctx context.Context, ops operations.Operations, inv commands.Invocat
 		ConnectWait: c, Wait: w}))
 }
 
-// changed prints a change of the home: the paths written and the notes on stderr; on
-// stdout the dist.yaml lines of rebuild-required, the final result, or with none the
-// operation ids and the last status, and the outcome (ADR-061 decisions 11 and 44).
-// The library's error decides the exit. The paths, the notes and the dist.yaml lines
-// carry what an artifact supplies, so they are shown as inspect shows it.
+// changed prints a change of the home: the paths written, the notes and each clause of
+// the gate at install, as plugin gate prints them, on stderr; on stdout the dist.yaml
+// lines of rebuild-required, the final result, or with none the operation ids and the
+// last status, and the outcome (ADR-061 decisions 11 and 44; ADR-060 decisions 9 and
+// 17). The library's error decides the exit. The paths, the notes and the dist.yaml
+// lines carry what an artifact supplies, so they are shown as inspect shows it.
 func changed(inv commands.Invocation) func(operations.Change, error) error {
 	return func(ch operations.Change, err error) error {
 		for _, p := range ch.Written {
@@ -441,10 +442,8 @@ func changed(inv commands.Invocation) func(operations.Change, error) error {
 		for _, n := range ch.Notes {
 			fmt.Fprintln(inv.Err, shown(n))
 		}
-		for _, c := range ch.Verdict.Clauses { // what the gate at plugin install does not evaluate (ADR-060 decision 17)
-			if c.Outcome == launch.OutcomeNotEvaluated {
-				fmt.Fprintln(inv.Err, clauseLine(c))
-			}
+		for _, c := range ch.Verdict.Clauses {
+			fmt.Fprintln(inv.Err, clauseLine(c))
 		}
 		for _, l := range ch.DistLines {
 			fmt.Fprintln(inv.Out, shown(l))
