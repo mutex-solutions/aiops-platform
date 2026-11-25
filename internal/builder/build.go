@@ -165,8 +165,17 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	}
 	m := Manifest{Graph: pkgs, Licences: l.Modules, Pins: pins, Release: b.input, Site: b.site.Bindings, Accept: b.site.AcceptLicenses}
 	var merr, aerr error
-	if q.Smoke != "" || q.Verify {
-		m.Attested, aerr = b.attest(ctx)
+	switch {
+	case q.Smoke != "" || q.Verify:
+		m.Ran, aerr = b.attest(ctx)
+	case b.release == nil: // the release attests each first-party plugin by the suites that ran on it
+		m.Ran, aerr = b.firstParty(ctx, pkgs, "each statement names the suites that ran (ADR-060 decision 50)")
+	}
+	if b.release != nil { // a site's build keeps the release's statement of each first-party plugin
+		m.Attested = map[string]string{}
+		for id, p := range b.release.Plugins {
+			m.Attested[id] = string(p.Attestation)
+		}
 	}
 	res.Manifest, merr = m.Write()
 	if err = errors.Join(err, lerr, ferr, aerr, CheckLicences(l, b.site.AcceptLicenses), merr, fakes(pkgs)); err != nil {
@@ -174,11 +183,11 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	}
 	switch {
 	case b.release == nil && q.Signed == nil: // the first phase of a release stops at the manifest
-		return res, errors.Join(b.gate(res.Manifest), b.source(ctx, false))
+		return res, errors.Join(b.gate(res.Manifest), b.source(ctx, pkgs, false))
 	case b.release == nil && !bytes.Equal(res.Manifest, q.Signed.Manifest):
 		return res, errors.New("the second phase writes another manifest than the first phase wrote: the inputs changed between the phases (ADR-020 decision 13)")
 	case b.release != nil:
-		if err := errors.Join(b.gate(res.Manifest), b.source(ctx, len(bumps) > 0)); err != nil {
+		if err := errors.Join(b.gate(res.Manifest), b.source(ctx, pkgs, len(bumps) > 0)); err != nil {
 			return res, err
 		}
 	}
@@ -781,35 +790,28 @@ func (b *build) moduleDir(pkg string) string {
 }
 
 // source runs on the source of what the build builds what the build runs there (ADR-060
-// decision 22), without -race, since the builder has cgo off: on each site plugin's
-// package, the import boundary and plugin vet of internal/vet, and the tests of each
-// site module, the suites among them; on each package of a release's table, the import
-// boundary of the repository, and its suites and generated tests. With a raise that
-// --allow-bump admitted, a site build runs those of each plugin of the release's table
-// on the raised build list, so that the first-party rows run their suites against what
-// the binary links (ADR-044 decision 10). A go.mod and go.sum of their own take the lines
-// of their test dependencies, which the binary does not link.
-func (b *build) source(ctx context.Context, bumped bool) error {
-	var errs []error
-	first, why := b.base, "on the raised build list (ADR-044 decision 10)"
+// decision 22), without -race, since the builder has cgo off: on each package of a
+// release's table, the import boundary of the repository, their suites and generated
+// tests having run for the manifest; on each site plugin's package, the import boundary
+// and plugin vet of internal/vet, and the tests of each site module, the suites among
+// them. With a raise that --allow-bump admitted, a site build runs the tests of the
+// first-party plugins of pkgs on the raised build list, so that their suites run against
+// what the binary links (ADR-044 decision 10).
+func (b *build) source(ctx context.Context, pkgs []Package, bumped bool) error {
 	if b.release == nil {
-		first, why = b.plugins, "the release's own (ADR-060 decision 22)"
 		var dirs []string
 		for _, p := range b.plugins {
 			fmt.Fprintf(b.progress, "boundary: the import boundary of %s\n", p.pkg)
 			dirs = append(dirs, strings.TrimPrefix(p.pkg, rootModule+"/"))
 		}
-		errs = append(errs, vet.Boundary(filepath.Join(b.scratch, "mod", rootModule+"@"+b.q.Root), dirs)) // its path needs no escape
-	} else {
-		for _, p := range b.plugins {
-			fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
-			errs = append(errs, err)
-			for _, f := range fs {
-				errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
-			}
-		}
-		if !bumped {
-			first = nil
+		return vet.Boundary(filepath.Join(b.scratch, "mod", rootModule+"@"+b.q.Root), dirs) // its path needs no escape
+	}
+	var errs []error
+	for _, p := range b.plugins {
+		fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
+		errs = append(errs, err)
+		for _, f := range fs {
+			errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
 		}
 	}
 	for _, p := range b.site.Plugins {
@@ -818,21 +820,22 @@ func (b *build) source(ctx context.Context, bumped bool) error {
 			errs = append(errs, fmt.Errorf("the suites of %s: %w", p.Path, err))
 		}
 	}
-	var pkgs []string
-	for _, p := range first {
-		pkgs = append(pkgs, p.pkg)
-	}
-	if len(pkgs) > 0 {
-		mod, err := os.ReadFile(filepath.Join(b.scratch, "go.mod"))
-		sum, serr := os.ReadFile(filepath.Join(b.scratch, "go.sum"))
-		err = errors.Join(err, serr, os.WriteFile(filepath.Join(b.scratch, "suites.mod"), mod, 0o644), os.WriteFile(filepath.Join(b.scratch, "suites.sum"), sum, 0o644))
-		fmt.Fprintf(b.progress, "suites: go test %s, %s\n", strings.Join(pkgs, " "), why)
-		if err == nil {
-			_, err = b.g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace", "-modfile=suites.mod", "-mod=mod", "-run", "^(TestConformance|TestCycle|TestTwoTenants)$"}, pkgs)...)
-		}
+	if bumped {
+		_, err := b.firstParty(ctx, pkgs, "on the raised build list (ADR-044 decision 10)")
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// firstParty runs suitesRan on a go.mod and go.sum of their own, copies of the scratch
+// module's that take the lines of test dependencies, which the binary does not link.
+func (b *build) firstParty(ctx context.Context, pkgs []Package, why string) (Ran, error) {
+	mod, err := os.ReadFile(filepath.Join(b.scratch, "go.mod"))
+	sum, serr := os.ReadFile(filepath.Join(b.scratch, "go.sum"))
+	if err = errors.Join(err, serr, os.WriteFile(filepath.Join(b.scratch, "suites.mod"), mod, 0o644), os.WriteFile(filepath.Join(b.scratch, "suites.sum"), sum, 0o644)); err != nil {
+		return nil, err
+	}
+	return suitesRan(ctx, b.g, b.progress, why, pkgs, "-modfile=suites.mod", "-mod=mod")
 }
 
 // link writes the signed manifest into the module table, links the server for

@@ -1,0 +1,19 @@
+# A first-party plugin of a test of the builder whose test fails.
+manifestVersion: "1.0"
+id: aiops/fails
+version: 0.1.0
+title: Fails
+license: Apache-2.0
+publisher: {id: aiops}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+uses: []
+provides: []
+registers: []
+hooks: []
+configSchema: {}
+durable: []
+requires:
+  pluginApi: "0.3"
+  definitions: {}

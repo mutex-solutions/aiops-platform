@@ -4,12 +4,13 @@ package builder
 
 import (
 	"archive/zip"
+	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
-	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
 // registries are the registries whose suite a pack's rows can feed, each with what the
@@ -177,17 +177,8 @@ func (b *build) compileSuites(ctx context.Context, g Go) ([][]Package, error) {
 
 // union returns the packages of graphs, each once.
 func union(graphs ...[]Package) []Package {
-	var out []Package
 	seen := map[string]bool{}
-	for _, g := range graphs {
-		for _, p := range g {
-			if !seen[p.ImportPath] {
-				seen[p.ImportPath] = true
-				out = append(out, p)
-			}
-		}
-	}
-	return out
+	return slices.DeleteFunc(slices.Concat(graphs...), func(p Package) bool { dup := seen[p.ImportPath]; seen[p.ImportPath] = true; return dup })
 }
 
 // ConformanceTest returns the test that step 5 of plugin check writes into the package
@@ -256,56 +247,74 @@ func (b *build) smokeTests() (map[string][]byte, error) {
 }
 
 // attest runs step 5 of plugin check on each site plugin of plugin smoke or verify, with
-// the builder's toolchain, and returns its statement by id, which the throwaway manifest
-// records for check 10 of the boot of smoke and for verify to compare: the definitions of
-// requires at their versions, and for each suite that ran its revision and the half that
-// ran (ADR-060 decisions 46 and 56). A failed obligation fails the build with its lines.
-func (b *build) attest(ctx context.Context) (map[string]string, error) {
+// the builder's toolchain, and returns what ran on each, of which the throwaway manifest
+// records the statement of each site plugin for check 10 of the boot of smoke and for
+// verify to compare: the half that ran of each suite (ADR-060 decisions 46 and 56). A
+// failed obligation fails the build with its lines.
+func (b *build) attest(ctx context.Context) (Ran, error) {
 	suites, err := b.smokeSuites()
-	ran := map[string]int{} // the revision of each suite that ran, by package and registry
+	ran := Ran{}
+	for _, p := range b.plugins {
+		ran[p.pkg] = map[string][]string{}
+	}
 	for _, s := range suites {
-		var d struct{ Dir string }
-		major, _, _ := strings.Cut(s.version, ".")
-		def := rootModule + "/sdk/def/" + s.name + "/v" + major
-		out, lerr := b.g.Run(ctx, "list", "-json", "-tags=grpcnotrace", def)
-		var src []byte
-		if lerr == nil {
-			lerr = json.Unmarshal(out, &d)
-		}
-		if lerr == nil {
-			src, lerr = os.ReadFile(filepath.Join(d.Dir, "definition.yaml"))
-		}
-		var dd plugingen.Definition
-		if lerr == nil {
-			dd, lerr = plugingen.ParseDefinition(def, src)
-		}
-		if err = errors.Join(err, lerr); err != nil {
-			return nil, err
-		}
 		fmt.Fprintf(b.progress, "suites: the suite of %s on %s, step 5 of plugin check\n", s.name, s.pkg)
 		if out, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", "-run", "^TestAiopsctl$", "./"+s.dir); err != nil {
 			return nil, fmt.Errorf("the suite of %s fails on %s: %w\n%s", s.name, s.pkg, err, strings.TrimSpace(string(out)))
 		}
-		ran[s.pkg+" "+s.name] = dd.Suite
+		ran[s.pkg][s.name] = []string{"obligations"}
 	}
-	statements := map[string]string{}
-	for _, p := range b.plugins {
-		m, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
-		if err != nil {
-			return nil, err
+	return ran, err
+}
+
+// Ran is, by import path and definition, the halves of each suite that ran and passed.
+type Ran map[string]map[string][]string
+
+// RecordVar is sdk/def/internal/deftest.RecordVar, which only sdk/def may import.
+const RecordVar = "AIOPS_SUITE_RECORD"
+
+// suitesRan runs with g and flags the tests of each first-party plugin of pkgs, a package
+// of the root module with a plugin.yaml, prints to w what and why, and returns what each
+// suite recorded (sdk/def/internal/deftest.Ran): the release pipeline attests a
+// first-party plugin by the suites that ran on it (ADR-060 decision 50).
+func suitesRan(ctx context.Context, g Go, w io.Writer, why string, pkgs []Package, flags ...string) (Ran, error) {
+	dirs := map[string]string{}
+	for _, p := range pkgs {
+		if p.Module.Path == rootModule && fileExists(filepath.Join(p.Dir, "plugin.yaml")) {
+			dirs[p.Dir] = p.ImportPath
 		}
-		defs := map[string]operations.Attested{}
-		for name, vs := range m.Requires.Definitions {
-			a := operations.Attested{Version: vs[len(vs)-1]}
-			if rev, ok := ran[p.pkg+" "+name]; ok {
-				a.Suite, a.Halves = &rev, []string{"obligations"}
+	}
+	paths := slices.Sorted(maps.Values(dirs))
+	fmt.Fprintf(w, "suites: go test %s, %s\n", strings.Join(paths, " "), why)
+	rec, err := os.MkdirTemp("", "aiopsctl-suites-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(rec)
+	if g.Env == nil {
+		g.Env = os.Environ()
+	}
+	g.Env = append(slices.Clip(g.Env), RecordVar+"="+rec)
+	if out, err := g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace"}, flags, paths)...); err != nil {
+		return nil, fmt.Errorf("the suites of the first-party plugins: %w\n%s", err, out)
+	}
+	files, err := filepath.Glob(filepath.Join(rec, "*.json"))
+	out := Ran{}
+	for _, f := range files {
+		var r []string // the package's directory, the definition and the halves
+		data, rerr := os.ReadFile(f)
+		if err = errors.Join(err, rerr, json.Unmarshal(data, &r)); err != nil || len(r) < 2 {
+			return nil, cmp.Or(err, fmt.Errorf("%s: %q is no record of a suite", f, data))
+		}
+		if pkg, ok := dirs[r[0]]; ok {
+			if out[pkg] == nil {
+				out[pkg] = map[string][]string{}
 			}
-			defs[name] = a
+			have := append(out[pkg][r[1]], r[2:]...)
+			out[pkg][r[1]] = slices.DeleteFunc([]string{"obligations", "guard"}, func(h string) bool { return !slices.Contains(have, h) })
 		}
-		sum := sha256.Sum256(p.manifest)
-		statements[m.ID] = string(operations.Statement(m.ID, m.Version, hex.EncodeToString(sum[:]), defs, nil, nil))
 	}
-	return statements, err
+	return out, err
 }
 
 // suitesReadme is the one file of suites/ beside the main of every aiopsctl that the

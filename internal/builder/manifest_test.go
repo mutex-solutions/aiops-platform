@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -91,6 +92,19 @@ func TestDistributionOfTheTestBinary(t *testing.T) {
 		if _, err := Distribution(ctx, Go{Dir: root}, bad.main, []byte(bad.input)); err == nil {
 			t.Errorf("Distribution took %q", bad)
 		}
+	}
+}
+
+// A first-party plugin whose test fails has no statement: the build that would attest it
+// fails with the test's lines (ADR-060 decision 50).
+func TestASuiteThatFailsAttestsNothing(t *testing.T) {
+	dir, err := filepath.Abs(filepath.Join("testdata", "suites", "fails"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg := Package{ImportPath: rootModule + "/internal/builder/testdata/suites/fails", Dir: dir, Module: Module{Path: rootModule}}
+	if ran, err := suitesRan(t.Context(), Go{Dir: filepath.Join("..", "..")}, io.Discard, "", []Package{pkg}); err == nil || !strings.Contains(err.Error(), "a suite that fails") {
+		t.Errorf("suitesRan = %v, %v; want the failure of the test", ran, err)
 	}
 }
 

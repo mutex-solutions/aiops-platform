@@ -8,8 +8,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
+	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
 // rootModule is the path of the root module, whose modules a release builds.
@@ -35,18 +36,19 @@ type Manifest struct {
 	Release  boot.DistManifest
 	Site     boot.DistManifest
 	Accept   []string
-	Attested map[string]string // plugin smoke and verify: the statement of each plugin of the site, by id
+	Attested map[string]string // a site's build: the release's statement of each first-party plugin, by id
+	Ran      Ran               // the suites that ran on each first-party plugin, or on each site plugin of smoke and verify
 }
 
 // Write returns the manifest as boot reads it (boot.ReadDistribution): the module table
 // is each package of the graph that holds a plugin.yaml, with that manifest byte for
-// byte and the statement of a first-party plugin, or of a site plugin of plugin smoke or
-// verify, Attested; it refuses an id that two packages
-// declare, and an id under aiops/ or contrib/, the two owners reserved to the release
-// pipeline, of a package outside the modules it builds (08:402); the modules are those
-// of the graph with their detected licences, a module of the repository replaced by a
-// directory with no version and no sum (ADR-020 decision 28); serves is plugingen's for
-// the definitions in the graph; the pins are sorted, with the toolchain module's.
+// byte and the statement of a first-party plugin, Attested or from Ran, or of a site
+// plugin of Ran; it refuses an id that two packages declare, and an id under aiops/ or
+// contrib/, the owners reserved to the release pipeline, of a package outside the
+// modules it builds (08:402); the modules are those of the graph with their detected
+// licences, a module of the repository replaced by a directory with no version and no
+// sum (ADR-020 decision 28); serves is plugingen's for the definitions in the graph; the
+// pins are sorted, with the toolchain module's.
 func (m Manifest) Write() ([]byte, error) {
 	doc := distDoc{DistVersion: 1, Plugins: map[string]distPlugin{}, Bindings: bindingsDoc(m.Release), Packages: []string{},
 		AcceptLicenses: slices.Sorted(slices.Values(m.Accept))}
@@ -78,7 +80,7 @@ func (m Manifest) Write() ([]byte, error) {
 			case (owner == "aiops" || owner == "contrib") && !slices.Contains(sdkModules, p.Module.Path):
 				return nil, fmt.Errorf("%s declares the id %s: the owner %s is reserved to the artifacts the release pipeline builds, and its module %s is outside the release (08:402)", p.ImportPath, man.ID, owner, p.Module.Path)
 			}
-			doc.Plugins[man.ID] = distPlugin{Package: p.ImportPath, Manifest: string(src), firstParty: p.Module.Path == rootModule, Attestation: m.Attested[man.ID]}
+			doc.Plugins[man.ID] = distPlugin{Package: p.ImportPath, Manifest: string(src), man: man, firstParty: p.Module.Path == rootModule, Attestation: m.Attested[man.ID]}
 		}
 	}
 	slices.Sort(doc.Packages)
@@ -105,12 +107,8 @@ func (m Manifest) Write() ([]byte, error) {
 	slices.SortFunc(doc.Pins, func(a, b distPin) int { return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Version, b.Version)) })
 	doc.Serves = plugingen.Serves(defs)
 	for id, p := range doc.Plugins {
-		if p.firstParty {
-			st, err := statement(id, []byte(p.Manifest), doc.Serves)
-			if err != nil {
-				return nil, err
-			}
-			p.Attestation = st
+		if (p.firstParty || m.Ran[p.Package] != nil) && p.Attestation == "" {
+			p.Attestation = statement(p.man, []byte(p.Manifest), doc.Serves, m.Ran[p.Package])
 			doc.Plugins[id] = p
 		}
 	}
@@ -127,8 +125,9 @@ func (m Manifest) Write() ([]byte, error) {
 // package is main, built by g in the repository, with the bindings and the required set
 // of the release input dist.yaml (ADR-060 decisions 20 and 28): the manifest that
 // cmd/aiops and the test binary embed, which the parity check of make check holds to
-// this function. Its licences are those the scan detects, and its pins the go.sum lines
-// of the modules of the graph and the toolchain module's.
+// this function. Its licences are those the scan detects, its pins the go.sum lines of
+// the modules of the graph and the toolchain module's, and the statement of each
+// first-party plugin names the suites that its tests ran here (suitesRan).
 func Distribution(ctx context.Context, g Go, main string, input []byte) ([]byte, error) {
 	release, err := boot.ParseDist("dist.yaml", input)
 	if err != nil {
@@ -155,49 +154,36 @@ func Distribution(ctx context.Context, g Go, main string, input []byte) ([]byte,
 			m.Pins = append(m.Pins, boot.DistPin{Path: path, Version: mod.Version, Sum: mod.Sum, GoMod: mod.GoModSum})
 		}
 	}
+	if m.Ran, err = suitesRan(ctx, g, io.Discard, "", pkgs); err != nil {
+		return nil, err
+	}
 	return m.Write()
 }
 
-// statement writes the conformance attestation of a first-party plugin of the module
-// table: its subject is the digest of its manifest as the table holds it (ADR-020
-// decision 9); it names every definition of its requires and the suite revision of each
-// it provides or contributes to, with both halves where the revision is 1 or more
-// (ADR-060 decisions 55 and 56), since CI runs the suites of every first-party plugin on
-// the tree it builds, which the release pipeline's attestation replaces.
-func statement(id string, manifest []byte, serves plugingen.ServesData) (string, error) {
-	m, err := boot.ReadManifest(id, manifest, boot.ManifestStrict)
-	if err != nil {
-		return "", err
-	}
-	type def struct {
-		Version string   `json:"version"`
-		Suite   *int     `json:"suite,omitempty"`
-		Halves  []string `json:"halves,omitempty"`
-	}
-	defs := map[string]def{}
+// statement writes the conformance attestation of the plugin m of the module table,
+// whose manifest is manifest as the table holds it: its subject is the digest of the
+// manifest (ADR-020 decision 9); it names every definition of its requires, and of each
+// it provides or contributes to the served suite revision with the halves that ran, the
+// suites that ran on its package (ran), or revision 0 with no half for a definition with
+// no suite (ADR-060 decisions 50, 55 and 56). A suite that did not run is not named.
+func statement(m boot.Manifest, manifest []byte, serves plugingen.ServesData, ran map[string][]string) string {
+	defs := map[string]operations.Attested{}
 	for name, vs := range m.Requires.Definitions {
-		defs[name] = def{Version: vs[len(vs)-1]}
+		defs[name] = operations.Attested{Version: vs[len(vs)-1]}
 	}
+	keys := append(m.Provides, m.Registers...)
 	for name, served := range serves.Definitions {
 		for _, sd := range served {
-			for _, k := range append(m.Provides, m.Registers...) {
-				if _, ok := sd.Classes[k.Key]; ok && fmt.Sprint(k.Major) == strings.SplitN(sd.Version, ".", 2)[0] {
-					d := defs[name]
-					d.Suite = &sd.Suite
-					if sd.Suite > 0 {
-						d.Halves = []string{"obligations", "guard"}
-					}
-					defs[name] = d
-				}
+			if slices.ContainsFunc(keys, func(k boot.ManifestKey) bool {
+				_, ok := sd.Classes[k.Key]
+				return ok && fmt.Sprint(k.Major) == strings.SplitN(sd.Version, ".", 2)[0]
+			}) && (sd.Suite == 0 || ran[name] != nil) {
+				defs[name] = operations.Attested{Version: defs[name].Version, Suite: &sd.Suite, Halves: ran[name]}
 			}
 		}
 	}
 	sum := sha256.Sum256(manifest)
-	st := map[string]any{"_type": "https://in-toto.io/Statement/v1", "predicateType": boot.AttestationType,
-		"subject":   []any{map[string]any{"name": m.ID + "@" + m.Version, "digest": map[string]string{"sha256": hex.EncodeToString(sum[:])}}},
-		"predicate": map[string]any{"definitions": defs}}
-	b, err := json.Marshal(st)
-	return string(b), err
+	return string(operations.Statement(m.ID, m.Version, hex.EncodeToString(sum[:]), defs, nil, nil))
 }
 
 // The document of Manifest.Write, in the field order of boot.Distribution.
@@ -217,6 +203,7 @@ type (
 		Package     string `yaml:"package"`
 		Manifest    string `yaml:"manifest"`
 		Attestation string `yaml:"attestation,omitempty"`
+		man         boot.Manifest
 		firstParty  bool
 	}
 	goModule struct {
