@@ -242,7 +242,6 @@ func shippedPlaces(root string) ([]place, error) {
 		for _, name := range prof.Bundles {
 			f := filepath.Join(root, "dist", "bundles", name, "bundle.yaml")
 			var items []struct {
-				ID     string `yaml:"id"`
 				Insert []struct {
 					ID string `yaml:"id"`
 				} `yaml:"insert"`

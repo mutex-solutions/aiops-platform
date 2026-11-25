@@ -78,10 +78,11 @@ func CheckReserved(c Composition) error {
 func (a Admission) Refused() bool { return a.Gate.Refused || len(a.Errors) > 0 }
 
 // Diagnostics returns one line per finding, in a fixed order: the module
-// table lookups, the failures of each gate slot, the gate's warnings of a deprecated
-// major, the graph and required-set errors, then the grouped warnings. Each line starts with "error:" or
-// "warning:". The words the failure matrix looks for are in the text: "not in
-// the module table", "detached", "denied", "static graph", "waits for".
+// table lookups, the failures of each gate slot, the gate's warnings of a
+// deprecated major, the graph and required-set errors, then the grouped
+// warnings. Each line starts with "error:" or "warning:". The words the failure
+// matrix looks for are in the text: "not in the module table", "detached",
+// "denied", "static graph", "waits for".
 func (a Admission) Diagnostics() []string {
 	var out []string
 	for _, f := range a.Gate.Unresolved {
