@@ -246,11 +246,13 @@ jobs:
     # ADR-060 decisions 22 and 36; ADR-044: the corpus of the licence classifier against
     # the pinned SPDX data; the cases of the builder on the tree of the pinned toolchain
     # module, the licence report of aiops and aiopsctl with THIRD_PARTY_LICENSES/, the
-    # NOTICE texts and the MPL-2.0 lines among them; and dist build on the local path,
-    # then dist sign and dist use of what it wrote (see the builder target of the
-    # Makefile). Nothing is pushed or published.
+    # NOTICE texts and the MPL-2.0 lines among them; dist build on the local path, then
+    # dist sign and dist use of what it wrote; and the test release built in two phases
+    # with a throwaway release key, with the aiopsctl of that distribution (ADR-060
+    # decision 38; see the builder target of the Makefile). Nothing is pushed or
+    # published.
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5

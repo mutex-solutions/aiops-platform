@@ -10,6 +10,7 @@ import (
 
 func TestParseDistOK(t *testing.T) {
 	d, err := ParseDist("dist.yaml", []byte(`
+modules: [example.test/m/b, example.test/m/a]
 providers: {z: [o/b, o/a], a: [o/c]}
 consumers: {k: [o/x]}
 sealedHooks: {approval/gates: [o/a]}
@@ -20,6 +21,7 @@ requiredRows: [loader, g:child]
 		t.Fatal(err)
 	}
 	want := DistManifest{
+		Modules:      []string{"example.test/m/a", "example.test/m/b"},
 		Providers:    []Binding{{"a", []string{"o/c"}}, {"z", []string{"o/a", "o/b"}}},
 		Consumers:    []Binding{{"k", []string{"o/x"}}},
 		SealedHooks:  []HookListeners{{"approval/gates", []string{"o/a"}}},
@@ -36,6 +38,9 @@ func TestParseDistRefusals(t *testing.T) {
 		{"empty file", ""},
 		{"not a mapping", "[a]"},
 		{"unknown field", "x: 1"},
+		{"modules not a list", "modules: example.test/m"},
+		{"module malformed", "modules: ['a b']"},
+		{"module twice", "modules: [example.test/m, example.test/m]"},
 		{"providers not a mapping", "providers: [a]"},
 		{"binding key malformed", "providers: {'a b': [o/x]}"},
 		{"binding not a list", "providers: {a: o/x}"},

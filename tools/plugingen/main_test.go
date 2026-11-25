@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	testdist "github.com/mutex-solutions/aiops-platform/test/dist"
 )
@@ -141,5 +144,57 @@ func TestAReleaseServesOnlyTheDefinitionsOfTheSDK(t *testing.T) {
 	}
 	if err := servesOnlySDK(root, []byte("x: [")); err == nil {
 		t.Fatal("a malformed manifest passes")
+	}
+}
+
+// The release module table is generated into dist/ from the modules of dist/dist.yaml
+// and committed, and the parity step of make check and of CI, which this command runs,
+// fails when it differs (ADR-060 decision 20). The release lists no package under
+// examples/ or test/, so the shipped table gains nothing (ADR-060 decision 38). The input
+// of the test release, test/release/dist.yaml, has the same form: the release table plus
+// the dispatcher, the instantiable echoer, the caller and teststate, with every binding
+// and the required set of the release; its table generates too, and a module that
+// declares no plugin is refused.
+func TestReleaseTableIsGenerated(t *testing.T) {
+	root := filepath.Join("..", "..")
+	read := func(p string) []byte {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	input := read("dist/dist.yaml")
+	if got, err := table(root, input); err != nil || !bytes.Equal(got, read("dist/modules.go")) {
+		t.Fatalf("dist/modules.go is not what plugingen writes from dist/dist.yaml: %v", err)
+	}
+	rel, err := boot.ParseDist("dist.yaml", input)
+	if err != nil || slices.ContainsFunc(rel.Modules, func(m string) bool { return strings.Contains(m, "/examples/") || strings.Contains(m, "/test/") }) {
+		t.Fatalf("the release lists %v (%v)", rel.Modules, err)
+	}
+	data := read("test/release/dist.yaml")
+	tst, err := boot.ParseDist("test/release/dist.yaml", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toys := []string{modPath + "/examples/caller", modPath + "/examples/dispatch", modPath + "/examples/echoer", modPath + "/test/dist/plugins/teststate"}
+	if want := slices.Sorted(slices.Values(slices.Concat(rel.Modules, toys))); !slices.Equal(tst.Modules, want) {
+		t.Errorf("the test release lists %v, want %v", tst.Modules, want)
+	}
+	tb := slices.Concat(tst.Providers, tst.Consumers)
+	for _, b := range slices.Concat(rel.Providers, rel.Consumers) {
+		i := slices.IndexFunc(tb, func(x boot.Binding) bool { return x.Key == b.Key })
+		if i < 0 || slices.ContainsFunc(b.Plugins, func(id string) bool { return !slices.Contains(tb[i].Plugins, id) }) {
+			t.Errorf("the test release binds %s to less than the release's %v", b.Key, b.Plugins)
+		}
+	}
+	if !reflect.DeepEqual(tst.SealedHooks, rel.SealedHooks) || !slices.Equal(tst.RequiredKeys, rel.RequiredKeys) || !slices.Equal(tst.RequiredRows, rel.RequiredRows) {
+		t.Errorf("the test release has other sealed hooks or another required set: %+v", tst)
+	}
+	if src, err := table(root, data); err != nil || !bytes.Contains(src, []byte(`"`+modPath+`/test/dist/plugins/teststate"`)) {
+		t.Errorf("the table of the test release: %v", err)
+	}
+	if _, err := table(root, []byte("modules: ["+modPath+"/boot]\n")); err == nil || !strings.Contains(err.Error(), modPath+"/boot declares no plugin") {
+		t.Errorf("a module that declares no plugin: %v", err)
 	}
 }

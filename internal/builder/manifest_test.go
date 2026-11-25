@@ -105,7 +105,8 @@ func TestManifestOfASite(t *testing.T) {
 // package of a module outside the release that holds a plugin.yaml under aiops/ or
 // contrib/ is refused wherever it lies, under testdata/ too, which go builds once a
 // package imports it; and two packages that declare one id are refused, not one entry
-// kept. A server graph that links a package under testdata/ is refused too.
+// kept. A server graph that links a package under testdata/, a fake package or a
+// package of sdk/testkit is refused too (ADR-060 decision 31).
 func TestManifestOwners(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "plugins", "clock", "plugin.yaml"))
 	if err != nil {
@@ -121,12 +122,24 @@ func TestManifestOwners(t *testing.T) {
 		!strings.Contains(err.Error(), "example.test/sneak/internal/testdata/reg declares the id aiops/clock") {
 		t.Errorf("an aiops/ id outside the release, under testdata/: %v", err)
 	}
+	contrib := strings.NewReplacer("id: aiops/clock", "id: contrib/clock", "publisher: {id: aiops}", "publisher: {id: contrib}").Replace(string(src))
+	third := Module{Path: "example.test/third", Version: "v0.1.0", Sum: h1("third"), Dir: moduleDir(t, map[string]string{"plugin.go": "package third\n", "plugin.yaml": contrib})}
+	if _, err := (Manifest{Graph: []Package{{ImportPath: third.Path, Dir: third.Dir, Module: third}}, Licences: map[string]string{third.Path: "Apache-2.0"}}).Write(); err == nil ||
+		!strings.Contains(err.Error(), "example.test/third declares the id contrib/clock: the owner contrib is reserved") {
+		t.Errorf("a contrib/ id outside the release: %v", err)
+	}
 	if _, err := (Manifest{Graph: []Package{root, {ImportPath: other.Path, Dir: other.Dir, Module: other}}, Licences: licences}).Write(); err == nil ||
 		!strings.Contains(err.Error(), "acme/clock is declared by example.test/sneak and by example.test/other") {
 		t.Errorf("one id declared twice: %v", err)
 	}
 	if err := fakes([]Package{pkg(sneak, "internal/testdata/reg")}); err == nil || !strings.Contains(err.Error(), "under testdata/") {
 		t.Errorf("a package under testdata/ in the server graph: %v", err)
+	}
+	testkit := Module{Path: rootModule + "/sdk/testkit", Version: "v0.2.0"}
+	for _, p := range []Package{pkg(sneak, "internal/fake"), {ImportPath: testkit.Path + "/kerneltest", Module: testkit}} {
+		if err := fakes([]Package{p}); err == nil || !strings.Contains(err.Error(), "the server links "+p.ImportPath+", a fake or sdk/testkit package") {
+			t.Errorf("%s in the server graph: %v", p.ImportPath, err)
+		}
 	}
 }
 

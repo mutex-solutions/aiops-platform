@@ -43,10 +43,12 @@ templates:
 # cases of the builder that read the tree of the pinned toolchain module, the licence
 # report of aiops and aiopsctl among them, with THIRD_PARTY_LICENSES/, the NOTICE texts
 # and the MPL-2.0 lines written for each as for an image, and the deny-list scan of the
-# whole program; and dist build on the local path, then dist sign and dist use of what
-# it wrote, which builds two binaries from nothing. Both modules come from the module
-# proxy into the module cache, so `make check` (-short) skips these cases; here they
-# fail, and do not skip, when they do not run.
+# whole program; dist build on the local path, then dist sign and dist use of what it
+# wrote, which builds two binaries from nothing; and the test release of
+# test/release/dist.yaml built in two phases with a throwaway release key (ADR-060
+# decision 38). Both modules come from the module proxy into the module cache, so `make
+# check` (-short) skips these cases; here they fail, and do not skip, when they do not
+# run.
 TOOLCHAIN := golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64
 SPDXDATA  := github.com/spdx/license-list-data@v3.29.0+incompatible
 .PHONY: builder
@@ -54,9 +56,9 @@ builder:
 	go mod download $(TOOLCHAIN) $(SPDXDATA)
 	go run ./tools/spdxcorpus .
 	out=$$(go test -count=1 -v -timeout 30m -run '^(TestBoringReading|TestStdNotices|TestLicenceReport|TestGRPCNeedsTheTag|TestToolchainLicenceFiles)$$' ./internal/builder 2>&1 && \
-		go test -count=1 -v -timeout 30m -run '^TestDistBuildSignAndUse$$' ./cmd/aiopsctl 2>&1); s=$$?; \
+		go test -count=1 -v -timeout 40m -run '^(TestDistBuildSignAndUse|TestTestRelease)$$' ./cmd/aiopsctl 2>&1); s=$$?; \
 	echo "$$out"; [ $$s -eq 0 ] && ! echo "$$out" | grep -q -- '--- SKIP' && \
-		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 6 ]
+		[ $$(echo "$$out" | grep -c -- '--- PASS') -eq 7 ]
 
 # `make builder-image` is the builder-image job (ADR-060 decisions 22 and 36; ADR-044
 # decisions 1, 3 to 6 and 17; ADR-020 decision 13): the release built in two phases from
