@@ -35,11 +35,13 @@ type Manifest struct {
 	Release  boot.DistManifest
 	Site     boot.DistManifest
 	Accept   []string
+	Attested map[string]string // plugin smoke: the statement of each plugin of the module under smoke, by id
 }
 
 // Write returns the manifest as boot reads it (boot.ReadDistribution): the module table
 // is each package of the graph that holds a plugin.yaml, with that manifest byte for
-// byte and the statement of a first-party plugin; it refuses an id that two packages
+// byte and the statement of a first-party plugin, or of a plugin of the module under
+// plugin smoke, Attested; it refuses an id that two packages
 // declare, and an id under aiops/ or contrib/, the two owners reserved to the release
 // pipeline, of a package outside the modules it builds (08:402); the modules are those
 // of the graph with their detected licences, a module of the repository replaced by a
@@ -76,7 +78,7 @@ func (m Manifest) Write() ([]byte, error) {
 			case (owner == "aiops" || owner == "contrib") && !slices.Contains(sdkModules, p.Module.Path):
 				return nil, fmt.Errorf("%s declares the id %s: the owner %s is reserved to the artifacts the release pipeline builds, and its module %s is outside the release (08:402)", p.ImportPath, man.ID, owner, p.Module.Path)
 			}
-			doc.Plugins[man.ID] = distPlugin{Package: p.ImportPath, Manifest: string(src), firstParty: p.Module.Path == rootModule}
+			doc.Plugins[man.ID] = distPlugin{Package: p.ImportPath, Manifest: string(src), firstParty: p.Module.Path == rootModule, Attestation: m.Attested[man.ID]}
 		}
 	}
 	slices.Sort(doc.Packages)

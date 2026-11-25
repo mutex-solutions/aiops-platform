@@ -512,3 +512,19 @@ func (l Library) Build(ctx context.Context, r def.BuildRequest) (launch.Built, e
 	}
 	return l.Box.Build(ctx, r.BuildRequest)
 }
+
+// Smoke is plugin smoke (ADR-060 decision 58, reading 1; ADR-044 decision 1): the
+// throwaway distribution of the release artifact and the plugin directory that the
+// builder of the toolbox builds and boots, and the rows it booted. It writes no home.
+func (l Library) Smoke(ctx context.Context, r def.BuildRequest) (launch.Built, error) {
+	if err := def.SmokeForm(r); err != nil {
+		return launch.Built{}, err
+	}
+	q := r.BuildRequest
+	q.DistYAML, q.Module = "", ""
+	b, err := l.Box.Build(ctx, q)
+	if err != nil {
+		return b, err
+	}
+	return b, def.Smoked(b.Rows)
+}

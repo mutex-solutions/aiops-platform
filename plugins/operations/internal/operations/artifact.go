@@ -3,6 +3,7 @@
 package operations
 
 import (
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -579,7 +580,7 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	id := a.ID + "@" + a.Version
 	v.Steps = []def.VerifyStep{{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer},
 		{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()}}
-	st, err := l.verifySuites(ctx, r.Caller, src, a.m, a.pluginYAML)
+	st, err := l.verifySuites(ctx, r, src, a.m, a.pluginYAML)
 	v.Steps = append(v.Steps, st)
 	v.Passed = st.Outcome == "pass"
 	return v, err
@@ -662,11 +663,33 @@ func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (tr
 // plugin check runs them on the pack that the artifact carries, its manifest, bundle
 // and fixtures unpacked into a directory of its own (ADR-060 decisions 46 and 49). It
 // fails where boot's strict reader refuses that manifest, or reads it as another plugin
-// than pm, the one that the signature and the attestation name.
-func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m ocispec.Manifest, pm pluginYAML) (def.VerifyStep, error) {
+// than pm, the one that the signature and the attestation name. In-process code is
+// built by the builder of the toolbox from the module that module.json records, on the
+// release that r names, whose tests, the suites among them, run on that build list.
+func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source, m ocispec.Manifest, pm pluginYAML) (def.VerifyStep, error) {
 	st := def.VerifyStep{Name: "suites", Outcome: "not-built"}
 	if len(pm.Runtimes) > 0 {
-		st.Reason = "the suites of in-process code run on its module, which plugin verify fetches with the builder of ADR-044, not built yet"
+		var mod struct{ Path, Version, Sum string }
+		b, err := fetchLayer(ctx, src, m, layerModule)
+		if err != nil || json.Unmarshal(b, &mod) != nil {
+			return st, refused("module.json of %s@%s: %v (ADR-047 decision 1)", pm.ID, pm.Version, err)
+		}
+		if r.Against == "" || r.ModCache == "" {
+			st.Reason = "plugin verify builds the module of in-process code on the release artifact of --against, from the module source of --modcache (ADR-044 decision 1)"
+			return st, nil
+		}
+		_, err = l.Box.Build(ctx, launch.BuildRequest{Module: mod.Path, Version: mod.Version, Sum: mod.Sum, Against: r.Against, ModCache: r.ModCache,
+			Mirrors: r.Mirrors, Builder: cmp.Or(r.Builder, "image")})
+		switch {
+		case errors.Is(err, launch.ErrNotCarried):
+			st.Reason = err.Error()
+		case ctx.Err() != nil:
+			return st, ctx.Err()
+		case err != nil:
+			st.Outcome, st.Reason = "fail", err.Error()
+		default:
+			st.Outcome, st.Reason = "pass", fmt.Sprintf("the tests of %s %s, its suites among them, on the build list of the release", mod.Path, mod.Version)
+		}
 		return st, nil
 	}
 	dir, err := os.MkdirTemp("", "aiops-verify-")
@@ -705,7 +728,7 @@ func (l Library) verifySuites(ctx context.Context, c def.Caller, src source, m o
 		st.Outcome, st.Reason = "fail", fmt.Sprintf("boot's reader reads plugin.yaml as %s@%s, and the artifact is %s@%s", sum.ID, sum.Version, pm.ID, pm.Version)
 		return st, nil
 	}
-	ran, ds, err := (&checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: c, Dir: dir}, sum: sum}).attested()
+	ran, ds, err := (&checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: dir}, sum: sum}).attested()
 	switch {
 	case err != nil:
 	case hasError(ds):

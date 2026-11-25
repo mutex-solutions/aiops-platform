@@ -17,5 +17,6 @@
 // socket of ADR-062). Pack and Verify run the suites of plugin check as Check runs
 // them, and a binary that does not carry them reports the suite step as not built
 // (ADR-060 decision 46). Build, added at 0.3, is dist build through the builder of
-// the toolbox (ADR-044); Smoke joins with the builder's image path.
+// the toolbox (ADR-044); Smoke, added at 0.4, is plugin smoke through the same builder,
+// with which Verify builds in-process code since 0.4.
 package operations

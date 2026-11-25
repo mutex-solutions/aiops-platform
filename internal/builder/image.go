@@ -344,12 +344,15 @@ func builderImage(ctx context.Context, s *oci.Store, def []byte, goroot, ctl str
 }
 
 // ImageRequest is dist build on the image path: the site's dist.yaml and the module
-// source, both absolute, the mirrors by prefix and the modules whose raise is allowed.
+// source, both absolute, the mirrors by prefix and the modules whose raise is allowed;
+// or plugin smoke, with the plugin directory and the release artifact for dist.yaml,
+// whose rows the image's aiopsctl prints on Stdout.
 type ImageRequest struct {
 	DistYAML, ModCache string
+	Smoke, Against     string
 	Mirrors            map[string]string
 	AllowBump          []string
-	Progress           io.Writer
+	Progress, Stdout   io.Writer
 }
 
 // RunImage is dist build on the image path (ADR-044 decision 1; ADR-061 decision 21).
@@ -359,13 +362,18 @@ type ImageRequest struct {
 // aiopsctl, with the same command and --builder local, no network, the caller's user,
 // dist.yaml and the module source bound read-only, build/ beside dist.yaml bound
 // read-write, and the Go environment of ADR-060 decision 21. It returns what the image's
-// aiopsctl wrote.
+// aiopsctl wrote. For plugin smoke the image's aiopsctl runs plugin smoke on the local
+// path, with the plugin directory bound read-only, and boots the throwaway distribution
+// inside the container; nothing is written beside the plugin.
 func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
-	q.Progress = cmp.Or[io.Writer](q.Progress, io.Discard)
-	if !filepath.IsAbs(q.DistYAML) || !filepath.IsAbs(q.ModCache) {
-		return Result{}, errors.New("dist build on the image path takes dist.yaml and --modcache, each an absolute path: every module source is a directory until L14 clears (ADR-044 decision 7)")
+	q.Progress, q.Stdout = cmp.Or[io.Writer](q.Progress, io.Discard), cmp.Or[io.Writer](q.Stdout, q.Progress)
+	if !filepath.IsAbs(cmp.Or(q.DistYAML, q.Smoke)) || !filepath.IsAbs(q.ModCache) {
+		return Result{}, errors.New("the image path takes dist.yaml or the plugin directory and --modcache, each an absolute path: every module source is a directory until L14 clears (ADR-044 decision 7)")
 	}
-	site, err := readSite(q.DistYAML)
+	site, err := Site{Release: q.Against}, error(nil)
+	if q.Smoke == "" {
+		site, err = readSite(q.DistYAML)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -378,7 +386,7 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	}
 	image := repo + "@" + m.Annotations[BuilderAnnotation]
 	out := filepath.Join(filepath.Dir(q.DistYAML), "build")
-	if entries, err := os.ReadDir(out); err == nil && len(entries) > 0 {
+	if entries, err := os.ReadDir(out); q.Smoke == "" && err == nil && len(entries) > 0 {
 		return Result{}, fmt.Errorf("%s exists and is not empty", out)
 	}
 	scratch, err := os.MkdirTemp("", "aiopsctl-image-")
@@ -390,21 +398,32 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	// directory, through a mirror, and makes the check of the local path on it.
 	name, dg, _ := strings.Cut(strings.TrimPrefix(site.Release, "oci://"), "@")
 	blob := filepath.Join(scratch, "release", "blobs", "sha256", strings.TrimPrefix(dg, "sha256:"))
-	if err := errors.Join(os.MkdirAll(out, 0o755), os.MkdirAll(filepath.Dir(blob), 0o755), os.WriteFile(blob, data, 0o644)); err != nil {
+	if err := errors.Join(os.MkdirAll(filepath.Dir(blob), 0o755), os.WriteFile(blob, data, 0o644)); err != nil {
 		return Result{}, err
 	}
 	args := []string{"run", "--rm", "--network", "none", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
-		"-v", q.DistYAML + ":/work/dist.yaml:ro", "-v", q.ModCache + ":/modcache:ro", "-v", out + ":/work/build", "-v", scratch + ":/scratch",
-		"-e", "TMPDIR=/scratch", "-e", "GOPROXY=file:///modcache", "-e", "GOSUMDB=off", "-e", "GOTOOLCHAIN=local", "-e", "GOFLAGS=-mod=readonly",
-		image, "dist", "build", "/work/dist.yaml", "--modcache", "/modcache", "--builder", "local", "--mirror", name + "=/scratch/release"}
+		"-v", q.ModCache + ":/modcache:ro", "-v", scratch + ":/scratch",
+		"-e", "TMPDIR=/scratch", "-e", "GOPROXY=file:///modcache", "-e", "GOSUMDB=off", "-e", "GOTOOLCHAIN=local", "-e", "GOFLAGS=-mod=readonly"}
+	if q.Smoke != "" {
+		args = append(args, "-v", q.Smoke+":/work/plugin:ro", image, "plugin", "smoke", "/work/plugin", "--against", site.Release)
+	} else {
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			return Result{}, err
+		}
+		args = append(args, "-v", q.DistYAML+":/work/dist.yaml:ro", "-v", out+":/work/build", image, "dist", "build", "/work/dist.yaml")
+	}
+	args = append(args, "--modcache", "/modcache", "--builder", "local", "--mirror", name+"=/scratch/release")
 	for _, m := range q.AllowBump {
 		args = append(args, "--allow-bump", m)
 	}
 	fmt.Fprintf(q.Progress, "the builder image %s, which the release artifact %s names\n", image, site.Release)
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdout, cmd.Stderr = q.Progress, q.Progress
+	cmd.Stdout, cmd.Stderr = q.Stdout, q.Progress
 	if err := cmd.Run(); err != nil {
 		return Result{}, fmt.Errorf("the builder image %s: %w", image, err)
+	}
+	if q.Smoke != "" {
+		return Result{}, nil
 	}
 	manifest, err := os.ReadFile(filepath.Join(out, "distribution.yaml"))
 	return Result{Manifest: manifest, Aiops: filepath.Join(out, "aiops", "aiops"), Image: filepath.Join(out, "image"), Aiopsctl: filepath.Join(out, "aiopsctl", "aiopsctl")}, err

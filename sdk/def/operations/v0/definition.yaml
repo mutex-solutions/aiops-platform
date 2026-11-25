@@ -11,11 +11,14 @@
 # through the toolbox's builder (ADR-044; ADR-061 decision 16), and the OCI image
 # layout as an image of dist sign and dist use; suite revision 3 adds the case of
 # Build, and those of plugin remove of an installed artifact only and of one digest of
-# a plugin id per site.
+# a plugin id per site. 0.4 adds Smoke, plugin smoke through the toolbox's builder
+# (ADR-060 decision 58, reading 1), and to the request of Verify the release and the
+# module source that in-process code builds on (ADR-060 decision 46); suite revision 4
+# adds the case of Smoke.
 key: operations
-version: "0.3"
+version: "0.4"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
 compatibleFrom: "0.1"
-suite: 3
+suite: 4

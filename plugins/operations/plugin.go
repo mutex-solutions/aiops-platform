@@ -133,6 +133,10 @@ func (s served) Build(ctx context.Context, r def.BuildRequest) (launch.Built, er
 	return call(s, ctx, r, ops.Library.Build)
 }
 
+func (s served) Smoke(ctx context.Context, r def.BuildRequest) (launch.Built, error) {
+	return call(s, ctx, r, ops.Library.Smoke)
+}
+
 func (s served) Gate(ctx context.Context, r def.GateRequest) (launch.Verdict, error) {
 	return call(s, ctx, r, ops.Library.Gate)
 }

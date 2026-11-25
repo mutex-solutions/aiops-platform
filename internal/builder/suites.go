@@ -5,7 +5,12 @@ package builder
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +19,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
+	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
 )
 
 // registries are the registries whose suite a pack's rows can feed, each with what the
@@ -192,6 +198,123 @@ func union(graphs ...[]Package) []Package {
 		}
 	}
 	return out
+}
+
+// ConformanceTest returns the test that step 5 of plugin check writes into the package
+// pkgName at importPath, never onto disk, to run the obligations of the suite of the
+// registry name at the major of version on the package's plugin value, mounted as a
+// contribution: TestAiopsctl, whose subtests are the obligations (07-c4-plugin-sdk.md:1571).
+func ConformanceTest(pkgName, importPath, name, version string) []byte {
+	major, _, _ := strings.Cut(version, ".")
+	return fmt.Appendf(nil, `package %s_test
+
+import (
+	"testing"
+
+	zzplugin %q
+	"%s/sdk/def/%s/v%s/conformance"
+	"%s/sdk/kernel"
+	"%s/sdk/testkit/kerneltest"
+)
+
+func TestAiopsctl(t *testing.T) {
+	conformance.Run(t, func(t *testing.T) (conformance.Subject, *kernel.Root) {
+		root := kerneltest.New(t)
+		return conformance.Contribution(root.Plugin(zzplugin.Plugin, nil)%s), root
+	})
+}
+`, pkgName, importPath, rootModule, name, major, rootModule, rootModule, strings.Replace(registries[name], "fixtures", `"fixtures"`, 1)) // the package's own fixtures
+}
+
+// smokeSuite is a suite that step 5 of plugin check runs on a plugin of the module under
+// plugin smoke: the directory of its test in the scratch module, the plugin's package,
+// the registry and the version that requires names.
+type smokeSuite struct{ dir, pkg, name, version string }
+
+// smokeSuites returns the suites of step 5 on the plugins of the module under smoke: of
+// each definition of requires that the plugin provides or registers with, a registry
+// (ADR-060 decision 56).
+func (b *build) smokeSuites() ([]smokeSuite, error) {
+	var out []smokeSuite
+	for i, p := range b.plugins {
+		m, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
+		if err != nil {
+			return nil, err
+		}
+		keys := slices.Concat(m.Provides, m.Registers)
+		for _, name := range sortedKeys(m.Requires.Definitions) {
+			vs := m.Requires.Definitions[name]
+			if _, ok := registries[name]; ok && slices.ContainsFunc(keys, func(k boot.ManifestKey) bool { return k.Key == name }) {
+				out = append(out, smokeSuite{dir: fmt.Sprintf("smoke/%d-%s", i, name), pkg: p.pkg, name: name, version: vs[len(vs)-1]})
+			}
+		}
+	}
+	return out, nil
+}
+
+// smokeTests returns the test of each suite of smokeSuites, a package of the scratch
+// module that imports the plugin's package, since go overlays no file of the module
+// cache.
+func (b *build) smokeTests() (map[string][]byte, error) {
+	suites, err := b.smokeSuites()
+	out := map[string][]byte{}
+	for _, s := range suites {
+		out[s.dir+"/doc.go"], out[s.dir+"/suite_test.go"] = []byte("package zz\n"), ConformanceTest("zz", s.pkg, s.name, s.version)
+	}
+	return out, err
+}
+
+// attest runs step 5 of plugin check on each plugin of the module under plugin smoke,
+// with the builder's toolchain, and returns its statement by id, which the throwaway
+// manifest records for check 10 of its boot: the definitions of requires at their
+// versions, and for each suite that ran its revision and the half that ran (ADR-060
+// decisions 46 and 56). A failed obligation fails the build.
+func (b *build) attest(ctx context.Context) (map[string]string, error) {
+	suites, err := b.smokeSuites()
+	ran := map[string]int{} // the revision of each suite that ran, by package and registry
+	for _, s := range suites {
+		var d struct{ Dir string }
+		major, _, _ := strings.Cut(s.version, ".")
+		def := rootModule + "/sdk/def/" + s.name + "/v" + major
+		out, lerr := b.g.Run(ctx, "list", "-json", "-tags=grpcnotrace", def)
+		var src []byte
+		if lerr == nil {
+			lerr = json.Unmarshal(out, &d)
+		}
+		if lerr == nil {
+			src, lerr = os.ReadFile(filepath.Join(d.Dir, "definition.yaml"))
+		}
+		var dd plugingen.Definition
+		if lerr == nil {
+			dd, lerr = plugingen.ParseDefinition(def, src)
+		}
+		if err = errors.Join(err, lerr); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(b.progress, "smoke: the suite of %s on %s, step 5 of plugin check\n", s.name, s.pkg)
+		if _, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", "-run", "^TestAiopsctl$", "./"+s.dir); err != nil {
+			return nil, fmt.Errorf("the suite of %s fails on %s: %w", s.name, s.pkg, err)
+		}
+		ran[s.pkg+" "+s.name] = dd.Suite
+	}
+	statements := map[string]string{}
+	for _, p := range b.plugins {
+		m, err := boot.ReadManifest(p.pkg+"/plugin.yaml", p.manifest, boot.ManifestLenient)
+		if err != nil {
+			return nil, err
+		}
+		defs := map[string]operations.Attested{}
+		for name, vs := range m.Requires.Definitions {
+			a := operations.Attested{Version: vs[len(vs)-1]}
+			if rev, ok := ran[p.pkg+" "+name]; ok {
+				a.Suite, a.Halves = &rev, []string{"obligations"}
+			}
+			defs[name] = a
+		}
+		sum := sha256.Sum256(p.manifest)
+		statements[m.ID] = string(operations.Statement(m.ID, m.Version, hex.EncodeToString(sum[:]), defs, nil, nil))
+	}
+	return statements, err
 }
 
 // suitesReadme is the one file of suites/ beside the main of every aiopsctl that the

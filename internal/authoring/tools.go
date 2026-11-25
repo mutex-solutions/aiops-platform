@@ -65,11 +65,14 @@ type Tools struct {
 // release's signed manifest this binary embeds (ADR-044 decision 1), extracts the
 // pinned toolchain under the user's cache directory, and refuses a proxy URL in GOPROXY
 // until L14 clears. On the image path it runs the builder image that the release
-// artifact names, whose aiopsctl takes the local path. The builds of plugin smoke and
-// plugin verify are not built yet.
+// artifact names, whose aiopsctl takes the local path. With q.Plugin it is the build of
+// plugin smoke, and with q.Module that of plugin verify of in-process code.
 func (t Tools) Build(ctx context.Context, q launch.BuildRequest) (launch.Built, error) {
-	if q.Plugin != "" || q.Module != "" {
-		return launch.Built{}, fmt.Errorf("%w: the builds of plugin smoke and plugin verify are not built yet", launch.ErrNotCarried)
+	switch {
+	case q.Module != "":
+		return t.verify(ctx, q)
+	case q.Plugin != "":
+		return t.smoke(ctx, q)
 	}
 	var r builder.Result
 	var err error
@@ -302,11 +305,6 @@ func own(ctx context.Context, dir string) (launch.SuiteReport, error) {
 	return launch.SuiteReport{Definitions: []launch.SuiteResult{r}}, nil
 }
 
-// contributionArgs are the arguments that the Contribution of a suite takes after the
-// fiber: the fixtures directory of commands (ADR-061 decision 5).
-// ponytail: one entry per suite whose Contribution takes more than the fiber.
-var contributionArgs = map[string]string{"commands": `, "fixtures"`}
-
 // conformance runs the obligations of the suite of the definition name at version on
 // the plugin in dir, through the toolchain in the author's module: a test written into
 // a go build overlay, never onto disk, mounts the plugin's value as a contribution.
@@ -343,27 +341,9 @@ func conformance(ctx context.Context, dir, name, version string, halves []string
 		return launch.SuiteResult{}, err
 	}
 	defer os.RemoveAll(tmp)
-	test := fmt.Sprintf(`package %s_test
-
-import (
-	"testing"
-
-	zzplugin %q
-	"%s/conformance"
-	"%s/sdk/kernel"
-	"%s/sdk/testkit/kerneltest"
-)
-
-func TestAiopsctl(t *testing.T) {
-	conformance.Run(t, func(t *testing.T) (conformance.Subject, *kernel.Root) {
-		root := kerneltest.New(t)
-		return conformance.Contribution(root.Plugin(zzplugin.Plugin, nil)%s), root
-	})
-}
-`, pkg.Name, pkg.ImportPath, def, modPath, modPath, contributionArgs[name])
 	file, overlay := filepath.Join(tmp, "suite_test.go"), filepath.Join(tmp, "overlay.json")
 	ovl, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(dir, "zz_aiopsctl_"+name+"_test.go"): file}})
-	if err := errors.Join(os.WriteFile(file, []byte(test), 0o600), os.WriteFile(overlay, ovl, 0o600)); err != nil {
+	if err := errors.Join(os.WriteFile(file, builder.ConformanceTest(pkg.Name, pkg.ImportPath, name, version), 0o600), os.WriteFile(overlay, ovl, 0o600)); err != nil {
 		return launch.SuiteResult{}, err
 	}
 	evs, err := goTest(ctx, dir, "-overlay", overlay, "-run", "^TestAiopsctl$", ".")

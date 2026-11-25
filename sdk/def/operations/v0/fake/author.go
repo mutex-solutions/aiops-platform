@@ -96,3 +96,14 @@ func (s served) Build(_ context.Context, r operations.BuildRequest) (launch.Buil
 		return s.f.cfg.Built, nil
 	})
 }
+
+// Smoke answers the rows of what the config says the builder built, and fails as
+// plugin smoke fails on them. It writes no home.
+func (s served) Smoke(_ context.Context, r operations.BuildRequest) (launch.Built, error) {
+	return do(s, "Smoke", func() (launch.Built, error) {
+		if err := operations.SmokeForm(r); err != nil {
+			return launch.Built{}, err
+		}
+		return s.f.cfg.Built, operations.Smoked(s.f.cfg.Built.Rows)
+	})
+}

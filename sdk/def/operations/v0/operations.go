@@ -215,10 +215,14 @@ type Pushed struct{ Spec string }
 
 // SpecRequest names an artifact by its spec: oci:// and a reference, or the absolute
 // path of an OCI image layout. Home is the home whose trust.yaml plugin verify reads,
-// and Builder the builder of its suites, image or local.
+// and Builder the builder of its suites, image or local. For in-process code plugin
+// verify builds the artifact's module on the release artifact Against, by digest, from
+// the module source ModCache, through Mirrors (added at 0.4; ADR-044 decision 1).
 type SpecRequest struct {
 	Caller
 	Spec, Home, Builder string
+	Against, ModCache   string
+	Mirrors             map[string]string
 }
 
 // Inspected is what plugin inspect read of an artifact, its manifest and its bundle
@@ -472,6 +476,13 @@ type Operations interface {
 	// the signed manifest and the site's aiopsctl. It writes no home; it refuses a
 	// dist.yaml path or a module cache that is not absolute.
 	Build(ctx context.Context, r BuildRequest) (launch.Built, error)
+	// Smoke is plugin smoke (added at 0.4): the toolbox's builder builds a throwaway
+	// distribution of the release artifact r.Against and the module of the plugin
+	// directory r.Plugin, and boots its test-only profile; it answers each row's state
+	// and passes when every row is ACTIVE or names the keys it waits for (ADR-060
+	// decision 58, reading 1). It writes no home and nothing beside the plugin; it
+	// refuses a plugin directory or a module cache that is not absolute, and no release.
+	Smoke(ctx context.Context, r BuildRequest) (launch.Built, error)
 	// SignDist is dist sign. It writes no home, and Written names the referrer it
 	// pushed by digest.
 	SignDist(ctx context.Context, r SignDistRequest) (Written, error)

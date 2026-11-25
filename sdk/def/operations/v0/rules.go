@@ -155,3 +155,31 @@ func Group(id string) string {
 	_, name, _ := strings.Cut(id, "/")
 	return name
 }
+
+// SmokeForm refuses a request of plugin smoke whose plugin directory or module cache
+// is not an absolute path, or that names no release artifact (added at 0.4).
+func SmokeForm(r BuildRequest) error {
+	if !strings.HasPrefix(r.Plugin, "/") || !strings.HasPrefix(r.ModCache, "/") || r.Against == "" {
+		return usage("plugin smoke takes the plugin directory %q and the module cache %q, each an absolute path, and the release artifact of --against", r.Plugin, r.ModCache)
+	}
+	return nil
+}
+
+// Smoked refuses the rows of the test-only profile that plugin smoke booted unless
+// each row is ACTIVE or names the keys it waits for (ADR-060 decision 58, reading 1;
+// added at 0.4).
+func Smoked(rows []launch.RowWait) error {
+	var bad []string
+	for _, r := range rows {
+		if r.State != kernel.Active && len(r.WaitsFor) == 0 {
+			bad = append(bad, fmt.Sprintf("%s is %q and waits for no key", r.ID, r.State))
+		}
+	}
+	if len(rows) == 0 {
+		bad = append(bad, "the test-only profile booted no row")
+	}
+	if len(bad) > 0 {
+		return refused("plugin smoke: %s; every row is ACTIVE or says what it waits for (ADR-060 decision 58, reading 1)", strings.Join(bad, "; "))
+	}
+	return nil
+}

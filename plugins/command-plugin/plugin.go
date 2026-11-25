@@ -10,9 +10,9 @@
 // and 20; ADR-060 decisions 23 and 24); gate, install, enable, disable and remove call
 // Gate, Install, Enable, Disable and Remove, which submit over the socket of ADR-062
 // within --connect-wait and --wait, and print the outcome (ADR-061 decisions 17 and
-// 44). plugin smoke is declared with its synopsis and flags, so the module table and
-// the name lint hold it, and answers that it is not built yet: it joins with the
-// builder of ADR-044. plugin purge joins at S3 (ADR-060 decision 47).
+// 44). plugin smoke calls Smoke, which builds a throwaway distribution with the builder
+// of ADR-044 and boots its test-only profile, and prints each row (ADR-060 decision 58,
+// reading 1). plugin purge joins at S3 (ADR-060 decision 47).
 package commandplugin
 
 import (
@@ -49,14 +49,10 @@ var Plugin = plugin.Define(plugin.Spec[Config]{
 	Apply: func(c *kernel.Context, _ *Config) error {
 		r, ops := commands.Key.Of(c), operations.Key.Of(c)
 		runs := map[string]func(context.Context, operations.Operations, commands.Invocation) error{
-			"new": newPlugin, "check": check, "pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify,
+			"new": newPlugin, "check": check, "smoke": smoke, "pack": pack, "sign": sign, "push": push, "inspect": inspect, "verify": verify,
 			"gate": gate, "install": install, "enable": enable, "disable": disable, "remove": remove}
 		for _, s := range specs() {
-			var cmd commands.Command = notBuilt(s.Name())
-			if run, ok := runs[s.Path[1]]; ok {
-				cmd = library(ops, run)
-			}
-			if err := r.Register(c, s, cmd); err != nil {
+			if err := r.Register(c, s, library(ops, runs[s.Path[1]])); err != nil {
 				return err
 			}
 		}
@@ -79,6 +75,11 @@ func specs() []commands.Spec {
 	out := commands.Flag{Name: "out", Kind: commands.String, Value: "<dir>", Usage: "the directory of the artifact's layout"}
 	profile := commands.Flag{Name: "profile", Kind: commands.String, Value: "<p>", Usage: "the profile to change (default: the one that run/status.json of the home names)"}
 	against := commands.Flag{Name: "against", Kind: commands.String, Value: "<dist.yaml>", Usage: "the published signed manifest of the release to check against"}
+	// The release artifact and the module source of a build of the builder (ADR-044
+	// decisions 1, 7 and 9).
+	release := commands.Flag{Name: "against", Kind: commands.String, Value: "<release>", Usage: "the release artifact, by digest, to build against"}
+	modcache := commands.Flag{Name: "modcache", Kind: commands.String, Value: "<dir>", Usage: "the module cache the build reads"}
+	mirror := commands.Flag{Name: "mirror", Kind: commands.List, Value: "<prefix>=<site prefix>", Usage: "read the modules under a prefix from the site's mirror"}
 	// The bounds of a submission over the socket of reload-socket (ADR-062 decisions 9
 	// and 10).
 	connect := commands.Flag{Name: "connect-wait", Kind: commands.String, Value: "<duration>", Usage: "how long to try the socket of a running process (default: 60s)"}
@@ -92,30 +93,19 @@ func specs() []commands.Spec {
 			commands.Flag{Name: "write", Kind: commands.Bool, Usage: "write the generated half of plugin.yaml and the generated tests"},
 			commands.Flag{Name: "json", Kind: commands.Bool, Usage: "print the report as JSON"}, against),
 		spec("smoke", "Build a throwaway distribution with the plugin and boot its test-only profile.", []string{"<dir>"}, 1, 1,
-			required(commands.Flag{Name: "against", Kind: commands.String, Value: "<release>", Usage: "the release to build against"}), builder),
+			required(release), required(modcache), mirror, builder),
 		spec("pack", "Pack a plugin directory into the layout of an artifact.", []string{"[<dir>]"}, 0, 1, out),
 		spec("sign", "Sign the packed artifact and its attestation.", nil, 0, 0,
 			required(commands.Flag{Name: "key", Kind: commands.String, Value: "<file>", Usage: "the private key file"}), out),
 		spec("push", "Push the signed artifact to a registry.", []string{"<registry>"}, 1, 1, out),
 		spec("inspect", "Show what a spec names, fetching only its manifest and its bundle.", []string{"<spec>"}, 1, 1),
-		spec("verify", "Verify the signer of an artifact and run its suites.", []string{"<spec>"}, 1, 1, builder),
+		spec("verify", "Verify the signer of an artifact and run its suites.", []string{"<spec>"}, 1, 1, builder, release, modcache, mirror),
 		spec("gate", "Run the clauses of the gate on an artifact against a published release.", []string{"<spec>"}, 1, 1, required(against)),
 		spec("install", "Install an artifact into a profile of the home.", []string{"<spec>"}, 1, 1, profile, connect, wait),
 		spec("enable", "Enable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile, connect, wait),
 		spec("disable", "Disable a row in a profile of the home.", []string{"<row>"}, 1, 1, profile, connect, wait),
 		spec("remove", "Remove an installed plugin from a profile of the home.", []string{"<id>"}, 1, 1, profile, connect, wait),
 	}
-}
-
-// notBuilt is a command whose operation lands with its method of the operations
-// library.
-type notBuilt string
-
-func (n notBuilt) Run(ctx context.Context, _ commands.Invocation) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return fmt.Errorf("%s is not built yet: it arrives with its method of the operations library (ADR-061 decision 16)", string(n))
 }
 
 type command func(ctx context.Context, inv commands.Invocation) error
@@ -293,10 +283,48 @@ func shown(s string) string {
 	return strconv.Quote(s)
 }
 
+// mirrors reads --mirror, each <prefix>=<site prefix>.
+func mirrors(inv commands.Invocation) (map[string]string, error) {
+	out := map[string]string{}
+	for _, m := range inv.List("mirror") {
+		prefix, site, ok := strings.Cut(m, "=")
+		if !ok || prefix == "" || site == "" {
+			return nil, fmt.Errorf("%w: --mirror %q is not <prefix>=<site prefix>", commands.ErrUsage, m)
+		}
+		out[prefix] = site
+	}
+	return out, nil
+}
+
+// smoke is plugin smoke <dir>: each row of the test-only profile on stdout, with its
+// state and the keys it waits for, "-" for a row with no fiber, and exit 1 unless every
+// row is ACTIVE or waits for a key.
+func smoke(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
+	m, err := mirrors(inv)
+	if err != nil {
+		return err
+	}
+	b, err := ops.Smoke(ctx, operations.BuildRequest{Caller: caller(inv), BuildRequest: launch.BuildRequest{Plugin: abs(inv, inv.Args[0]),
+		Against: inv.Value("against"), ModCache: abs(inv, inv.Value("modcache")), Mirrors: m, Builder: inv.Value("builder")}})
+	for _, r := range b.Rows {
+		line := fmt.Sprintf("row %s: %s", shown(r.ID), cmp.Or(string(r.State), "-"))
+		if len(r.WaitsFor) > 0 {
+			line += " and waits for " + shown(strings.Join(r.WaitsFor, ", "))
+		}
+		fmt.Fprintln(inv.Out, line)
+	}
+	return err
+}
+
 // verify is plugin verify: each step on stdout, and exit 1 naming the steps that did
 // not pass.
 func verify(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
-	v, err := ops.Verify(ctx, operations.SpecRequest{Caller: caller(inv), Spec: specOf(inv, inv.Args[0]), Home: inv.Home, Builder: inv.Value("builder")})
+	m, err := mirrors(inv)
+	if err != nil {
+		return err
+	}
+	v, err := ops.Verify(ctx, operations.SpecRequest{Caller: caller(inv), Spec: specOf(inv, inv.Args[0]), Home: inv.Home, Builder: inv.Value("builder"),
+		Against: inv.Value("against"), ModCache: abs(inv, inv.Value("modcache")), Mirrors: m})
 	if err != nil {
 		return err
 	}

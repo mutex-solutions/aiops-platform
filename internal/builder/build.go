@@ -38,6 +38,7 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 	"golang.org/x/mod/sumdb/dirhash"
+	modzip "golang.org/x/mod/zip"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
@@ -48,10 +49,13 @@ import (
 // manifest, and links in one phase. A release build names the release input in the
 // form of dist/dist.yaml and the version of the root module, and runs in two phases
 // (ADR-020 decision 13): the first writes the manifest and stops; the second, given it
-// back as Signed, links the release binaries with it.
+// back as Signed, links the release binaries with it. A build of plugin smoke names, for
+// dist.yaml, the plugin directory and the release artifact by digest.
 type Request struct {
 	Signed    *Signed           // a release build's second phase
 	DistYAML  string            // the site's dist.yaml
+	Smoke     string            // plugin smoke: the plugin directory, a module of the site
+	Against   string            // plugin smoke: the release artifact, as dist.yaml names it
 	Release   []byte            // the release's signed manifest: the one this aiopsctl embeds
 	Input     []byte            // a release build: the release input
 	Root      string            // a release build: the version of the root module
@@ -116,15 +120,15 @@ type tablePlugin struct {
 // Build runs one build on the local path.
 func Build(ctx context.Context, q Request) (Result, error) {
 	b := &build{q: q, recorded: map[string]string{}, progress: cmp.Or[io.Writer](q.Progress, io.Discard)}
-	if err := b.inputs(ctx); err != nil {
-		return Result{}, err
-	}
 	scratch, err := os.MkdirTemp("", "aiopsctl-build-")
 	if err != nil {
 		return Result{}, err
 	}
 	defer os.RemoveAll(scratch)
 	b.scratch = scratch
+	if err := b.inputs(ctx); err != nil {
+		return Result{}, err
+	}
 	if b.goroot, err = Tree(q.ModCache, q.Cache, b.toolchainSum()); err != nil {
 		return Result{}, err
 	}
@@ -158,9 +162,12 @@ func Build(ctx context.Context, q Request) (Result, error) {
 		ferr = errors.Join(ferr, fmt.Errorf("init deny-list: %s (ADR-044 decision 11)", f))
 	}
 	m := Manifest{Graph: pkgs, Licences: l.Modules, Pins: pins, Release: b.input, Site: b.site.Bindings, Accept: b.site.AcceptLicenses}
-	var merr error
+	var merr, aerr error
+	if q.Smoke != "" {
+		m.Attested, aerr = b.attest(ctx)
+	}
 	res.Manifest, merr = m.Write()
-	if err = errors.Join(err, lerr, ferr, CheckLicences(l, b.site.AcceptLicenses), merr, fakes(pkgs)); err != nil {
+	if err = errors.Join(err, lerr, ferr, aerr, CheckLicences(l, b.site.AcceptLicenses), merr, fakes(pkgs)); err != nil {
 		return res, err
 	}
 	switch {
@@ -192,7 +199,7 @@ func (b *build) inputs(ctx context.Context) error {
 	if entries, err := os.ReadDir(q.Out); err == nil && len(entries) > 0 {
 		return fmt.Errorf("%s exists and is not empty", q.Out)
 	}
-	if q.DistYAML == "" {
+	if q.DistYAML == "" && q.Smoke == "" {
 		var err error
 		b.input, err = boot.ParseDist("the release input", q.Input)
 		if err != nil || !semver.IsValid(q.Root) {
@@ -217,7 +224,12 @@ func (b *build) inputs(ctx context.Context) error {
 		return errors.Join(errs...)
 	}
 	var err error
-	if b.site, err = readSite(q.DistYAML); err != nil {
+	if q.Smoke != "" {
+		b.site, err = b.smoke()
+	} else {
+		b.site, err = readSite(q.DistYAML)
+	}
+	if err != nil {
 		return err
 	}
 	d, err := boot.ReadDistribution("the release's signed manifest", q.Release)
@@ -256,9 +268,12 @@ func (b *build) releaseVersion(path string) string {
 // env is the Go environment the builder sets on both paths (ADR-044 decision 2; ADR-060
 // decision 21): none of the caller's.
 func (b *build) env(goroot string) []string {
-	s := b.scratch
+	s, proxy := b.scratch, "file://"+filepath.ToSlash(b.q.ModCache)
+	if b.q.Smoke != "" {
+		proxy = "file://" + filepath.ToSlash(filepath.Join(s, "source")) + "," + proxy // the source of smoke first (ADR-044 decision 7)
+	}
 	return []string{"PATH=" + filepath.Join(goroot, "bin"), "HOME=" + filepath.Join(s, "home"), "GOROOT=" + goroot,
-		"GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOSUMDB=off", "GOPROXY=file://" + filepath.ToSlash(b.q.ModCache),
+		"GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly -modcacherw", "GOSUMDB=off", "GOPROXY=" + proxy,
 		"GOENV=off", "GOWORK=off", "CGO_ENABLED=0", "GOTELEMETRY=off",
 		"GOCACHE=" + filepath.Join(s, "cache"), "GOMODCACHE=" + filepath.Join(s, "mod"), "TMPDIR=" + filepath.Join(s, "tmp")}
 }
@@ -318,6 +333,13 @@ func (b *build) module(ctx context.Context) error {
 			return err
 		}
 		maps.Copy(files, suites)
+	}
+	if b.q.Smoke != "" { // step 5 of plugin check on the module under smoke
+		tests, err := b.smokeTests()
+		if err != nil {
+			return err
+		}
+		maps.Copy(files, tests)
 	}
 	for name, data := range files {
 		p := filepath.Join(b.scratch, filepath.FromSlash(name))
@@ -417,10 +439,59 @@ func tablePackages(file, path, version string) ([]tablePlugin, error) {
 	return out, nil
 }
 
-// zip returns the file of the module zip of m in the module source.
+// zip returns the file of the module zip of m in the module source, in that of plugin
+// smoke first.
 func (b *build) zip(m module.Version) string {
 	esc, _ := module.EscapePath(m.Path)
+	if p := filepath.Join(b.scratch, "source", esc, "@v", m.Version+".zip"); b.q.Smoke != "" && fileExists(p) {
+		return p
+	}
 	return filepath.Join(b.q.ModCache, esc, "@v", m.Version+".zip")
+}
+
+// smoke writes the module of the plugin directory of plugin smoke as a module zip at the
+// zero pseudo-version, which no tag carries, into a module source of the scratch
+// directory that the build reads before the module cache, prints its sum, and returns
+// the site of the throwaway distribution: the release that Against names and that
+// module, at that sum, so the directory enters the build as every module does (ADR-044
+// decisions 1, 7 and 8).
+func (b *build) smoke() (Site, error) {
+	if !byDigest.MatchString(b.q.Against) {
+		return Site{}, fmt.Errorf("plugin smoke --against names the release artifact by digest, not %q (08:401)", b.q.Against)
+	}
+	gomod, err := os.ReadFile(filepath.Join(b.q.Smoke, "go.mod"))
+	path := modfile.ModulePath(gomod)
+	if err == nil && path == "" {
+		err = errors.New("go.mod names no module")
+	}
+	if err != nil {
+		return Site{}, fmt.Errorf("plugin smoke builds the module of %s: %w", b.q.Smoke, err)
+	}
+	_, major, _ := module.SplitPathVersion(path)
+	v := module.Version{Path: path, Version: module.ZeroPseudoVersion(strings.TrimLeft(major, "/."))}
+	esc, _ := module.EscapePath(path)
+	at := filepath.Join(b.scratch, "source", esc, "@v")
+	info, _ := json.Marshal(map[string]string{"Version": v.Version})
+	err = errors.Join(os.MkdirAll(at, 0o755), os.WriteFile(filepath.Join(at, v.Version+".mod"), gomod, 0o644), os.WriteFile(filepath.Join(at, v.Version+".info"), info, 0o644))
+	var f *os.File
+	if err == nil {
+		f, err = os.Create(filepath.Join(at, v.Version+".zip"))
+	}
+	if err == nil {
+		err = errors.Join(modzip.CreateFromDir(f, v, b.q.Smoke), f.Close())
+	}
+	var sum, modSum string
+	if err == nil {
+		sum, err = dirhash.HashZip(f.Name(), dirhash.Hash1)
+	}
+	if err == nil {
+		modSum, err = dirhash.Hash1([]string{"go.mod"}, func(string) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(gomod)), nil })
+	}
+	if err = errors.Join(err, b.record(path+" "+v.Version+"/go.mod", modSum, "plugin smoke")); err != nil {
+		return Site{}, err
+	}
+	fmt.Fprintf(b.progress, "smoke: %s at %s, sum %s, the module zip of %s\n", path, v.Version, sum, b.q.Smoke)
+	return Site{Release: b.q.Against, Plugins: []module.Version{v}, Sums: map[string]string{path: sum}}, nil
 }
 
 func readZip(f *zip.File) ([]byte, error) {

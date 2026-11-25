@@ -1,10 +1,12 @@
-usage: aiopsctl plugin smoke <dir> --against <release> [--builder image|local]
+usage: aiopsctl plugin smoke <dir> --against <release> --modcache <dir> [--mirror <prefix>=<site prefix>]... [--builder image|local]
 
 Build a throwaway distribution with the plugin and boot its test-only profile.
 
 Flags:
-  --against <release>    the release to build against
-  --builder image|local  the builder: the builder image, or the local toolchain
+  --against <release>              the release artifact, by digest, to build against
+  --modcache <dir>                 the module cache the build reads
+  --mirror <prefix>=<site prefix>  read the modules under a prefix from the site's mirror
+  --builder image|local            the builder: the builder image, or the local toolchain
 
 Exit codes:
   0  success, or help that was asked for
