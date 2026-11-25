@@ -79,8 +79,11 @@ type Setup struct {
 	Built launch.Built
 }
 
-// Built is what the builder of the suite builds.
-var Built = launch.Built{Image: "/site/build/image", Manifest: []byte("distVersion: 1\n"), Aiopsctl: "/site/build/aiopsctl/aiopsctl"}
+// Built is what the builder of the suite builds, and the rows that plugin smoke boots:
+// one ACTIVE, one that waits for a key and one FAILED.
+var Built = launch.Built{Image: "/site/build/image", Manifest: []byte("distVersion: 1\n"), Aiopsctl: "/site/build/aiopsctl/aiopsctl",
+	Rows: []launch.RowWait{{ID: "clock", State: kernel.Active}, {ID: "echo:echo", State: kernel.Pending, WaitsFor: []string{"echoers"}},
+		{ID: "echo:broken", State: kernel.Failed}}}
 
 // Pack is the plugin directory of the cases of the artifact, by path: a pack whose
 // bundle inserts one row, disabled, with content and a fixture (ADR-047 decision 1).
@@ -647,6 +650,22 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("install of %s once no profile names acme/connector-x: %v", d2, err)
 			}
 		})
+		t.Run("operations.O23 plugin smoke answers the rows the toolbox booted and fails one that is neither ACTIVE nor waiting", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			q := operations.BuildRequest{Caller: u.caller(), BuildRequest: launch.BuildRequest{Plugin: filepath.Join(u.s.Dir, "plugin"),
+				Against: "oci://registry.test/aiops/release@sha256:" + strings.Repeat("ab", 32), ModCache: filepath.Join(u.s.Dir, "modcache"), Builder: "local"}}
+			got, err := u.ops.Smoke(t.Context(), q)
+			if !reflect.DeepEqual(got, Built) || !errors.Is(err, operations.ErrRefused) || !strings.Contains(err.Error(), "echo:broken") || strings.Contains(err.Error(), "echo:echo ") {
+				t.Errorf("Smoke = %+v, %v; want %+v and a refusal naming echo:broken alone", got, err, Built)
+			}
+			q.Plugin = "plugin"
+			if _, err := u.ops.Smoke(t.Context(), q); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("a relative plugin directory: %v, want ErrUsage", err)
+			}
+			if h := u.home(); h.Current != "" || len(h.Records) != 0 {
+				t.Errorf("plugin smoke wrote the home: %+v", h)
+			}
+		})
 	})
 
 	t.Run("guard", func(t *testing.T) {
@@ -737,6 +756,8 @@ func Run(t *testing.T, mount Mount) {
 			_, calls["Disable"] = u.ops.Disable(ctx, u.row(Row))
 			_, calls["Remove"] = u.ops.Remove(ctx, operations.RemoveRequest{Caller: c, Home: u.s.Home, Profile: "dev", ID: "acme/x"})
 			_, calls["Build"] = u.ops.Build(ctx, operations.BuildRequest{Caller: c, BuildRequest: launch.BuildRequest{DistYAML: filepath.Join(u.s.Dir, "dist.yaml"), Builder: "local"}})
+			_, calls["Smoke"] = u.ops.Smoke(ctx, operations.BuildRequest{Caller: c, BuildRequest: launch.BuildRequest{Plugin: u.s.Dir,
+				Against: "oci://registry.test/aiops/release@sha256:" + strings.Repeat("ab", 32), ModCache: u.s.Dir, Builder: "local"}})
 			for name, err := range calls {
 				if !errors.Is(err, kernel.ErrInactive) {
 					t.Errorf("%s after release: %v, want ErrInactive", name, err)

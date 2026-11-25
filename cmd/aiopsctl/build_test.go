@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,9 +50,10 @@ const testVersion = "v0.2.0-s2a.test"
 // builder embeds is refused, as is a zip whose sum
 // differs from dist.yaml's, and a module outside the release that
 // declares an aiops/ id, links a fake package, registers a default-mux handler from
-// init and is under a licence dist.yaml does not accept. It builds from nothing with the
-// pinned toolchain module, read from the Go module cache, so -short skips it and the CI
-// job builder runs it.
+// init and is under a licence dist.yaml does not accept. plugin smoke of the echoer's
+// directory and plugin verify of its module build on the same release on the local
+// path. It builds from nothing with the pinned toolchain module, read from the Go module
+// cache, so -short skips it and the CI job builder runs it.
 func TestDistBuildSignAndUse(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds two binaries from nothing with the pinned toolchain; the CI job builder runs it")
@@ -155,6 +157,9 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	if err != nil || built.Image != filepath.Join(out, "image") || built.Aiopsctl != filepath.Join(out, "aiopsctl", "aiopsctl") {
 		t.Fatalf("dist build: %+v, %v\n%s", built, err, printed)
 	}
+	// plugin smoke and plugin verify of in-process code on the local path (ADR-044
+	// decision 1; ADR-060 decisions 46 and 58).
+	smokeAndVerify(t, rel.Manifest, releaseRef, src, filepath.Join(scratch, "echo"), echo, "local")
 	manifest, err := os.ReadFile(filepath.Join(out, "distribution.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -204,6 +209,55 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	cmd.Dir, cmd.Env = site, []string{"AIOPS_HOME=" + home, "HOME=" + site, "PATH=" + os.Getenv("PATH")}
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Errorf("the site's aiopsctl on the record dist use wrote: %v\n%s", err, b)
+	}
+}
+
+// smokeAndVerify runs the builds of plugin smoke and plugin verify of in-process code on
+// the release of the signed manifest, whose artifact is release, from the module source
+// src, with the builder: smoke writes the module of the echo plugin's directory dir at
+// a pseudo-version no tag carries into a module source ahead of src, prints its sum,
+// runs step 5 of plugin check on it, whose statement the throwaway manifest records for
+// check 10, builds a throwaway distribution and boots its test-only profile, where every row of
+// aiops-core but reload-socket, which a --patch disables, is ACTIVE and the echo row
+// waits for echoers, which nothing provides, so smoke passes (ADR-060 decision 58,
+// reading 1; ADR-062 decision 27). On the local path verify builds the module at the
+// version and sum of echo and runs its tests, its suites among them, and fails a sum
+// that the module source does not serve (ADR-060 decision 46).
+func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, echo modulePin, builderPath string) {
+	t.Helper()
+	var progress bytes.Buffer
+	tools := authoring.New()
+	tools.Signed, tools.Progress = manifest, &progress
+	b, err := tools.Build(t.Context(), launch.BuildRequest{Plugin: dir, Against: release, ModCache: src, Builder: builderPath})
+	want := map[string]string{"clock": "ACTIVE", "config-refs": "ACTIVE", "loader": "ACTIVE", "readiness": "ACTIVE", "reload": "ACTIVE",
+		"restart-policy": "ACTIVE", "echo": "PENDING [echoers]"}
+	got := map[string]string{}
+	for _, r := range b.Rows {
+		got[r.ID] = string(r.State)
+		if len(r.WaitsFor) > 0 {
+			got[r.ID] += " [" + strings.Join(r.WaitsFor, " ") + "]"
+		}
+	}
+	if err != nil || !maps.Equal(got, want) {
+		t.Errorf("plugin smoke --builder %s: %v, rows %v, want %v\n%s", builderPath, err, got, want, progress.String())
+	}
+	for _, want := range []string{"smoke: " + echo.path + " at v0.0.0-00010101000000-000000000000, sum h1:",
+		"smoke: the suite of echoers on " + echo.path + ", step 5 of plugin check"} {
+		if !strings.Contains(progress.String(), want) {
+			t.Errorf("plugin smoke --builder %s printed no %q:\n%s", builderPath, want, progress.String())
+		}
+	}
+	if builderPath != "local" {
+		return
+	}
+	progress.Reset()
+	if _, err := tools.Build(t.Context(), launch.BuildRequest{Module: echo.path, Version: "v0.1.0", Sum: echo.sum, Against: release, ModCache: src, Builder: builderPath}); err != nil ||
+		!strings.Contains(progress.String(), "suites: go test "+echo.path+"/...") {
+		t.Errorf("plugin verify of %s: %v\n%s", echo.path, err, progress.String())
+	}
+	if _, err := tools.Build(t.Context(), launch.BuildRequest{Module: echo.path, Version: "v0.1.0", Sum: h1Of("another zip"), Against: release, ModCache: src,
+		Builder: builderPath}); err == nil || !strings.Contains(err.Error(), "dist.yaml lists") {
+		t.Errorf("plugin verify of a sum the module source does not serve: %v", err)
 	}
 }
 

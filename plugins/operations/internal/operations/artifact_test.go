@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 )
 
@@ -88,9 +90,20 @@ type packBox struct {
 	suite    *launch.SuiteReport
 	scenario *launch.ScenarioReport
 	mod      launch.Module
+	built    launch.Built
+	buildErr error
 	mu       sync.Mutex
 	gates    []launch.GateRequest
+	builds   []launch.BuildRequest
 	fixtures []bool
+}
+
+// Build records each request and answers built and buildErr.
+func (b *packBox) Build(_ context.Context, q launch.BuildRequest) (launch.Built, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.builds = append(b.builds, q)
+	return b.built, b.buildErr
 }
 
 func (b *packBox) Module(ctx context.Context, q launch.ModuleRequest) (launch.Module, error) {
@@ -402,6 +415,89 @@ func TestPackOfInProcessCode(t *testing.T) {
 // echoSum is an h1 sum of the module example.test/echo at v0.1.0, as go mod download
 // would record it.
 const echoSum = "h1:Ryl9hfaUbtcrXqV18lzBbPaztAz29w8OPhu5dRdlIXM="
+
+// The suites step of verify builds in-process code with the builder of the toolbox: the
+// module that module.json of the artifact records, at its version and sum, on the
+// release artifact and from the module cache of the request, whose tests, the suites
+// among them, the builder runs (ADR-060 decision 46; ADR-044 decision 1). With no
+// release or no module cache it builds nothing and is not built; a build that fails is
+// a step that fails with its reason, and one that the toolbox does not carry is not
+// built.
+func TestVerifyBuildsInProcessCode(t *testing.T) {
+	sum := packSummary()
+	sum.Runtimes = []string{"inproc"}
+	b := &packBox{sum: sum, mod: launch.Module{Path: "example.test/echo", Sum: echoSum}}
+	l := Library{Box: b, LockWait: time.Second}
+	out := filepath.Join(t.TempDir(), "artifact")
+	dir := pluginDir(t, map[string]string{"plugin.yaml": strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1),
+		"bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n", "echo.go": "package echo\n"})
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: out}); err != nil {
+		t.Fatal(err)
+	}
+	home, prefix := filepath.Join(t.TempDir(), "home"), generate(t, l, t.TempDir(), "author")
+	if _, err := l.AddTrust(t.Context(), def.TrustRequest{Caller: caller(), Home: home, KeyFile: prefix + ".pub", IDs: []string{"acme/*"}, Runtimes: []string{"inproc"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Sign(t.Context(), def.SignRequest{Caller: caller(), Out: out, Key: prefix + ".key"}); err != nil {
+		t.Fatal(err)
+	}
+	q := def.SpecRequest{Caller: caller(), Spec: out, Home: home, Builder: "local"}
+	v, err := l.Verify(t.Context(), q)
+	if err != nil || v.Passed || v.Steps[2].Outcome != "not-built" || !strings.Contains(v.Steps[2].Reason, "--against") || len(b.builds) != 0 {
+		t.Fatalf("Verify of in-process code with no release = %+v, %v (%d builds); want the suites not built", v, err, len(b.builds))
+	}
+	q.Against, q.ModCache, q.Mirrors = "oci://registry.test/aiops/release@sha256:"+strings.Repeat("ab", 32), "/modcache", map[string]string{"registry.test": "/mirror"}
+	v, err = l.Verify(t.Context(), q)
+	want := launch.BuildRequest{Module: "example.test/echo", Version: "v0.1.0", Sum: echoSum, Against: q.Against, ModCache: "/modcache", Mirrors: q.Mirrors, Builder: "local"}
+	if err != nil || !v.Passed || v.Steps[2].Outcome != "pass" || len(b.builds) != 1 || !reflect.DeepEqual(b.builds[0], want) {
+		t.Errorf("Verify of in-process code = %+v, %v; builds %+v, want one of %+v", v, err, b.builds, want)
+	}
+	for _, c := range []struct {
+		err     error
+		outcome string
+	}{{errors.New("the suites of example.test/echo: FAIL"), "fail"}, {launch.ErrNotCarried, "not-built"}} {
+		b.buildErr = c.err
+		if v, err := l.Verify(t.Context(), q); err != nil || v.Passed || v.Steps[2].Outcome != c.outcome || !strings.Contains(v.Steps[2].Reason, c.err.Error()) {
+			t.Errorf("Verify with a build that answers %v = %+v, %v; want %s", c.err, v, err, c.outcome)
+		}
+	}
+}
+
+// plugin smoke hands the plugin directory, the release artifact, the module cache, the
+// mirrors and the builder to the builder of the toolbox, and passes when every row of
+// the test-only profile it booted is ACTIVE or names the keys it waits for (ADR-060
+// decision 58, reading 1); a row that is neither fails it, naming the row, and so does
+// a profile with no row. It refuses a relative path and no release, and builds nothing
+// then.
+func TestSmoke(t *testing.T) {
+	b := &packBox{built: launch.Built{Rows: []launch.RowWait{{ID: "clock", State: kernel.Active},
+		{ID: "echo:echo", State: kernel.Pending, WaitsFor: []string{"echoers"}}}}}
+	l := Library{Box: b}
+	q := def.BuildRequest{Caller: caller(), BuildRequest: launch.BuildRequest{Plugin: "/work/echo", Against: "oci://registry.test/aiops/release@sha256:" + strings.Repeat("ab", 32),
+		ModCache: "/modcache", Mirrors: map[string]string{"registry.test": "/mirror"}, Builder: "image"}}
+	if got, err := l.Smoke(t.Context(), q); err != nil || !reflect.DeepEqual(got, b.built) || len(b.builds) != 1 || !reflect.DeepEqual(b.builds[0], q.BuildRequest) {
+		t.Errorf("Smoke = %+v, %v; builds %+v", got, err, b.builds)
+	}
+	b.built.Rows = append(b.built.Rows, launch.RowWait{ID: "echo:broken", State: kernel.Failed})
+	if _, err := l.Smoke(t.Context(), q); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "echo:broken") || strings.Contains(err.Error(), "echo:echo") {
+		t.Errorf("Smoke with a FAILED row = %v; want a refusal naming it alone", err)
+	}
+	b.built.Rows = nil
+	if _, err := l.Smoke(t.Context(), q); !errors.Is(err, def.ErrRefused) {
+		t.Errorf("Smoke that booted no row = %v; want a refusal", err)
+	}
+	for _, bad := range []func(*def.BuildRequest){func(q *def.BuildRequest) { q.Plugin = "echo" }, func(q *def.BuildRequest) { q.ModCache = "" },
+		func(q *def.BuildRequest) { q.Against = "" }} {
+		r := q
+		bad(&r)
+		if _, err := l.Smoke(t.Context(), r); !errors.Is(err, def.ErrUsage) {
+			t.Errorf("Smoke(%+v) = %v; want ErrUsage", r.BuildRequest, err)
+		}
+	}
+	if len(b.builds) != 3 {
+		t.Errorf("a refused smoke built: %d builds", len(b.builds))
+	}
+}
 
 // Pack refuses, and leaves no layout, where the gate denies a clause, where a content
 // entry is a link, where the manifest lists a remote runtime, and where the out

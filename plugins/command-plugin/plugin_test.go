@@ -39,6 +39,7 @@ type stub struct {
 	rep operations.CheckReport
 	ch  operations.Change
 	vd  launch.Verdict
+	b   launch.Built
 	err error
 
 	mu     sync.Mutex
@@ -81,6 +82,10 @@ func (s *stub) Inspect(ctx context.Context, r operations.SpecRequest) (operation
 
 func (s *stub) Verify(ctx context.Context, r operations.SpecRequest) (operations.Verified, error) {
 	return s.v, s.record(ctx, r)
+}
+
+func (s *stub) Smoke(ctx context.Context, r operations.BuildRequest) (launch.Built, error) {
+	return s.b, s.record(ctx, r)
 }
 
 func (s *stub) New(ctx context.Context, r operations.NewRequest) (operations.Written, error) {
@@ -137,32 +142,46 @@ func dispatch(t *testing.T, rec *fake.Registry, argv ...string) (code int, out, 
 	return code, o.String(), e.String()
 }
 
-// built are the commands that run through the operations library (ADR-061 decision
-// 16; ADR-047 decision 1; ADR-060 decisions 23 and 24).
-var built = []string{"plugin check", "plugin disable", "plugin enable", "plugin gate", "plugin inspect", "plugin install", "plugin new",
-	"plugin pack", "plugin push", "plugin remove", "plugin sign", "plugin verify"}
-
-// Every other command answers that it is not built yet, with exit 1, on a command line
-// that its spec reads.
-func TestNotBuiltYet(t *testing.T) {
+// Every command of the row runs through the operations library (ADR-061 decision 16;
+// ADR-047 decision 1; ADR-060 decisions 23, 24 and 58): none answers that it is not
+// built.
+func TestEveryCommandIsBuilt(t *testing.T) {
 	rec := world(t, &stub{})
-	for _, name := range rec.Inventory() {
-		if slices.Contains(built, name) {
-			continue
-		}
-		s, _ := rec.Spec(name)
-		argv := s.Path
-		for range s.Min {
-			argv = append(argv, "x")
-		}
-		for _, f := range s.Flags {
-			if f.Required {
-				argv = append(argv, "--"+f.Name, "x")
-			}
-		}
-		if code, _, errOut := dispatch(t, rec, argv...); code != 1 || !strings.Contains(errOut, name+" is not built yet") {
-			t.Errorf("%q: exit %d, stderr %q", argv, code, errOut)
-		}
+	want := []string{"plugin check", "plugin disable", "plugin enable", "plugin gate", "plugin inspect", "plugin install", "plugin new",
+		"plugin pack", "plugin push", "plugin remove", "plugin sign", "plugin smoke", "plugin verify"}
+	if got := rec.Inventory(); !slices.Equal(got, want) {
+		t.Errorf("the commands %v, want %v", got, want)
+	}
+	s := &stub{b: launch.Built{Rows: []launch.RowWait{{ID: "clock", State: kernel.Active}}}}
+	if code, _, errOut := dispatch(t, world(t, s), "plugin", "smoke", "x", "--against", "x", "--modcache", "x"); code != 0 || strings.Contains(errOut, "not built") {
+		t.Errorf("plugin smoke: exit %d, stderr %q", code, errOut)
+	}
+}
+
+// plugin smoke calls Smoke with the plugin directory and the module cache resolved
+// against the working directory, the release artifact, the mirrors by prefix and the
+// builder, the image by default, and prints each row on stdout with its state and the
+// keys it waits for, "-" for a row with no fiber; the library's refusal exits 1 after
+// the rows (ADR-060 decision 58, reading 1; ADR-044 decision 1).
+func TestSmokePrintsTheRows(t *testing.T) {
+	const release = "oci://registry.example/aiops/release@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	s := &stub{b: launch.Built{Rows: []launch.RowWait{{ID: "clock", State: kernel.Active}, {ID: "echo:echo", State: kernel.Pending, WaitsFor: []string{"echoers", "stampers"}},
+		{ID: "ghost"}}}}
+	rec := world(t, s)
+	code, out, errOut := dispatch(t, rec, "plugin", "smoke", "echo", "--against", release, "--modcache", "mod", "--mirror", "registry.example=/mirror")
+	if want := "row clock: ACTIVE\nrow echo:echo: PENDING and waits for echoers, stampers\nrow ghost: -\n"; code != 0 || out != want || errOut != "" {
+		t.Errorf("plugin smoke: exit %d, stdout %q, stderr %q; want stdout %q", code, out, errOut, want)
+	}
+	q, _ := s.last().(operations.BuildRequest)
+	if q.Plugin != "/work/echo" || q.ModCache != "/work/mod" || q.Against != release || q.Builder != "image" || q.Mirrors["registry.example"] != "/mirror" || q.DistYAML != "" || q.Env == nil {
+		t.Errorf("request %+v", q)
+	}
+	s.err = fmt.Errorf("%w: plugin smoke: ghost is \"\" and waits for no key", operations.ErrRefused)
+	if code, out, errOut := dispatch(t, rec, "plugin", "smoke", "echo", "--against", release, "--modcache", "mod"); code != 1 || !strings.Contains(out, "row ghost: -") || !strings.Contains(errOut, "ghost") {
+		t.Errorf("a smoke that fails: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if code, _, errOut := dispatch(t, rec, "plugin", "smoke", "echo", "--modcache", "mod"); code != 2 || !strings.Contains(errOut, "against") {
+		t.Errorf("plugin smoke with no release: exit %d, stderr %q; want a usage error", code, errOut)
 	}
 }
 
@@ -298,8 +317,14 @@ func TestVerifyPrintsTheSteps(t *testing.T) {
 		t.Errorf("request %+v", q)
 	}
 	s.v.Steps[2].Outcome, s.v.Passed = "pass", true
-	if code, _, errOut := dispatch(t, rec, "plugin", "verify", "artifact", "--builder", "local"); code != 0 || errOut != "" {
+	if code, _, errOut := dispatch(t, rec, "plugin", "verify", "artifact", "--builder", "local", "--against", "oci://r.example/release@sha256:ab",
+		"--modcache", "mod", "--mirror", "r.example=/mirror"); code != 0 || errOut != "" {
 		t.Errorf("verify that passes: exit %d, stderr %q", code, errOut)
+	}
+	// In-process code builds on the release artifact from the module cache (ADR-044
+	// decision 1).
+	if q := s.last().(operations.SpecRequest); q.Builder != "local" || q.Against != "oci://r.example/release@sha256:ab" || q.ModCache != "/work/mod" || q.Mirrors["r.example"] != "/mirror" {
+		t.Errorf("request %+v", q)
 	}
 	s.err = fmt.Errorf("%w: check 5: no signature verifies", operations.ErrRefused)
 	if code, out, errOut := dispatch(t, rec, "plugin", "verify", "artifact"); code != 1 || out != "" || !strings.Contains(errOut, "check 5") {

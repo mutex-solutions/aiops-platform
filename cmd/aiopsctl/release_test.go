@@ -45,8 +45,10 @@ import (
 // on that release runs, on the image path, the builder image the release artifact names,
 // and writes the same server, site aiopsctl and manifest as the local path from the same
 // inputs, the same licence report, the same SBOMs and the same image, digest for digest
-// (ADR-044 decision 3). It needs the pinned toolchain module and a container runtime, so -short
-// skips it and the CI job builder-image runs it.
+// (ADR-044 decision 3), and plugin smoke of the echoer's directory on the image path
+// boots its test-only profile inside the container. It needs the pinned toolchain
+// module and a container runtime, so -short skips it and the CI job builder-image runs
+// it.
 func TestReleaseAndBuilderImage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the release twice and a site on both paths with the pinned toolchain; the CI job builder-image runs it")
@@ -238,6 +240,10 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 	if len(a) != len(l) {
 		t.Errorf("the image path wrote %d files and the local path %d", len(a), len(l))
 	}
+	// plugin smoke on the image path: the image's aiopsctl builds the throwaway
+	// distribution and boots its test-only profile inside the container, and the rows it
+	// prints are the answer (ADR-044 decision 1; ADR-060 decision 58, reading 1).
+	smokeAndVerify(t, first.Manifest, reg.Host+"/aiops/release@"+rel.digest, src, filepath.Join(scratch, "echo"), echo, "image")
 }
 
 // ref is a manifest of a layout: its digest, subject, annotations and layers.
