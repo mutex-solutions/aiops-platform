@@ -14,8 +14,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -580,7 +582,7 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 	id := a.ID + "@" + a.Version
 	v.Steps = []def.VerifyStep{{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer},
 		{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()}}
-	st, err := l.verifySuites(ctx, r, src, a.m, a.pluginYAML)
+	st, err := l.verifySuites(ctx, r, src, a)
 	v.Steps = append(v.Steps, st)
 	v.Passed = st.Outcome == "pass"
 	return v, err
@@ -670,8 +672,10 @@ func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (tr
 // fails where boot's strict reader refuses that manifest, or reads it as another plugin
 // than pm, the one that the signature and the attestation name. In-process code is
 // built by the builder of the toolbox from the module that module.json records, on the
-// release that r names, whose tests, the suites among them, run on that build list.
-func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source, m ocispec.Manifest, pm pluginYAML) (def.VerifyStep, error) {
+// release that r names, which runs its tests and step 5 of plugin check on that build
+// list; the step then holds the manifest of that build to the artifact (ranSuites).
+func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source, a trusted) (def.VerifyStep, error) {
+	m, pm := a.m, a.pluginYAML
 	st := def.VerifyStep{Name: "suites", Outcome: "not-built"}
 	if len(pm.Runtimes) > 0 {
 		var mod struct{ Path, Version, Sum string }
@@ -683,7 +687,7 @@ func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source
 			st.Reason = "plugin verify builds the module of in-process code on the release artifact of --against, from the module source of --modcache (ADR-044 decision 1)"
 			return st, nil
 		}
-		_, err = l.Box.Build(ctx, launch.BuildRequest{Module: mod.Path, Version: mod.Version, Sum: mod.Sum, Against: r.Against, ModCache: r.ModCache,
+		built, err := l.Box.Build(ctx, launch.BuildRequest{Module: mod.Path, Version: mod.Version, Sum: mod.Sum, Against: r.Against, ModCache: r.ModCache,
 			Mirrors: r.Mirrors, Builder: cmp.Or(r.Builder, "image")})
 		switch {
 		case errors.Is(err, launch.ErrNotCarried):
@@ -693,7 +697,7 @@ func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source
 		case err != nil:
 			st.Outcome, st.Reason = "fail", err.Error()
 		default:
-			st.Outcome, st.Reason = "pass", fmt.Sprintf("the tests of %s %s, its suites among them, on the build list of the release", mod.Path, mod.Version)
+			st.Outcome, st.Reason = ranSuites(built.Manifest, pm, a.statement, mod.Path+" "+mod.Version)
 		}
 		return st, nil
 	}
@@ -744,6 +748,46 @@ func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source
 		st.Outcome, st.Reason = "pass", "step 5 and the echo scenario of plugin check"
 	}
 	return st, err
+}
+
+// ranSuites holds the manifest that the build of verify wrote for the module mod to the
+// artifact: it must hold the plugin pm with the artifact's plugin.yaml byte for byte, and
+// the statement it records of the suites that step 5 ran on the build must name the
+// definitions, suite revisions and halves that the artifact's attestation names
+// (07-c4-plugin-sdk.md:1512). It returns the outcome, and a reason that names the suites
+// that ran.
+func ranSuites(manifest []byte, pm pluginYAML, attestation []byte, mod string) (string, string) {
+	var d struct {
+		Plugins map[string]struct{ Manifest, Attestation string }
+	}
+	if err := yaml.Unmarshal(manifest, &d); err != nil {
+		return "fail", fmt.Sprintf("the manifest of the build of %s: %v", mod, err)
+	}
+	p, ok := d.Plugins[pm.ID]
+	if !ok || p.Manifest != string(pm.file) || p.Attestation == "" {
+		return "fail", fmt.Sprintf("the build of %s holds no plugin %s with the artifact's plugin.yaml and a statement of the suites that ran", mod, pm.ID)
+	}
+	defs := func(statement []byte) map[string]def.Attested {
+		var s struct {
+			Predicate struct{ Definitions map[string]def.Attested }
+		}
+		_ = json.Unmarshal(statement, &s)
+		return s.Predicate.Definitions
+	}
+	ran, named := defs([]byte(p.Attestation)), defs(attestation)
+	if !maps.EqualFunc(ran, named, func(a, b def.Attested) bool { return reflect.DeepEqual(a, b) }) {
+		got, _ := json.Marshal(ran)
+		want, _ := json.Marshal(named)
+		return "fail", fmt.Sprintf("step 5 on the build of %s ran %s, and the attestation names %s", mod, got, want)
+	}
+	var suites []string
+	for _, name := range slices.Sorted(maps.Keys(ran)) {
+		if a := ran[name]; a.Suite != nil {
+			suites = append(suites, fmt.Sprintf("%s at revision %d, %s", name, *a.Suite, strings.Join(a.Halves, " and ")))
+		}
+	}
+	return "pass", fmt.Sprintf("the tests of %s and step 5 of plugin check on the build list of the release; the suites that ran, as the attestation names them: %s", mod,
+		cmp.Or(strings.Join(suites, "; "), "none"))
 }
 
 // attestation checks the attestation of d: with key, the bundle that verifies, and

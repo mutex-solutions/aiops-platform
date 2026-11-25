@@ -54,6 +54,7 @@ import (
 type Request struct {
 	Signed    *Signed           // a release build's second phase
 	DistYAML  string            // the site's dist.yaml
+	Verify    bool              // plugin verify of in-process code: step 5 on the plugins of dist.yaml, as smoke runs it
 	Smoke     string            // plugin smoke: the plugin directory, a module of the site
 	Against   string            // plugin smoke: the release artifact, as dist.yaml names it
 	Release   []byte            // the release's signed manifest: the one this aiopsctl embeds
@@ -163,7 +164,7 @@ func Build(ctx context.Context, q Request) (Result, error) {
 	}
 	m := Manifest{Graph: pkgs, Licences: l.Modules, Pins: pins, Release: b.input, Site: b.site.Bindings, Accept: b.site.AcceptLicenses}
 	var merr, aerr error
-	if q.Smoke != "" {
+	if q.Smoke != "" || q.Verify {
 		m.Attested, aerr = b.attest(ctx)
 	}
 	res.Manifest, merr = m.Write()
@@ -334,7 +335,7 @@ func (b *build) module(ctx context.Context) error {
 		}
 		maps.Copy(files, suites)
 	}
-	if b.q.Smoke != "" { // step 5 of plugin check on the module under smoke
+	if b.q.Smoke != "" || b.q.Verify { // step 5 of plugin check on the site's plugins
 		tests, err := b.smokeTests()
 		if err != nil {
 			return err

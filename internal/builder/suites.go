@@ -228,14 +228,14 @@ func TestAiopsctl(t *testing.T) {
 `, pkgName, importPath, rootModule, name, major, rootModule, rootModule, strings.Replace(registries[name], "fixtures", strconv.Quote(fixtures), 1))
 }
 
-// smokeSuite is a suite that step 5 of plugin check runs on a plugin of the module under
-// plugin smoke: the directory of its test in the scratch module, the plugin's package,
-// the registry and the version that requires names.
+// smokeSuite is a suite that step 5 of plugin check runs on a plugin of a site module of
+// plugin smoke or verify: the directory of its test in the scratch module, the plugin's
+// package, the registry and the version that requires names.
 type smokeSuite struct{ dir, pkg, name, version string }
 
-// smokeSuites returns the suites of step 5 on the plugins of the module under smoke: of
-// each definition of requires that the plugin provides or registers with, a registry
-// (ADR-060 decision 56).
+// smokeSuites returns the suites of step 5 on the plugins of the site modules: of each
+// definition of requires that the plugin provides or registers with, a registry (ADR-060
+// decision 56).
 func (b *build) smokeSuites() ([]smokeSuite, error) {
 	var out []smokeSuite
 	for i, p := range b.plugins {
@@ -266,11 +266,11 @@ func (b *build) smokeTests() (map[string][]byte, error) {
 	return out, err
 }
 
-// attest runs step 5 of plugin check on each plugin of the module under plugin smoke,
-// with the builder's toolchain, and returns its statement by id, which the throwaway
-// manifest records for check 10 of its boot: the definitions of requires at their
-// versions, and for each suite that ran its revision and the half that ran (ADR-060
-// decisions 46 and 56). A failed obligation fails the build.
+// attest runs step 5 of plugin check on each site plugin of plugin smoke or verify, with
+// the builder's toolchain, and returns its statement by id, which the throwaway manifest
+// records for check 10 of the boot of smoke and for verify to compare: the definitions of
+// requires at their versions, and for each suite that ran its revision and the half that
+// ran (ADR-060 decisions 46 and 56). A failed obligation fails the build with its lines.
 func (b *build) attest(ctx context.Context) (map[string]string, error) {
 	suites, err := b.smokeSuites()
 	ran := map[string]int{} // the revision of each suite that ran, by package and registry
@@ -293,7 +293,7 @@ func (b *build) attest(ctx context.Context) (map[string]string, error) {
 		if err = errors.Join(err, lerr); err != nil {
 			return nil, err
 		}
-		fmt.Fprintf(b.progress, "smoke: the suite of %s on %s, step 5 of plugin check\n", s.name, s.pkg)
+		fmt.Fprintf(b.progress, "suites: the suite of %s on %s, step 5 of plugin check\n", s.name, s.pkg)
 		if out, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", "-run", "^TestAiopsctl$", "./"+s.dir); err != nil {
 			return nil, fmt.Errorf("the suite of %s fails on %s: %w\n%s", s.name, s.pkg, err, strings.TrimSpace(string(out)))
 		}

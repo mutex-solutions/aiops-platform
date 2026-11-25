@@ -38,9 +38,24 @@ import (
 // verify is the build of plugin verify of in-process code (ADR-060 decision 46; ADR-044
 // decision 1): a throwaway site build of the release that q.Against names and the
 // module at the version and sum that the artifact records, resolved through the module
-// source against that sum, whose tests, the suites among them, the builder runs on the
-// release's build list. What it wrote is removed.
+// source against that sum, whose tests the builder runs on the release's build list, and
+// step 5 of plugin check, as smoke runs it; the manifest records the statement of the
+// suites that ran. What it wrote is removed. It takes the local path: the builder image's
+// aiopsctl runs dist build, which runs no suite of a registry, so the image path answers
+// that the step is not carried.
 func (t Tools) verify(ctx context.Context, q launch.BuildRequest) (launch.Built, error) {
+	switch q.Builder {
+	case "image":
+		return launch.Built{}, fmt.Errorf("%w: plugin verify of in-process code runs step 5 of plugin check on the local path, and the builder image runs no suite: --builder local runs them (ADR-060 decision 46)",
+			launch.ErrNotCarried)
+	case "local":
+	default:
+		return launch.Built{}, fmt.Errorf("the builder is image or local, not %q", q.Builder)
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return launch.Built{}, err
+	}
 	tmp, err := os.MkdirTemp("", "aiopsctl-verify-")
 	if err != nil {
 		return launch.Built{}, err
@@ -55,12 +70,13 @@ func (t Tools) verify(ctx context.Context, q launch.BuildRequest) (launch.Built,
 		Release string   `json:"release"`
 		Plugins []plugin `json:"plugins"`
 	}{q.Against, []plugin{{q.Module, q.Version, q.Sum}}})
-	q.DistYAML, q.Module = filepath.Join(tmp, "dist.yaml"), ""
-	if err := os.WriteFile(q.DistYAML, site, 0o600); err != nil {
+	yaml := filepath.Join(tmp, "dist.yaml")
+	if err := os.WriteFile(yaml, site, 0o600); err != nil {
 		return launch.Built{}, err
 	}
-	b, err := t.Build(ctx, q)
-	return launch.Built{Manifest: b.Manifest}, err
+	r, err := builder.Build(ctx, builder.Request{DistYAML: yaml, Verify: true, Release: t.Signed, ModCache: q.ModCache, Mirrors: q.Mirrors,
+		Proxy: os.Getenv("GOPROXY"), Out: filepath.Join(tmp, "build"), Cache: filepath.Join(cache, "aiopsctl"), Progress: t.Progress})
+	return launch.Built{Manifest: r.Manifest}, err
 }
 
 // smoke is the build of plugin smoke (ADR-044 decision 1; ADR-060 decision 58, reading

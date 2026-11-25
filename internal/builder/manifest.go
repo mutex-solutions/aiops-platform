@@ -35,13 +35,13 @@ type Manifest struct {
 	Release  boot.DistManifest
 	Site     boot.DistManifest
 	Accept   []string
-	Attested map[string]string // plugin smoke: the statement of each plugin of the module under smoke, by id
+	Attested map[string]string // plugin smoke and verify: the statement of each plugin of the site, by id
 }
 
 // Write returns the manifest as boot reads it (boot.ReadDistribution): the module table
 // is each package of the graph that holds a plugin.yaml, with that manifest byte for
-// byte and the statement of a first-party plugin, or of a plugin of the module under
-// plugin smoke, Attested; it refuses an id that two packages
+// byte and the statement of a first-party plugin, or of a site plugin of plugin smoke or
+// verify, Attested; it refuses an id that two packages
 // declare, and an id under aiops/ or contrib/, the two owners reserved to the release
 // pipeline, of a package outside the modules it builds (08:402); the modules are those
 // of the graph with their detected licences, a module of the repository replaced by a
