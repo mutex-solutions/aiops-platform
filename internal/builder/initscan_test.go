@@ -73,12 +73,21 @@ func TestInitDenyList(t *testing.T) {
 			t.Errorf("%s: %v", main, got[main])
 		}
 	}
-	defer func(e []exception) { exceptions = e }(exceptions)
-	exceptions = nil
-	got = scan(t)
-	for _, from := range []string{"encoding/gob", "google.golang.org/grpc/encoding/proto"} {
-		if len(got[from]) != 1 {
-			t.Errorf("%s without its exception: %v", from, got[from])
+	// An exception admits the call at the version it was reviewed at only: at another,
+	// it needs a new review (owner, 2026-11-25).
+	reviewed, moved := exceptions, []exception(nil)
+	defer func() { exceptions = reviewed }()
+	for _, x := range reviewed {
+		x.version += "-another"
+		moved = append(moved, x)
+	}
+	for name, table := range map[string][]exception{"without its exception": nil, "with its exception at another version": moved} {
+		exceptions = table
+		got = scan(t)
+		for _, from := range []string{"encoding/gob", "google.golang.org/grpc/encoding/proto"} {
+			if len(got[from]) != 1 {
+				t.Errorf("%s %s: %v", from, name, got[from])
+			}
 		}
 	}
 }
