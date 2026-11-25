@@ -548,9 +548,9 @@ func Run(t *testing.T, mount Mount) {
 				if !errors.Is(err, c.want) || !reflect.DeepEqual(u.homeOf(c.profile), before) || why == "a denial" && len(ch.Verdict.Clauses) != 1 {
 					t.Errorf("%s: %+v, %v; want %v, the verdict, and nothing written", why, ch, err, c.want)
 				}
-				// The lines a site adds to the modules of its dist.yaml (08:397).
-				if l := ch.DistLines; why == "rebuild-required" && (len(l) != 2 || l[0] != "modules:" || !strings.HasPrefix(l[1], "  - {path: ")) {
-					t.Errorf("rebuild-required: the dist.yaml lines %q; want modules: and one {path, version} of its module", l)
+				// The lines a site adds to the plugins of its dist.yaml (08:397, :401).
+				if l := ch.DistLines; why == "rebuild-required" && (len(l) != 2 || l[0] != "plugins:" || !strings.HasPrefix(l[1], "  - {module: ") || !strings.Contains(l[1], ", sum: ")) {
+					t.Errorf("rebuild-required: the dist.yaml lines %q; want plugins: and one {module, version, sum} of its module", l)
 				}
 			}
 		})

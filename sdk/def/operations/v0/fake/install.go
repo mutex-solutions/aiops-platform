@@ -52,7 +52,7 @@ func (s served) Install(ctx context.Context, r operations.InstallRequest) (opera
 		case err != nil:
 			return ch, err
 		case ch.Verdict.RebuildRequired:
-			ch.DistLines = []string{"modules:", fmt.Sprintf("  - {path: %s, version: %s}", a.module[0], a.module[1])}
+			ch.DistLines = []string{"plugins:", fmt.Sprintf("  - {module: %s, version: %s, sum: %s}", a.module[0], a.module[1], a.module[2])}
 			return ch, operations.ErrRebuildRequired
 		case r.Profile == "cli" && !slices.Contains(a.in.Runtimes, "inproc"):
 			return ch, refused("into the profile cli only in-process code installs (ADR-061 decision 40)")

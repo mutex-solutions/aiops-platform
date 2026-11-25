@@ -277,12 +277,12 @@ func (l Library) admit(ctx context.Context, h Home, p string, src source, d ocis
 	case len(denied) > 0:
 		return refused("the gate at plugin install denies %s: %s", a.ID, strings.Join(denied, "; "))
 	case ch.Verdict.RebuildRequired:
-		var mod struct{ Path, Version string }
+		var mod struct{ Path, Version, Sum string }
 		b, err := fetchLayer(ctx, src, a.m, layerModule)
 		if err == nil {
 			_ = json.Unmarshal(b, &mod)
 		}
-		ch.DistLines = []string{"modules:", fmt.Sprintf("  - {path: %s, version: %s}", mod.Path, mod.Version)}
+		ch.DistLines = []string{"plugins:", fmt.Sprintf("  - {module: %s, version: %s, sum: %s}", mod.Path, mod.Version, mod.Sum)}
 		return fmt.Errorf("%w: %s is in-process code that the distribution of this home does not link: build one with dist.yaml naming its module, dist build, dist sign and dist use it, then install again (08:397)",
 			def.ErrRebuildRequired, a.ID)
 	}

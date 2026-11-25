@@ -291,7 +291,7 @@ func TestPrintsNoControlCharacterOfTheArtifact(t *testing.T) {
 		v:  operations.Verified{Digest: "sha256:ab", Signer: "unsigned", Steps: []operations.VerifyStep{{Name: "suites", Outcome: "fail", Reason: "plugin.yaml: " + esc}}},
 		vd: launch.Verdict{Clauses: []launch.Clause{{Check: 2, Clause: "unserved-definition", Outcome: launch.OutcomeDeny, Reason: "requires " + esc}}},
 		ch: operations.Change{Written: []string{"/site/bundles/acme/x" + esc}, Notes: []string{"kept " + esc},
-			DistLines: []string{"modules:", "  - {path: example.com/x" + esc + ", version: v0.1.0" + esc + "}"}}}
+			DistLines: []string{"plugins:", "  - {module: example.com/x" + esc + ", version: v0.1.0" + esc + ", sum: h1:" + esc + "}"}}}
 	rec := world(t, s)
 	for _, argv := range [][]string{{"plugin", "inspect", "artifact"}, {"plugin", "verify", "artifact"},
 		{"plugin", "gate", "artifact", "--against", "rel/dist.yaml"}, {"plugin", "install", "artifact"}} {
@@ -479,10 +479,10 @@ func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 	if code, _, _ := dispatch(t, rec, "plugin", "enable", "x", "--wait", "soon"); code != 2 {
 		t.Errorf("--wait soon: exit %d, want a usage error", code)
 	}
-	s.ch = operations.Change{DistLines: []string{"modules:", "  - {path: example.com/echo, version: v0.1.0}"}}
+	s.ch = operations.Change{DistLines: []string{"plugins:", "  - {module: example.com/echo, version: v0.1.0, sum: h1:AAAA}"}}
 	s.err = fmt.Errorf("%w: acme/echo is in-process code", operations.ErrRebuildRequired)
 	if code, out, errOut := dispatch(t, rec, "plugin", "install", "oci://r.example/echo@sha256:ab"); code != 1 ||
-		out != "modules:\n  - {path: example.com/echo, version: v0.1.0}\n" || !strings.Contains(errOut, "rebuild-required") {
+		out != "plugins:\n  - {module: example.com/echo, version: v0.1.0, sum: h1:AAAA}\n" || !strings.Contains(errOut, "rebuild-required") {
 		t.Errorf("rebuild-required: exit %d, stdout %q, stderr %q", code, out, errOut)
 	}
 	s.ch = operations.Change{IDs: []reload.ID{3, 4}, Last: reload.Running}

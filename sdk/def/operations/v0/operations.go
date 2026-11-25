@@ -414,7 +414,7 @@ type Change struct {
 	IDs    []reload.ID
 	Last   reload.Status
 	// Install: the clauses of the gate, and with rebuild-required the dist.yaml lines
-	// of the module (08:397).
+	// of the module, plugins: with its module, version and sum (08:397, :401).
 	Verdict   launch.Verdict
 	DistLines []string
 }

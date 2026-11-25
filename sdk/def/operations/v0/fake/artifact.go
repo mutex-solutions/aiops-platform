@@ -4,6 +4,8 @@ package fake
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,13 +18,14 @@ import (
 // config, keeps it in memory by layout and by spec, and records the key ids that
 // signed it. It writes no layout.
 
-// artifact is an artifact the fake packed: module is the path and the version of the
-// module of in-process code, as its module.json records them, the module line of go.mod
-// in the plugin directory and v<version>; empty for none.
+// artifact is an artifact the fake packed: module is the path, the version and the sum
+// of the module of in-process code, as its module.json records them, the module line of
+// go.mod in the plugin directory, v<version> and an h1 sum of the files it read; empty
+// for none.
 type artifact struct {
 	in      operations.Inspected
 	signers []string
-	module  [2]string
+	module  [3]string
 }
 
 // artifactAt returns the artifact at a layout or a spec, or a refusal.
@@ -60,7 +63,8 @@ func (s served) Pack(_ context.Context, r operations.PackRequest) (operations.Wr
 		if b, err := os.ReadFile(filepath.Join(r.Dir, "go.mod")); err == nil {
 			for _, l := range strings.Split(string(b), "\n") {
 				if p, ok := strings.CutPrefix(strings.TrimSpace(l), "module "); ok {
-					a.module = [2]string{strings.Trim(strings.TrimSpace(p), `"`), "v" + in.Version}
+					sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+					a.module = [3]string{strings.Trim(strings.TrimSpace(p), `"`), "v" + in.Version, "h1:" + base64.StdEncoding.EncodeToString(sum[:])}
 				}
 			}
 		}
