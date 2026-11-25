@@ -1,0 +1,4 @@
+[
+  {"argv": ["plugin", "pack"], "delay": "0s"},
+  {"argv": ["plugin", "check"], "delay": "0s"}
+]

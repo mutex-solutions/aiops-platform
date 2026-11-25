@@ -1,0 +1,17 @@
+[
+  {"argv": ["plugin", "new", "echoers", "acme/echo"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "new"], "outcome": "usage", "stdout": "", "stderr": "plugin new takes 2 arguments, not 0"},
+  {"argv": ["plugin", "check"], "outcome": "ok", "stdout": "", "stderr": "the attestation it would sign"},
+  {"argv": ["plugin", "smoke", "echo", "--against", "oci://registry.example/aiops/release@sha256:ab", "--modcache", "mod"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "pack"], "outcome": "ok", "stdout": "", "stderr": "/artifact\n"},
+  {"argv": ["plugin", "sign", "--key", "author.key"], "outcome": "ok", "stdout": "", "stderr": "/artifact\n"},
+  {"argv": ["plugin", "push", "registry.example/echo"], "outcome": "ok", "stdout": "oci://registry.example/echo@sha256:ab\n"},
+  {"argv": ["plugin", "inspect", "oci://registry.example/echo@sha256:ab"], "outcome": "ok", "stdout": "digest: \nid: \nversion: \nruntimes: []\nsigner: not verified\n"},
+  {"argv": ["plugin", "verify", "oci://registry.example/echo@sha256:ab"], "outcome": "ok", "stdout": "digest: \nsigner: \n"},
+  {"argv": ["plugin", "gate", "oci://registry.example/echo@sha256:ab", "--against", "dist.yaml"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "gate", "oci://registry.example/echo@sha256:ab"], "outcome": "usage", "stdout": "", "stderr": "--against is required"},
+  {"argv": ["plugin", "install", "oci://registry.example/echo@sha256:ab", "--profile", "dev"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "enable", "echo:echo", "--profile", "dev"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "disable", "echo:echo", "--profile", "dev"], "outcome": "ok", "stdout": ""},
+  {"argv": ["plugin", "remove", "acme/echo", "--profile", "dev"], "outcome": "ok", "stdout": ""}
+]
