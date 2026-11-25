@@ -912,6 +912,9 @@ plugins:
       configSchema:
         $schema: https://json-schema.org/draft/2020-12/schema
         additionalProperties: false
+        examples:
+          - name: loud
+            prefix: 'LOUD '
         properties:
           name:
             default: example
@@ -928,7 +931,7 @@ plugins:
         pluginApi: "0.3"
         definitions:
           echoers: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"echoers":{"version":"0.1","suite":1,"halves":["obligations"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"f916584d41409942f6f4986ec2f9ca9f1700b166f8f8f140c3e72a3b8c812093"},"name":"aiops/example-echoer@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"echoers":{"version":"0.1","suite":1,"halves":["obligations"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e9787ce438f48b0890e17b1f95b0b064df4bd480578ea00e89061bfc4cb988a9"},"name":"aiops/example-echoer@0.1.0"}]}'
   aiops/example-stamper:
     package: github.com/mutex-solutions/aiops-platform/examples/stamper
     manifest: |

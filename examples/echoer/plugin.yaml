@@ -23,6 +23,9 @@ hooks: []
 configSchema:
   $schema: https://json-schema.org/draft/2020-12/schema
   additionalProperties: false
+  examples:
+    - name: loud
+      prefix: 'LOUD '
   properties:
     name:
       default: example

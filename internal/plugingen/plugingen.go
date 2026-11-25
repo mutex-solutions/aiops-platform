@@ -63,6 +63,9 @@ func Generate(dir string) (Result, error) {
 		return Result{}, err
 	}
 	g, err := runDriver(&t)
+	if err == nil {
+		err = configExamples(dir, &g)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -167,6 +170,35 @@ func Check(dir string) error {
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("%s: %w", dir, err)
 	}
+	return nil
+}
+
+// configExamples sets the root examples of the configSchema of g to the config examples
+// testdata/config/*.json of the plugin in dir, in the byte order of their names, each
+// read as a layer reads a row config: the first is the config of the row that plugin
+// new connector writes for an instantiable plugin (ADR-047 decision 12).
+func configExamples(dir string, g *plugin.Generated) error {
+	files, _ := filepath.Glob(filepath.Join(dir, "testdata", "config", "*.json"))
+	if len(files) == 0 {
+		return nil
+	}
+	slices.Sort(files)
+	var xs []any
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		tree, err := boot.ParseConfig(f, src)
+		if err != nil {
+			return err
+		}
+		xs = append(xs, tree)
+	}
+	if g.ConfigSchema == nil {
+		g.ConfigSchema = map[string]any{}
+	}
+	g.ConfigSchema["examples"] = xs
 	return nil
 }
 

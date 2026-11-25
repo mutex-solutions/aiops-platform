@@ -227,16 +227,23 @@ func (Tools) Vet(ctx context.Context, dir string) ([]launch.Diagnostic, error) {
 
 // examples holds each config example testdata/config/*.json of the plugin in dir to the
 // configSchema of its manifest, read as the launcher reads a row config: the validator
-// of sdk/plugin on the tree of boot.ParseConfig (07-c4-plugin-sdk.md:1569). A manifest
-// that does not read is step 1's to report.
+// of sdk/plugin on the tree of boot.ParseConfig (07-c4-plugin-sdk.md:1569). An
+// instantiable plugin has at least one, and none holds a reference, so that the row
+// that plugin new connector writes from the first passes check 8 (ADR-047 decision 12).
+// A manifest that does not read is step 1's to report.
 func examples(dir string) []launch.Diagnostic {
 	files, _ := filepath.Glob(filepath.Join(dir, "testdata", "config", "*.json"))
 	raw, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
-	if len(files) == 0 || err != nil {
+	if err != nil {
 		return nil
 	}
 	m, err := boot.ReadManifest("plugin.yaml", raw, boot.ManifestLenient)
-	if err != nil {
+	switch {
+	case err != nil:
+		return nil
+	case m.Instantiable && len(files) == 0:
+		return []launch.Diagnostic{{Check: "3", File: "plugin.yaml", Text: "an instantiable plugin has a config example in testdata/config/*.json, the first of which plugin new connector writes as a row's config (ADR-047 decision 12)"}}
+	case len(files) == 0:
 		return nil
 	}
 	schema, _ := json.Marshal(m.ConfigSchema)
@@ -257,6 +264,8 @@ func examples(dir string) []launch.Diagnostic {
 		}
 		if err != nil {
 			out = append(out, launch.Diagnostic{Check: "3", File: rel, Text: "a config example that does not validate against the derived schema: " + err.Error()})
+		} else if m.Instantiable && (bytes.Contains(src, []byte("${env:")) || bytes.Contains(src, []byte("${file:"))) {
+			out = append(out, launch.Diagnostic{Check: "3", File: rel, Text: "a config example of an instantiable plugin holds a reference, which the bundle of an installed artifact may not (check 8; ADR-047 decision 12)"})
 		}
 	}
 	return out
