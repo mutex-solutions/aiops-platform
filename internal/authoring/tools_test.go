@@ -103,6 +103,55 @@ func TestVetConfigExamples(t *testing.T) {
 	}
 }
 
+// An instantiable plugin has a config example, the first of which plugin new connector
+// writes as a row's config, and none of its examples holds a reference, which the
+// bundle of an installed artifact may not (ADR-047 decision 12; check 8): step 3 denies
+// one with no example on plugin.yaml and an example with a reference on its file, here
+// at a field that the schema leaves open, so that the example validates. A plugin that
+// is not instantiable needs no example.
+func TestVetExamplesOfAnInstantiablePlugin(t *testing.T) {
+	manifest := "manifestVersion: \"1.0\"\nid: aiops/echo\nversion: 0.1.0\ntitle: Echo\nlicense: Apache-2.0\npublisher: {id: aiops}\n" +
+		"stability: experimental\nscope: [process]\nruntimes: [inproc]\ninstantiable: true\nuses:\n  - {key: echoers, major: 0, as: need}\nprovides: []\n" +
+		"registers:\n  - {key: echoers, major: 0}\nhooks: []\n" +
+		"configSchema:\n  $schema: https://json-schema.org/draft/2020-12/schema\n  properties:\n    name: {type: string}\n  type: object\n" +
+		"durable: []\nrequires: {pluginApi: \"0.3\", definitions: {echoers: [\"0.1\"]}}\n"
+	for _, c := range []struct {
+		name       string
+		files      map[string]string
+		file, text string
+	}{
+		{"no example", map[string]string{"plugin.yaml": manifest}, "plugin.yaml", "an instantiable plugin has a config example in testdata/config/*.json"},
+		{"a reference", map[string]string{"plugin.yaml": manifest, "testdata/config/env.json": `{"name": "loud", "token": "${env:TOKEN}"}`},
+			"testdata/config/env.json", "a config example of an instantiable plugin holds a reference"},
+		{"a file reference", map[string]string{"plugin.yaml": manifest, "testdata/config/a.json": `{"name": "loud"}`, "testdata/config/file.json": `{"token": "${file:token.txt}"}`},
+			"testdata/config/file.json", "a config example of an instantiable plugin holds a reference"},
+		{"not instantiable", map[string]string{"plugin.yaml": strings.Replace(manifest, "instantiable: true\n", "", 1)}, "", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			c.files["go.mod"], c.files["plugin.go"] = "module example.com/acme/echo\n\ngo 1.26.0\n", "package echo\n"
+			for name, body := range c.files {
+				p := filepath.Join(dir, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ds, err := Tools{}.Vet(t.Context(), dir)
+			switch {
+			case err != nil:
+				t.Fatal(err)
+			case c.file == "" && len(ds) != 0:
+				t.Errorf("Vet = %+v; want no finding", ds)
+			case c.file != "" && (len(ds) != 1 || ds[0].Check != "3" || ds[0].File != c.file || !strings.Contains(ds[0].Text, c.text)):
+				t.Errorf("Vet = %+v; want one finding of step 3 on %s: %s", ds, c.file, c.text)
+			}
+		})
+	}
+}
+
 // The lint data that aiopsctl hands to boot: the SPDX license list it embeds, licenses
 // and exceptions, at the version its register entry pins; the marks of
 // 00-decisions.md §8.1, each named in that paragraph; and the tier words of T7.
