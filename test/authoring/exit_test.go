@@ -53,6 +53,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -614,11 +615,19 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 		if r.code != 1 || r.out != lines || !strings.Contains(r.errOut, "rebuild-required") || len(deniedChecks(r.out+r.errOut)) > 0 {
 			t.Errorf("plugin install of in-process code: exit %d, stdout %q; want exit 1, rebuild-required and the lines %q", r.code, r.out, lines)
 		}
+		// Install before dist use evaluates every clause of decision 17 but the module
+		// clause of check 5, the licence check, which reads a build list, and the checks of
+		// S2b, and each clause it evaluates passes.
+		if got, want := clauses(r.errOut), []string{"1: pass", "2: pass", "3: not-evaluated", "4: pass", "5: pass", "5 module: not-evaluated",
+			"6: not-evaluated", "7: pass", "8: pass", "9: not-evaluated", "10: pass"}; !slices.Equal(got, want) {
+			t.Errorf("plugin install of in-process code printed the clauses %v; want %v", got, want)
+		}
 		if c := changed(before, tree(t, homeKeeps(home), home, m.work)); len(c) > 0 {
 			t.Errorf("plugin install answering rebuild-required changed %v", c)
 		}
 		write(t, filepath.Join(site, "dist.yaml"), "release: "+x.release+"\n"+r.out)
 		r = m.must(site, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", x.proxy, "--builder", x.builder)
+		passed(t, r, echoModule)
 		for _, f := range []string{"aiops/aiops", "aiops/NOTICE", "aiops/aiops.spdx.json", "aiops/THIRD_PARTY_LICENSES/golang.org/toolchain/LICENSE",
 			"aiops/THIRD_PARTY_LICENSES/" + echoModule + "/LICENSE", "aiopsctl/aiopsctl", "image/index.json", "distribution.yaml"} {
 			if _, err := os.Stat(filepath.Join(site, "build", filepath.FromSlash(f))); err != nil {
@@ -643,7 +652,7 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 		other := map[string]string{"image": "local", "local": "image"}[x.builder]
 		again := filepath.Join(m.root, "again")
 		write(t, filepath.Join(again, "dist.yaml"), read(t, filepath.Join(site, "dist.yaml")))
-		m.must(again, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", x.proxy, "--builder", other)
+		passed(t, m.must(again, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", x.proxy, "--builder", other), echoModule)
 		l, o := contents(t, filepath.Join(site, "build")), contents(t, filepath.Join(again, "build"))
 		for p, sum := range l {
 			if o[p] != sum {
@@ -701,7 +710,7 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 		write(t, filepath.Join(dir, "dist.yaml"), read(t, filepath.Join(site, "dist.yaml"))+
 			"  - {module: example.com/acme/watch, version: v0.1.0, sum: "+a.watchSum+"}\n"+
 			"bindings:\n  consumers:\n    reload: [acme/watch]\nacceptLicenses: [GPL-2.0-only]\n")
-		m.must(dir, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", x.proxy, "--builder", x.builder)
+		passed(t, m.must(dir, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", x.proxy, "--builder", x.builder), echoModule, "example.com/acme/watch")
 		d, err := boot.ReadDistribution("distribution.yaml", []byte(read(t, filepath.Join(dir, "build", "distribution.yaml"))))
 		if err != nil {
 			t.Fatal(err)
@@ -713,10 +722,15 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 		h.must("", "aiopsctl", "trust", "add", filepath.Join(m.work, "site.pub"), "--distribution")
 		h.must(dir, "aiopsctl", "dist", "sign", filepath.Join(dir, "build", "image"), "--key", filepath.Join(m.work, "site.key"))
 		h.must(dir, "aiopsctl", "dist", "use", filepath.Join(dir, "build", "image"))
+		// Each stream on its own: the report of profile verify on stdout, and what boot
+		// prints at the boot of the site's aiopsctl on stderr.
 		r := h.must("", filepath.Join(dir, "build", "aiopsctl", "aiopsctl"), "profile", "verify")
-		for _, want := range []string{"the site adds consumers of reload: acme/watch", "licence: the distribution accepts GPL-2.0-only"} {
-			if !strings.Contains(r.out+r.errOut, want) {
-				t.Errorf("profile verify of the departing site printed no %q", want)
+		if want := "the site adds consumers of reload: acme/watch"; !slices.Contains(strings.Split(r.out, "\n"), want) {
+			t.Errorf("profile verify of the departing site reported no line %q on stdout:\n%s", want, r.out)
+		}
+		for _, want := range []string{"bindings: the site adds consumers of reload: acme/watch", "licence: the distribution accepts GPL-2.0-only"} {
+			if !slices.Contains(strings.Split(r.errOut, "\n"), want) {
+				t.Errorf("the boot of the departing site's aiopsctl printed no line %q on stderr:\n%s", want, r.errOut)
 			}
 		}
 	})
@@ -984,6 +998,75 @@ func deniedChecks(out string) []int {
 }
 
 var checkRE = regexp.MustCompile(`\bcheck (\d+)\b`)
+
+// clauses returns the clauses of the gate that out prints, without their reasons, as
+// "<check>[ <clause>]: <outcome>", once each, by check: the lines that plugin install
+// prints as plugin gate prints them, "check <n>[ <clause>]: <outcome>[: <reason>]", and
+// the lines "gate: check <n> <name>: ..." of dist build, whose clause that it does not
+// evaluate leads the reason. A line on a row's result, or on the clauses of a later step,
+// says nothing more.
+func clauses(out string) []string {
+	type clause struct {
+		check      int
+		name, text string
+	}
+	var got []clause
+	add := func(check, name, outcome string) {
+		n, _ := strconv.Atoi(check)
+		got = append(got, clause{n, name, strings.TrimSpace(check+" "+name) + ": " + outcome})
+	}
+	for _, l := range strings.Split(out, "\n") {
+		if mm := installRE.FindStringSubmatch(l); mm != nil {
+			add(mm[1], mm[2], mm[3])
+		} else if mm := buildRE.FindStringSubmatch(l); mm != nil && mm[2] != "not evaluated until a later step" && mm[2] != "not evaluated on row" {
+			add(mm[1], mm[3], map[bool]string{true: "pass", false: "not-evaluated"}[mm[2] == "pass"])
+		}
+	}
+	slices.SortStableFunc(got, func(a, b clause) int {
+		if a.check != b.check {
+			return a.check - b.check
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	var texts []string
+	for _, c := range got {
+		if !slices.Contains(texts, c.text) {
+			texts = append(texts, c.text)
+		}
+	}
+	return texts
+}
+
+var (
+	installRE = regexp.MustCompile(`^check (\d+)(?: ([a-z-]+))?: (pass|deny|not-evaluated)(?:: |$)`)
+	buildRE   = regexp.MustCompile(`^gate: check (\d+) [^:]+: (pass$|not evaluated until S2b$|not evaluated until a later step|not evaluated on row|not evaluated at dist build)(?:: (?:(signed|fake|installed|signer|module|tie): )?)?`)
+)
+
+// passed holds dist build, which r is, to each check of ADR-060 decision 22 that it runs
+// on a site: the gate at dist build passes checks 1, 2, 6 and 7 and does not evaluate
+// what decision 17 says it does not; the strict-version check, the module table and its
+// ids, the package graph, the init deny-list and the licence scan of each binary pass;
+// and so do the import boundary and plugin vet of the package of each site module of
+// mods, a plugin at the module's root, and its tests, the suites among them.
+func passed(t *testing.T, r result, mods ...string) {
+	t.Helper()
+	if got, want := clauses(r.errOut), []string{"1: pass", "2: pass", "3: not-evaluated", "4: not-evaluated", "5: not-evaluated", "6: pass",
+		"7: pass", "7 signed: not-evaluated", "8: not-evaluated", "9: not-evaluated", "10: not-evaluated"}; !slices.Equal(got, want) {
+		t.Errorf("the gate at dist build printed the clauses %v; want %v", got, want)
+	}
+	want := []string{"versions: the strict-version check: pass", "manifest: the module table and the ids of its plugins: pass",
+		"graph: no fake, sdk/testkit or testdata package: pass", "init: the deny-list scan: pass",
+		"licences: the licence scan of aiops: pass", "licences: the licence scan of aiopsctl: pass"}
+	for _, m := range mods {
+		want = append(want, "boundary: the import boundary and plugin vet of "+m+": pass", "suites: go test "+m+"/...: pass")
+	}
+	lines := strings.Split(r.errOut, "\n")
+	for _, w := range want {
+		if !slices.Contains(lines, w) {
+			t.Errorf("dist build printed no line %q", w)
+		}
+	}
+}
 
 // artifactOf returns the artifact of the layout dir, its descriptor and its layers by
 // media type.

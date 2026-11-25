@@ -165,15 +165,28 @@ func docker(t *testing.T, args ...string) string {
 }
 
 // startRegistry runs the pinned registry image with its port published on the loopback
-// interface, and returns its host and port. It removes the container, and the image
-// when the job held none before.
+// interface, and returns its host and port. It removes the container with the volume
+// that the image declares, which holds what the exit pushed, and the image when the job
+// held none before; a volume left behind fails the test, which then removes it.
 func startRegistry(t *testing.T) string {
 	t.Helper()
 	if exec.Command("docker", "image", "inspect", registryImage).Run() != nil {
 		t.Cleanup(func() { _ = exec.Command("docker", "image", "rm", registryImage).Run() })
 	}
+	var volumes string
+	t.Cleanup(func() {
+		for _, v := range strings.Fields(volumes) {
+			if exec.Command("docker", "volume", "inspect", v).Run() == nil {
+				t.Errorf("the registry's container left its volume %s", v)
+				_ = exec.Command("docker", "volume", "rm", "-f", v).Run()
+			}
+		}
+	})
 	id := docker(t, "run", "-d", "-p", "127.0.0.1::5000", registryImage)
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", id).Run() })
+	if volumes = docker(t, "inspect", "-f", "{{range .Mounts}}{{.Name}} {{end}}", id); volumes == "" {
+		t.Errorf("the registry's container mounts no volume: the pinned image declares /var/lib/registry one")
+	}
 	host := docker(t, "port", id, "5000/tcp")
 	if i := strings.IndexByte(host, '\n'); i >= 0 {
 		host = host[:i]
