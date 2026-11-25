@@ -166,6 +166,19 @@ func TestRepositoryNames(t *testing.T) {
 	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "schemas" && strings.Contains(p.text, "maxFailures") }) {
 		t.Error("the configSchema of plugins/restart-policy is no place")
 	}
+	// U1 reads the id of each row of a bundle that a shipped profile lists, and each
+	// golden dump of a shipped profile, line by line (decision 14; 00:651; 08:1266).
+	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "ids" && p.text == "restart-policy" }) {
+		t.Error("the row restart-policy of aiops-core, which the cli profile lists, is no place")
+	}
+	if !slices.ContainsFunc(ps, func(p place) bool { return p.key == "ids" && p.text == "command-profile" }) {
+		t.Error("the row command-profile of aiops-cli, which the cli profile lists, is no place")
+	}
+	for dump, line := range map[string]string{"cmd/aiopsctl/testdata/cli/cli.dump.golden": "plugin=aiops/cli", "cmd/aiopsctl/testdata/cli/cli.hooks.golden": ""} {
+		if !slices.ContainsFunc(ps, func(p place) bool { return p.key == dump && strings.Contains(p.text, line) }) {
+			t.Errorf("the golden dump %s of the shipped cli profile is no place", dump)
+		}
+	}
 	if bad := lint(r, ps); len(bad) > 0 {
 		t.Errorf("U1 or U3 finds names in the repository:\n%s", strings.Join(bad, "\n"))
 	}
