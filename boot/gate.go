@@ -282,6 +282,22 @@ func (g GateResult) NotEvaluated() []string {
 	return out
 }
 
+// Report returns what dist build prints of its gate (ADR-060 decisions 9, 17 and 22): a
+// line for each check that passed on every row, one for each warning of a deprecated
+// major, which never denies, and the lines of NotEvaluated.
+func (g GateResult) Report() []string {
+	var out []string
+	for _, s := range g.Slots {
+		if s.Evaluated && len(s.Fails) == 0 {
+			out = append(out, fmt.Sprintf("check %d %s: pass", s.N, s.Name))
+		}
+	}
+	for _, w := range g.Warnings {
+		out = append(out, fmt.Sprintf("check %d %s: warning: %s", w.Check, g.Slots[w.Check-1].Name, w.Reason))
+	}
+	return append(out, g.NotEvaluated()...)
+}
+
 // Denied returns an error that lists each denial of g, naming the row and the check
 // that denied, the module table lookup included (ADR-060 decision 17); nil for none.
 func (g GateResult) Denied() error {

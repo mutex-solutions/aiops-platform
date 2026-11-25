@@ -123,11 +123,10 @@ type tablePlugin struct {
 func Build(ctx context.Context, q Request) (Result, error) {
 	b := &build{q: q, recorded: map[string]string{}, progress: cmp.Or[io.Writer](q.Progress, io.Discard)}
 	scratch, err := os.MkdirTemp("", "aiopsctl-build-")
-	if err != nil {
+	if b.scratch = scratch; err != nil {
 		return Result{}, err
 	}
 	defer os.RemoveAll(scratch)
-	b.scratch = scratch
 	if err := b.inputs(ctx); err != nil {
 		return Result{}, err
 	}
@@ -178,7 +177,8 @@ func Build(ctx context.Context, q Request) (Result, error) {
 		}
 	}
 	res.Manifest, merr = m.Write()
-	if err = errors.Join(err, lerr, ferr, aerr, CheckLicences(l, b.site.AcceptLicenses), merr, fakes(pkgs)); err != nil {
+	if err = errors.Join(b.passed("versions: the strict-version check", err), lerr, b.passed("init: the deny-list scan", ferr), aerr, b.passed("licences: the licence scan of aiops",
+		CheckLicences(l, b.site.AcceptLicenses)), b.passed("manifest: the module table and the ids of its plugins", merr), b.passed("graph: no fake, sdk/testkit or testdata package", fakes(pkgs))); err != nil {
 		return res, err
 	}
 	switch {
@@ -202,8 +202,8 @@ func (b *build) inputs(ctx context.Context) error {
 	switch {
 	case q.ModCache == "":
 		return errors.New("dist build needs --modcache: every module source is a directory until L14 clears, and no default proxy is asked (ADR-044 decision 7)")
-	case strings.Contains(strings.ReplaceAll(q.Proxy, "file://", ""), "://"): // in any element of the list
-		return fmt.Errorf("GOPROXY names %s: until L14 clears, every module source of the builder is a file:// directory and dist build refuses a proxy URL (ADR-044 decision 7; ADR-060 decision 21)", q.Proxy)
+	case slices.ContainsFunc(strings.FieldsFunc(q.Proxy, func(r rune) bool { return r == ',' || r == '|' }), func(e string) bool { return e != "direct" && e != "off" && !strings.HasPrefix(e, "file://") }):
+		return fmt.Errorf("GOPROXY names %s: until L14 clears, every module source of the builder is a file:// directory and dist build refuses a proxy URL, which go reads as https:// with no scheme (ADR-044 decision 7; ADR-060 decision 21)", q.Proxy)
 	case !filepath.IsAbs(q.Out) || !filepath.IsAbs(q.ModCache) || !filepath.IsAbs(q.Cache):
 		return errors.New("the output directory, the module cache and the builder's cache are absolute paths")
 	}
@@ -748,8 +748,8 @@ func fakes(pkgs []Package) error {
 }
 
 // gate runs the clauses of dist build on the manifests of what the build builds, an
-// enabled row of each plugin (ADR-060 decisions 17 and 22): it prints each clause it does
-// not evaluate with the reason, and a denial fails the build and names its check.
+// enabled row of each plugin (ADR-060 decisions 9, 17 and 22): it prints each check that
+// passes, each warning and each clause it does not evaluate; a denial names its check.
 func (b *build) gate(manifest []byte) error {
 	d, err := boot.ReadDistribution("the signed manifest of the build", manifest)
 	if err != nil {
@@ -771,10 +771,14 @@ func (b *build) gate(manifest []byte) error {
 		return err
 	}
 	g := boot.GateWith(boot.WithLoader(c), boot.GateInput{Entry: boot.EntryBuild, Mods: mods, Bindings: d.Bindings(), Dist: &d, Artifacts: map[string]boot.Artifact{}})
-	for _, l := range g.NotEvaluated() {
-		fmt.Fprintln(b.progress, "gate: "+l)
-	}
+	fmt.Fprintln(b.progress, "gate: "+strings.Join(g.Report(), "\ngate: ")) // never empty: checks 3 and 9 are S2b
 	return g.Denied()
+}
+
+// passed prints the outcome of the check what of dist build, err, and returns err.
+func (b *build) passed(what string, err error) error {
+	fmt.Fprintf(b.progress, "%s: %s\n", what, map[bool]string{true: "pass", false: "fail"}[err == nil])
+	return err
 }
 
 // moduleDir returns the directory of the package pkg of a site plugin in the scratch
@@ -809,14 +813,13 @@ func (b *build) source(ctx context.Context, pkgs []Package, bumped bool) error {
 	var errs []error
 	for _, p := range b.plugins {
 		fs, err := vet.Module(b.moduleDir(p.pkg), vet.Std{Go: b.g.Bin, Env: b.g.Env, Dir: b.g.Dir})
-		errs = append(errs, err)
 		for _, f := range fs {
-			errs = append(errs, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
+			err = errors.Join(err, fmt.Errorf("import boundary of %s: %s", p.pkg, f))
 		}
+		errs = append(errs, b.passed("boundary: the import boundary and plugin vet of "+p.pkg, err))
 	}
 	for _, p := range b.site.Plugins {
-		fmt.Fprintf(b.progress, "suites: go test %s/...\n", p.Path)
-		if _, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", p.Path+"/..."); err != nil {
+		if _, err := b.g.Run(ctx, "test", "-count=1", "-tags=grpcnotrace", p.Path+"/..."); b.passed("suites: go test "+p.Path+"/...", err) != nil {
 			errs = append(errs, fmt.Errorf("the suites of %s: %w", p.Path, err))
 		}
 	}
@@ -877,7 +880,7 @@ func (b *build) link(ctx context.Context, res Result, pkgs []Package, l Licences
 	var cl Licences
 	if err == nil {
 		cl, err = ScanLicences(ctl)
-		err = errors.Join(err, CheckLicences(cl, b.site.AcceptLicenses))
+		err = errors.Join(err, b.passed("licences: the licence scan of aiopsctl", CheckLicences(cl, b.site.AcceptLicenses)))
 		if err == nil {
 			_, err = Notices(filepath.Join(out, "aiopsctl"), "aiopsctl", ctl, cl, created)
 		}

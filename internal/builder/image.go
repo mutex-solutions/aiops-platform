@@ -137,8 +137,7 @@ func toolchainFiles(goroot string) ([]File, error) {
 	return out, err
 }
 
-// component is one package of an SBOM: a module, or a binary or an image with no
-// version.
+// component is one package of an SBOM: a module, or a binary or an image with no version.
 type component struct{ name, version, sum, licence string }
 
 // treeComponents returns the toolchain module, the module of each line of the

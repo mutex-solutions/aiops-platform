@@ -317,6 +317,18 @@ func TestGateReportsWhatItDoesNotEvaluateAndWhoDenied(t *testing.T) {
 			t.Errorf("the report lacks %q:\n%s", want, got)
 		}
 	}
+	// What dist build prints of its gate adds a line for each check that passed on every
+	// row, and for each warning of a deprecated major (ADR-060 decisions 9 and 22).
+	g.Warnings = []RowResult{{Check: CheckDefinitions, Row: "b", Status: StatusPass, Rule: RuleDeprecated, Reason: "row \"b\": of a deprecated major"}}
+	rep := strings.Join(g.Report(), "\n") + "\n"
+	for _, want := range []string{"check 8 Layer rules: pass\n", "check 2 Definition versions: warning: row \"b\": of a deprecated major\n", got + "\n"} {
+		if !strings.Contains(rep, want) {
+			t.Errorf("the report of dist build lacks %q:\n%s", want, rep)
+		}
+	}
+	if strings.Contains(rep, "check 7 Key and hook classes: pass") {
+		t.Errorf("the report of dist build passes check 7, which denies row a:\n%s", rep)
+	}
 	err := g.Denied()
 	for _, want := range []string{"the gate at profile render denies row m by the module table lookup, which runs before the ten checks: ",
 		"the gate at profile render denies row a by check 7 Key and hook classes (provider-binding): "} {
