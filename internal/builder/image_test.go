@@ -380,12 +380,12 @@ func TestImagePath(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("DOCKER_ARGS", args)
 	builderDigest := "sha256:" + strings.Repeat("b", 64)
-	release := func(annotations map[string]string) string {
+	release := func(tag string, annotations map[string]string) string {
 		layer := reg.Blob("aiops/release", "application/vnd.aiops.distribution.manifest.v1+yaml", []byte("manifest\n"))
 		empty := reg.Blob("aiops/release", ocitest.EmptyType, []byte("{}"))
 		m, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ocitest.ManifestType, "artifactType": "application/vnd.aiops.distribution.v1",
 			"config": empty, "layers": []any{layer}, "annotations": annotations})
-		return reg.Manifest("aiops/release", "", ocitest.ManifestType, m).Digest
+		return reg.Manifest("aiops/release", tag, ocitest.ManifestType, m).Digest
 	}
 	site := func(ref string) string {
 		dir := t.TempDir()
@@ -396,7 +396,7 @@ func TestImagePath(t *testing.T) {
 		return p
 	}
 	modcache := t.TempDir()
-	good := release(map[string]string{BuilderAnnotation: builderDigest})
+	good := release("latest", map[string]string{BuilderAnnotation: builderDigest})
 	yaml := site("registry.example/aiops/release@" + good)
 	r, err := RunImage(context.Background(), ImageRequest{DistYAML: yaml, ModCache: modcache, AllowBump: []string{"example.com/x"},
 		Mirrors: map[string]string{"registry.example/aiops": reg.Host + "/aiops"}, Progress: io.Discard})
@@ -430,11 +430,23 @@ func TestImagePath(t *testing.T) {
 		t.Errorf("the image's aiopsctl is given another mirror, or no release artifact in the scratch directory (%v):\n%s\n%s", err, cmd, scratch)
 	}
 	for _, c := range []struct{ name, ref, want string }{
-		{"no annotation", reg.Host + "/aiops/release@" + release(nil), BuilderAnnotation},
+		{"no annotation", reg.Host + "/aiops/release@" + release("", nil), BuilderAnnotation},
 		{"a digest the registry does not hold", reg.Host + "/aiops/release@sha256:" + strings.Repeat("c", 64), "release"},
 	} {
 		if _, err := RunImage(context.Background(), ImageRequest{DistYAML: site(c.ref), ModCache: modcache, Progress: io.Discard}); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v", c.name, err)
 		}
+	}
+	// plugin smoke names the release artifact by digest, as dist.yaml does and as the local
+	// path refuses otherwise: one named by a tag, which the registry resolves to the same
+	// artifact, is refused before any container runs with the plugin directory and the
+	// module cache bound (08:401).
+	if err := os.Remove(args); err != nil {
+		t.Fatal(err)
+	}
+	tag := reg.Host + "/aiops/release:latest"
+	_, err = RunImage(context.Background(), ImageRequest{Smoke: t.TempDir(), Against: tag, ModCache: modcache, Progress: io.Discard})
+	if _, serr := os.Stat(args); err == nil || !strings.Contains(err.Error(), "by digest") || !strings.Contains(err.Error(), "08:401") || serr == nil {
+		t.Errorf("plugin smoke against %s: %v; the container runtime ran: %v", tag, err, serr == nil)
 	}
 }

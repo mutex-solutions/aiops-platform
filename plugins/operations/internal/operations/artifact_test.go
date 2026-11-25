@@ -467,8 +467,8 @@ func TestVerifyBuildsInProcessCode(t *testing.T) {
 // mirrors and the builder to the builder of the toolbox, and passes when every row of
 // the test-only profile it booted is ACTIVE or names the keys it waits for (ADR-060
 // decision 58, reading 1); a row that is neither fails it, naming the row, and so does
-// a profile with no row. It refuses a relative path and no release, and builds nothing
-// then.
+// a profile with no row. It refuses a relative path and a release that is missing or
+// not named by digest (08:401), and builds nothing then.
 func TestSmoke(t *testing.T) {
 	b := &packBox{built: launch.Built{Rows: []launch.RowWait{{ID: "clock", State: kernel.Active},
 		{ID: "echo:echo", State: kernel.Pending, WaitsFor: []string{"echoers"}}}}}
@@ -487,7 +487,7 @@ func TestSmoke(t *testing.T) {
 		t.Errorf("Smoke that booted no row = %v; want a refusal", err)
 	}
 	for _, bad := range []func(*def.BuildRequest){func(q *def.BuildRequest) { q.Plugin = "echo" }, func(q *def.BuildRequest) { q.ModCache = "" },
-		func(q *def.BuildRequest) { q.Against = "" }} {
+		func(q *def.BuildRequest) { q.Against = "" }, func(q *def.BuildRequest) { q.Against = "oci://registry.test/aiops/release:latest" }} {
 		r := q
 		bad(&r)
 		if _, err := l.Smoke(t.Context(), r); !errors.Is(err, def.ErrUsage) {

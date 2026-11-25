@@ -670,6 +670,10 @@ func Run(t *testing.T, mount Mount) {
 			if _, err := u.ops.Smoke(t.Context(), q); !errors.Is(err, operations.ErrUsage) {
 				t.Errorf("a relative plugin directory: %v, want ErrUsage", err)
 			}
+			q.Plugin, q.Against = filepath.Join(u.s.Dir, "plugin"), "oci://registry.test/aiops/release:latest"
+			if _, err := u.ops.Smoke(t.Context(), q); !errors.Is(err, operations.ErrUsage) {
+				t.Errorf("a release named by a tag, not by digest (08:401): %v, want ErrUsage", err)
+			}
 			if h := u.home(); h.Current != "" || len(h.Records) != 0 {
 				t.Errorf("plugin smoke wrote the home: %+v", h)
 			}
