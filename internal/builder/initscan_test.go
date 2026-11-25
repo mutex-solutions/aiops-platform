@@ -4,6 +4,10 @@ package builder
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"slices"
@@ -89,6 +93,36 @@ func TestInitDenyList(t *testing.T) {
 				t.Errorf("%s %s: %v", from, name, got[from])
 			}
 		}
+	}
+}
+
+// Each exception holds the version it was reviewed at as a literal, so a bump of a pin,
+// the toolchain's among them, leaves the row behind and the scan refuses the call again
+// until a review moves the row (owner, 2026-11-25; ADR-044 decision 21). A row that
+// names a constant, as ToolchainVersion, follows the pin unreviewed: the scan stamps the
+// standard library with the same constant, so TestInitDenyList passes at any pin.
+func TestExceptionsHoldReviewedVersions(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "initscan.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := 0
+	ast.Inspect(f, func(n ast.Node) bool {
+		vs, ok := n.(*ast.ValueSpec)
+		if !ok || vs.Names[0].Name != "exceptions" {
+			return true
+		}
+		for _, e := range vs.Values[0].(*ast.CompositeLit).Elts {
+			row := e.(*ast.CompositeLit).Elts
+			if _, lit := row[2].(*ast.BasicLit); !lit {
+				t.Errorf("the exception of %s holds its version as %s, not as the literal it was reviewed at", types.ExprString(row[0]), types.ExprString(row[2]))
+			}
+			rows++
+		}
+		return false
+	})
+	if rows != len(exceptions) {
+		t.Errorf("read %d rows of exceptions in initscan.go, and the table holds %d", rows, len(exceptions))
 	}
 }
 
