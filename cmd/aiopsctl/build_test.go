@@ -220,7 +220,8 @@ func TestDistBuildSignAndUse(t *testing.T) {
 // check 10, builds a throwaway distribution and boots its test-only profile, where every row of
 // aiops-core but reload-socket, which a --patch disables, is ACTIVE and the echo row
 // waits for echoers, which nothing provides, so smoke passes (ADR-060 decision 58,
-// reading 1; ADR-062 decision 27). On the local path verify builds the module at the
+// reading 1; ADR-062 decision 27); so does smoke of a command row, whose suite reads the
+// cases of its fixtures/commands/. On the local path verify builds the module at the
 // version and sum of echo and runs its tests, its suites among them, and fails a sum
 // that the module source does not serve (ADR-060 decision 46).
 func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, echo modulePin, builderPath string) {
@@ -246,6 +247,23 @@ func smokeAndVerify(t *testing.T, manifest []byte, release, src, dir string, ech
 		if !strings.Contains(progress.String(), want) {
 			t.Errorf("plugin smoke --builder %s printed no %q:\n%s", builderPath, want, progress.String())
 		}
+	}
+	// A command row passes step 5 on the cases of its own fixtures/commands/, as plugin
+	// check runs them, and waits for commands, which no row of the server provides (ADR-060
+	// decision 58, reading 1, and its note of 2026-11-25).
+	cmdy := filepath.Join(filepath.Dir(dir), "cmdy")
+	render(t, src, cmdy, "acme/cmdy", "commands", func(files map[string]string) {
+		files["fixtures/commands/paths.json"] = `[{"path": "example", "summary": "An example command."}]` + "\n"
+		files["internal/command/command.go"] = strings.Replace(files["internal/command/command.go"], "return ErrNotImplemented", "return ctx.Err()", 1)
+	})
+	progress.Reset()
+	b, err = tools.Build(t.Context(), launch.BuildRequest{Plugin: cmdy, Against: release, ModCache: src, Builder: builderPath})
+	got = map[string]string{}
+	for _, r := range b.Rows {
+		got[r.ID] = string(r.State) + " " + strings.Join(r.WaitsFor, " ")
+	}
+	if err != nil || got["cmdy"] != "PENDING commands" || !strings.Contains(progress.String(), "smoke: the suite of commands on example.com/acme/cmdy") {
+		t.Errorf("plugin smoke --builder %s of a command row: %v, rows %v\n%s", builderPath, err, got, progress.String())
 	}
 	if builderPath != "local" {
 		return
@@ -429,20 +447,18 @@ func link(from, to string) error {
 type modulePin struct{ path, sum string }
 
 // plugin writes the module example.com/acme/echo at v0.1.0 into the module source src:
-// the echoers template of plugin new for acme/echo, its stub written as an author
-// fills it in, its go.sum resolved through src and its generated half written, as plugin
-// check --write writes it. It works in scratch with a module cache of its own.
+// the echoers template of plugin new for acme/echo, its stub written as an author fills it
+// in, as render writes it in scratch.
 func plugin(t *testing.T, src, scratch string) modulePin {
 	t.Helper()
-	data, err := templates.NewData("acme/echo", testVersion, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	files, err := templates.Render("echoers", data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	files["internal/echo/echo.go"] = []byte(`// Package echo is the echoer of acme/echo.
+	dir := filepath.Join(scratch, "echo")
+	return zipModule(t, src, render(t, src, dir, "acme/echo", "echoers", func(files map[string]string) {
+		files["internal/echo/echo.go"] = echoGo
+	}), dir)
+}
+
+// echoGo is the echoer of acme/echo, as its author writes it.
+const echoGo = `// Package echo is the echoer of acme/echo.
 package echo
 
 import (
@@ -469,28 +485,43 @@ func (e Echoer) Echo(ctx context.Context, msg string) (string, error) {
 	}
 	return "echo: " + msg, nil
 }
-`)
-	dir := filepath.Join(scratch, "echo")
+`
+
+// render writes into dir the template of plugin new of registry for the plugin id, with
+// the files that edit changes, its go.sum resolved through the module source src and its
+// generated half written, as plugin check --write writes it, and returns its module
+// path. It works with a module cache of its own beside dir.
+func render(t *testing.T, src, dir, id, registry string, edit func(map[string]string)) string {
+	t.Helper()
+	data, err := templates.NewData(id, testVersion, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := templates.Render(registry, data)
+	if err != nil {
+		t.Fatal(err)
+	}
 	written := map[string]string{}
 	for p, b := range files {
 		written[p] = string(b)
 	}
+	edit(written)
 	if err := writeFiles(dir, written); err != nil {
 		t.Fatal(err)
 	}
 	for k, v := range map[string]string{"GOPROXY": "file://" + filepath.ToSlash(src), "GOSUMDB": "off", "GOFLAGS": "-mod=mod -modcacherw", "GOWORK": "off",
-		"GOMODCACHE": filepath.Join(scratch, "mod"), "GONOSUMDB": "", "GOPRIVATE": "", "GOTOOLCHAIN": "local"} {
+		"GOMODCACHE": filepath.Join(filepath.Dir(dir), "mod"), "GONOSUMDB": "", "GOPRIVATE": "", "GOTOOLCHAIN": "local"} {
 		t.Setenv(k, v)
 	}
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = dir
 	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go mod tidy of the plugin: %v\n%s", err, b)
+		t.Fatalf("go mod tidy of %s: %v\n%s", id, err, b)
 	}
 	if err := plugingen.Write(dir); err != nil {
 		t.Fatal(err)
 	}
-	return zipModule(t, src, data.Module, dir)
+	return data.Module
 }
 
 // bumpPlugin writes into src the module path at the version raised, a copy of its zip at
