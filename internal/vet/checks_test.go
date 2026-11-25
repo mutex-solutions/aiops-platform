@@ -33,7 +33,7 @@ func write(t *testing.T, dir, name, content string) {
 // YAML library with its importers, pgx and River for the S0 probes, an upstream that a
 // plugin wraps, and two entries where one module path holds the other.
 var testRegister = []Upstream{
-	{ID: "go-yaml", Modules: []string{"go.yaml.in/yaml/v3"}, Importers: dirs("boot", "tools", "internal/plugingen")},
+	{ID: "go-yaml", Modules: []string{"go.yaml.in/yaml/v3"}, Importers: append(dirs("boot", "tools", "internal/plugingen"), ImportDir{Dir: "cmd/aiopsctl", Tests: true})},
 	{ID: "river", Modules: []string{"github.com/riverqueue/river", "github.com/riverqueue/river/rivertype"}, Importers: dirs("plugins/jobs-river")},
 	{ID: "pgx", Modules: []string{"github.com/jackc/pgx/v5"}, Importers: dirs("plugins/jobs-river")},
 	{ID: "wrapped", Modules: []string{"example.org/wrapped"}, Plugins: []string{"aiops/wrapper"}},
@@ -119,6 +119,8 @@ func TestImports(t *testing.T) {
 		{"loader test of its own package", "loader/zz_cycle_test.go", imp(mp+"/loader", mp+"/sdk/testkit/cycle", mp+"/sdk/def/launch/v0/fake"), ""},
 		{"loader source of its own package", "loader/a.go", imp(mp + "/loader"), "loader imports"},
 		{"yaml in another internal package", "internal/serve/x.go", imp("go.yaml.in/yaml/v3"), "U2: imported outside the plugins and importers of its register entry go-yaml"},
+		{"yaml in a test of an importer of tests", "cmd/aiopsctl/x_test.go", imp("go.yaml.in/yaml/v3"), ""},
+		{"yaml outside the tests of an importer of tests", "cmd/aiopsctl/x.go", imp("go.yaml.in/yaml/v3"), "U2: imported outside the plugins and importers of its register entry go-yaml"},
 		{"module of no entry in a command", "cmd/aiopsctl/x.go", imp("example.org/unlisted"), "U2: its module is in no entry's modules"},
 		{"the longest module path names the entry", "tools/x/x.go", imp("example.org/a/b/c"), ""},
 		{"the longest module path names the entry elsewhere", "internal/serve/x.go", imp("example.org/a/b/c"), "U2: imported outside the plugins and importers of its register entry b"},

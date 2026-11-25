@@ -19,6 +19,7 @@ entries:
     names: [go-yaml]
     importers:
       - {dir: boot, decision: an accepted decision}
+      - {dir: cmd/aiopsctl, tests: true, decision: an accepted decision}
   - id: queue
     names: [river, riverqueue]
     plugins: [jobs-river]
@@ -81,6 +82,8 @@ func TestNameLint(t *testing.T) {
 		{"a command path", place{"plugins/command-x/fixtures/commands/paths.json: river sync", "commands", "river sync"},
 			"plugins/command-x/fixtures/commands/paths.json: river sync: U1: \"river\""},
 		{"a command path of the entry's plugin", place{"x", "commands", "jobs-river"}, "\"river\""},
+		{"a test file of an importer of tests", place{"x", "cmd/aiopsctl/a_test.go", "var goYaml int"}, ""},
+		{"a dump under an importer of tests", place{"x", "cmd/aiopsctl/testdata/cli/cli.dump.golden", "go-yaml"}, "\"go-yaml\""},
 	} {
 		got := lint(r, []place{c.p})
 		switch {
