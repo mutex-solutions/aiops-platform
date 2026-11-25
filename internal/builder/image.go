@@ -373,6 +373,8 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	site, err := Site{Release: q.Against}, error(nil)
 	if q.Smoke == "" {
 		site, err = readSite(q.DistYAML)
+	} else if !byDigest.MatchString(q.Against) {
+		err = fmt.Errorf("plugin smoke --against names the release artifact by digest, not %q (08:401)", q.Against)
 	}
 	if err != nil {
 		return Result{}, err

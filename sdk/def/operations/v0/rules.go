@@ -20,6 +20,8 @@ import (
 var (
 	kebab = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 	hook  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`) // a key or a hook, as boot reads signed
+	// byDigest is an OCI reference by digest, as dist.yaml names its release (08:401).
+	byDigest = regexp.MustCompile(`^(oci://)?[^@\s]+@sha256:[0-9a-f]{64}$`)
 )
 
 func usage(format string, a ...any) error {
@@ -157,10 +159,11 @@ func Group(id string) string {
 }
 
 // SmokeForm refuses a request of plugin smoke whose plugin directory or module cache
-// is not an absolute path, or that names no release artifact (added at 0.4).
+// is not an absolute path, or that names no release artifact by digest (added at 0.4).
 func SmokeForm(r BuildRequest) error {
-	if !strings.HasPrefix(r.Plugin, "/") || !strings.HasPrefix(r.ModCache, "/") || r.Against == "" {
-		return usage("plugin smoke takes the plugin directory %q and the module cache %q, each an absolute path, and the release artifact of --against", r.Plugin, r.ModCache)
+	if !strings.HasPrefix(r.Plugin, "/") || !strings.HasPrefix(r.ModCache, "/") || !byDigest.MatchString(r.Against) {
+		return usage("plugin smoke takes the plugin directory %q and the module cache %q, each an absolute path, and the release artifact of --against by digest, not %q (08:401)",
+			r.Plugin, r.ModCache, r.Against)
 	}
 	return nil
 }
