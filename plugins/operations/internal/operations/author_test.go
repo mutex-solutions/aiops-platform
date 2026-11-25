@@ -244,6 +244,27 @@ func TestPackOfCodeNamesWhatDidNotRun(t *testing.T) {
 	}
 }
 
+// Step 5 fails on a suite with a case that skipped and names each such case: the suite
+// recorded no half, and no attestation names a half that mostly did not run (ADR-060
+// decision 50).
+func TestCheckNamesTheCasesThatSkipped(t *testing.T) {
+	b := &packBox{sum: packSummary(), suite: &launch.SuiteReport{Definitions: []launch.SuiteResult{{Name: "echoers", Revision: 1,
+		Skipped: []string{"echoers/reply", "echoers/stable"}}}}, scenario: &launch.ScenarioReport{Name: "echo", Version: "1", Halves: []string{"kernel"}}}
+	r, err := (Library{Box: checkBox{b}}).Check(t.Context(), def.CheckRequest{Caller: caller(), Dir: pluginDir(t, pack)})
+	if err != nil || len(r.Steps) != 8 || r.Steps[4].Outcome != def.StepFail || r.Attestation != nil {
+		t.Fatalf("Check = %v, %v; want step 5 failing and no attestation", steps(r), err)
+	}
+	var texts []string
+	for _, d := range r.Steps[4].Diagnostics {
+		texts = append(texts, d.Text)
+	}
+	for _, want := range []string{"echoers/reply: the case skipped and did not run", "echoers/stable: the case skipped and did not run"} {
+		if !slices.Contains(texts, want) {
+			t.Errorf("step 5 says %q; want %q", texts, want)
+		}
+	}
+}
+
 // Step 1 refuses a manifest that lists remote until S2b (ADR-060 decision 23).
 func TestCheckRefusesRemote(t *testing.T) {
 	b := &connectorBox{sum: launch.ManifestSummary{ID: "acme/x", Version: "0.1.0", Runtimes: []string{"inproc", "remote"}}}

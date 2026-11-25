@@ -167,6 +167,26 @@ func TestTemplateJob(t *testing.T) {
 			if r := rep.Definitions[0]; r.Name != reg || r.Revision < 1 || !slices.Equal(r.Halves, []string{"obligations"}) || !slices.Equal(r.Failed, obligations[reg]) {
 				t.Errorf("step 5: %+v; want suite %s failing each of %v once", r, reg, obligations[reg])
 			}
+			// A mount of the author's that skips each case after the first: step 5 names each
+			// case that skipped, and no half is recorded, so nothing attests a half that
+			// mostly did not run (ADR-060 decision 50).
+			if reg == "echoers" {
+				mount := "package jobechoers_test\n\nimport (\n\t\"strings\"\n\t\"testing\"\n\n\tplug \"example.com/acme/job-echoers\"\n" +
+					"\t\"github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/conformance\"\n\t\"github.com/mutex-solutions/aiops-platform/sdk/kernel\"\n" +
+					"\t\"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest\"\n)\n\n" +
+					"func MountEchoers(t *testing.T) (conformance.Subject, *kernel.Root) {\n\tif strings.Contains(t.Name(), \"/\") {\n\t\tt.Skip(\"a case that this mount cannot set up\")\n\t}\n" +
+					"\troot := kerneltest.New(t)\n\treturn conformance.Contribution(root.Plugin(plug.Plugin, nil)), root\n}\n"
+				if err := os.WriteFile(filepath.Join(dir, "zz_mount_test.go"), []byte(mount), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				rep, err = tl.Suite(t.Context(), launch.SuiteRequest{Dir: dir, Definitions: map[string]string{reg: "0.1"}, Halves: []string{"obligations"}, Fixtures: filepath.Join(dir, "fixtures")})
+				if err != nil || len(rep.Definitions) != 1 || len(rep.Definitions[0].Halves) != 0 || !slices.Equal(rep.Definitions[0].Skipped, obligations[reg][1:]) {
+					t.Errorf("step 5 on a mount that skips each case after the first: %+v, %v; want no half and %v skipped", rep, err, obligations[reg][1:])
+				}
+				if err := os.Remove(filepath.Join(dir, "zz_mount_test.go")); err != nil {
+					t.Fatal(err)
+				}
+			}
 			// The failures of commands come from its stub: a command that works passes the
 			// cases of run.json and cancel.json that the template ships, and paths.json,
 			// which the author writes, fails on its missing file (07-c4-plugin-sdk.md:1561).

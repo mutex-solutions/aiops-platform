@@ -8,13 +8,16 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/conformance"
+	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
 )
@@ -33,21 +36,45 @@ func contribution(echoer func(c *kernel.Context) echoers.Echoer) conformance.Mou
 	}
 }
 
+// correct is an echoer that keeps the contract.
+func correct(c *kernel.Context) echoers.Echoer {
+	return echoFunc(func(ctx context.Context, msg string) (string, error) {
+		leave, ok := c.Enter()
+		if !ok {
+			return "", kernel.ErrInactive
+		}
+		defer leave()
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return "echo: " + msg, nil
+	})
+}
+
 // An echoer that keeps the contract passes the obligations half.
 func TestObligationsPassOnACorrectEchoer(t *testing.T) {
-	conformance.Run(t, contribution(func(c *kernel.Context) echoers.Echoer {
-		return echoFunc(func(ctx context.Context, msg string) (string, error) {
-			leave, ok := c.Enter()
-			if !ok {
-				return "", kernel.ErrInactive
+	conformance.Run(t, contribution(correct))
+}
+
+// The suite records the half it ran only when every case of it ran (ADR-060 decision
+// 50): on a mount that skips each case after the first, as one that cannot set them up
+// does, most of the half did not run, and nothing is recorded for the release build or
+// step 5 of plugin check to attest.
+func TestASuiteWithASkippedCaseRecordsNothing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(deftest.RecordVar, dir)
+	mount := contribution(correct)
+	t.Run("suite", func(t *testing.T) {
+		conformance.Run(t, func(t *testing.T) (conformance.Subject, *kernel.Root) {
+			if strings.Count(t.Name(), "/") > 1 {
+				t.Skip("a case that this mount cannot set up")
 			}
-			defer leave()
-			if err := ctx.Err(); err != nil {
-				return "", err
-			}
-			return "echo: " + msg, nil
+			return mount(t)
 		})
-	}))
+	})
+	if files, err := filepath.Glob(filepath.Join(dir, "*.json")); err != nil || len(files) > 0 {
+		t.Errorf("the suite recorded %v (%v); a suite with a case that skipped records nothing", files, err)
+	}
 }
 
 const stubEnv = "ECHOERS_CONFORMANCE_STUB"
