@@ -340,28 +340,25 @@ func builderImage(ctx context.Context, s *oci.Store, def []byte, goroot, ctl str
 	return pushImage(ctx, s, y, ocispec.ImageConfig{Entrypoint: []string{"/aiopsctl"}, Env: append(slices.Clone(d.Env), "XDG_CACHE_HOME=/cache")})
 }
 
-// ImageRequest is dist build on the image path: the site's dist.yaml and the module
-// source, both absolute, the mirrors by prefix and the modules whose raise is allowed;
-// or plugin smoke, with the plugin directory and the release artifact for dist.yaml,
-// whose rows the image's aiopsctl prints on Stdout.
+// ImageRequest is dist build on the image path: the site's dist.yaml and the module source,
+// both absolute, the mirrors by prefix and the modules whose raise is allowed; or plugin
+// smoke, with the plugin directory and the release artifact, whose rows go to Stdout.
 type ImageRequest struct {
-	DistYAML, ModCache string
-	Smoke, Against     string
-	Mirrors            map[string]string
-	AllowBump          []string
-	Progress, Stdout   io.Writer
+	DistYAML, ModCache, Smoke, Against string
+	Mirrors                            map[string]string
+	AllowBump                          []string
+	Progress, Stdout                   io.Writer
 }
 
-// RunImage is dist build on the image path (ADR-044 decision 1; ADR-061 decision 21).
-// It reads the release artifact that dist.yaml names, by digest, through the mirrors
-// (ADR-044 decision 9), and runs the builder image that its annotation names in the same
-// repository, by digest, which the container runtime pulls and checks: the image's
-// aiopsctl, with the same command and --builder local, no network, the caller's user,
-// dist.yaml and the module source bound read-only, build/ beside dist.yaml bound
-// read-write, and the Go environment of ADR-060 decision 21. It returns what the image's
-// aiopsctl wrote. For plugin smoke the image's aiopsctl runs plugin smoke on the local
-// path, with the plugin directory bound read-only, and boots the throwaway distribution
-// inside the container; nothing is written beside the plugin.
+// RunImage is dist build on the image path (ADR-044 decisions 1 and 9; ADR-061 decision
+// 21): it reads the release artifact that dist.yaml names, by digest, through the mirrors,
+// and runs the builder image that its annotation names in the same repository, by digest,
+// which the container runtime pulls and checks: the image's aiopsctl, with the same
+// command and --builder local, no network, the caller's user, dist.yaml and the module
+// source bound read-only, build/ beside dist.yaml read-write, which a failed build leaves
+// as it found it, and the Go environment of ADR-060 decision 21. It returns what that
+// aiopsctl wrote. For plugin smoke it runs plugin smoke on the local path, the plugin
+// directory bound read-only, and boots the throwaway distribution inside the container.
 func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	q.Progress, q.Stdout = cmp.Or[io.Writer](q.Progress, io.Discard), cmp.Or[io.Writer](q.Stdout, q.Progress)
 	if !filepath.IsAbs(cmp.Or(q.DistYAML, q.Smoke)) || !filepath.IsAbs(q.ModCache) {
@@ -385,9 +382,11 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	}
 	image := repo + "@" + m.Annotations[BuilderAnnotation]
 	out := filepath.Join(filepath.Dir(q.DistYAML), "build")
-	if entries, err := os.ReadDir(out); q.Smoke == "" && err == nil && len(entries) > 0 {
+	entries, err := os.ReadDir(out)
+	if q.Smoke == "" && err == nil && len(entries) > 0 {
 		return Result{}, fmt.Errorf("%s exists and is not empty", out)
 	}
+	made := q.Smoke == "" && err != nil // a build that fails leaves no build/ that it made
 	scratch, err := os.MkdirTemp("", "aiopsctl-image-")
 	if err != nil {
 		return Result{}, err
@@ -419,6 +418,9 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout, cmd.Stderr = q.Stdout, q.Progress
 	if err := cmd.Run(); err != nil {
+		if made {
+			_ = os.Remove(out)
+		}
 		return Result{}, fmt.Errorf("the builder image %s: %w", image, err)
 	}
 	if q.Smoke != "" {
@@ -428,12 +430,11 @@ func RunImage(ctx context.Context, q ImageRequest) (Result, error) {
 	return Result{Manifest: manifest, Aiops: filepath.Join(out, "aiops", "aiops"), Image: filepath.Join(out, "image"), Aiopsctl: filepath.Join(out, "aiopsctl", "aiopsctl")}, err
 }
 
-// releaseArtifact returns the release artifact that release names by digest, read
-// through mirrors (ADR-044 decision 9): its OCI manifest, as read and parsed, and the
-// repository that holds it. It reads it from the registry, or, where a mirror's site
-// prefix is an absolute directory, from blobs/sha256/ under it, as an OCI image layout
-// holds it: so the image path hands it to the image's aiopsctl. An object whose digest
-// differs fails.
+// releaseArtifact returns the release artifact that release names by digest, read through
+// mirrors (ADR-044 decision 9): its OCI manifest, as read and parsed, and the repository
+// that holds it, from the registry or, where a mirror's site prefix is an absolute
+// directory, from blobs/sha256/ under it, as an OCI image layout holds it, the way the
+// image path hands it to the image's aiopsctl. An object whose digest differs fails.
 func releaseArtifact(ctx context.Context, release string, mirrors map[string]string) (ocispec.Manifest, []byte, string, error) {
 	ref := mirrored(strings.TrimPrefix(release, "oci://"), mirrors)
 	repo, dg, _ := strings.Cut(ref, "@")
