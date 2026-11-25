@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,8 +42,13 @@ func standIn(report string) *fstest.MapFile {
 // The S2a exit's steps C3 and C4 on the test distribution (ADR-060 decision 30;
 // ADR-062 decision 18): aiopsctl, over the test distribution's module table, packs
 // the echo pack, signs it, pushes it to a registry inside the test, installs it into
-// the profile of a running aiops-test, whose composition adds reload-socket and the toy
-// dispatcher to smoke, and enables its row. Install and enable each submit over the
+// the profile dev of a running aiops-test and enables its row. The home holds no
+// profiles/dev/profile.yaml, so the process boots the shipped dev, whose aiops-core runs
+// reload-socket (ADR-062 decision 2), with the test-state row, the toy rows that provide
+// the test distribution's required keys toy.spine and toy.store, and the toy dispatcher
+// in the profile layer of the home (ADR-060 decision 38). Install copies the shipped dev into the home and says
+// so, appends the pack's bundle to it, writes plugins.lock by the pushed digest and
+// unpacks the content (ADR-060 decision 27). Install and enable each submit over the
 // socket of the process, which answers passed, and the row is ACTIVE in the state that
 // test-state writes. plugin gate --against the test distribution's signed manifest
 // passes the pack, and a copy whose row sets required, which the bundle of an installed
@@ -51,10 +57,11 @@ func standIn(report string) *fstest.MapFile {
 // those the release build embeds do (ADR-060 decision 46).
 func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 	bin := harness.Binary(t)
-	p, err := harness.Start(t, bin, harness.Options{Profile: "echo", Context: t.Context(), Install: func(home string) error {
+	p, err := harness.Start(t, bin, harness.Options{Profile: "dev", Context: t.Context(), Install: func(home string) error {
 		return writeFiles(home, map[string]string{
-			"profiles/echo/profile.yaml": "bundles: [smoke, socket]\n",
-			"bundles/socket/bundle.yaml": "- insert:\n    - {id: reload-socket, plugin: aiops/reload-socket, roles: [api]}\n" +
+			"profiles/dev/aiops.patch.yml": "- insert:\n    - {id: state, plugin: aiops-test/test-state, roles: [api]}\n" +
+				"    - {id: spine, plugin: aiops-test/toy-spine, roles: [api], config: {workers: 2}}\n" +
+				"    - {id: store, plugin: aiops-test/toy-provider, roles: [api]}\n" +
 				"    - {id: dispatch, plugin: aiops/example-dispatch, roles: [api]}\n",
 			// The cli profile of the home meets the required set of the test distribution,
 			// whose required keys toy.spine and toy.store no row of aiops-core provides.
@@ -68,7 +75,7 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 	}
 	t.Cleanup(func() { p.Stop(10 * time.Second); _ = os.RemoveAll(p.Home) })
 	if s, ok := p.Until(time.Minute, harness.Snapshot.Running); !ok || s.RowState("reload-socket") != "ACTIVE" {
-		t.Fatalf("aiops-test did not run echo with reload-socket ACTIVE: %+v\n%s", s.State.Rows, p.Output())
+		t.Fatalf("aiops-test did not run the shipped dev with reload-socket ACTIVE: %+v\n%s", s.State.Rows, p.Output())
 	}
 	work := t.TempDir()
 	if err := writeFiles(work, echoPack); err != nil {
@@ -87,8 +94,8 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 	for _, args := range [][]string{{"key", "generate", "author"}, {"trust", "add", "author.pub", "--ids", "acme/*"},
 		{"plugin", "pack", "--out", "out"}, {"plugin", "sign", "--key", "author.key", "--out", "out"},
 		{"plugin", "push", reg.Host + "/echo-pack", "--out", "out"}, {"plugin", "gate", "<spec>", "--against", against},
-		{"plugin", "install", "<spec>", "--profile", "echo"},
-		{"plugin", "enable", "echo-pack:hello", "--profile", "echo"}} {
+		{"plugin", "install", "<spec>", "--profile", "dev"},
+		{"plugin", "enable", "echo-pack:hello", "--profile", "dev"}} {
 		if args[2] == "<spec>" {
 			args[2] = spec
 		}
@@ -103,6 +110,24 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 		if (args[1] == "install" || args[1] == "enable") && !strings.HasPrefix(r.out, "result passed, generation ") {
 			t.Errorf("%q answered %q; want the final result passed", args, r.out)
 		}
+		if args[1] == "install" && !strings.Contains(r.errOut, "copied the shipped profile dev to profiles/dev/profile.yaml") {
+			t.Errorf("install into dev of a home with no profiles/dev/profile.yaml did not say that it copied the shipped one:\n%s", r.errOut)
+		}
+	}
+	_, digest, _ := strings.Cut(spec, "@")
+	dev, err := fs.ReadFile(dist.Shipped(), "profiles/dev/profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"profiles/dev/profile.yaml": strings.Replace(string(dev), "bundles: [aiops-core]\n", "bundles: [aiops-core, acme/echo-pack]\n", 1),
+		"content/acme/echo-pack/README.md": echoPack["content/README.md"]} {
+		if b, err := os.ReadFile(filepath.Join(p.Home, filepath.FromSlash(name))); err != nil || string(b) != want {
+			t.Errorf("%s of the home: %q, %v; want %q", name, b, err, want)
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(p.Home, "profiles", "dev", "plugins.lock")); err != nil || digest == "" ||
+		!strings.Contains(string(b), "{id: acme/echo-pack, digest: "+digest+", content: sha256:") {
+		t.Errorf("plugins.lock of dev: %q, %v; want acme/echo-pack at %s with its content", b, err, digest)
 	}
 	if s, ok := p.Until(30*time.Second, func(s harness.Snapshot) bool { return s.RowState("echo-pack:hello") == "ACTIVE" }); !ok {
 		t.Errorf("the row echo-pack:hello is not ACTIVE in the running process: %+v", s.State.Rows)
@@ -119,8 +144,8 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 	}
 }
 
-// doTest runs aiopsctl with the module table and the signed manifest of the test
-// distribution, its shipped bundles and profiles over the release's, and tools.
+// doTest runs aiopsctl with the module table, the signed manifest and the shipped
+// bundles and profiles of the test distribution, its own over the release's, and tools.
 func doTest(t *testing.T, env map[string]string, tools authoring.Tools, args ...string) result {
 	t.Helper()
 	d, err := testdist.Distribution()
@@ -133,7 +158,7 @@ func doTest(t *testing.T, env map[string]string, tools authoring.Tools, args ...
 	}
 	var out, errOut syncBuffer
 	code := run(t.Context(), args, process{In: strings.NewReader(""), Out: &out, Err: &errOut, Environ: environ, Dir: cmp.Or(env["PWD"], "/"), Files: os.DirFS("/")},
-		distribution{Registry: d.Registry, Signed: d.Signed, Limits: d.Limits, Shipped: overlay{First: d.Shipped, Second: dist.Shipped()}, Tools: tools})
+		distribution{Registry: d.Registry, Signed: d.Signed, Limits: d.Limits, Shipped: d.Shipped, Tools: tools})
 	return result{code, out.String(), errOut.String()}
 }
 

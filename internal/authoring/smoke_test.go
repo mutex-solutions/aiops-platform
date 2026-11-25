@@ -18,8 +18,9 @@ import (
 
 // The boot of plugin smoke, with the server that cmd/aiops builds in the repository
 // (ADR-060 decision 58, reading 1; ADR-062 decision 27): the test-only profile is the
-// shipped aiops-core bundle and the plugin's bundle, its rows enabled and reload-socket
-// disabled by a --patch file, and Boot answers each row that the server mounted, from
+// aiops-core bundle that the server ships (ADR-060 decision 27), so the home holds no
+// copy of it, and the plugin's bundle, its rows enabled and reload-socket disabled by a
+// --patch file, and Boot answers each row that the server mounted, from
 // run/status.json, once it runs. A plugin row that does not mount, as one of a plugin
 // the distribution does not link, fails it by its id.
 func TestBoot(t *testing.T) {
@@ -36,7 +37,8 @@ func TestBoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var progress bytes.Buffer
-	rows, err := Boot(t.Context(), aiops, manifest, dir, filepath.Join(t.TempDir(), "home"), &progress)
+	home := filepath.Join(t.TempDir(), "home")
+	rows, err := Boot(t.Context(), aiops, manifest, dir, home, &progress)
 	ids := slices.Collect(func(yield func(string) bool) {
 		for _, r := range rows {
 			if r.State != kernel.Active || !yield(r.ID) {
@@ -46,6 +48,9 @@ func TestBoot(t *testing.T) {
 	})
 	if err != nil || !slices.Equal(ids, []string{"clock", "config-refs", "loader", "readiness", "reload", "restart-policy"}) {
 		t.Errorf("Boot of aiops-core = %+v, %v; want each row but reload-socket ACTIVE\n%s", rows, err, progress.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, "bundles", "aiops-core")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the home of smoke holds bundles/aiops-core, which the server ships: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "bundle.yaml"), []byte("- insert:\n    - {id: ghost, plugin: acme/ghost, roles: [api], enabled: false}\n"), 0o644); err != nil {
 		t.Fatal(err)

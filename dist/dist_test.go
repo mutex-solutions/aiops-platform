@@ -121,10 +121,12 @@ func TestShipsTheCLIProfile(t *testing.T) {
 	}
 }
 
-// reload-socket is a row of aiops-core with the roles of the reload row it serves, no
-// config and no required mark, so every server profile that lists aiops-core runs it;
-// the aiops-cli bundle disables it with a bundle-layer patch, so aiopsctl never listens
-// (ADR-062 decisions 1, 2 and 19).
+// The release ships the profile dev, which lists aiops-core alone at S2a: the rows of the
+// S1 core plugins and reload-socket (ADR-060 decision 27). reload-socket is a row of
+// aiops-core with the roles of the reload row it serves, no config and no required mark,
+// so every server profile that lists aiops-core runs it, dev included; the aiops-cli
+// bundle disables it with a bundle-layer patch, so aiopsctl never listens (ADR-062
+// decisions 1, 2 and 19).
 func TestAiopsCoreServesTheSocketAndAiopsCLIDisablesIt(t *testing.T) {
 	reg, _, _, err := Load()
 	if err != nil {
@@ -141,10 +143,18 @@ func TestAiopsCoreServesTheSocketAndAiopsCLIDisablesIt(t *testing.T) {
 		t.Fatalf("no row %s", id)
 		return boot.Row{}
 	}
-	home := fstest.MapFS{"profiles/core/profile.yaml": {Data: []byte("bundles: [aiops-core]\n")}}
-	core, _, err := boot.Compose(boot.Sources{Profile: "core", Home: home, Bundles: s}, boot.Options{Server: true, Modules: reg.Modules})
+	core, _, err := boot.Compose(boot.Sources{Profile: "dev", Home: s, Bundles: s}, boot.Options{Server: true, Modules: reg.Modules})
 	if err != nil {
 		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range core.Rows {
+		if ids = append(ids, r.ID); !r.Enabled {
+			t.Errorf("row %s of dev is disabled", r.ID)
+		}
+	}
+	if want := []string{"clock", "config-refs", "restart-policy", "reload", "reload-socket", "readiness"}; !slices.Equal(ids, want) {
+		t.Fatalf("dev composes %v, want %v", ids, want)
 	}
 	sock, rl := row(core, "reload-socket"), row(core, "reload")
 	if sock.Plugin != "aiops/reload-socket" || !sock.Enabled || sock.Required || !slices.Equal(sock.Roles, rl.Roles) || len(sock.Config.Map) != 0 {

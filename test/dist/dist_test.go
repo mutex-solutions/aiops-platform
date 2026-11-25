@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/trusted"
@@ -166,6 +167,42 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	}
 	// The launcher checks every entry against its plugin and every key name against the
 	// key table when it starts, so a run of any profile proves the table is consistent.
+}
+
+// The test distribution ships its own bundles and profiles over the release's, aiops-core
+// and dev among them (ADR-060 decision 27), as one file system whose walk lists both, as
+// the launcher's toolbox walks it for profile init and plugin install.
+func TestShipsTheReleaseFilesUnderItsOwn(t *testing.T) {
+	d, err := Distribution()
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk := func(fsys fs.FS) map[string]string {
+		files := map[string]string{}
+		err := fs.WalkDir(fsys, ".", func(p string, e fs.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				var b []byte
+				b, err = fs.ReadFile(fsys, p)
+				files[p] = string(b)
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return files
+	}
+	got := walk(d.Shipped)
+	for p, data := range walk(dist.Shipped()) {
+		if got[p] != data {
+			t.Errorf("the test distribution ships %s as %q, the release as %q", p, got[p], data)
+		}
+	}
+	for _, p := range []string{"limits.yaml", "bundles/smoke/bundle.yaml", "profiles/smoke/profile.yaml", "profiles/dev/profile.yaml"} {
+		if _, ok := got[p]; !ok {
+			t.Errorf("the test distribution ships no %s", p)
+		}
+	}
 }
 
 func TestSmokeProfileInProcess(t *testing.T) {
