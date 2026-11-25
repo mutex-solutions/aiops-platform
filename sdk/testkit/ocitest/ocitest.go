@@ -2,10 +2,11 @@
 
 // Package ocitest is a registry of the OCI distribution protocol that runs inside a
 // test, over net/http/httptest on the loopback interface, with its content in memory:
-// blobs pushed in one or two requests, manifests by tag and by digest, deleted by
-// digest, and the referrers API, which a registry can leave out so that a client falls
-// back to the referrers tag schema. With a user it asks for Basic credentials, as a
-// registry that a Docker config.json logs into does. Only test code imports it.
+// blobs pushed in one or two requests or in chunks, manifests by tag and by digest,
+// deleted by digest, and the referrers API, which a registry can leave out so that a
+// client falls back to the referrers tag schema. With a user it asks for Basic
+// credentials, as a registry that a Docker config.json logs into does. Only test code
+// imports it.
 package ocitest
 
 import (
@@ -56,6 +57,7 @@ type repo struct {
 	blobs     map[string][]byte
 	manifests map[string]stored // by digest
 	tags      map[string]string // tag to digest
+	uploads   map[string][]byte // the chunks of an upload, by its session
 }
 
 type stored struct {
@@ -91,7 +93,7 @@ func Digest(b []byte) string {
 func (r *Registry) repo(name string) *repo {
 	p := r.repos[name]
 	if p == nil {
-		p = &repo{blobs: map[string][]byte{}, manifests: map[string]stored{}, tags: map[string]string{}}
+		p = &repo{blobs: map[string][]byte{}, manifests: map[string]stored{}, tags: map[string]string{}, uploads: map[string][]byte{}}
 		r.repos[name] = p
 	}
 	return p
@@ -220,7 +222,13 @@ func (r *Registry) route(w http.ResponseWriter, q *http.Request, kind string, p 
 	case kind == "/blobs/uploads/" && q.Method == http.MethodPost && q.URL.Query().Get("digest") == "":
 		w.Header().Set("Location", q.URL.Path+rand.Text())
 		w.WriteHeader(http.StatusAccepted)
+	case kind == "/blobs/uploads/" && q.Method == http.MethodPatch:
+		p.uploads[ref] = append(p.uploads[ref], body...)
+		w.Header().Set("Location", q.URL.Path)
+		w.WriteHeader(http.StatusAccepted)
 	case kind == "/blobs/uploads/" && (q.Method == http.MethodPut || q.Method == http.MethodPost):
+		body = append(p.uploads[ref], body...)
+		delete(p.uploads, ref)
 		if d := q.URL.Query().Get("digest"); d != Digest(body) {
 			http.Error(w, `{"errors": [{"code": "DIGEST_INVALID"}]}`, http.StatusBadRequest)
 			return

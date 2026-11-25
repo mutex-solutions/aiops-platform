@@ -728,6 +728,47 @@ func TestVerifyRefusesAnotherSubject(t *testing.T) {
 	}
 }
 
+// verify takes, in place of the signature of plugin sign, the one cosign sign writes,
+// whose one subject has the artifact's digest and no name, so the signer of an artifact
+// that cosign signed is the key that verifies it (ADR-020 decision 2).
+func TestVerifyTakesTheSignatureOfCosign(t *testing.T) {
+	l, out, home, prefix := signed(t)
+	desc, _, _ := layout(t, out)
+	priv, _ := os.ReadFile(prefix + ".key")
+	k, err := LoadPrivateKey(priv, []byte("pw"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The statement as cosign marshals it
+	// (github.com/sigstore/cosign/v3@v3.1.4/cmd/cosign/cli/sign/sign.go:158-179).
+	st := `{"_type":"https://in-toto.io/Statement/v1","subject":[{"digest":{"sha256":"` + desc.Digest.Encoded() +
+		`"},"annotations":{}}],"predicateType":"https://sigstore.dev/cosign/sign/v1","predicate":{}}`
+	b, err := SignStatement(k, []byte(st))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := oci.NewWithContext(t.Context(), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range layoutReferrers(t, out, desc, "application/vnd.dev.sigstore.bundle.v0.3+json") {
+		if r.Annotations["dev.sigstore.bundle.predicateType"] == "https://sigstore.dev/cosign/sign/v1" {
+			raw, _ := json.Marshal(r)
+			if err := s.Delete(t.Context(), content.NewDescriptorFromBytes(ocispec.MediaTypeImageManifest, raw)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := pushBundle(t.Context(), s, &desc, "https://sigstore.dev/cosign/sign/v1", b); err != nil {
+		t.Fatal(err)
+	}
+	pub, _ := os.ReadFile(prefix + ".pub")
+	_, id, _ := LoadPublicKey(pub)
+	if v, err := l.Verify(t.Context(), def.SpecRequest{Caller: caller(), Spec: out, Home: home}); err != nil || v.Signer != id || v.Steps[1].Outcome != "pass" {
+		t.Errorf("Verify of the signature cosign writes = %+v, %v; want the signer %s and the attestation verified", v, err, id)
+	}
+}
+
 // An unsigned artifact whose id allowUnsigned lists verifies with the signer unsigned
 // and the statement that pack recorded (ADR-020 decision 8).
 func TestVerifyOfAnUnsignedArtifactThatAllowUnsignedLists(t *testing.T) {
