@@ -29,6 +29,7 @@ import (
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
+	"github.com/mutex-solutions/aiops-platform/test/modsrc"
 )
 
 // The release build in two phases, the builder image and dist build on the image path
@@ -67,7 +68,7 @@ func TestReleaseAndBuilderImage(t *testing.T) {
 	if err := builder.Serve(repo, testVersion, src); err != nil {
 		t.Fatal(err)
 	}
-	fill(t, repo, filepath.Join(host, "cache", "download"), src)
+	modsrc.Fill(t, repo, src)
 	echo := plugin(t, src, scratch)
 	input, err := os.ReadFile(filepath.Join(repo, "dist", "dist.yaml"))
 	if err != nil {

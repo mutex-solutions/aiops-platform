@@ -184,6 +184,18 @@ func image(tb testing.TB, ops def.Operations, manifest []byte) (string, string) 
 	return ref, pub
 }
 
+// Sign returns the bundle of a signature of manifest by the throwaway key of the
+// process, as dist sign writes it, in the form of cosign sign-blob, and the public key
+// file: what a release pipeline signs the manifest of a release with, and the release
+// key its second phase embeds (ADR-020 decision 13; ADR-060 decision 28).
+func Sign(tb testing.TB, manifest []byte) (bundle, pub []byte) {
+	tb.Helper()
+	image(tb, mount(tb), manifest)
+	signer.Lock()
+	defer signer.Unlock()
+	return signer.bundles[digest(manifest)], signer.pub
+}
+
 func readFile(tb testing.TB, p string) []byte {
 	tb.Helper()
 	b, err := os.ReadFile(p)

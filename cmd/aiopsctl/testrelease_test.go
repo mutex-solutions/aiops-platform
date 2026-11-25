@@ -23,6 +23,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
+	"github.com/mutex-solutions/aiops-platform/test/modsrc"
 )
 
 // The test release (ADR-060 decisions 28 and 38): the builder takes test/release/dist.yaml,
@@ -52,7 +53,7 @@ func TestTestRelease(t *testing.T) {
 	if err := builder.Serve(repo, testVersion, src); err != nil {
 		t.Fatal(err)
 	}
-	fill(t, repo, filepath.Join(host, "cache", "download"), src)
+	modsrc.Fill(t, repo, src)
 	input, err := os.ReadFile(filepath.Join(repo, "test", "release", "dist.yaml"))
 	if err != nil {
 		t.Fatal(err)

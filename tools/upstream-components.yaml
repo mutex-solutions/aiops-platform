@@ -368,6 +368,7 @@ entries:
     importers:
       - {dir: plugins/operations, decision: "ADR-047 decision 4; ADR-060 decision 41"}
       - {dir: internal/builder, decision: "ADR-044 decisions 1 and 6: the OCI image layout of the image dist build writes, its distribution manifest a referrer"}
+      - {dir: test/authoring, tests: true, decision: "ADR-060 decision 30: the release pipeline of the S2a exit pushes the release layout, and the host the site's image, into the registry of the job"}
     contains:
       - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
       - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
@@ -395,6 +396,7 @@ entries:
     importers:
       - {dir: plugins/operations, decision: "ADR-047 decisions 1 and 4: the types of the OCI client"}
       - {dir: internal/builder, decision: "ADR-044 decision 6: the manifest and the config of the image dist build writes"}
+      - {dir: test/authoring, tests: true, decision: "ADR-060 decisions 30 and 31: the S2a exit reads the layouts of the artifacts it checks and writes the copies of D1, D2 and plugin verify"}
     default: false
 
   # The module zip and its h1 sum that plugin pack takes for the module layer and the SBOM
@@ -421,6 +423,7 @@ entries:
       - {dir: internal/authoring, decision: "ADR-047 decision 1; ADR-044, Consequences: the module zip of the toolbox, for the module layer and the SBOM of in-process code"}
       - {dir: internal/builder, decision: "ADR-044 decisions 7, 8, 10, 16 and 23: the scratch go.mod, the module zips and their h1 sums, the strict versions, the toolchain module and the served go.mod copies"}
       - {dir: cmd/aiopsctl, decision: "ADR-044 decision 9: the case of dist build fills a module source with module zips, as a site does"}
+      - {dir: test/modsrc, decision: "ADR-044 decision 9; ADR-060 decision 40: the module sources of the tests that build with the builder, the module proxy of the S2a exit among them, a test package that no shipped distribution links"}
       - {dir: tools/spdxcorpus, decision: "ADR-044 decision 26: the h1 sum of the SPDX data that the corpus is written from"}
       - {dir: tools/mplsources, decision: "ADR-044 decision 6: the h1 hash of each zip of the MPL-2.0 archive of a release, for its release check"}
     default: false

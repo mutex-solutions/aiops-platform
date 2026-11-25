@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +28,7 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/ocitest"
 	"github.com/mutex-solutions/aiops-platform/templates"
+	"github.com/mutex-solutions/aiops-platform/test/modsrc"
 )
 
 // testVersion is the version at which the case serves the modules of the repository: a
@@ -69,7 +69,7 @@ func TestDistBuildSignAndUse(t *testing.T) {
 	if err := builder.Serve(repo, testVersion, src); err != nil {
 		t.Fatal(err)
 	}
-	fill(t, repo, filepath.Join(host, "cache", "download"), src)
+	modsrc.Fill(t, repo, src)
 	echo := plugin(t, src, scratch)
 	rogue := roguePlugin(t, src, echo, filepath.Join(host, "github.com", "google", "licenseclassifier", "v2@v2.0.0", "assets", "License", "GPL-2.0", "license.txt"))
 
@@ -91,7 +91,7 @@ func TestDistBuildSignAndUse(t *testing.T) {
 		t.Errorf("the release build checked against nothing: %q", rel.Unchecked)
 	}
 	tampered := t.TempDir()
-	linkTree(t, src, tampered)
+	modsrc.LinkTree(t, src, tampered)
 	tamper(t, filepath.Join(tampered, "go.yaml.in", "yaml", "v3", "@v", "v3.0.6.zip"), "go.yaml.in/yaml/v3@v3.0.6/yaml.go")
 	if _, err := builder.Build(ctx, builder.Request{Input: input, Root: testVersion, ModCache: tampered, Cache: filepath.Join(cache, "aiopsctl"),
 		Out: filepath.Join(t.TempDir(), "release")}); err == nil || !strings.Contains(err.Error(), "go.yaml.in/yaml/v3@v3.0.6: checksum mismatch") {
@@ -315,71 +315,6 @@ func abs(t *testing.T, p string) string {
 	return a
 }
 
-// fill copies into the module source src, from the download cache of the Go module
-// cache, what a site that builds on the release fills its module cache with (ADR-044
-// decision 9): the .info and .mod of every module version of the repository's module
-// graph, since go list -m all of a build reads them for whichever version that build
-// selects; the zip of every module of the build list; and the toolchain module, which
-// the case found there. It fetches the others into the module cache first, from the
-// module proxy when the cache is cold, and fails, naming them, when it still lacks any.
-func fill(t *testing.T, repo, download, src string) {
-	t.Helper()
-	repoGo := func(args ...string) []string {
-		cmd := exec.Command("go", args...)
-		cmd.Dir, cmd.Env = repo, append(os.Environ(), "GOFLAGS=-mod=readonly")
-		out, err := cmd.Output()
-		if err != nil {
-			t.Fatal(err)
-		}
-		var mvs []string
-		for _, f := range strings.Fields(string(out)) {
-			if p, _, ok := strings.Cut(f, "@"); ok && strings.Contains(p, ".") && !strings.HasPrefix(p, "github.com/mutex-solutions/aiops-platform") {
-				mvs = append(mvs, f)
-			}
-		}
-		slices.Sort(mvs)
-		return slices.Compact(mvs)
-	}
-	graph, list := repoGo("mod", "graph"), repoGo("list", "-m", "-f", "{{.Path}}@{{.Version}}", "all")
-	// go mod download writes the three files of each module of the build list, and go
-	// list -m the .info and .mod of each module version of the graph; both run outside
-	// the module, so that the repository's go.sum is never written.
-	for _, args := range [][]string{append([]string{"mod", "download"}, list...), append([]string{"list", "-m"}, graph...)} {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = t.TempDir()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Skipf("go %s fails (%v): the case needs the modules of the build list in the module cache or a module proxy that serves them; the CI jobs builder and builder-image have one\n%s", args[0]+" "+args[1], err, out)
-		}
-	}
-	type file struct{ mv, ext string }
-	want := map[file]bool{}
-	for _, ext := range []string{".info", ".mod", ".zip"} {
-		want[file{builder.Toolchain + "@" + builder.ToolchainVersion, ext}] = true
-	}
-	for _, mv := range graph {
-		want[file{mv, ".info"}], want[file{mv, ".mod"}] = true, true
-	}
-	for _, mv := range list {
-		want[file{mv, ".zip"}] = true
-	}
-	var missing []string
-	for f := range want {
-		path, version, _ := strings.Cut(f.mv, "@")
-		esc, err := module.EscapePath(path)
-		from, to := filepath.Join(download, esc, "@v", version+f.ext), filepath.Join(src, esc, "@v", version+f.ext)
-		if _, serr := os.Stat(from); serr != nil {
-			missing = append(missing, f.mv+f.ext)
-			continue
-		}
-		if err := errors.Join(err, os.MkdirAll(filepath.Dir(to), 0o755), link(from, to)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if slices.Sort(missing); len(missing) > 0 {
-		t.Fatalf("the module cache lacks %d files of the module source: %s", len(missing), strings.Join(missing, ", "))
-	}
-}
-
 // releaseArtifact stores in reg the release artifact of the signed manifest, the
 // distribution referrer with the manifest as its layer and notes among its annotations,
 // and returns its reference by digest.
@@ -389,24 +324,6 @@ func releaseArtifact(reg *ocitest.Registry, manifest []byte, notes map[string]st
 	m, _ := json.Marshal(map[string]any{"schemaVersion": 2, "mediaType": ocitest.ManifestType, "artifactType": "application/vnd.aiops.distribution.v1",
 		"config": reg.Blob(name, ocitest.EmptyType, []byte("{}")), "layers": []ocitest.Descriptor{layer}, "annotations": notes})
 	return reg.Host + "/" + name + "@" + reg.Manifest(name, "", ocitest.ManifestType, m).Digest
-}
-
-// linkTree links every file under from into to, at the same path.
-func linkTree(t *testing.T, from, to string) {
-	t.Helper()
-	err := filepath.WalkDir(from, func(p string, e os.DirEntry, err error) error {
-		rel, _ := filepath.Rel(from, p)
-		switch {
-		case err != nil:
-			return err
-		case e.IsDir():
-			return os.MkdirAll(filepath.Join(to, rel), 0o755)
-		}
-		return link(p, filepath.Join(to, rel))
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 // tamper writes the module zip file again, as a new file, with a line added to its
@@ -443,23 +360,6 @@ func tamper(t *testing.T, file, name string) {
 	if err := errors.Join(zw.Close(), os.Remove(file), os.WriteFile(file, b.Bytes(), 0o644)); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func link(from, to string) error {
-	if os.Link(from, to) == nil {
-		return nil
-	}
-	r, err := os.Open(from)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	w, err := os.Create(to)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(w, r)
-	return errors.Join(err, w.Close())
 }
 
 type modulePin struct{ path, sum string }
@@ -640,26 +540,7 @@ func roguePlugin(t *testing.T, src string, echo modulePin, gpl string) modulePin
 // zipModule writes the module path at v0.1.0 from dir into src and returns its sum.
 func zipModule(t *testing.T, src, path, dir string) modulePin {
 	t.Helper()
-	esc, _ := module.EscapePath(path)
-	at := filepath.Join(src, esc, "@v")
-	if err := os.MkdirAll(at, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	f, err := os.Create(filepath.Join(at, "v0.1.0.zip"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = errors.Join(modzip.CreateFromDir(f, module.Version{Path: path, Version: "v0.1.0"}, dir), f.Close())
-	gomod, rerr := os.ReadFile(filepath.Join(dir, "go.mod"))
-	info, _ := json.Marshal(map[string]string{"Version": "v0.1.0"})
-	if err = errors.Join(err, rerr, os.WriteFile(filepath.Join(at, "v0.1.0.mod"), gomod, 0o644), os.WriteFile(filepath.Join(at, "v0.1.0.info"), info, 0o644)); err != nil {
-		t.Fatal(err)
-	}
-	sum, err := dirhash.HashZip(filepath.Join(at, "v0.1.0.zip"), dirhash.Hash1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return modulePin{path, sum}
+	return modulePin{path, modsrc.Zip(t, src, path, "v0.1.0", dir)}
 }
 
 func h1Of(s string) string {
