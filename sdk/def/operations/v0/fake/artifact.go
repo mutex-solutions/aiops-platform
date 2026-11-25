@@ -16,10 +16,13 @@ import (
 // config, keeps it in memory by layout and by spec, and records the key ids that
 // signed it. It writes no layout.
 
-// artifact is an artifact the fake packed.
+// artifact is an artifact the fake packed: module is the path and the version of the
+// module of in-process code, as its module.json records them, the module line of go.mod
+// in the plugin directory and v<version>; empty for none.
 type artifact struct {
 	in      operations.Inspected
 	signers []string
+	module  [2]string
 }
 
 // artifactAt returns the artifact at a layout or a spec, or a refusal.
@@ -53,8 +56,16 @@ func (s served) Pack(_ context.Context, r operations.PackRequest) (operations.Wr
 			return nil
 		})
 		in.Digest = digestOf(in.ID + "@" + in.Version + strings.Join(parts, "\x00"))
+		a := &artifact{in: in}
+		if b, err := os.ReadFile(filepath.Join(r.Dir, "go.mod")); err == nil {
+			for _, l := range strings.Split(string(b), "\n") {
+				if p, ok := strings.CutPrefix(strings.TrimSpace(l), "module "); ok {
+					a.module = [2]string{strings.Trim(strings.TrimSpace(p), `"`), "v" + in.Version}
+				}
+			}
+		}
 		s.f.mu.Lock()
-		s.f.artifacts[r.Out] = &artifact{in: in}
+		s.f.artifacts[r.Out] = a
 		s.f.mu.Unlock()
 		return operations.Written{Paths: []string{r.Out}}, nil
 	})

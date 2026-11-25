@@ -52,7 +52,7 @@ func (s served) Install(ctx context.Context, r operations.InstallRequest) (opera
 		case err != nil:
 			return ch, err
 		case ch.Verdict.RebuildRequired:
-			ch.DistLines = []string{a.in.ID + "@" + a.in.Version}
+			ch.DistLines = []string{"modules:", fmt.Sprintf("  - {path: %s, version: %s}", a.module[0], a.module[1])}
 			return ch, operations.ErrRebuildRequired
 		case r.Profile == "cli" && !slices.Contains(a.in.Runtimes, "inproc"):
 			return ch, refused("into the profile cli only in-process code installs (ADR-061 decision 40)")
@@ -98,7 +98,7 @@ func (s served) Disable(ctx context.Context, r operations.RowRequest) (operation
 // config.
 func (f *Fake) row(ctx context.Context, r operations.RowRequest, on bool) (operations.Change, error) {
 	rd, command := f.cfg.Rendered[r.Profile], reload.CommandEnable
-	err := homeOf(r.Home)
+	err := cmp.Or(homeOf(r.Home), f.composes(r.Profile))
 	switch {
 	case err != nil:
 	case !on:
@@ -117,13 +117,14 @@ func (f *Fake) row(ctx context.Context, r operations.RowRequest, on bool) (opera
 }
 
 // Remove takes an installed artifact only (ADR-047 decision 10; ADR-062 decision 12),
-// drops the enabled departures of its rows, so a later install leaves them disabled,
-// and the kept files once the change is kept and no profile names the id.
+// from a profile that composes, drops the enabled departures of its rows, so a later
+// install leaves them disabled, and the kept files once the change is kept and no
+// profile names the id.
 func (s served) Remove(ctx context.Context, r operations.RemoveRequest) (operations.Change, error) {
 	return do(s, "Remove", func() (operations.Change, error) {
 		var ch operations.Change
 		return s.f.change(ctx, r.Home, r.Profile, reload.CommandRemove, r.ID, &ch, func(l *layer, st *state) error {
-			i, err := slices.Index(l.bundles, r.ID), operations.CannotRemove(s.f.cfg.Rendered[r.Profile], r.Profile, r.ID)
+			i, err := slices.Index(l.bundles, r.ID), cmp.Or(operations.CannotRemove(s.f.cfg.Rendered[r.Profile], r.Profile, r.ID), s.f.composes(r.Profile))
 			switch _, kept := st.kept[r.ID]; {
 			case i < 0:
 				return refused("%s does not install %s", r.Profile, r.ID)
@@ -141,6 +142,17 @@ func (s served) Remove(ctx context.Context, r operations.RemoveRequest) (operati
 			return nil
 		})
 	})
+}
+
+// composes refuses a change of profile whose Rendered in the config holds an error, as
+// the row keeps a change only when the changed profile renders.
+func (f *Fake) composes(profile string) error {
+	for _, d := range f.cfg.Rendered[profile].Diagnostics {
+		if !d.Warning {
+			return refused("%s does not compose: %s", profile, d.Text)
+		}
+	}
+	return nil
 }
 
 // change runs edit on the layer of profile under the lock of the home, after a copy of
