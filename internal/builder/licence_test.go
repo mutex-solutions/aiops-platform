@@ -75,7 +75,10 @@ func TestLicenceFiles(t *testing.T) {
 // (ADR-044 decision 26): a text, its required form, two texts in one file, a twin text
 // read as one id, an exception with its licence; and a text it cannot name, or one
 // with a clause outside what it names, however short, is unknown, which fails the build
-// (L16); a title of the text it names and "All rights reserved" are not clauses.
+// (L16); so is a clause inside the text it names, in that text's own words, in place
+// of words of it, or after the holder on its copyright line. A title of the text it
+// names, "All rights reserved" and a holder in a variable of the SPDX template are not
+// clauses.
 func TestClassify(t *testing.T) {
 	apache := corpusFile(t, "License/Apache-2.0/text.txt")
 	mit := corpusFile(t, "License/MIT/text.txt")
@@ -87,6 +90,28 @@ func TestClassify(t *testing.T) {
 	clause := "\nWithout limiting other conditions of the License, the grant of rights under the License does not include the right to " +
 		"sell the Software or to offer it to third parties as a hosted service for a fee, and this condition binds every copy and every " +
 		"derivative work that anyone makes of the Software.\n"
+	// A restriction inside a text, in the words of that text, and one on its copyright
+	// line: the classifier names the text at a confidence of 0.9 or more all the same.
+	inside := "Notwithstanding anything in this License, You may not use, reproduce or distribute the Work or any Derivative Works " +
+		"thereof for any commercial purpose, and You may not offer the Work to any other entity, without a separate written " +
+		"commercial license agreement executed with Licensor; any such use without that agreement shall terminate all rights " +
+		"granted to You under this License.\n\n"
+	insert := func(text []byte, before, s string) []byte {
+		i := bytes.Index(text, []byte(before))
+		if i < 0 {
+			t.Fatalf("the text holds no %q", before)
+		}
+		return append(append(bytes.Clone(text[:i]), s...), text[i:]...)
+	}
+	replace := func(text []byte, old, s string) []byte {
+		if !bytes.Contains(text, []byte(old)) {
+			t.Fatalf("the text holds no %q", old)
+		}
+		return bytes.Replace(text, []byte(old), []byte(s), 1)
+	}
+	// BSD-3-Clause as the Go modules write it: their holder in the variables of the
+	// SPDX template.
+	goBSD := replace(replace(replace(bsd, "<year> <owner>", "2009 The Go Authors"), "the copyright holder nor", "Google LLC nor"), "COPYRIGHT HOLDER OR", "COPYRIGHT OWNER OR")
 	for _, c := range []struct {
 		name       string
 		text       []byte
@@ -106,6 +131,12 @@ func TestClassify(t *testing.T) {
 		{"Apache-2.0 with a clause of nine words", append(bytes.Clone(apache), "\nThe Software shall not be used by any military organisation.\n"...), "", "words outside the texts it names"},
 		{"MIT with a clause of nine words", append(bytes.Clone(mit), "\nNo permission is granted to sell or host the Software.\n"...), "", "words outside the texts it names"},
 		{"MIT with a clause of two words", append(bytes.Clone(mit), "\nNon-commercial use.\n"...), "", "words outside the texts it names"},
+		{"Apache-2.0 with a paragraph of its own words inside", insert(apache, "5. Submission of Contributions", inside), "", "words outside the texts it names"},
+		{"MIT with a clause inside", insert(mit, "The above copyright notice", "The Software may not be used for any commercial purpose.\n\n"), "", "words outside the texts it names"},
+		{"MIT with a clause on its copyright line", replace(mit, "<year> <copyright holders>", "2026 Example Authors. The Software may not be used for any commercial purpose"), "", "words outside the texts it names"},
+		{"MIT with its grant replaced", replace(mit, "without restriction, including\nwithout limitation", "for non-commercial purposes only, including"), "", "words outside the texts it names"},
+		{"BSD-3-Clause as the Go modules write it", goBSD, "BSD-3-Clause", ""},
+		{"MIT under a copyright line of initials", replace(mit, "<year> <copyright holders>", "2026 J. R. Example, Example Inc. All rights reserved."), "MIT", ""},
 		{"a text of its own", []byte(clause), "", "names no licence"},
 		{"an exception alone", classpath, "", "no licence"},
 	} {
