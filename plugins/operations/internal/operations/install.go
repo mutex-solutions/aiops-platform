@@ -585,7 +585,11 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			}
 			if err == nil && patch == nil {
 				shows(rd)
-				ch.Notes = append(ch.Notes, cmp.Or(overridden, fmt.Sprintf("the bundle layers of %s give %s enabled %v, and the profile layer departs from none: nothing to write", r.Profile, r.Row, on)))
+				if overridden != "" && running(h.Dir, r.Profile) { // as after a write that the process then shows overridden
+					res = fmt.Errorf("%w: %s, and the process runs %s so", def.ErrSubmission, overridden, r.Profile)
+				} else {
+					ch.Notes = append(ch.Notes, cmp.Or(overridden, fmt.Sprintf("the bundle layers of %s give %s enabled %v, and the profile layer departs from none: nothing to write", r.Profile, r.Row, on)))
+				}
 			}
 			if err != nil || patch == nil {
 				return nil, err
