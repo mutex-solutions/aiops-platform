@@ -25,12 +25,15 @@ s1-suites:
 	if ls $$r/report.* >/dev/null 2>&1; then cat $$r/report.*; echo 's1-suites: a race-built process reported a data race'; s=1; fi; \
 	rm -rf $$r; exit $$s
 
-# `make templates` is the templates job (ADR-060 decisions 24 and 36): a plugin
-# generated from the template of each registry compiles, passes T0 and the generated
-# tests, and fails conformance with exactly one line per obligation. The connector
-# template's case is deferred (ADR-060 decision 24, note of 2026-11-24): the job holds
-# its pack to T0 and asserts that step 5 and the echo scenario answer that the binary
-# carries no suite. It builds Go in modules of its own, which reach the modules of this
+# `make templates` is the templates job (ADR-060 decisions 24 and 36): through the
+# aiopsctl built in the repository, on a throwaway home that trusts it with a key made
+# in the test (ADR-020 decision 13), plugin new writes a plugin from the template of each
+# registry, which compiles, passes T0 and the generated tests, and fails plugin check
+# against the test distribution with exactly one line per obligation. The connector
+# template writes a pack of the test distribution's instantiable echoer, whose plugin
+# check names the suite binary that this aiopsctl does not carry; the builder job runs
+# the case on the aiopsctl of the test release (ADR-060 decision 24, note of
+# 2026-11-26). It builds Go in modules of its own, which reach the modules of this
 # repository through the module cache, so `make check` (-short) skips it. It fails, and
 # does not skip, when the case does not run.
 .PHONY: templates

@@ -344,11 +344,12 @@ jobs:
   templates:
     name: Templates of plugin new
     # ADR-060 decisions 24 and 36 (08-profiles-roadmap-adrs.md:1263; 07-c4-plugin-sdk.md:1563):
-    # a plugin generated from the template of each registry compiles, passes T0 and the
-    # generated tests under -race, and fails conformance with exactly one line per
-    # obligation, so a template cannot fall behind its definition. The connector
-    # template's case is deferred (ADR-060 decision 24, note of 2026-11-24): its pack
-    # passes T0, and step 5 and the echo scenario answer that no suite binary is carried.
+    # through the built aiopsctl on a home that trusts it with a throwaway key, a plugin
+    # generated from the template of each registry compiles, passes T0 and the generated
+    # tests under -race, and fails conformance with exactly one line per obligation, so
+    # a template cannot fall behind its definition. The connector template's pack names
+    # the suite binary that this aiopsctl does not carry; the builder job runs its case
+    # on the aiopsctl of the test release (ADR-060 decision 24, note of 2026-11-26).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
