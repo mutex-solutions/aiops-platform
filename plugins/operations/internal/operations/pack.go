@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -67,6 +68,7 @@ func canonicalTar(files map[string][]byte) ([]byte, []string) {
 // entry of another type or a path that leaves the root (ADR-047 decision 3).
 func untar(b []byte, put func(name string, data []byte) error) error {
 	r := tar.NewReader(bytes.NewReader(b))
+	left := int64(len(b)) // a canonical tar holds no more than its own bytes
 	for {
 		h, err := r.Next()
 		switch {
@@ -74,10 +76,14 @@ func untar(b []byte, put func(name string, data []byte) error) error {
 			return nil
 		case err != nil:
 			return err
-		case h.Typeflag != tar.TypeReg || !filepath.IsLocal(filepath.FromSlash(h.Name)):
+		case h.Typeflag != tar.TypeReg || !filepath.IsLocal(filepath.FromSlash(h.Name)) ||
+			slices.ContainsFunc(slices.Collect(maps.Keys(h.PAXRecords)), func(k string) bool { return strings.HasPrefix(k, "GNU.sparse.") }):
 			return refused("the tar holds %q, which is not a regular file under its root (ADR-047 decision 3)", h.Name)
+		case h.Size > left:
+			return refused("the tar's entries claim more than its %d bytes (ADR-047 decision 3)", len(b))
 		}
-		data, err := io.ReadAll(r)
+		left -= h.Size
+		data, err := io.ReadAll(io.LimitReader(r, h.Size))
 		if err == nil {
 			err = put(h.Name, data)
 		}

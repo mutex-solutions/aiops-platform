@@ -34,13 +34,16 @@ import (
 // the credentials of the caller's config.json, the referrers of a manifest, and the
 // artifacts the library pushes, each an OCI image manifest with the empty config.
 
-// maxBlob bounds a blob that the library reads whole: a manifest, a bundle, a layer of
-// a plugin artifact. plugin.yaml and the bundle of an artifact, which it parses as
-// YAML, are bounded by maxFile, the 1 MiB that boot reads of a file
-// (boot.MaxFileBytes).
+// maxBlob bounds a blob that the library reads whole: a layer of a plugin artifact.
+// plugin.yaml and the bundle of an artifact, which it parses as YAML, an OCI image
+// manifest, a sigstore bundle and a distribution manifest are bounded by maxFile, the 1
+// MiB that boot reads of a file (boot.MaxFileBytes); and the referrers of one type that
+// it reads of a manifest by maxReferrers, so that what it reads before a trust decision
+// stays small.
 const (
-	maxBlob = 64 << 20
-	maxFile = 1 << 20
+	maxBlob      = 64 << 20
+	maxFile      = 1 << 20
+	maxReferrers = 16
 )
 
 // remoteRepo returns the repository of ref, an OCI reference with oci:// optional,
@@ -99,7 +102,7 @@ func resolve(ctx context.Context, r *remote.Repository) (ocispec.Descriptor, err
 // digest that the signed manifest records.
 func fetch(ctx context.Context, src content.Fetcher, d ocispec.Descriptor) ([]byte, error) {
 	limit := int64(maxBlob)
-	if d.MediaType == layerManifest || d.MediaType == layerBundle {
+	if slices.Contains([]string{layerManifest, layerBundle, bundleType, def.DistributionLayer, ocispec.MediaTypeImageManifest}, d.MediaType) {
 		limit = maxFile
 	}
 	if d.Size > limit {
@@ -143,6 +146,9 @@ func referrers(ctx context.Context, src content.ReadOnlyGraphStorage, d ocispec.
 	refs, err := registry.Referrers(ctx, src, d, artifactType)
 	if err != nil {
 		return nil, err
+	}
+	if refs = slices.DeleteFunc(refs, func(r ocispec.Descriptor) bool { return r.ArtifactType != "" && r.ArtifactType != artifactType }); len(refs) > maxReferrers {
+		return nil, refused("%s has %d referrers of %s, more than the %d the library reads", d.Digest, len(refs), artifactType, maxReferrers)
 	}
 	slices.SortFunc(refs, func(a, b ocispec.Descriptor) int { return strings.Compare(string(a.Digest), string(b.Digest)) })
 	var out []referrer
