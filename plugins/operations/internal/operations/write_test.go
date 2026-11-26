@@ -273,8 +273,8 @@ const helperEnv = "OPERATIONS_TEST_HELPER"
 // stops is the stage at which the child of each mode stops: after its first rename;
 // after the first step of the restore that its refused submission starts; and after
 // the snapshot is renamed aside for its removal, at the end of the write or of the
-// restore.
-var stops = map[string]string{"rename": "renamed", "restore": "restored", "remove": "trashed", "restore-remove": "trashed"}
+// restore; and while its submission waits for the row.
+var stops = map[string]string{"rename": "renamed", "restore": "restored", "remove": "trashed", "restore-remove": "trashed", "submit": "submitted"}
 
 func TestHelperProcess(t *testing.T) {
 	mode := os.Getenv(helperEnv)
@@ -286,6 +286,9 @@ func TestHelperProcess(t *testing.T) {
 	var submit func(context.Context) error
 	if strings.HasPrefix(mode, "restore") {
 		submit = func(context.Context) error { return errors.New("refused") }
+	}
+	if mode == "submit" { // the request went out, and the row has not answered
+		submit = func(context.Context) error { os.Stdout.WriteString("submitted\n"); select {} }
 	}
 	h.hook = func(stage string) {
 		if stage == stop {
@@ -355,6 +358,26 @@ func TestKilledWriteIsRestoredByTheNextWriter(t *testing.T) {
 				t.Errorf("notes %q, want one that says the snapshot was restored", done.Notes)
 			}
 		})
+	}
+}
+
+// A write killed while its submission waits for the row keeps its files: the row may
+// have taken the change and the process may run it, so the next writer drops the
+// snapshot, restores nothing, and says that the verdict is unknown (ADR-062 decision
+// 11).
+func TestWriteKilledAfterItsSubmissionKeepsItsFiles(t *testing.T) {
+	h := newHome(t)
+	kill(t, h, "submit")
+	h.LockWait = 0
+	var seen map[string]string
+	done, err := h.Write(t.Context(), Write{Command: "next", Plan: func() ([]Change, error) { seen = tree(t, h); return nil, nil }})
+	want := map[string]string{"trust.yaml": "child\n", "verified/sha256-ab/record.yaml": "kind: distribution\n",
+		"verified/sha256-ab/manifest": "child\n", "verified/current": "sha256:ab\n"}
+	if err != nil || !equal(seen, want) {
+		t.Errorf("the next writer: %v, planned on %v; want %v", err, seen, want)
+	}
+	if len(done.Notes) != 1 || !strings.Contains(done.Notes[0], "verdict") {
+		t.Errorf("notes %q, want one that says the verdict of the killed submission is unknown", done.Notes)
 	}
 }
 

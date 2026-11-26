@@ -133,18 +133,19 @@ func homeTree(t *testing.T, home string) map[string]string {
 }
 
 // An install, as a process of its own, that a kill stops after its renames, while it
-// waits for the final result of the process that runs dev, leaves its snapshot, and the
-// next writer of the home restores the home as it was before the install and says so;
-// one that an interrupt stops there restores the home itself and exits 1 (ADR-061
-// decisions 17 and 31). The install copies the shipped dev into the home, writes the
-// artifact's files, the bundle list and plugins.lock, and unpacks the content first.
-func TestAnInstallKilledOrInterruptedIsRestored(t *testing.T) {
+// waits for the final result of the process that runs dev, which took its request,
+// leaves its snapshot, and the next writer of the home keeps the files, drops the
+// snapshot and says that the verdict is unknown; one that an interrupt stops there
+// keeps them itself and exits 1 with verdict-unknown, since the process may apply the
+// change (ADR-061 decisions 17 and 31; ADR-062 decision 11). The install copies the
+// shipped dev into the home, writes the artifact's files, the bundle list and
+// plugins.lock, and unpacks the content first.
+func TestAnInstallKilledOrInterruptedKeepsItsFiles(t *testing.T) {
 	for _, killed := range []bool{true, false} {
 		t.Run(map[bool]string{true: "killed", false: "interrupted"}[killed], func(t *testing.T) {
 			env, layout := installable(t)
 			home := env["AIOPS_HOME"]
 			sent := stalled(t, home)
-			before := homeTree(t, home)
 			var errOut bytes.Buffer
 			cmd := ctl(t, env, "plugin", "install", layout, "--profile", "dev")
 			cmd.Stderr = &errOut
@@ -166,7 +167,7 @@ func TestAnInstallKilledOrInterruptedIsRestored(t *testing.T) {
 				_ = cmd.Process.Kill()
 				_ = cmd.Wait()
 				r := ctlRun(t, env, "profile", "sanitize", "dev")
-				if r.code != 0 || !strings.Contains(r.errOut, "restored") {
+				if r.code != 0 || !strings.Contains(r.errOut, "verdict") {
 					t.Errorf("the next writer, profile sanitize: exit %d; stderr:\n%s", r.code, r.errOut)
 				}
 			} else {
@@ -174,13 +175,14 @@ func TestAnInstallKilledOrInterruptedIsRestored(t *testing.T) {
 					t.Fatal(err)
 				}
 				var ee *exec.ExitError
-				if err := cmd.Wait(); !errors.As(err, &ee) || ee.ExitCode() != 1 || !strings.Contains(errOut.String(), "interrupted") {
-					t.Errorf("the interrupted install: %v; want exit 1, interrupted\n%s", err, errOut.String())
+				if err := cmd.Wait(); !errors.As(err, &ee) || ee.ExitCode() != 1 || !strings.Contains(errOut.String(), "interrupted") || !strings.Contains(errOut.String(), "verdict-unknown") {
+					t.Errorf("the interrupted install: %v; want exit 1, interrupted, verdict-unknown\n%s", err, errOut.String())
 				}
 			}
-			if after := homeTree(t, home); !maps.Equal(after, before) {
-				t.Errorf("the home after the %s install holds %v; want it as before, %v", map[bool]string{true: "killed", false: "interrupted"}[killed],
-					slices.Sorted(maps.Keys(after)), slices.Sorted(maps.Keys(before)))
+			maps.DeleteFunc(during, func(p, _ string) bool { return strings.HasPrefix(p, "snapshot/") })
+			if after := homeTree(t, home); !maps.Equal(after, during) {
+				t.Errorf("the home after the %s install holds %v; want the files of the install kept and no snapshot, %v", map[bool]string{true: "killed", false: "interrupted"}[killed],
+					slices.Sorted(maps.Keys(after)), slices.Sorted(maps.Keys(during)))
 			}
 		})
 	}
