@@ -265,6 +265,42 @@ func TestCheckNamesTheCasesThatSkipped(t *testing.T) {
 	}
 }
 
+// servesBox is checkBox whose release serves the key ready under launch and echoers
+// under echoers, and whose suites record the definitions that step 5 asks for.
+type servesBox struct {
+	checkBox
+	asked map[string]string
+}
+
+func (*servesBox) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{Digest: "sha256:ab", Manifest: []byte("serves:\n  definitions:\n    echoers:\n      - version: \"0.1\"\n" +
+		"        classes:\n          echoers: {provider: open, consumer: open}\n    launch:\n      - version: \"0.2\"\n" +
+		"        classes:\n          ready: {provider: bound, consumer: open}\n")}, nil
+}
+
+func (b *servesBox) Suite(_ context.Context, q launch.SuiteRequest) (launch.SuiteReport, error) {
+	var r launch.SuiteReport
+	for name := range q.Definitions {
+		b.asked = q.Definitions
+		r.Definitions = append(r.Definitions, launch.SuiteResult{Name: name, Revision: 1, Halves: []string{"obligations"}})
+	}
+	return r, nil
+}
+
+// Step 5 maps each key that in-process code provides or registers with to the definition
+// whose served classes hold it in the release it runs against, whatever the key is
+// named: ready is a key of launch. A definition the plugin only consumes runs no suite
+// (ADR-060 decisions 9 and 56).
+func TestCheckMapsAKeyByTheServesOfTheRelease(t *testing.T) {
+	sum := launch.ManifestSummary{ID: "acme/ready", Version: "0.1.0", Runtimes: []string{"inproc"}, Provides: []string{"ready"},
+		Definitions: map[string][]string{"launch": {"0.2"}, "echoers": {"0.1"}}}
+	b := &servesBox{checkBox: checkBox{&packBox{sum: sum}}}
+	r, err := (Library{Box: b}).Check(t.Context(), def.CheckRequest{Caller: caller(), Dir: pluginDir(t, pack)})
+	if err != nil || len(r.Steps) != 8 || r.Steps[4].Outcome != def.StepPass || len(b.asked) != 1 || b.asked["launch"] != "0.2" {
+		t.Fatalf("Check = %v, %v; step 5 asked %v, want the suite of launch alone", steps(r), err, b.asked)
+	}
+}
+
 // Step 1 refuses a manifest that lists remote until S2b (ADR-060 decision 23).
 func TestCheckRefusesRemote(t *testing.T) {
 	b := &connectorBox{sum: launch.ManifestSummary{ID: "acme/x", Version: "0.1.0", Runtimes: []string{"inproc", "remote"}}}
