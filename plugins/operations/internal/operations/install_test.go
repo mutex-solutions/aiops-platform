@@ -3,7 +3,10 @@
 package operations
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"maps"
@@ -116,6 +119,80 @@ func TestInstallKeepsAPack(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "bundles", "beta")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the refused install kept files: %v", err)
+	}
+}
+
+// handPack writes the layout of an artifact of acme/connector-x with layers as given,
+// the statement that pack records naming its digest, and signs it with a new key that
+// trust.yaml of home lists for acme/*: a layout that plugin pack would not write.
+func handPack(t *testing.T, l Library, home string, layers ...blob) string {
+	t.Helper()
+	out := filepath.Join(t.TempDir(), "artifact")
+	d, raw, err := manifestOf(artifactType, nil, nil, layers)
+	if err == nil {
+		err = writeLayout(t.Context(), out, d, raw, layers, "0.1.0", def.Statement("acme/connector-x", "0.1.0", d.Digest.Encoded(), nil, nil, nil))
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := generate(t, l, t.TempDir(), "author")
+	if _, err := l.AddTrust(t.Context(), def.TrustRequest{Caller: caller(), Home: home, KeyFile: prefix + ".pub", IDs: []string{"acme/*"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Sign(t.Context(), def.SignRequest{Caller: caller(), Out: out, Key: prefix + ".key"}); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// contentLayer is a content layer of the tar b whose annotation lists paths, none for
+// nil.
+func contentLayer(b []byte, paths ...string) blob {
+	ann := title("content.tar")
+	if paths != nil {
+		j, _ := json.Marshal(paths)
+		ann[contentPaths] = string(j)
+	}
+	return blob{layerContent, b, ann}
+}
+
+// Install refuses, before it writes anything, what boot's check of the kept files
+// would deny at every boot (ADR-047 decisions 1 to 3 and 18): a content layer that is
+// not in the canonical form, whose entries written back in it give other bytes; one
+// that holds paths its annotation aiops.plugin.content.paths does not list, or has no
+// such annotation, so that plugin inspect shows what install keeps; and an image
+// manifest that holds a layer type twice. A layer in that form installs.
+func TestInstallRefusesAContentLayerBootDenies(t *testing.T) {
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	canonical, _ := canonicalTar(map[string][]byte{"runbooks/restart.md": []byte("# Restart\n")})
+	var stamped bytes.Buffer
+	tw := tar.NewWriter(&stamped)
+	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "runbooks/restart.md", Mode: 0o755, Size: 10, ModTime: time.Unix(1700000000, 0)})
+	_, _ = tw.Write([]byte("# Restart\n"))
+	_ = tw.Close()
+	hidden, _ := canonicalTar(map[string][]byte{"runbooks/restart.md": []byte("# Restart\n"), "hidden/run.sh": []byte("#!/bin/sh\n")})
+	man, bun := blob{layerManifest, []byte(packManifest), title("plugin.yaml")}, blob{layerBundle, []byte(pack["bundle.yaml"]), title("bundle.yaml")}
+	sbom := blob{layerSBOM, []byte("{}"), title("sbom.spdx.json")}
+	for name, layers := range map[string][]blob{
+		"a tar with a time and a mode of its own":  {man, bun, contentLayer(stamped.Bytes(), "runbooks/restart.md"), sbom},
+		"a path that the annotation does not list": {man, bun, contentLayer(hidden, "runbooks/restart.md"), sbom},
+		"no annotation of the paths":               {man, bun, contentLayer(canonical), sbom},
+		"a layer type twice":                       {man, bun, contentLayer(canonical, "runbooks/restart.md"), sbom, {layerSBOM, []byte("[]"), nil}},
+	} {
+		home := filepath.Join(t.TempDir(), "home")
+		spec := handPack(t, l, home, layers...)
+		before := tree(t, Home{Dir: home})
+		if _, err := l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: "dev", Spec: spec}); !errors.Is(err, def.ErrRefused) {
+			t.Errorf("%s: %v; want ErrRefused", name, err)
+		}
+		if got := tree(t, Home{Dir: home}); !equal(got, before) {
+			t.Errorf("%s: the refused install wrote the home", name)
+		}
+	}
+	home := filepath.Join(t.TempDir(), "home")
+	spec := handPack(t, l, home, man, bun, contentLayer(canonical, "runbooks/restart.md"), sbom)
+	if _, err := l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: "dev", Spec: spec}); err != nil {
+		t.Errorf("a canonical content layer that its annotation lists: %v", err)
 	}
 }
 
