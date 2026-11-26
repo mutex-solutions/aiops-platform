@@ -196,6 +196,19 @@ func TestInstallGatesTheModuleOfInProcessCode(t *testing.T) {
 	}
 }
 
+// A runtime that the schema does not serve, wasm, is check 1's to deny, not check 5's
+// for want of a signer that covers it: install names check 1, as the gate at plugin
+// gate --against does, so the denial names one check (ADR-060 decision 58, reading 3).
+func TestInstallOfWasmNamesCheck1(t *testing.T) {
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	spec := handPack(t, l, home, blob{layerManifest, []byte(strings.Replace(packManifest, "runtimes: []", "runtimes: [wasm]", 1)), title("plugin.yaml")},
+		blob{layerBundle, []byte(pack["bundle.yaml"]), title("bundle.yaml")}, blob{layerSBOM, []byte("{}"), title("sbom.spdx.json")})
+	if _, err := l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: "dev", Spec: spec}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "check 1") {
+		t.Errorf("install of a wasm artifact: %v; want ErrRefused naming check 1", err)
+	}
+}
+
 // contentLayer is a content layer of the tar b whose annotation lists paths, none for
 // nil.
 func contentLayer(b []byte, paths ...string) blob {

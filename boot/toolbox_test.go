@@ -410,7 +410,6 @@ func TestToolboxGate(t *testing.T) {
 		want string
 	}{
 		"entry":         {launch.GateRequest{Entry: string(EntryBoot), Manifest: man}, "not an entry point"},
-		"manifest":      {launch.GateRequest{Entry: string(EntryCheck), Manifest: []byte("id: [")}, "the manifest of the artifact"},
 		"no home":       {launch.GateRequest{Entry: string(EntryInstall), Manifest: man, Bundle: own}, "names the home"},
 		"no profile":    {launch.GateRequest{Entry: string(EntryInstall), Manifest: man, Bundle: own, Home: "/h", Profile: "nope"}, "profile.yaml"},
 		"against":       {launch.GateRequest{Entry: string(EntryOffline), Manifest: man, Bundle: own, Against: []byte("distVersion: 2")}, "--against"},
@@ -418,6 +417,17 @@ func TestToolboxGate(t *testing.T) {
 	} {
 		if _, err := tb.Gate(ctx, tc.q); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: %v, want %q", name, err, tc.want)
+		}
+	}
+	// A manifest that the reader refuses is a denial of check 1 with the reader's text,
+	// at every entry point, and the other checks are listed as not evaluated (ADR-048
+	// decision 24; ADR-060 decision 17).
+	bogus := append(slices.Clone(man), []byte("bogus: 1\n")...)
+	for _, q := range []launch.GateRequest{{Entry: string(EntryCheck), Manifest: []byte("id: [")},
+		{Entry: string(EntryInstall), Manifest: bogus, Bundle: own, Home: "/h", Profile: "p"}} {
+		v, err := tb.Gate(ctx, q)
+		if got := clauseOutcomes(v); err != nil || got["1 "+string(RuleManifest)] != launch.OutcomeDeny || got["5 "] != launch.OutcomeNotEvaluated || len(v.Clauses) != 10 {
+			t.Errorf("%s of a manifest the reader refuses: %+v, %v; want check 1 denying it and checks 2 to 10 not evaluated", q.Entry, v, err)
 		}
 	}
 }
