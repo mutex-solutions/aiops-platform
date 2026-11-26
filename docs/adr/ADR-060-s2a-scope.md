@@ -1614,16 +1614,16 @@ to a question, the decision here settles it.
     first-party plugin of the module table in both phases, on a `go.mod` and `go.sum` of
     their own that take the lines of their test dependencies, and the statement of each
     names exactly the suites and halves that its package recorded, with no suite
-    revision for a suite that did not run; a failed test fails the build. The manifests that the parity
-    check of `make check` holds, `dist/` and `test/dist/`, are written the same way, a
-    site's build keeps the release's statement of each first-party plugin, and the
-    rows of `plugins/command-plugin` run the obligations half on the cases of its
-    `fixtures/commands/` (ADR-061 decision 5). Before, the builder wrote both halves for
-    every first-party definition with a suite, run or not. Second note of 2026-11-26, as
-    built: the statement of each first-party plugin also names the generated tests that
-    did not run on its package (decision 18), read from the skip events of those tests
-    (`plugingen.GeneratedTests`): `TestTwoTenants` of every plugin until S4a (decision
-    43). Before, it named none, while `plugin check` names them.
+    revision for a suite that did not run; a failed test fails the build. The manifests
+    that the parity check of `make check` holds, `dist/` and `test/dist/`, are written
+    the same way, a site's build keeps the release's statement of each first-party
+    plugin, and the rows of `plugins/command-plugin` run the obligations half on the
+    cases of its `fixtures/commands/` (ADR-061 decision 5). Before, the builder wrote
+    both halves for every first-party definition with a suite, run or not. Second note
+    of 2026-11-26, as built: the statement of each first-party plugin also names the
+    generated tests that did not run on its package (decision 18), read from the skip
+    events of those tests (`plugingen.GeneratedTests`): `TestTwoTenants` of every plugin
+    until S4a (decision 43). Before, it named none, while `plugin check` names them.
 
 51. **The upstream register starts at S2a** (Q15 (a)). S2a writes
     `tools/upstream-components.yaml` with an entry for every module, image and tool that
