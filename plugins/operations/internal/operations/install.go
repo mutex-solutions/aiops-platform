@@ -274,7 +274,7 @@ func (l Library) profile(ctx context.Context, h Home, p string) ([]byte, string,
 // clauses of the entry point plugin install on the artifact with its verified signer
 // (ADR-060 decision 17; ADR-047 decision 17).
 func (l Library) admit(ctx context.Context, h Home, p string, src source, d ocispec.Descriptor, a trusted, bundle []byte, ch *def.Change) error {
-	rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Append: launch.Bundle{ID: a.ID, Data: bundle}})
+	rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Server: p != "cli", Append: launch.Bundle{ID: a.ID, Data: bundle}})
 	if err != nil {
 		return err
 	}
@@ -576,7 +576,7 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			if err != nil {
 				return nil, err
 			}
-			base, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile, Aside: []string{layer, "aiops.patch.yml"}})
+			base, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile, Server: r.Profile != "cli", Aside: []string{layer, "aiops.patch.yml"}})
 			var patch []byte
 			if x := rowOf(base, r.Row); err == nil && errorsOf(base.Diagnostics) == "" && x != nil && x.Enabled == on {
 				patch, _, err = withoutEnabled(h.path(layer), func(id string) bool { return id == r.Row })
@@ -677,7 +677,7 @@ func view(h Home, cs []Change) (string, error) {
 // composes renders the profile p of the home as boot would, and refuses it when it does
 // not compose (ADR-060 decision 17).
 func (l Library) composes(ctx context.Context, h Home, p string) (launch.Rendered, error) {
-	rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p})
+	rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Server: p != "cli"})
 	if e := errorsOf(rd.Diagnostics); err == nil && e != "" {
 		err = refused("%s does not compose: %s", p, e)
 	}
@@ -819,7 +819,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 				return nil, refused("%s is no installed artifact of %s: plugin remove takes the plugin id of one, with its kept files or its lock entry (ADR-047 decision 10; ADR-062 decision 12); edit profiles/%s/profile.yaml to drop another bundle",
 					r.ID, r.Profile, r.Profile)
 			}
-			rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile})
+			rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile, Server: r.Profile != "cli"})
 			if err == nil {
 				err = def.CannotRemove(rd, r.Profile, r.ID)
 			}

@@ -290,7 +290,8 @@ func launchAdmission(a Admission) launch.Admission {
 // plugin check and plugin gate --against, on the artifact's bundle alone, against the
 // signed manifest this binary embeds or the published one of the request. The verdict
 // holds the clauses that judge the artifact's rows and every clause that would stop the
-// profile.
+// profile. A profile other than cli composes as a server boots it, and so does the
+// bundle of a pack, which installs into server profiles only (ADR-061 decision 40).
 func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
 	if err := t.ready(ctx); err != nil {
 		return launch.Verdict{}, err
@@ -316,7 +317,7 @@ func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdic
 		}
 		src, err := t.sources(launch.RenderRequest{Home: q.Home, Profile: q.Profile, Append: launch.Bundle{ID: man.ID, Data: q.Bundle}}, t.p.signed.Digest)
 		if err == nil {
-			c, _, err = Compose(src, Options{Modules: t.p.mods, Locks: lockDigests(src.Home, q.Profile)})
+			c, _, err = Compose(src, Options{Server: q.Profile != "cli", Modules: t.p.mods, Locks: lockDigests(src.Home, q.Profile)})
 		}
 		if err != nil {
 			return launch.Verdict{}, err
@@ -340,7 +341,7 @@ func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdic
 		// (Composition.Unread).
 		mem := fstest.MapFS{"profiles/gate/profile.yaml": {Data: []byte("bundles: []")},
 			path.Join("bundles", man.ID, "bundle.yaml"): {Data: q.Bundle}}
-		c, _, _ = Compose(Sources{Profile: "gate", Home: mem, Bundles: mem, Append: []string{man.ID}}, Options{Modules: mods})
+		c, _, _ = Compose(Sources{Profile: "gate", Home: mem, Bundles: mem, Append: []string{man.ID}}, Options{Server: len(man.Runtimes) == 0, Modules: mods})
 		in = GateInput{Mods: mods, Bindings: d.Bindings(), Dist: &d, Artifacts: map[string]Artifact{}}
 	}
 	in.Entry, in.Artifacts[man.ID] = entry, art

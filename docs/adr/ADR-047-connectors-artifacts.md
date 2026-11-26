@@ -738,6 +738,12 @@ above leaves a point to a question, the decision here settles it.
     leaves the artifact's rows out and names the clash, and the operator then removes the
     artifact. "Two packs cannot collide" reads "two artifacts of one name never compose
     together: the second install is refused" in `08:391`, `07:1817` and community:298.
+    Note of 2026-11-27 (review round over the whole step, round 2): "as boot would"
+    includes the server rule of `08:156`. Install, enable, disable, remove and profile
+    sanitize render a profile other than `cli` in server mode, and the gate composes it
+    so at install; at `plugin check` and offline it composes a pack's bundle so, since a
+    pack installs into server profiles only (ADR-061 decision 40). A pack row that
+    states no roles is then denied by check 8 where the author and the installer see it.
 
 18. **Boot checks what install kept against the locked digest** (Q3 (a)). At every
     composition, boot hashes `bundles/<plugin id>/artifact.json` and compares it with the

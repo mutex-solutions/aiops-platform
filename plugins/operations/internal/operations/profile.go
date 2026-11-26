@@ -114,7 +114,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 				notes = append(notes, fmt.Sprintf("%v: set aside as plugins.lock.bak-%s", err, stamp))
 			}
 			for range layers {
-				rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Aside: aside})
+				rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Server: p != "cli", Aside: aside})
 				if err != nil {
 					return nil, err
 				}
