@@ -559,8 +559,11 @@
       home's `dev` and the test binary running as the `aiopsctl` of the test distribution
       in a process of its own; the change of `inject` and of `history` are each asserted
       by the rows that test-state reports the loader restarted in that generation
-      (`reload-socket`; `reload`), and the case of a disabled `reload-socket` runs on a
-      second process started with a patch that disables it. The client case of disabling
+      (`reload-socket`; `reload`), and the restart of the dependant `reload-socket` after
+      the change of `history`, which the kernel makes through its epoch (`08:189`) and
+      the loader does not list, by the new socket file that its next activation listens
+      on; the case of a disabled `reload-socket` runs on a second process started with a
+      patch that disables it. The client case of disabling
       `reload-socket` and `reload` is `TestDisableOfTheRowsOfTheSubmission` of the
       operations plugin.
     - `plugin smoke`: with question Q9 (a), the composition that smoke boots holds

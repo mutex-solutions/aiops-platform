@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/test/dist/harness"
 )
 
@@ -64,10 +65,10 @@ func restarted(t *testing.T, p *harness.Proc, r result, row string) {
 // changes the row-level inject of reload-socket, which restarts it during the apply,
 // answers passed. With a site layer that disables extra, enabling extra answers passed
 // without the row, exits 1 and keeps the files. A generation that changes the history
-// of reload, which restarts reload, answers passed. Disabling reload-socket or reload
-// writes nothing and exits 1. On a process that runs dev with reload-socket disabled,
-// enable answers restart-required and exits 1; with no status.json it exits 0 and
-// changes the files only. s1-suites runs it.
+// of reload, which restarts reload and then its dependant reload-socket, answers
+// passed. Disabling reload-socket or reload writes nothing and exits 1. On a process
+// that runs dev with reload-socket disabled, enable answers restart-required and exits
+// 1; with no status.json it exits 0 and changes the files only. s1-suites runs it.
 func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 	files := map[string]string{
 		"profiles/dev/profile.yaml": "bundles: [aiops-core, extras]\n",
@@ -129,11 +130,24 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sock := filepath.Join(p.Home, reload.RunDir, reload.SocketFile)
+	old, err := os.Stat(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
 	edit(patch, "- {id: reload, config: {queue: 8, history: 64}}\n")
 	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || !strings.HasPrefix(r.out, "result passed, generation ") {
 		t.Errorf("disable extra in a generation that restarts reload: %s", say(r))
 	}
 	restarted(t, p, r, "reload")
+	// Its dependant reload-socket restarts through its epoch, which the loader does not
+	// list (08:189): the new activation listens on a socket of its own.
+	if _, ok := p.Until(30*time.Second, func(harness.Snapshot) bool {
+		fi, err := os.Stat(sock)
+		return err == nil && (!os.SameFile(old, fi) || !fi.ModTime().Equal(old.ModTime()))
+	}); !ok {
+		t.Errorf("the generation of %q did not restart reload-socket: %s is the socket it listened on before", r.out, sock)
+	}
 
 	for _, row := range []string{"reload-socket", "reload"} {
 		before := homeTree(t, p.Home)
