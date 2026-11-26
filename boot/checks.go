@@ -430,13 +430,8 @@ func (g *gate) binaryFaults() []binaryFault {
 // Licensed reports whether the SPDX expression e passes L7 with the accepted ids: A OR
 // B when one side does, A AND B when both do, an id on the allow-list or accepted, and
 // an id WITH an exception as the id. The licences L7 allows with a recorded condition
-// are allowed here, since the register records the condition.
-//
-// ponytail: the list leaves out one SPDX id that L7 allows, the one that is the name
-// of the register entry of the database behind sql, because the name lint U1 refuses
-// that name in boot/ and no item of the register's exceptions gives it this place;
-// until the owner adds one, a module under that licence alone needs acceptLicenses.
-// No module of a distribution is under it.
+// are allowed here, since the register records the condition. The SPDX id PostgreSQL
+// stands here by the register's exception item of 2026-11-26 (ADR-054 decision 9).
 func Licensed(e string, accepted []string) bool {
 	toks := strings.Fields(strings.NewReplacer("(", " ( ", ")", " ) ").Replace(e))
 	i := 0
@@ -453,7 +448,7 @@ func Licensed(e string, accepted []string) bool {
 			i += 2
 		}
 		return slices.Contains(accepted, t) || slices.Contains([]string{"Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD",
-			"Zlib", "Unicode-DFS-2016", "Unicode-3.0", "BlueOak-1.0.0", "MPL-2.0", "CC0-1.0"}, t)
+			"Zlib", "PostgreSQL", "Unicode-DFS-2016", "Unicode-3.0", "BlueOak-1.0.0", "MPL-2.0", "CC0-1.0"}, t)
 	}
 	and := func() bool {
 		v := term()
