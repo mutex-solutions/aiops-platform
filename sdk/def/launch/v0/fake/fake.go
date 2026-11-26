@@ -52,6 +52,7 @@ type Launcher struct {
 
 	mu     sync.Mutex
 	ready  bool
+	ended  bool // End was called: Set does nothing
 	boot   sync.Once
 	booted chan struct{}
 	exit   sync.Once
@@ -351,13 +352,18 @@ func (f *Launcher) Environ() []string {
 
 // Ready.
 
-func (f *Launcher) Set()  { f.setReady(true) }
-func (f *Launcher) Drop() { f.setReady(false) }
+func (f *Launcher) Set()  { f.setReady(true, false) }
+func (f *Launcher) Drop() { f.setReady(false, false) }
 
-func (f *Launcher) setReady(v bool) {
+// End ends the latch, as the launcher does when the process stops: it drops it, and
+// Set does nothing from then on.
+func (f *Launcher) End() { f.setReady(false, true) }
+
+func (f *Launcher) setReady(v, end bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.ready = v
+	f.ended = f.ended || end
+	f.ready = v && !f.ended
 }
 
 func (f *Launcher) IsReady() bool {

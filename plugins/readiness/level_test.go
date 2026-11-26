@@ -58,3 +58,29 @@ func TestNotReadyWarnsOnlyAfterReady(t *testing.T) {
 		t.Errorf("the levels of the not-ready lines: %v; want info until ready, then warn", got)
 	}
 }
+
+// The launcher ends the latch when the process stops, a command of aiopsctl among
+// them, and its rows then stop: that is no fault, so the row says so at the level info,
+// however many rows it sees stop.
+func TestNotReadyAtAStopIsNoWarning(t *testing.T) {
+	var mu sync.Mutex
+	var got []slog.Level
+	w := newWorld(t, kerneltest.WithConfig(func(c *kernel.Config) { c.LogHandler = levels{&mu, &got} }))
+	f := w.root.Plugin(readiness.New(), nil)
+	if err := f.Await(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.rows(kernel.Active, kernel.Active)
+	w.settle()
+	w.wantReady(true)
+	w.launch.End() // as boot's stop ends the latch
+	w.rows(kernel.Active, kernel.Unloading)
+	w.settle()
+	w.rows(kernel.Unloading, kernel.Disposed)
+	w.settle()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) == 0 || slices.Contains(got, slog.LevelWarn) {
+		t.Errorf("the levels of the not-ready lines at a stop: %v; want info only", got)
+	}
+}
