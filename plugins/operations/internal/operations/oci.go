@@ -79,12 +79,19 @@ func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
 }
 
 // registryClient returns the HTTP client of a registry: oras-go's retries of a reset or
-// of an answer that asks for one, but none of a timeout, and wait on a dial and on the
-// headers of each answer, so that a registry that cannot be reached, or does not answer,
-// fails the command in that time.
+// of an answer that asks for one, but none of a timeout, and wait on a dial, on the
+// headers of each answer and on each read of a connection that brings no byte, so that a
+// registry that cannot be reached, does not answer, or stalls an answer, fails the
+// command in that time.
 func registryClient(wait time.Duration) *http.Client {
 	base := http.DefaultTransport.(*http.Transport).Clone()
-	base.DialContext = (&net.Dialer{Timeout: wait}).DialContext
+	base.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		c, err := (&net.Dialer{Timeout: wait}).DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return idle{c, wait}, nil
+	}
 	base.ResponseHeaderTimeout = wait
 	p := *retry.DefaultPolicy.(*retry.GenericPolicy)
 	p.Retryable = func(resp *http.Response, err error) (bool, error) {
@@ -94,6 +101,17 @@ func registryClient(wait time.Duration) *http.Client {
 		return retry.DefaultPredicate(resp, err)
 	}
 	return &http.Client{Transport: &retry.Transport{Base: base, Policy: func() retry.Policy { return &p }}}
+}
+
+// idle is a connection whose each read fails when no byte arrives within wait.
+type idle struct {
+	net.Conn
+	wait time.Duration
+}
+
+func (c idle) Read(p []byte) (int, error) {
+	_ = c.SetReadDeadline(time.Now().Add(c.wait))
+	return c.Conn.Read(p)
 }
 
 // configJSON returns the path of the caller's config.json, "" with neither variable.
