@@ -108,9 +108,10 @@ type latch struct {
 	log     *slog.Logger
 	unknown *atomic.Bool // the state of the tree is unknown: the latch stays dropped
 
-	mu    sync.Mutex
-	known bool
-	last  string
+	mu       sync.Mutex
+	known    bool
+	last     string
+	wasReady bool // the required set was ACTIVE once: a drop after it is a warning
 }
 
 // evaluate sets or drops the latch from the live states and logs a change of what the
@@ -138,9 +139,13 @@ func (r *latch) evaluate() {
 	}
 	if now := strings.Join(unmet, " "); !r.known || now != r.last {
 		r.known, r.last = true, now
-		if len(unmet) == 0 {
+		switch {
+		case len(unmet) == 0:
+			r.wasReady = true
 			r.log.Info("readiness: ready, the required set is ACTIVE")
-		} else {
+		case !r.wasReady: // a boot is not ready until its rows are ACTIVE: no fault
+			r.log.Info("readiness: not ready, the required set is not ACTIVE", "waiting", unmet)
+		default:
 			r.log.Warn("readiness: not ready, the required set is not ACTIVE", "waiting", unmet)
 		}
 	}

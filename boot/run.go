@@ -769,9 +769,11 @@ func exitCodeOf(why launch.ExitReason) int {
 func (r *run) stop(ctx context.Context, code int, why string, command bool) int {
 	r.ready.end()
 	r.pub.update(func(s *ProcessStatus) { s.Phase, s.Detail = PhaseStopping, why })
-	if code == ExitOK {
+	switch {
+	case command: // the command returned and said what it did
+	case code == ExitOK:
 		fmt.Fprintf(r.errw, "aiops: stopping: %s\n", why)
-	} else {
+	default:
 		fmt.Fprintf(r.errw, "aiops: exit %d: %s\n", code, why)
 	}
 	bctx, cancel := r.bound(context.WithoutCancel(ctx), r.o.Limits.ShutdownBound)
