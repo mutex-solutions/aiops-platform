@@ -78,6 +78,12 @@ type Setup struct {
 	// socket of ADR-062; with no Result no process runs.
 	Verdict launch.Verdict
 	Result  *reload.WireResult
+	// Socket, when set, is how a process that runs the profile answers a submission in
+	// place of Result (ADR-062 decision 11): operations.SubmitRefused, an error line
+	// before an id; NoFinalResult, the id of each submission and then the end of the
+	// connection, with an await of it answered unknown; VerdictUnknown, the id and then
+	// nothing within Wait; ReasonNoAnswer, no connection within ConnectWait.
+	Socket string
 	// Built is what the toolbox's builder answers for dist build. use sets the suite's.
 	Built launch.Built
 }
@@ -705,6 +711,30 @@ func Run(t *testing.T, mount Mount) {
 				if err := u.remove("dev", "acme/connector-x"); !errors.Is(err, operations.ErrRefused) || !strings.Contains(fmt.Sprint(err), key) || !reflect.DeepEqual(u.homeOf("dev"), before) {
 					t.Errorf("remove of the last providers of %s: %v; want ErrRefused naming the key, and nothing written", key, err)
 				}
+			}
+		})
+		rec.Run(t, "operations.O26 a submission with no final result keeps or restores the files, and a write the wire does not carry is not submitted", func(t *testing.T) {
+			for _, c := range []struct{ socket, says string }{{operations.SubmitRefused, "refused"}, {operations.NoFinalResult, "no-final-result"},
+				{operations.VerdictUnknown, "verdict-unknown"}, {operations.ReasonNoAnswer, "restart-required"}} {
+				u := use(t, mount, Setup{Socket: c.socket})
+				before, q := u.homeOf("dev"), u.row(Row)
+				q.ConnectWait, q.Wait = time.Second, time.Second
+				ch, err := u.ops.Enable(t.Context(), q)
+				refused, after := c.socket == operations.SubmitRefused, u.homeOf("dev")
+				switch {
+				case !errors.Is(err, operations.ErrSubmission) || !strings.Contains(err.Error(), ": "+c.says+":"):
+					t.Errorf("%s: %+v, %v; want ErrSubmission saying %s", c.socket, ch, err, c.says)
+				case refused && (ch.Error == nil || !reflect.DeepEqual(after, before)), !refused && !after.Enabled[Row]:
+					t.Errorf("%s: %+v, the departure of %s %v; want the error line and the files restored, or the files kept", c.socket, ch, Row, after.Enabled[Row])
+				case c.socket == operations.NoFinalResult && len(ch.IDs) != 2, c.socket == operations.VerdictUnknown && len(ch.IDs) != 1,
+					c.socket == operations.ReasonNoAnswer && (ch.Outcome != operations.RestartRequired || ch.Reason != operations.ReasonNoAnswer):
+					t.Errorf("%s: %+v; want the id of each submission, or restart-required for no-answer", c.socket, ch)
+				}
+			}
+			u := use(t, mount, Setup{Result: Passed})
+			if ch := u.trust(operations.TrustRequest{KeyFile: u.key("a"), IDs: []string{"acme/*"}}); ch.Outcome != operations.RestartRequired ||
+				ch.Reason != operations.ReasonNotSubmitted || len(u.home().Signers) != 1 {
+				t.Errorf("trust add while a process runs dev: %+v; want restart-required, not-submitted, and the signer kept", ch)
 			}
 		})
 	})

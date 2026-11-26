@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -40,8 +41,8 @@ func TestConformance(t *testing.T) { conformance.Run(t, MountOperations) }
 // check does.
 func MountOperations(t *testing.T, s conformance.Setup) conformance.Subject {
 	home := filepath.Join(t.TempDir(), "home")
-	if s.Result != nil {
-		home = serve(t, s.Result)
+	if s.Result != nil || s.Socket != "" {
+		home = serve(t, s.Result, s.Socket)
 	}
 	if s.Interrupted {
 		interrupted(t, home)
@@ -152,10 +153,10 @@ func (box) Release(context.Context, string) (launch.Release, error) {
 }
 
 // serve makes a home in which a process runs dev and answers each submission on its
-// socket with the result queued, then res (ADR-062 decisions 6 and 9), and returns it.
-// The home is under the system's temporary directory, so its socket path stays under
-// the 107 bytes of Linux.
-func serve(t *testing.T, res *reload.WireResult) string {
+// socket with the result queued, then res (ADR-062 decisions 6 and 9), or as socket
+// says (conformance.Setup), and returns it. The home is under the system's temporary
+// directory, so its socket path stays under the 107 bytes of Linux.
+func serve(t *testing.T, res *reload.WireResult, socket string) string {
 	t.Helper()
 	home, err := os.MkdirTemp("", "ops-")
 	if err != nil {
@@ -169,21 +170,41 @@ func serve(t *testing.T, res *reload.WireResult) string {
 	if err := os.WriteFile(filepath.Join(run, reload.StatusFile), reload.Line(reload.ProcessStatus{Phase: "running", Profile: "dev"}), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if socket == def.ReasonNoAnswer { // no socket answers
+		return home
+	}
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(run, reload.SocketFile), Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
+	reply := func(c net.Conn, r *reload.WireResult, e *reload.WireError) {
+		_, _ = c.Write(reload.Line(reload.Reply{V: reload.WireVersion, Result: r, Error: e}))
+	}
 	go func() {
-		for {
+		for id := reload.ID(1); ; id++ {
 			c, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			_, _ = bufio.NewReader(c).ReadBytes('\n')
-			q := *res
-			q.Status = reload.Queued
-			_, _ = c.Write(append(reload.Line(reload.Reply{V: reload.WireVersion, Result: &q}), reload.Line(reload.Reply{V: reload.WireVersion, Result: res})...))
+			line, _ := bufio.NewReader(c).ReadBytes('\n')
+			q, _ := reload.DecodeRequest(line)
+			switch queued := (&reload.WireResult{ID: id, Status: reload.Queued}); {
+			case socket == def.SubmitRefused:
+				reply(c, nil, reload.NewError("the queue is full", reload.CauseQueueFull))
+			case socket == def.NoFinalResult && q.Op == reload.OpAwait:
+				reply(c, nil, reload.NewError("no operation has that id", reload.CauseUnknown))
+			case socket == def.NoFinalResult:
+				reply(c, queued, nil)
+			case socket == def.VerdictUnknown: // the id, and nothing more until the client goes
+				reply(c, queued, nil)
+				_, _ = io.Copy(io.Discard, c)
+			default:
+				r := *res
+				r.Status = reload.Queued
+				reply(c, &r, nil)
+				reply(c, res, nil)
+			}
 			_ = c.Close()
 		}
 	}()
