@@ -664,6 +664,46 @@ gaps:
     `rebuild-required` as `modules:`, which `dist build` refuses, and now prints them
     under `plugins:` with the sum (decision 20); a blob that fails its digest is named;
     and a failed build on the image path no longer leaves the `build/` it made.
+
+    Note of 2026-11-26, on the owner's answer of that day: the three environments run as
+    containers, each on a network of its own that reaches only the exit's module proxy
+    and registry (decision 21), not as directories with proxy variables. This replaces
+    the sentences of the note of 2026-11-25 from "Each environment is a directory" to
+    "through `file://`"; the containers of the builder image and of the kernel still
+    have no network. Each network is an internal network of the container runtime whose
+    bridge has no address on the host, so that it routes to no address outside it, the
+    host's among them. The registry is attached to each. The module proxy, a container
+    that serves the module proxy's directory over HTTP, is attached to the author's
+    repository's network alone, and its go command resolves modules through
+    `GOPROXY=http://proxy`. The pack author's machine reaches the registry alone. The
+    clean machine's only module reader is the builder, whose module source is the module
+    proxy's directory and which refuses a `GOPROXY` that names a URL until L14 clears
+    (ADR-044 decision 7), so its `GOPROXY` names that directory through `file://`, and
+    so does that of `plugin smoke` in the author's repository. A container on each
+    network holds the network namespace that the environment's containers join and
+    forwards, on its loopback interface, the registry's host and port to the registry,
+    so that the registry keeps inside each environment the name that the container
+    runtime pulls from on the host, and `aiopsctl` speaks plain HTTP to it as to any
+    registry on the loopback interface. Each command runs in a container of the
+    environment's image, as the test's user, with the environment's directory bound
+    read-write and each other path it reads bound read-only, each at its own path, so
+    that a path names the same file inside and outside it. The image of the pack
+    author's machine holds the test release's `aiopsctl` alone. The author's repository
+    runs the same image with the host's Go toolchain and system directories bound
+    read-only, a C compiler for `-race` among them, the module proxy's directory and, on
+    the image path, the container runtime's socket for `plugin smoke`. The clean
+    machine's image holds that `aiopsctl` and the host's docker client with the shared
+    libraries it loads, and its containers have the socket, the module proxy's
+    directory, the release's signed manifest, and what the author and the pack author
+    hand it: the module source of D1's copy and the pack author's public key. The images
+    are built in the test, on no base layer, from those files and from the program
+    `testdata/exitnet`, which forwards, serves and dials; nothing new is fetched for them
+    (decision 34). The case `networks` dials, from each environment, the registry, the
+    module proxy, a public address, and a port that the host listens on at each of its
+    addresses and on the loopback interface, and passes only when the registry and, from
+    the author's repository, the module proxy answer and nothing else does; it also
+    lists a container of the pack author's image and passes only when `aiopsctl` is the
+    one file in it that holds a byte. The steps and their assertions do not change.
 31. **The other refusals and the commands the exit does not reach** are cases of the
     tests of `boot`, `test/failure-matrix` and `test/authoring/`:
     - Every denial clause of checks 1, 2, 4, 5, 6 and 10 and of the S2a parts of checks 7
