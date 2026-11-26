@@ -625,11 +625,26 @@
       of `trust add`; each outcome of a submission, with the files kept or restored; a
       write after an interrupted one restores first; a second writer waits and fails
       after its bound; and `ErrInactive` after release (`07:512`, `:520`). The fake
-      passes it.
+      passes it. Note of 2026-11-26, as built: suite revision 5 of `operations` adds
+      O26, the outcomes of a submission with no final result, each set by `Setup.Socket`:
+      `refused` restores the files, and `no-final-result`, `verdict-unknown` and
+      `restart-required` with the reason `no-answer` keep them, each with
+      `ErrSubmission` naming its outcome; and `trust add` while a process runs the
+      profile answers `restart-required` with the reason `not-submitted`. The mount of
+      the operations row scripts its socket so, and the fake takes `Socket` in its
+      config. No cap was raised.
     - The cases that need the files are T1 tests of `plugins/operations`, which may
       import the YAML library (ADR-060 decision 41): the rename order, the content of
       the snapshot and the restore after a kill (decision 17), the modes and the owner
-      of decision 17, and the record in `write.lock` (decision 19).
+      of decision 17, and the record in `write.lock` (decision 19). Note of 2026-11-26,
+      as built: `TestAnInstallKilledOrInterruptedIsRestored` of `cmd/aiopsctl` runs an
+      install in a process of its own, the test binary as the `aiopsctl` of the test
+      distribution, against a process that runs `dev` and whose socket takes the request
+      and answers nothing, so the install stops after its renames: killed, it leaves its
+      snapshot and the next writer restores the home as it was and says so; interrupted,
+      it restores the home itself and exits 1 (decision 31). A stop after the first
+      rename alone stays the generic write of `TestKilledWriteIsRestoredByTheNextWriter`,
+      since the built binary has no hook to stop there.
 
 ### The profile write lock
 

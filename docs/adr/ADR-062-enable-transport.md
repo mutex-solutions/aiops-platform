@@ -553,7 +553,15 @@
       row, exits 1 and keeps the files; with the row disabled while the process runs,
       `enable` answers `restart-required` and exits 1; with no `status.json`, it exits 0
       and changes the files only. `test-submit` stays the submitter of the S1 suites
-      (ADR-059 decision 9).
+      (ADR-059 decision 9). Note of 2026-11-26, as built: `TestEnableOutcomesOnARunningProcess`
+      of `cmd/aiopsctl`, which `make s1-suites` runs, holds each case of this bullet, with
+      `extra` and `flaky` in a bundle of the home's `dev` and the test binary running as
+      the `aiopsctl` of the test distribution in a process of its own; the change of
+      `inject` and of `history` are each asserted by the rows that test-state reports the
+      loader restarted in that generation (`reload-socket`; `reload`), and the case of a
+      disabled `reload-socket` runs on a second process started with a patch that disables
+      it. The client case of disabling `reload-socket` and `reload` is
+      `TestDisableOfTheRowsOfTheSubmission` of the operations plugin.
     - `plugin smoke`: with question Q9 (a), the composition that smoke boots holds
       `reload-socket` disabled by the patch and every other row of `aiops-core` ACTIVE;
       with (b), smoke under the runtime of the exit's clean machine finds the row ACTIVE.

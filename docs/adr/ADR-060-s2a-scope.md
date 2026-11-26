@@ -260,7 +260,13 @@ gaps:
     one gate text and the check of the copies were written in two companion commits,
     `d1b9396` and `e8557b5`, the second a descendant of `e28dd3e`. Only the placement in
     commits differs; `08` §1.6 holds the one text and `07` §9 links to it, as this
-    decision says.
+    decision says. Note of 2026-11-26, on the owner's answer of that date: the relaxation
+    of check 8 that standing rule 2 needed (decision 32, note of 2026-11-25) is
+    confirmed. An artifact under `aiops/` whose manifest is byte for byte the one that the
+    release signed for that plugin stands in for nothing and is not denied for its group,
+    which takes the id of a required row, as plugin check packs `readiness`, `reload` and
+    `restart-policy`; any other artifact whose group takes the id of a required row is
+    denied. The one gate text of `08` §1.6 carries it in check 8.
 17. **Where each clause runs.** The gate runs at build, at `plugin check`, at install, at
     boot, at every recomposition and offline (`08:493`), and each entry point evaluates
     the clauses its inputs decide. Every entry point reports each clause it does not
@@ -383,7 +389,16 @@ gaps:
     package of its table; their tests, the suites and generated tests among them, have
     run by then in each phase, since the statement of each first-party plugin names the
     suites that ran (decision 50). A `GOPROXY` that names a proxy URL in any element of
-    its list is refused.
+    its list is refused. Note of 2026-11-26, as built: `dist build` prints the outcome,
+    pass or fail, of each check of this decision that it runs: each clause of its gate,
+    the strict-version check, the module table and the ids of its plugins, the package
+    graph, the `init` deny-list scan, the licence scan of each binary, and the import
+    boundary and plugin vet of each site package and the tests of each site module. The
+    gate prints each check that passed on every row and, beside the clauses it does not
+    evaluate, the warning of each row whose `requires` names a deprecated major, which
+    never denies (decision 9). A `GOPROXY` element is refused unless it is `direct`,
+    `off` or a `file://` directory, so an element with no scheme, which the go command
+    reads as `https://`, is refused too.
 23. **The CLI** gains `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`,
     `install`, `verify`, `enable`, `disable`, `remove` and `gate --against`, `trust add`,
     a command that writes a key pair in the format of ADR-020 decision 4, which the CLI
@@ -463,7 +478,20 @@ gaps:
     `plugingen` writes the config examples `testdata/config/*.json` of a plugin as the
     root `examples` of its `configSchema`, which it did not, and step 3 refuses an
     instantiable plugin with none or with a reference in one (ADR-047 decision 12);
-    `examples/echoer` has one.
+    `examples/echoer` has one. Note of 2026-11-26, as built: the template job,
+    `TestTemplateJob` of `internal/authoring`, runs the `aiopsctl` built in the
+    repository on a throwaway home that trusts the manifest it embeds with a key made in
+    the test (ADR-020 decision 13), not the toolbox in process: `plugin new`, `plugin
+    check --write`, `go mod tidy` and `plugin check --json`, each plugin checked `--against`
+    the test distribution, whose `serves` holds the toy registries, since step 5 maps a
+    key to its definition by those classes (decision 32, note of 2026-11-26). Its
+    connector case writes a pack of the test distribution's instantiable echoer with
+    `plugin new connector --against`, and `plugin check` names the suite binary that this
+    `aiopsctl` does not carry. The job builds no release, so the case of the connector
+    template against the test release runs in the job that builds it, `builder`:
+    `TestTestRelease` runs `plugin new connector` and `plugin check` with the `aiopsctl`
+    of the test release, and step 5 fails each obligation of `echoers` once on the suite
+    binary that the release embeds.
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
@@ -734,7 +762,16 @@ gaps:
       boot prints the departure and `profile verify` reports it, as the S3 exit needs
       (`08:643`, `:696`). A build whose `acceptLicenses` names a licence outside the
       allow-list records it in the signed manifest and boot prints it; check 6 denies the
-      same module in a distribution whose manifest does not record it.
+      same module in a distribution whose manifest does not record it. Note of 2026-11-26,
+      a departure recorded as built: the departing build of the exit adds a consumer of
+      `reload`, a consumer-bound key of `sdk/def` that the test release serves, not a key
+      of a test definition. The test release serves no test definition: of `test/dist` it
+      links `teststate` alone, which uses keys of `sdk/def` only, and the test
+      definitions declare no consumer-bound key (`toy.policy` is provider-bound). Serving
+      one would link a toy or fault plugin of `test/dist` into the test release and give a
+      test definition a consumer-bound key, which changes the fixtures of the S1 suites and
+      their goldens, for a departure that boot prints and `profile verify` reports by the
+      same code whatever definition declares the key; the exit asserts both on `reload`.
 
 ### Working rules
 
@@ -785,7 +822,12 @@ gaps:
          manifest is byte for byte the one of the release's module table, which stands in
          for nothing, the case of `readiness`, `reload` and `restart-policy`, whose rows
          are required; and the tests of `examples/caller` call through the fakes of the
-         two dispatchers, since a plugin imports no other plugin.
+         two dispatchers, since a plugin imports no other plugin. Note of 2026-11-26, as
+         built: step 5 maps a key that in-process code provides or registers with to the
+         definition whose classes hold it in the `serves` of the release it runs against,
+         the embedded one or `--against`, in place of the name prefix, so `ready` reaches
+         `launch`; a key that no served definition holds, as `configRefsReady`, runs no
+         suite.
       3. Nothing outside the closed vocabularies merges into `sdk/kernel`, `boot/` or
          `loader/`, checked as question Q9 decides.
       4. Whoever changes a `v0` definition fixes every plugin under `plugins/` and
@@ -861,8 +903,9 @@ gaps:
     (ADR-047 decision 4); the builder image has its entry `builder-image` of mode `ship`
     beside `go-toolchain` (ADR-044 decision 5); and the builder image's base layer and
     SBOM tool are settled, since it has no base layer and `aiopsctl` writes the SBOM
-    (ADR-044 decisions 15 and 17). The owner's word is still due on the names `distribution` and `registry`
-    (ADR-054 decision 8).
+    (ADR-044 decisions 15 and 17). On the owner's word of 2026-11-26, the entry of the
+    registry image keeps the one name `docker-distribution`, and `distribution` and
+    `registry` are not added to its names (ADR-054 decision 8).
 
 ### Line budgets
 
@@ -1564,16 +1607,23 @@ to a question, the decision here settles it.
     `AIOPS_SUITE_RECORD` names a directory, the definition and the halves it ran on a
     package, unless it skipped (`sdk/def/internal/deftest.Ran`): a provider's suite both
     halves, a registry's the guard half on a dispatcher and the obligations half on a
-    contribution. The release build runs the tests of each first-party plugin of the
-    module table in both phases, on a `go.mod` and `go.sum` of their own that take the
-    lines of their test dependencies, and the statement of each names exactly the
-    suites and halves that its package recorded, with no suite revision for a suite
-    that did not run; a failed test fails the build. The manifests that the parity
+    contribution (note of 2026-11-26, as built: the condition is "unless it, or a case of
+    it, skipped"; each suite runs its cases through the record that `deftest.Ran`
+    returns, which a case that skips voids, and step 5 of `plugin check` names each case
+    that skipped as a failure of the step). The release build runs the tests of each
+    first-party plugin of the module table in both phases, on a `go.mod` and `go.sum` of
+    their own that take the lines of their test dependencies, and the statement of each
+    names exactly the suites and halves that its package recorded, with no suite
+    revision for a suite that did not run; a failed test fails the build. The manifests that the parity
     check of `make check` holds, `dist/` and `test/dist/`, are written the same way, a
     site's build keeps the release's statement of each first-party plugin, and the
     rows of `plugins/command-plugin` run the obligations half on the cases of its
     `fixtures/commands/` (ADR-061 decision 5). Before, the builder wrote both halves for
-    every first-party definition with a suite, run or not.
+    every first-party definition with a suite, run or not. Second note of 2026-11-26, as
+    built: the statement of each first-party plugin also names the generated tests that
+    did not run on its package (decision 18), read from the skip events of those tests
+    (`plugingen.GeneratedTests`): `TestTwoTenants` of every plugin until S4a (decision
+    43). Before, it named none, while `plugin check` names them.
 
 51. **The upstream register starts at S2a** (Q15 (a)). S2a writes
     `tools/upstream-components.yaml` with an entry for every module, image and tool that

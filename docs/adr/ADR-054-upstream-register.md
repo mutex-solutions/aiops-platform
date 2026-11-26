@@ -275,6 +275,12 @@ entry, and cosign is pinned as a CI tool with its entry (ADR-060 decisions 23 an
    commit that writes the register adds `loader/NOTICE` with both MIT notices. A tool image
    records no layers, since `contains` asks for layers in mode `ship` only.
 
+   Owner word of 2026-11-26 on the names of the registry image the exit runs (ADR-060
+   decision 34): the entry `distribution-registry` keeps the one name `docker-distribution`.
+   `distribution` and `registry` are words the repository's own files carry, for the signed
+   distribution manifest and for any OCI registry, and they are not added to the entry's
+   `names`, so U1 does not look for them.
+
 ### The exception list
 
 9. **The exception list is the list of `00:267`**, recorded under `exceptions` with, for
