@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -273,9 +274,33 @@ func TestNoProcessOnTheProfileKeepsTheFiles(t *testing.T) {
 	}
 }
 
-// A process runs the profile and nothing answers within the connect window.
+// A server killed with its status saying that it runs left run/process.lock, whose
+// flock the system released with it: no process runs the profile, and the submission
+// answers so at once, without the connect window (ADR-062 decisions 2 and 9).
+func TestAKilledProcessIsNotRunning(t *testing.T) {
+	home := newHome(t)
+	if err := os.WriteFile(filepath.Join(home, "run", "process.lock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	o, err := ops.Submit(t.Context(), ops.Request{Home: home, Profile: "dev", Command: reload.CommandEnable, ConnectWait: 5 * time.Second})
+	if err != nil || o.Kind != ops.NotRunning || time.Since(start) > 2*time.Second {
+		t.Errorf("a submission after a killed process: %+v, %v after %v; want not-running at once", o, err, time.Since(start))
+	}
+}
+
+// A process runs the profile, holding run/process.lock, and nothing answers within the
+// connect window.
 func TestNothingAnswersIsRestartRequired(t *testing.T) {
 	home := newHome(t)
+	lock, err := os.OpenFile(filepath.Join(home, "run", "process.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err == nil {
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
 	o := submit(t, home)
 	check(t, o, ops.RestartRequired, false, nil, "")
 	if o.Socket != filepath.Join(home, "run", "reload.sock") {
