@@ -22,7 +22,10 @@
 // and the clean machine, with that aiopsctl and a container runtime, whose builds read
 // the module proxy's directory and run on the builder image, or with
 // AIOPS_EXIT_BUILDER=local on the pinned toolchain module that the module proxy serves
-// (the second job). The case networks holds each network to that. Every step A1 to A3,
+// (the second job). The container runtime of an environment, the clean machine's and,
+// on the image path, the author's, is a daemon of its own on the environment's network
+// (startRuntime), so what it pulls and the containers it runs reach no more than the
+// environment does. The case networks holds each network to that. Every step A1 to A3,
 // P1, C1 to C6, D1 and D2 passes only as decision 30 states it, and the kernel of steps
 // C3 to C6 runs in the container form of ADR-047 decision 15. The cases of decision 31 that the exit reaches
 // run beside them: plugin smoke of A2's plugin, plugin verify of A3's artifact, of P1's
@@ -129,6 +132,11 @@ func TestS2aExit(t *testing.T) {
 	if err := exec.Command("docker", "version").Run(); err != nil {
 		t.Skipf("no container runtime answers docker version (%v): the clean machine has one and the registry runs in one; the CI jobs s2a-exit and s2a-exit-local have one", err)
 	}
+	for _, p := range runtimePrograms {
+		if _, err := exec.LookPath(p); err != nil {
+			t.Skipf("no %s on PATH (%v): the container runtime of an environment is a daemon of the job's container runtime of its own; the CI jobs s2a-exit and s2a-exit-local have one", p, err)
+		}
+	}
 	gomodcache, err := exec.Command("go", "env", "GOMODCACHE").Output()
 	if err != nil {
 		t.Fatal(err)
@@ -150,16 +158,18 @@ func TestS2aExit(t *testing.T) {
 	var registry string
 	x.reg, registry = startRegistry(t)
 	x.buildRelease()
-	netd := x.image(map[string]string{"exitnet": x.exitnet()})
+	exitnet := x.exitnet()
+	netd := x.image(map[string]string{"exitnet": exitnet})
 	netns := x.networks(registry, netd)
+	daemon := x.image(programs(t, map[string]string{"exitnet": exitnet}, runtimePrograms...))
 
 	// The image of the author's repository and of the pack author's machine holds the
 	// test release's aiopsctl alone. The author's containers also have, read-only, the
 	// host's Go toolchain and the system directories that hold the host's programs, a C
 	// compiler for -race among them, as on an author's computer, with the module proxy's
 	// directory, the module source that plugin smoke builds from, and, on the image path,
-	// the container runtime, which plugin smoke runs the builder image on. Its go command
-	// resolves modules through the module proxy at http://proxy.
+	// a container runtime of their own, which plugin smoke runs the builder image on. Its
+	// go command resolves modules through the module proxy at http://proxy.
 	out, err := exec.Command("go", "env", "GOROOT").Output()
 	if err != nil {
 		t.Fatal(err)
@@ -172,33 +182,21 @@ func TestS2aExit(t *testing.T) {
 			system = append(system, d)
 		}
 	}
-	opts := bound(append(system, goroot, x.proxy)...)
+	author := newMachine(t, x.root, "author", ctl, netns["author"], "/bin:"+goroot+"/bin:/usr/local/bin:/usr/bin", bound(append(system, goroot, x.proxy)...))
 	if x.builder == "image" {
-		opts = append(opts, containerRuntime(t)...)
+		author.startRuntime(daemon, x.proxy)
 	}
-	author := newMachine(t, x.root, "author", ctl, netns["author"], "/bin:"+goroot+"/bin:/usr/local/bin:/usr/bin", opts)
-	author.runtime = x.builder == "image"
 	packer := newMachine(t, x.root, "packer", ctl, netns["packer"], "/bin", nil)
 	// The clean machine's image holds that aiopsctl and the host's docker client, with
-	// the shared libraries it loads; its containers have the container runtime, the
-	// module proxy's directory and the release's signed manifest. Its only module reader
-	// is the builder, which takes that directory and refuses a GOPROXY that names a URL
-	// until L14 clears (ADR-044 decision 7), so its GOPROXY names the directory.
-	dockerBin, err := exec.LookPath("docker")
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{"bin/aiopsctl": x.aiopsctl, "bin/docker": dockerBin}
-	libs, _ := exec.Command("ldd", dockerBin).Output() // a static docker loads none
-	for _, f := range strings.Fields(string(libs)) {
-		if filepath.IsAbs(f) {
-			files[f[1:]] = f
-		}
-	}
+	// the shared libraries it loads; its containers have a container runtime of their
+	// own, the module proxy's directory and the release's signed manifest. Its only
+	// module reader is the builder, which takes that directory and refuses a GOPROXY that
+	// names a URL until L14 clears (ADR-044 decision 7), so its GOPROXY names the
+	// directory.
 	home := filepath.Join(x.root, "clean", "site", "home")
-	clean := newMachine(t, x.root, "clean", x.image(files), netns["clean"], "/bin", append(bound(x.proxy, x.signed), containerRuntime(t)...),
-		"GOPROXY=file://"+x.proxy, "AIOPS_HOME="+home)
-	clean.runtime = true
+	clean := newMachine(t, x.root, "clean", x.image(programs(t, map[string]string{"bin/aiopsctl": x.aiopsctl}, "docker")), netns["clean"], "/bin",
+		bound(x.proxy, x.signed), "GOPROXY=file://"+x.proxy, "AIOPS_HOME="+home)
+	clean.startRuntime(daemon, x.proxy)
 	if err := os.MkdirAll(filepath.Dir(home), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -206,9 +204,6 @@ func TestS2aExit(t *testing.T) {
 
 	a := x.author(author)
 	x.pack(packer)
-	// What the author and the pack author hand to the clean machine: the module source
-	// of D1's copy and the pack author's public key.
-	clean.opts = append(clean.opts, bound(a.copySrc, filepath.Join(packer.work, "packer.pub"))...)
 	x.cleanMachine(clean, author, packer, a, home)
 }
 
@@ -319,7 +314,6 @@ func (x *exit) buildRelease() {
 	if x.release == "" || x.builderImage == "" {
 		t.Fatalf("the release layout holds no release artifact or no builder image: %+v", idx)
 	}
-	x.images = append(x.images, x.builderImage)
 }
 
 // primeProxy makes the module proxy serve what the module of a plugin of each Go
@@ -382,7 +376,6 @@ type authored struct {
 	sum      string // the module's h1 sum
 	unserved string // the copy of D1
 	copySum  string // the sum of the copy's module
-	copySrc  string // the module source that serves the copy's module
 	foreign  string // the copy of D2
 	watchSum string // the sum of the module of the departing plugin acme/watch
 }
@@ -485,15 +478,16 @@ func (x *exit) author(m *machine) authored {
 		cp := filepath.Join(m.work, "copy")
 		copyDir(t, a.dir, cp)
 		write(t, filepath.Join(cp, "plugin.yaml"), strings.Replace(read(t, filepath.Join(cp, "plugin.yaml")), `echoers: ["0.1"]`, `echoers: ["0.2"]`, 1))
-		a.copySrc = filepath.Join(m.work, "copy-source")
-		modsrc.LinkTree(t, x.proxy, a.copySrc)
-		esc := filepath.Join(a.copySrc, "example.com", "acme", "echo", "@v")
+		// The module source that serves the copy's module, which the clean machine copies.
+		src := filepath.Join(m.work, "copy-source")
+		modsrc.LinkTree(t, x.proxy, src)
+		esc := filepath.Join(src, "example.com", "acme", "echo", "@v")
 		for _, ext := range []string{".zip", ".mod", ".info"} {
 			if err := os.Remove(filepath.Join(esc, "v0.1.0"+ext)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		a.copySum = modsrc.Zip(t, a.copySrc, echoModule, "v0.1.0", cp)
+		a.copySum = modsrc.Zip(t, src, echoModule, "v0.1.0", cp)
 		d1 := filepath.Join(m.work, "unserved")
 		rewrite(t, unsigned, d1, map[string]func([]byte) []byte{
 			layerManifest: func([]byte) []byte { return []byte(read(t, filepath.Join(cp, "plugin.yaml"))) },
@@ -616,12 +610,17 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 	site := filepath.Join(m.root, "site")
 	run := filepath.Join(home, "run")
 	siteCtl := filepath.Join(site, "build", "aiopsctl", "aiopsctl")
+	// What the author and the pack author hand to the clean machine is copied into its
+	// directory: the author's, with the author's public key and the module source of
+	// D1's copy, and the pack author's public key.
+	fromAuthor := filepath.Join(m.work, "from-author")
 	ok := t.Run("C1", func(t *testing.T) {
 		m.t = t
-		copyDir(t, filepath.Join(author.work), filepath.Join(m.work, "from-author"))
+		copyDir(t, author.work, fromAuthor)
+		write(t, filepath.Join(m.work, "from-packer", "packer.pub"), read(t, filepath.Join(packer.work, "packer.pub")))
 		m.must("", "aiopsctl", "key", "generate", "site")
-		m.must("", "aiopsctl", "trust", "add", filepath.Join(m.work, "from-author", "author.pub"), "--ids", "acme/*", "--runtimes", "inproc")
-		m.must("", "aiopsctl", "trust", "add", filepath.Join(packer.work, "packer.pub"), "--ids", "globex/*")
+		m.must("", "aiopsctl", "trust", "add", filepath.Join(fromAuthor, "author.pub"), "--ids", "acme/*", "--runtimes", "inproc")
+		m.must("", "aiopsctl", "trust", "add", filepath.Join(m.work, "from-packer", "packer.pub"), "--ids", "globex/*")
 		m.must("", "aiopsctl", "trust", "add", "site.pub", "--distribution")
 		tr := read(t, filepath.Join(home, "trust.yaml"))
 		pemLines := strings.Split(read(t, filepath.Join(m.work, "site.pub")), "\n")
@@ -666,7 +665,7 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 		denies(t, 2, m.work, "aiopsctl", "plugin", "install", a.unserved, "--profile", "dev")
 		dir := filepath.Join(m.root, "unserved")
 		write(t, filepath.Join(dir, "dist.yaml"), fmt.Sprintf("release: %s\nplugins:\n  - {module: %s, version: v0.1.0, sum: %s}\n", x.release, echoModule, a.copySum))
-		denies(t, 2, dir, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", a.copySrc, "--builder", x.builder)
+		denies(t, 2, dir, "aiopsctl", "dist", "build", "dist.yaml", "--modcache", filepath.Join(fromAuthor, "copy-source"), "--builder", x.builder)
 	})
 	t.Run("D2", func(t *testing.T) {
 		m.t = t

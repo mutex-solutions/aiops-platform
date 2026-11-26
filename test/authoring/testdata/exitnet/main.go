@@ -9,11 +9,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +36,8 @@ func main() {
 		fail(err)
 	case len(a) == 3 && a[0] == "serve":
 		fail(http.ListenAndServe(a[1], http.FileServer(http.Dir(a[2]))))
+	case len(a) > 1 && a[0] == "daemon":
+		fail(daemon(a[1:]))
 	case len(a) > 1 && a[0] == "dial":
 		for _, addr := range a[1:] {
 			c, err := net.DialTimeout("tcp", addr, 5*time.Second)
@@ -44,6 +51,36 @@ func main() {
 	default:
 		fail(fmt.Errorf("usage: exitnet forward <listen> <to> | serve <listen> <dir> | dial <address>..."))
 	}
+}
+
+// daemon readies the container it runs in, the first process of a privileged container,
+// for a container runtime, and replaces itself with the program of args: on cgroup v2 it
+// moves itself out of the container's root cgroup into a child, since a cgroup that
+// holds a process enables no controller for its children, and enables each controller
+// for them; and it makes the directories that a runtime writes under, which an image of
+// a few programs on no base layer lacks.
+func daemon(args []string) error {
+	if b, err := os.ReadFile("/sys/fs/cgroup/cgroup.controllers"); err == nil {
+		on := strings.Fields(string(b))
+		for i := range on {
+			on[i] = "+" + on[i]
+		}
+		if err := errors.Join(os.MkdirAll("/sys/fs/cgroup/init", 0o755),
+			os.WriteFile("/sys/fs/cgroup/init/cgroup.procs", []byte(strconv.Itoa(os.Getpid())), 0),
+			os.WriteFile("/sys/fs/cgroup/cgroup.subtree_control", []byte(strings.Join(on, " ")), 0)); err != nil {
+			return err
+		}
+	}
+	for _, d := range []string{"/etc", "/run", "/tmp", "/var/lib"} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return err
+		}
+	}
+	p, err := exec.LookPath(args[0])
+	if err != nil {
+		return err
+	}
+	return syscall.Exec(p, args, os.Environ())
 }
 
 // join copies c to a connection to addr and back until either side closes.

@@ -20,7 +20,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -41,7 +40,8 @@ const password = "a throwaway key of the exit"
 // machine is one environment of the exit (ADR-060 decision 30; the owner's answer of
 // 2026-11-26): containers of an image that holds the environment's programs, one per
 // command, run as the test's user in the network namespace of a container on a network
-// of its own (networks). Its directory, outside the repository, with a home, a
+// of its own (networks), with, where the environment has one, a container runtime of
+// its own in that namespace (startRuntime). Its directory, outside the repository, with a home, a
 // temporary directory and caches of its own, is bound into them read-write at its own
 // path, and each other path it reads is bound read-only at its own path, so that a path
 // names the same file inside and outside them. It has the Go environment of ADR-060
@@ -54,7 +54,7 @@ type machine struct {
 	work         string   // its working directory
 	image, netns string   // the image of its containers, and the container whose network namespace they join
 	opts, env    []string // the options of docker run of its containers, and their variables
-	runtime      bool     // its containers have a container runtime
+	runtime      bool     // its containers have a container runtime of its own
 }
 
 // newMachine returns the environment name under root, whose containers run image in the
@@ -90,17 +90,77 @@ func bound(paths ...string) []string {
 	return opts
 }
 
-// containerRuntime returns the options of docker run that give a container the
-// container runtime of the job: its socket, where the docker client dials by default,
-// and the group that owns it.
-func containerRuntime(t *testing.T) []string {
+// runtimePrograms are the programs of the job's container runtime that the daemon of an
+// environment runs.
+var runtimePrograms = []string{"dockerd", "containerd", "containerd-shim-runc-v2", "runc"}
+
+// programs adds to files, at bin/<name> of an image, each program of the host named,
+// and each shared library it loads at its own path, and returns files.
+func programs(t *testing.T, files map[string]string, names ...string) map[string]string {
 	t.Helper()
-	sock, ok := strings.CutPrefix(docker(t, "context", "inspect", "-f", "{{.Endpoints.docker.Host}}"), "unix://")
-	st, err := os.Stat(sock)
-	if !ok || err != nil {
-		t.Fatalf("the container runtime of the job answers on no unix socket: %q, %v", sock, err)
+	for _, n := range names {
+		p, err := exec.LookPath(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files["bin/"+n] = p
+		libs, _ := exec.Command("ldd", p).Output() // a static program loads none
+		for _, f := range strings.Fields(string(libs)) {
+			if filepath.IsAbs(f) {
+				files[f[1:]] = f
+			}
+		}
 	}
-	return []string{"--mount", "type=bind,src=" + sock + ",dst=/var/run/docker.sock", "--group-add", strconv.FormatUint(uint64(st.Sys().(*syscall.Stat_t).Gid), 10)}
+	return files
+}
+
+// startRuntime gives the environment a container runtime of its own (the owner's answer
+// of 2026-11-26): the daemon of the job's container runtime, run from the image daemon,
+// which holds its programs and exitnet, in a privileged container in the environment's
+// network namespace, so that what it pulls and the containers it runs reach what the
+// environment reaches and nothing else. It keeps its images in a volume that is removed
+// with it. The environment's directory is bound into it read-write and each of paths
+// read-only, each at its own path, so that a path that a command of the environment
+// binds into a container names the same file. It runs no bridge, so a container on its
+// default network has no network. It listens on a socket in the environment's directory
+// that the test's group owns, which DOCKER_HOST names in the environment's containers.
+func (m *machine) startRuntime(daemon string, paths ...string) {
+	t := m.t
+	t.Helper()
+	sock := filepath.Join(m.root, "runtime", "docker.sock")
+	if err := os.MkdirAll(filepath.Dir(sock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	args := append([]string{"run", "-d", "--privileged", "--network", "container:" + m.netns, "-e", "PATH=/bin",
+		"--mount", "type=volume,dst=/var/lib/docker", "--mount", "type=bind,src=" + m.root + ",dst=" + m.root}, bound(paths...)...)
+	id := docker(t, append(args, daemon, "/exitnet", "daemon", "dockerd", "--host", "unix://"+sock, "--group", strconv.Itoa(os.Getgid()),
+		"--bridge", "none", "--iptables=false", "--ip6tables=false", "--userland-proxy=false")...)
+	removed(t, id)
+	for deadline := time.Now().Add(time.Minute); exec.Command("docker", "--host", "unix://"+sock, "version").Run() != nil; time.Sleep(100 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			out, _ := exec.Command("docker", "logs", id).CombinedOutput()
+			t.Fatalf("the container runtime of the %s did not answer within a minute:\n%s", m.name, out)
+		}
+	}
+	m.env, m.runtime = append(m.env, "DOCKER_HOST=unix://"+sock), true
+}
+
+// removed removes the container id with its volumes when the test ends, and returns
+// the names of its volumes; a volume left behind fails the test, which then removes it.
+func removed(t *testing.T, id string) []string {
+	t.Helper()
+	var volumes []string
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "rm", "-f", "-v", id).Run()
+		for _, v := range volumes {
+			if exec.Command("docker", "volume", "inspect", v).Run() == nil {
+				t.Errorf("the container %s left its volume %s", id, v)
+				_ = exec.Command("docker", "volume", "rm", "-f", v).Run()
+			}
+		}
+	})
+	volumes = strings.Fields(docker(t, "inspect", "-f", "{{range .Mounts}}{{.Name}} {{end}}", id))
+	return volumes
 }
 
 // image imports into the container runtime an image of one layer on no base layer that
@@ -359,18 +419,8 @@ func startRegistry(t *testing.T) (string, string) {
 	if exec.Command("docker", "image", "inspect", registryImage).Run() != nil {
 		t.Cleanup(func() { _ = exec.Command("docker", "image", "rm", registryImage).Run() })
 	}
-	var volumes string
-	t.Cleanup(func() {
-		for _, v := range strings.Fields(volumes) {
-			if exec.Command("docker", "volume", "inspect", v).Run() == nil {
-				t.Errorf("the registry's container left its volume %s", v)
-				_ = exec.Command("docker", "volume", "rm", "-f", v).Run()
-			}
-		}
-	})
 	id := docker(t, "run", "-d", "-p", "127.0.0.1::5000", registryImage)
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", "-v", id).Run() })
-	if volumes = docker(t, "inspect", "-f", "{{range .Mounts}}{{.Name}} {{end}}", id); volumes == "" {
+	if len(removed(t, id)) == 0 {
 		t.Errorf("the registry's container mounts no volume: the pinned image declares /var/lib/registry one")
 	}
 	host := docker(t, "port", id, "5000/tcp")
