@@ -134,7 +134,10 @@ func TestDecodeRules(t *testing.T) {
 		{"an unexported field is not config", m("hidden", int64(1)), nil, "config.hidden: unknown field"},
 		{"null is not the default", m("count", nil), nil, "config.count: want an integer, got null"},
 		{"null struct", m("auth", nil), nil, "config.auth: want a map, got null"},
-		{"float into an integer", m("count", 5.0), nil, "config.count: want an integer, got 5"},
+		// A whole float is shown as written, so it is seen why it is no integer: S1's
+		// decoders took factor: 2.0 as 2.
+		{"float into an integer", m("count", 5.0), nil, "config.count: want an integer, got 5.0, a float"},
+		{"float with a fraction into an integer", m("count", 5.5), nil, "config.count: want an integer, got 5.5, a float"},
 		{"string into an integer", m("count", "5"), nil, `config.count: want an integer, got a string`},
 		{"int8 above range", m("small", int64(128)), nil, "config.small: 128 is above the maximum 127"},
 		{"int8 below range", m("small", int64(-129)), nil, "config.small: -129 is below the minimum -128"},
