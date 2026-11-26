@@ -15,7 +15,8 @@
 // deprecated, its text (<category>/<id>/text.txt) and, where it differs in its words,
 // the text its template requires (required.txt): the optional parts left out, a
 // variable that may be empty left out, and every other variable at its original
-// text. It holds the standard header of each license that has one
+// text; and each variable of its template, its original text and its match, one a line
+// (variables.txt). It holds the standard header of each license that has one
 // (Header/<id>/header.txt). The classifier names each text by its SPDX id, so no table
 // maps names (ADR-044 decision 26). The tar is written sorted, with no time, owner or
 // mode beyond 0644, and gzip with no name and no time, so the same data gives the same
@@ -137,6 +138,9 @@ func Corpus(dir string) ([]byte, error) {
 		if r := required(tmpl); words(r) != words(text) && words(r) != "" {
 			files[category+"/"+id+"/required.txt"] = r
 		}
+		if v := variables(tmpl); v != "" {
+			files[category+"/"+id+"/variables.txt"] = v
+		}
 		if strings.TrimSpace(d.Header) != "" {
 			files["Header/"+id+"/header.txt"] = d.Header
 		}
@@ -227,6 +231,20 @@ func required(tmpl string) string {
 		}
 		return m[1]
 	})
+}
+
+// variables returns each variable of a template that has an original text, one a line,
+// each once, in the order they appear: its original text and its match, a tab apart,
+// each on one line: the words in whose place a licence file may hold others, and what
+// it may hold (ADR-044 decision 26).
+func variables(tmpl string) string {
+	var vs []string
+	for _, m := range variable.FindAllStringSubmatch(tmpl, -1) {
+		if v := strings.Join(strings.Fields(m[1]), " ") + "\t" + strings.Join(strings.Fields(m[2]), " "); !strings.HasPrefix(v, "\t") && !slices.Contains(vs, v) {
+			vs = append(vs, v)
+		}
+	}
+	return strings.Join(vs, "\n")
 }
 
 // words returns the words of s, lowercase, one space apart.

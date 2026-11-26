@@ -867,7 +867,15 @@ settles it.
     without its package `assets`, and its names are SPDX ids, so no table maps them. The
     terms of the data are read at a primary source before the classifier merges. The
     header and supplement variants of the module's corpus are not carried; a text the
-    corpus cannot name is `unknown` and fails the build (L16).
+    corpus cannot name is `unknown` and fails the build (L16). Note of 2026-11-26 (review
+    round over the whole step): the classifier names a text at a confidence of 0.9 or
+    more with up to a tenth of its words foreign, and its tokenizer drops a copyright
+    line whole, so a text is also `unknown` when it holds a word that the text it names
+    does not, by the longest common run of their words, other than in place of words of
+    a variable of the SPDX template (any words where the variable's match takes any
+    text, else words of its match), or a word on a copyright line beyond its copyright
+    statements and a holder of ten words. The corpus carries each template's variables,
+    their original text and match, for that.
 
 27. **The header notices of the standard library enter `THIRD_PARTY_LICENSES/`** (Q13
     (a)). The release pipeline generates, at each toolchain pin and by a walk of the

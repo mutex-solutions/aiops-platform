@@ -15,7 +15,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -116,11 +118,12 @@ var readings = []reading{
 		"Apache-2.0 AND MIT", "", "its prose puts the files ported from libyaml under the MIT text it holds and the rest under the Apache-2.0 notice it holds (licence record §2.1, read 2026-11-21)"},
 }
 
-// corpusTexts holds the texts of the corpus by id, and ownLines the lines of each, as
-// the classifier normalizes them, once read; apacheText is the text of Apache-2.0.
+// corpusTexts holds the texts of the corpus by id and corpusVars the variables of its
+// template; apacheText is the text of Apache-2.0.
 var (
 	corpusTexts = map[string][][]byte{}
-	ownLines    sync.Map // id -> map[string]bool
+	corpusVars  = map[string]string{}
+	knowns      sync.Map // id -> *known
 	apacheText  []byte
 )
 
@@ -131,19 +134,135 @@ func apache() []byte {
 	return apacheText
 }
 
-// lines returns the normalized lines of the texts of id.
-func lines(c *classifier.Classifier, id string) map[string]bool {
-	if v, ok := ownLines.Load(id); ok {
-		return v.(map[string]bool)
+// known is what Classify reads of the texts of one id, as the classifier normalizes
+// them, once: their lines, the words of each, and the variables of the template.
+type known struct {
+	lines     map[string]bool
+	texts     [][]string
+	variables []variable
+}
+
+// variable is a variable of a template: its original words, a space before and after
+// each, and the words of its match, of two letters or more, or any for a match that
+// takes any text.
+type variable struct {
+	original string
+	takes    []string
+	any      bool
+}
+
+func knownOf(c *classifier.Classifier, id string) *known {
+	if v, ok := knowns.Load(id); ok {
+		return v.(*known)
 	}
-	set := map[string]bool{}
+	k := &known{lines: map[string]bool{}}
 	for _, t := range corpusTexts[id] {
-		for _, l := range strings.Split(string(c.Normalize(t)), "\n") {
-			set[l] = true
+		n := string(c.Normalize(t))
+		for _, l := range strings.Split(n, "\n") {
+			k.lines[l] = true
+		}
+		k.texts = append(k.texts, words(n))
+	}
+	for _, l := range strings.Split(corpusVars[id], "\n") {
+		original, match, _ := strings.Cut(l, "\t")
+		k.variables = append(k.variables, variable{" " + strings.Join(words(string(c.Normalize([]byte(original)))), " ") + " ",
+			slices.DeleteFunc(words(match), func(w string) bool { return len(w) < 2 }),
+			strings.Contains(match, ".+") || strings.Contains(match, ".*") || strings.Contains(match, ".{")})
+	}
+	knowns.Store(id, k)
+	return k
+}
+
+// within reports whether the words t[a:b] of a text, in whose place a file holds ins,
+// are in one variable of the template: inside it with the word before and after them,
+// at its start with the next word or its end with the word before (two for an empty
+// t[a:b]), or the whole of it; and its match takes any text, or each word of ins
+// starts with a word of its match.
+func (k *known) within(t []string, a, b int, ins []string) bool {
+	at := func(i, j int) string {
+		if i < 0 || j > len(t) {
+			return "\x00"
+		}
+		return " " + strings.Join(t[i:j], " ") + " "
+	}
+	return slices.ContainsFunc(k.variables, func(v variable) bool {
+		in := strings.Contains(v.original, at(a-1, b+1)) || strings.HasPrefix(v.original, at(a, max(b+1, a+2))) ||
+			strings.HasSuffix(v.original, at(min(a-1, b-2), b)) || b > a && v.original == at(a, b)
+		return in && (v.any || !slices.ContainsFunc(ins, func(w string) bool {
+			return !slices.ContainsFunc(v.takes, func(p string) bool { return strings.HasPrefix(w, p) })
+		}))
+	})
+}
+
+// foreign counts the words of doc, the words of the lines a match spans, that the text
+// of k closest to it leaves unpaired in their longest common run of words, but title
+// words and words in place of words within a variable of the template.
+func (k *known) foreign(doc, title []string) int {
+	best := len(doc)
+	for _, t := range k.texts {
+		w := len(t) + 1
+		lcs := make([]int32, (len(doc)+1)*w)
+		for i := len(doc) - 1; i >= 0; i-- {
+			for j := len(t) - 1; j >= 0; j-- {
+				if lcs[i*w+j] = max(lcs[(i+1)*w+j], lcs[i*w+j+1]); doc[i] == t[j] {
+					lcs[i*w+j] = lcs[(i+1)*w+j+1] + 1
+				}
+			}
+		}
+		// Walk the run; at each paired word, and at the end, the words between it and the
+		// pair before are a gap: foreign but where the text's side is within a variable.
+		n, gi, gj := 0, 0, 0
+		for i, j := 0, 0; ; {
+			switch {
+			case i < len(doc) && j < len(t) && doc[i] == t[j]:
+			case i < len(doc) && (j == len(t) || lcs[(i+1)*w+j] >= lcs[i*w+j+1]):
+				i++
+				continue
+			case j < len(t):
+				j++
+				continue
+			}
+			if ins := slices.DeleteFunc(slices.Clone(doc[gi:i]), func(w string) bool { return slices.Contains(title, w) }); !k.within(t, gj, j, ins) {
+				n += len(ins)
+			}
+			if i == len(doc) {
+				break
+			}
+			i, j = i+1, j+1
+			gi, gj = i, j
+		}
+		best = min(best, n)
+	}
+	return best
+}
+
+// sentence ends a sentence of a copyright line: a period after a word of two letters or
+// more before a capital, or a semicolon; copyrightStart starts a copyright statement, with
+// a word such as "Portions" before it. holderWords is the most words a holder has.
+var (
+	sentence       = regexp.MustCompile(`(\p{L}{2})\.\s+(\p{Lu})|;`)
+	copyrightStart = regexp.MustCompile(`(?i)^\s*(\p{L}+\s+)?(copyright|\(c\)|©)`)
+)
+
+const holderWords = 10
+
+// clause counts the words of a copyright line, which the classifier drops whole, that
+// are not a copyright statement: every word of a later sentence that is not one, and of
+// a holder of more than holderWords, but title words, and "copyright", "c" and numbers
+// in a statement.
+func clause(line string, title []string) int {
+	n := 0
+	for i, s := range strings.Split(sentence.ReplaceAllString(line, "$1\x00$2"), "\x00") {
+		held := i == 0 || copyrightStart.MatchString(s)
+		ws := slices.DeleteFunc(words(s), func(w string) bool {
+			_, err := strconv.Atoi(w)
+			return slices.Contains(title, w) || held && (err == nil || w == "copyright" || w == "c")
+		})
+		if !held || len(ws) > holderWords {
+			n += len(ws)
 		}
 	}
-	ownLines.Store(id, set)
-	return set
+	return n
 }
 
 // corpusClassifier is the classifier over the embedded corpus, built once.
@@ -168,6 +287,10 @@ var corpusClassifier = sync.OnceValues(func() (*classifier.Classifier, error) {
 		if err != nil || len(parts) != 3 {
 			return nil, fmt.Errorf("the licence corpus: %s: %v", h.Name, err)
 		}
+		if parts[2] == "variables.txt" {
+			corpusVars[parts[1]] = string(b)
+			continue
+		}
 		c.AddContent(parts[0], parts[1], strings.TrimSuffix(parts[2], ".txt"), b)
 		corpusTexts[parts[1]] = append(corpusTexts[parts[1]], b)
 		if h.Name == "License/Apache-2.0/text.txt" {
@@ -185,8 +308,10 @@ var corpusClassifier = sync.OnceValues(func() (*classifier.Classifier, error) {
 // licences, headers and exceptions of the corpus it holds, each id once, joined with
 // AND in the order they appear, an exception joined with WITH to the one licence of
 // the file. It fails, naming the file as unknown (L16), when the text names nothing,
-// holds a word outside what it names but on a title line, matches two texts equally
-// that twins does not join, or holds an exception beside no licence or two.
+// holds a word outside what it names but on a title line, a word inside a text it
+// names that the text does not hold but in a variable of its template, or a word on a
+// copyright line beyond its statement, matches two texts equally that twins does not
+// join, or holds an exception beside no licence or two.
 func Classify(text []byte) (string, error) {
 	c, err := corpusClassifier()
 	if err != nil {
@@ -194,23 +319,43 @@ func Classify(text []byte) (string, error) {
 	}
 	norm := c.Normalize(text)
 	var ms []*classifier.Match
-	covered := map[int]bool{}
 	for _, m := range c.Match(norm).Matches {
-		for l := m.StartLine; l <= m.EndLine; l++ {
-			covered[l] = true
-		}
 		if m.MatchType != "Copyright" {
 			ms = append(ms, m)
 		}
 	}
+	// A match inside a longer one, such as the short form of an exception inside its
+	// text, is the longer one's.
+	ms = slices.DeleteFunc(ms, func(m *classifier.Match) bool {
+		return slices.ContainsFunc(ms, func(o *classifier.Match) bool {
+			return o.StartTokenIndex <= m.StartTokenIndex && m.EndTokenIndex <= o.EndTokenIndex && o.EndTokenIndex-o.StartTokenIndex > m.EndTokenIndex-m.StartTokenIndex
+		})
+	})
 	title := slices.Clone(titleWords)
 	for _, m := range ms {
 		title = append(title, words(m.Name)...)
 	}
-	extra := 0
-	for i, l := range strings.Split(string(norm), "\n") {
-		own := slices.ContainsFunc(ms, func(m *classifier.Match) bool { return lines(c, m.Name)[l] })
-		if ws := words(l); !covered[i+1] && !own && slices.ContainsFunc(ws, func(w string) bool { return !slices.Contains(title, w) }) {
+	nls, raw := strings.Split(string(norm), "\n"), strings.Split(string(text), "\n")
+	extra, covered := 0, map[int]bool{}
+	for _, m := range ms {
+		var doc []string
+		for l := m.StartLine; l <= m.EndLine && l <= len(nls); l++ {
+			covered[l] = true
+			doc = append(doc, words(nls[l-1])...)
+		}
+		extra += knownOf(c, m.Name).foreign(doc, title)
+	}
+	// The normalized text leaves the copyright lines out, and its lines need not be
+	// those of the file; the matches of the file name them.
+	for _, m := range c.Match(text).Matches {
+		if m.MatchType == "Copyright" && m.StartLine <= len(raw) {
+			extra += clause(raw[m.StartLine-1], title)
+		}
+	}
+	for i, l := range nls {
+		ws := words(l)
+		own := slices.ContainsFunc(ms, func(m *classifier.Match) bool { return knownOf(c, m.Name).lines[l] })
+		if !covered[i+1] && !own && slices.ContainsFunc(ws, func(w string) bool { return !slices.Contains(title, w) }) {
 			extra += len(ws)
 		}
 	}
@@ -220,13 +365,6 @@ func Classify(text []byte) (string, error) {
 	if extra > 0 {
 		return "", fmt.Errorf("unknown: %d words outside the texts it names", extra)
 	}
-	// A match inside a longer one, such as the short form of an exception inside its
-	// text, is the longer one's.
-	ms = slices.DeleteFunc(ms, func(m *classifier.Match) bool {
-		return slices.ContainsFunc(ms, func(o *classifier.Match) bool {
-			return o.StartTokenIndex <= m.StartTokenIndex && m.EndTokenIndex <= o.EndTokenIndex && o.EndTokenIndex-o.StartTokenIndex > m.EndTokenIndex-m.StartTokenIndex
-		})
-	})
 	slices.SortStableFunc(ms, func(a, b *classifier.Match) int { return a.StartTokenIndex - b.StartTokenIndex })
 	var ids, exceptions []string
 	prev := ""
