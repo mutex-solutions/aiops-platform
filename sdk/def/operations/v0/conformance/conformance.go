@@ -562,7 +562,7 @@ func Run(t *testing.T, mount Mount) {
 			}
 		})
 
-		rec.Run(t, "operations.O18 plugin enable and disable write a departure and submit, and disable refuses what the manager cannot", func(t *testing.T) {
+		rec.Run(t, "operations.O18 plugin enable and disable write a departure from the bundle layers and submit, and disable refuses what the manager cannot", func(t *testing.T) {
 			u := use(t, mount, Setup{Result: Passed})
 			ch, err := u.ops.Enable(t.Context(), u.row(Row))
 			if err != nil || ch.Result == nil || ch.Result.Status != reload.Passed || ch.Result.Generation != 2 || !u.homeOf("dev").Enabled[Row] {
@@ -574,11 +574,12 @@ func Run(t *testing.T, mount Mount) {
 					t.Errorf("disable %s: %v; want ErrRefused and nothing written", row, err)
 				}
 			}
-			// The result still holds the row ACTIVE: a pass that does not show the change
-			// keeps the files and fails.
+			// The bundle layers leave the row disabled, so disable drops the departure, and
+			// writes none of its own (08:375). The result still holds the row ACTIVE: a
+			// pass that does not show the change keeps the files and fails.
 			ch, err = u.ops.Disable(t.Context(), u.row(Row))
-			if en, ok := u.homeOf("dev").Enabled[Row]; !errors.Is(err, operations.ErrSubmission) || ch.Result == nil || !ok || en {
-				t.Errorf("disable with the row still ACTIVE: %+v, %v; want ErrSubmission with the departure kept", ch, err)
+			if _, ok := u.homeOf("dev").Enabled[Row]; !errors.Is(err, operations.ErrSubmission) || ch.Result == nil || ok {
+				t.Errorf("disable with the row still ACTIVE: %+v, %v; want ErrSubmission with the departure dropped", ch, err)
 			}
 		})
 

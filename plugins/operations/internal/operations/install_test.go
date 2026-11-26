@@ -303,8 +303,59 @@ func TestEnableWritesNothingThatBootRefuses(t *testing.T) {
 	if _, err := l.Disable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "echo"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := tree(t, h)["profiles/dev/aiops.patch.yml"]; !strings.Contains(got, "{id: echo, enabled: false}") {
-		t.Errorf("the profile layer after a disable that boot admits: %q", got)
+	if got := tree(t, h)["profiles/dev/aiops.patch.yml"]; got != "" {
+		t.Errorf("the profile layer after a disable of a row that the bundle layers disable: %q; want nothing written", got)
+	}
+}
+
+// Enable and disable write only a departure from the bundle layers into the profile
+// layer (08:375; ADR-061 decision 17): a value the bundle layers give the row already
+// writes nothing, and one that returns to it drops the item of the row, so a later
+// change of the bundle's default reaches the profile.
+func TestEnableWritesOnlyADeparture(t *testing.T) {
+	rows := []launch.Row{{ID: "clock", Plugin: "aiops/clock", Enabled: true}}
+	l := Library{Box: rowsBox{installBox{&packBox{}}, launch.Rendered{Composition: launch.Composition{Rows: rows}}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/dev/profile.yaml", "bundles: [aiops-core]\n")
+	before := tree(t, h)
+	if ch, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "clock"}); err != nil || len(ch.Written) != 0 || !equal(tree(t, h), before) {
+		t.Errorf("enable of a row that the bundle layers enable: %+v, %v; want nothing written", ch, err)
+	}
+	put(t, h, "profiles/dev/aiops.patch.yml", "- {id: clock, enabled: false}\n- {id: other, enabled: false}\n")
+	if _, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "clock"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tree(t, h)["profiles/dev/aiops.patch.yml"]; strings.Contains(got, "clock") || !strings.Contains(got, "other") {
+		t.Errorf("the profile layer after an enable back to the bundle's value: %q; want the item of clock dropped and other kept", got)
+	}
+}
+
+// With no process on the profile, an enable whose changed profile still renders the row
+// disabled, as the site layer overrides it, says so, and not that the change applies
+// when the process starts; it exits 0 (ADR-062 decision 9).
+func TestEnableOverriddenWithNoProcessSaysSo(t *testing.T) {
+	rows := []launch.Row{{ID: "echo", Plugin: "acme/echo"}} // disabled in every render: the site layer disables it
+	l := Library{Box: rowsBox{installBox{&packBox{}}, launch.Rendered{Composition: launch.Composition{Rows: rows}}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/dev/profile.yaml", "bundles: [aiops-core]\n")
+	ch, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "echo"})
+	notes := strings.Join(ch.Notes, "\n")
+	if err != nil || ch.Outcome != def.NotRunning || !strings.Contains(notes, "overrides") || strings.Contains(notes, "applies when it starts") {
+		t.Errorf("an overridden enable with no process: %+v, %v; want not-running, a note that a later layer overrides it, and none that it applies", ch, err)
+	}
+}
+
+// A refused enable, disable or install writes nothing, so it does not say that it copied
+// the shipped profile; one that writes says so.
+func TestARefusalCopiesNothing(t *testing.T) {
+	l := Library{Box: rowsBox{installBox{&packBox{}}, launch.Rendered{}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	ch, err := l.Disable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "nosuchrow"})
+	if !errors.Is(err, def.ErrRefused) || slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, "copied") }) {
+		t.Errorf("a refused disable: %+v, %v; want ErrRefused and no note of a copy", ch, err)
+	}
+	if _, err := os.Stat(filepath.Join(h.Dir, "profiles")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the refused disable wrote profiles/: %v", err)
 	}
 }
 
