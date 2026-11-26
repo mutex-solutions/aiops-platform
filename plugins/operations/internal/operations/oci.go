@@ -68,6 +68,7 @@ func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
 		}
 	}
 	r.Client = &auth.Client{Client: registryClient(registryWait), Cache: auth.NewCache(), Credential: credentials.Credential(store)}
+	r.ReferrerListMaxPages, r.MaxMetadataBytes = maxReferrers, maxFile // what referrers lists before a trust decision
 	host, _, err := net.SplitHostPort(r.Reference.Registry)
 	if err != nil {
 		host = r.Reference.Registry
@@ -165,14 +166,30 @@ type referrer struct {
 }
 
 // referrers returns, sorted by digest, the image manifests of artifactType in src
-// whose subject is d.
+// whose subject is d. A registry's listing stops at the page that passes maxReferrers
+// of the type, and at the page bound of remoteRepo.
 func referrers(ctx context.Context, src content.ReadOnlyGraphStorage, d ocispec.Descriptor, artifactType string) ([]referrer, error) {
-	refs, err := registry.Referrers(ctx, src, d, artifactType)
+	var refs []ocispec.Descriptor
+	keep := func(page []ocispec.Descriptor) error {
+		for _, r := range page {
+			if r.ArtifactType == "" || r.ArtifactType == artifactType {
+				refs = append(refs, r)
+			}
+		}
+		if len(refs) > maxReferrers {
+			return refused("%s has more referrers of %s than the %d the library reads", d.Digest, artifactType, maxReferrers)
+		}
+		return nil
+	}
+	var all []ocispec.Descriptor
+	var err error
+	if l, ok := src.(registry.ReferrerLister); ok {
+		err = l.Referrers(ctx, d, artifactType, keep)
+	} else if all, err = registry.Referrers(ctx, src, d, artifactType); err == nil {
+		err = keep(all)
+	}
 	if err != nil {
 		return nil, err
-	}
-	if refs = slices.DeleteFunc(refs, func(r ocispec.Descriptor) bool { return r.ArtifactType != "" && r.ArtifactType != artifactType }); len(refs) > maxReferrers {
-		return nil, refused("%s has %d referrers of %s, more than the %d the library reads", d.Digest, len(refs), artifactType, maxReferrers)
 	}
 	slices.SortFunc(refs, func(a, b ocispec.Descriptor) int { return strings.Compare(string(a.Digest), string(b.Digest)) })
 	var out []referrer
