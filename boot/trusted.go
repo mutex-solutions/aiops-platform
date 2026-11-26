@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -260,6 +261,9 @@ func installedArtifact(home fs.FS, profile, id string, lock []LockEntry, lerr er
 		a.Digest, a.Content = lock[i].Digest, lock[i].Content
 	} else if a.Err == nil {
 		art, err := readFile(File{FS: home, Path: path.Join("bundles", id, "artifact.json")})
+		if errors.Is(err, fs.ErrNotExist) { // as the bundle of an S1 profile so named is read
+			err = fmt.Errorf("%w: a bundle name with \"/\" is the plugin id of an installed artifact, whose files plugin install keeps (ADR-047 decision 5); an S1 bundle of that name has to be renamed without \"/\"", err)
+		}
 		a.Digest, a.Err = digestOf(art), err
 	}
 	if a.Err == nil {

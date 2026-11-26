@@ -280,7 +280,13 @@ gaps:
      bundle, which is `aiops-<name>` (`00:658`). Boot reads such a bundle, and the
      `plugin.yaml` beside it, from the home only, never from `--bundles` or the bundles
      shipped in the binary (`internal/serve/serve.go`), and applies the installed-artifact
-     clause of check 8 to exactly those bundles (decision 11).
+     clause of check 8 to exactly those bundles (decision 11). Upgrade note of 2026-11-26
+     (review round over the whole step): S1 read a bundle named `<owner>/<name>` from
+     `--bundles` or the home like any other, so an S1 home whose profile lists one boots
+     under S2a with each of its rows denied by check 5 and, where they are required, exits
+     3. Such a bundle has to be renamed without `/`, in the profile and under `bundles/`,
+     before the upgrade; the denial of an artifact with no `artifact.json` and no lock
+     entry says so.
    - Boot mounts the rows of that bundle under one `core:group` row that it adds itself,
      whose id is the `<name>` segment of the plugin id, so a row id is `<name>:<row>`
      (`08:159`; `08:391`; `07:1817`). The group row is enabled, holds only the bundle's
