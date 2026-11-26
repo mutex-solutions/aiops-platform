@@ -48,6 +48,40 @@ type machine struct {
 	name, root string
 	work       string // its working directory
 	env        []string
+	exitnet    string // the program of testdata/exitnet
+}
+
+// dial dials each of addrs from the environment and returns, by address, "connected"
+// or why it did not connect.
+func (m *machine) dial(addrs ...string) map[string]string {
+	m.t.Helper()
+	got := map[string]string{}
+	for _, l := range strings.Split(strings.TrimSpace(m.must("", append([]string{m.exitnet, "dial"}, addrs...)...).out), "\n") {
+		a, r, _ := strings.Cut(l, " ")
+		got[a] = r
+	}
+	return got
+}
+
+// holds returns the paths of the programs that the environment holds.
+func (m *machine) holds() []string {
+	es, _ := os.ReadDir(filepath.Join(m.root, "bin"))
+	var out []string
+	for _, e := range es {
+		out = append(out, "bin/"+e.Name())
+	}
+	return out
+}
+
+// exitnet builds the program of testdata/exitnet, static, into the directory of the exit.
+func (x *exit) exitnet() string {
+	out := filepath.Join(x.root, "exitnet", "exitnet")
+	cmd := exec.Command("go", "build", "-o", out, "./testdata/exitnet")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		x.t.Fatalf("go build of testdata/exitnet: %v\n%s", err, b)
+	}
+	return out
 }
 
 // newMachine returns the environment name under root, whose bin/ links tools, by name,

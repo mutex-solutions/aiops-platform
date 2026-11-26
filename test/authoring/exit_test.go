@@ -48,6 +48,7 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -163,10 +164,60 @@ func TestS2aExit(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(home), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	exitnet := x.exitnet()
+	for _, m := range []*machine{author, packer, clean} {
+		m.exitnet = exitnet
+	}
+	x.isolated(author, packer, clean)
 
 	a := x.author(author)
 	x.pack(packer)
 	x.cleanMachine(clean, author, packer, a, home)
+}
+
+// isolated is the case of the owner's answer of 2026-11-26 on the environments: each
+// reaches the registry by its host and port, the author's repository reaches the module
+// proxy at http://proxy, and none reaches anything else: not the module proxy from the
+// pack author's machine (ADR-060 decision 30) or from the clean machine, whose builder
+// reads the module proxy's directory (ADR-060 decision 21), not a public address, and
+// not a port that the host listens on, at each of its addresses or on the loopback
+// interface. The pack author's machine holds aiopsctl alone.
+func (x *exit) isolated(author, packer, clean *machine) {
+	x.t.Run("networks", func(t *testing.T) {
+		l, err := net.Listen("tcp", ":0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+		addrs, err := net.InterfaceAddrs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		host := []string{net.JoinHostPort("127.0.0.1", port)}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() {
+				host = append(host, net.JoinHostPort(n.IP.String(), port))
+			}
+		}
+		for _, m := range []*machine{author, packer, clean} {
+			m.t = t
+			want := map[string]bool{x.reg: true, "proxy:80": m.name == "author", "1.1.1.1:443": false}
+			for _, a := range host {
+				want[a] = false
+			}
+			got := m.dial(slices.Sorted(maps.Keys(want))...)
+			for _, a := range slices.Sorted(maps.Keys(want)) {
+				if g := got[a]; g == "" || (g == "connected") != want[a] {
+					t.Errorf("the %s dials %s: %q; want it %s", m.name, a, g, map[bool]string{true: "connected", false: "not connected"}[want[a]])
+				}
+			}
+			m.t = x.t
+		}
+		if got := packer.holds(); !slices.Equal(got, []string{"bin/aiopsctl"}) {
+			t.Errorf("the pack author's machine holds %v; want aiopsctl alone", got)
+		}
+	})
 }
 
 // buildRelease builds what the release pipeline of the exit builds: the module proxy,
