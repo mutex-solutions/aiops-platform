@@ -150,7 +150,8 @@ func TestS2aExit(t *testing.T) {
 	var registry string
 	x.reg, registry = startRegistry(t)
 	x.buildRelease()
-	netns := x.networks(registry, x.image(map[string]string{"exitnet": x.exitnet()}))
+	netd := x.image(map[string]string{"exitnet": x.exitnet()})
+	netns := x.networks(registry, netd)
 
 	// The image of the author's repository and of the pack author's machine holds the
 	// test release's aiopsctl alone. The author's containers also have, read-only, the
@@ -176,6 +177,7 @@ func TestS2aExit(t *testing.T) {
 		opts = append(opts, containerRuntime(t)...)
 	}
 	author := newMachine(t, x.root, "author", ctl, netns["author"], "/bin:"+goroot+"/bin:/usr/local/bin:/usr/bin", opts)
+	author.runtime = x.builder == "image"
 	packer := newMachine(t, x.root, "packer", ctl, netns["packer"], "/bin", nil)
 	// The clean machine's image holds that aiopsctl and the host's docker client, with
 	// the shared libraries it loads; its containers have the container runtime, the
@@ -196,10 +198,11 @@ func TestS2aExit(t *testing.T) {
 	home := filepath.Join(x.root, "clean", "site", "home")
 	clean := newMachine(t, x.root, "clean", x.image(files), netns["clean"], "/bin", append(bound(x.proxy, x.signed), containerRuntime(t)...),
 		"GOPROXY=file://"+x.proxy, "AIOPS_HOME="+home)
+	clean.runtime = true
 	if err := os.MkdirAll(filepath.Dir(home), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	x.isolated(author, packer, clean)
+	x.isolated(netd, author, packer, clean)
 
 	a := x.author(author)
 	x.pack(packer)
@@ -215,8 +218,12 @@ func TestS2aExit(t *testing.T) {
 // pack author's machine (ADR-060 decision 30) or from the clean machine, whose builder
 // reads the module proxy's directory (ADR-060 decision 21), not a public address, and
 // not a port that the host listens on, at each of its addresses or on the loopback
-// interface. The pack author's machine holds aiopsctl alone.
-func (x *exit) isolated(author, packer, clean *machine) {
+// interface. Nor does a container that the container runtime of an environment runs,
+// the clean machine's and, on the image path, the author's: on the network of the
+// runtime's own host it reaches what the environment reaches, and on its default
+// network nothing. The pack author's machine holds aiopsctl alone. netd is the image
+// of exitnet.
+func (x *exit) isolated(netd string, author, packer, clean *machine) {
 	x.t.Run("networks", func(t *testing.T) {
 		l, err := net.Listen("tcp", ":0")
 		if err != nil {
@@ -241,11 +248,19 @@ func (x *exit) isolated(author, packer, clean *machine) {
 			for _, a := range host {
 				want[a] = false
 			}
-			got := m.dial(slices.Sorted(maps.Keys(want))...)
-			for _, a := range slices.Sorted(maps.Keys(want)) {
-				if g := got[a]; g == "" || (g == "connected") != want[a] {
-					t.Errorf("the %s dials %s: %q; want it %s", m.name, a, g, map[bool]string{true: "connected", false: "not connected"}[want[a]])
+			addrs := slices.Sorted(maps.Keys(want))
+			check := func(from string, got map[string]string, want func(string) bool) {
+				for _, a := range addrs {
+					if g := got[a]; g == "" || (g == "connected") != want(a) {
+						t.Errorf("%s dials %s: %q; want it %s", from, a, g, map[bool]string{true: "connected", false: "not connected"}[want(a)])
+					}
 				}
+			}
+			check("the "+m.name, m.dial(addrs...), func(a string) bool { return want[a] })
+			if m.runtime {
+				img := m.load(netd)
+				check("a container of the "+m.name+" on its runtime's host network", m.dialFrom(img, "host", addrs...), func(a string) bool { return want[a] })
+				check("a container of the "+m.name+" on its runtime's default network", m.dialFrom(img, "", addrs...), func(string) bool { return false })
 			}
 		}
 		if got := packer.holds(); !slices.Equal(got, []string{"bin/aiopsctl"}) {

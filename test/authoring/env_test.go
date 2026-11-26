@@ -54,6 +54,7 @@ type machine struct {
 	work         string   // its working directory
 	image, netns string   // the image of its containers, and the container whose network namespace they join
 	opts, env    []string // the options of docker run of its containers, and their variables
+	runtime      bool     // its containers have a container runtime
 }
 
 // newMachine returns the environment name under root, whose containers run image in the
@@ -194,8 +195,13 @@ func (x *exit) networks(registry, netd string) map[string]string {
 // returns, by address, "connected" or why it did not connect.
 func dial(t *testing.T, netns string, addrs ...string) map[string]string {
 	t.Helper()
+	return dialed(docker(t, append([]string{"exec", netns, "/exitnet", "dial"}, addrs...)...))
+}
+
+// dialed reads what exitnet dial printed.
+func dialed(out string) map[string]string {
 	got := map[string]string{}
-	for _, l := range strings.Split(docker(t, append([]string{"exec", netns, "/exitnet", "dial"}, addrs...)...), "\n") {
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
 		a, r, _ := strings.Cut(l, " ")
 		got[a] = r
 	}
@@ -206,6 +212,30 @@ func dial(t *testing.T, netns string, addrs ...string) map[string]string {
 func (m *machine) dial(addrs ...string) map[string]string {
 	m.t.Helper()
 	return dial(m.t, m.netns, addrs...)
+}
+
+// load loads the image of the container runtime of the job into the container runtime
+// of the environment, through a file in its directory, and returns its id there.
+func (m *machine) load(image string) string {
+	m.t.Helper()
+	f := filepath.Join(m.root, "tmp", "load.tar")
+	docker(m.t, "save", "-o", f, image)
+	id, ok := strings.CutPrefix(strings.TrimSpace(m.must("", "docker", "load", "-i", f).out), "Loaded image ID: ")
+	if !ok {
+		m.t.Fatalf("docker load of the %s names no image id", m.name)
+	}
+	return id
+}
+
+// dialFrom dials each of addrs from a container of image that the environment's
+// container runtime runs on network, or on its default network when network is "".
+func (m *machine) dialFrom(image, network string, addrs ...string) map[string]string {
+	m.t.Helper()
+	args := []string{"docker", "run", "--rm"}
+	if network != "" {
+		args = append(args, "--network", network)
+	}
+	return dialed(m.must("", append(append(args, image, "/exitnet", "dial"), addrs...)...).out)
 }
 
 // holds returns the paths of the files of a container of the environment's image that
