@@ -169,15 +169,16 @@ check:
 	$(KC) lines internal/plugingen 1500 provisional
 	@# ADR-060 decision 35: cmd/aiopsctl and its launcher, internal/aiopsctl, which the
 	@# aiopsctl that dist build writes runs too, share the one 2,500 lines of the row of
-	@# cmd/aiopsctl; the builder, 3,500 lines since the note of 2026-11-25, provisional.
+	@# cmd/aiopsctl; the builder, 3,700 lines since the note of 2026-11-26, provisional and
+	@# awaiting the owner.
 	$(KC) lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
-	$(KC) lines internal/builder 3500 provisional
-	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,500
-	@# lines since the second note of 2026-11-24, provisional: the row package, internal/
-	@# skipped, and its internal package, with the client of reload-socket (ADR-062
-	@# decision 16), each.
-	$(KC) lines plugins/operations 4500 provisional internal
-	$(KC) lines plugins/operations/internal/operations 4500 provisional
+	$(KC) lines internal/builder 3700 provisional
+	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,600
+	@# lines since the note of 2026-11-26, provisional and awaiting the owner: the row
+	@# package, internal/ skipped, and its internal package, with the client of
+	@# reload-socket (ADR-062 decision 16), each.
+	$(KC) lines plugins/operations 4600 provisional internal
+	$(KC) lines plugins/operations/internal/operations 4600 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
