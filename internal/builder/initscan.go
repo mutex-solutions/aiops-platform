@@ -167,11 +167,15 @@ func ScanInits(ctx context.Context, dir string, env []string, mains ...string) (
 }
 
 // later are the functions that hand a function value to the runtime, which calls it
-// after they return through no edge of the call graph: a function or closure passed to
-// one of them is reached from the init that reaches the call.
+// through no edge of the call graph, after they return or, for iter.Pull, as a
+// coroutine: a function or closure passed to one of them is reached from the init that
+// reaches the call.
 // ponytail: the function or closure written in the call only; one that a variable or a
-// parameter carries there is not followed.
-var later = map[string]bool{"time.AfterFunc": true, "context.AfterFunc": true, "runtime.SetFinalizer": true, "runtime.AddCleanup": true}
+// parameter carries there is not followed. And these functions only: every call that
+// passes a function to a body-less function is not followed, since such a function
+// need not call it.
+var later = map[string]bool{"time.AfterFunc": true, "context.AfterFunc": true, "runtime.SetFinalizer": true, "runtime.AddCleanup": true,
+	"iter.Pull": true, "iter.Pull2": true}
 
 // handed returns the nodes of cg of the functions that the call of e hands to the
 // runtime, nil for one cg does not hold.
@@ -181,6 +185,9 @@ func handed(cg *callgraph.Graph, e *callgraph.Edge) []*callgraph.Node {
 		return nil
 	}
 	for _, a := range e.Site.Common().Args {
+		if c, ok := a.(*ssa.ChangeType); ok { // to a named function type, as iter.Seq
+			a = c.X
+		}
 		if c, ok := a.(*ssa.MakeClosure); ok {
 			a = c.Fn
 		}

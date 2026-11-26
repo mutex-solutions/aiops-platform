@@ -867,7 +867,11 @@ settles it.
     through no edge of the graph; one that a variable or a parameter carries to that call
     is not. Following every function a reached function refers to as a value was tried
     and refused: it finds closures that inits store as test hooks in gRPC and the HTTP
-    server's handler, which no init runs.
+    server's handler, which no init runs. Note of 2026-11-27 (round 2): so is a sequence
+    that a reached call of `iter.Pull` or `iter.Pull2` hands to the runtime's coroutine,
+    whose start has no body in the SSA form. Following each function that a reached call
+    passes to a function with no body, as suggested, was not taken: such a function need
+    not call it.
 
 26. **The classifier carries a corpus built from the SPDX License List data** (Q12 (b)),
     at a pinned version and embedded by the builder package. The classifier is linked
