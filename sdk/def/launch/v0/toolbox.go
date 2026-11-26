@@ -178,6 +178,8 @@ type Rendered struct {
 // --against" or "plugin install". Signer is the key id that the caller verified,
 // "unsigned", or "" where the entry point verifies none. Home and Profile name the
 // target profile of install; Against holds the bytes of a published signed manifest.
+// Module is what module.json of in-process code records at install, its path, version
+// and sum, which install writes into the record that boot judges; nil for a pack.
 type GateRequest struct {
 	Entry                         string
 	Manifest, Bundle, Attestation []byte
@@ -185,6 +187,7 @@ type GateRequest struct {
 	Signer                        string
 	Home, Profile                 string
 	Against                       []byte
+	Module                        *Module
 }
 
 // ManifestRequest names the directory of a plugin.yaml, and the release it is read

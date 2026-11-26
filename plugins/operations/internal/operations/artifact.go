@@ -600,13 +600,14 @@ func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, e
 // trusted is an artifact whose signature and attestation verified: its image
 // manifest, raw and read, plugin.yaml as pluginOf reads it, the signer's key id or
 // unsigned, and the bundles and the statement that install records (ADR-020 decision
-// 10).
+// 10); and for install the module of in-process code.
 type trusted struct {
 	m   ocispec.Manifest
 	raw []byte
 	pluginYAML
 	signer              string
 	sig, att, statement []byte
+	mod                 *launch.Module
 }
 
 // verified verifies the signature of d with each signer of trust.yaml of h, then the

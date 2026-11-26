@@ -112,7 +112,10 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 	var copied string
 	done, err := h.Write(ctx, Write{Command: "plugin install " + r.Spec,
 		Plan: func() ([]Change, error) {
-			if a, err = verified(ctx, h, src, d); err != nil {
+			if a, err = verified(ctx, h, src, d); err == nil {
+				a.mod, err = moduleOf(ctx, src, a)
+			}
+			if err != nil {
 				return nil, err
 			}
 			switch code := len(a.Runtimes) > 0; {
@@ -279,7 +282,7 @@ func (l Library) admit(ctx context.Context, h Home, p string, src source, d ocis
 		return refused("%s does not compose with the bundle of %s: %s", p, a.ID, e)
 	}
 	ch.Verdict, err = l.Box.Gate(ctx, launch.GateRequest{Entry: "plugin install", Manifest: a.file, Bundle: bundle,
-		Attestation: a.statement, Digest: d.Digest.String(), Signer: a.signer, Home: h.Dir, Profile: p})
+		Attestation: a.statement, Digest: d.Digest.String(), Signer: a.signer, Home: h.Dir, Profile: p, Module: a.mod})
 	if err != nil {
 		return err
 	}
@@ -293,11 +296,7 @@ func (l Library) admit(ctx context.Context, h Home, p string, src source, d ocis
 	case len(denied) > 0:
 		return refused("the gate at plugin install denies %s: %s", a.ID, strings.Join(denied, "; "))
 	case ch.Verdict.RebuildRequired:
-		var mod struct{ Path, Version, Sum string }
-		b, err := fetchLayer(ctx, src, a.m, layerModule)
-		if err == nil {
-			_ = json.Unmarshal(b, &mod)
-		}
+		mod := cmp.Or(a.mod, &launch.Module{})
 		ch.DistLines = []string{"plugins:", fmt.Sprintf("  - {module: %s, version: %s, sum: %s}", mod.Path, mod.Version, mod.Sum)}
 		return fmt.Errorf("%w: %s is in-process code that the distribution of this home does not link: build one with dist.yaml naming its module, dist build, dist sign and dist use it, then install again (08:397)",
 			def.ErrRebuildRequired, a.ID)
@@ -313,6 +312,23 @@ func errorsOf(ds []launch.Diagnostic) string {
 		}
 	}
 	return strings.Join(out, "; ")
+}
+
+// moduleOf reads module.json of in-process code a, its path, version and sum (ADR-047
+// decision 1); nil for a pack.
+func moduleOf(ctx context.Context, src source, a trusted) (*launch.Module, error) {
+	if !slices.Contains(a.Runtimes, "inproc") {
+		return nil, nil
+	}
+	var mod launch.Module
+	b, err := fetchLayer(ctx, src, a.m, layerModule)
+	if err == nil {
+		err = json.Unmarshal(b, &mod)
+	}
+	if err != nil {
+		return nil, refused("the module layer of %s: %v", a.ID, err)
+	}
+	return &mod, nil
 }
 
 // fetchLayer returns the layer of mediaType of m, nil for none.
@@ -349,15 +365,7 @@ func kept(ctx context.Context, src source, d ocispec.Descriptor, a trusted, bund
 		out = append(out, Change{Path: "content/" + a.ID, Files: files})
 	}
 	rec := fmt.Sprintf("kind: artifact\ndigest: %s\nsigner: %s\nid: %s\nversion: %s\nruntimes: [%s]\n", d.Digest, a.signer, a.ID, a.Version, strings.Join(a.Runtimes, ", "))
-	if slices.Contains(a.Runtimes, "inproc") {
-		var mod struct{ Path, Version, Sum string }
-		b, err := fetchLayer(ctx, src, a.m, layerModule)
-		if err == nil {
-			err = json.Unmarshal(b, &mod)
-		}
-		if err != nil {
-			return nil, entry, refused("the module layer of %s: %v", a.ID, err)
-		}
+	if mod := a.mod; mod != nil {
 		rec += fmt.Sprintf("module: {path: %q, version: %q, sum: %q}\n", mod.Path, mod.Version, mod.Sum)
 	}
 	files := map[string][]byte{"record.yaml": []byte(rec), "attestation.json": a.statement}

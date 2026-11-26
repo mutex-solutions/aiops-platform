@@ -305,6 +305,9 @@ func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdic
 	}
 	art := Artifact{ID: man.ID, Digest: q.Digest, Kept: Kept{Manifest: q.Manifest, Bundle: q.Bundle},
 		Record: Record{Signer: q.Signer, ID: man.ID, Version: man.Version, Runtimes: man.Runtimes, Attestation: q.Attestation}}
+	if m := q.Module; m != nil { // the record that install writes, which checks 5 and 10 judge as boot does
+		art.Record.Module = &GoModule{Path: m.Path, Version: m.Version, Sum: m.Sum}
+	}
 	var in GateInput
 	var c Composition
 	if entry == EntryInstall {
