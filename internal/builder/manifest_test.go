@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,11 @@ func TestDistributionOfTheTestBinary(t *testing.T) {
 		st, err := boot.ReadAttestation(m.Plugin.ID, p.Attestation)
 		if err != nil || !bytes.Equal(p.Manifest, m.Manifest) || st.Digest != fmt.Sprintf("sha256:%x", sha256.Sum256(p.Manifest)) || !strings.Contains(p.Package, "/") {
 			t.Fatalf("%s: %v, statement %+v", m.Plugin.ID, err, st)
+		}
+		// It names the generated tests that did not run on its package: the two-tenant
+		// test, which skips until S4a (ADR-060 decisions 18 and 43).
+		if !slices.Equal(st.NotRun, []string{"TestTwoTenants"}) {
+			t.Errorf("%s names %v as not run; want the generated TestTwoTenants", m.Plugin.ID, st.NotRun)
 		}
 	}
 	st, err := boot.ReadAttestation("aiops-test/toy-provider", d.Plugins["aiops-test/toy-provider"].Attestation)
