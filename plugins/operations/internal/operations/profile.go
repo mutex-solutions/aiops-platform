@@ -105,6 +105,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 	stamp := time.Now().UTC().Format("20060102T150405Z")
 	var ch def.Change
 	var notes []string
+	var stops string // what still stops the profile once the layers are set aside
 	done, err := h.Write(ctx, Write{
 		Command: "profile sanitize " + p,
 		Plan: func() ([]Change, error) {
@@ -113,7 +114,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 				aside = append(aside, "profiles/"+p+"/plugins.lock")
 				notes = append(notes, fmt.Sprintf("%v: set aside as plugins.lock.bak-%s", err, stamp))
 			}
-			for range layers {
+			for { // each turn sets aside one more layer, so it ends
 				rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Server: p != "cli", Aside: aside})
 				if err != nil {
 					return nil, err
@@ -122,6 +123,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 					return !d.Warning && d.Check == "compose" && slices.Contains(layers, d.File) && !slices.Contains(aside, d.File)
 				})
 				if i < 0 {
+					stops = errorsOf(rd.Diagnostics)
 					break
 				}
 				d := rd.Diagnostics[i]
@@ -136,7 +138,7 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 				}
 				changes = append(changes, Change{Path: f + ".bak-" + stamp, Data: data}, Change{Path: f, Remove: true})
 			}
-			if len(changes) == 0 {
+			if len(changes) == 0 && stops == "" {
 				notes = append(notes, "no layer file of the home stops the composition of "+p)
 			}
 			return changes, nil
@@ -146,6 +148,9 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 	ch.Written, ch.Notes = done.Written, done.Notes
 	if err == nil {
 		ch.Notes = append(ch.Notes, notes...)
+	}
+	if err == nil && stops != "" {
+		err = refused("%s still does not compose: %s; correct or move aside the file it names, a profile.yaml or a bundle, which sanitize does not set aside, or write a missing profile with profile init (ADR-061 decision 41)", p, stops)
 	}
 	return ch, err
 }

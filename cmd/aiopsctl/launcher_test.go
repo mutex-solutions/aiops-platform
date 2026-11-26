@@ -273,7 +273,8 @@ func TestAHomeProfileWins(t *testing.T) {
 // profile.yaml, and a layer that composes but disables the row of aiops/cli, which runs
 // every command, stop no command either: aiopsctl names the file, says how to recover,
 // and runs on the shipped cli profile, so help and profile sanitize still run (ADR-061
-// decision 41).
+// decision 41). Sanitize, which sets aside neither, then exits 1 saying that the cli
+// profile of the home still does not compose.
 func TestABrokenHomeCLIProfile(t *testing.T) {
 	_, signed, _, err := dist.Load()
 	if err != nil {
@@ -291,7 +292,11 @@ func TestABrokenHomeCLIProfile(t *testing.T) {
 		want := strings.ReplaceAll(c.want, "%[1]s", home)
 		for _, args := range [][]string{{"help"}, {"profile", "sanitize"}} {
 			r := doWith(t, os.DirFS("/"), map[string]string{"AIOPS_HOME": home}, nil, args...)
-			if r.code != 0 || !strings.Contains(r.errOut, want) || !strings.Contains(r.errOut, "shipped cli profile alone") {
+			ran := r.code == 0
+			if args[0] == "profile" {
+				ran = r.code == 1 && strings.Contains(r.errOut, "cli still does not compose")
+			}
+			if !ran || !strings.Contains(r.errOut, want) || !strings.Contains(r.errOut, "shipped cli profile alone") {
 				t.Errorf("%s, %q: exit %d; stderr:\n%s", name, args, r.code, r.errOut)
 			}
 		}

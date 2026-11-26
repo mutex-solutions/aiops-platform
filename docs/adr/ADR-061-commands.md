@@ -1467,7 +1467,12 @@ it.
     aside `profiles/<p>/plugins.lock` where it does not read, whose rows boot detaches,
     so `plugin remove` can take the artifact again; and `plugin install` names, and does
     not stop on, a lock of another profile that does not read, which it then does not
-    check for another digest of the id (ADR-047 decision 7).
+    check for another digest of the id (ADR-047 decision 7). Note of 2026-11-27 (round
+    2): with the layers it sets aside read as absent, `profile sanitize` renders the
+    profile once more; where that render still holds an error, a `profile.yaml`, a
+    bundle or a profile that exists nowhere, it keeps what it set aside and exits 1
+    naming the error and what to do, and says that nothing stops the profile only when
+    nothing does.
 
 **Edits made with this record.** `00` is edited in the commit that records the answers
 (`08:997`), and that commit makes the edits that "Edits on acceptance" names for the
