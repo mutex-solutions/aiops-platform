@@ -258,12 +258,42 @@ func TestABrokenSiteLayer(t *testing.T) {
 }
 
 // The release ships aiops-core, aiops-cli and the cli profile; a file of the home wins
-// over a shipped one (ADR-061 decision 29).
+// over a shipped one (ADR-061 decision 29): a home cli profile that names a bundle the
+// home lacks stops its boot, so aiopsctl says so and runs on the shipped cli profile.
 func TestAHomeProfileWins(t *testing.T) {
 	m := trustedHome(t)
 	m["home/profiles/cli/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: [aiops-core, aiops-cli, extra]\n")}
 	r := do(t, m, map[string]string{"AIOPS_HOME": "/home"}, "help")
-	if r.code != 1 || !strings.Contains(r.errOut, "bundles/extra/bundle.yaml") {
+	if r.code != 0 || !strings.Contains(r.errOut, "bundles/extra/bundle.yaml") || !strings.Contains(r.errOut, "shipped cli profile alone") {
 		t.Fatalf("exit %d; stderr:\n%s", r.code, r.errOut)
+	}
+}
+
+// A file of the home other than a layer that stops the boot of the cli profile, its
+// profile.yaml, and a layer that composes but disables the row of aiops/cli, which runs
+// every command, stop no command either: aiopsctl names the file, says how to recover,
+// and runs on the shipped cli profile, so help and profile sanitize still run (ADR-061
+// decision 41).
+func TestABrokenHomeCLIProfile(t *testing.T) {
+	_, signed, _, err := dist.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct{ file, data, want string }{
+		"a malformed profile.yaml":               {"profiles/cli/profile.yaml", "bundles: [aiops-core, aiops-cli\n", "mv %[1]s/profiles/cli/profile.yaml %[1]s/profiles/cli/profile.yaml.bak"},
+		"a site layer that disables the cli row": {"aiops.patch.yml", "- {id: cli, enabled: false}\n", "disables the row of aiops/cli"},
+	} {
+		home := t.TempDir()
+		trusted.Write(t, home, signed)
+		if err := writeFiles(home, map[string]string{c.file: c.data}); err != nil {
+			t.Fatal(err)
+		}
+		want := strings.ReplaceAll(c.want, "%[1]s", home)
+		for _, args := range [][]string{{"help"}, {"profile", "sanitize"}} {
+			r := doWith(t, os.DirFS("/"), map[string]string{"AIOPS_HOME": home}, nil, args...)
+			if r.code != 0 || !strings.Contains(r.errOut, want) || !strings.Contains(r.errOut, "shipped cli profile alone") {
+				t.Errorf("%s, %q: exit %d; stderr:\n%s", name, args, r.code, r.errOut)
+			}
+		}
 	}
 }
