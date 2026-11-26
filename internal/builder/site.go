@@ -4,6 +4,7 @@ package builder
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -26,7 +27,10 @@ type Site struct {
 	AcceptLicenses []string
 }
 
-var byDigest = regexp.MustCompile(`^(oci://)?[^@\s]+@sha256:[0-9a-f]{64}$`)
+var (
+	byDigest     = regexp.MustCompile(`^(oci://)?[^@\s]+@sha256:[0-9a-f]{64}$`)
+	unknownField = regexp.MustCompile(`(?s)^line (\d+): field (\S+) not found in type .*`)
+)
 
 // ReadSite reads the site's dist.yaml:
 //
@@ -57,6 +61,13 @@ func ReadSite(data []byte) (Site, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&raw); err != nil {
+		var te *yaml.TypeError
+		if errors.As(err, &te) { // an unknown field by its line, not by the Go type it is read into
+			for i, e := range te.Errors {
+				te.Errors[i] = unknownField.ReplaceAllString(e, `dist.yaml:$1: unknown field "$2"`)
+			}
+			return Site{}, errors.New(strings.Join(te.Errors, "; "))
+		}
 		return Site{}, fmt.Errorf("dist.yaml: %w", err)
 	}
 	if !byDigest.MatchString(raw.Release) {

@@ -94,9 +94,16 @@ func caller(inv commands.Invocation) operations.Caller {
 // build is dist build: dist.yaml and the module cache resolved against the working
 // directory, the mirrors by prefix, the bumps and the builder, through the builder of
 // the toolbox; it names what the builder wrote and the digest of the signed manifest.
+// A builder other than image and local, and the image path with no module cache, are
+// usage errors (ADR-044 decision 7).
 func build(ctx context.Context, ops operations.Operations, inv commands.Invocation) error {
 	q := launch.BuildRequest{DistYAML: abs(inv, inv.Args[0]), AllowBump: inv.List("allow-bump"), Builder: inv.Value("builder"), Mirrors: map[string]string{}}
-	if m := inv.Value("modcache"); m != "" {
+	switch m := inv.Value("modcache"); {
+	case q.Builder != "image" && q.Builder != "local":
+		return fmt.Errorf("%w: --builder %q is image or local", commands.ErrUsage, q.Builder)
+	case m == "" && q.Builder == "image":
+		return fmt.Errorf("%w: the image path takes --modcache, the module cache the build reads (ADR-044 decision 7)", commands.ErrUsage)
+	case m != "":
 		q.ModCache = abs(inv, m)
 	}
 	for _, m := range inv.List("mirror") {
