@@ -76,8 +76,8 @@ func image(reg *ocitest.Registry, name, tag string, manifest []byte) ocitest.Des
 }
 
 // box is the launcher's toolbox of a case: Render answers the Rendered of the Setup for
-// the profile, Shipped its shipped files, ReadManifest its manifest, and the gate
-// passes every clause; the suites are not carried, as in an aiopsctl built before
+// the profile, Shipped its shipped files, ReadManifest its manifest, Release a release
+// that serves echoers, and the gate passes every clause; the suites are not carried, as in an aiopsctl built before
 // they land, and the module zip answers a module of the plugin directory, as that of
 // aiopsctl does.
 type box struct {
@@ -144,8 +144,11 @@ func (b box) Suite(ctx context.Context, q launch.SuiteRequest) (launch.SuiteRepo
 		Failed: b.s.Plugin.Failed}}}, ctx.Err()
 }
 
+// Release answers a release that serves the key echoers under echoers, from which step
+// 5 maps the key that the plugin of plugin check registers with to its definition.
 func (box) Release(context.Context, string) (launch.Release, error) {
-	return launch.Release{}, launch.ErrNotCarried
+	return launch.Release{Digest: "sha256:ab", Manifest: []byte("serves:\n  definitions:\n    echoers:\n      - version: \"0.1\"\n" +
+		"        classes:\n          echoers: {provider: open, consumer: open}\n")}, nil
 }
 
 // serve makes a home in which a process runs dev and answers each submission on its

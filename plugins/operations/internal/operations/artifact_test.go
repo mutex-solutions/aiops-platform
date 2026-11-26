@@ -122,9 +122,13 @@ func (*packBox) Render(context.Context, launch.RenderRequest) (launch.Rendered, 
 
 func (*packBox) Shipped(context.Context) (map[string][]byte, error) { return nil, nil }
 
+// Release answers a release that serves the key echoers under echoers, which step 5
+// reads to run the suite of a plugin that registers with it.
 func (*packBox) Release(context.Context, string) (launch.Release, error) {
-	return launch.Release{}, launch.ErrNotCarried
+	return launch.Release{Digest: "sha256:ab", Manifest: []byte(servesEchoers)}, nil
 }
+
+const servesEchoers = "serves:\n  definitions:\n    echoers:\n      - version: \"0.1\"\n        classes:\n          echoers: {provider: open, consumer: open}\n"
 
 func (b *packBox) ReadManifest(_ context.Context, q launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
 	if _, err := os.Stat(filepath.Join(q.Dir, "plugin.yaml")); err != nil {

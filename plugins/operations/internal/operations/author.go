@@ -347,20 +347,40 @@ func (c *checkRun) alone() (string, []launch.Diagnostic, error) {
 }
 
 // suited returns the definitions whose suite step 5 runs, each at the version that
-// requires names: for code, those of the keys it provides or registers with; for a
-// pack, those its rows feed (ADR-060 decision 56).
-// ponytail: a key maps to the definition whose name it is or, in lower case, begins
-// with, as configRefsDryRun of configrefs; a key of another name fails check 10 of step
-// 7 and passes nothing. The classes of the release's serves would map every key.
-func (c *checkRun) suited() map[string]string {
+// requires names: for code, those whose classes in the serves of the release it runs
+// against hold a key it provides or registers with; for a pack, those its rows feed
+// (ADR-060 decisions 9 and 56).
+func (c *checkRun) suited() (map[string]string, error) {
+	owner := map[string]string{} // the definition of each served key
+	if c.code {
+		rel, err := c.l.Box.Release(c.ctx, c.r.Against)
+		if err != nil {
+			return nil, err
+		}
+		var m struct {
+			Serves struct {
+				Definitions map[string][]struct{ Classes map[string]any }
+			}
+		}
+		if err := yaml.Unmarshal(rel.Manifest, &m); err != nil {
+			return nil, fmt.Errorf("the serves of the release %s: %w", rel.Digest, err)
+		}
+		for name, vs := range m.Serves.Definitions {
+			for _, v := range vs {
+				for k := range v.Classes {
+					owner[k] = name
+				}
+			}
+		}
+	}
 	keys := slices.Concat(c.sum.Provides, c.sum.Registers)
 	out := map[string]string{}
 	for name, vs := range c.sum.Definitions {
-		if !c.code || slices.ContainsFunc(keys, func(k string) bool { return strings.HasPrefix(strings.ToLower(k), name) }) {
+		if !c.code || slices.ContainsFunc(keys, func(k string) bool { return owner[k] == name }) {
 			out[name] = vs[len(vs)-1]
 		}
 	}
-	return out
+	return out, nil
 }
 
 // conformance is step 5, T2: the suite of each definition the plugin provides or
@@ -372,7 +392,10 @@ func (c *checkRun) conformance() (string, []launch.Diagnostic, error) {
 	for name, vs := range c.sum.Definitions {
 		c.defs[name] = def.Attested{Version: vs[len(vs)-1]}
 	}
-	suited := c.suited()
+	suited, err := c.suited()
+	if err != nil {
+		return "", nil, err
+	}
 	if len(suited) == 0 {
 		return def.StepNotApplicable, nil, nil
 	}
