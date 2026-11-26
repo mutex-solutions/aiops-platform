@@ -77,9 +77,23 @@ func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
 	return r, nil
 }
 
-// registryClient returns the HTTP client of a registry: oras-go's retry client, which
-// does not bound a dial or an answer.
-func registryClient(time.Duration) *http.Client { return retry.DefaultClient }
+// registryClient returns the HTTP client of a registry: oras-go's retries of a reset or
+// of an answer that asks for one, but none of a timeout, and wait on a dial and on the
+// headers of each answer, so that a registry that cannot be reached, or does not answer,
+// fails the command in that time.
+func registryClient(wait time.Duration) *http.Client {
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.DialContext = (&net.Dialer{Timeout: wait}).DialContext
+	base.ResponseHeaderTimeout = wait
+	p := *retry.DefaultPolicy.(*retry.GenericPolicy)
+	p.Retryable = func(resp *http.Response, err error) (bool, error) {
+		if e, ok := err.(net.Error); ok && e.Timeout() {
+			return false, err
+		}
+		return retry.DefaultPredicate(resp, err)
+	}
+	return &http.Client{Transport: &retry.Transport{Base: base, Policy: func() retry.Policy { return &p }}}
+}
 
 // configJSON returns the path of the caller's config.json, "" with neither variable.
 func configJSON(c def.Caller) string {
