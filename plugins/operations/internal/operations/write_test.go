@@ -142,6 +142,24 @@ func TestHomeModesAndOwner(t *testing.T) {
 	}
 }
 
+// A run/ of another mode, as the S1 server created it with mode 0755, is set to 0700
+// by a write, which says so: reload-socket serves only from such a directory (ADR-047
+// decision 14; ADR-062 decision 4).
+func TestWriteNarrowsTheModeOfRun(t *testing.T) {
+	h := Home{Dir: filepath.Join(t.TempDir(), "home"), LockWait: time.Second}
+	if err := os.MkdirAll(filepath.Join(h.Dir, "run"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(h.Dir, "run"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	done, err := h.Write(t.Context(), Write{Command: "test", Plan: plan(record("x\n"))})
+	st, serr := os.Stat(filepath.Join(h.Dir, "run"))
+	if err != nil || serr != nil || st.Mode().Perm() != 0o700 || !slices.ContainsFunc(done.Notes, func(n string) bool { return strings.Contains(n, "0700") }) {
+		t.Errorf("a write on a run/ of mode 0755: %+v, %v; run/ %v, %v; want mode 0700 and a note", done, err, st, serr)
+	}
+}
+
 // A submission that fails restores the snapshot: the replaced file is back and every
 // created path is gone (ADR-061 decision 17).
 func TestRefusedSubmissionRestores(t *testing.T) {

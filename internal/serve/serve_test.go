@@ -472,6 +472,45 @@ func TestRunCreatesTheRuntimeDirectoryWithMode0700(t *testing.T) {
 	}
 }
 
+// A run/ that the S1 server created with mode 0755 is set to 0700 at start, and the
+// server says so, since reload-socket serves only from a directory of mode 0700 that
+// the site user owns (ADR-047 decision 14; ADR-062 decision 4).
+func TestRunNarrowsTheModeOfTheRuntimeDirectory(t *testing.T) {
+	h := home(t, "[]")
+	if err := os.Chmod(filepath.Join(h, "run"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if fi, err := os.Stat(filepath.Join(h, "run")); err != nil || fi.Mode().Perm() != 0o700 || !strings.Contains(stderr.String(), "0700") {
+		t.Errorf("run/ = %v, %v, stderr %q; want mode 0700 and a line that says so", fi.Mode(), err, stderr.String())
+	}
+}
+
+// A process.lock that the server cannot open, as one that a run as root left, says so
+// and names the file, and does not say that another process runs on the home.
+func TestRunNamesAProcessLockItCannotOpen(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens a file of mode 0000")
+	}
+	h := home(t, "[]")
+	if err := os.MkdirAll(filepath.Join(h, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h, "run", ProcessLock), nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitRefused || strings.Contains(stderr.String(), "another process") ||
+		!strings.Contains(stderr.String(), filepath.Join(h, "run", ProcessLock)) {
+		t.Errorf("exit %d, stderr %q; want 1 naming the file, and no other process", code, stderr.String())
+	}
+}
+
 // The client of reload-socket reads phase and profile of the status file through
 // reload.ProcessStatus and imports no package of boot or internal/ (ADR-062 decision
 // 8): every status this package writes carries both, with the values boot gave.
