@@ -19,8 +19,9 @@ import (
 )
 
 // box is the launcher's toolbox of these tests. Render reads the home as boot would for
-// the two layer files: one that holds "broken" and is not set aside stops the
-// composition of the profile. It records each request. Shipped holds the profile cli.
+// profile.yaml and the two layer files: one that holds "broken" and is not set aside
+// stops the composition of the profile. It records each request. Shipped holds the
+// profile cli.
 type box struct {
 	launch.NoTools
 	mu   sync.Mutex
@@ -31,7 +32,7 @@ func (b *box) Render(ctx context.Context, q launch.RenderRequest) (launch.Render
 	b.mu.Lock()
 	b.reqs = append(b.reqs, q)
 	b.mu.Unlock()
-	for _, f := range []string{"profiles/" + q.Profile + "/aiops.patch.yml", "aiops.patch.yml"} {
+	for _, f := range []string{"profiles/" + q.Profile + "/profile.yaml", "profiles/" + q.Profile + "/aiops.patch.yml", "aiops.patch.yml"} {
 		data, err := os.ReadFile(filepath.Join(q.Home, filepath.FromSlash(f)))
 		if q.Home != "" && err == nil && strings.TrimSpace(string(data)) == "broken" && !slices.Contains(q.Aside, f) {
 			return launch.Rendered{Diagnostics: []launch.Diagnostic{{Check: "compose", File: f, Line: 1, Text: f + ":1: syntax: broken"}}}, nil
@@ -166,6 +167,20 @@ func TestSanitizeProfileSetsAsideWhatStops(t *testing.T) {
 	}
 	if got := tree(t, h); !equal(got, before) {
 		t.Errorf("a sanitize with nothing to set aside changed the home: %v", got)
+	}
+}
+
+// profile sanitize gives no all-clear on a profile that does not compose for a file it
+// does not set aside, its profile.yaml or a profile that exists nowhere: it exits 1,
+// naming the file and what to do, as the server's refusal would (ADR-061 decision 41).
+func TestSanitizeProfileRefusesWhatItCannotSetAside(t *testing.T) {
+	l := Library{LockWait: time.Second, Box: &box{}}
+	h := newHome(t)
+	put(t, h, "profiles/dev/profile.yaml", "broken\n")
+	put(t, h, "profiles/dev/aiops.patch.yml", "broken\n")
+	ch, err := l.SanitizeProfile(t.Context(), profileRequest(h.Dir, "dev"))
+	if !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "profiles/dev/profile.yaml") || slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, "no layer file") }) {
+		t.Errorf("sanitize of a profile whose profile.yaml stops it: %+v, %v; want ErrRefused naming profiles/dev/profile.yaml and no all-clear", ch, err)
 	}
 }
 
