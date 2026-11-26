@@ -414,6 +414,24 @@ func TestRunRefusals(t *testing.T) {
 	}
 }
 
+// A write of aiopsctl killed after its renames leaves its snapshot, and the files may
+// hold part of its change, which the next writer restores or keeps: a server does not
+// boot them, and says how to finish the write (ADR-061 decision 17). The cli profile of
+// aiopsctl, whose commands are those writers, boots.
+func TestRunRefusesAStoppedWrite(t *testing.T) {
+	for _, command := range []bool{false, true} {
+		f := newFixture(t, happyBundle)
+		f.files["snapshot/paths.json"] = &fstest.MapFile{Data: []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`)}
+		f.opt.Command = command
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		code := f.run(ctx)
+		cancel()
+		if refused := code == ExitRefused && strings.Contains(f.errb.String(), "aiopsctl profile sanitize p"); refused == command {
+			t.Errorf("command %v: exit %d; stderr:\n%s", command, code, f.errb.String())
+		}
+	}
+}
+
 func TestKernelConfigNamesUnknownPlugins(t *testing.T) {
 	f := newFixture(t, happyBundle)
 	f.opt.Registry = f.reg

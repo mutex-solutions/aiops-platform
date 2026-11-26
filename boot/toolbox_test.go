@@ -235,6 +235,22 @@ func TestToolboxRenderNamesTheFileThatStopsComposition(t *testing.T) {
 	}
 }
 
+// A home that holds the snapshot of a stopped write renders with a warning that names
+// it, so profile render shows that its files may hold part of that change (ADR-061
+// decision 17).
+func TestToolboxRenderWarnsOfAStoppedWrite(t *testing.T) {
+	b := newBox(t)
+	tb := b.start(t, nil)
+	for name, f := range b.files {
+		b.extra["stopped/"+name] = f
+	}
+	b.extra["stopped/snapshot/paths.json"] = &fstest.MapFile{Data: []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`)}
+	r, err := tb.Render(t.Context(), launch.RenderRequest{Home: "/x/stopped", Profile: "p"})
+	if err != nil || !slices.ContainsFunc(r.Diagnostics, func(d launch.Diagnostic) bool { return d.Warning && strings.Contains(d.Text, "snapshot/") }) {
+		t.Errorf("a render of a home with a snapshot: %+v, %v; want a warning that names snapshot/", r.Diagnostics, err)
+	}
+}
+
 // With Against a render reads the module table and the bindings from that signed
 // manifest, as `aiopsctl profile render --dist` does, and holds a home to that manifest's
 // digest instead of the embedded one (ADR-061 decision 26). Its dump holds the lines that
