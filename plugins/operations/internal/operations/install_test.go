@@ -278,6 +278,22 @@ func TestDisableOfTheRowsOfTheSubmission(t *testing.T) {
 	}
 }
 
+// aiopsctl never listens (ADR-062 decision 2): enable refuses reload-socket in the
+// profile cli, whose row could not take effect there, and writes nothing.
+func TestEnableOfTheSocketInTheProfileCli(t *testing.T) {
+	rows := []launch.Row{{ID: "reload-socket", Plugin: "aiops/reload-socket"}}
+	l := Library{Box: rowsBox{installBox{&packBox{}}, launch.Rendered{Composition: launch.Composition{Rows: rows}}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/cli/profile.yaml", "bundles: [aiops-core, aiops-cli]\n")
+	before := tree(t, h)
+	if _, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "cli", Row: "reload-socket"}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "ADR-062 decision 2") {
+		t.Errorf("enable reload-socket in cli: %v; want ErrRefused naming ADR-062 decision 2", err)
+	}
+	if got := tree(t, h); !equal(got, before) {
+		t.Errorf("a refused enable wrote the home: %v", got)
+	}
+}
+
 // Remove takes the plugin id of an installed artifact only, one with its kept files or
 // its lock entry: aiops-cli of the profile cli, the bundle that inserts reload-socket,
 // another first-party bundle, an id with no kept files and an id that is no plugin id

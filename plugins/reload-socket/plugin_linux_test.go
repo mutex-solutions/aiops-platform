@@ -379,6 +379,24 @@ func TestTheDefaultDirectoryIsRunUnderTheHome(t *testing.T) {
 	}
 }
 
+// aiopsctl never listens (ADR-062 decision 2): a row that a layer enables in the
+// process of an aiopsctl command, whose launcher alone fills the working directory of
+// cmdline, is ACTIVE with no socket and no lock, so a server that starts meanwhile
+// serves its own, and the command submits to that server.
+func TestAiopsctlNeverListens(t *testing.T) {
+	w := newWorld(t)
+	w.launch.Flags, w.launch.WorkDir = map[string]string{"home": filepath.Dir(w.dir)}, "/work"
+	f, err := w.mount(short, nil)
+	if st, _ := f.State(t.Context()); err != nil || st != kernel.Active {
+		t.Fatalf("row is %s: %v", st, err)
+	}
+	for _, name := range []string{"reload.sock", "reload.lock"} {
+		if _, err := os.Stat(filepath.Join(w.dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("the row in an aiopsctl process made %s: %v", name, err)
+		}
+	}
+}
+
 func TestASocketLeftBehindIsReplaced(t *testing.T) {
 	w := newWorld(t)
 	sock := filepath.Join(w.dir, reload.SocketFile)
