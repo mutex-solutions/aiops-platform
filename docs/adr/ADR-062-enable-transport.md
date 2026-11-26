@@ -320,7 +320,15 @@
    ADR-059 decision 30 revisits at S3, so a site whose `--limits` raises those deadlines
    raises the flag. When nothing answers in the window it keeps the files, prints
    `restart-required: <socket> did not answer; the change applies at the next start`
-   (`00:490`) and exits 1.
+   (`00:490`) and exits 1. Note of 2026-11-27 (review round over the whole step, round
+   2): a server that was killed leaves a `status.json` that says it runs. So `aiopsctl`
+   first tries a shared, non-blocking `flock(2)` of `run/process.lock`, which a server
+   holds for its life (decision 2), and releases it at once; where it takes it, no
+   process runs and the outcome is not-running, exit 0, as for a status that says
+   `stopped`; a server that starts in that instant tries its own lock again for a
+   moment. Skipping the window where the profile composes no enabled `reload-socket`
+   row was not taken: the render of the home after the write does not show what the
+   running process composed, and the window still ends.
 10. **Timeouts and a second submission.** The row reads the request within 5 s of the
     accept and writes each reply line within 5 s. It notices a client that closed its end
     within 1 s and stops awaiting for it; the operation itself goes on in `reload`. The

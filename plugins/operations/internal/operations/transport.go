@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
@@ -129,8 +130,17 @@ func Submit(ctx context.Context, r Request) (Outcome, error) {
 }
 
 // running reports whether status.json says that a process runs profile on home. A
-// file that does not read as JSON names no phase, so it counts as running.
+// file that does not read as JSON names no phase, so it counts as running. A
+// process.lock whose flock is free says that no server runs, whatever the status of a
+// killed one says (ADR-062 decision 2); the shared lock is held for an instant only.
 func running(home, profile string) bool {
+	if f, err := os.Open(filepath.Join(home, reload.RunDir, "process.lock")); err == nil {
+		free := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB) == nil
+		_ = f.Close()
+		if free {
+			return false
+		}
+	}
 	b, err := os.ReadFile(filepath.Join(home, reload.RunDir, reload.StatusFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return false
