@@ -527,6 +527,28 @@ func TestEnableOverriddenWithNoProcessSaysSo(t *testing.T) {
 	}
 }
 
+// siteBox renders the row echo enabled by the bundle layers and disabled by the site
+// layer: enabled only in a render that sets the layers aside.
+type siteBox struct{ installBox }
+
+func (siteBox) Render(_ context.Context, q launch.RenderRequest) (launch.Rendered, error) {
+	return launch.Rendered{Composition: launch.Composition{Rows: []launch.Row{{ID: "echo", Plugin: "acme/echo", Enabled: len(q.Aside) > 0}}}}, nil
+}
+
+// With a process on the profile, an enable that the site layer overrides exits 1 naming
+// the override, also where the profile layer needs no write, as it does after a write
+// (ADR-062 decision 11; ADR-061 decision 17): exit 0 is for no process only.
+func TestEnableOverriddenOnARunningProcessFails(t *testing.T) {
+	l := Library{Box: siteBox{installBox{&packBox{}}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/dev/profile.yaml", "bundles: [aiops-core]\n")
+	put(t, h, "run/status.json", `{"phase": "running", "profile": "dev"}`)
+	ch, err := l.Enable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: "echo", ConnectWait: time.Millisecond})
+	if !errors.Is(err, def.ErrSubmission) || !strings.Contains(err.Error(), "overrides") || len(ch.Written) != 0 {
+		t.Errorf("an overridden enable on a running process: %+v, %v; want ErrSubmission naming the override and nothing written", ch, err)
+	}
+}
+
 // A refused enable, disable or install writes nothing, so it does not say that it copied
 // the shipped profile; one that writes says so.
 func TestARefusalCopiesNothing(t *testing.T) {
