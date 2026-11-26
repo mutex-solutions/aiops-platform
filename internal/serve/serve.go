@@ -32,6 +32,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
@@ -130,15 +131,32 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return boot.ExitInternal
 	}
-	// One server process runs on a home until S4b (ADR-062 decision 2): a second one
-	// refuses before it writes the status that aiopsctl reads of the first.
-	lock, err := os.OpenFile(filepath.Join(runDir, ProcessLock), os.O_RDWR|os.O_CREATE, 0o600)
-	if err == nil {
-		defer lock.Close() // the system releases the lock with it, and when the process dies
-		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err := ownRun(*home, runDir, e.Stderr); err != nil {
+		fmt.Fprintf(e.Stderr, "error: %v\n", err)
+		return boot.ExitRefused
 	}
+	// One server process runs on a home until S4b (ADR-062 decision 2): a second one
+	// refuses before it writes the status that aiopsctl reads of the first. A command of
+	// aiopsctl holds a shared lock for an instant to see whether one runs, so the lock is
+	// tried for a little while.
+	p := filepath.Join(runDir, ProcessLock)
+	lock, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
-		fmt.Fprintf(e.Stderr, "error: another process runs on the home %s: %s is held (%v); one server process runs on a home (ADR-062 decision 2)\n", *home, filepath.Join(runDir, ProcessLock), err)
+		fmt.Fprintf(e.Stderr, "error: %v: the server opens it to hold the home (ADR-062 decision 2); remove it as the user who owns it, as a run as another user leaves it\n", err)
+		return boot.ExitRefused
+	}
+	defer lock.Close() // the system releases the lock with it, and when the process dies
+	for i := 0; ; i++ {
+		if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil || !errors.Is(err, syscall.EWOULDBLOCK) || i == 10 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		fmt.Fprintf(e.Stderr, "error: another process runs on the home %s: %s is held; one server process runs on a home (ADR-062 decision 2)\n", *home, p)
+		return boot.ExitRefused
+	} else if err != nil {
+		fmt.Fprintf(e.Stderr, "error: lock %s: %v\n", p, err)
 		return boot.ExitRefused
 	}
 	publish := func(s boot.ProcessStatus) {
@@ -187,6 +205,29 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		opts.Patches = append(opts.Patches, patchFile(p))
 	}
 	return bootRun(ctx, opts)
+}
+
+// ownRun refuses a home or a run/ that the effective user does not own, so that a run
+// as another user, root among them, writes nothing there (ADR-047 decision 14); and sets
+// a run/ of another mode, as the S1 server created it with 0755, to 0700, saying so,
+// since only the site user enters it (ADR-062 decision 4).
+func ownRun(home, runDir string, stderr io.Writer) error {
+	for _, p := range []string{home, runDir} {
+		st, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		if s, ok := st.Sys().(*syscall.Stat_t); ok && int(s.Uid) != os.Geteuid() {
+			return fmt.Errorf("%s belongs to uid %d, and this process runs as uid %d: the user who owns the home runs its server (ADR-047 decision 14)", p, s.Uid, os.Geteuid())
+		}
+		if p == runDir && st.Mode().Perm() != 0o700 {
+			if err := os.Chmod(p, 0o700); err != nil {
+				return err
+			}
+			fmt.Fprintf(stderr, "warning: %s had mode %#o; set to 0700, since only the site user enters it (ADR-047 decision 14)\n", p, st.Mode().Perm())
+		}
+	}
+	return nil
 }
 
 // bootRun is boot.Run; a test replaces it to see the options and the status file.

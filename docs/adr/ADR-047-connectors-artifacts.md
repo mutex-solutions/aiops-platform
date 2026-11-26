@@ -477,7 +477,13 @@ gaps:
     does not test. Only the site user can then open `run/reload.sock`, the socket of
     ADR-062, and no other unprivileged user of the host reads or changes a file of the
     home between install and boot. Any protection of the records of install and `dist use`
-    beyond that is ADR-020's (`07:75` R17).
+    beyond that is ADR-020's (`07:75` R17). Note of 2026-11-27 (review round over the
+    whole step, round 2): the server holds the home to the same rule. It refuses a home
+    or a `run/` whose owner is not its effective user, before it creates
+    `run/process.lock`, and names a lock file it cannot open instead of calling it held
+    by another process. A `run/` of another mode, as the S1 server created it with mode
+    0755, is set to 0700 at the start of the server and at a write of `aiopsctl`, each of
+    which says so (upgrade note of the S2a report).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
     has on the host, read-only; `run/` bound over it at the same path, read-write; the

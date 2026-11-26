@@ -81,7 +81,8 @@ const (
 // restores what is left of it under its own context before anything else, but drops
 // one whose write died while its submission was out.
 func (h Home) Write(ctx context.Context, w Write) (Done, error) {
-	if err := h.prepare(); err != nil {
+	narrowed, err := h.prepare()
+	if err != nil {
 		return Done{}, err
 	}
 	unlock, err := h.lock(ctx, w.Command)
@@ -94,9 +95,7 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	if err != nil {
 		return done, fmt.Errorf("restore the snapshot of an interrupted write in %s: %w", h.path(snapshotDir), err)
 	}
-	if note != "" {
-		done.Notes = append(done.Notes, note)
-	}
+	done.Notes = slices.DeleteFunc([]string{narrowed, note}, func(n string) bool { return n == "" })
 	if err := ctx.Err(); err != nil {
 		return done, err
 	}
@@ -164,29 +163,35 @@ func (h Home) step(stage string) {
 
 // prepare creates the home and run/ with mode 0700 where they are missing, but not a
 // missing parent, and refuses a home whose owner is not the effective user (ADR-047
-// decision 14).
-func (h Home) prepare() error {
+// decision 14); it sets a run/ of another mode to 0700, and returns what it says of it.
+func (h Home) prepare() (string, error) {
 	if err := os.Mkdir(h.Dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
+		return "", err
 	}
 	st, err := os.Stat(h.Dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	euid := os.Geteuid()
 	if h.euid != nil {
 		euid = h.euid()
 	}
 	if s, ok := st.Sys().(*syscall.Stat_t); ok && int(s.Uid) != euid {
-		return fmt.Errorf("%w: %s belongs to uid %d, and this process runs as uid %d (ADR-047 decision 14)", ErrOwner, h.Dir, s.Uid, euid)
+		return "", fmt.Errorf("%w: %s belongs to uid %d, and this process runs as uid %d (ADR-047 decision 14)", ErrOwner, h.Dir, s.Uid, euid)
 	}
 	if !st.IsDir() {
-		return fmt.Errorf("the home %s is not a directory", h.Dir)
+		return "", fmt.Errorf("the home %s is not a directory", h.Dir)
 	}
 	if err := os.Mkdir(h.path("run"), 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
+		return "", err
 	}
-	return nil
+	// The S1 server created run/ with mode 0755; reload-socket serves only from 0700.
+	if st, err := os.Stat(h.path("run")); err != nil || st.Mode().Perm() == 0o700 {
+		return "", err
+	} else if err := os.Chmod(h.path("run"), 0o700); err != nil {
+		return "", err
+	}
+	return "set " + h.path("run") + " to mode 0700, since only the site user enters it (ADR-047 decision 14)", nil
 }
 
 // lock takes the exclusive flock(2) of write.lock, the one file of the home that is
