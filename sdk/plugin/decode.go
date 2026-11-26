@@ -7,6 +7,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -158,8 +159,15 @@ func with(path []string, seg string) []string { return append(slices.Clone(path)
 // showValue names a value of a config tree in an error. A string is never echoed: it
 // may come from a resolved reference such as ${secret:name}.
 func showValue(v any) string {
-	if _, ok := v.(string); ok {
+	switch x := v.(type) {
+	case string:
 		return "a string"
+	case float64: // as written, so that 2.0 is not read as the integer it is refused for
+		s := strconv.FormatFloat(x, 'g', -1, 64)
+		if !strings.ContainsAny(s, ".eIN") {
+			s += ".0"
+		}
+		return s + ", a float"
 	}
 	return show(v)
 }
