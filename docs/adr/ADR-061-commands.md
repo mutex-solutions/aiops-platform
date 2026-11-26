@@ -657,7 +657,14 @@
       `ErrSubmission` naming its outcome; and `trust add` while a process runs the
       profile answers `restart-required` with the reason `not-submitted`. The mount of
       the operations row scripts its socket so, and the fake takes `Socket` in its
-      config. No cap was raised.
+      config. No cap was raised. Note on the owner's answer of 2026-11-26 (item 6 of
+      the S2a report's open questions), as built: suite revision 7 of `operations` adds
+      O27, the group clash with an artifact of another owner: with `acme/connector-x`
+      installed into `dev`, `plugin install` of `beta/connector-x` is refused naming
+      `acme/connector-x`, and writes nothing (ADR-047 decision 17). The mount of the
+      operations row reads the id of a plugin directory from its `plugin.yaml`, and the
+      fake packs under that id and names the artifact the profile holds; the signed
+      manifests and the golden dumps that print their digest are regenerated.
     - The cases that need the files are T1 tests of `plugins/operations`, which may
       import the YAML library (ADR-060 decision 41): the rename order, the content of
       the snapshot and the restore after a kill (decision 17), the modes and the owner

@@ -366,7 +366,7 @@ plugins:
         definitions:
           launch: ["0.2"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.4","suite":6,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"360c196ab022a401b2f5db75d6060360719f74bc30518c43f2ea90c750de53bc"},"name":"aiops/operations@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.4","suite":7,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"360c196ab022a401b2f5db75d6060360719f74bc30518c43f2ea90c750de53bc"},"name":"aiops/operations@0.1.0"}]}'
   aiops/readiness:
     package: github.com/mutex-solutions/aiops-platform/plugins/readiness
     manifest: |
@@ -1699,7 +1699,7 @@ serves:
     operations:
       - version: "0.4"
         compatibleFrom: "0.1"
-        suite: 6
+        suite: 7
         classes:
           operations:
             provider: open

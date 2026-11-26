@@ -17,11 +17,14 @@
 # adds the case of Smoke. Suite revision 5 adds the case of each outcome of a submission
 # with no final result and of a write the wire does not carry (ADR-061 decision 18).
 # Suite revision 6: plugin disable back to the value the bundle layers give a row drops
-# its departure, and writes none (08:375; review round of 2026-11-26).
+# its departure, and writes none (08:375; review round of 2026-11-26). Suite revision 7
+# adds the case of an install of an artifact of the name of one the profile holds under
+# another owner, which is refused and writes nothing (ADR-047 decision 17; owner answer
+# of 2026-11-26).
 key: operations
 version: "0.4"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
 compatibleFrom: "0.1"
-suite: 6
+suite: 7

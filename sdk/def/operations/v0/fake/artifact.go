@@ -52,6 +52,14 @@ func (s served) Pack(_ context.Context, r operations.PackRequest) (operations.Wr
 			return operations.Written{}, refused("every artifact carries a bundle: %v", err)
 		}
 		in, parts := s.f.cfg.Artifact, []string{} // the digest is of the files too: other content, another digest
+		// The id that plugin.yaml names, as boot's reader reads it.
+		if b, err := os.ReadFile(filepath.Join(r.Dir, "plugin.yaml")); err == nil {
+			for _, l := range strings.Split(string(b), "\n") {
+				if id, ok := strings.CutPrefix(l, "id: "); ok {
+					in.ID = id
+				}
+			}
+		}
 		_ = filepath.Walk(r.Dir, func(p string, _ os.FileInfo, _ error) error {
 			if b, err := os.ReadFile(p); err == nil {
 				parts = append(parts, strings.TrimPrefix(p, r.Dir), string(b))

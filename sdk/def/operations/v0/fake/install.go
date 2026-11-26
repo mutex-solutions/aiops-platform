@@ -59,12 +59,13 @@ func (s served) Install(ctx context.Context, r operations.InstallRequest) (opera
 		}
 		return s.f.change(ctx, r.Home, r.Profile, reload.CommandInstall, a.in.ID, &ch, func(l *layer, st *state) error {
 			held, kept := st.holders(r.Profile, a.in.ID), st.kept[a.in.ID]
+			clash := slices.IndexFunc(l.bundles, func(b string) bool { return operations.Group(b) == operations.Group(a.in.ID) })
 			switch {
 			case len(held) > 0 && kept != a.in.Digest:
 				return refused("the profiles %s name %s at %s, and a site holds one digest of a plugin id (ADR-047 decision 7)",
 					strings.Join(held, ", "), a.in.ID, cmp.Or(kept, "no kept files"))
-			case slices.ContainsFunc(l.bundles, func(b string) bool { return operations.Group(b) == operations.Group(a.in.ID) }):
-				return refused("%s holds an artifact of the name %s", r.Profile, operations.Group(a.in.ID))
+			case clash >= 0:
+				return refused("%s holds %s, an artifact of the name %s (ADR-047 decision 17)", r.Profile, l.bundles[clash], operations.Group(a.in.ID))
 			case kept != "" && len(held) == 0:
 				ch.Notes = append(ch.Notes, "removed the leftover bundles/"+a.in.ID+", which no profile names (ADR-047 decision 10)")
 			}
