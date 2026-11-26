@@ -344,20 +344,17 @@ func (b *build) module(ctx context.Context) error {
 	for i, p := range table {
 		files[fmt.Sprintf("site/manifests/%d.yaml", i)] = p.manifest
 	}
-	if b.release == nil { // a release's aiopsctl embeds the suite binaries (ADR-060 decision 46)
-		suites, err := b.suites()
-		if err != nil {
-			return err
-		}
-		maps.Copy(files, suites)
+	var more map[string][]byte
+	switch {
+	case b.release == nil: // a release's aiopsctl embeds the suite binaries (ADR-060 decision 46)
+		more, err = b.suites()
+	case b.q.Smoke != "" || b.q.Verify: // step 5 of plugin check on the site's plugins
+		more, err = b.smokeTests()
 	}
-	if b.q.Smoke != "" || b.q.Verify { // step 5 of plugin check on the site's plugins
-		tests, err := b.smokeTests()
-		if err != nil {
-			return err
-		}
-		maps.Copy(files, tests)
+	if err != nil {
+		return err
 	}
+	maps.Copy(files, more)
 	for name, data := range files {
 		p := filepath.Join(b.scratch, filepath.FromSlash(name))
 		if err := errors.Join(os.MkdirAll(filepath.Dir(p), 0o755), os.WriteFile(p, data, 0o644)); err != nil {
@@ -450,11 +447,7 @@ func tablePackages(file, path, version string) ([]tablePlugin, error) {
 		if accessor == "" {
 			return nil, fmt.Errorf("%s/%s holds a plugin.yaml and declares neither var Plugin nor func New()", path, dir)
 		}
-		pkg := path
-		if dir != "." {
-			pkg += "/" + dir
-		}
-		out = append(out, tablePlugin{pkg: pkg, accessor: accessor, manifest: manifest})
+		out = append(out, tablePlugin{pkg: strings.TrimSuffix(path+"/"+dir, "/."), accessor: accessor, manifest: manifest})
 	}
 	return out, nil
 }

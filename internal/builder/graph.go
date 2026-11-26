@@ -124,11 +124,6 @@ func modulesOf(pkgs []Package) map[string]Module {
 	return out
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	return slices.Sorted(maps.Keys(m))
-}
+func sortedKeys[V any](m map[string]V) []string { return slices.Sorted(maps.Keys(m)) }
 
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

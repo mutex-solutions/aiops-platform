@@ -165,7 +165,7 @@ func Distribution(ctx context.Context, g Go, main string, input []byte) ([]byte,
 // manifest (ADR-020 decision 9); it names every definition of its requires, and of each
 // it provides or contributes to the served suite revision with the halves that ran, the
 // suites that ran on its package (ran), or revision 0 with no half for a definition with
-// no suite (ADR-060 decisions 50, 55 and 56). A suite that did not run is not named.
+// no suite (ADR-060 decisions 50, 55 and 56), and the generated tests that did not run.
 func statement(m boot.Manifest, manifest []byte, serves plugingen.ServesData, ran map[string][]string) string {
 	defs := map[string]operations.Attested{}
 	for name, vs := range m.Requires.Definitions {
@@ -183,7 +183,7 @@ func statement(m boot.Manifest, manifest []byte, serves plugingen.ServesData, ra
 		}
 	}
 	sum := sha256.Sum256(manifest)
-	return string(operations.Statement(m.ID, m.Version, hex.EncodeToString(sum[:]), defs, nil, nil))
+	return string(operations.Statement(m.ID, m.Version, hex.EncodeToString(sum[:]), defs, nil, ran[""]))
 }
 
 // The document of Manifest.Write, in the field order of boot.Distribution.

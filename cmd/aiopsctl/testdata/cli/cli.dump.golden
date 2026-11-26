@@ -67,7 +67,7 @@ key operations: operations
 key reload: reload
 
 ## distribution
-trust: the default release root, key test-release, is trusted; the built-in record of sha256:1fe20bcea424b696e73ccdb46219a2736a57c922d8cdcc87cf3bad311e7e2452 is in use (ADR-020 decision 13)
+trust: the default release root, key test-release, is trusted; the built-in record of sha256:d5102cd724822397b76a08d5d77257d519492d5ac7e41f70bae245cac5727826 is in use (ADR-020 decision 13)
 
 ## gate
 check 1 Manifest schema and author API: pass (later: exemptions (compatibility.yaml) are S6b)

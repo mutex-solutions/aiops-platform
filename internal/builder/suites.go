@@ -4,6 +4,7 @@ package builder
 
 import (
 	"archive/zip"
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -267,7 +268,8 @@ func (b *build) attest(ctx context.Context) (Ran, error) {
 	return ran, err
 }
 
-// Ran is, by import path and definition, the halves of each suite that ran and passed.
+// Ran is, by import path and definition, the halves of each suite that ran and passed;
+// under "" in place of a definition, the generated tests that did not run.
 type Ran map[string]map[string][]string
 
 // RecordVar is sdk/def/internal/deftest.RecordVar, which only sdk/def may import.
@@ -275,8 +277,8 @@ const RecordVar = "AIOPS_SUITE_RECORD"
 
 // suitesRan runs with g and flags the tests of each first-party plugin of pkgs, a package
 // of the root module with a plugin.yaml, prints to w what and why, and returns what each
-// suite recorded (sdk/def/internal/deftest.Ran): the release pipeline attests a
-// first-party plugin by the suites that ran on it (ADR-060 decision 50).
+// suite recorded (sdk/def/internal/deftest.Ran) and the generated tests that skipped: the
+// release pipeline attests a first-party plugin by what ran on it (ADR-060 decision 50).
 func suitesRan(ctx context.Context, g Go, w io.Writer, why string, pkgs []Package, flags ...string) (Ran, error) {
 	dirs := map[string]string{}
 	for _, p := range pkgs {
@@ -295,11 +297,21 @@ func suitesRan(ctx context.Context, g Go, w io.Writer, why string, pkgs []Packag
 		g.Env = os.Environ()
 	}
 	g.Env = append(slices.Clip(g.Env), RecordVar+"="+rec)
-	if out, err := g.Run(ctx, slices.Concat([]string{"test", "-count=1", "-tags=grpcnotrace"}, flags, paths)...); err != nil {
-		return nil, fmt.Errorf("the suites of the first-party plugins: %w\n%s", err, out)
+	tests, err := g.Run(ctx, slices.Concat([]string{"test", "-json", "-count=1", "-tags=grpcnotrace"}, flags, paths)...)
+	if err != nil {
+		return nil, fmt.Errorf("the suites of the first-party plugins: %w\n%s", err, tests)
+	}
+	out := Ran{}
+	for _, pkg := range dirs {
+		out[pkg] = map[string][]string{}
+	}
+	for _, l := range bytes.Split(tests, []byte("\n")) {
+		var e struct{ Action, Package, Test string }
+		if json.Unmarshal(l, &e) == nil && e.Action == "skip" && out[e.Package] != nil && slices.Contains(plugingen.GeneratedTests, e.Test) {
+			out[e.Package][""] = append(out[e.Package][""], e.Test)
+		}
 	}
 	files, err := filepath.Glob(filepath.Join(rec, "*.json"))
-	out := Ran{}
 	for _, f := range files {
 		var r []string // the package's directory, the definition and the halves
 		data, rerr := os.ReadFile(f)
@@ -307,9 +319,6 @@ func suitesRan(ctx context.Context, g Go, w io.Writer, why string, pkgs []Packag
 			return nil, cmp.Or(err, fmt.Errorf("%s: %q is no record of a suite", f, data))
 		}
 		if pkg, ok := dirs[r[0]]; ok {
-			if out[pkg] == nil {
-				out[pkg] = map[string][]string{}
-			}
 			have := append(out[pkg][r[1]], r[2:]...)
 			out[pkg][r[1]] = slices.DeleteFunc([]string{"obligations", "guard"}, func(h string) bool { return !slices.Contains(have, h) })
 		}

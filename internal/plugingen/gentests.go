@@ -17,6 +17,10 @@ const (
 	TenantsFile = "zz_tenants_test.go"
 )
 
+// GeneratedTests are the tests of the two files, which an attestation names when they
+// did not run (ADR-060 decisions 18 and 43).
+var GeneratedTests = []string{"TestCycle", "TestTwoTenants"}
+
 // cycleTest writes zz_cycle_test.go: cycle.Run on the plugin with the fake of each
 // definition its Spec injects, the registries it lists and the row config of
 // testdata/cycle.yaml, if any (ADR-060 decision 12). The plugin is imported as

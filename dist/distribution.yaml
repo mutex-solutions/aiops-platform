@@ -39,7 +39,7 @@ plugins:
           commands: ["0.1"]
           composition: ["0.1"]
           launch: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["guard"]},"composition":{"version":"0.1"},"launch":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"ecab71f17fec8cc9c4ef57f9ff1ad537e4377a500a08cc90812fdd685ebd03ca"},"name":"aiops/cli@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["guard"]},"composition":{"version":"0.1"},"launch":{"version":"0.2"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"ecab71f17fec8cc9c4ef57f9ff1ad537e4377a500a08cc90812fdd685ebd03ca"},"name":"aiops/cli@0.1.0"}]}'
   aiops/clock:
     package: github.com/mutex-solutions/aiops-platform/plugins/clock
     manifest: |
@@ -72,7 +72,7 @@ plugins:
         pluginApi: "0.3"
         definitions:
           clock: ["0.1"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e122c1149b5d4702d92bf22b59cfadfbeaf67cd3228545f208a90fd8dc197c8a"},"name":"aiops/clock@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1","suite":1,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e122c1149b5d4702d92bf22b59cfadfbeaf67cd3228545f208a90fd8dc197c8a"},"name":"aiops/clock@0.1.0"}]}'
   aiops/command-dist:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-dist
     manifest: |
@@ -108,7 +108,7 @@ plugins:
         definitions:
           commands: ["0.1"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9e6561db37ece8983ce7f8ae0e1270c95aac68f50388ada5c4103dcf35837010"},"name":"aiops/command-dist@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9e6561db37ece8983ce7f8ae0e1270c95aac68f50388ada5c4103dcf35837010"},"name":"aiops/command-dist@0.1.0"}]}'
   aiops/command-key:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-key
     manifest: |
@@ -144,7 +144,7 @@ plugins:
         definitions:
           commands: ["0.1"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"a90d42108e56817bb42941cd066efac8d44b45139c3fa497223ee8de673ca3ee"},"name":"aiops/command-key@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"a90d42108e56817bb42941cd066efac8d44b45139c3fa497223ee8de673ca3ee"},"name":"aiops/command-key@0.1.0"}]}'
   aiops/command-plugin:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-plugin
     manifest: |
@@ -180,7 +180,7 @@ plugins:
         definitions:
           commands: ["0.1"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9c89ef8a3c21bc8c83610fd17da5b99f058e37f873834cb0ac8b5318f36b23a8"},"name":"aiops/command-plugin@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"9c89ef8a3c21bc8c83610fd17da5b99f058e37f873834cb0ac8b5318f36b23a8"},"name":"aiops/command-plugin@0.1.0"}]}'
   aiops/command-profile:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-profile
     manifest: |
@@ -216,7 +216,7 @@ plugins:
         definitions:
           commands: ["0.1"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"eb32f5263055d35b9f55d9f1eafd3f46086fb3016e9cbd46fd69e0f589685815"},"name":"aiops/command-profile@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"eb32f5263055d35b9f55d9f1eafd3f46086fb3016e9cbd46fd69e0f589685815"},"name":"aiops/command-profile@0.1.0"}]}'
   aiops/command-trust:
     package: github.com/mutex-solutions/aiops-platform/plugins/command-trust
     manifest: |
@@ -252,7 +252,7 @@ plugins:
         definitions:
           commands: ["0.1"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"6b8043a403f713283567ef21ea648cb0c2d11e05dbb6120697577bbb27fec7c2"},"name":"aiops/command-trust@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"commands":{"version":"0.1","suite":1,"halves":["obligations"]},"operations":{"version":"0.4"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"6b8043a403f713283567ef21ea648cb0c2d11e05dbb6120697577bbb27fec7c2"},"name":"aiops/command-trust@0.1.0"}]}'
   aiops/config-refs:
     package: github.com/mutex-solutions/aiops-platform/plugins/config-refs
     manifest: |
@@ -291,7 +291,7 @@ plugins:
         definitions:
           configrefs: ["0.1"]
           launch: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"configrefs":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"86e53cbff0e9a387f152dbee94fd414047548a5a10abb78f59d0b85f439ed495"},"name":"aiops/config-refs@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"configrefs":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"86e53cbff0e9a387f152dbee94fd414047548a5a10abb78f59d0b85f439ed495"},"name":"aiops/config-refs@0.1.0"}]}'
   aiops/loader:
     package: github.com/mutex-solutions/aiops-platform/loader
     manifest: |
@@ -327,7 +327,7 @@ plugins:
           composition: ["0.1"]
           launch: ["0.2"]
           loader: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"},"loader":{"version":"0.2","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"4c8ee192538d1ce33777f2e69efb7452062eafc221c6318d2343463d414db32e"},"name":"aiops/loader@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1","suite":1,"halves":["obligations","guard"]},"launch":{"version":"0.2"},"loader":{"version":"0.2","suite":1,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"4c8ee192538d1ce33777f2e69efb7452062eafc221c6318d2343463d414db32e"},"name":"aiops/loader@0.1.0"}]}'
   aiops/operations:
     package: github.com/mutex-solutions/aiops-platform/plugins/operations
     manifest: |
@@ -366,7 +366,7 @@ plugins:
         definitions:
           launch: ["0.2"]
           operations: ["0.4"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.4","suite":4,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"360c196ab022a401b2f5db75d6060360719f74bc30518c43f2ea90c750de53bc"},"name":"aiops/operations@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"operations":{"version":"0.4","suite":4,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"360c196ab022a401b2f5db75d6060360719f74bc30518c43f2ea90c750de53bc"},"name":"aiops/operations@0.1.0"}]}'
   aiops/readiness:
     package: github.com/mutex-solutions/aiops-platform/plugins/readiness
     manifest: |
@@ -408,7 +408,7 @@ plugins:
           composition: ["0.1"]
           launch: ["0.2"]
           reload: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e36448d44e42d690441eef7e044d25be5d4e63efcf901f0081c700a753c17681"},"name":"aiops/readiness@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"e36448d44e42d690441eef7e044d25be5d4e63efcf901f0081c700a753c17681"},"name":"aiops/readiness@0.1.0"}]}'
   aiops/reload:
     package: github.com/mutex-solutions/aiops-platform/plugins/reload
     manifest: |
@@ -450,7 +450,7 @@ plugins:
           launch: ["0.2"]
           loader: ["0.2"]
           reload: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.2","suite":1,"halves":["obligations","guard"]}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"bd492dbc85d184899525e7a58cc488c4cba1478635cec6a0e95170d87d69943d"},"name":"aiops/reload@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"loader":{"version":"0.2"},"reload":{"version":"0.2","suite":1,"halves":["obligations","guard"]}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"bd492dbc85d184899525e7a58cc488c4cba1478635cec6a0e95170d87d69943d"},"name":"aiops/reload@0.1.0"}]}'
   aiops/reload-socket:
     package: github.com/mutex-solutions/aiops-platform/plugins/reload-socket
     manifest: |
@@ -487,7 +487,7 @@ plugins:
         definitions:
           launch: ["0.2"]
           reload: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"b84e752428bd8f8b0078498bd9edf7dabafc0e048751d11f34a0fe253a2c1cb7"},"name":"aiops/reload-socket@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"launch":{"version":"0.2"},"reload":{"version":"0.2"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"b84e752428bd8f8b0078498bd9edf7dabafc0e048751d11f34a0fe253a2c1cb7"},"name":"aiops/reload-socket@0.1.0"}]}'
   aiops/restart-policy:
     package: github.com/mutex-solutions/aiops-platform/plugins/restart-policy
     manifest: |
@@ -550,7 +550,7 @@ plugins:
           composition: ["0.1"]
           launch: ["0.2"]
           reload: ["0.2"]
-    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}}},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"344cb08353325b2de89fd0ef3d641996b4644d07dcb6c02d775603995637adba"},"name":"aiops/restart-policy@0.1.0"}]}'
+    attestation: '{"_type":"https://in-toto.io/Statement/v1","predicate":{"definitions":{"clock":{"version":"0.1"},"composition":{"version":"0.1"},"launch":{"version":"0.2"},"reload":{"version":"0.2"}},"notRun":["TestTwoTenants"]},"predicateType":"https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1","subject":[{"digest":{"sha256":"344cb08353325b2de89fd0ef3d641996b4644d07dcb6c02d775603995637adba"},"name":"aiops/restart-policy@0.1.0"}]}'
 modules:
   - path: github.com/asaskevich/govalidator
     version: v0.0.0-20230301143203-a9d515a09cc2
