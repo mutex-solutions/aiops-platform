@@ -12,10 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
@@ -46,6 +48,10 @@ const (
 	maxReferrers = 16
 )
 
+// registryWait bounds the dial of a registry and the wait for the headers of each of
+// its answers.
+const registryWait = 30 * time.Second
+
 // remoteRepo returns the repository of ref, an OCI reference with oci:// optional,
 // that reads the credentials of config.json under DOCKER_CONFIG, or under .docker/ of
 // HOME, of the caller's environment (ADR-061 decision 17). A registry on the loopback
@@ -61,7 +67,7 @@ func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
 			return nil, refused("the registry credentials: %v", err)
 		}
 	}
-	r.Client = &auth.Client{Client: retry.DefaultClient, Cache: auth.NewCache(), Credential: credentials.Credential(store)}
+	r.Client = &auth.Client{Client: registryClient(registryWait), Cache: auth.NewCache(), Credential: credentials.Credential(store)}
 	host, _, err := net.SplitHostPort(r.Reference.Registry)
 	if err != nil {
 		host = r.Reference.Registry
@@ -70,6 +76,10 @@ func remoteRepo(c def.Caller, ref string) (*remote.Repository, error) {
 	r.PlainHTTP = host == "localhost" || ip != nil && ip.IsLoopback()
 	return r, nil
 }
+
+// registryClient returns the HTTP client of a registry: oras-go's retry client, which
+// does not bound a dial or an answer.
+func registryClient(time.Duration) *http.Client { return retry.DefaultClient }
 
 // configJSON returns the path of the caller's config.json, "" with neither variable.
 func configJSON(c def.Caller) string {

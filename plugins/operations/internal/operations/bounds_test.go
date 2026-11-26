@@ -8,9 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content/oci"
@@ -118,5 +121,30 @@ func TestReferrersAreBoundedBeforeTrust(t *testing.T) {
 		if !errors.Is(err, def.ErrRefused) || read > 0 && c.bytes > maxFile || read > 16 {
 			t.Errorf("%s: %v, %d bundle layers read; want ErrRefused, none above 1 MiB and at most 16", c.name, err, read)
 		}
+	}
+}
+
+// A registry that takes the connection and never answers, as one behind a filter that
+// drops what it is sent, fails a request of the registry client within its wait, which
+// no retry repeats, not minutes later.
+func TestAnUnansweringRegistryFailsSoon(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0") // never accepted: the kernel completes the handshake
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+ln.Addr().String()+"/v2/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	resp, err := registryClient(200 * time.Millisecond).Do(req)
+	if err == nil {
+		resp.Body.Close()
+	}
+	if took := time.Since(start); err == nil || ctx.Err() != nil || took > 2*time.Second {
+		t.Errorf("a request of a registry that never answers: %v after %v; want an error of its own within 2s", err, took)
 	}
 }
