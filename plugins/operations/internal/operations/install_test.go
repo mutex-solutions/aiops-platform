@@ -385,6 +385,20 @@ func TestRemoveTakesAnInstalledArtifactOnly(t *testing.T) {
 	}
 }
 
+// Remove reads the bundle list as the other writes do: on a shipped profile that the
+// home does not hold it refuses an id that the profile does not install, and on a
+// profile that exists nowhere it says so, each a refusal and not a raw read error.
+func TestRemoveFromAProfileTheHomeDoesNotHold(t *testing.T) {
+	l := Library{Box: installBox{&packBox{}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "trust.yaml", "")
+	for p, want := range map[string]string{"dev": "does not install", "nosuch": "neither the home nor this binary"} {
+		if _, err := l.Remove(t.Context(), def.RemoveRequest{Home: h.Dir, Profile: p, ID: "nosuch/x"}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), want) {
+			t.Errorf("remove from %s: %v; want ErrRefused saying %q", p, err, want)
+		}
+	}
+}
+
 // Remove deletes bundles/<id>/ and content/<id>/ only once its write is kept and the
 // snapshot dropped, so a deletion that fails leaves the bundle list and plugins.lock
 // without the id and says so: it never leaves a lock entry without its files (ADR-047
