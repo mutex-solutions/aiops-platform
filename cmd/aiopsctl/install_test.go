@@ -1,11 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
+	"context"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -18,10 +25,66 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv(asCtl) != "" {
+		os.Exit(testCtl())
+	}
 	code := m.Run()
 	harness.Cleanup()
 	os.Exit(code)
 }
+
+// asCtl makes the test binary the aiopsctl of the test distribution: TestMain runs its
+// arguments as main runs them, with the module table, the signed manifest and the
+// shipped files of the test distribution, its own over the release's, and the stand-ins
+// of the embedded binaries, so a case runs aiopsctl as a process of its own, with its
+// signals and its exit code.
+const asCtl = "AIOPSCTL_TEST_DIST"
+
+func testCtl() int {
+	d, err := testdist.Distribution()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "aiopsctl: %v\n", err)
+		return 1
+	}
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	dir, _ := os.Getwd()
+	return run(context.Background(), os.Args[1:],
+		process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Environ: os.Environ(), Dir: dir, Files: os.DirFS("/"), Signals: sigs},
+		distribution{Registry: d.Registry, Signed: d.Signed, Limits: d.Limits, Shipped: d.Shipped, Tools: standIns})
+}
+
+// ctl returns the command that runs the test binary as the aiopsctl of the test
+// distribution with args, in the working directory and with the home of env.
+func ctl(t *testing.T, env map[string]string, args ...string) *exec.Cmd {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), exe, args...)
+	cmd.Dir, cmd.Env = env["PWD"], append(os.Environ(), asCtl+"=1", "AIOPS_HOME="+env["AIOPS_HOME"], "AIOPS_KEY_PASSWORD="+env["AIOPS_KEY_PASSWORD"])
+	return cmd
+}
+
+// ctlRun runs ctl to its end and returns its exit code and output.
+func ctlRun(t *testing.T, env map[string]string, args ...string) result {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	cmd := ctl(t, env, args...)
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	err := cmd.Run()
+	if ee := (*exec.ExitError)(nil); err != nil && !errors.As(err, &ee) {
+		t.Fatal(err)
+	}
+	return result{cmd.ProcessState.ExitCode(), out.String(), errOut.String()}
+}
+
+// standIns are the stand-ins of the suite and scenario binaries that a release build
+// embeds, each reporting a pass (ADR-060 decision 46).
+var standIns = authoring.Tools{Suites: fstest.MapFS{
+	"suites/echoers.test":       standIn(`{"Name":"echoers","Revision":1,"Halves":["obligations"]}`),
+	"suites/scenario-echo.test": standIn(`{"Name":"echo","Version":"1","Halves":["kernel"]}`)}}
 
 // The echo pack: a pack of acme whose bundle inserts one disabled row of the toy
 // echoer of the test release, with content and a fixture (ADR-060 decision 38).
@@ -83,9 +146,7 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 	}
 	reg := ocitest.New(t, ocitest.Options{})
 	env := map[string]string{"PWD": work, "AIOPS_HOME": p.Home, "AIOPS_KEY_PASSWORD": "test"}
-	tools := authoring.Tools{Suites: fstest.MapFS{
-		"suites/echoers.test":       standIn(`{"Name":"echoers","Revision":1,"Halves":["obligations"]}`),
-		"suites/scenario-echo.test": standIn(`{"Name":"echo","Version":"1","Halves":["kernel"]}`)}}
+	tools := standIns
 	var spec string
 	against, err := filepath.Abs(filepath.Join("..", "..", "test", "dist", "distribution.yaml"))
 	if err != nil {
