@@ -296,10 +296,11 @@ jobs:
     # image inside the job, and drives the author's repository, the pack author's machine
     # and the clean machine, each as containers on a network of its own that reaches the
     # registry and, from the author's repository, the module proxy, which a container
-    # serves; the clean machine's builds run on the builder image and its kernel runs as
-    # a container on the home it bound read-only (see the s2a-exit target of the
-    # Makefile). Race-built; a race report or a skip fails the job. Nothing is pushed or
-    # published outside the job, and no key outlives it.
+    # serves, with a container runtime of its own on that network where it has one; the
+    # clean machine's builds run on the builder image and its kernel runs as a container
+    # on the home it bound read-only (see the s2a-exit target of the Makefile).
+    # Race-built; a race report or a skip fails the job. Nothing is pushed or published
+    # outside the job, and no key outlives it.
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:

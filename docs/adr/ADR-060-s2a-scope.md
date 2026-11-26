@@ -732,6 +732,28 @@ gaps:
     the author's repository, the module proxy answer and nothing else does; it also
     lists a container of the pack author's image and passes only when `aiopsctl` is the
     one file in it that holds a byte. The steps and their assertions do not change.
+
+    Second note of 2026-11-26, as built: through the socket of the job's container
+    runtime, the clean machine, and the author's repository on the image path, could run
+    a container on the host's network or on the runtime's default bridge, and every
+    image they pulled was pulled from the host, so they reached more than their network.
+    Each now has a container runtime of its own instead of the socket: the daemon of the
+    job's container runtime, from an image that the test builds on no base layer from
+    its programs (`dockerd`, `containerd`, the runc shim of `containerd` and `runc`, with
+    the shared libraries they load) and `exitnet`, run in a privileged container in the
+    environment's network namespace with no bridge, its images in a volume removed with
+    it, the environment's directory bound read-write and the module proxy's directory
+    read-only, each at its own path, and listening on a socket in the environment's
+    directory that `DOCKER_HOST` names in its containers. So the builder image is
+    pulled, and run with no network, through the environment's network alone, and
+    nothing new is fetched (decision 34). What the author and the pack author hand the
+    clean machine, the author's directory with the module source of D1's copy and the
+    pack author's public key, is copied into its directory at C1 rather than bound. The
+    case `networks` also loads the image of `exitnet` into each of these runtimes and
+    passes only when a container on the runtime's host network reaches what the
+    environment reaches and one on its default network reaches nothing. The kernel of C3
+    to C6 stays a container of the job's runtime with no network, run by the test as
+    the host of ADR-047 decision 15.
 31. **The other refusals and the commands the exit does not reach** are cases of the
     tests of `boot`, `test/failure-matrix` and `test/authoring/`:
     - Every denial clause of checks 1, 2, 4, 5, 6 and 10 and of the S2a parts of checks 7

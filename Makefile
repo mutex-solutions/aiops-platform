@@ -86,13 +86,15 @@ builder-image:
 # the pinned registry image, and drives the author's repository, the pack author's
 # machine and the clean machine, each as containers on a network of its own that reaches
 # the registry and, from the author's repository, the module proxy, which a container
-# serves over HTTP. EXIT_BUILDERS names the path of the clean machine's builds, each run
-# in turn: image, the CI job s2a-exit, and local, its local-toolchain variant
-# s2a-exit-local. The test binary is race-built, GORACE writes every race report of a
-# race-built process to a file, and any report fails the target, as s1-suites does; so
-# does a skip. It needs a container runtime and the module cache of the builder job, so
-# `make check` (-short) skips it. It removes the containers, with their volumes, and the
-# networks and images it makes or pulls.
+# serves over HTTP; the clean machine and, on the image path, the author's repository
+# have a container runtime of their own on that network, a daemon of the job's runtime
+# in a privileged container. EXIT_BUILDERS names the path of the clean machine's
+# builds, each run in turn: image, the CI job s2a-exit, and local, its local-toolchain
+# variant s2a-exit-local. The test binary is race-built, GORACE writes every race report
+# of a race-built process to a file, and any report fails the target, as s1-suites does;
+# so does a skip. It needs a container runtime, whose daemon programs are on PATH, and
+# the module cache of the builder job, so `make check` (-short) skips it. It removes the
+# containers, with their volumes, and the networks and images it makes or pulls.
 EXIT_BUILDERS ?= image local
 .PHONY: s2a-exit
 s2a-exit:
