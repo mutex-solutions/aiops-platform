@@ -366,6 +366,13 @@ func TestGateS2aChecksAtBoot(t *testing.T) {
 			fx.dist.add(manifestText("aiops/pack"), "")
 			fx.dist.bindings = "{required: {rows: [pack]}}"
 		}, []string{"5 pack:e1 signer stop=false", "8 pack group-clash stop=true"}},
+		// The release signed no manifest for the id, so there is none for the artifact's to
+		// equal (the owner's answer of 2026-11-26).
+		{"a bundle under a first-party id that the release does not list, whose group takes the id of a required row", func(fx *gateFix) {
+			fx.bundles["aiops/pack"] = string(fx.arts["acme/pack"].Kept.Bundle)
+			delete(fx.arts, "acme/pack")
+			fx.dist.bindings = "{required: {rows: [pack]}}"
+		}, []string{"5 pack:e1 signer stop=false", "8 pack group-clash stop=true"}},
 		// ADR-047 decisions 6 and 18: a kept bundle that does not compose inserts no row,
 		// and the artifact is denied by the check its kept files fail.
 		{"a kept bundle.yaml that differs from the artifact and does not compose", func(fx *gateFix) {
