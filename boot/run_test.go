@@ -432,6 +432,23 @@ func TestRunRefusesAStoppedWrite(t *testing.T) {
 	}
 }
 
+// The writes of aiopsctl compose a profile with the bundles of the home: a server
+// whose --bundles names another directory refuses to start while its profile enables
+// reload-socket, which would carry the submissions of writes that compose otherwise
+// than it runs (ADR-062 decision 2).
+func TestRunRefusesBundlesApartFromTheHomeWithTheSocket(t *testing.T) {
+	for _, bundles := range []string{"/b", "/h"} {
+		f := newFixture(t, happyBundle+"    - {id: reload-socket, plugin: aiops/reload-socket, roles: [api]}\n")
+		f.opt.Flags = map[string]string{"home": "/h", "bundles": bundles}
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		code := f.run(ctx)
+		cancel()
+		if refused := code == ExitRefused && strings.Contains(f.errb.String(), "--bundles"); refused != (bundles == "/b") {
+			t.Errorf("--bundles %s: exit %d; stderr:\n%s", bundles, code, f.errb.String())
+		}
+	}
+}
+
 func TestKernelConfigNamesUnknownPlugins(t *testing.T) {
 	f := newFixture(t, happyBundle)
 	f.opt.Registry = f.reg
