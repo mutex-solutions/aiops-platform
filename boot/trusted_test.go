@@ -232,7 +232,8 @@ func TestBootInputArtifacts(t *testing.T) {
 		// Only in-process code has no lock entry (ADR-047 decisions 8 and 18).
 		{"a pack with no lock entry", "", nil, "profiles/p/plugins.lock: kept: names no digest for acme/connector-x", 0},
 		{"a pack with no lock entry in a lock", "lockVersion: 1\nartifacts: []\n", nil, "names no digest", 0},
-		{"no artifact.json and no lock entry", "", func(h fstest.MapFS) { delete(h, keptDir+"artifact.json") }, "artifact.json", 0},
+		// As an S1 bundle named <owner>/<name> is read: the denial says what such a name is.
+		{"no artifact.json and no lock entry", "", func(h fstest.MapFS) { delete(h, keptDir+"artifact.json") }, "an S1 bundle of that name has to be renamed", 0},
 		{"kept files that differ", lock, func(h fstest.MapFS) { h[keptDir+"bundle.yaml"] = &fstest.MapFile{Data: []byte("[]\n")} }, "kept", 2},
 		{"no record", lock, func(h fstest.MapFS) { delete(h, rec) }, "file-missing", 2},
 		{"a lock that does not read", "lockVersion: 2\n", nil, "plugins.lock", 0},
