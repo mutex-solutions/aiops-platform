@@ -2,7 +2,7 @@
 
 Status: proposal, awaiting the project owner; changes no decision and no roadmap order. Nothing here is implemented or measured, and no step has a date. `docs/architecture/00-decisions.md` wins wherever it and this record differ. Where the design needs an accepted line changed, this record names the line and asks (section 14); it edits none.
 
-Conventions. `00:72` is line 72 of `docs/architecture/00-decisions.md`; `01`, `03`, `05`, `06`, `07`, `08` and `09` name the other files of `docs/architecture/` by their number. `HR`, `CR` and `LR` are the harness record, the community record and the licence record under `docs/design/`. `ADR-061:1407` is a line of that ADR. The plugin record is cited by section. Line numbers are those of commit `50665fa`. `aiops-delivery` and every other new id here is a working name. Products are named only where an outside fact or a recorded licence verdict is about them; no name in this record says which systems any user of the platform runs. Licence statements are engineering analysis, not legal advice.
+Conventions. `00:72` is line 72 of `docs/architecture/00-decisions.md`; `01`, `03`, `05`, `06`, `07`, `08` and `09` name the other files of `docs/architecture/` by their number. `HR`, `CR` and `LR` are the harness record, the community record and the licence record under `docs/design/`. `ADR-061:1407` is a line of that ADR. Line numbers are those of commit `50665fa`. `aiops-delivery` and every other new id here is a working name. Products are named only where an outside fact or a recorded licence verdict is about them; no name in this record says which systems any user of the platform runs. Licence statements are engineering analysis, not legal advice.
 
 ## 1. The requirement
 
@@ -28,7 +28,7 @@ Two questions came with it. Does this fit the platform as a plugin, or does it n
 
 ## 2. A plugin bundle, not a separate platform
 
-**Answer.** The requirement fits as one optional first-party bundle, working name `aiops-delivery`, on the definitions the platform already has in design. It needs no change to the kernel, the launcher or the loader, no new shipped profile and no change to the order of work. It does not fit everywhere as written: seven places meet an open or a closed decision, and each is a line to amend by ADR or a question for the owner, not a reason for a second platform.
+**Answer.** The requirement fits as one optional first-party bundle, working name `aiops-delivery`, on the definitions the platform already has in design. It needs no change to the kernel, the launcher or the loader, no new shipped profile and no change to the order of work. It does not fit everywhere as written: the places listed below meet an open or a closed decision, and each is a line to amend by ADR or a question for the owner, not a reason for a second platform.
 
 **Reasons.**
 
@@ -49,6 +49,7 @@ Two questions came with it. Does this fit the platform as a plugin, or does it n
 | e | A harness that calls a vendor-hosted model itself is not admitted in the community edition | `HR:83`, `00:632` | The owner confirms or revisits before ADR-051 is accepted (D7) |
 | f | There is no work-item object: a signal is an alert, a change or a finding, and the incident machine is keyed on a correlation key | `00:55`, `03:199` | New: one plugin with its own record (section 4.1) |
 | g | The product text counts seven pillars | `00:55`, `08:1070` | The owner chooses how an optional pillar group is named in the text (D1) |
+| h | The home rule for an optional bundle covers a first-party plugin that wraps an optional upstream, and every optional bundle listed wraps one | `00:112`, `00:521`, `08:281` | `aiops-delivery` wraps none, so it is a new category with no home rule and no precedent. The owner chooses (D15) |
 
 ## 3. The requirement mapped onto what exists
 
@@ -80,11 +81,11 @@ Two questions came with it. Does this fit the platform as a plugin, or does it n
 | 22 | Separation between customers | One tenant id is the row-level-security fence, the secret scope, the blob prefix and the audit chain; delete purges every namespace | `00:326`, `00:335`, `00:377`, `00:433` | S4a (mechanism), S4b (a second tenant) |
 | 23 | One engineer on several customers | `tenant_binding(tenant, subject, role)` and `authz.Check(subject, tenant, permission)` | `00:339`, `00:224` | S4a |
 | 24 | Notices: plan ready, outcome ready | `notifiers`, with email and webhook rows and the instantiable `notifier-webhook` | `00:230`, `06:93`, `07:137` | S5, S8b |
-| 25 | Write back to a tracker; log time | None. Read tools refuse a write; a contributed plugin writes to a vendor only as an executor | `07:789`, `CR:374` | new (D10) |
+| 25 | Write back to a tracker; open a task; log time | A notice can be posted to a tracker through `notifier-webhook`. A state change, a new task or a time log has no seam: read tools refuse a write, and a contributed plugin writes to a vendor only as an executor | `01:335`, `07:789`, `CR:374` | S5 (the notice); the rest is new (D10) |
 | 26 | Evidence per customer | The audit chain is per tenant, appended in the caller's transaction, exportable | `00:73`, `03:480` | S5 |
 | 27 | Cost control | One model route with a daily budget and per-run caps keyed by pillar and kind; `agents-paused` | `00:56`, `HR:41` | S8a |
 | 28 | Add a plugin with no rebuild | A remote Go or Python plugin; a pack with no code | `08:391`, `08:623`, `00:507` | S2b, S6a |
-| 29 | Packaging | An optional first-party bundle listed by no shipped profile, enabled with `plugin install` and `plugin enable` | `00:521`, `00:112`, `08:401` | S8b (first use of the pattern) |
+| 29 | Packaging | An optional first-party bundle listed by no shipped profile, enabled with `plugin install` and `plugin enable`. The rule and its lists cover bundles that wrap an upstream; one that wraps none is not covered (D15) | `00:521`, `00:112`, `08:281`, `08:401` | S8b (first use of the pattern); the category is new |
 
 ## 4. What is new
 
@@ -146,7 +147,7 @@ The table is a required design artifact (`00:381`). Each class below needs holde
 - **Tools and model.** The harness reads the ticket and the repository through rows of `tool-mcp`; every call gets the actor filter, the output cap, the scrub and an audit row (`07:789`). The model is reached only through `llm-gateway`, whose inner scrub no hook can skip (`00:56`).
 - **Invariants.** The harness holds no credential and every offered tool is a read, so a crash restart is safe (`00:45`). Every step is a row before it is forwarded (`03:200`).
 - **Result.** `delivery` stores the answer in `blob` by digest as plan version 1, emits `delivery.plan_ready` and sends a notice.
-- **Why kind `investigate`.** It needs no change to `harnesses` v0: budgets and the builder and checker rows are keyed by pillar and kind (`HR:41`, `HR:113`), and a compliance run already uses the kind with no incident (`00:45`). Whether plan writing gets a kind of its own is part of D6.
+- **Why kind `investigate`.** It needs no change to `harnesses` v0: budgets and the builder and checker rows are keyed by pillar and kind (`HR:41`, `HR:113`), a compliance run needs no incident (`00:45`), and the compliance pillar already uses the kind (`05:166`). Whether plan writing gets a kind of its own is part of D6.
 
 ### 5.3 Step 3: the engineer reads, edits and approves
 
@@ -188,7 +189,7 @@ The tier of a catalogue action is fixed in its entry, and the tier table can onl
 |---|---|---|---|---|
 | A pull request | One branch and one pull request in one repository | L1, the tier a rollout restart has today (`03:319`) | Nothing changes on a running system until a person merges; the rollback is to close and delete | The merge on the forge (`01:131`) |
 | A deployment through GitOps | Nothing more: the merge is the deployment and the controller's sync is the receipt (`05:736`) | The tier of the pull request | The platform's write is the same | The merge on the forge |
-| A deployment by a typed Kubernetes action | One of the five catalogue actions, asked for through the API with no alert (`00:72`, `03:319`) | The fixed tier of that action | Unchanged from the incident flow | `approval.Decide` |
+| A deployment by a typed Kubernetes action | One of the five catalogue actions (`00:72`). Their offers are derived from alert labels today (`00:72`, `03:296`), so a request outside an incident is possible only if section 9, row 14 holds | The fixed tier of that action | The tier is fixed in the catalogue entry | `approval.Decide` |
 | A deployment by pipeline trigger or on a host | Not in this design. It is the class of the deferred host executor (`00:617`) | To be set by its own ADR; L2 outside production and L3 for production are proposed, as two catalogue actions | A gate listener cannot see the environment (`03:287`), so a rule by environment is a separate action today | `approval.Decide`, two approvers at L3 |
 
 Opening a pull request can start the customer's pipeline on content a model wrote. The deny list in `Plan` and the approval reduce that exposure; the control that removes it is the forge's own rule that holds pipelines for such a change, which the platform cannot enforce (section 13).
@@ -199,7 +200,7 @@ Opening a pull request can start the customer's pipeline on content a model wrot
 
 This is the recommended model, not a recorded decision (D2).
 
-- One tenant id is already the `tenant_id` column, the secret scope, the blob prefix and the key of every per-tenant record (`00:326`). Row-level security is forced on every tenant table (`00:335`), secrets are scoped (tenant, plugin, name) under one key per tenant (`00:377`), the audit chain is per tenant (`00:73`), and the model budget is per tenant (`00:353`).
+- One tenant id is already the `tenant_id` column, the secret scope, the blob prefix and the key of every per-tenant record (`00:326`). Row-level security is forced on every tenant table (`00:335`), secrets are scoped (tenant, plugin, name) under one key per tenant (`00:377`), the audit chain is per tenant (`00:73`), and the model budget is a row of a tenant table (`00:353`, `00:335`). The first release still has one upstream key and one daily budget for the install; a key per tenant is a hosted P2 item (`00:56`).
 - An engineer who serves three customers is three `tenant_binding` rows for one platform user, and `authz.Check(subject, tenant, permission)` decides per customer (`00:339`, `00:224`).
 - Intake names the customer by credential, never by message: the binding of the caller on the API, the channel binding on chat (`00:327`, `06:289`).
 - Off-boarding a customer is the tenant delete saga, which purges every namespace of every plugin from the `durable` registry, `delivery` included (`00:433`).
@@ -227,21 +228,21 @@ Run transcripts, plan text and notes are plaintext rows; only secrets are encryp
 
 ## 7. Harnesses, trackers and chat products as optional plugins
 
-The rule is principle 9: every upstream enters through one provider or contribution behind a definition whose fake and suite name no upstream, and lives in its own bundle or pack (`00:32`). `aiops-delivery` wraps no upstream. An optional bundle that wraps none has a precedent in `aiops-dashboard-app` (`00:290`).
+The rule is principle 9: every upstream enters through one provider or contribution behind a definition whose fake and suite name no upstream, and lives in its own bundle or pack (`00:32`). `aiops-delivery` wraps no upstream, and that has no precedent. Every optional bundle listed today wraps one (`00:521`, `08:281`), `aiops-dashboard-app` included: its rows need `aiops-app`, a plugin loaded by an upstream server and rated `optional-plugin-only` (`00:290`, `LR:108`). The home rule W8 covers only a first-party plugin that wraps an optional upstream (`00:112`). An optional first-party bundle with no upstream is a new category, and the owner decides whether the rule is widened (D15).
 
 **Coding harnesses.**
 
 - A wrapped harness is its own optional plugin in its own optional bundle, under the home rule W8 (`00:112`); its process is the role id `harness-sidecar`, which the operator installs (`HR:181`). It is selected for the delivery pillar alone through the group's `harness` field, and `harness-native` stays the default everywhere (`HR:102`, `00:111`).
 - As a harness it runs with its own shell and file tools off, proven by its rendered profile, as the round-5 design already states for an agent behind the Agent Client Protocol (`docs/design/harness-r5/agent-harness.md:376`). It reaches the model through the gateway's HTTP surface with a lease-bound key (`03:520`).
 - A harness that calls a vendor-hosted model itself is not admitted in the community edition (`HR:83`). This is the largest edition finding for the requirement, because that is how such agents are commonly used with a vendor login (D7).
-- Verdicts already recorded: goose, opencode and the Agent Client Protocol are `ok` at licence-file level with the vendors' service terms UNVERIFIED (`LR:88`); Codex CLI is `ok-with-conditions` (`LR:89`); the Claude Agent SDK is `optional-plugin-only`, never shipped by the project and never in the community index (`LR:90`); OpenHands is `unverified` and stays out until its runtime repository is read (`LR:92`). The register holds no entry for any agent harness today, and an entry lands in the same commit as its first use (`08:1337`, `08:1347`).
+- Verdicts already recorded: goose, opencode and the Agent Client Protocol are `ok` at licence-file level with the vendors' service terms UNVERIFIED (`LR:88`); Codex CLI is `ok-with-conditions` (`LR:89`); the Claude Agent SDK is `optional-plugin-only`, never shipped by the project and never in the community index (`LR:90`); OpenHands is `unverified` and stays out until its runtime repository is read (`LR:92`). The register holds no entry for a harness that may be wrapped: its one entry from this area, `langgraph-platform`, is rated `replace-or-rebuild`. An entry enters with the commit that first uses, wraps or names its upstream (`ADR-054:600`), and an `unverified` entry is read before the step that first uses it (`08:1347`).
 - The lowest-risk first adapter is a protocol adapter for the Agent Client Protocol that drives an agent the user installs. Its id stays generic until a register entry allows a name (`08:1370`).
 
 **Trackers.**
 
 - Reads: rows of `tool-mcp` in a pack with no code, one pack per system, where the system offers a Streamable HTTP MCP server with read tools (`00:113`); otherwise a remote read tool, which the S8b exit proves in Python (`08:630`).
-- A tracker is not a named external system today. Naming one needs, in order, an `ext-` id, a trigger row and a numbered ADR (`01:396`), and a reading of its terms and mark policy at a primary source before any id carries its name (`08:1370`).
-- Writes have no seam yet (section 3, row 25; D10).
+- A tracker is not a named external system today, and nothing defers one: the decisions hold no tracker row, no `ext-` id for one and no trigger row for one (`01:335`, `01:364`). Naming one needs, in order, an `ext-` id, a new trigger row and a numbered ADR (`01:396`), and a reading of its terms and mark policy at a primary source before any id carries its name (`08:1370`).
+- A notice can be posted to a tracker through `notifier-webhook` (`01:335`). A state change, a new task or a time log has no seam (section 3, row 25; D10).
 
 **Chat products.**
 
@@ -315,7 +316,7 @@ No step is asked to build anything for delivery, to add a field, or to move. Eac
 | 29 | S8a | ADR-012: the surface is OpenAI-compatible, the key serves one run at a time (`00:56`, `HR:75`) | Nothing, if both stay simplifications of `v0` | Do not write either as an invariant of the gateway |
 | 30 | S8a | ADR-053: "a tool refuses a call without a time range and a limit" (`HR:161`) | A repository or ticket read tool, which has no time range | Keep it a rule of the telemetry tools; other read tools need a size bound |
 | 31 | S9a start (adjacent) | ADR-031, the credential per Git forge (`08:1165`) | A second amendment of `00` §2.2 for the same credential class | Decide it for application repositories and for several forges in one tenant in the same ADR |
-| 32 | S8b (adjacent) | "An optional bundle wraps one upstream" (`08:281`) | An optional first-party bundle that wraps none | Keep the sentence a description, as `aiops-dashboard-app` already requires (`00:290`) |
+| 32 | S8b (adjacent) | "An optional bundle wraps one upstream" (`08:281`), the list of `00:521` and the home rule W8 (`00:112`) | An optional first-party bundle that wraps none | None by wording alone: the three lines are amended or the bundle has no home (D15) |
 
 ## 10. The earliest usable form, and what is throwaway
 
@@ -348,7 +349,7 @@ New ADRs take the next free number from ADR-063 when they are opened, and an ADR
 
 | # | ADR | Decides | Edits | Due |
 |---|---|---|---|---|
-| A | The delivery bundle | The record and its states, the plan as an answer and not a plan of `00` §2.2, the plan schema, memory written by code or a person, retention of plan text, the pillar group | `00` §1 and §2.1 row 12 (`00:55`), by the choice of D1 | When the bundle is planned, at the review of the first community release |
+| A | The delivery bundle | The record and its states, the plan as an answer and not a plan of `00` §2.2, the plan schema, memory written by code or a person, retention of plan text, the pillar group | `00` §1 and §2.1 row 12 (`00:55`), by the choice of D1; W8 (`00:112`), `00:521` and `08:281`, by the choice of D15 | When the bundle is planned, at the review of the first community release |
 | B | The typed envelope and the action `open-pull-request` | The sentence of D5, the action's tier, rollback and verification mapping, the requester (D3), the two gates (D4), the deny list, the pseudonym rule | `00` §2.2 Typed plans (`00:72`); the table of `00` §5.4 | S9a start, read with ADR-031 |
 | C | ADR-031, already open | Asked to cover application repositories and several forges per tenant (section 9, row 31) | As it already states (`00:769`) | S9a start |
 | D | Runs with workspace effects | `workspaces`; a kind and a departure of `harnesses` or a second registry (D6); sandbox, egress, clone credential, wipe, crash rule, slot class; the scrub on source code | `00` §2.1 row 2 (`00:45`) and one sentence of principle 6 (`00:29`) | After ADR-051 is accepted; before form 5 |
@@ -360,7 +361,7 @@ Inputs to ADRs that are already open, with no new ADR: ADR-041 (rows 1 to 5 of s
 
 ## 12. The outside landscape
 
-Every statement in this section was read at the primary source named with it, on 2026-11-27. What could not be verified is listed at the end and is not relied on.
+Every statement in this section was read at the primary source named with it, on 2026-11-27. What could not be verified is listed at the end and is not relied on. Where a cited page is about one tracker or one chat product, it was chosen because the vendor publishes it; which product a page names says nothing about what any user of the platform runs.
 
 ### 12.1 The personal agent the owner named
 
@@ -455,9 +456,10 @@ Each question states the options and a recommendation. None is decided here.
 | D6 | Where does a run that edits a checkout live, and when is it decided? This would edit `00:45` and one sentence of `00:29` | (a) In `harnesses`: a new kind and one more declared departure, with `workspaces` beside it. (b) A second registry and dispatcher. (c) Never inside the platform: patches are always uploaded or come from an answer | (a), decided after ADR-051 is accepted; (c) is how forms 2 and 3 already work | (b) doubles every adapter and suite. Until the decision, hold the promotion of `harnesses` to `v1` |
 | D7 | Does a harness that calls a vendor-hosted model itself stay an enterprise item (`00:632`)? | (a) Yes; in the community edition a coding harness goes through the gateway, or runs outside the platform and its patch is uploaded. (b) Admit it in the community edition as a declared departure of an optional bundle, with scrub, budget and meter lost and printed at boot. (c) Decide per harness | (a) | The upload path already serves the agents engineers use today, with the write still guarded. Confirm before ADR-051 is accepted |
 | D8 | What do engineers use before the first community release? | (a) Nothing new. (b) Form 0: the four formats as a convention in the team's own private repositories, with no code and nothing in this repository. (c) A command plugin in a distribution the company builds | (b) | Today's practice is already outside the invariants; the formats carry over and cost nothing to drop. (c) is code that is thrown away |
-| D9 | Do trackers and a second chat product become named external systems now? This fires the triggers of `00:602` and `00:612` | (a) Trackers through generic rows and `tool-mcp` packs first; a second chat surface only after its product's terms are read. (b) Open the ADRs now and schedule first-party rows after S8b | (a) | No tracker and no chat product has a register entry or a mark reading yet (`08:1347`). Whether this requirement is the "first customer request" of `00:602` is the owner's word |
+| D9 | Do trackers and a second chat product become named external systems now? Only the chat half has a trigger: a second chat surface waits for "first customer request" (`00:602`). A tracker has none (`01:335`, `01:364`): naming one means adding an `ext-` id, a new trigger row in `00` §7.3 and a numbered ADR (`01:396`), which is ADR E | (a) Trackers through generic rows and `tool-mcp` packs first; a second chat surface only after its product's terms are read. (b) Open ADR E and ADR G now and schedule first-party rows after S8b | (a) | No tracker and no chat product has a register entry or a mark reading yet (`08:1347`). Whether this requirement is the "first customer request" of `00:602` is the owner's word |
 | D10 | Does the platform write back to a tracker (a comment, a status, a time log)? | (a) Stay manual. (b) A notice with a link through a row of `notifier-webhook`; a status change or a time log as an executor action at a low fixed tier, under approval. (c) A write tool | (a) for the first forms, then (b) for notices | A state-changing write to a vendor belongs to `executors` (`CR:374`). (c) breaks the read seam (`07:789`). Time logging has no definition and no consumer in the platform yet |
 | D11 | Does meeting capture enter the platform? | (a) No; only a summary a person confirmed enters, as a file. (b) A connector for a self-hosted meeting bot | (a) | Consent and personal data stay with the company; no product read creates tickets with a review step (section 12.3) |
 | D12 | Is a repository an entity kind or always a typed parameter (ADR-025, S7)? | (a) A typed parameter under a service, workload or namespace target. (b) A kind `repository` | (a), and ask ADR-025 to state how a kind is added | It matches `07:64`. Work with no natural service (a shared library, documentation) is the case that may later need (b) |
 | D13 | Which model endpoint may see a customer's code and tickets? | (a) Deny by default: a tenant runs delivery only with a recorded consent and an endpoint the customer accepts. (b) One endpoint for every customer of the install | (a) | It is a contract matter per customer; the per-tenant route is a hosted P2 item (`00:56`), so before it (a) means one install per endpoint |
 | D14 | Is Hermes Agent the project the comparison was asked about? | (a) Yes. (b) Another project of that name | (a) | The name and both properties match (section 12.1); the conclusions hold for the class either way |
+| D15 | May an optional bundle of the release wrap no upstream? Today the home rule W8 (`00:112`), the list of `00:521` and the sentence of `08:281` cover only bundles that wrap one | (a) Amend the three lines so that an optional first-party bundle may carry rows that wrap no upstream; `aiops-delivery` lives under `plugins/` with its modules in the release table. (b) Leave the lines; the bundle is built as a distribution outside the release and is not a first-party bundle of it. (c) Leave the lines and put the rows in a bundle a shipped profile lists, disabled | (a), decided in ADR A | No accepted line allows the packaging that sections 3 and 4 assume. (a) puts the code in every release image and under the release gate. (b) keeps the release unchanged and loses the no-rebuild enable. (c) changes the golden dumps of a shipped profile |
