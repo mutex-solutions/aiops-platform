@@ -449,6 +449,29 @@ func TestToolboxGateJudgesTheModuleAtInstall(t *testing.T) {
 	}
 }
 
+// The gate composes a pack's bundle as a server bundle, as the server boots it: at
+// plugin check, offline and at install into a profile other than cli, a row of the
+// pack that states no roles is denied by check 8 (08:156; ADR-047 decision 17; ADR-061
+// decision 40).
+func TestToolboxGateComposesAPackAsAServerBundle(t *testing.T) {
+	b := newBox(t)
+	tb := b.start(t, nil)
+	pack, _, att, digest := artifact("acme/pack", "runtimes: []", "uses: -", "provides: -", "registers: -", "hooks: -", "configSchema: -", "durable: -", "requires: {definitions: {}}")
+	rows := []byte("- insert:\n    - {id: echo, plugin: t/store, enabled: false}\n")
+	for _, q := range []launch.GateRequest{
+		{Entry: string(EntryCheck), Manifest: pack, Bundle: rows, Attestation: att, Digest: digest, Signer: "throwaway"},
+		{Entry: string(EntryOffline), Manifest: pack, Bundle: rows, Attestation: att, Digest: digest, Against: b.opt.Signed},
+		{Entry: string(EntryInstall), Manifest: pack, Bundle: rows, Attestation: att, Digest: digest, Signer: Unsigned, Home: "/h", Profile: "p"},
+	} {
+		v, err := tb.Gate(t.Context(), q)
+		if err != nil || !slices.ContainsFunc(v.Clauses, func(c launch.Clause) bool {
+			return c.Check == CheckLayerRules && c.Outcome == launch.OutcomeDeny && strings.Contains(c.Reason, "roles")
+		}) {
+			t.Errorf("%s of a pack row with no roles: %+v, %v; want check 8 denying it for its roles", q.Entry, v, err)
+		}
+	}
+}
+
 func TestToolboxReadManifest(t *testing.T) {
 	b := newBox(t)
 	b.extra["plug/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/echo", "registers: [{key: echoers, major: 0}]",

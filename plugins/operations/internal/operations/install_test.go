@@ -247,6 +247,31 @@ func TestInstallRefusesAContentLayerBootDenies(t *testing.T) {
 	}
 }
 
+// serverBox is installBox that records whether each render composes in server mode.
+type serverBox struct {
+	installBox
+	server []bool
+}
+
+func (b *serverBox) Render(_ context.Context, q launch.RenderRequest) (launch.Rendered, error) {
+	b.server = append(b.server, q.Server)
+	return launch.Rendered{}, nil
+}
+
+// Install renders the target profile as the server boots it, in server mode, so that a
+// pack row that states no roles is refused where the installer sees it, and not at the
+// next start (08:156; ADR-047 decision 17).
+func TestInstallRendersAServerProfile(t *testing.T) {
+	box := &serverBox{installBox: installBox{&packBox{sum: packSummary()}}}
+	l := Library{Box: box, LockWait: time.Second}
+	if _, err := installed(t, l, filepath.Join(t.TempDir(), "home"), pack, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	if len(box.server) == 0 || slices.Contains(box.server, false) {
+		t.Errorf("the renders of an install into dev in server mode: %v; want each true", box.server)
+	}
+}
+
 // rowsBox is installBox whose Render answers rd.
 type rowsBox struct {
 	installBox
