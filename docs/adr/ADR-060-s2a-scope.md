@@ -491,7 +491,10 @@ gaps:
     template against the test release runs in the job that builds it, `builder`:
     `TestTestRelease` runs `plugin new connector` and `plugin check` with the `aiopsctl`
     of the test release, and step 5 fails each obligation of `echoers` once on the suite
-    binary that the release embeds.
+    binary that the release embeds. Note of 2026-11-26, the owner's word: the owner
+    accepted on 2026-11-26 the departure of the note before, the connector case against
+    the test release in the job `builder` instead of the template job (open question 8
+    of the S2a report).
 25. **The handshake message** is frozen as question Q6 decides. Check 3 stays S2b.
 26. **`trust.yaml`** has `signers`, each limited to id patterns and runtimes,
     `distributions` and `allowUnsigned` from S2a; `indexes`, `install --index` and
@@ -794,6 +797,9 @@ gaps:
       test definition a consumer-bound key, which changes the fixtures of the S1 suites and
       their goldens, for a departure that boot prints and `profile verify` reports by the
       same code whatever definition declares the key; the exit asserts both on `reload`.
+      Note of 2026-11-26, the owner's word: the owner accepted on 2026-11-26 this
+      departure, the departing build on `reload` and not on a consumer-bound key of a test
+      definition (open question 8 of the S2a report).
 
 ### Working rules
 

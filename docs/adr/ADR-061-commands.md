@@ -679,7 +679,9 @@
       decision 17, until which the case was `TestAnInstallKilledOrInterruptedIsRestored`
       and wanted the home restored). A stop after the first rename alone stays the
       generic write of `TestKilledWriteIsRestoredByTheNextWriter`, since the built binary
-      has no hook to stop there.
+      has no hook to stop there. Note of 2026-11-26, the owner's word: the owner accepted
+      on 2026-11-26 that departure, the stop after the first rename alone held by the
+      generic write test only (open question 8 of the S2a report).
 
 ### The profile write lock
 
