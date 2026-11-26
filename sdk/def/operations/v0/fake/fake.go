@@ -78,6 +78,10 @@ type Config struct {
 	// process runs.
 	Verdict launch.Verdict
 	Result  *reload.WireResult
+	// Socket, when set, is the outcome of every submission in place of Result:
+	// SubmitRefused, NoFinalResult, VerdictUnknown or ReasonNoAnswer, as the suite's
+	// Setup.Socket names them.
+	Socket string
 	// Built is what dist build answers.
 	Built launch.Built
 }

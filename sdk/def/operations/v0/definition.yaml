@@ -14,11 +14,12 @@
 # a plugin id per site. 0.4 adds Smoke, plugin smoke through the toolbox's builder
 # (ADR-060 decision 58, reading 1), and to the request of Verify the release and the
 # module source that in-process code builds on (ADR-060 decision 46); suite revision 4
-# adds the case of Smoke.
+# adds the case of Smoke. Suite revision 5 adds the case of each outcome of a submission
+# with no final result and of a write the wire does not carry (ADR-061 decision 18).
 key: operations
 version: "0.4"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
 compatibleFrom: "0.1"
-suite: 4
+suite: 5

@@ -157,9 +157,10 @@ func (f *Fake) composes(profile string) error {
 
 // change runs edit on the layer of profile under the lock of the home, after a copy of
 // the shipped profile where the home holds none, and answers the submission of
-// command on target by the config: with no Result no process runs; a Result that
-// does not pass restores the home; a pass that does not show the change keeps it, and
-// both fail with ErrSubmission.
+// command on target by the config: with no Result and no Socket no process runs; a
+// Result that does not pass and a refusal of Socket restore the home; a pass that does
+// not show the change and the other outcomes of Socket keep it, and each fails with
+// ErrSubmission.
 func (f *Fake) change(ctx context.Context, home, profile, command, target string, ch *operations.Change, edit func(*layer, *state) error) (operations.Change, error) {
 	if err := homeOf(home); err != nil {
 		return *ch, err
@@ -168,6 +169,7 @@ func (f *Fake) change(ctx context.Context, home, profile, command, target string
 		return *ch, err
 	}
 	var notes []string
+	var kept error // the outcome of a submission that keeps the files
 	written, err := f.write(ctx, home, func(st *state) error {
 		if !slices.Contains(st.profiles, profile) {
 			b, ok := f.cfg.Shipped["profiles/"+profile+"/profile.yaml"]
@@ -190,14 +192,30 @@ func (f *Fake) change(ctx context.Context, home, profile, command, target string
 		}
 		st.layers[profile] = l
 		ch.Result = f.cfg.Result
-		if ch.Result == nil {
+		switch s := f.cfg.Socket; {
+		case s == operations.SubmitRefused:
+			ch.Error = reload.NewError("the queue is full", reload.CauseQueueFull)
+			return fmt.Errorf("%w: %s: %s", operations.ErrSubmission, s, ch.Error.Text)
+		case s == operations.ReasonNoAnswer:
+			ch.Outcome, ch.Reason = operations.RestartRequired, s
+			kept = fmt.Errorf("%w: restart-required: the socket did not answer; the change applies at the next start", operations.ErrSubmission)
+		case s != "": // NoFinalResult, an id of each submission, or VerdictUnknown, of the one
+			ch.IDs, ch.Last = []reload.ID{1}, reload.Queued
+			if s == operations.NoFinalResult {
+				ch.IDs = append(ch.IDs, 2)
+			}
+			kept = fmt.Errorf("%w: %s: operation %v, last status %q", operations.ErrSubmission, s, ch.IDs, ch.Last)
+		case ch.Result == nil:
 			ch.Outcome = operations.NotRunning
-		} else if ch.Result.Status != reload.Passed {
+		case ch.Result.Status != reload.Passed:
 			return fmt.Errorf("%w: %s", operations.ErrSubmission, ch.Result.Status)
 		}
 		return nil
 	})
 	ch.Notes = append(append(written, notes...), ch.Notes...)
+	if err == nil {
+		err = kept
+	}
 	if err == nil && ch.Result != nil && !operations.Shows(ch.Result, command, target) {
 		err = fmt.Errorf("%w: passed, and a later layer overrides %s %s", operations.ErrSubmission, command, target)
 	}
