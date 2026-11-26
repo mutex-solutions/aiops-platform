@@ -163,6 +163,34 @@ func TestReferrersAreBoundedAcrossPages(t *testing.T) {
 	}
 }
 
+// A registry that sends the headers of an answer and then stalls its body fails a read
+// of the registry client within its wait, as one that never answers does, so install,
+// which reads under the lock of the home, verify, inspect and dist use do not hang.
+func TestAStalledAnswerFailsSoon(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("x"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/v2/acme/x/blobs/sha256:00", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	resp, err := registryClient(200 * time.Millisecond).Do(req)
+	if err == nil {
+		_, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+	}
+	if took := time.Since(start); err == nil || ctx.Err() != nil || took > 2*time.Second {
+		t.Errorf("a read of an answer whose body stalls: %v after %v; want an error of its own within 2s", err, took)
+	}
+}
+
 // A registry that takes the connection and never answers, as one behind a filter that
 // drops what it is sent, fails a request of the registry client within its wait, which
 // no retry repeats, not minutes later.
