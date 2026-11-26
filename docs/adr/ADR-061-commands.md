@@ -561,7 +561,10 @@
       before it submits, and the next writer drops a marked snapshot that a killed write
       left, keeps the files and says that the verdict is unknown, instead of restoring
       it; a write whose submission it restores unmarks it first, so a stopped restore
-      goes on.
+      goes on. A server process does not boot a home that holds `snapshot/paths.json`:
+      it exits 1 and names `aiopsctl profile sanitize <profile>`, whose write finishes
+      the stopped one first; `aiopsctl` itself boots, since its commands are those
+      writers, and `profile render` prints a warning that names the snapshot.
     - **Submission** (`08:369`, `:446`; `07:1855`). Every method that writes the home ends
       with the outcome below while it holds the lock. `Install`, `Enable`, `Disable` and
       `Remove` submit the profile they changed over `<home>/run/reload.sock`, the

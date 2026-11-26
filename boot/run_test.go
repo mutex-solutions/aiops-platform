@@ -423,7 +423,7 @@ func TestRunRefusesAStoppedWrite(t *testing.T) {
 		f := newFixture(t, happyBundle)
 		f.files["snapshot/paths.json"] = &fstest.MapFile{Data: []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`)}
 		f.opt.Command = command
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second) // a boot runs until it ends
 		code := f.run(ctx)
 		cancel()
 		if refused := code == ExitRefused && strings.Contains(f.errb.String(), "aiopsctl profile sanitize p"); refused == command {

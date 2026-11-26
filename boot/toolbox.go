@@ -227,6 +227,9 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 	for _, w := range warns {
 		out.Diagnostics = append(out.Diagnostics, launch.Diagnostic{File: w.File, Line: w.Line, Text: w.String(), Warning: true})
 	}
+	if q.Home != "" && stopped(src.Home) {
+		out.Diagnostics = append(out.Diagnostics, launch.Diagnostic{File: "snapshot/paths.json", Text: stoppedWrite, Warning: true})
+	}
 	// The lines that boot prints at every boot and the findings: a departure from the
 	// release bindings is a line of its own (08-profiles-roadmap-adrs.md:366), and so is
 	// one from the release pins (ADR-044 decision 10).
@@ -252,6 +255,17 @@ func (t *toolbox) Render(ctx context.Context, q launch.RenderRequest) (launch.Re
 		out.Keys = append(out.Keys, launch.KeyProviders{Name: k, Provider: class[pb[k]], Consumer: class[cb[k]], Rows: rows[k]})
 	}
 	return out, nil
+}
+
+// stoppedWrite is what boot says of a home that holds the snapshot of a write of
+// aiopsctl that was stopped after its renames (ADR-061 decision 17).
+const stoppedWrite = "the home holds snapshot/, which a write of aiopsctl that was stopped left, so its files may hold part of that change; " +
+	"the next write of the home restores it first, or keeps the files of a submission the process may have taken (ADR-061 decision 17)"
+
+// stopped reports whether the home holds such a snapshot.
+func stopped(home fs.FS) bool {
+	_, err := fs.Stat(home, "snapshot/paths.json")
+	return err == nil
 }
 
 // launchAdmission lists every denied row of a. A disabled row mounts no code, so only

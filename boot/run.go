@@ -329,6 +329,10 @@ func (r *run) run(ctx context.Context) int {
 	mods := signed.place(o.Registry.Modules)
 	dist := signed.Bindings()
 	tie, tied := tieModules(signed, o.BuildInfo)
+	// The commands of aiopsctl are the writers that finish a stopped write.
+	if stopped(o.Home) && !o.Command {
+		return r.fail(ExitRefused, "%s: run aiopsctl profile sanitize %s, then start again", stoppedWrite, o.Profile)
+	}
 
 	// 1. Compose layers 0 to 4 (03-c3-kernel.md:355).
 	// The server rule holds for every run but that of aiopsctl, whose cli profile is no server
