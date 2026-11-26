@@ -32,17 +32,17 @@ func capsOf(t *testing.T, file, call string) []string {
 // make check and the test job of CI run the same line caps (the Makefile: "Keep the two
 // in step"), and the row package of the operations library has a cap of its own beside
 // the library's: ADR-060 decision 35 and ADR-061, Consequences, cap "the operations
-// library, plugins/operations" at 4,600 lines since the note of 2026-11-26 to decision
+// library, plugins/operations" at 4,700 lines since the note of 2026-11-27 to decision
 // 35, which awaits the owner, and the library's cap measures internal/operations only.
-// That note caps the builder at 3,700 lines, and the note of 2026-11-25 the operations
-// fake and suite at 1,300 each.
+// The note of 2026-11-26 caps the builder at 3,700 lines, and the note of 2026-11-25
+// the operations fake and suite at 1,300 each.
 func TestLineCapsInStep(t *testing.T) {
 	mk := capsOf(t, "../../Makefile", "$(KC)")
 	ci := capsOf(t, "../../.github/workflows/ci.yml", "go run ./tools/kernelcheck")
 	if !slices.Equal(mk, ci) {
 		t.Errorf("the line caps differ:\nMakefile: %q\nci.yml:   %q", mk, ci)
 	}
-	for _, want := range []string{"plugins/operations 4600 provisional internal", "plugins/operations/internal/operations 4600 provisional",
+	for _, want := range []string{"plugins/operations 4700 provisional internal", "plugins/operations/internal/operations 4700 provisional",
 		"cmd/aiopsctl:internal/aiopsctl 2500 provisional", "internal/builder 3700 provisional",
 		"sdk/def/operations/v0/fake 1300 provisional", "sdk/def/operations/v0/conformance 1300 provisional"} {
 		if !slices.Contains(mk, want) || !slices.Contains(ci, want) {

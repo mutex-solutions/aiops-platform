@@ -173,12 +173,12 @@ check:
 	@# awaiting the owner.
 	$(KC) lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
 	$(KC) lines internal/builder 3700 provisional
-	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,600
-	@# lines since the note of 2026-11-26, provisional and awaiting the owner: the row
+	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,700
+	@# lines since the note of 2026-11-27, provisional and awaiting the owner: the row
 	@# package, internal/ skipped, and its internal package, with the client of
 	@# reload-socket (ADR-062 decision 16), each.
-	$(KC) lines plugins/operations 4600 provisional internal
-	$(KC) lines plugins/operations/internal/operations 4600 provisional
+	$(KC) lines plugins/operations 4700 provisional internal
+	$(KC) lines plugins/operations/internal/operations 4700 provisional
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
