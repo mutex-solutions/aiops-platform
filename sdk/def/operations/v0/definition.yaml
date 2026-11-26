@@ -16,10 +16,12 @@
 # module source that in-process code builds on (ADR-060 decision 46); suite revision 4
 # adds the case of Smoke. Suite revision 5 adds the case of each outcome of a submission
 # with no final result and of a write the wire does not carry (ADR-061 decision 18).
+# Suite revision 6: plugin disable back to the value the bundle layers give a row drops
+# its departure, and writes none (08:375; review round of 2026-11-26).
 key: operations
 version: "0.4"
 stability: preview
 class: {provider: open, consumer: bound}
 remote: "no"
 compatibleFrom: "0.1"
-suite: 5
+suite: 6

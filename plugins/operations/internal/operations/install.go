@@ -108,6 +108,7 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 	var ch def.Change
 	var res error
 	var a trusted
+	var copied string
 	done, err := h.Write(ctx, Write{Command: "plugin install " + r.Spec,
 		Plan: func() ([]Change, error) {
 			if a, err = verified(ctx, h, src, d); err != nil {
@@ -133,10 +134,11 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 				return nil, refused("the profiles %s name %s at another digest, and a site holds one digest of a plugin id (ADR-047 decision 7): plugin remove it from them before an install of %s",
 					strings.Join(other, ", "), a.ID, d.Digest)
 			}
-			profile, _, err := l.profile(ctx, h, r.Profile, &ch)
+			profile, note, err := l.profile(ctx, h, r.Profile)
 			if err != nil {
 				return nil, err
 			}
+			copied = note
 			bundle, err := fetchLayer(ctx, src, a.m, layerBundle)
 			if err == nil {
 				err = l.admit(ctx, h, r.Profile, src, d, a, bundle, &ch)
@@ -178,7 +180,10 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 			}
 			return append(changes, Change{Path: "profiles/" + r.Profile + "/profile.yaml", Data: list}), err
 		},
-		Submit: submitted(h, r.Profile, reload.CommandInstall, "", [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res),
+		Submit: submitted(h, r.Profile, reload.CommandInstall, "", [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res, nil),
+		After: func(d *Done) {
+			d.Notes = append(d.Notes, slices.DeleteFunc([]string{copied}, func(n string) bool { return n == "" })...)
+		},
 	})
 	return changed(done, ch, err, res)
 }
@@ -232,23 +237,23 @@ func profileOf(h Home, p string) (string, error) {
 }
 
 // profile returns profiles/<p>/profile.yaml of the home, or the shipped template,
-// which the write then copies, and says so (ADR-061 decision 17).
-func (l Library) profile(ctx context.Context, h Home, p string, ch *def.Change) ([]byte, bool, error) {
+// which the write then copies, with what the write says once it keeps the copy, ""
+// for the home's (ADR-061 decision 17).
+func (l Library) profile(ctx context.Context, h Home, p string) ([]byte, string, error) {
 	rel := "profiles/" + p + "/profile.yaml"
 	b, err := os.ReadFile(h.path(rel))
 	if !errors.Is(err, fs.ErrNotExist) {
-		return b, false, err
+		return b, "", err
 	}
 	shipped, err := l.Box.Shipped(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 	b, ok := shipped[rel]
 	if !ok {
-		return nil, false, refused("neither the home nor this binary holds the profile %s", p)
+		return nil, "", refused("neither the home nor this binary holds the profile %s", p)
 	}
-	ch.Notes = append(ch.Notes, "copied the shipped profile "+p+" to "+rel)
-	return b, true, nil
+	return b, "copied the shipped profile " + p + " to " + rel, nil
 }
 
 // admit renders the profile with the bundle appended as boot composes it, and runs the
@@ -413,7 +418,7 @@ func readLock(h Home, p string) ([]def.Locked, error) {
 // of ADR-061 decision 17, in *res, and returns that error where the table restores the
 // files, so the write restores its snapshot. The end of ctx restores them only before a
 // request reached the row; after, the verdict is unknown and they stay.
-func submitted(h Home, profile, command, target string, waits [2]time.Duration, ch *def.Change, res *error) func(context.Context) error {
+func submitted(h Home, profile, command, target string, waits [2]time.Duration, ch *def.Change, res *error, overridden *string) func(context.Context) error {
 	return func(ctx context.Context) error {
 		o, err := Submit(ctx, Request{Home: h.Dir, Profile: profile, Command: command, ConnectWait: waits[0], Wait: waits[1]})
 		if err != nil && !o.sent { // nothing reached the row: the end of ctx restores
@@ -428,7 +433,11 @@ func submitted(h Home, profile, command, target string, waits [2]time.Duration, 
 		switch o.Kind {
 		case NotRunning:
 			ch.Outcome = def.NotRunning
-			ch.Notes = append(ch.Notes, fmt.Sprintf("no process runs %s on %s; the change applies when it starts", profile, h.Dir))
+			note := fmt.Sprintf("no process runs %s on %s; the change applies when it starts", profile, h.Dir)
+			if overridden != nil && *overridden != "" {
+				note = fmt.Sprintf("no process runs %s on %s, and %s", profile, h.Dir, *overridden)
+			}
+			ch.Notes = append(ch.Notes, note)
 		case RestartRequired:
 			ch.Outcome, ch.Reason = def.RestartRequired, def.ReasonNoAnswer
 			*res = fmt.Errorf("%w: restart-required: %s did not answer; the change applies at the next start", def.ErrSubmission, o.Socket)
@@ -503,7 +512,9 @@ func (l Library) Disable(ctx context.Context, r def.RowRequest) (def.Change, err
 // lock it renders the profile, refuses a row it does not compose and a disable that
 // CannotDisable refuses, renders the changed profile in a view of the home, and only
 // when boot would admit it writes the departure into the profile layer, copying the
-// shipped profile first where the home holds none; then it submits.
+// shipped profile first where the home holds none; then it submits. A value that the
+// bundle layers alone give the row is no departure: its item goes, and nothing is
+// written where there is none. It names a change that a later layer overrides.
 func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -514,10 +525,16 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 	}
 	var ch def.Change
 	var res error
-	layer := "profiles/" + r.Profile + "/aiops.patch.yml"
+	var copied, overridden string
+	layer, on := "profiles/"+r.Profile+"/aiops.patch.yml", command == reload.CommandEnable
+	shows := func(rd launch.Rendered) {
+		if x := rowOf(rd, r.Row); x != nil && x.Enabled != on {
+			overridden = fmt.Sprintf("%s renders %s with enabled %v: a later layer, the site layer %s, overrides the change", r.Profile, r.Row, x.Enabled, h.path("aiops.patch.yml"))
+		}
+	}
 	done, err := h.Write(ctx, Write{Command: command + " " + r.Row,
 		Plan: func() ([]Change, error) {
-			profile, copied, err := l.profile(ctx, h, r.Profile, &ch)
+			profile, note, err := l.profile(ctx, h, r.Profile)
 			if err != nil {
 				return nil, err
 			}
@@ -526,29 +543,52 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 			case err != nil:
 			case command == reload.CommandDisable:
 				err = def.CannotDisable(rd, r.Profile, r.Row)
-			case !slices.ContainsFunc(rd.Composition.Rows, func(x launch.Row) bool { return x.ID == r.Row }):
+			case rowOf(rd, r.Row) == nil:
 				err = refused("%s composes no row %q", r.Profile, r.Row)
 			}
 			if err != nil {
 				return nil, err
 			}
-			patch, err := withEnabled(h.path(layer), r.Row, command == reload.CommandEnable)
+			base, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: r.Profile, Aside: []string{layer, "aiops.patch.yml"}})
+			var patch []byte
+			if x := rowOf(base, r.Row); err == nil && errorsOf(base.Diagnostics) == "" && x != nil && x.Enabled == on {
+				patch, _, err = withoutEnabled(h.path(layer), func(id string) bool { return id == r.Row })
+			} else {
+				patch, err = withEnabled(h.path(layer), r.Row, on)
+			}
+			if err == nil && patch == nil {
+				shows(rd)
+				ch.Notes = append(ch.Notes, cmp.Or(overridden, fmt.Sprintf("the bundle layers of %s give %s enabled %v, and the profile layer departs from none: nothing to write", r.Profile, r.Row, on)))
+			}
+			if err != nil || patch == nil {
+				return nil, err
+			}
 			changes := []Change{{Path: layer, Data: patch}}
-			if copied {
+			if copied = note; note != "" {
 				changes = append([]Change{{Path: "profiles/" + r.Profile + "/profile.yaml", Data: profile}}, changes...)
 			}
-			if err == nil { // nothing is renamed before boot would admit the change
-				var dir string
-				if dir, err = view(h, changes); err == nil {
-					_, err = l.composes(ctx, Home{Dir: dir}, r.Profile)
-				}
-				err = errors.Join(err, os.RemoveAll(dir))
+			// nothing is renamed before boot would admit the change
+			dir, err := view(h, changes)
+			if err == nil {
+				rd, err = l.composes(ctx, Home{Dir: dir}, r.Profile)
+				shows(rd)
 			}
-			return changes, err
+			return changes, errors.Join(err, os.RemoveAll(dir))
 		},
-		Submit: submitted(h, r.Profile, command, r.Row, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res),
+		Submit: submitted(h, r.Profile, command, r.Row, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res, &overridden),
+		After: func(d *Done) {
+			d.Notes = append(d.Notes, slices.DeleteFunc([]string{copied}, func(n string) bool { return n == "" })...)
+		},
 	})
 	return changed(done, ch, err, res)
+}
+
+// rowOf returns the row id of rd, nil for none.
+func rowOf(rd launch.Rendered, id string) *launch.Row {
+	if i := slices.IndexFunc(rd.Composition.Rows, func(x launch.Row) bool { return x.ID == id }); i >= 0 {
+		return &rd.Composition.Rows[i]
+	}
+	return nil
 }
 
 // view returns a directory that reads as the home h once the files of cs hold their
@@ -637,17 +677,17 @@ func withEnabled(p, id string, on bool) ([]byte, error) {
 	return yaml.Marshal(doc)
 }
 
-// withoutEnabled returns the profile layer at p with the enabled field of every item
-// under group dropped, and an item left with its id alone, nil where nothing changes;
-// and, as JSON, each item under group that stays (ADR-047 decision 10).
-func withoutEnabled(p, group string) ([]byte, []string, error) {
+// withoutEnabled returns the profile layer at p with the enabled field of every item of
+// an id that match takes dropped, and an item left with its id alone, nil where
+// nothing changes; and, as JSON, each such item that stays (ADR-047 decision 10).
+func withoutEnabled(p string, match func(id string) bool) ([]byte, []string, error) {
 	doc, err := itemsOf(p)
 	if err != nil {
 		return nil, nil, err
 	}
 	changed, kept := false, []string(nil)
 	doc.Content[0].Content = slices.DeleteFunc(doc.Content[0].Content, func(it *yaml.Node) bool {
-		if id := field(it, "id"); id == nil || !strings.HasPrefix(id.Value, group+":") {
+		if id := field(it, "id"); id == nil || !match(id.Value) {
 			return false
 		}
 		for i := 0; i+1 < len(it.Content); i += 2 {
@@ -728,7 +768,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 	var ch def.Change
 	var res error
 	list, layer := "profiles/"+r.Profile+"/profile.yaml", "profiles/"+r.Profile+"/aiops.patch.yml"
-	submit := submitted(h, r.Profile, reload.CommandRemove, r.ID, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res)
+	submit := submitted(h, r.Profile, reload.CommandRemove, r.ID, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res, nil)
 	done, err := h.Write(ctx, Write{Command: "plugin remove " + r.ID,
 		Plan: func() ([]Change, error) {
 			b, err := os.ReadFile(h.path(list))
@@ -757,7 +797,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 				err = def.CannotRemove(rd, r.Profile, r.ID)
 			}
 			lock, werr := withLock(h, r.Profile, r.ID, nil)
-			patch, kept, perr := withoutEnabled(h.path(layer), def.Group(r.ID))
+			patch, kept, perr := withoutEnabled(h.path(layer), func(id string) bool { return strings.HasPrefix(id, def.Group(r.ID)+":") })
 			if err = errors.Join(err, werr, perr); err != nil {
 				return nil, err
 			}

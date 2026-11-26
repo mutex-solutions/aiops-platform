@@ -489,6 +489,15 @@
       the home, and rename nothing until that render admits it; the view is removed
       before they return. Until that date they renamed the change first and restored the
       snapshot on a refusal, so a refused layer stood in the home until the restore.
+      Note of 2026-11-26 (review round over the whole step): "only a departure" is
+      read against a render of the profile with the profile layer and the site layer
+      set aside (`RenderRequest.Aside`). Where the bundle layers already give the row
+      the value asked for, the item of the row loses its `enabled` field, or goes when
+      only its id stays, and where the layer holds none nothing is written or submitted;
+      until that date each command set or appended `{id, enabled}` whatever the bundle
+      layers gave. With no process on the profile, a changed profile that still renders
+      the row otherwise is named as overridden by the site layer, not as a change that
+      applies at the start. Suite revision 6 of `operations` holds the drop.
     - **What the manager cannot disable.** `Disable` and `Remove` refuse, and write
       nothing for, a change that disables or removes: a row of `aiops-cli` in the profile
       `cli`, or that bundle itself, since that is the manager, and without the rule one

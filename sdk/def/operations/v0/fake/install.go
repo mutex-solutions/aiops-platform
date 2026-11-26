@@ -94,8 +94,8 @@ func (s served) Disable(ctx context.Context, r operations.RowRequest) (operation
 	return do(s, "Disable", func() (operations.Change, error) { return s.f.row(ctx, r, false) })
 }
 
-// row writes the enabled departure of r.Row after the rules of the Rendered of the
-// config.
+// row writes the enabled departure of r.Row from the Rendered of the config, or drops
+// the one the profile holds, after the rules of that Rendered.
 func (f *Fake) row(ctx context.Context, r operations.RowRequest, on bool) (operations.Change, error) {
 	rd, command := f.cfg.Rendered[r.Profile], reload.CommandEnable
 	err := cmp.Or(homeOf(r.Home), f.composes(r.Profile))
@@ -111,7 +111,12 @@ func (f *Fake) row(ctx context.Context, r operations.RowRequest, on bool) (opera
 	}
 	var ch operations.Change
 	return f.change(ctx, r.Home, r.Profile, command, r.Row, &ch, func(l *layer, _ *state) error {
-		l.enabled[r.Row] = on
+		// A value that the bundle layers give the row is no departure (08:375).
+		if i := slices.IndexFunc(rd.Composition.Rows, func(x launch.Row) bool { return x.ID == r.Row }); rd.Composition.Rows[i].Enabled == on {
+			delete(l.enabled, r.Row)
+		} else {
+			l.enabled[r.Row] = on
+		}
 		return nil
 	})
 }
