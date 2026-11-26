@@ -324,15 +324,21 @@ func fetchLayer(ctx context.Context, src source, m ocispec.Manifest, mediaType s
 // kept returns what install keeps of the artifact (ADR-047 decisions 5, 8 and 18;
 // ADR-020 decision 10): bundles/<id>/ with the image manifest, plugin.yaml and
 // bundle.yaml, content/<id>/ unpacked from the content layer, and the record under
-// verified/; and its lock entry.
+// verified/; and its lock entry. A content layer is refused unless its entries,
+// written back in the form of ADR-047 decision 3, give its bytes, and its annotation
+// lists their paths, which inspect prints (decision 2): what boot hashes again.
 func kept(ctx context.Context, src source, d ocispec.Descriptor, a trusted, bundle []byte) ([]Change, def.Locked, error) {
 	entry := def.Locked{ID: a.ID, Digest: d.Digest.String()}
 	out := []Change{{Path: "bundles/" + a.ID, Files: map[string][]byte{"artifact.json": a.raw, "plugin.yaml": a.file, "bundle.yaml": bundle}}}
 	if c := layer(a.m, layerContent); c != nil {
 		b, err := fetch(ctx, src, *c)
-		files := map[string][]byte{}
+		files, listed := map[string][]byte{}, []string(nil)
 		if err == nil {
 			err = untar(b, func(name string, data []byte) error { files[name] = data; return nil })
+		}
+		again, paths := canonicalTar(files)
+		if err == nil && (json.Unmarshal([]byte(c.Annotations[contentPaths]), &listed) != nil || !bytes.Equal(again, b) || !slices.Equal(paths, listed) || readable(a.pluginYAML, paths) != nil) {
+			err = refused("the content layer of %s is not the canonical tar of clean paths that its annotation %s lists (ADR-047 decisions 2 and 3)", a.ID, contentPaths)
 		}
 		if err != nil {
 			return nil, entry, err

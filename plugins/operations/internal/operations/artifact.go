@@ -643,8 +643,10 @@ func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (tr
 	if len(found) == 0 && len(t.allow) == 0 {
 		return a, refused("check 5: no signature of %s verifies with a key that trust.yaml lists, and allowUnsigned lists no id", d.Digest)
 	}
-	if a.raw, err = fetch(ctx, src, d); err == nil && (json.Unmarshal(a.raw, &a.m) != nil || a.m.MediaType != ocispec.MediaTypeImageManifest) {
-		err = refused("%s is not an OCI image manifest", d.Digest)
+	seen := map[string]bool{}
+	twice := func(l ocispec.Descriptor) bool { t := seen[l.MediaType]; seen[l.MediaType] = true; return t }
+	if a.raw, err = fetch(ctx, src, d); err == nil && (json.Unmarshal(a.raw, &a.m) != nil || a.m.MediaType != ocispec.MediaTypeImageManifest || slices.ContainsFunc(a.m.Layers, twice)) {
+		err = refused("%s is not the OCI image manifest of a plugin artifact, each layer type once (ADR-047 decision 1)", d.Digest)
 	}
 	if err == nil {
 		a.pluginYAML, err = pluginOf(ctx, src, a.m)
