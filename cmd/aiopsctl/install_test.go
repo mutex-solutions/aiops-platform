@@ -168,8 +168,8 @@ func TestInstallAndEnableReachARunningProcess(t *testing.T) {
 		if args[1] == "push" {
 			spec = strings.TrimSpace(r.out)
 		}
-		if (args[1] == "install" || args[1] == "enable") && !strings.HasPrefix(r.out, "result passed, generation ") {
-			t.Errorf("%q answered %q; want the final result passed", args, r.out)
+		if (args[1] == "install" || args[1] == "enable") && (r.out != "" || !strings.Contains(r.errOut, "result passed, generation ")) {
+			t.Errorf("%q answered stdout %q, stderr %q; want the final result passed on stderr", args, r.out, r.errOut)
 		}
 		if args[1] == "install" && !strings.Contains(r.errOut, "copied the shipped profile dev to profiles/dev/profile.yaml") {
 			t.Errorf("install into dev of a home with no profiles/dev/profile.yaml did not say that it copied the shipped one:\n%s", r.errOut)

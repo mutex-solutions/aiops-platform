@@ -34,11 +34,12 @@ func running(t *testing.T, files map[string]string, patches ...string) *harness.
 	return p
 }
 
-// generation returns the generation of the passed final result that r prints, 0 for
-// none.
+// generation returns the generation of the passed final result that r prints on
+// stderr, with nothing on stdout, 0 for none.
 func generation(r result) uint64 {
 	var g uint64
-	if _, err := fmt.Sscanf(r.out, "result passed, generation %d,", &g); err != nil {
+	_, line, ok := strings.Cut(r.errOut, "result passed, generation ")
+	if _, err := fmt.Sscanf(line, "%d,", &g); r.out != "" || !ok || err != nil {
 		return 0
 	}
 	return g
@@ -51,7 +52,7 @@ func restarted(t *testing.T, p *harness.Proc, r result, row string) {
 	if s, ok := p.Until(30*time.Second, func(s harness.Snapshot) bool {
 		return s.State.Reload != nil && s.State.Reload.Generation == generation(r) && slices.Contains(s.State.Reload.Applied["restarted"], row)
 	}); !ok {
-		t.Errorf("the generation of %q did not restart %s: test-state reports %+v", r.out, row, s.State.Reload)
+		t.Errorf("the generation of %q did not restart %s: test-state reports %+v", r.errOut, row, s.State.Reload)
 	}
 }
 
@@ -107,7 +108,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 
 	before := read(patch)
 	r = ctlRun(t, env, "plugin", "enable", "flaky", "--profile", "dev")
-	if r.code != 1 || !strings.HasPrefix(r.out, "result rolled back, generation ") || read(patch) != before {
+	if r.code != 1 || r.out != "" || !strings.Contains(r.errOut, "result rolled back, generation ") || read(patch) != before {
 		t.Errorf("enable flaky: %s; want rolled back, exit 1 and the profile patch restored to %q, not %q", say(r), before, read(patch))
 	}
 	if s, ok := p.Until(30*time.Second, func(s harness.Snapshot) bool { return s.RowState("flaky") != "ACTIVE" && len(s.TreeProblems()) == 0 }); !ok {
@@ -115,7 +116,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 	}
 
 	edit(patch, "- {id: reload-socket, inject: [clock]}\n")
-	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || !strings.HasPrefix(r.out, "result passed, generation ") {
+	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || (r.out != "" || !strings.Contains(r.errOut, "result passed, generation ")) {
 		t.Errorf("disable extra in a generation that restarts reload-socket: %s", say(r))
 	}
 	restarted(t, p, r, "reload-socket")
@@ -123,7 +124,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 	edit(site, "- {id: extra, enabled: false}\n")
 	before = read(patch)
 	r = ctlRun(t, env, "plugin", "enable", "extra", "--profile", "dev")
-	if r.code != 1 || !strings.HasPrefix(r.out, "result passed, generation ") || !strings.Contains(r.errOut, "does not show") || read(patch) == before {
+	if r.code != 1 || (r.out != "" || !strings.Contains(r.errOut, "result passed, generation ")) || !strings.Contains(r.errOut, "does not show") || read(patch) == before {
 		t.Errorf("enable extra under a site layer that disables it: %s; want passed, exit 1 and the files kept", say(r))
 	}
 	if err := os.Remove(site); err != nil {
@@ -136,7 +137,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	edit(patch, "- {id: reload, config: {queue: 8, history: 64}}\n")
-	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || !strings.HasPrefix(r.out, "result passed, generation ") {
+	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || (r.out != "" || !strings.Contains(r.errOut, "result passed, generation ")) {
 		t.Errorf("disable extra in a generation that restarts reload: %s", say(r))
 	}
 	restarted(t, p, r, "reload")
@@ -146,7 +147,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 		fi, err := os.Stat(sock)
 		return err == nil && (!os.SameFile(old, fi) || !fi.ModTime().Equal(old.ModTime()))
 	}); !ok {
-		t.Errorf("the generation of %q did not restart reload-socket: %s is the socket it listened on before", r.out, sock)
+		t.Errorf("the generation of %q did not restart reload-socket: %s is the socket it listened on before", r.errOut, sock)
 	}
 
 	for _, row := range []string{"reload-socket", "reload"} {
@@ -164,7 +165,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 	env["AIOPS_HOME"] = q.Home
 	patch = filepath.Join(q.Home, "profiles", "dev", "aiops.patch.yml")
 	r = ctlRun(t, env, "plugin", "enable", "extra", "--profile", "dev", "--connect-wait", "1s")
-	if r.code != 1 || !strings.Contains(r.out, "restart-required: no-answer") || !strings.Contains(read(patch), "id: extra") {
+	if r.code != 1 || (r.out != "" || !strings.Contains(r.errOut, "restart-required: no-answer")) || !strings.Contains(read(patch), "id: extra") {
 		t.Errorf("enable extra on a process whose reload-socket is disabled: %s; want restart-required, exit 1 and the files kept", say(r))
 	}
 	q.Stop(10 * time.Second)
@@ -172,7 +173,7 @@ func TestEnableOutcomesOnARunningProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	before = read(patch)
-	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || read(patch) == before || strings.Contains(r.out, "result") {
+	if r = ctlRun(t, env, "plugin", "disable", "extra", "--profile", "dev"); r.code != 0 || read(patch) == before || r.out != "" || strings.Contains(r.errOut, "result ") {
 		t.Errorf("disable extra with no status.json: %s; want exit 0 and the files changed only", say(r))
 	}
 }

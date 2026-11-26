@@ -451,9 +451,10 @@ func (s *stub) Remove(ctx context.Context, r operations.RemoveRequest) (operatio
 
 // install, enable, disable and remove pass the home, the profile, the spec, row or id,
 // and the bounds of --connect-wait and --wait to the library (ADR-062 decisions 9 and
-// 10); they print the final result on stdout and the paths and notes on stderr, and
-// exit 1 with the text of an error that matches ErrSubmission or ErrRebuildRequired,
-// whose dist.yaml lines are on stdout (ADR-061 decisions 17 and 44).
+// 10); they print the final result, the operation ids, the outcome, the paths and the
+// notes on stderr, and exit 1 with the text of an error that matches ErrSubmission or
+// ErrRebuildRequired; stdout holds only the dist.yaml lines of rebuild-required
+// (ADR-061 decisions 10, 11, 17 and 44).
 func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 	s := &stub{ch: operations.Change{Written: []string{"/site/profiles/dev/aiops.patch.yml"}, Notes: []string{"passed at generation 4, digest ab"},
 		Result: &reload.WireResult{ID: 3, Status: reload.Passed, Generation: 4, Digest: "ab"}}}
@@ -469,7 +470,7 @@ func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 		{[]string{"plugin", "remove", "acme/connector-x", "--profile", "dev"}, operations.RemoveRequest{Home: "/site", Profile: "dev", ID: "acme/connector-x"}},
 	} {
 		code, out, errOut := dispatch(t, rec, c.argv...)
-		if code != 0 || out != "result passed, generation 4, digest ab\n" || !strings.Contains(errOut, "wrote /site/profiles/dev/aiops.patch.yml\n") {
+		if code != 0 || out != "" || !strings.Contains(errOut, "result passed, generation 4, digest ab\n") || !strings.Contains(errOut, "wrote /site/profiles/dev/aiops.patch.yml\n") {
 			t.Errorf("%q: exit %d, stdout %q, stderr %q", c.argv, code, out, errOut)
 		}
 		if got := fmt.Sprintf("%+v", strip(s.last())); got != fmt.Sprintf("%+v", c.want) {
@@ -487,9 +488,15 @@ func TestInstallEnableDisableAndRemoveCallTheLibrary(t *testing.T) {
 	}
 	s.ch = operations.Change{IDs: []reload.ID{3, 4}, Last: reload.Running}
 	s.err = fmt.Errorf("%w: %s: operation [3 4], last status running", operations.ErrSubmission, operations.NoFinalResult)
-	if code, out, errOut := dispatch(t, rec, "plugin", "enable", "x", "--profile", "dev"); code != 1 || out != "operations 3, 4; last status running\n" ||
-		!strings.Contains(errOut, "no-final-result") {
+	if code, out, errOut := dispatch(t, rec, "plugin", "enable", "x", "--profile", "dev"); code != 1 || out != "" ||
+		!strings.Contains(errOut, "operations 3, 4; last status running\n") || !strings.Contains(errOut, "no-final-result") {
 		t.Errorf("no final result: exit %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	for _, o := range []operations.Change{{Outcome: operations.NotRunning}, {Outcome: operations.RestartRequired, Reason: operations.ReasonNoAnswer}} {
+		s.ch, s.err = o, nil
+		if code, out, errOut := dispatch(t, rec, "plugin", "disable", "x", "--profile", "dev"); code != 0 || out != "" || !strings.Contains(errOut, string(o.Outcome)) {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q; want the outcome on stderr only", o.Outcome, code, out, errOut)
+		}
 	}
 }
 

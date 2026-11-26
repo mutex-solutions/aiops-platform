@@ -859,7 +859,7 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 	t.Run("C3", func(t *testing.T) {
 		m.t = t
 		r := m.must("", siteCtl, "plugin", "install", x.packSpec, "--profile", "dev")
-		if !strings.HasPrefix(r.out, "result passed, generation ") {
+		if r.out != "" || !strings.Contains(r.errOut, "result passed, generation ") {
 			t.Errorf("install of the pack into the running process answered %q", r.out)
 		}
 		_, digest, _ := strings.Cut(x.packSpec, "@")
@@ -885,8 +885,9 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 			r := m.must("", siteCtl, "plugin", "enable", row, "--profile", "dev")
 			var gen uint64
 			var dg string
-			if _, err := fmt.Sscanf(r.out, "result passed, generation %d, digest %s\n", &gen, &dg); err != nil {
-				t.Fatalf("plugin enable %s printed %q, not the final result passed: %v", row, r.out, err)
+			_, line, ok := strings.Cut(r.errOut, "result passed, generation ")
+			if _, err := fmt.Sscanf(line, "%d, digest %s\n", &gen, &dg); r.out != "" || !ok || err != nil {
+				t.Fatalf("plugin enable %s printed stdout %q, stderr %q, not the final result passed on stderr: %v", row, r.out, r.errOut, err)
 			}
 			s := state(t, func(s teststate.State) bool {
 				return s.Reload != nil && s.Reload.Generation >= gen && rowState(s, row) == "ACTIVE"
@@ -979,11 +980,11 @@ func (x *exit) cleanMachine(m *machine, author, packer *machine, a authored, hom
 	t.Run("disable-remove", func(t *testing.T) {
 		m.t = t
 		row := "connector-echo:example-echoer"
-		if r := m.must("", siteCtl, "plugin", "disable", row, "--profile", "dev"); !strings.HasPrefix(r.out, "result passed, generation ") {
+		if r := m.must("", siteCtl, "plugin", "disable", row, "--profile", "dev"); r.out != "" || !strings.Contains(r.errOut, "result passed, generation ") {
 			t.Errorf("plugin disable %s answered %q", row, r.out)
 		}
 		state(t, func(s teststate.State) bool { return rowState(s, row) == "" })
-		if r := m.must("", siteCtl, "plugin", "remove", packID, "--profile", "dev"); !strings.HasPrefix(r.out, "result passed, generation ") {
+		if r := m.must("", siteCtl, "plugin", "remove", packID, "--profile", "dev"); r.out != "" || !strings.Contains(r.errOut, "result passed, generation ") {
 			t.Errorf("plugin remove %s answered %q", packID, r.out)
 		}
 		if p := read(t, filepath.Join(home, "profiles", "dev", "profile.yaml")) + read(t, filepath.Join(home, "profiles", "dev", "plugins.lock")); strings.Contains(p, packID) {
