@@ -43,11 +43,11 @@ func scan(t *testing.T) map[string][]Finding {
 // init fails, in the main package or in the package that declares the registry; a
 // registration reached through an interface method and one through a function value
 // fail, on the call graph of vta, and so does one in a function that init hands on as a
-// value, which the runtime may call (time.AfterFunc); a mux of its own is no default
-// mux. The default mux
-// and the default registry count however init reaches them: through an interface
-// value, a method value, a variable that holds them, a parameter, or a factory of
-// promauto; the default mux used after init does not. The exceptions table, keyed by
+// value, which the runtime may call (time.AfterFunc) or run as a coroutine
+// (iter.Pull); a mux of its own is no default mux. The default mux and the default
+// registry count however init reaches them: through an interface value, a method
+// value, a variable that holds them, a parameter, or a factory of promauto; the
+// default mux used after init does not. The exceptions table, keyed by
 // package and version, admits gRPC's proto codec at its pin and gob's own registration,
 // which fail without it (ADR-044 decision 21; ADR-020 decision 27).
 func TestInitDenyList(t *testing.T) {
@@ -62,6 +62,7 @@ func TestInitDenyList(t *testing.T) {
 		"funcval":     "a database/sql driver: database/sql.Register in example.test/inits/cmd/funcval.viaValue",
 		"afterfunc":   "a default-mux handler: net/http.HandleFunc in example.test/inits/cmd/afterfunc.init",
 		"sqlafter":    "a database/sql driver: database/sql.Register in example.test/inits/cmd/sqlafter.register",
+		"pull":        "a database/sql driver: database/sql.Register in example.test/inits/cmd/pull.init",
 		"ifacemux":    mux + "ifacemux.init#1",
 		"methodvalue": mux + "methodvalue.init",
 		"aliasmux":    mux + "aliasmux.init",
