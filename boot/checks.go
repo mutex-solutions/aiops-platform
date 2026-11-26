@@ -557,7 +557,9 @@ func (g *gate) installed(c Composition) []RowResult {
 		owner, name, _ := strings.Cut(id, "/")
 		// An artifact of the release's own module, its manifest byte for byte the one of the
 		// module table, stands in for nothing: plugin check packs each first-party plugin so.
-		own := owner == "aiops" && g.in.Dist != nil && bytes.Equal(g.in.Dist.Plugins[id].Manifest, g.in.Artifacts[id].Kept.Manifest)
+		// An id that the release signed no manifest for has none to equal.
+		own := owner == "aiops" && g.in.Dist != nil && len(g.in.Dist.Plugins[id].Manifest) > 0 &&
+			bytes.Equal(g.in.Dist.Plugins[id].Manifest, g.in.Artifacts[id].Kept.Manifest)
 		if slices.Contains(g.in.Bindings.RequiredRows, name) && !own {
 			out = append(out, g.fail(CheckLayerRules, Row{ID: name}, RuleGroupClash, false,
 				"the group %q of the installed artifact %s takes the id of a required row, which no artifact stands in for (ADR-047 decision 6)", name, id))
