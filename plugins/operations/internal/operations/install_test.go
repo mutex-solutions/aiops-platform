@@ -418,3 +418,27 @@ func TestInstallKeepsOneDigestPerID(t *testing.T) {
 		t.Errorf("the leftover stays")
 	}
 }
+
+// A plugins.lock that does not read stops no install into another profile, which names
+// it and that it went unchecked for another digest of the id; and profile sanitize sets
+// aside the one of its profile, as it sets aside a layer file, so that plugin remove
+// can then take the artifact (ADR-047 decisions 7, 8 and 10; ADR-061 decision 41).
+func TestAnUnreadableLock(t *testing.T) {
+	l := Library{Box: installBox{&packBox{sum: packSummary()}}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	h := Home{Dir: home}
+	put(t, h, "profiles/prod/profile.yaml", "bundles: [aiops-core]\n")
+	put(t, h, "profiles/prod/plugins.lock", "lockVersion: 1\nartifacts: [\n")
+	ch, err := installed(t, l, home, pack, "acme")
+	if err != nil || !slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, "profiles/prod/plugins.lock") }) {
+		t.Fatalf("an install into dev beside a prod lock that does not read: %+v, %v; want it kept, naming that lock", ch, err)
+	}
+	put(t, h, "profiles/dev/plugins.lock", "lockVersion: 1\nartifacts: [\n")
+	ch, err = l.SanitizeProfile(t.Context(), def.ProfileRequest{Home: home, Profile: "dev"})
+	if err != nil || !slices.ContainsFunc(ch.Notes, func(n string) bool { return strings.Contains(n, "set aside as plugins.lock.bak-") }) {
+		t.Errorf("sanitize of dev with a lock that does not read: %+v, %v; want the lock set aside", ch, err)
+	}
+	if _, err := l.Remove(t.Context(), def.RemoveRequest{Home: home, Profile: "dev", ID: "acme/connector-x"}); err != nil {
+		t.Errorf("remove after the sanitize: %v", err)
+	}
+}
