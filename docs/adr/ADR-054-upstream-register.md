@@ -298,6 +298,14 @@ entry, and cosign is pinned as a CI tool with its entry (ADR-060 decisions 23 an
    | The Cordis semantics of the kernel port | `cordis`, `deepseek`, `dsh` | `sdk/kernel/`, `loader/`, `test/differential/` and `test/spike/s0/`, their notices included | `00:267`; `08:1341` L12 |
    | The default stack bundle (`aiops-stack`, `agent-base` and the agent bundles) | The `names` of every entry whose `plugins` sit in one of those bundles, read from the register | The code and content of those plugins and their config in the golden dumps, as the wire names, syntax and file paths those upstreams define; never an id, where the marks of `00:649` and T1 hold | `00:267`, `:649`, `:651`; `04:9`, `:14`; harness:211; upstreams design §1.1 |
    | With question Q5 (a): the Go language and SPDX identifiers | `go`, `golang`, `spdx` | Every place | question Q5 |
+   | With the owner answer of 2026-11-26: the SPDX id `PostgreSQL` on the licence allow-list of gate check 6, an SPDX identifier of decision 21 | `postgresql` | `boot/` | S2a report, open question 7 |
+
+   Note of 2026-11-26, on the owner's answer to open question 7 of the S2a report: the
+   SPDX id `PostgreSQL`, which L7 allows, is an SPDX identifier of decision 21, and the
+   register's item for it gives the token `postgresql` the place `boot/` alone, so that
+   the allow-list of gate check 6 (`boot.Licensed`) holds every licence that L7 allows.
+   `00:267` already names SPDX identifiers and is not edited. The database entry keeps its
+   names, and its other token, `postgres`, stays refused in `boot/`.
 
 ### The base provider allow-list
 

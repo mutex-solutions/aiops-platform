@@ -759,6 +759,10 @@ exceptions:
     tokens: [go, golang, spdx]
     places: [every place]
     source: ADR-054 decision 21
+  - item: The SPDX id PostgreSQL on the licence allow-list of gate check 6
+    tokens: [postgresql]
+    places: [boot/]
+    source: 00-decisions.md:267, SPDX identifiers; ADR-054 decision 21, owner answer of 2026-11-26
 
 # The base provider allow-list (ADR-054 decision 10).
 baseProviders: [sql-postgres, sql-platform, kv-postgres, blob-s3, llm-provider-openai-compatible, identity-oidc, notifier-email, jobs-river]
