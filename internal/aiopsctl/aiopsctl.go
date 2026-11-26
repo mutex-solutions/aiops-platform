@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
@@ -36,9 +37,11 @@ import (
 //     asked to print, and no status file, since run/status.json is the readiness channel
 //     of a server (ADR-059 decision 31).
 //
-// When a layer file of the home stops the boot of the cli profile, it boots once more
+// When a file of the home stops the boot of the cli profile, a layer, its profile.yaml
+// or a bundle it names, or a layer disables the row of aiops/cli, it boots once more
 // with the shipped cli profile alone and the home still passed, and says which file
-// stopped the first boot, so profile sanitize can set it aside (ADR-061 decision 41).
+// stopped the first boot and how to recover: profile sanitize sets a layer aside
+// (ADR-061 decision 41).
 
 // Process is everything Run takes from the process. Files is rooted at "/".
 type Process struct {
@@ -85,8 +88,8 @@ func Run(ctx context.Context, args []string, p Process, d Distribution) int {
 			return 1
 		}
 		layers = Overlay{h, d.Shipped}
-		if err := brokenLayer(layers); err != nil {
-			fmt.Fprintf(p.Err, "aiopsctl: %v\naiopsctl: the layer stops the boot of the cli profile, so this run composes the shipped cli profile alone, with the home still passed: a command does not see the layers of the home for the cli profile; aiopsctl profile sanitize sets the file aside\n", err)
+		if why := brokenLayer(layers, home); why != "" {
+			fmt.Fprintf(p.Err, "aiopsctl: %s\naiopsctl: this run composes the shipped cli profile alone, with the home still passed: a command does not see the layers of the home for the cli profile\n", why)
 			layers = shippedCLI{layers, d.Shipped}
 		}
 	}
@@ -108,15 +111,24 @@ func Run(ctx context.Context, args []string, p Process, d Distribution) int {
 	return ExitCode(boot.Run(ctx, o), p.Err)
 }
 
-// brokenLayer returns the error of a layer file of the home, the site layer or the
-// profile layer of cli, that stops the composition of the cli profile as boot reads it.
-func brokenLayer(layers fs.FS) error {
-	_, _, err := boot.Compose(boot.Sources{Profile: "cli", Home: layers, Bundles: layers}, boot.Options{})
+// brokenLayer says what of the home at home, read through layers, stops the cli profile
+// as boot reads it, and how to recover, "" for nothing: a file that stops its
+// composition, a layer, which profile sanitize sets aside, or its profile.yaml or a
+// bundle, which the operator moves aside; or a layer that disables the row of
+// aiops/cli, which runs every command.
+func brokenLayer(layers fs.FS, home string) string {
+	c, _, err := boot.Compose(boot.Sources{Profile: "cli", Home: layers, Bundles: layers}, boot.Options{})
 	var e *boot.Error
-	if errors.As(err, &e) && (e.File == "aiops.patch.yml" || e.File == "profiles/cli/aiops.patch.yml") {
-		return err
+	switch {
+	case errors.As(err, &e) && (e.File == "aiops.patch.yml" || e.File == "profiles/cli/aiops.patch.yml"):
+		return fmt.Sprintf("%v\naiopsctl: the layer stops the boot of the cli profile; aiopsctl profile sanitize sets the file aside", err)
+	case errors.As(err, &e) && (strings.HasPrefix(e.File, "profiles/cli/") || strings.HasPrefix(e.File, "bundles/")):
+		f := path.Join(home, e.File)
+		return fmt.Sprintf("%v\naiopsctl: the file stops the boot of the cli profile; correct it, or move it aside: mv %s %s.bak", err, f, f)
+	case err == nil && !slices.ContainsFunc(c.Rows, func(r boot.ComposedRow) bool { return r.Plugin == "aiops/cli" && r.Enabled }):
+		return "a layer of the home, the site layer or profiles/cli/aiops.patch.yml, disables the row of aiops/cli, which runs every command: correct the layer, which profile sanitize keeps, since it composes"
 	}
-	return nil
+	return ""
 }
 
 // ExitCode maps the code of the launcher under Command to the three of aiopsctl (ADR-061
