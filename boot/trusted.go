@@ -252,8 +252,8 @@ func bootInput(home fs.FS, profile string, c Composition, mods ModuleTable, d Di
 // installedArtifact reads one installed artifact: the digest that plugins.lock names,
 // or for in-process code, which has no entry, that of the artifact.json install kept
 // (ADR-047 decisions 8 and 18); then the kept files against it and the record beside
-// it. An artifact the lock names no digest for is in-process code by its record, or it
-// is denied.
+// it. An artifact the lock names no digest for is in-process code by its record, with
+// no content layer (ADR-060 decision 19), or it is denied.
 func installedArtifact(home fs.FS, profile, id string, lock []LockEntry, lerr error) Artifact {
 	a := Artifact{ID: id, Err: lerr}
 	i := slices.IndexFunc(lock, func(e LockEntry) bool { return e.ID == id })
@@ -272,8 +272,11 @@ func installedArtifact(home fs.FS, profile, id string, lock []LockEntry, lerr er
 	if a.Err == nil {
 		a.Record, a.Err = ReadRecord(home, a.Digest)
 	}
-	if a.Err == nil && i < 0 && a.Record.Module == nil {
+	switch {
+	case a.Err == nil && i < 0 && a.Record.Module == nil:
 		a.Err = &Error{File: path.Join("profiles", profile, "plugins.lock"), Rule: RuleKept, Msg: "names no digest for " + id + ", and only in-process code has no entry"}
+	case a.Err == nil && i < 0 && a.Kept.Content != "":
+		a.Err = &Error{File: path.Join("bundles", id), Rule: RuleKept, Msg: "in-process code carries no content layer: content is a pack's, whose lock entry carries its digest (ADR-060 decision 19)"}
 	}
 	return a
 }

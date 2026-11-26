@@ -137,8 +137,8 @@ type packed struct {
 }
 
 // layers reads the layers of the plugin directory: plugin.yaml and bundle.yaml, the
-// module of in-process code, the content and, for a pack, the fixtures as canonical
-// tars, and the SBOM.
+// module of in-process code, for a pack the content and the fixtures as canonical tars,
+// and the SBOM. In-process code with a content/ directory is refused.
 func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSummary) (packed, error) {
 	var p packed
 	var err error
@@ -176,10 +176,12 @@ func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSumm
 		on             bool
 	}{{"content", layerContent, true}, {"fixtures", layerFixtures, len(sum.Runtimes) == 0}} {
 		files, err := regularFiles(filepath.Join(dir, t.dir))
-		if err != nil {
+		switch {
+		case err != nil:
 			return p, refused("%s/: %v (ADR-047 decision 3)", t.dir, err)
-		}
-		if !t.on || files == nil {
+		case t.dir == "content" && files != nil && len(sum.Runtimes) > 0:
+			return p, refused("content/: in-process code carries no content, which is a pack's (ADR-060 decision 19)")
+		case !t.on || files == nil:
 			continue
 		}
 		b, paths := canonicalTar(files)

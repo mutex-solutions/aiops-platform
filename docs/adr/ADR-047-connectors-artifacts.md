@@ -118,6 +118,12 @@ gaps:
 
    - The title annotation is `org.opencontainers.image.title`, so a generic OCI client
      lists the layers by file name. Each type appears at most once.
+   - Note of 2026-11-27 (review round over the whole step, round 2): ADR-060 decision 19
+     gives content to a pack, whose lock entry carries the content digest into the
+     generation digest (decision 8). In-process code has no lock entry, so an artifact
+     with a `content/` directory is a pack: `plugin pack` refuses in-process code with
+     one, install refuses an in-process artifact with a content layer, and boot denies
+     one that a home holds, naming ADR-060 decision 19.
    - A reader, `install` and the gate included, ignores a layer type it does not know and
      fetches no blob of it, as a reader of `plugin.yaml` ignores an unknown field of a
      higher minor; `plugin check` refuses one, as it refuses an unknown field (`07:120`).

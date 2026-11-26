@@ -120,6 +120,8 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 				return nil, refused("remote code installs from S2b, with the remote runtime (ADR-060 decision 29)")
 			case r.Profile == "cli" && !code:
 				return nil, refused("into the profile cli only in-process code installs, since a pack's rows contribute no command (ADR-061 decision 40)")
+			case code && layer(a.m, layerContent) != nil:
+				return nil, refused("in-process code carries no content layer: content is a pack's, whose lock entry carries its digest (ADR-060 decision 19)")
 			}
 			keptAt, held, unread := holders(h, r.Profile, a.ID)
 			ch.Notes = append(ch.Notes, unread...)
