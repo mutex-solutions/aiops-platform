@@ -48,6 +48,10 @@ func TestCommandReturnsTheCodeOfTheCommand(t *testing.T) {
 			if s := f.lastStatus(); s.Exit != code || s.Phase != PhaseStopped {
 				t.Fatalf("final status %+v", s)
 			}
+			// The command said what it did: the launcher adds no line of the server's.
+			if strings.Contains(f.errb.String(), "aiops: ") {
+				t.Errorf("stderr of a command that returned %d:\n%s", code, f.errb.String())
+			}
 		})
 	}
 }
