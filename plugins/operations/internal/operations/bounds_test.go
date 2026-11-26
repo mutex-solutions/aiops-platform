@@ -5,17 +5,22 @@ package operations
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
 
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
@@ -121,6 +126,40 @@ func TestReferrersAreBoundedBeforeTrust(t *testing.T) {
 		if !errors.Is(err, def.ErrRefused) || read > 0 && c.bytes > maxFile || read > 16 {
 			t.Errorf("%s: %v, %d bundle layers read; want ErrRefused, none above 1 MiB and at most 16", c.name, err, read)
 		}
+	}
+}
+
+// The referrers of an artifact in a registry are listed no further than the bound: a
+// registry that answers page after page of referrers of the type, or of another type,
+// each with a link to the next, is refused within a few pages, before any trust
+// decision, not after it served them all, nor never.
+func TestReferrersAreBoundedAcrossPages(t *testing.T) {
+	for _, typ := range []string{bundleType, "application/vnd.example.other"} {
+		var pages atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n := pages.Add(1)
+			var ms []ocispec.Descriptor
+			for i := range 2000 {
+				d := content.NewDescriptorFromBytes(ocispec.MediaTypeImageManifest, fmt.Appendf(nil, "%d %d", n, i))
+				d.ArtifactType = typ
+				ms = append(ms, d)
+			}
+			b, _ := json.Marshal(ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex, Manifests: ms})
+			w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+			if n < 100 { // so that the case ends on a registry that the client follows to the end
+				w.Header().Set("Link", fmt.Sprintf(`<%s?page=%d>; rel="next"`, r.URL.Path, n+1))
+			}
+			_, _ = w.Write(b)
+		}))
+		repo, err := remoteRepo(caller(), strings.TrimPrefix(srv.URL, "http://")+"/acme/x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = referrers(t.Context(), repo, content.NewDescriptorFromBytes(ocispec.MediaTypeImageManifest, []byte("{}")), bundleType)
+		if got := pages.Load(); err == nil || got > 17 {
+			t.Errorf("referrers of %s: %v after %d pages; want an error within 17 pages", typ, err, got)
+		}
+		srv.Close()
 	}
 }
 
