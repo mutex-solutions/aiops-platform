@@ -428,12 +428,13 @@ func remove(ctx context.Context, ops operations.Operations, inv commands.Invocat
 		ConnectWait: c, Wait: w}))
 }
 
-// changed prints a change of the home: the paths written, the notes and each clause of
-// the gate at install, as plugin gate prints them, on stderr; on stdout the dist.yaml
-// lines of rebuild-required, the final result, or with none the operation ids and the
-// last status, and the outcome (ADR-061 decisions 11 and 44; ADR-060 decisions 9 and
-// 17). The library's error decides the exit. The paths, the notes and the dist.yaml
-// lines carry what an artifact supplies, so they are shown as inspect shows it.
+// changed prints a change of the home: the paths written, the notes, each clause of the
+// gate at install, as plugin gate prints them, the final result, or with none the
+// operation ids and the last status, and the outcome, on stderr; on stdout only the
+// dist.yaml lines of rebuild-required (ADR-061 decisions 10, 11 and 44; ADR-060
+// decisions 9 and 17). The library's error decides the exit. The paths, the notes and
+// the dist.yaml lines carry what an artifact supplies, so they are shown as inspect
+// shows it.
 func changed(inv commands.Invocation) func(operations.Change, error) error {
 	return func(ch operations.Change, err error) error {
 		for _, p := range ch.Written {
@@ -450,16 +451,16 @@ func changed(inv commands.Invocation) func(operations.Change, error) error {
 		}
 		switch r := ch.Result; {
 		case r != nil:
-			fmt.Fprintf(inv.Out, "result %s, generation %d, digest %s\n", r.Status, r.Generation, r.Digest)
+			fmt.Fprintf(inv.Err, "result %s, generation %d, digest %s\n", r.Status, r.Generation, r.Digest)
 		case len(ch.IDs) > 0:
 			ids := make([]string, len(ch.IDs))
 			for i, id := range ch.IDs {
 				ids[i] = fmt.Sprint(id)
 			}
-			fmt.Fprintf(inv.Out, "operations %s; last status %s\n", strings.Join(ids, ", "), ch.Last)
+			fmt.Fprintf(inv.Err, "operations %s; last status %s\n", strings.Join(ids, ", "), ch.Last)
 		}
 		if ch.Outcome != "" {
-			fmt.Fprintln(inv.Out, strings.TrimSuffix(string(ch.Outcome)+": "+ch.Reason, ": "))
+			fmt.Fprintln(inv.Err, strings.TrimSuffix(string(ch.Outcome)+": "+ch.Reason, ": "))
 		}
 		return err
 	}
