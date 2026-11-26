@@ -153,8 +153,10 @@ func TestSignAndUseExits(t *testing.T) {
 // working directory, each --mirror as a prefix and its site prefix, each --allow-bump and
 // the builder, and the environment of the invocation; it names what the builder wrote
 // and the digest of the signed manifest on stderr, prints nothing on stdout and exits
-// 0. A malformed --mirror is a usage error, and a refusal of the builder exits 1 with
-// its reason (ADR-061 decisions 10 and 30; ADR-044 decisions 7, 9 and 10).
+// 0. A malformed --mirror, a --builder that is neither image nor local and the image
+// path with no --modcache are usage errors that name the flag, and a refusal of the
+// builder exits 1 with its reason (ADR-061 decisions 10 and 30; ADR-044 decisions 7, 9
+// and 10).
 func TestBuildCallsTheLibrary(t *testing.T) {
 	s := &stub{built: launch.Built{Image: "/work/build/image", Manifest: []byte("distVersion: 1\n"), Aiopsctl: "/work/build/aiopsctl/aiopsctl"}}
 	rec := world(t, s)
@@ -172,8 +174,14 @@ func TestBuildCallsTheLibrary(t *testing.T) {
 	if code, _, errOut := dispatch(t, rec, "dist", "build", "dist.yaml", "--mirror", "registry.example/aiops"); code != 2 || !strings.Contains(errOut, "--mirror") {
 		t.Errorf("a malformed mirror: exit %d, stderr %q", code, errOut)
 	}
+	for _, argv := range [][]string{{"dist", "build", "dist.yaml", "--modcache", "/cache", "--builder", "bogus"}, {"dist", "build", "dist.yaml"}} {
+		flag := map[bool]string{true: "--builder", false: "--modcache"}[len(argv) > 3]
+		if code, _, errOut := dispatch(t, rec, argv...); code != 2 || !strings.Contains(errOut, flag) {
+			t.Errorf("%q: exit %d, stderr %q; want a usage error naming %s", argv, code, errOut, flag)
+		}
+	}
 	refusal := fmt.Errorf("%w: module example.test/x declares the id aiops/x", operations.ErrRefused)
-	if code, _, errOut := dispatch(t, world(t, &stub{err: refusal}), "dist", "build", "dist.yaml"); code != 1 || !strings.Contains(errOut, refusal.Error()) {
+	if code, _, errOut := dispatch(t, world(t, &stub{err: refusal}), "dist", "build", "dist.yaml", "--modcache", "/cache"); code != 1 || !strings.Contains(errOut, refusal.Error()) {
 		t.Errorf("a refusal: exit %d, stderr %q", code, errOut)
 	}
 }

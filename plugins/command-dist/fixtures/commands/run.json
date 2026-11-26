@@ -1,5 +1,7 @@
 [
-  {"argv": ["dist", "build", "dist.yaml"], "outcome": "ok", "stdout": "", "stderr": "the signed manifest sha256:"},
+  {"argv": ["dist", "build", "dist.yaml", "--modcache", "mod"], "outcome": "ok", "stdout": "", "stderr": "the signed manifest sha256:"},
+  {"argv": ["dist", "build", "dist.yaml"], "outcome": "usage", "stdout": "", "stderr": "--modcache"},
+  {"argv": ["dist", "build", "dist.yaml", "--modcache", "mod", "--builder", "bogus"], "outcome": "usage", "stdout": "", "stderr": "--builder"},
   {"argv": ["dist", "build", "dist.yaml", "--builder", "local", "--mirror", "registry.example/aiops=mirror.site/aiops"], "outcome": "ok", "stdout": ""},
   {"argv": ["dist", "build"], "outcome": "usage", "stdout": ""},
   {"argv": ["dist", "build", "dist.yaml", "--mirror", "registry.example/aiops"], "outcome": "usage", "stdout": ""},

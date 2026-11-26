@@ -1,5 +1,5 @@
 [
-  {"argv": ["dist", "build", "dist.yaml"], "delay": "0s"},
+  {"argv": ["dist", "build", "dist.yaml", "--modcache", "mod"], "delay": "0s"},
   {"argv": ["dist", "sign", "registry.example/site:1", "--key", "site.key"], "delay": "0s"},
   {"argv": ["dist", "use", "registry.example/site:1"], "delay": "0s"}
 ]

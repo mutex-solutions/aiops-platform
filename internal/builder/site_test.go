@@ -46,6 +46,10 @@ func TestReadSite(t *testing.T) {
 			t.Errorf("ReadSite took %q", bad)
 		}
 	}
+	// An unknown field is named by its line, not by the Go type the reader decodes into.
+	if _, err := ReadSite([]byte(release + "modules: []\n")); err == nil || err.Error() != `dist.yaml:2: unknown field "modules"` {
+		t.Errorf("an unknown field: %v", err)
+	}
 }
 
 // Strict versions (ADR-044 decisions 10 and 20): a pinned module raised by the build
