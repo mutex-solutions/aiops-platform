@@ -226,9 +226,12 @@ func TestBootInputArtifacts(t *testing.T) {
 		locks      int
 	}{
 		{"locked", lock, nil, "", 2},
-		{"in-process code, with no lock entry", "", func(h fstest.MapFS) {
+		// Content is a pack's: in-process code has no lock entry to carry its digest into
+		// the generation digest (ADR-060 decision 19). In-process code with no content is
+		// TestBootInputReadsTheArtifactOfARowWithNoOrigin's.
+		{"in-process code with a content layer", "", func(h fstest.MapFS) {
 			h[rec] = &fstest.MapFile{Data: []byte("kind: artifact\ndigest: " + digest + "\nsigner: " + keyP256ID + "\nid: acme/connector-x\nversion: 0.1.0\nruntimes: [inproc]\nmodule: {path: " + testModule + "}\n")}
-		}, "", 0},
+		}, "ADR-060 decision 19", 0},
 		// Only in-process code has no lock entry (ADR-047 decisions 8 and 18).
 		{"a pack with no lock entry", "", nil, "profiles/p/plugins.lock: kept: names no digest for acme/connector-x", 0},
 		{"a pack with no lock entry in a lock", "lockVersion: 1\nartifacts: []\n", nil, "names no digest", 0},

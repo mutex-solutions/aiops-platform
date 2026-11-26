@@ -124,7 +124,8 @@ func TestInstallKeepsAPack(t *testing.T) {
 
 // handPack writes the layout of an artifact of acme/connector-x with layers as given,
 // the statement that pack records naming its digest, and signs it with a new key that
-// trust.yaml of home lists for acme/*: a layout that plugin pack would not write.
+// trust.yaml of home lists for acme/* and in-process code: a layout that plugin pack
+// would not write.
 func handPack(t *testing.T, l Library, home string, layers ...blob) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "artifact")
@@ -136,13 +137,41 @@ func handPack(t *testing.T, l Library, home string, layers ...blob) string {
 		t.Fatal(err)
 	}
 	prefix := generate(t, l, t.TempDir(), "author")
-	if _, err := l.AddTrust(t.Context(), def.TrustRequest{Caller: caller(), Home: home, KeyFile: prefix + ".pub", IDs: []string{"acme/*"}}); err != nil {
+	if _, err := l.AddTrust(t.Context(), def.TrustRequest{Caller: caller(), Home: home, KeyFile: prefix + ".pub", IDs: []string{"acme/*"}, Runtimes: []string{"inproc"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.Sign(t.Context(), def.SignRequest{Caller: caller(), Out: out, Key: prefix + ".key"}); err != nil {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// Content is a pack's (ADR-060 decision 19): its digest enters the generation digest
+// through the lock entry, of which in-process code has none, so boot would deny such
+// content at every boot. Pack refuses in-process code with a content/ directory, and
+// install refuses an in-process artifact with a content layer and writes nothing.
+func TestInProcessCodeCarriesNoContent(t *testing.T) {
+	sum := packSummary()
+	sum.Runtimes = []string{"inproc"}
+	l := Library{Box: installBox{&packBox{sum: sum, mod: launch.Module{Path: "example.test/echo", Sum: echoSum}}}, LockWait: time.Second}
+	manifest := strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1)
+	dir := pluginDir(t, map[string]string{"plugin.yaml": manifest, "bundle.yaml": "[]\n", "go.mod": "module example.test/echo\n", "echo.go": "package echo\n",
+		"content/runbooks/restart.md": "# Restart\n"})
+	if _, err := l.Pack(t.Context(), def.PackRequest{Caller: caller(), Dir: dir, Out: filepath.Join(t.TempDir(), "a")}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "ADR-060 decision 19") {
+		t.Errorf("pack of in-process code with content/: %v; want ErrRefused naming ADR-060 decision 19", err)
+	}
+	home := filepath.Join(t.TempDir(), "home")
+	canonical, _ := canonicalTar(map[string][]byte{"runbooks/restart.md": []byte("# Restart\n")})
+	spec := handPack(t, l, home, blob{layerManifest, []byte(manifest), title("plugin.yaml")}, blob{layerBundle, []byte("[]\n"), title("bundle.yaml")},
+		blob{layerModule, []byte(`{"path":"example.test/echo","version":"v0.1.0","sum":"` + echoSum + `"}`), title("module.json")},
+		contentLayer(canonical, "runbooks/restart.md"), blob{layerSBOM, []byte("{}"), title("sbom.spdx.json")})
+	before := tree(t, Home{Dir: home})
+	if _, err := l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: "dev", Spec: spec}); !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "ADR-060 decision 19") {
+		t.Errorf("install of in-process code with a content layer: %v; want ErrRefused naming ADR-060 decision 19", err)
+	}
+	if got := tree(t, Home{Dir: home}); !equal(got, before) {
+		t.Errorf("the refused install wrote the home")
+	}
 }
 
 // contentLayer is a content layer of the tar b whose annotation lists paths, none for
