@@ -218,6 +218,11 @@ type RunOptions struct {
 	// Command is set by aiopsctl, whose cli row runs one command and requests the exit
 	// with its code (ADR-061 decision 13).
 	Command bool
+	// WriteHeld says that a write of aiopsctl holds write.lock of the home, so a
+	// snapshot/ is that live write's, which restores or keeps its files under its lock:
+	// the server boots the files, as the process that replaces one killed mid-submission
+	// must (ADR-062 decision 10). Only a stopped write's snapshot refuses a server.
+	WriteHeld bool
 	// Tools are the parts of the toolbox that only aiopsctl links, nil in aiops, where
 	// each answers launch.ErrNotCarried; Shipped holds the bundles and profiles that the
 	// binary embeds; Files is the file system, rooted at "/", that the toolbox reads the
@@ -329,8 +334,9 @@ func (r *run) run(ctx context.Context) int {
 	mods := signed.place(o.Registry.Modules)
 	dist := signed.Bindings()
 	tie, tied := tieModules(signed, o.BuildInfo)
-	// The commands of aiopsctl are the writers that finish a stopped write.
-	if stopped(o.Home) && !o.Command {
+	// The commands of aiopsctl are the writers that finish a stopped write; a write that
+	// holds its lock is live, and restores or keeps its files itself.
+	if stopped(o.Home) && !o.Command && !o.WriteHeld {
 		return r.fail(ExitRefused, "%s: run aiopsctl profile sanitize %s, then start again", stoppedWrite, o.Profile)
 	}
 

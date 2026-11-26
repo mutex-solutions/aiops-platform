@@ -564,7 +564,11 @@
       goes on. A server process does not boot a home that holds `snapshot/paths.json`:
       it exits 1 and names `aiopsctl profile sanitize <profile>`, whose write finishes
       the stopped one first; `aiopsctl` itself boots, since its commands are those
-      writers, and `profile render` prints a warning that names the snapshot.
+      writers, and `profile render` prints a warning that names the snapshot. Note of
+      2026-11-27 (round 2): only where no writer holds `write.lock`; a snapshot under a
+      held lock is a live write's, which restores or keeps its files itself, so the
+      server boots, as the process that replaces one killed mid-submission must (ADR-062
+      decision 10).
     - **Submission** (`08:369`, `:446`; `07:1855`). Every method that writes the home ends
       with the outcome below while it holds the lock. `Install`, `Enable`, `Disable` and
       `Remove` submit the profile they changed over `<home>/run/reload.sock`, the

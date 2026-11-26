@@ -176,6 +176,10 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Shipped: d.Shipped, Files: os.DirFS("/"),
 	}
 	opts.BuildInfo, _ = debug.ReadBuildInfo()
+	if w, err := os.Open(filepath.Join(*home, "write.lock")); err == nil { // a writer holds it exclusively
+		opts.WriteHeld = errors.Is(syscall.Flock(int(w.Fd()), syscall.LOCK_SH|syscall.LOCK_NB), syscall.EWOULDBLOCK)
+		_ = w.Close()
+	}
 	if d.Kernel != nil {
 		opts.Kernel = func(root *kernel.Root) { d.Kernel(root, runDir) }
 	}
