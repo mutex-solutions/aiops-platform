@@ -89,8 +89,9 @@ func (l Library) InitProfile(ctx context.Context, r def.ProfileRequest) (def.Cha
 // SanitizeProfile is profile sanitize: under the lock it renders the profile, cli when
 // none is named, and sets aside the layer file of the home that stops its composition,
 // its profile layer or the site layer, then renders again with that file read as
-// absent, as dsh's sanitizeProfile does (ADR-061 decision 41; dsh §3.4). Each file set
-// aside is copied to <name>.bak-<time> and removed, and the profile is submitted.
+// absent, as dsh's sanitizeProfile does (ADR-061 decision 41; dsh §3.4); and its
+// plugins.lock where it does not read, whose rows boot detaches. Each file set aside is
+// copied to <name>.bak-<time> and removed, and the profile is submitted.
 func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err != nil {
@@ -108,6 +109,10 @@ func (l Library) SanitizeProfile(ctx context.Context, r def.ProfileRequest) (def
 		Command: "profile sanitize " + p,
 		Plan: func() ([]Change, error) {
 			var aside []string
+			if _, err := readLock(h, p); err != nil {
+				aside = append(aside, "profiles/"+p+"/plugins.lock")
+				notes = append(notes, fmt.Sprintf("%v: set aside as plugins.lock.bak-%s", err, stamp))
+			}
 			for range layers {
 				rd, err := l.Box.Render(ctx, launch.RenderRequest{Home: h.Dir, Profile: p, Aside: aside})
 				if err != nil {

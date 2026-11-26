@@ -121,10 +121,8 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 			case r.Profile == "cli" && !code:
 				return nil, refused("into the profile cli only in-process code installs, since a pack's rows contribute no command (ADR-061 decision 40)")
 			}
-			keptAt, held, err := holders(h, r.Profile, a.ID)
-			if err != nil {
-				return nil, err
-			}
+			keptAt, held, unread := holders(h, r.Profile, a.ID)
+			ch.Notes = append(ch.Notes, unread...)
 			var other []string
 			for _, p := range slices.Sorted(maps.Keys(held)) {
 				if held[p] != d.Digest.String() {
@@ -201,13 +199,14 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 // holders returns the digest of the kept artifact.json of id, "" for none, and each
 // profile of the home but p that names id, in its bundle list or its lock, with the
 // digest it holds: that of its lock entry or, for in-process code, which has none, the
-// kept one (ADR-047 decisions 7 and 16).
-func holders(h Home, p, id string) (string, map[string]string, error) {
+// kept one (ADR-047 decisions 7 and 16); and a note for each profile whose files do not
+// read, which it does not check.
+func holders(h Home, p, id string) (string, map[string]string, []string) {
 	kept := ""
 	if b, err := os.ReadFile(h.path("bundles/" + id + "/artifact.json")); err == nil {
 		kept = fmt.Sprintf("sha256:%x", sha256.Sum256(b))
 	}
-	held := map[string]string{}
+	held, unread := map[string]string{}, []string(nil)
 	files, _ := filepath.Glob(h.path("profiles/*/profile.yaml"))
 	for _, f := range files {
 		q := filepath.Base(filepath.Dir(f))
@@ -219,16 +218,16 @@ func holders(h Home, p, id string) (string, map[string]string, error) {
 		if err == nil {
 			err = readYAML(f, &list)
 		}
-		if err != nil {
-			return "", nil, err
-		}
-		if i := slices.IndexFunc(locked, func(e def.Locked) bool { return e.ID == id }); i >= 0 {
+		switch i := slices.IndexFunc(locked, func(e def.Locked) bool { return e.ID == id }); {
+		case err != nil:
+			unread = append(unread, fmt.Sprintf("%v; the profile %s is not checked for another digest of %s (ADR-047 decision 7): profile sanitize %s sets its lock aside", err, q, id, q))
+		case i >= 0:
 			held[q] = locked[i].Digest
-		} else if slices.Contains(list.Bundles, id) {
+		case slices.Contains(list.Bundles, id):
 			held[q] = kept
 		}
 	}
-	return kept, held, nil
+	return kept, held, unread
 }
 
 // profileOf is the profile of a command: p, or with none the profile that

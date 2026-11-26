@@ -1452,7 +1452,12 @@ it.
     which is what boot runs first, and when that stops on the site layer or the profile
     layer of `cli` it boots once, with the shipped `cli` profile alone and the home
     still passed, and prints the file and the stop; so the output and the outcome are
-    those of a first boot that stops as `08:465` says, with one boot less.
+    those of a first boot that stops as `08:465` says, with one boot less. Note of
+    2026-11-26 (review round over the whole step): `profile sanitize <p>` also sets
+    aside `profiles/<p>/plugins.lock` where it does not read, whose rows boot detaches,
+    so `plugin remove` can take the artifact again; and `plugin install` names, and does
+    not stop on, a lock of another profile that does not read, which it then does not
+    check for another digest of the id (ADR-047 decision 7).
 
 **Edits made with this record.** `00` is edited in the commit that records the answers
 (`08:997`), and that commit makes the edits that "Edits on acceptance" names for the
