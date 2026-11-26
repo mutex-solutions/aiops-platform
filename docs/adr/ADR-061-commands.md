@@ -543,7 +543,16 @@
       `plugins/operations` run an install in a child process that stops after its first
       rename, kill it, and check that the next write first restores the home to its state
       before the install; kill a restore in the middle and check the same; and interrupt
-      the install at the same point and check exit 1 with the home restored.
+      the install at the same point and check exit 1 with the home restored. Note of
+      2026-11-26 (review round over the whole step): the end of `ctx` restores only
+      before a request reached the row. After it, the row may have accepted the
+      operation and the process may apply it, so the files stay and the outcome is
+      `verdict-unknown`, with each id and the last status, as ADR-062 decision 11 has an
+      accepted operation whose verdict is unknown keep them. A write marks its snapshot
+      before it submits, and the next writer drops a marked snapshot that a killed write
+      left, keeps the files and says that the verdict is unknown, instead of restoring
+      it; a write whose submission it restores unmarks it first, so a stopped restore
+      goes on.
     - **Submission** (`08:369`, `:446`; `07:1855`). Every method that writes the home ends
       with the outcome below while it holds the lock. `Install`, `Enable`, `Disable` and
       `Remove` submit the profile they changed over `<home>/run/reload.sock`, the

@@ -411,16 +411,20 @@ func readLock(h Home, p string) ([]def.Locked, error) {
 // the socket of reload-socket (ADR-062 decisions 9 to 11), which runs under the lock
 // once the renames are done. It records the outcome in ch and its error, by the table
 // of ADR-061 decision 17, in *res, and returns that error where the table restores the
-// files, so the write restores its snapshot.
+// files, so the write restores its snapshot. The end of ctx restores them only before a
+// request reached the row; after, the verdict is unknown and they stay.
 func submitted(h Home, profile, command, target string, waits [2]time.Duration, ch *def.Change, res *error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		o, err := Submit(ctx, Request{Home: h.Dir, Profile: profile, Command: command, ConnectWait: waits[0], Wait: waits[1]})
-		if err != nil {
+		if err != nil && !o.sent { // nothing reached the row: the end of ctx restores
 			return err
 		}
 		ch.Result, ch.Error, ch.IDs, ch.Last = o.Result, o.Error, o.IDs, o.Last
 		restart := "; restart the process, which then boots the restored files (08:244)"
 		ids := fmt.Sprintf("operation %v, last status %q", o.IDs, o.Last)
+		if err != nil { // the row may have taken the request: the files stay
+			ids += fmt.Sprintf("; interrupted (%v), and the process may go on to apply it", err)
+		}
 		switch o.Kind {
 		case NotRunning:
 			ch.Outcome = def.NotRunning

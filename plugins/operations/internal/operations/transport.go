@@ -79,8 +79,8 @@ type Outcome struct {
 	IDs    []reload.ID        // every operation id the row answered, oldest first
 	Last   reload.Status      // the last status the row answered, "" for none
 	// untouched: NoFinal where each operation was abandoned without state-unknown, so
-	// no generation touched the tree.
-	untouched bool
+	// no generation touched the tree; sent: a request reached a connection.
+	untouched, sent bool
 }
 
 // Restore reports whether the command restores its snapshot, the Files column of the
@@ -176,7 +176,7 @@ func (s *session) run(ctx context.Context) (Outcome, error) {
 
 // end returns the outcome of kind k.
 func (s *session) end(k Kind) Outcome {
-	s.o.Kind = k
+	s.o.Kind, s.o.sent = k, s.sent
 	return s.o
 }
 

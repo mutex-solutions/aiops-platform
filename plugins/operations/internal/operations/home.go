@@ -60,10 +60,11 @@ var (
 )
 
 const (
-	lockFile    = "write.lock"
-	snapshotDir = "snapshot"
-	snapshotNew = "snapshot.new" // a snapshot being written, renamed to snapshotDir once synced
-	snapshotOld = "snapshot.old" // a snapshot being removed, renamed from snapshotDir first
+	lockFile     = "write.lock"
+	snapshotDir  = "snapshot"
+	snapshotNew  = "snapshot.new" // a snapshot being written, renamed to snapshotDir once synced
+	snapshotOld  = "snapshot.old" // a snapshot being removed, renamed from snapshotDir first
+	snapshotSent = "submitted"    // in snapshotDir while the write's submission may reach the row
 	// restoreBound is how long a restore runs after its write failed or its context
 	// ended: half the drain deadline of ADR-059 decision 30 (ADR-061 decision 17).
 	restoreBound = 5 * time.Second
@@ -77,7 +78,8 @@ const (
 // snapshot, and then runs After. A failure after the snapshot, a failed submission and the end of ctx
 // restore the snapshot under a context of their own, bounded to five seconds; when
 // the bound passes or the process dies, the snapshot stays for the next writer, which
-// restores what is left of it under its own context before anything else.
+// restores what is left of it under its own context before anything else, but drops
+// one whose write died while its submission was out.
 func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	if err := h.prepare(); err != nil {
 		return Done{}, err
@@ -88,12 +90,12 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	}
 	defer unlock()
 	var done Done
-	restored, err := h.recover(ctx)
+	note, err := h.recover(ctx)
 	if err != nil {
 		return done, fmt.Errorf("restore the snapshot of an interrupted write in %s: %w", h.path(snapshotDir), err)
 	}
-	if restored {
-		done.Notes = append(done.Notes, "restored the snapshot that an interrupted write left in "+h.path(snapshotDir))
+	if note != "" {
+		done.Notes = append(done.Notes, note)
 	}
 	if err := ctx.Err(); err != nil {
 		return done, err
@@ -109,10 +111,16 @@ func (h Home) Write(ctx context.Context, w Write) (Done, error) {
 	if err == nil {
 		err = ctx.Err()
 	}
+	sent := h.path(snapshotDir + "/" + snapshotSent)
 	if err == nil && w.Submit != nil {
-		err = w.Submit(ctx)
+		// From here the row may take the change, so a write killed before it decides keeps
+		// its files (ADR-062 decision 11).
+		if err = errors.Join(writeFile(sent, nil), syncDir(h.path(snapshotDir))); err == nil {
+			err = w.Submit(ctx)
+		}
 	}
 	if err != nil {
+		_, _ = os.Remove(sent), syncDir(h.path(snapshotDir)) // a restore stopped from here on goes on
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreBound)
 		defer cancel()
 		if rerr := h.restore(rctx); rerr != nil {
@@ -336,21 +344,26 @@ func (h Home) apply(ctx context.Context, changes []Change, done *Done) error {
 // renamed before it was, and one that was being removed, and restores one that was
 // renamed into place. A snapshot/ with no paths.json is part of a snapshot whose
 // removal an earlier version did not rename aside: paths.json is in place before the
-// snapshot is, so it is removed too. It reports whether it restored. The restore is not
-// bounded: the writer holds the lock and does nothing else until it is done, and ctx
-// stops it with its progress kept.
-func (h Home) recover(ctx context.Context) (bool, error) {
+// snapshot is, so it is removed too. A snapshot whose write was killed while its
+// submission might reach the row is dropped, not restored: the process may run the
+// change (ADR-062 decision 11). It returns what the operator is told. The restore is
+// not bounded: the writer holds the lock and does nothing else until it is done, and
+// ctx stops it with its progress kept.
+func (h Home) recover(ctx context.Context) (string, error) {
 	for _, p := range []string{snapshotNew, snapshotOld} {
 		if err := os.RemoveAll(h.path(p)); err != nil {
-			return false, err
+			return "", err
 		}
 	}
 	if _, err := os.Stat(h.path(snapshotDir + "/paths.json")); errors.Is(err, fs.ErrNotExist) {
-		return false, os.RemoveAll(h.path(snapshotDir))
+		return "", os.RemoveAll(h.path(snapshotDir))
 	} else if err != nil {
-		return false, err
+		return "", err
 	}
-	return true, h.restore(ctx)
+	if _, err := os.Stat(h.path(snapshotDir + "/" + snapshotSent)); err == nil {
+		return "kept the files of an interrupted write whose submission may have reached the running process, and dropped its snapshot: the verdict of that submission is unknown (ADR-062 decision 11); profile render shows the files", h.drop()
+	}
+	return "restored the snapshot that an interrupted write left in " + h.path(snapshotDir), h.restore(ctx)
 }
 
 // restore copies each replaced path back from the snapshot, removes each created path
