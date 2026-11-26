@@ -160,6 +160,11 @@
    a second process on the home exits 1 naming that file and writes no status, which
    would otherwise make `aiopsctl` read the first process as stopped or as running
    another profile. S4b, which lets several processes share a home, replaces the rule.
+   Note of 2026-11-27 (round 2): a later layer can enable the row in the profile `cli`,
+   the site layer among them, so the patch of `aiops-cli` alone does not keep `aiopsctl`
+   from listening. The row applies with no effect in a process whose launcher fills the
+   working directory of `cmdline`, which only that of `aiopsctl` does (launch 0.2), and
+   `plugin enable` refuses the row in the profile `cli`.
 
 ### The socket and who may open it
 

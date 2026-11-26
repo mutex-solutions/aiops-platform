@@ -570,6 +570,8 @@ func (l Library) row(ctx context.Context, r def.RowRequest, command string) (def
 				err = def.CannotDisable(rd, r.Profile, r.Row)
 			case rowOf(rd, r.Row) == nil:
 				err = refused("%s composes no row %q", r.Profile, r.Row)
+			case r.Profile == "cli" && rowOf(rd, r.Row).Plugin == "aiops/reload-socket":
+				err = refused("aiopsctl never listens, so the row %s takes no effect in the profile cli (ADR-062 decision 2)", r.Row)
 			}
 			if err != nil {
 				return nil, err

@@ -5,7 +5,9 @@
 // queue of the running process, from S2a until plugin-manager takes them at S6a. It
 // serves wire format version 1 of sdk/def/reload/v0 on the stream socket
 // <home>/run/reload.sock and provides nothing; it is a bound consumer of reload, in
-// no required set, and the aiops-cli bundle disables it, so aiopsctl never listens.
+// no required set, and the aiops-cli bundle disables it, so aiopsctl never listens; in
+// a process of aiopsctl, whose launcher alone fills the working directory of cmdline,
+// a row that a layer enables applies with no effect.
 //
 // At apply, in one effect, the row checks that its directory is mode 0700 and owned
 // by the process's effective uid, takes an exclusive flock of reload.lock, removes a
@@ -74,6 +76,9 @@ func newPlugin(b bounds) kernel.Plugin {
 }
 
 func apply(c *kernel.Context, cfg Config, b bounds) error {
+	if launch.CmdlineKey.Of(c).Dir() != "" { // the launcher of aiopsctl alone fills it: aiopsctl never listens
+		return nil
+	}
 	dir, where := cfg.Dir, cfg.Dir
 	if dir == "" {
 		home, ok := launch.CmdlineKey.Of(c).Flag("home")
