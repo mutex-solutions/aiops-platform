@@ -352,6 +352,13 @@ func (r *run) run(ctx context.Context) int {
 	for _, w := range warns {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
+	// The writes of aiopsctl compose with the bundles of the home; a server that composes
+	// with others does not serve their submissions (ADR-062 decision 2).
+	if b, h := o.Flags["bundles"], o.Flags["home"]; !o.Command && b != "" && strings.TrimSuffix(b, "/") != strings.TrimSuffix(h, "/") &&
+		slices.ContainsFunc(comp.Rows, func(r ComposedRow) bool { return r.Plugin == "aiops/reload-socket" && r.Enabled }) {
+		return r.fail(ExitRefused, "--bundles %s is not the home %s, and the profile enables reload-socket, which carries the writes of aiopsctl, "+
+			"whose composition reads the bundles of the home: move the bundles into the home, or disable reload-socket (ADR-062 decision 2)", b, h)
+	}
 	if err := CheckReserved(comp); err != nil {
 		return r.fail(ExitRefused, "%v", err)
 	}

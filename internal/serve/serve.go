@@ -84,7 +84,8 @@ const usage = `usage: %s --profile <name> [flags]
 
   --profile <name>   profile to run (required)
   --home <dir>       home with profiles/<name>/ and the runtime directory run/ (default $AIOPS_HOME)
-  --bundles <dir>    directory with bundles/<name>/bundle.yaml (default: the home)
+  --bundles <dir>    directory with bundles/<name>/bundle.yaml (default: the home; another
+                     directory refuses a profile that enables reload-socket)
   --role <role>      edge, api, worker or all (default: all)
   --patch <file>     layer 4 overlay; repeat for several
   --limits <file>    limits.yaml replacing the limits of the distribution

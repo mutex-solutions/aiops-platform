@@ -164,7 +164,14 @@
    the site layer among them, so the patch of `aiops-cli` alone does not keep `aiopsctl`
    from listening. The row applies with no effect in a process whose launcher fills the
    working directory of `cmdline`, which only that of `aiopsctl` does (launch 0.2), and
-   `plugin enable` refuses the row in the profile `cli`.
+   `plugin enable` refuses the row in the profile `cli`. And the four writes compose a
+   profile with the bundles of the home, while `aiops --bundles <dir>`, a flag of S1,
+   composes with another directory's, so a write would be refused, or write nothing and
+   exit 0, for a profile that the process runs otherwise. A server whose `--bundles`
+   names another directory than its home therefore refuses to start while its profile
+   enables `reload-socket`, naming both remedies: the bundles move into the home, or the
+   row is disabled, and then the writes do not reach that process (upgrade note of the
+   S2a report).
 
 ### The socket and who may open it
 
