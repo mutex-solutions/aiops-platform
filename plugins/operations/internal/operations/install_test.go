@@ -174,6 +174,28 @@ func TestInProcessCodeCarriesNoContent(t *testing.T) {
 	}
 }
 
+// Install hands the gate the module that module.json of in-process code records, the
+// one it writes into the record, so that checks 5 and 10 judge at install what boot
+// judges at every boot (ADR-047 decision 17; ADR-020 decision 12).
+func TestInstallGatesTheModuleOfInProcessCode(t *testing.T) {
+	sum := packSummary()
+	sum.Runtimes = []string{"inproc"}
+	box := &packBox{sum: sum}
+	l := Library{Box: installBox{box}, LockWait: time.Second}
+	home := filepath.Join(t.TempDir(), "home")
+	spec := handPack(t, l, home, blob{layerManifest, []byte(strings.Replace(packManifest, "runtimes: []", "runtimes: [inproc]", 1)), title("plugin.yaml")},
+		blob{layerBundle, []byte("[]\n"), title("bundle.yaml")},
+		blob{layerModule, []byte(`{"path":"example.test/echo","version":"v0.1.0","sum":"` + echoSum + `"}`), title("module.json")},
+		blob{layerSBOM, []byte("{}"), title("sbom.spdx.json")})
+	if _, err := l.Install(t.Context(), def.InstallRequest{Caller: caller(), Home: home, Profile: "dev", Spec: spec}); err != nil {
+		t.Fatal(err)
+	}
+	want := &launch.Module{Path: "example.test/echo", Version: "v0.1.0", Sum: echoSum}
+	if len(box.gates) != 1 || !reflect.DeepEqual(box.gates[0].Module, want) {
+		t.Errorf("the gate requests %+v; want one with the module %+v", box.gates, want)
+	}
+}
+
 // contentLayer is a content layer of the tar b whose annotation lists paths, none for
 // nil.
 func contentLayer(b []byte, paths ...string) blob {

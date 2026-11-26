@@ -422,6 +422,33 @@ func TestToolboxGate(t *testing.T) {
 	}
 }
 
+// After dist use the install of in-process code judges the module that module.json of
+// the artifact records, as boot judges the record that install writes from it: check 5
+// holds it to the pins of the trusted manifest and check 10 to the module the binary
+// runs, so an artifact of another module is denied at install, not at the next boot
+// (ADR-047 decision 17; ADR-020 decision 12).
+func TestToolboxGateJudgesTheModuleAtInstall(t *testing.T) {
+	b := newBox(t)
+	b.files["profiles/r/profile.yaml"] = &fstest.MapFile{Data: []byte("bundles: []")}
+	tb := b.start(t, nil)
+	pub, id := testKey()
+	trust := b.files["trust.yaml"].Data
+	b.files["trust.yaml"] = &fstest.MapFile{Data: append([]byte("signers:\n  - key: |\n"+indent(pub, 6)+"\n    ids: [t/*]\n    runtimes: [inproc]\n"), trust...)}
+	man, _, att, digest := artifact("t/store")
+	q := launch.GateRequest{Entry: string(EntryInstall), Manifest: man, Bundle: []byte("- insert:\n    - {id: own, plugin: t/store, enabled: false, roles: [api]}\n"),
+		Attestation: att, Digest: digest, Signer: id, Home: "/h", Profile: "r",
+		Module: &launch.Module{Path: "example.test/other", Version: "v0.2.0", Sum: "h1:" + strings.Repeat("C", 43) + "="}}
+	v, err := tb.Gate(t.Context(), q)
+	if got := clauseOutcomes(v); err != nil || v.Entry != string(EntryInstallUsed) || got["5 module"] != launch.OutcomeDeny || got["10 attestation"] != launch.OutcomeDeny {
+		t.Errorf("install of an artifact of another module after dist use: %+v, %v; want checks 5 and 10 denying its module", v, err)
+	}
+	q.Module = &launch.Module{Path: testModule}
+	v, err = tb.Gate(t.Context(), q)
+	if got := clauseOutcomes(v); err != nil || got["5 module"] == launch.OutcomeDeny || got["10 attestation"] == launch.OutcomeDeny {
+		t.Errorf("install of an artifact of the module the binary runs: %+v, %v; want neither check 5 nor 10 denying its module", v, err)
+	}
+}
+
 func TestToolboxReadManifest(t *testing.T) {
 	b := newBox(t)
 	b.extra["plug/plugin.yaml"] = &fstest.MapFile{Data: []byte(manifestText("acme/echo", "registers: [{key: echoers, major: 0}]",
