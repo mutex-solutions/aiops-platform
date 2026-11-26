@@ -607,10 +607,10 @@ entries:
   # read in /lib/apk/db/installed of its linux/amd64 image: GPL-2.0-only (busybox,
   # apk-tools, alpine-baselayout, scanelf, ssl_client), MIT (musl, alpine-keys),
   # MIT AND BSD-2-Clause AND GPL-2.0-or-later (musl-utils), MPL-2.0 AND MIT
-  # (ca-certificates), Apache-2.0 (OpenSSL 3) and Zlib (zlib). The project's own names,
-  # distribution and registry, are words the repository's files must carry, so they go
-  # to the owner before U1 reads them (ADR-054 decision 8); until then the entry names
-  # it by the name it was published under before, docker-distribution.
+  # (ca-certificates), Apache-2.0 (OpenSSL 3) and Zlib (zlib). On the owner's word of
+  # 2026-11-26 (ADR-054 decision 8), the entry keeps the one name docker-distribution,
+  # the name the project was published under before; its own names, distribution and
+  # registry, are not added, since the repository's own files use those words.
   - id: distribution-registry
     names: [docker-distribution]
     form: process
