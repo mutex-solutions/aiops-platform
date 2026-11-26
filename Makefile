@@ -80,13 +80,15 @@ builder-image:
 # the test release of test/release/dist.yaml in two phases with a throwaway release key,
 # from the modules it serves at a pre-release version in a file-based module proxy, runs
 # the pinned registry image, and drives the author's repository, the pack author's
-# machine and the clean machine. EXIT_BUILDERS names the path of the clean machine's
-# builds, each run in turn: image, the CI job s2a-exit, and local, its local-toolchain
-# variant s2a-exit-local. The test binary is race-built, GORACE writes every race report
-# of a race-built process to a file, and any report fails the target, as s1-suites does;
-# so does a skip. It needs a container runtime and the module cache of the builder job,
-# so `make check` (-short) skips it. It removes the containers, with their volumes, and
-# the images it pulls.
+# machine and the clean machine, each as containers on a network of its own that reaches
+# the registry and, from the author's repository, the module proxy, which a container
+# serves over HTTP. EXIT_BUILDERS names the path of the clean machine's builds, each run
+# in turn: image, the CI job s2a-exit, and local, its local-toolchain variant
+# s2a-exit-local. The test binary is race-built, GORACE writes every race report of a
+# race-built process to a file, and any report fails the target, as s1-suites does; so
+# does a skip. It needs a container runtime and the module cache of the builder job, so
+# `make check` (-short) skips it. It removes the containers, with their volumes, and the
+# networks and images it makes or pulls.
 EXIT_BUILDERS ?= image local
 .PHONY: s2a-exit
 s2a-exit:

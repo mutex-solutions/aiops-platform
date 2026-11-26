@@ -3,12 +3,14 @@
 package authoring
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"net/http"
@@ -16,7 +18,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -34,43 +38,98 @@ const registryImage = "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc48
 // password is the password of every key the exit makes, in AIOPS_KEY_PASSWORD.
 const password = "a throwaway key of the exit"
 
-// machine is one environment of the exit (ADR-060 decision 30): a directory of its own
-// outside the repository, with a bin/ that holds only the programs the environment
-// holds and is its whole PATH, a home, a temporary directory and caches of its own, and
-// the Go environment of ADR-060 decision 21. No variable names the repository, its
-// module cache or a replace line, and GOPROXY names only the exit's module proxy. The
-// network limit is the one a Go program keeps: every HTTP request goes through a proxy
-// that refuses, and Go never sends a request to the loopback interface through one, so
-// the registry of the exit, on that interface, is all it reaches; the go command
-// reaches the module proxy through file:// and runs no version control.
+// machine is one environment of the exit (ADR-060 decision 30; the owner's answer of
+// 2026-11-26): containers of an image that holds the environment's programs, one per
+// command, run as the test's user in the network namespace of a container on a network
+// of its own (networks). Its directory, outside the repository, with a home, a
+// temporary directory and caches of its own, is bound into them read-write at its own
+// path, and each other path it reads is bound read-only at its own path, so that a path
+// names the same file inside and outside them. It has the Go environment of ADR-060
+// decision 21: no variable names the repository, its module cache or a replace line,
+// GOPROXY names only the exit's module proxy, at http://proxy unless extra sets it, and
+// the go command runs no version control.
 type machine struct {
-	t          *testing.T
-	name, root string
-	work       string // its working directory
-	env        []string
-	exitnet    string // the program of testdata/exitnet
+	t            *testing.T
+	name, root   string
+	work         string   // its working directory
+	image, netns string   // the image of its containers, and the container whose network namespace they join
+	opts, env    []string // the options of docker run of its containers, and their variables
 }
 
-// dial dials each of addrs from the environment and returns, by address, "connected"
-// or why it did not connect.
-func (m *machine) dial(addrs ...string) map[string]string {
-	m.t.Helper()
-	got := map[string]string{}
-	for _, l := range strings.Split(strings.TrimSpace(m.must("", append([]string{m.exitnet, "dial"}, addrs...)...).out), "\n") {
-		a, r, _ := strings.Cut(l, " ")
-		got[a] = r
+// newMachine returns the environment name under root, whose containers run image in the
+// network namespace of netns, with the options opts, path as their PATH and the
+// variables extra over the others.
+func newMachine(t *testing.T, root, name, image, netns, path string, opts []string, extra ...string) *machine {
+	t.Helper()
+	m := &machine{t: t, name: name, root: filepath.Join(root, name), image: image, netns: netns}
+	m.work = filepath.Join(m.root, "work")
+	for _, d := range []string{"home", "tmp", "cache", "config", "gopath", "work"} {
+		if err := os.MkdirAll(filepath.Join(m.root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	return got
+	t.Cleanup(func() { writable(filepath.Join(m.root, "gopath")) })
+	m.opts = append([]string{"--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--mount", "type=bind,src=" + m.root + ",dst=" + m.root}, opts...)
+	m.env = append([]string{"PATH=" + path, "HOME=" + filepath.Join(m.root, "home"), "TMPDIR=" + filepath.Join(m.root, "tmp"),
+		"XDG_CACHE_HOME=" + filepath.Join(m.root, "cache"), "XDG_CONFIG_HOME=" + filepath.Join(m.root, "config"),
+		"GOPATH=" + filepath.Join(m.root, "gopath"), "GOCACHE=" + filepath.Join(m.root, "cache", "go-build"),
+		// The Go environment of ADR-060 decision 21: GOPRIVATE and GONOPROXY are unset.
+		"GOPROXY=http://proxy", "GOSUMDB=off", "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly",
+		"DOCKER_CONFIG=" + filepath.Join(m.root, "config", "docker"), "AIOPS_KEY_PASSWORD=" + password}, extra...)
+	return m
 }
 
-// holds returns the paths of the programs that the environment holds.
-func (m *machine) holds() []string {
-	es, _ := os.ReadDir(filepath.Join(m.root, "bin"))
-	var out []string
-	for _, e := range es {
-		out = append(out, "bin/"+e.Name())
+// bound returns the options of docker run that bind each of paths of the host,
+// read-only, at its own path.
+func bound(paths ...string) []string {
+	var opts []string
+	for _, p := range paths {
+		opts = append(opts, "--mount", "type=bind,readonly,src="+p+",dst="+p)
 	}
-	return out
+	return opts
+}
+
+// containerRuntime returns the options of docker run that give a container the
+// container runtime of the job: its socket, where the docker client dials by default,
+// and the group that owns it.
+func containerRuntime(t *testing.T) []string {
+	t.Helper()
+	sock, ok := strings.CutPrefix(docker(t, "context", "inspect", "-f", "{{.Endpoints.docker.Host}}"), "unix://")
+	st, err := os.Stat(sock)
+	if !ok || err != nil {
+		t.Fatalf("the container runtime of the job answers on no unix socket: %q, %v", sock, err)
+	}
+	return []string{"--mount", "type=bind,src=" + sock + ",dst=/var/run/docker.sock", "--group-add", strconv.FormatUint(uint64(st.Sys().(*syscall.Stat_t).Gid), 10)}
+}
+
+// image imports into the container runtime an image of one layer on no base layer that
+// holds files: at each path of the image, the file of the host that it names.
+func (x *exit) image(files map[string]string) string {
+	t := x.t
+	t.Helper()
+	f, err := os.CreateTemp(x.root, "layer-*.tar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := tar.NewWriter(f)
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		b, err := os.ReadFile(files[name])
+		if err == nil {
+			err = w.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Mode: 0o755, Size: int64(len(b))})
+		}
+		if err == nil {
+			_, err = w.Write(b)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := errors.Join(w.Close(), f.Close()); err != nil {
+		t.Fatal(err)
+	}
+	id := docker(t, "import", f.Name())
+	x.images = append(x.images, id)
+	return id
 }
 
 // exitnet builds the program of testdata/exitnet, static, into the directory of the exit.
@@ -84,37 +143,102 @@ func (x *exit) exitnet() string {
 	return out
 }
 
-// newMachine returns the environment name under root, whose bin/ links tools, by name,
-// to the programs of the host; system adds the directories of the host's own programs
-// to PATH, a compiler among them, as on an author's computer.
-func newMachine(t *testing.T, root, name, proxy string, tools map[string]string, system bool, extra ...string) *machine {
+// networks makes the network of each environment and returns, by name, the container
+// whose network namespace its containers join (ADR-060 decision 21; the owner's answer
+// of 2026-11-26). Each is an internal network whose bridge has no address on the host,
+// so that it routes to no address outside it, the host's among them. The registry is on
+// each. The module proxy, the image netd serving the module proxy's directory at
+// http://proxy, is on the author's repository's alone, whose go command resolves
+// modules through it: the pack author's machine reaches the registry alone (ADR-060
+// decision 30), and the clean machine's only module reader is the builder, whose module
+// source is that directory until L14 clears (ADR-044 decision 7). The container of each
+// network forwards, on its loopback interface, the registry's host and port to the
+// registry, so that the registry has inside each environment the name it has on the
+// host, where the container runtime pulls from it, and aiopsctl speaks plain HTTP to it
+// there as it does on the host. Each network is removed with the test.
+func (x *exit) networks(registry, netd string) map[string]string {
+	t := x.t
+	netns := map[string]string{}
+	for _, name := range []string{"author", "packer", "clean"} {
+		n := fmt.Sprintf("aiops-exit-%d-%s", time.Now().UnixNano(), name)
+		docker(t, "network", "create", "--internal", "-o", "com.docker.network.bridge.inhibit_ipv4=true", n)
+		t.Cleanup(func() {
+			_ = exec.Command("docker", "network", "disconnect", "-f", n, registry).Run()
+			_ = exec.Command("docker", "network", "rm", n).Run()
+		})
+		docker(t, "network", "connect", "--alias", "registry", n, registry)
+		reach := []string{x.reg}
+		if name == "author" {
+			proxy := docker(t, append(append([]string{"run", "-d", "--network", n, "--network-alias", "proxy"}, bound(x.proxy)...), netd, "/exitnet", "serve", ":80", x.proxy)...)
+			t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", proxy).Run() })
+			reach = append(reach, "proxy:80")
+		}
+		id := docker(t, "run", "-d", "--network", n, netd, "/exitnet", "forward", x.reg, "registry:5000")
+		t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", id).Run() })
+		netns[name] = id
+		// Its containers start once what it reaches answers.
+		for deadline := time.Now().Add(time.Minute); ; time.Sleep(100 * time.Millisecond) {
+			got := dial(t, id, reach...)
+			if !slices.ContainsFunc(reach, func(a string) bool { return got[a] != "connected" }) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the network of the %s reaches no %v within a minute: %v", name, reach, got)
+			}
+		}
+	}
+	return netns
+}
+
+// dial dials each of addrs from the network namespace of the container netns and
+// returns, by address, "connected" or why it did not connect.
+func dial(t *testing.T, netns string, addrs ...string) map[string]string {
 	t.Helper()
-	m := &machine{t: t, name: name, root: filepath.Join(root, name)}
-	m.work = filepath.Join(m.root, "work")
-	for _, d := range []string{"bin", "home", "tmp", "cache", "config", "gopath", "work"} {
-		if err := os.MkdirAll(filepath.Join(m.root, d), 0o755); err != nil {
-			t.Fatal(err)
+	got := map[string]string{}
+	for _, l := range strings.Split(docker(t, append([]string{"exec", netns, "/exitnet", "dial"}, addrs...)...), "\n") {
+		a, r, _ := strings.Cut(l, " ")
+		got[a] = r
+	}
+	return got
+}
+
+// dial dials each of addrs from the environment.
+func (m *machine) dial(addrs ...string) map[string]string {
+	m.t.Helper()
+	return dial(m.t, m.netns, addrs...)
+}
+
+// holds returns the paths of the files of a container of the environment's image that
+// hold a byte, and of its links but those into /proc that the container runtime makes.
+func (m *machine) holds() []string {
+	m.t.Helper()
+	id := docker(m.t, "create", m.image, "aiopsctl")
+	defer exec.Command("docker", "rm", id).Run()
+	cmd := exec.Command("docker", "export", id)
+	pipe, err := cmd.StdoutPipe()
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	var out []string
+	for r := tar.NewReader(pipe); ; {
+		h, err := r.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			m.t.Fatal(err)
+		}
+		if h.Typeflag == tar.TypeReg && h.Size > 0 || h.Typeflag == tar.TypeSymlink && !strings.HasPrefix(h.Linkname, "/proc/") {
+			out = append(out, h.Name)
 		}
 	}
-	t.Cleanup(func() { writable(filepath.Join(m.root, "gopath")) })
-	for _, n := range slices.Sorted(maps.Keys(tools)) {
-		if err := os.Symlink(tools[n], filepath.Join(m.root, "bin", n)); err != nil {
-			t.Fatal(err)
-		}
+	if err := cmd.Wait(); err != nil {
+		m.t.Fatal(err)
 	}
-	path := filepath.Join(m.root, "bin")
-	if system {
-		path += ":/usr/local/bin:/usr/bin:/bin"
-	}
-	m.env = append([]string{"PATH=" + path, "HOME=" + filepath.Join(m.root, "home"), "TMPDIR=" + filepath.Join(m.root, "tmp"),
-		"XDG_CACHE_HOME=" + filepath.Join(m.root, "cache"), "XDG_CONFIG_HOME=" + filepath.Join(m.root, "config"),
-		"GOPATH=" + filepath.Join(m.root, "gopath"), "GOCACHE=" + filepath.Join(m.root, "cache", "go-build"),
-		// The Go environment of ADR-060 decision 21: GOPRIVATE and GONOPROXY are unset.
-		"GOPROXY=file://" + filepath.ToSlash(proxy), "GOSUMDB=off", "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly",
-		// The network: no request leaves the loopback interface.
-		"HTTP_PROXY=http://127.0.0.1:9", "HTTPS_PROXY=http://127.0.0.1:9", "NO_PROXY=",
-		"DOCKER_CONFIG=" + filepath.Join(m.root, "config", "docker"), "AIOPS_KEY_PASSWORD=" + password}, extra...)
-	return m
+	return out
 }
 
 // writable makes the directories under dir writable: the go command writes its module
@@ -134,28 +258,25 @@ type result struct {
 	out, errOut string
 }
 
-// run runs args in dir, the working directory when it is "", with the environment of
-// m: args[0] is a program of its bin/ or an absolute path.
+// run runs args in dir, the working directory when it is "", in a container of m:
+// args[0] is a program on its PATH or an absolute path.
 func (m *machine) run(dir string, args ...string) result {
 	m.t.Helper()
-	prog := args[0]
-	if !filepath.IsAbs(prog) {
-		prog = filepath.Join(m.root, "bin", prog)
-		if _, err := os.Stat(prog); err != nil {
-			m.t.Fatalf("the %s holds no %s", m.name, args[0])
-		}
+	a := append([]string{"run", "--rm", "--network", "container:" + m.netns, "-w", cmp(dir, m.work)}, m.opts...)
+	for _, e := range m.env {
+		a = append(a, "-e", e)
 	}
-	cmd := exec.Command(prog, args[1:]...)
+	cmd := exec.Command("docker", append(append(a, m.image), args...)...)
 	var out, errOut bytes.Buffer
-	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = cmp(dir, m.work), m.env, &out, &errOut
+	cmd.Stdout, cmd.Stderr = &out, &errOut
 	err := cmd.Run()
 	r := result{out: out.String(), errOut: errOut.String()}
 	var exit *exec.ExitError
 	switch {
-	case errors.As(err, &exit):
+	case errors.As(err, &exit) && exit.ExitCode() < 125:
 		r.code = exit.ExitCode()
-	case err != nil:
-		m.t.Fatalf("%s: %v", strings.Join(args, " "), err)
+	case err != nil: // docker run did not start the program: the image holds none of that name, or the runtime failed
+		m.t.Fatalf("the %s: %s: %v\n%s", m.name, strings.Join(args, " "), err, r.errOut)
 	}
 	m.t.Logf("%s$ %s: exit %d\n%s%s", m.name, strings.Join(args, " "), r.code, r.out, r.errOut)
 	return r
@@ -164,7 +285,7 @@ func (m *machine) run(dir string, args ...string) result {
 // with returns m with the variables env set over its own.
 func (m *machine) with(env ...string) *machine {
 	c := *m
-	c.env = append(slices.Clone(m.env), env...) // os/exec takes the last value of a variable
+	c.env = append(slices.Clone(m.env), env...) // docker run takes the last value of a variable
 	return &c
 }
 
@@ -199,10 +320,11 @@ func docker(t *testing.T, args ...string) string {
 }
 
 // startRegistry runs the pinned registry image with its port published on the loopback
-// interface, and returns its host and port. It removes the container with the volume
-// that the image declares, which holds what the exit pushed, and the image when the job
-// held none before; a volume left behind fails the test, which then removes it.
-func startRegistry(t *testing.T) string {
+// interface, and returns its host and port and its container, which networks attaches to
+// the network of each environment. It removes the container with the volume that the
+// image declares, which holds what the exit pushed, and the image when the job held none
+// before; a volume left behind fails the test, which then removes it.
+func startRegistry(t *testing.T) (string, string) {
 	t.Helper()
 	if exec.Command("docker", "image", "inspect", registryImage).Run() != nil {
 		t.Cleanup(func() { _ = exec.Command("docker", "image", "rm", registryImage).Run() })
@@ -229,7 +351,7 @@ func startRegistry(t *testing.T) string {
 		if r, err := http.Get("http://" + host + "/v2/"); err == nil {
 			r.Body.Close()
 			if r.StatusCode == http.StatusOK {
-				return host
+				return host, id
 			}
 		}
 		if time.Now().After(deadline) {

@@ -12,16 +12,19 @@
 // decision 13); and the registry of the exit, the pinned distribution image run inside
 // the job, which receives the release image, the builder image and the release
 // artifact (ADR-047 decision 4). Nothing is published outside the test, and every key,
-// container, volume and image it makes is removed with it (ADR-057 decision 5).
+// container, volume, network and image it makes is removed with it (ADR-057 decision 5).
 //
-// It then drives three environments, each a directory of its own outside the
-// repository (machine): the author's repository, with a Go toolchain and the aiopsctl
-// of the test release; the pack author's machine, with that aiopsctl alone; and the
-// clean machine, with that aiopsctl and a container runtime, whose builds run on the
-// builder image, or with AIOPS_EXIT_BUILDER=local on the pinned toolchain module that
-// the module proxy serves (the second job). Every step A1 to A3, P1, C1 to C6, D1 and
-// D2 passes only as decision 30 states it, and the kernel of steps C3 to C6 runs in the
-// container form of ADR-047 decision 15. The cases of decision 31 that the exit reaches
+// It then drives three environments, each run as containers on a network of its own
+// (machine, networks; the owner's answer of 2026-11-26) that reaches the registry and,
+// from the author's repository, the module proxy, which a container serves from its
+// directory, and nothing else: the author's repository, with a Go toolchain and the
+// aiopsctl of the test release; the pack author's machine, with that aiopsctl alone;
+// and the clean machine, with that aiopsctl and a container runtime, whose builds read
+// the module proxy's directory and run on the builder image, or with
+// AIOPS_EXIT_BUILDER=local on the pinned toolchain module that the module proxy serves
+// (the second job). The case networks holds each network to that. Every step A1 to A3,
+// P1, C1 to C6, D1 and D2 passes only as decision 30 states it, and the kernel of steps
+// C3 to C6 runs in the container form of ADR-047 decision 15. The cases of decision 31 that the exit reaches
 // run beside them: plugin smoke of A2's plugin, plugin verify of A3's artifact, of P1's
 // pack and of a copy of the pack whose fixture changed, and a site build that departs
 // from the release bindings and accepts a licence outside the allow-list. So do the
@@ -102,7 +105,7 @@ type exit struct {
 	t                *testing.T
 	root, repo       string
 	builder          string // the path of the clean machine's builds: image or local
-	proxy            string // the module proxy, a directory served through file://
+	proxy            string // the module proxy: a directory, served at http://proxy and the module source of the builds
 	reg              string // the registry: its host and port on the loopback interface
 	manifest         []byte // the test release's signed manifest
 	signed           string // the file that the release publishes it in, for plugin gate --against
@@ -144,34 +147,65 @@ func TestS2aExit(t *testing.T) {
 			_ = exec.Command("docker", "image", "rm", img).Run()
 		}
 	})
-	x.reg = startRegistry(t)
+	var registry string
+	x.reg, registry = startRegistry(t)
 	x.buildRelease()
+	netns := x.networks(registry, x.image(map[string]string{"exitnet": x.exitnet()}))
 
-	goBin, err := exec.LookPath("go")
+	// The image of the author's repository and of the pack author's machine holds the
+	// test release's aiopsctl alone. The author's containers also have, read-only, the
+	// host's Go toolchain and the system directories that hold the host's programs, a C
+	// compiler for -race among them, as on an author's computer, with the module proxy's
+	// directory, the module source that plugin smoke builds from, and, on the image path,
+	// the container runtime, which plugin smoke runs the builder image on. Its go command
+	// resolves modules through the module proxy at http://proxy.
+	out, err := exec.Command("go", "env", "GOROOT").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
-	goBin, _ = filepath.EvalSymlinks(goBin)
+	goroot := strings.TrimSpace(string(out))
+	ctl := x.image(map[string]string{"bin/aiopsctl": x.aiopsctl})
+	system := []string{"/usr"}
+	for _, d := range []string{"/lib", "/lib32", "/lib64", "/libx32"} {
+		if _, err := os.Stat(d); err == nil {
+			system = append(system, d)
+		}
+	}
+	opts := bound(append(system, goroot, x.proxy)...)
+	if x.builder == "image" {
+		opts = append(opts, containerRuntime(t)...)
+	}
+	author := newMachine(t, x.root, "author", ctl, netns["author"], "/bin:"+goroot+"/bin:/usr/local/bin:/usr/bin", opts)
+	packer := newMachine(t, x.root, "packer", ctl, netns["packer"], "/bin", nil)
+	// The clean machine's image holds that aiopsctl and the host's docker client, with
+	// the shared libraries it loads; its containers have the container runtime, the
+	// module proxy's directory and the release's signed manifest. Its only module reader
+	// is the builder, which takes that directory and refuses a GOPROXY that names a URL
+	// until L14 clears (ADR-044 decision 7), so its GOPROXY names the directory.
 	dockerBin, err := exec.LookPath("docker")
 	if err != nil {
 		t.Fatal(err)
 	}
-	author := newMachine(t, x.root, "author", x.proxy, map[string]string{"go": goBin, "gofmt": filepath.Join(filepath.Dir(goBin), "gofmt"),
-		"aiopsctl": x.aiopsctl}, true)
-	packer := newMachine(t, x.root, "packer", x.proxy, map[string]string{"aiopsctl": x.aiopsctl}, false, "DOCKER_HOST=unix:///nonexistent")
+	files := map[string]string{"bin/aiopsctl": x.aiopsctl, "bin/docker": dockerBin}
+	libs, _ := exec.Command("ldd", dockerBin).Output() // a static docker loads none
+	for _, f := range strings.Fields(string(libs)) {
+		if filepath.IsAbs(f) {
+			files[f[1:]] = f
+		}
+	}
 	home := filepath.Join(x.root, "clean", "site", "home")
-	clean := newMachine(t, x.root, "clean", x.proxy, map[string]string{"aiopsctl": x.aiopsctl, "docker": dockerBin}, false, "AIOPS_HOME="+home)
+	clean := newMachine(t, x.root, "clean", x.image(files), netns["clean"], "/bin", append(bound(x.proxy, x.signed), containerRuntime(t)...),
+		"GOPROXY=file://"+x.proxy, "AIOPS_HOME="+home)
 	if err := os.MkdirAll(filepath.Dir(home), 0o755); err != nil {
 		t.Fatal(err)
-	}
-	exitnet := x.exitnet()
-	for _, m := range []*machine{author, packer, clean} {
-		m.exitnet = exitnet
 	}
 	x.isolated(author, packer, clean)
 
 	a := x.author(author)
 	x.pack(packer)
+	// What the author and the pack author hand to the clean machine: the module source
+	// of D1's copy and the pack author's public key.
+	clean.opts = append(clean.opts, bound(a.copySrc, filepath.Join(packer.work, "packer.pub"))...)
 	x.cleanMachine(clean, author, packer, a, home)
 }
 
@@ -202,6 +236,7 @@ func (x *exit) isolated(author, packer, clean *machine) {
 		}
 		for _, m := range []*machine{author, packer, clean} {
 			m.t = t
+			defer func() { m.t = x.t }()
 			want := map[string]bool{x.reg: true, "proxy:80": m.name == "author", "1.1.1.1:443": false}
 			for _, a := range host {
 				want[a] = false
@@ -212,7 +247,6 @@ func (x *exit) isolated(author, packer, clean *machine) {
 					t.Errorf("the %s dials %s: %q; want it %s", m.name, a, g, map[bool]string{true: "connected", false: "not connected"}[want[a]])
 				}
 			}
-			m.t = x.t
 		}
 		if got := packer.holds(); !slices.Equal(got, []string{"bin/aiopsctl"}) {
 			t.Errorf("the pack author's machine holds %v; want aiopsctl alone", got)
@@ -472,9 +506,12 @@ func (x *exit) author(m *machine) authored {
 	// 58, reading 1): the test-only profile boots with every row of aiops-core ACTIVE
 	// but reload-socket, which the patch of smoke disables, and the echo row waiting for
 	// echoers, which no row of the profile provides.
+	// The builder reads the module proxy's directory that --modcache names and refuses a
+	// GOPROXY that names a URL until L14 clears (ADR-044 decision 7; ADR-060 decision 21),
+	// so plugin smoke runs with GOPROXY naming that directory.
 	t.Run("smoke", func(t *testing.T) {
 		m.t = t
-		r := m.must(a.dir, "aiopsctl", "plugin", "smoke", ".", "--against", x.release, "--modcache", x.proxy, "--builder", x.builder)
+		r := m.with("GOPROXY=file://"+x.proxy).must(a.dir, "aiopsctl", "plugin", "smoke", ".", "--against", x.release, "--modcache", x.proxy, "--builder", x.builder)
 		for _, want := range []string{"row clock: ACTIVE\n", "row config-refs: ACTIVE\n", "row loader: ACTIVE\n", "row readiness: ACTIVE\n",
 			"row reload: ACTIVE\n", "row restart-policy: ACTIVE\n", "row echo: PENDING and waits for echoers\n"} {
 			if !strings.Contains(r.out, want) {
