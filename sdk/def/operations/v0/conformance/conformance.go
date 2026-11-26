@@ -739,6 +739,33 @@ func Run(t *testing.T, mount Mount) {
 				t.Errorf("trust add while a process runs dev: %+v; want restart-required, not-submitted, and the signer kept", ch)
 			}
 		})
+		rec.Run(t, "operations.O27 plugin install refuses an artifact of the name of one the profile holds under another owner, and writes nothing", func(t *testing.T) {
+			u := use(t, mount, Setup{})
+			if err := u.install(u.signedPack(), "dev"); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(u.s.Dir, "beta")
+			for name, data := range Pack { // Pack under the owner beta: the group connector-x again (ADR-047 decision 17)
+				p := filepath.Join(dir, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(data), "acme/connector-x", "beta/connector-x")), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pub, out := u.key("beta"), filepath.Join(dir, "artifact")
+			u.trust(operations.TrustRequest{KeyFile: pub, IDs: []string{"beta/*"}})
+			u.packed(dir, out, private(pub))
+			if in, err := u.ops.Inspect(t.Context(), operations.SpecRequest{Caller: u.caller(), Spec: out}); err != nil || in.ID != "beta/connector-x" {
+				t.Fatalf("inspect of the pack of beta/connector-x = %+v, %v; want that id", in, err)
+			}
+			before := u.homeOf("dev")
+			err := u.install(out, "dev")
+			if !errors.Is(err, operations.ErrRefused) || !strings.Contains(fmt.Sprint(err), "acme/connector-x") || !reflect.DeepEqual(u.homeOf("dev"), before) {
+				t.Errorf("install of beta/connector-x into dev, which holds acme/connector-x: %v; want ErrRefused naming acme/connector-x, and nothing written", err)
+			}
+		})
 	})
 
 	rec.Run(t, "guard", func(t *testing.T) {

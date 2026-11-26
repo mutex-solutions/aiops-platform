@@ -103,7 +103,7 @@ func (b box) Shipped(ctx context.Context) (map[string][]byte, error) { return b.
 
 // Gate answers the verdict of the Setup at plugin install; at plugin check it passes
 // every clause it evaluates, and denies check 10 where the attestation does not name the
-// plugin of the Setup.
+// plugin of the Setup, under the id that its manifest names.
 func (b box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, error) {
 	if q.Entry == "plugin install" {
 		return b.s.Verdict, ctx.Err()
@@ -112,14 +112,29 @@ func (b box) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdict, er
 	for _, n := range []int{1, 2, 5, 7, 8, 10} {
 		v.Clauses = append(v.Clauses, launch.Clause{Check: n, Outcome: launch.OutcomePass})
 	}
-	if !strings.Contains(string(q.Attestation), b.s.Plugin.Summary.ID+"@"+b.s.Plugin.Summary.Version) {
+	if !strings.Contains(string(q.Attestation), idOf(q.Manifest, b.s.Plugin.Summary.ID)+"@"+b.s.Plugin.Summary.Version) {
 		v.Clauses[5].Outcome = launch.OutcomeDeny
 	}
 	return v, ctx.Err()
 }
 
+// ReadManifest answers the summary of the Setup under the id that plugin.yaml of the
+// directory names, as boot's reader would, so that a case packs another owner's copy.
 func (b box) ReadManifest(ctx context.Context, q launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
-	return b.s.Plugin.Summary, nil, ctx.Err()
+	sum := b.s.Plugin.Summary
+	f, _ := os.ReadFile(filepath.Join(q.Dir, "plugin.yaml"))
+	sum.ID = idOf(f, sum.ID)
+	return sum, nil, ctx.Err()
+}
+
+// idOf returns the id that the manifest names, or id where it names none.
+func idOf(manifest []byte, id string) string {
+	for _, l := range strings.Split(string(manifest), "\n") {
+		if v, ok := strings.CutPrefix(l, "id: "); ok {
+			return v
+		}
+	}
+	return id
 }
 
 func (b box) Template(ctx context.Context, q launch.TemplateRequest) (map[string][]byte, error) {
