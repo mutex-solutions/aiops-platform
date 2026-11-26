@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
@@ -120,6 +121,41 @@ func TestRunBootsAndStops(t *testing.T) {
 	}
 	if s := readStatus(t, h); s.Phase != "stopped" || s.Ready || s.Exit != 0 {
 		t.Fatalf("final status %+v", s)
+	}
+}
+
+// One server process runs on a home (ADR-062 decision 2, until S4b): a second process on
+// the home refuses at once, exit 1, naming the process lock, and writes no status, so
+// status.json keeps saying that the first one runs its profile, and aiopsctl submits to
+// it.
+func TestASecondProcessOnTheHomeRefuses(t *testing.T) {
+	h := home(t, "[]")
+	out := &readyWriter{ready: make(chan struct{})}
+	e, _, sig := env("--profile", "p", "--home", h)
+	e.Stdout = out
+	done := make(chan int, 1)
+	go func() { done <- Run(context.Background(), "aiops", e, distribution(t)) }()
+	select {
+	case <-out.ready:
+	case code := <-done:
+		t.Fatalf("the first process exited with %d", code)
+	}
+	defer func() { sig <- syscall.SIGTERM; <-done }()
+	e2, stderr2, sig2 := env("--profile", "other", "--home", h)
+	second := make(chan int, 1)
+	go func() { second <- Run(context.Background(), "aiops", e2, distribution(t)) }()
+	select {
+	case code := <-second:
+		if code != boot.ExitRefused || !strings.Contains(stderr2.String(), "process.lock") {
+			t.Errorf("the second process: exit %d, stderr %q; want exit 1 naming run/process.lock", code, stderr2.String())
+		}
+	case <-time.After(10 * time.Second):
+		sig2 <- syscall.SIGTERM
+		<-second
+		t.Errorf("a second process ran on the home: %s", stderr2.String())
+	}
+	if s := readStatus(t, h); s.Phase != "running" || s.Profile != "p" {
+		t.Errorf("status.json after the second process: %+v; want the first one's, running p", s)
 	}
 }
 
