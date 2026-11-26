@@ -159,6 +159,45 @@ func TestASecondProcessOnTheHomeRefuses(t *testing.T) {
 	}
 }
 
+// A snapshot/ that a live write of aiopsctl holds, under the flock of write.lock, is
+// that write's, which restores or keeps its files under its lock: a server that
+// replaces one killed mid-submission boots, so that the write's await reaches it
+// (ADR-062 decision 10). A snapshot that no writer holds is a stopped write's, and the
+// server refuses it, naming profile sanitize (ADR-061 decision 17).
+func TestRunBootsTheSnapshotOfALiveWrite(t *testing.T) {
+	h := home(t, "[]")
+	if err := os.MkdirAll(filepath.Join(h, "snapshot"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h, "snapshot", "paths.json"), []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitRefused || !strings.Contains(stderr.String(), "profile sanitize") {
+		t.Fatalf("a snapshot that no writer holds: exit %d, %s; want 1 naming profile sanitize", code, stderr.String())
+	}
+	lock, err := os.OpenFile(filepath.Join(h, "write.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err == nil {
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	out := &readyWriter{ready: make(chan struct{})}
+	e, stderr, sig := env("--profile", "p", "--home", h)
+	e.Stdout = out
+	done := make(chan int, 1)
+	go func() { done <- Run(context.Background(), "aiops", e, distribution(t)) }()
+	select {
+	case <-out.ready:
+		sig <- syscall.SIGTERM
+		<-done
+	case code := <-done:
+		t.Fatalf("a snapshot that a live write holds: exit %d, %s; want the server to boot", code, stderr.String())
+	}
+}
+
 func TestRunUsesTheHomeFromTheEnvironmentAndShippedFiles(t *testing.T) {
 	h := t.TempDir()
 	shipped := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}, "bundles/b/bundle.yaml": {Data: []byte("[]")}}
