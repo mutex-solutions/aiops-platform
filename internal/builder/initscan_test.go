@@ -42,7 +42,9 @@ func scan(t *testing.T) map[string][]Finding {
 // The deny-list (ADR-044 decisions 11, 12, 24 and 25): per kind, a registration from
 // init fails, in the main package or in the package that declares the registry; a
 // registration reached through an interface method and one through a function value
-// fail, on the call graph of vta; a mux of its own is no default mux. The default mux
+// fail, on the call graph of vta, and so does one in a function that init hands on as a
+// value, which the runtime may call (time.AfterFunc); a mux of its own is no default
+// mux. The default mux
 // and the default registry count however init reaches them: through an interface
 // value, a method value, a variable that holds them, a parameter, or a factory of
 // promauto; the default mux used after init does not. The exceptions table, keyed by
@@ -58,6 +60,8 @@ func TestInitDenyList(t *testing.T) {
 		"promauto":    "a default-registry collector: github.com/prometheus/client_golang/prometheus/promauto.NewCounter in example.test/inits/cmd/promauto.init",
 		"iface":       "a database/sql driver: database/sql.Register in (example.test/inits/cmd/iface.viaMethod).do",
 		"funcval":     "a database/sql driver: database/sql.Register in example.test/inits/cmd/funcval.viaValue",
+		"afterfunc":   "a default-mux handler: net/http.HandleFunc in example.test/inits/cmd/afterfunc.init",
+		"sqlafter":    "a database/sql driver: database/sql.Register in example.test/inits/cmd/sqlafter.register",
 		"ifacemux":    mux + "ifacemux.init#1",
 		"methodvalue": mux + "methodvalue.init",
 		"aliasmux":    mux + "aliasmux.init",
