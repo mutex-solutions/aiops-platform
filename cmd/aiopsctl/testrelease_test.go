@@ -23,6 +23,7 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/builder"
+	echoers "github.com/mutex-solutions/aiops-platform/sdk/def/echoers/v0/conformance"
 	"github.com/mutex-solutions/aiops-platform/test/modsrc"
 )
 
@@ -35,7 +36,8 @@ import (
 // and generated tests of each plugin, as on every release; its manifest's module table
 // is the input's, the release table plus the dispatcher, the instantiable echoer, the
 // caller and teststate. The second writes the server and the aiopsctl of that
-// distribution, and that aiopsctl boots on its built-in record with no trust.yaml. It
+// distribution, and that aiopsctl boots on its built-in record with no trust.yaml and
+// runs the case of the connector template of the template job on its pack. It
 // builds from nothing with the pinned toolchain module, so -short skips it and the CI job
 // builder runs it.
 func TestTestRelease(t *testing.T) {
@@ -122,5 +124,34 @@ func TestTestRelease(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(q.Out, "aiops", "aiops")); err != nil {
 		t.Errorf("the second phase wrote no server: %v", err)
+	}
+
+	// The case of the connector template of the template job, which this job runs since it
+	// builds the release (ADR-060 decision 24, note of 2026-11-26): plugin new connector of
+	// the release's aiopsctl writes a pack of the release's instantiable echoer, and
+	// plugin check fails each obligation of echoers once, on the suite binary that the
+	// release embeds.
+	work := t.TempDir()
+	ctl := func(dir string, args ...string) (int, string) {
+		cmd := exec.Command(filepath.Join(q.Out, "aiopsctl", "aiopsctl"), args...)
+		cmd.Dir, cmd.Env = dir, []string{"AIOPS_HOME=" + t.TempDir(), "HOME=" + t.TempDir(), "PATH=" + os.Getenv("PATH")}
+		b, err := cmd.CombinedOutput()
+		if err != nil && cmd.ProcessState == nil {
+			t.Fatal(err)
+		}
+		return cmd.ProcessState.ExitCode(), string(b)
+	}
+	if code, out := ctl(work, "plugin", "new", "connector", "acme/job-connector"); code != 0 {
+		t.Fatalf("plugin new connector of the test release: exit %d\n%s", code, out)
+	}
+	code, out := ctl(filepath.Join(work, "job-connector"), "plugin", "check")
+	var failed []string
+	for _, l := range strings.Split(out, "\n") {
+		if id, ok := strings.CutSuffix(strings.TrimSpace(l), ": the obligation failed"); ok {
+			failed = append(failed, id)
+		}
+	}
+	if code != 1 || !strings.Contains(out, "step 5 conformance: fail\n") || !slices.Equal(failed, echoers.Obligations) {
+		t.Errorf("plugin check of the connector pack: exit %d, the failed obligations %v; want step 5 failing each of %v once\n%s", code, failed, echoers.Obligations, out)
 	}
 }
