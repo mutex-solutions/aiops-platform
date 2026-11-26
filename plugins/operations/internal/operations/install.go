@@ -86,13 +86,14 @@ func recorded(ctx context.Context, src source, d ocispec.Descriptor) ([]byte, er
 // Install is plugin install: under the lock it verifies the signature and the
 // attestation as Verify does, refuses remote code until S2b and a pack or remote code
 // into the profile cli (ADR-061 decision 40), refuses an id that another profile names
-// at another digest, since a site holds one (ADR-047 decision 7), renders the profile
-// with the artifact's bundle appended, which refuses a group that clashes, refuses an
-// artifact of the name of one the profile holds, of whatever owner, and runs every
-// clause of the entry point plugin install. A denial and rebuild-required write
-// nothing. Then it writes the kept files, which it reuses where another profile names
-// them and which replace, with a note, a leftover that no profile names (decision 10),
-// the record, plugins.lock for a pack and the bundle list, and submits.
+// at another digest, since a site holds one (ADR-047 decision 7), refuses an artifact
+// of the name of one the profile holds, of whatever owner, or the same artifact again,
+// renders the profile with the artifact's bundle appended, which refuses a group that
+// clashes, and runs every clause of the entry point plugin install. A denial and
+// rebuild-required write nothing. Then it writes the kept files, which it reuses where
+// another profile names them and which replace, with a note, a leftover that no
+// profile names (decision 10), the record, plugins.lock for a pack and the bundle
+// list, and submits.
 func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change, error) {
 	h, err := l.home(r.Home)
 	if err == nil {
@@ -139,21 +140,30 @@ func (l Library) Install(ctx context.Context, r def.InstallRequest) (def.Change,
 				return nil, err
 			}
 			copied = note
-			bundle, err := fetchLayer(ctx, src, a.m, layerBundle)
-			if err == nil {
-				err = l.admit(ctx, h, r.Profile, src, d, a, bundle, &ch)
-			}
-			if err != nil {
-				return nil, err
-			}
+			// A name the profile holds is refused before the gate, whose group clash of
+			// check 8 names neither artifact (ADR-047 decision 17).
 			list, err := withBundles(profile, func(list []string) ([]string, error) {
 				for _, b := range list {
-					if def.Group(b) == def.Group(a.ID) {
-						return nil, refused("%s holds %s, and two artifacts of the name %s never compose together (ADR-047 decision 17); plugin remove it first", r.Profile, b, def.Group(a.ID))
+					switch {
+					case b == a.ID && keptAt == d.Digest.String():
+						return nil, refused("%s already installs %s at %s", r.Profile, a.ID, d.Digest)
+					case b == a.ID:
+						return nil, refused("%s installs %s at another digest, %s: plugin remove %s first, then install %s (ADR-047 decision 7)",
+							r.Profile, a.ID, cmp.Or(keptAt, "with no kept files"), a.ID, d.Digest)
+					case def.Group(b) == def.Group(a.ID):
+						return nil, refused("%s holds %s, and %s and %s, two artifacts of the name %s, never compose together (ADR-047 decision 17); plugin remove %s first",
+							r.Profile, b, b, a.ID, def.Group(a.ID), b)
 					}
 				}
 				return append(list, a.ID), nil
 			})
+			if err != nil {
+				return nil, err
+			}
+			bundle, err := fetchLayer(ctx, src, a.m, layerBundle)
+			if err == nil {
+				err = l.admit(ctx, h, r.Profile, src, d, a, bundle, &ch)
+			}
 			if err != nil {
 				return nil, err
 			}
