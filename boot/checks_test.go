@@ -714,6 +714,10 @@ func TestLicensed(t *testing.T) {
 		"MIT": true, "Apache-2.0 AND MIT": true, "GPL-2.0-only": false, "GPL-2.0-or-later OR BSD-3-Clause": true,
 		"(MIT OR GPL-2.0-only) AND ISC": true, "MIT AND (GPL-2.0-only OR LGPL-2.1-only)": false, "GPL-2.0+": false,
 		"": false, "MIT AND": false, "LicenseRef-x": false,
+		// Every licence that L7 allows, PostgreSQL among them (register exception item of
+		// 2026-11-26).
+		"PostgreSQL": true, "PostgreSQL AND MIT": true, "Unicode-DFS-2016": true, "Unicode-3.0": true, "BlueOak-1.0.0": true,
+		"Zlib": true, "0BSD": true, "BSD-2-Clause": true,
 	} {
 		if got := Licensed(e, nil); got != want {
 			t.Errorf("Licensed(%q) = %v", e, got)
