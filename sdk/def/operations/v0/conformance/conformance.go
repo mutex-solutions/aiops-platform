@@ -71,7 +71,8 @@ type Setup struct {
 	// Plugin is what the toolbox finds in the plugin of plugin check or plugin pack:
 	// ReadManifest answers its summary, PackSummary unless a case sets one, Suite
 	// fails the obligations of echoers in Failed, and the plugin's own tests skip the
-	// tests in Skipped; Generate, Vet and Gate find nothing.
+	// tests in Skipped; Generate, Vet and Gate find nothing; and Release answers a
+	// release whose serves hold the key echoers under echoers, which step 5 reads.
 	Plugin Plugin
 	// Verdict is what the toolbox's Gate answers at plugin install, and Result the final
 	// result with which a process that runs the profile answers a submission over the
