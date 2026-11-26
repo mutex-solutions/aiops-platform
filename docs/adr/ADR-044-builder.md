@@ -860,7 +860,14 @@ settles it.
     function values** (Q11 (a)), on the call graph that
     `golang.org/x/tools/go/callgraph/vta` builds over the SSA form of the whole program
     (decision 12). An edge that over-approximates a dynamic call and reaches a
-    registration is a finding, cleared only by an exception of decision 21.
+    registration is a finding, cleared only by an exception of decision 21. Note of
+    2026-11-26 (review round over the whole step): a function or closure that a reached
+    call of `time.AfterFunc`, `context.AfterFunc`, `runtime.SetFinalizer` or
+    `runtime.AddCleanup` hands to the runtime is reached too, since the runtime calls it
+    through no edge of the graph; one that a variable or a parameter carries to that call
+    is not. Following every function a reached function refers to as a value was tried
+    and refused: it finds closures that inits store as test hooks in gRPC and the HTTP
+    server's handler, which no init runs.
 
 26. **The classifier carries a corpus built from the SPDX License List data** (Q12 (b)),
     at a pinned version and embedded by the builder package. The classifier is linked

@@ -87,9 +87,10 @@ func (f Finding) String() string {
 // ScanInits loads the program of the main packages mains in dir with env, with the build
 // flags of every binary, builds its SSA form and the call graph of the whole program
 // that golang.org/x/tools/go/callgraph/vta builds, which follows static calls,
-// interface method calls and calls through function values, and returns every
-// registration reachable from an init that no exception names. A call through
-// reflection or unsafe is not followed (ADR-044 decision 12).
+// interface method calls and calls through function values, with the functions that a
+// reached call hands to the runtime (later), and returns every registration reachable
+// from an init that no exception names. A call through reflection or unsafe is not
+// followed (ADR-044 decision 12).
 func ScanInits(ctx context.Context, dir string, env []string, mains ...string) ([]Finding, error) {
 	// go/packages runs the go that the process's PATH names, not env's, so env's PATH
 	// stands for it while the graph loads: the builder's go is the pinned toolchain's,
@@ -154,13 +155,40 @@ func ScanInits(ctx context.Context, dir string, env []string, mains ...string) (
 				}
 				continue // the registry's own body is not followed
 			}
-			if seen[e.Callee] == "" {
-				seen[e.Callee] = seen[n]
-				queue = append(queue, e.Callee)
+			for _, next := range append([]*callgraph.Node{e.Callee}, handed(cg, e)...) {
+				if next != nil && seen[next] == "" {
+					seen[next] = seen[n]
+					queue = append(queue, next)
+				}
 			}
 		}
 	}
 	return out, nil
+}
+
+// later are the functions that hand a function value to the runtime, which calls it
+// after they return through no edge of the call graph: a function or closure passed to
+// one of them is reached from the init that reaches the call.
+// ponytail: the function or closure written in the call only; one that a variable or a
+// parameter carries there is not followed.
+var later = map[string]bool{"time.AfterFunc": true, "context.AfterFunc": true, "runtime.SetFinalizer": true, "runtime.AddCleanup": true}
+
+// handed returns the nodes of cg of the functions that the call of e hands to the
+// runtime, nil for one cg does not hold.
+func handed(cg *callgraph.Graph, e *callgraph.Edge) []*callgraph.Node {
+	var out []*callgraph.Node
+	if name, _, _ := strings.Cut(e.Callee.Func.String(), "["); e.Site == nil || !later[name] {
+		return nil
+	}
+	for _, a := range e.Site.Common().Args {
+		if c, ok := a.(*ssa.MakeClosure); ok {
+			a = c.Fn
+		}
+		if fn, ok := a.(*ssa.Function); ok {
+			out = append(out, cg.Nodes[fn])
+		}
+	}
+	return out
 }
 
 // registration returns the kind of the registration that the call of e makes, and the
