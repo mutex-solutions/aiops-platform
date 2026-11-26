@@ -119,6 +119,37 @@ func TestInstallKeepsAPack(t *testing.T) {
 	}
 }
 
+// rowsBox is installBox whose Render answers rd.
+type rowsBox struct {
+	installBox
+	rd launch.Rendered
+}
+
+func (b rowsBox) Render(context.Context, launch.RenderRequest) (launch.Rendered, error) {
+	return b.rd, nil
+}
+
+// Disable refuses the rows that carry its own submission, reload-socket and reload,
+// writes nothing and submits nothing to the process that runs the profile, so the
+// command exits 1 with the home as it was (ADR-062 decisions 12 and 18).
+func TestDisableOfTheRowsOfTheSubmission(t *testing.T) {
+	rows := []launch.Row{{ID: "reload", Plugin: "aiops/reload", Enabled: true}, {ID: "reload-socket", Plugin: "aiops/reload-socket", Enabled: true}}
+	l := Library{Box: rowsBox{installBox{&packBox{}}, launch.Rendered{Composition: launch.Composition{Rows: rows}}}, LockWait: time.Second}
+	h := Home{Dir: filepath.Join(t.TempDir(), "home")}
+	put(t, h, "profiles/dev/profile.yaml", "bundles: [aiops-core]\n")
+	put(t, h, "run/status.json", `{"phase": "running", "profile": "dev"}`) // a process runs dev, with no socket to answer
+	before := tree(t, h)
+	for _, r := range rows {
+		ch, err := l.Disable(t.Context(), def.RowRequest{Home: h.Dir, Profile: "dev", Row: r.ID, ConnectWait: time.Millisecond})
+		if !errors.Is(err, def.ErrRefused) || !strings.Contains(err.Error(), "ADR-062 decision 12") || ch.Outcome != "" {
+			t.Errorf("disable %s: %+v, %v; want ErrRefused naming ADR-062 decision 12 and no submission", r.ID, ch, err)
+		}
+	}
+	if got := tree(t, h); !equal(got, before) {
+		t.Errorf("a refused disable wrote the home: %v", got)
+	}
+}
+
 // Remove takes the plugin id of an installed artifact only, one with its kept files or
 // its lock entry: aiops-cli of the profile cli, the bundle that inserts reload-socket,
 // another first-party bundle, an id with no kept files and an id that is no plugin id
