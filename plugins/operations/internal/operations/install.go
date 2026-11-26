@@ -802,7 +802,7 @@ func (l Library) Remove(ctx context.Context, r def.RemoveRequest) (def.Change, e
 	submit := submitted(h, r.Profile, reload.CommandRemove, r.ID, [2]time.Duration{r.ConnectWait, r.Wait}, &ch, &res, nil)
 	done, err := h.Write(ctx, Write{Command: "plugin remove " + r.ID,
 		Plan: func() ([]Change, error) {
-			b, err := os.ReadFile(h.path(list))
+			b, _, err := l.profile(ctx, h, r.Profile) // a shipped profile installs nothing
 			if err == nil {
 				b, err = withBundles(b, func(bs []string) ([]string, error) {
 					if i := slices.Index(bs, r.ID); i >= 0 {
