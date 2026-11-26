@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"syscall"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
@@ -66,8 +67,12 @@ type Env struct {
 }
 
 // StatusFile is the name, in the runtime directory of the home, of the file that
-// holds the launcher's last status as JSON.
-const StatusFile = "status.json"
+// holds the launcher's last status as JSON; ProcessLock that of the file whose flock(2)
+// the server process holds while it runs.
+const (
+	StatusFile  = "status.json"
+	ProcessLock = "process.lock"
+)
 
 type list []string
 
@@ -124,6 +129,17 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	if err := os.MkdirAll(runDir, 0o700); err != nil { // only the site user enters run/ (ADR-047 decision 14)
 		fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return boot.ExitInternal
+	}
+	// One server process runs on a home until S4b (ADR-062 decision 2): a second one
+	// refuses before it writes the status that aiopsctl reads of the first.
+	lock, err := os.OpenFile(filepath.Join(runDir, ProcessLock), os.O_RDWR|os.O_CREATE, 0o600)
+	if err == nil {
+		defer lock.Close() // the system releases the lock with it, and when the process dies
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	}
+	if err != nil {
+		fmt.Fprintf(e.Stderr, "error: another process runs on the home %s: %s is held (%v); one server process runs on a home (ADR-062 decision 2)\n", *home, filepath.Join(runDir, ProcessLock), err)
+		return boot.ExitRefused
 	}
 	publish := func(s boot.ProcessStatus) {
 		if err := runfile.Write(runDir, StatusFile, statusJSON(s)); err != nil {

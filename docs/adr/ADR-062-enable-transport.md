@@ -154,7 +154,12 @@
    it, since in hosted the profile layer is a platform table written only through
    `plugin-manager` (`00:491`); and from S4b, where several processes may run on one home,
    the lock of decision 4 lets the first serve the socket and fails the row in the others,
-   so ADR-038 states which process serves it.
+   so ADR-038 states which process serves it. Note of 2026-11-26 (review round over the
+   whole step): until S4b one server process runs on a home. `internal/serve` takes the
+   exclusive `flock(2)` of `<home>/run/process.lock` before it writes `status.json`, and
+   a second process on the home exits 1 naming that file and writes no status, which
+   would otherwise make `aiopsctl` read the first process as stopped or as running
+   another profile. S4b, which lets several processes share a home, replaces the rule.
 
 ### The socket and who may open it
 
