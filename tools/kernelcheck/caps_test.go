@@ -30,28 +30,31 @@ func capsOf(t *testing.T, file, call string) []string {
 }
 
 // make check and the test job of CI run the same line caps (the Makefile: "Keep the two
-// in step"), and the row package of the operations library has a cap of its own beside
-// the library's: ADR-060 decision 35 and ADR-061, Consequences, cap "the operations
-// library, plugins/operations" at 4,700 lines since the note of 2026-11-27 to decision
-// 35, which awaits the owner, and the library's cap measures internal/operations only.
-// The note of 2026-11-26 caps the builder at 3,700 lines, and the note of 2026-11-25
-// the operations fake and suite at 1,300 each.
+// in step"), and each is a cap fixed at the S2a exit, none provisional: ADR-060 decision
+// 35 makes each the count measured on the commit that closes S2a plus ten per cent,
+// rounded up to the next hundred. The row package of the operations library has a cap
+// of its own beside the library's, which measures internal/operations only.
 func TestLineCapsInStep(t *testing.T) {
 	mk := capsOf(t, "../../Makefile", "$(KC)")
 	ci := capsOf(t, "../../.github/workflows/ci.yml", "go run ./tools/kernelcheck")
 	if !slices.Equal(mk, ci) {
 		t.Errorf("the line caps differ:\nMakefile: %q\nci.yml:   %q", mk, ci)
 	}
-	for _, want := range []string{"plugins/operations 4700 provisional internal", "plugins/operations/internal/operations 4700 provisional",
-		"cmd/aiopsctl:internal/aiopsctl 2500 provisional", "internal/builder 3700 provisional",
-		"sdk/def/operations/v0/fake 1300 provisional", "sdk/def/operations/v0/conformance 1300 provisional"} {
+	for _, want := range []string{"sdk/kernel 8200", "loader 1300", "boot 10900", "plugins/operations 200 internal",
+		"plugins/operations/internal/operations 5100", "cmd/aiopsctl:internal/aiopsctl 300", "internal/builder 4100",
+		"sdk/def/operations/v0/fake 1200", "sdk/def/operations/v0/conformance 1300", "internal/vet 1300"} {
 		if !slices.Contains(mk, want) || !slices.Contains(ci, want) {
 			t.Errorf("no cap %q in the Makefile and ci.yml", want)
 		}
 	}
+	for _, c := range mk {
+		if strings.Contains(c, "provisional") {
+			t.Errorf("a provisional cap after the S2a exit: %q", c)
+		}
+	}
 	// The launcher of internal/aiopsctl came out of cmd/aiopsctl, whose row of ADR-060
-	// decision 35 is the only one: the two share its 2,500 lines, and neither has a cap
-	// of its own.
+	// decision 35 is the only one: the two share its budget, and neither has a cap of its
+	// own.
 	for _, c := range slices.Concat(mk, ci) {
 		if strings.HasPrefix(c, "cmd/aiopsctl ") || strings.HasPrefix(c, "internal/aiopsctl ") {
 			t.Errorf("a cap of its own: %q", c)

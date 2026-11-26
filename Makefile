@@ -165,20 +165,30 @@ check:
 	cd sdk/kernel && go test -count=1 -coverprofile=cover.out ./...
 	$(KC) modfile sdk/kernel
 	$(KC) modfile sdk $(MOD)/sdk/kernel $(MOD)/sdk/testkit
-	$(KC) lines sdk/plugin 2500 provisional
-	$(KC) lines internal/plugingen 1500 provisional
-	@# ADR-060 decision 35: cmd/aiopsctl and its launcher, internal/aiopsctl, which the
-	@# aiopsctl that dist build writes runs too, share the one 2,500 lines of the row of
-	@# cmd/aiopsctl; the builder, 3,700 lines since the note of 2026-11-26, provisional and
-	@# awaiting the owner.
-	$(KC) lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
-	$(KC) lines internal/builder 3700 provisional
-	@# ADR-060 decision 35 and ADR-061: the operations library, plugins/operations, 4,700
-	@# lines since the note of 2026-11-27, provisional and awaiting the owner: the row
-	@# package, internal/ skipped, and its internal package, with the client of
-	@# reload-socket (ADR-062 decision 16), each.
-	$(KC) lines plugins/operations 4700 provisional internal
-	$(KC) lines plugins/operations/internal/operations 4700 provisional
+	@# ADR-060 decision 35: the caps fixed at the S2a exit, each the count measured on the
+	@# commit that closes S2a plus ten per cent, rounded up to the next hundred.
+	$(KC) lines sdk/plugin 1400
+	$(KC) lines internal/plugingen 1100
+	@# cmd/aiopsctl and its launcher, internal/aiopsctl, which the aiopsctl that dist build
+	@# writes runs too, share one budget (ADR-060 decision 35, second note of 2026-11-25).
+	$(KC) lines cmd/aiopsctl:internal/aiopsctl 300
+	$(KC) lines internal/builder 4100
+	@# ADR-061: the operations library, plugins/operations: the row package, internal/
+	@# skipped, and its internal package, with the client of reload-socket (ADR-062
+	@# decision 16), each.
+	$(KC) lines plugins/operations 200 internal
+	$(KC) lines plugins/operations/internal/operations 5100
+	@# The other production packages that S2a adds (owner answer (4d) of 2026-11-25), and
+	@# the root package, manifests.go, each directory under the root a tree of its own.
+	$(KC) lines internal/vet 1300
+	$(KC) lines internal/packsuite 400
+	$(KC) lines internal/authoring 1000
+	$(KC) lines plugins/reload-socket 400 internal
+	$(KC) lines plugins/reload-socket/internal/socket 200
+	$(KC) lines templates 200
+	$(KC) lines sdk/testkit/cycle 200
+	$(KC) lines sdk/testkit/ocitest 400
+	$(KC) lines . 100 $$(find . -mindepth 1 -maxdepth 1 -type d | sed 's|^\./||')
 	go run ./tools/pluginapi .
 	$(KC) vocab sdk/kernel tools/kernelcheck/vocabulary.txt
 	$(KC) lines sdk/kernel 8200
@@ -202,37 +212,40 @@ check:
 	go run ./tools/register .
 	go test -count=1 -coverprofile=cover-boot.out ./boot
 	go test -count=1 -coverprofile=cover-loader.out ./loader
-	@# ADR-060 decision 35: boot's provisional cap during S2a (the manifest reader, ADR-048 decision 18),
-	@# 10,500 since its note of 2026-11-24.
-	$(KC) lines boot 10500 provisional
+	@# ADR-060 decision 35: boot's cap fixed at the S2a exit (the manifest reader, ADR-048
+	@# decision 18).
+	$(KC) lines boot 10900
 	$(KC) vocab boot tools/kernelcheck/vocabulary-boot.txt
 	$(KC) coverage cover-boot.out $(MOD)/boot
 	$(KC) lines loader 1300
 	$(KC) vocab loader tools/kernelcheck/vocabulary-loader.txt
 	$(KC) coverage cover-loader.out $(MOD)/loader
-	@# ADR-060 decision 35: each toy definition package, its fake and its suite, 800 each.
+	@# ADR-060 decision 35, the caps fixed at the S2a exit: each toy definition package, its
+	@# fake and its suite.
 	for d in echoers stampers; do \
-		$(KC) lines sdk/def/$$d/v0 800 provisional fake conformance && \
-		$(KC) lines sdk/def/$$d/v0/fake 800 provisional && \
-		$(KC) lines sdk/def/$$d/v0/conformance 800 provisional || exit 1; \
+		$(KC) lines sdk/def/$$d/v0 100 fake conformance && \
+		$(KC) lines sdk/def/$$d/v0/fake 200 && \
+		$(KC) lines sdk/def/$$d/v0/conformance 500 || exit 1; \
 	done
-	$(KC) lines sdk/def/clock/v0/conformance 800 provisional
-	$(KC) lines sdk/def/composition/v0/conformance 800 provisional
-	$(KC) lines sdk/def/configrefs/v0/conformance 800 provisional
-	$(KC) lines sdk/def/reload/v0/conformance 800 provisional
-	$(KC) lines sdk/def/launch/v0/conformance 800 provisional
+	$(KC) lines sdk/def/clock/v0/conformance 200
+	$(KC) lines sdk/def/composition/v0/conformance 200
+	$(KC) lines sdk/def/configrefs/v0/conformance 300
+	$(KC) lines sdk/def/reload/v0/conformance 200
+	$(KC) lines sdk/def/launch/v0/conformance 500
 	@# ADR-060 decision 35 and ADR-061, Consequences: the commands definition, its fake and its
-	@# suite, 800 lines each; the cli row and each command row, 1,500 each.
-	$(KC) lines sdk/def/commands/v0 800 provisional fake conformance
-	$(KC) lines sdk/def/commands/v0/fake 800 provisional
-	$(KC) lines sdk/def/commands/v0/conformance 800 provisional
-	for p in cli command-profile command-plugin command-trust command-dist command-key; do \
-		$(KC) lines plugins/$$p 1500 provisional || exit 1; \
-	done
-	@# ADR-060 decision 35 and ADR-061: the operations definition, 800 lines; its fake and
-	@# its suite, 1,300 each since the note of 2026-11-25.
-	$(KC) lines sdk/def/operations/v0 800 provisional fake conformance
-	$(KC) lines sdk/def/operations/v0/fake 1300 provisional
-	$(KC) lines sdk/def/operations/v0/conformance 1300 provisional
+	@# suite; the cli row and each command row.
+	$(KC) lines sdk/def/commands/v0 700 fake conformance
+	$(KC) lines sdk/def/commands/v0/fake 200
+	$(KC) lines sdk/def/commands/v0/conformance 800
+	$(KC) lines plugins/cli 200
+	$(KC) lines plugins/command-profile 300
+	$(KC) lines plugins/command-plugin 600
+	$(KC) lines plugins/command-trust 100
+	$(KC) lines plugins/command-dist 200
+	$(KC) lines plugins/command-key 100
+	@# ADR-060 decision 35 and ADR-061: the operations definition, its fake and its suite.
+	$(KC) lines sdk/def/operations/v0 900 fake conformance
+	$(KC) lines sdk/def/operations/v0/fake 1200
+	$(KC) lines sdk/def/operations/v0/conformance 1300
 	@# ADR-060 decision 32, standing rule 2: plugin check and a T3 boot of every plugin.
 	$(MAKE) --no-print-directory plugin-check

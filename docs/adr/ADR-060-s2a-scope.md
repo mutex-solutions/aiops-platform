@@ -3,7 +3,10 @@
 - Status: **accepted 2026-11-23 by the project owner.** The owner answered all 22
   questions on the same date with the recommended option of each; the section "Owner
   answers of 2026-11-23" records them as decisions 37 to 58. S2a starts with this scope
-  (s1-report:29).
+  (s1-report:29). **Closed 2026-11-26:** the owner approved the S2a exit report
+  (`docs/design/s2a-report.md`) and closed S2a on 2026-11-26. The merge of
+  `s2a/integration` into `main` follows, and then the call-path gate of G13 on the merge
+  commit (ADR-034, verification item 4).
 - Scope: roadmap step S2a (`08-profiles-roadmap-adrs.md` §2.1). It turns the S2a text of
   the roadmap into decidable work and working rules, as ADR-059 did for S1. It changes no
   decision of `00-decisions.md` by itself: every point where an answer would change one
@@ -977,20 +980,51 @@ gaps:
     second departure of the same kind: the fixes of round 2 of that round take the
     library to 4,621 lines, past its 4,600, so `ci.yml` and the Makefile cap it and its
     row package at 4,700; the builder measures 3,681 of its 3,700.
+    Note of the exit, on the owner's approval of 2026-11-26: the owner approved the S2a
+    report and closed S2a on 2026-11-26. The commit that closes S2a measures every capped
+    and listed package with `go run ./tools/kernelcheck lines` and gives each production
+    package of S2a, those of the S2a report §9 (a) item 1 (no other was added since),
+    the measured count plus ten per cent, rounded up to the next hundred; `sdk/kernel` and
+    `loader` keep their caps, and `examples/`, `tools/` and `test/` get none. These caps
+    replace every provisional one, the raises of the builder and of the operations
+    library in the notes of 2026-11-26 and 2026-11-27 included; this ADR, `ci.yml` and
+    the Makefile change together, and `TestLineCapsInStep` of `tools/kernelcheck` holds
+    the two files in step with no provisional cap left. A package with subpackages is
+    measured with them excluded, and the root package, `manifests.go`, with every
+    directory under the root excluded.
 
-| Package | Measured at `491a518` | Cap during S2a |
+| Package | Measured at the exit | Cap from the S2a exit |
 |---|---|---|
-| `sdk/kernel` | 8,043 | 8,200, unchanged (ADR-034) |
-| `boot` | 6,173 | 10,500, provisional (9,000 until the note of 2026-11-24) |
-| `loader` | 1,100 | 1,300, unchanged |
-| the `plugin` package | new | 2,500, provisional |
-| each toy definition package; its fake and its suite are packages of their own | new | 800 each, provisional |
-| `cmd/aiopsctl`, with its launcher `internal/aiopsctl` in the same budget (second note of 2026-11-25) | 210 (s1-report:75) | 2,500, provisional, shared by the two |
-| each command row's plugin, with question Q17 (a), and `plugins/cli` (ADR-061) | new | 1,500 each, provisional |
-| `sdk/def/commands/v0` and `sdk/def/operations/v0`; the fake and the suite of each are packages of their own (ADR-061) | new | 800 each, provisional; the fake and the suite of `sdk/def/operations/v0` 1,300 each (1,000 until the note of 2026-11-25, 800 until the second note of 2026-11-24) |
-| the operations library, `plugins/operations` (ADR-061) | new | 4,700, provisional, awaiting the owner (4,600 until the note of 2026-11-27, 4,500 until that of 2026-11-26, 3,500 until the second note of 2026-11-24) |
-| the builder | new | 3,700, provisional, awaiting the owner (3,500 until the note of 2026-11-26, 3,000 until the note of 2026-11-25) |
-| `plugingen` | new | 1,500, provisional |
+| `sdk/kernel` | 8,175 | 8,200, unchanged (ADR-034) |
+| `loader` | 1,104 | 1,300, unchanged |
+| `boot` | 9,820 | 10,900 |
+| the `plugin` package, `sdk/plugin` | 1,191 | 1,400 |
+| `plugingen`, `internal/plugingen` | 970 | 1,100 |
+| `cmd/aiopsctl` with its launcher `internal/aiopsctl`, one budget (second note of 2026-11-25) | 212 | 300 |
+| the builder, `internal/builder` | 3,681 | 4,100 |
+| the operations row package, `plugins/operations`, `internal/` excluded | 158 | 200 |
+| the operations library, `plugins/operations/internal/operations` | 4,621 | 5,100 |
+| `sdk/def/echoers/v0`; its `fake`; its `conformance` | 67; 175; 428 | 100; 200; 500 |
+| `sdk/def/stampers/v0`; its `fake`; its `conformance` | 66; 175; 428 | 100; 200; 500 |
+| `sdk/def/commands/v0`; its `fake`; its `conformance` | 582; 127; 709 | 700; 200; 800 |
+| `sdk/def/operations/v0`; its `fake`; its `conformance` | 746; 1,069; 1,122 | 900; 1,200; 1,300 |
+| the suites of `clock`, `composition`, `configrefs`, `reload` and `launch` | 169, 180, 184, 141, 374 | 200, 200, 300, 200, 500 |
+| `plugins/cli`, `command-profile`, `command-plugin`, `command-trust`, `command-dist`, `command-key` | 126, 220, 467, 87, 157, 66 | 200, 300, 600, 100, 200, 100 |
+| `internal/vet` | 1,129 | 1,300 |
+| `internal/packsuite` | 310 | 400 |
+| `internal/authoring` | 827 | 1,000 |
+| `plugins/reload-socket`, `internal/` excluded; `plugins/reload-socket/internal/socket` | 324; 139 | 400; 200 |
+| `templates` | 121 | 200 |
+| `sdk/testkit/cycle`; `sdk/testkit/ocitest` | 120; 303 | 200; 400 |
+| the root package, `manifests.go` | 15 | 100 |
+
+During S2a the caps were provisional: `boot` 10,500 (9,000 until the note of 2026-11-24);
+the `plugin` package 2,500; each toy definition package, its fake and its suite, and
+the suite of each definition of S1, 800;
+`cmd/aiopsctl` and `internal/aiopsctl` 2,500; each command row and `plugins/cli` 1,500;
+`sdk/def/commands/v0` and `sdk/def/operations/v0` 800 each, the operations fake and suite
+1,300 each; the operations library 4,700; the builder 3,700; `plugingen` 1,500; and the
+other packages of S2a none. `boot` measured 6,173 and `loader` 1,100 at `491a518`.
 
 The coverage gate of 100 per cent stays on `sdk/kernel`, `boot` and `loader` (`08:95`,
 row 53), so it covers the new gate checks.

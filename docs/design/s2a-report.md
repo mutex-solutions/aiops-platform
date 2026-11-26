@@ -2,10 +2,12 @@
 
 - Date: 2026-11-26.
 - For: the project owner, who decides whether S2a is closed.
+- Status: **approved by the owner, and S2a closed, on 2026-11-26.** The merge of `s2a/integration` into `main` follows, and then the call-path gate of G13 on the merge commit (§2, §9 (c)).
 - Commit: `d8e85b1`, the head of the S2a work when this report was first written. It is `d3dc2d1` and the 16 commits after it, which close most of what the audit of 2026-11-25 and the round of group 4 left open in part (§9). `d8e85b1` is 507 commits ahead of `main` and 0 behind it, with merge base `17283a8`, the head of `main` (`git rev-list --count main..d8e85b1` and `d8e85b1..main`). Nothing of S2a has merged into `main`. The first version of this report, `bc1550a`, changed nothing else; it was pushed to `s2a/integration` on 2026-11-26 at 14:35 +0700 (reflog of `refs/remotes/origin/s2a/integration`), and its hosted run passed (§5.2).
 - Since `bc1550a`: the review of the first version reported nine findings, each with a reproduction. The seven commits `8382959` to `8be7eb0` fix those in the code, the tests, the ADRs and the register, and this version corrects the rest (§6.4). A row that names one of those commits is measured on `8be7eb0`; everything else stays measured on `d8e85b1`.
 - Since `50665fa`: the owner approved closing S2a on 2026-11-26 after one more adversarial round over the whole step (decision 32). Round 1 of that round reported nineteen findings, each with a reproduction. The 33 commits `a1b28f2` to `8724b99` fix them, each finding with a test commit that fails on its base and then its fix, and raise two provisional caps as a departure that awaits the owner (§6.5). A row that names one of those commits is measured on `8724b99`.
 - Since `c473f7d`: round 2 of that round reported twenty findings, each with a reproduction. The 35 commits `9294a8b` to `c64dcba` fix them, each with a test commit that fails on its base and then its fix, and raise the provisional cap of the operations library as a second departure that awaits the owner (§6.6). A row that names one of those commits is measured on `c64dcba`.
+- Since `b27100f`: the owner's answers of 2026-11-26 to the questions of §9 (a) are applied in the commits `528f0c0` to `9a62fd8`, and the commit that closes S2a writes the caps of decision 35 at the exit (§6.7).
 - Sources: [`08-profiles-roadmap-adrs.md`](../architecture/08-profiles-roadmap-adrs.md) §1.6, §2 and §2.1; [`ADR-060`](../adr/ADR-060-s2a-scope.md); the ADRs due at S2a, [`ADR-020`](../adr/ADR-020-signing.md), [`ADR-044`](../adr/ADR-044-builder.md), [`ADR-047`](../adr/ADR-047-connectors-artifacts.md), [`ADR-048`](../adr/ADR-048-manifest.md) and [`ADR-054`](../adr/ADR-054-upstream-register.md), and those that ADR-060 asked for, [`ADR-061`](../adr/ADR-061-commands.md) and [`ADR-062`](../adr/ADR-062-enable-transport.md); [`ADR-034`](../adr/ADR-034-kernel-concurrency.md), "2026-11-23 proposed addition G13"; [`s1-report.md`](s1-report.md); the code; the result files of the review rounds, `s2a-adr-result.json`, `s2a-adrs.json` and `s2a-three-adrs.json` for the ADRs and `s2a-g1a.json`, `s2a-g1b.json`, `s2a-g13.json`, `s2a-g2a.json`, `s2a-g3a.json`, `s2a-g3b.json`, `s2a-g3c.json`, `s2a-g3d.json` and `s2a-g4.json` for the groups, and the file of the audit of 2026-11-25, `s2a-audit.json`, all kept outside the repository; the hosted CI runs on `s2a/integration` (`gh run list --branch s2a/integration`).
 - Run for this report on `d8e85b1`, on one development host: `make s2a-exit`, both paths in turn, race-built; `make check`; `make s1-suites`; `go test -count=1 -v ./test/failure-matrix/`; `make templates`; `make builder`; `make builder-image`; `make cosign`; `scripts/ci/hygiene.sh` and `gitleaks detect --redact --source .` (v8.18.4); `go test -count=1 -v` on the gate cases of `boot`, on `./internal/builder/` with `-short`, on `./test/recomposition/` and `./test/loader-smoke/`, and on the golden dumps; `go run ./tools/kernelcheck lines <dir> <cap>` on every package of §3; `git log`, `git rev-list`, `git diff` and the reflog of the remote branch. Not run here: `make peer-check`, which needs passwordless `sudo` (its CI step passed on `d3dc2d1` and on `bc1550a`); the live oracle comparison, the property workload and the call-path gate, whose G13 runs are recorded on `b7071ed`, and `sdk/kernel` is byte-identical from `b7071ed` to `d8e85b1` (`git diff --stat b7071ed d8e85b1 -- sdk/kernel` is empty; §2).
 - Status vocabulary: **met**, **met with recorded exception**, **pending** (a run, an edit or a decision is still needed), **not met**.
@@ -60,11 +62,11 @@ The exit criteria are the S2a row of `08` §2.1 and its one exit text (ADR-060 d
 | 32b | Test first: each acceptance test committed failing before its code, and each fix with a test that fails on its base | **met with recorded exception**: the owner waived on 2026-11-26 the test-first rule and the rule that each commit passes the checks of the tree for the commits of §6.2, all before `d3dc2d1`, and §6.2 keeps their list for a bisect; every `feat` and `fix` after it, of the 16 commits to `d8e85b1` and of those after `bc1550a`, follows a test commit | §6.2 | `d8e85b1` |
 | 32c | An adversarial review round on each group, once more on the whole step, each finding confirmed by a reproduction | **met** | Each group had its round (§6.1). The round over the whole step, on the owner's approval of 2026-11-26, ran: it reported nineteen findings in its round 1 and twenty in its round 2, 39 in all, each with a reproduction, all fixed (§6.5, §6.6) | §6.1, §6.5, §6.6 |
 | 32d | Conventional Commits; nothing published outside the private repository | **met** | Every subject of `main..d8e85b1` has a type of the convention; the registry, the module proxy and the keys exist only inside the tests. A built binary reached the private repository and is purged from the branch's history but not from the host (§6.3) | `d8e85b1` |
-| 32e | S2a closes on the owner's approval of this report | **pending** | This report | this report's commit |
+| 32e | S2a closes on the owner's approval of this report | **met** | The owner approved this report and closed S2a on 2026-11-26 (ADR-060, status line) | the closing commit (§6.7) |
 | 32f | Standing rules 1 to 4 | **met** | Rule 1: `tools/deflint`; rule 2: `make plugin-check` in `make check` and the `test` job; rule 3: the vocabulary checks of `sdk/kernel`, `boot` and `loader`; rule 4, read as the build, `plugin check` and every suite staying green: `make check` | `13f42ce`, `b87e88b`, `6b49b93` |
 | 33 | What each ADR due at S2a settles | **met** | ADR-020, 044, 047, 048 and 054 settle each listed point; their owner answers are in §4 | `bac99e0` |
 | 34 | The licence rule for new dependencies | **met** | Each new module, tool and image has its register entry and licence record row; `go run ./tools/register .` (U7, U1, U3) in `make check`; the exit's registry image is pinned by digest, and its entry keeps the one name `docker-distribution` (owner's word of 2026-11-26, ADR-054 decision 8) | `0c4f51a`, `ffd5d8c` |
-| 35 | Line budgets | **pending** | Every provisional cap holds (§3), the cap of the builder since `8724b99` at 3,700 and that of the operations library since `c64dcba` at 4,700, raised past 3,500 and 4,500 as departures that await the owner (§6.5, §6.6, §9 (a) item 9). At the exit each cap becomes the measured count plus ten per cent, rounded up to the next hundred, and owner answer (4d) of 2026-11-25 extends that to every new production package; §9 (a) item 1 gives the figures, which the closing commit writes into ADR-060, `ci.yml` and the Makefile together | `d8e85b1` |
+| 35 | Line budgets | **met** | The closing commit measures every capped and listed package and gives each production package of S2a its measured count plus ten per cent, rounded up to the next hundred, owner answer (4d) of 2026-11-25 included; `sdk/kernel` and `loader` keep their caps; `examples/`, `tools/` and `test/` get none. ADR-060 decision 35, `ci.yml` and the Makefile carry the same table, and no provisional cap is left (§9 (a) item 1). The raises of the builder and the operations library past their provisional caps, `8724b99` and `c64dcba`, end with it | the closing commit (§6.7) |
 | 36 | The CI jobs | **met** | Every job and step of decision 36 is in `ci.yml` and passed on `bc1550a` (run 45776452687) and on `d3dc2d1` (§5.2) | `62a9ed0` |
 | 37 | The exit calls both plugins through a toy caller row | **met** | Step C5; `examples/caller` | `6e89564` |
 | 38 | The exit builds on a test release | **met** | `test/release/dist.yaml`, built in two phases with a throwaway release key by the exit and by `TestTestRelease` | `6a6e7eb`, `773e571` |
@@ -90,7 +92,7 @@ The exit criteria are the S2a row of `08` §2.1 and its one exit text (ADR-060 d
 | 58 | The four readings of Q22 | **met** | Smoke boots `aiops-core` and the plugin's bundle; inspect fetches only the manifest and the bundle; check 1 denies `wasm`; the package graph of a binary | `852f4b6` |
 | A | ADR-020, 044, 047, 048, 054, 061 and 062 as built | **met with recorded exception** | Met but for: a stop after the first rename alone stays a generic write test (**met with recorded exception**, recorded by the implementer and accepted by the owner on 2026-11-26: ADR-061 decision 18, notes of 2026-11-26, and §9 (a) item 8); and the offline build of ADR-044 decision 14, which waits for L14 (**met with recorded exception**, ADR-044 decision 19) | `d8e85b1` |
 
-**Overall.** S2a is not closed. Every exit criterion is met, on both paths of the clean machine, on `d8e85b1`, on `8be7eb0`, on `8724b99` (§6.5) and on `c64dcba` (§6.6). Every decision of ADR-060 is met or met with a recorded exception except three: decision 3, whose last run, the call-path gate on the merge commit, waits for the merge into `main`; decision 35, whose exit caps the closing commit writes and whose provisional caps of the builder and the operations library `8724b99` and `c64dcba` raised as departures that await the owner; and decision 32, where the test-first rule is not met by commits before `d3dc2d1` and this report awaits the owner's approval. The round over the whole step reported nineteen findings in its round 1 and twenty in its round 2, all fixed (§6.5, §6.6). The case of the operations suite that row A missed is O27, suite revision 7 (§9 (a) item 6). The owner accepted on 2026-11-26 the exceptions of rows 24, 31 and A that the implementer recorded. The owner questions of §9 (a) are open.
+**Overall.** S2a is closed: the owner approved this report and closed S2a on 2026-11-26. Every exit criterion is met, on both paths of the clean machine, on `d8e85b1`, on `8be7eb0`, on `8724b99` (§6.5), on `c64dcba` (§6.6) and on the tree of the closing commit (§6.7). Every decision of ADR-060 is met or met with a recorded exception but decision 3, whose last run, the call-path gate of G13 on the merge commit, follows the merge into `main`. The round over the whole step reported 39 findings, nineteen in its round 1 and twenty in its round 2, all fixed (§6.5, §6.6). The owner waived the test-first rule and the rule of a green commit for the commits of §6.2 (row 32b), accepted the three departures of rows 24, 31 and A, and asked for the case O27 of the operations suite (§9 (a) item 6) and for the SPDX id `PostgreSQL` in the allow-list of check 6 (§9 (a) item 7), all applied. The closing commit writes the caps of decision 35 at the exit (row 35).
 
 ## 2. The kernel change: G13
 
@@ -108,7 +110,7 @@ S2a planned no kernel change (decision 3). The derived `Volatile[T]` fields need
 
 ## 3. What was built
 
-Line counts are physical lines of non-test Go, by `go run ./tools/kernelcheck lines <dir> <cap>` at `d8e85b1`; a package with subpackages is measured with them excluded, as `make check` does. "Cap" is the cap of `make check` and `ci.yml` now; "none" is a package that has none.
+Line counts are physical lines of non-test Go, by `go run ./tools/kernelcheck lines <dir> <cap>` at `d8e85b1`; a package with subpackages is measured with them excluded, as `make check` does. "Cap" is the cap of `make check` and `ci.yml` at `d8e85b1`; "none" is a package that had none. The caps fixed at the exit are those of §9 (a) item 1 and ADR-060 decision 35.
 
 | Package | Role | Files | Lines | Cap |
 |---|---|---:|---:|---:|
@@ -171,7 +173,7 @@ Line counts are physical lines of non-test Go, by `go run ./tools/kernelcheck li
 57. Check 8 refuses an `${env:}` or `${file:}` reference in the bundle of an installed artifact.
 58. The four readings of Q22: smoke, inspect, `wasm` and "module graph".
 
-Notes recorded after the acceptance, beyond those above: decision 9 (2026-11-25, owner answer (4c)), the deprecation warning; decision 16 (2026-11-25 and 2026-11-26), the companion commits and the relaxation of check 8; decision 20 (2026-11-25, owner answer (1)), the release input; decision 22 (2026-11-25 and 2026-11-26), the gate of release builds, the refused `GOPROXY` forms and the print of every check; decision 24 (2026-11-24, 2026-11-25 twice and 2026-11-26 twice: a departure that the implementer recorded as built, and the owner's acceptance of it), the connector case; decision 27 (2026-11-25, owner answer (3)), the shipped files; decision 30 (2026-11-25, step A1 edited on owner answer (4a); 2026-11-26 twice), the exit as built, its containers and the container runtime of each environment that has one; decision 31 (2026-11-26 twice: a departure that the implementer recorded as built, and the owner's acceptance of it), the departing build; decision 32 (2026-11-25 and 2026-11-26), standing rule 2 and step 5 by `serves`; decision 34 (2026-11-25 and 2026-11-26), the registry and builder images; decision 35 (2026-11-24 twice, 2026-11-25 twice), the caps; decision 36 (2026-11-25), the cosign case.
+Notes recorded after the acceptance, beyond those above: decision 9 (2026-11-25, owner answer (4c)), the deprecation warning; decision 16 (2026-11-25 and 2026-11-26), the companion commits and the relaxation of check 8; decision 20 (2026-11-25, owner answer (1)), the release input; decision 22 (2026-11-25 and 2026-11-26), the gate of release builds, the refused `GOPROXY` forms and the print of every check; decision 24 (2026-11-24, 2026-11-25 twice and 2026-11-26 twice: a departure that the implementer recorded as built, and the owner's acceptance of it), the connector case; decision 27 (2026-11-25, owner answer (3)), the shipped files; decision 30 (2026-11-25, step A1 edited on owner answer (4a); 2026-11-26 twice), the exit as built, its containers and the container runtime of each environment that has one; decision 31 (2026-11-26 twice: a departure that the implementer recorded as built, and the owner's acceptance of it), the departing build; decision 32 (2026-11-25 and 2026-11-26), standing rule 2 and step 5 by `serves`; decision 34 (2026-11-25 and 2026-11-26), the registry and builder images; decision 35 (2026-11-24 twice, 2026-11-25 twice, 2026-11-26, 2026-11-27 and the note of the exit on the owner's approval of 2026-11-26), the caps; decision 36 (2026-11-25), the cosign case.
 
 ### 4.2 The other ADRs of S2a
 
@@ -447,6 +449,21 @@ Round 2 reviewed `s2a/integration` at `c473f7d` and reported twenty findings, ea
 
 Run on `c64dcba`, on one development host: `gofmt -l .` (empty), `GOFLAGS=-mod=readonly go build ./...`, `go vet ./...`, `go test -race -short -count=1 ./...`, `make check`, `make s1-suites`, `make templates`, `make builder`, whose seven cases passed (`TestDistBuildSignAndUse` 451.47 s, `TestTestRelease` 129.38 s), `make builder-image` (`TestReleaseAndBuilderImage` 364.56 s), `make cosign`, `scripts/ci/hygiene.sh`, `go run ./tools/plugingen .`, `gitleaks detect --redact --source .` (v8.18.4, no leaks), the live oracle comparison `S0_ORACLE_RUN=1 S0_CAUSAL_RUN=1 GOMAXPROCS=8 go test -race -count=1 -run TestCausal ./test/spike/s0/replay/`, and `make s2a-exit`, both paths in turn, race-built, which exited 0 with no skip and no race report: `TestS2aExit` took 801.03 s on the builder image and 806.10 s on a local toolchain, every one of its 21 subtests passed on each, and `networks` took 3.63 s and 2.10 s. The containers, networks and volumes of the exit were removed with it, and every run passed. Not run: `make peer-check`, which needs passwordless `sudo`.
 
+### 6.7 The owner's answers of 2026-11-26 and the close
+
+On 2026-11-26 the owner approved this report and closed S2a, and answered the questions of §9 (a). The answers are applied in these commits on `b27100f`, each behaviour change after a test commit that fails on its base; `sdk/kernel` does not change.
+
+| Answer | Commits | What changed |
+|---|---|---|
+| Item 6: the group clash in the operations suite | `528f0c0`, `2e1ce87` | Suite case O27, suite revision 7 of `operations`; the test commit fails on the fake, which packed every directory under one id and named neither artifact of a clash; the signed manifests and golden dumps regenerated; ADR-061 decision 18 has the note |
+| Item 7: `PostgreSQL` in the allow-list of check 6 | `9a34225`, `fe55cd9`, `2d44455` | The register's exception item for the SPDX id in `boot/`, with its row and note in ADR-054 decision 9; `TestLicensed` wants every licence that L7 allows and fails on its base; `boot.Licensed` holds `PostgreSQL` |
+| Item 8: the three departures | `f431fb0` | ADR-060 decisions 24 and 31 and ADR-061 decision 18 record the owner's acceptance |
+| Item 4: test first for the commits of §6.2 | `8dbf4fd` | Row 32b and §6.2 record the waiver, with the list kept for a bisect |
+| Item 3: the round over the whole step | `9a62fd8` | Row 32c, item 3 and §9 (d) record that it ran, with its 39 findings |
+| Items 1 and 9: the caps at the exit; the close | the closing commit | The caps of §9 (a) item 1 in ADR-060 decision 35, `ci.yml` and the Makefile, held in step by `TestLineCapsInStep`; the status lines of ADR-060 and of this report |
+
+Run on the tree of the closing commit, on one development host: `gofmt -l .` (empty), `GOFLAGS=-mod=readonly go build ./...`, `go vet ./...`, `go test -race -short -count=1 ./...`, `make check`, whose line caps are those of the exit, `make s1-suites`, `make templates`, `make builder`, whose seven cases passed (`TestDistBuildSignAndUse` 446.58 s, `TestTestRelease` 132.36 s), `make builder-image` (`TestReleaseAndBuilderImage` 366.81 s), `make cosign`, `scripts/ci/hygiene.sh`, `go run ./tools/plugingen .`, `gitleaks detect --redact --source .` (v8.18.4, no leaks), the live oracle comparison `S0_ORACLE_RUN=1 S0_CAUSAL_RUN=1 GOMAXPROCS=8 go test -race -count=1 -run TestCausal ./test/spike/s0/replay/`, whose 104 cases passed and whose rate case skips as it does unless its own variables ask for it, and `make s2a-exit`, both paths in turn, race-built, which exited 0 with no skip and no race report: `TestS2aExit` took 789.61 s on the builder image and 794.88 s on a local toolchain, every one of its 21 subtests passed on each, and `networks` took 3.80 s and 2.15 s. The containers, networks and volumes of the runs were removed with them, and every run passed. Not run: `make peer-check`, which needs passwordless `sudo`.
+
 ## 7. The four kernel words of decision 45, for review
 
 `tools/kernelcheck/vocabulary.txt` lists every word of `00` §4.3 that the kernel does not use, and leaves out four that it uses in other senses. Counted as `kernelcheck vocab` counts, whole words with the endings s, es, ed or ing, in the production files of `sdk/kernel` at `d8e85b1`:
@@ -473,17 +490,17 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
 
 ### (a) Owner questions for the close
 
-1. **Caps at the exit** (decision 35; owner answer (4d) of 2026-11-25). The rule gives each package its measured count plus ten per cent, rounded up to the next hundred. Measured at `d8e85b1`, and at `8724b99` and `c64dcba` for the rows that rounds 1 and 2 of the round over the whole step changed (§6.5, §6.6):
+1. **Caps at the exit** (decision 35; owner answer (4d) of 2026-11-25). Settled in the closing commit. The rule gives each production package of S2a its measured count plus ten per cent, rounded up to the next hundred. Measured on the tree of the closing commit with `go run ./tools/kernelcheck lines` (§6.7), each package with its subpackages excluded and the root with every directory under it excluded:
 
-   | Package | Measured | Provisional cap now | Plus 10% | Cap at the exit |
+   | Package | Measured | Provisional cap until the exit | Plus 10% | Cap at the exit |
    |---|---:|---|---:|---:|
-   | `boot` | 9,825 | 10,500 | 10,807.5 | 10,900 |
+   | `boot` | 9,820 | 10,500 | 10,802.0 | 10,900 |
    | `sdk/plugin` | 1,191 | 2,500 | 1,310.1 | 1,400 |
    | `internal/plugingen` | 970 | 1,500 | 1,067.0 | 1,100 |
    | `cmd/aiopsctl:internal/aiopsctl` | 212 | 2,500 | 233.2 | 300 |
-   | `internal/builder` | 3,681 | 3,700, awaiting the owner | 4,049.1 | 4,100 |
-   | `plugins/operations` | 158 | 4,700, awaiting the owner | 173.8 | 200 |
-   | `plugins/operations/internal/operations` | 4,621 | 4,700, awaiting the owner | 5,083.1 | 5,100 |
+   | `internal/builder` | 3,681 | 3,700 | 4,049.1 | 4,100 |
+   | `plugins/operations` | 158 | 4,700 | 173.8 | 200 |
+   | `plugins/operations/internal/operations` | 4,621 | 4,700 | 5,083.1 | 5,100 |
    | `sdk/def/echoers/v0` | 67 | 800 | 73.7 | 100 |
    | `sdk/def/echoers/v0/fake` | 175 | 800 | 192.5 | 200 |
    | `sdk/def/echoers/v0/conformance` | 428 | 800 | 470.8 | 500 |
@@ -494,8 +511,8 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
    | `sdk/def/commands/v0/fake` | 127 | 800 | 139.7 | 200 |
    | `sdk/def/commands/v0/conformance` | 709 | 800 | 779.9 | 800 |
    | `sdk/def/operations/v0` | 746 | 800 | 820.6 | 900 |
-   | `sdk/def/operations/v0/fake` | 1,060 | 1,300 | 1,166.0 | 1,200 |
-   | `sdk/def/operations/v0/conformance` | 1,095 | 1,300 | 1,204.5 | 1,300 |
+   | `sdk/def/operations/v0/fake` | 1,069 | 1,300 | 1,175.9 | 1,200 |
+   | `sdk/def/operations/v0/conformance` | 1,122 | 1,300 | 1,234.2 | 1,300 |
    | `sdk/def/clock/v0/conformance` | 169 | 800 | 185.9 | 200 |
    | `sdk/def/composition/v0/conformance` | 180 | 800 | 198.0 | 200 |
    | `sdk/def/configrefs/v0/conformance` | 184 | 800 | 202.4 | 300 |
@@ -517,7 +534,7 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
    | `sdk/testkit/ocitest` | 303 | none | 333.3 | 400 |
    | `aiops`, the repository root (`manifests.go`) | 15 | none | 16.5 | 100 |
 
-   `sdk/kernel` (8,175 of 8,200, ADR-034) and `loader` (1,104 of 1,300) keep their caps under decision 35. Four caps would rise above their provisional figures: `boot` to 10,900, the builder to 4,100, the operations library to 5,100 and the operations definition to 900; the suites of `commands` and `operations` would keep theirs, 800 and 1,300; every other would fall. The rule as written covers production packages; `examples/`, `tools/` and `test/` are not production code, and the owner decides whether they get caps. As at S1 (ADR-059 decision 28), the proposal is to measure again on the commit that closes S2a and apply the rule to that count, with ADR-060, `ci.yml` and the Makefile changed together.
+   `sdk/kernel` (8,175 of 8,200, ADR-034) and `loader` (1,104 of 1,300) keep their caps under decision 35. No production package was added after the list above. Four caps rise above their provisional figures: `boot` to 10,900, the builder to 4,100, the operations library to 5,100 and the operations definition to 900; the suites of `commands` and `operations` keep theirs, 800 and 1,300; every other falls. `examples/`, `tools/` and `test/` are not production code and get no cap. As at S1 (ADR-059 decision 28), ADR-060 decision 35, `ci.yml` and the Makefile change together, and `TestLineCapsInStep` holds the two files in step with no provisional cap left.
 2. **The call-path gate on the merge commit** (G13 verification item 4). It runs on the measurement host after S2a merges into `main`, alternating with the `main` commit it merges into, as on `b7071ed`.
 3. **The round on the whole step** (decision 32). Settled: the owner approved closing S2a after one more round over the whole step, and the round ran. Its round 1, on `50665fa`, and its round 2, on `c473f7d`, reported 39 findings, each with a reproduction: 13 medium and 26 low, none high and none rejected. The 68 commits `a1b28f2` to `8724b99` and `9294a8b` to `c64dcba` fix all 39, each with a test commit that fails on its base before its fix; `sdk/kernel` did not change. §6.5 and §6.6 list each finding with its test, its fix and its repair; see (d).
 4. **Test first and the commits that fail a check** (§6.2). Settled: on 2026-11-26 the owner waived the test-first rule and the rule of a green commit for the commits that §6.2 lists, instead of a rewrite of the branch, and §6.2 keeps the list for a bisect.
@@ -526,7 +543,7 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
 7. **The licence allow-list of check 6** (`boot/checks.go`, `Licensed`). Settled: on the owner's answer of 2026-11-26 an exception item of the register gives `boot/` the token `postgresql`, the SPDX id `PostgreSQL`, an SPDX identifier of ADR-054 decision 21 (decision 9 has the row and a dated note), and the allow-list of `Licensed` then holds it, so it holds every licence that L7 allows; `TestLicensed` holds each of them and failed on its base.
 8. **Departures that the implementer recorded** (rows 24, 31 and A). Settled: the owner accepted the three on 2026-11-26: the departing build of decision 31 binds `reload`, a key of the release, not a consumer-bound key of a test definition (audit item 39); the connector case of the templates runs in the job `builder`, not in the template job of decisions 24 and 36; and a stop after the first rename stays a generic write test (ADR-061 decision 18). ADR-060 decisions 24 and 31 and ADR-061 decision 18 record the acceptance in a note of 2026-11-26 each.
 
-9. **The caps of the builder and the operations library** (decision 35; §6.5, §6.6). The fixes of the round over the whole step take them past their provisional caps, which `8724b99` raises to 3,700 and 4,600 and `c64dcba` raises for the library to 4,700, each as a departure recorded by the implementer. Accept the raises, or ask for cuts that bring the builder back under 3,500 lines and the library under 4,500; the exit caps of item 1 follow either way.
+9. **The caps of the builder and the operations library** (decision 35; §6.5, §6.6). Settled: the exit caps of item 1, 4,100 for the builder and 5,100 for the library, replace the provisional raises of `8724b99` and `c64dcba` in the closing commit.
 
 ### (b) Known limits that remain
 
@@ -542,7 +559,7 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
 - The third G13 case of `test/loader-smoke` cannot fail against a hand-off to the replaced group's old child; kernel test 2 checks that closure.
 - `plugingen` refuses a plugin that provides one key of a definition and injects another.
 - The offline build of ADR-044 decision 14, which fills the module cache through `--modcache`, waits for L14.
-- The builder is at 3,681 of its 3,700 lines and the operations library at 4,621 of its 4,700, both caps awaiting the owner (§9 (a) item 9).
+- The builder is at 3,681 of its 4,100 lines and the operations library at 4,621 of its 5,100, the caps fixed at the exit (§9 (a) item 1).
 - The licence scan accepts any words in place of the words of a variable of the SPDX template whose match takes any text, as SPDX matching does, and a holder of ten words at most on a copyright line, so a restriction joined to a short holder by a comma passes (§6.5 finding 1).
 - The init deny-list follows a function handed to the runtime only when the function or closure is written in the call of `time.AfterFunc`, `context.AfterFunc`, `runtime.SetFinalizer`, `runtime.AddCleanup`, `iter.Pull` or `iter.Pull2`; one that a variable or a parameter carries there is not followed (§6.5 finding 2; §6.6 finding 4).
 - A write killed after it marked its snapshot and before its request reached the row keeps files of a change that no process took; the next writer says the verdict is unknown, and the change applies at the next start (§6.5 finding 6).
@@ -553,7 +570,7 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
 
 ### (c) Obligations handed to later steps
 
-- **The merge into `main`:** the call-path gate on the merge commit (G13 item 4); the exit caps (item 1 above); the merge of each group only when its round leaves no open finding.
+- **The merge into `main`:** the merge of `s2a/integration`, whose round over the whole step left no open finding (§6.5, §6.6), and then the call-path gate on the merge commit (G13 item 4).
 - **S2b:** checks 3 and 9, `runtimes: [remote]`, `plugin.FromManifest`, the adapter generator and the `contrib` mark of the toy registries, the Python template.
 - **S3:** `Spec.Durable`, `plugin purge`, `secret:` references in an artifact's own scope.
 - **S4a:** the two-tenant and disabled-for-tenant cases, with raised suite revisions (§8).
@@ -575,4 +592,4 @@ Community record G10 asks that the solo test kit be complete: `kerneltest`, fake
 
 ## 10. Stop point
 
-S2a stops here. This report, ADR-060 and the G13 section of ADR-034 form the S2a exit record. S2a is not closed until the owner approves this report. The S2a branch reaches `main` only by merge, after which the call-path gate runs on the merge commit. S2b starts only on the owner's word.
+S2a is closed: the owner approved this report and closed S2a on 2026-11-26. This report, ADR-060 and the G13 section of ADR-034 form the S2a exit record. The S2a branch reaches `main` only by merge, which follows, and after it the call-path gate of G13 runs on the merge commit. S2b starts only on the owner's word.

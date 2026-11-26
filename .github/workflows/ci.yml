@@ -109,22 +109,32 @@ jobs:
         # 00-decisions.md §4.3: sdk requires sdk/kernel, and sdk/testkit for its tests only;
         # pgx v5 joins at S3 (ADR-060 decision 4).
         run: go run ./tools/kernelcheck modfile sdk github.com/mutex-solutions/aiops-platform/sdk/kernel github.com/mutex-solutions/aiops-platform/sdk/testkit
-      - name: Plugin package, plugingen, aiopsctl, builder and operations library line caps
-        # ADR-060 decision 35: the package sdk/plugin, plugingen, cmd/aiopsctl with its
-        # launcher internal/aiopsctl under the one 2,500 of its row, the builder (3,700
-        # since the note of 2026-11-26, which awaits the owner and raised it from 3,500)
-        # and the operations library, plugins/operations, provisional caps during S2a.
-        # The row package, internal/ skipped, and its internal package, which holds the
-        # client of reload-socket (ADR-061 decision 41; ADR-062 decision 16), are capped
-        # each, at 4,700 since the note of 2026-11-27 (4,600 since that of 2026-11-26),
-        # which await the owner and raised them from 4,500.
+      - name: Line caps of the production packages that S2a adds
+        # ADR-060 decision 35: the caps fixed at the S2a exit, each the count measured on
+        # the commit that closes S2a plus ten per cent, rounded up to the next hundred
+        # (owner answer (4d) of 2026-11-25): the package sdk/plugin, plugingen,
+        # cmd/aiopsctl with its launcher internal/aiopsctl under one budget, the builder,
+        # and the operations library, plugins/operations: the row package, internal/
+        # skipped, and its internal package, which holds the client of reload-socket
+        # (ADR-061 decision 41; ADR-062 decision 16), each; then the other production
+        # packages that S2a adds, and the root package, manifests.go, each directory
+        # under the root a tree of its own.
         run: |
-          go run ./tools/kernelcheck lines sdk/plugin 2500 provisional
-          go run ./tools/kernelcheck lines internal/plugingen 1500 provisional
-          go run ./tools/kernelcheck lines cmd/aiopsctl:internal/aiopsctl 2500 provisional
-          go run ./tools/kernelcheck lines internal/builder 3700 provisional
-          go run ./tools/kernelcheck lines plugins/operations 4700 provisional internal
-          go run ./tools/kernelcheck lines plugins/operations/internal/operations 4700 provisional
+          go run ./tools/kernelcheck lines sdk/plugin 1400
+          go run ./tools/kernelcheck lines internal/plugingen 1100
+          go run ./tools/kernelcheck lines cmd/aiopsctl:internal/aiopsctl 300
+          go run ./tools/kernelcheck lines internal/builder 4100
+          go run ./tools/kernelcheck lines plugins/operations 200 internal
+          go run ./tools/kernelcheck lines plugins/operations/internal/operations 5100
+          go run ./tools/kernelcheck lines internal/vet 1300
+          go run ./tools/kernelcheck lines internal/packsuite 400
+          go run ./tools/kernelcheck lines internal/authoring 1000
+          go run ./tools/kernelcheck lines plugins/reload-socket 400 internal
+          go run ./tools/kernelcheck lines plugins/reload-socket/internal/socket 200
+          go run ./tools/kernelcheck lines templates 200
+          go run ./tools/kernelcheck lines sdk/testkit/cycle 200
+          go run ./tools/kernelcheck lines sdk/testkit/ocitest 400
+          go run ./tools/kernelcheck lines . 100 $(find . -mindepth 1 -maxdepth 1 -type d | sed 's|^\./||')
       - name: pluginApi check
         # ADR-060 decision 8: fails when the exported API of sdk/kernel or sdk/plugin
         # differs from tools/pluginapi/api.txt and plugin.APIVersion was not raised.
@@ -168,15 +178,15 @@ jobs:
           go test -count=1 -coverprofile=cover-boot.out ./boot
           go test -count=1 -coverprofile=cover-loader.out ./loader
       - name: Boot structural checks
-        # Line cap: 10,500, provisional during S2a (ADR-060 decision 35 and its note of
-        # 2026-11-24, which raised it from 9,000), in place of the 6,800 fixed at the S1
-        # exit (ADR-059 decision 11); the manifest reader adds to it (ADR-048 decision 18).
+        # Line cap: 10,900, fixed at the S2a exit (ADR-060 decision 35), in place of the
+        # 6,800 fixed at the S1 exit (ADR-059 decision 11); the manifest reader adds to it
+        # (ADR-048 decision 18).
         # Its vocabulary list holds the domain words and upstream names of ADR-060 decision 45
         # and not tenant, which boot legitimately handles (a scope class of its closed
         # vocabulary). An upstream name leaves it in the commit that adds the register entry
         # carrying it, from which the name lint U1 reads it (ADR-054 decisions 14 and 20).
         run: |
-          go run ./tools/kernelcheck lines boot 10500 provisional
+          go run ./tools/kernelcheck lines boot 10900
           go run ./tools/kernelcheck vocab boot tools/kernelcheck/vocabulary-boot.txt
           go run ./tools/kernelcheck coverage cover-boot.out github.com/mutex-solutions/aiops-platform/boot
       - name: Loader structural checks
@@ -187,42 +197,43 @@ jobs:
           go run ./tools/kernelcheck coverage cover-loader.out github.com/mutex-solutions/aiops-platform/loader
       - name: Toy definition line caps
         # ADR-060 decision 35: each toy definition package, its fake and its suite are
-        # packages of their own, 800 lines each, provisional until the S2a exit.
+        # packages of their own, with the caps fixed at the S2a exit.
         run: |
           for d in echoers stampers; do
-            go run ./tools/kernelcheck lines sdk/def/$d/v0 800 provisional fake conformance
-            go run ./tools/kernelcheck lines sdk/def/$d/v0/fake 800 provisional
-            go run ./tools/kernelcheck lines sdk/def/$d/v0/conformance 800 provisional
+            go run ./tools/kernelcheck lines sdk/def/$d/v0 100 fake conformance
+            go run ./tools/kernelcheck lines sdk/def/$d/v0/fake 200
+            go run ./tools/kernelcheck lines sdk/def/$d/v0/conformance 500
           done
       - name: Definition suite line caps
-        # ADR-060 decision 35: a definition's suite is a package of its own, 800 lines,
-        # provisional until the S2a exit.
+        # ADR-060 decision 35: a definition's suite is a package of its own, with the cap
+        # fixed at the S2a exit.
         run: |
-          go run ./tools/kernelcheck lines sdk/def/clock/v0/conformance 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/composition/v0/conformance 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/configrefs/v0/conformance 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/reload/v0/conformance 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/launch/v0/conformance 800 provisional
+          go run ./tools/kernelcheck lines sdk/def/clock/v0/conformance 200
+          go run ./tools/kernelcheck lines sdk/def/composition/v0/conformance 200
+          go run ./tools/kernelcheck lines sdk/def/configrefs/v0/conformance 300
+          go run ./tools/kernelcheck lines sdk/def/reload/v0/conformance 200
+          go run ./tools/kernelcheck lines sdk/def/launch/v0/conformance 500
       - name: Command line caps
         # ADR-060 decision 35 and ADR-061, Consequences: the commands definition, its fake
-        # and its suite, 800 lines each; the cli row and each command row, 1,500 each,
-        # provisional until the S2a exit.
+        # and its suite, the cli row and each command row, with the caps fixed at the S2a
+        # exit.
         run: |
-          go run ./tools/kernelcheck lines sdk/def/commands/v0 800 provisional fake conformance
-          go run ./tools/kernelcheck lines sdk/def/commands/v0/fake 800 provisional
-          go run ./tools/kernelcheck lines sdk/def/commands/v0/conformance 800 provisional
-          for p in cli command-profile command-plugin command-trust command-dist command-key; do
-            go run ./tools/kernelcheck lines plugins/$p 1500 provisional
-          done
+          go run ./tools/kernelcheck lines sdk/def/commands/v0 700 fake conformance
+          go run ./tools/kernelcheck lines sdk/def/commands/v0/fake 200
+          go run ./tools/kernelcheck lines sdk/def/commands/v0/conformance 800
+          go run ./tools/kernelcheck lines plugins/cli 200
+          go run ./tools/kernelcheck lines plugins/command-profile 300
+          go run ./tools/kernelcheck lines plugins/command-plugin 600
+          go run ./tools/kernelcheck lines plugins/command-trust 100
+          go run ./tools/kernelcheck lines plugins/command-dist 200
+          go run ./tools/kernelcheck lines plugins/command-key 100
       - name: Operations definition line caps
         # ADR-060 decision 35 and ADR-061: the operations definition, its fake and its
-        # suite are packages of their own, provisional until the S2a exit: the definition
-        # 800 lines, the fake and the suite 1,300 each since the note of 2026-11-25, which
-        # raised them from 1,000.
+        # suite are packages of their own, with the caps fixed at the S2a exit.
         run: |
-          go run ./tools/kernelcheck lines sdk/def/operations/v0 800 provisional fake conformance
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1300 provisional
-          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1300 provisional
+          go run ./tools/kernelcheck lines sdk/def/operations/v0 900 fake conformance
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/fake 1200
+          go run ./tools/kernelcheck lines sdk/def/operations/v0/conformance 1300
       - name: plugin check and T3 boot of every plugin
         # ADR-060 decision 32, standing rule 2, and decision 36; ADR-020 decision 13;
         # ADR-061 decision 23: a Go test builds aiopsctl, makes a throwaway home trust the
