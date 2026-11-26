@@ -301,8 +301,12 @@ func (t *toolbox) Gate(ctx context.Context, q launch.GateRequest) (launch.Verdic
 		return launch.Verdict{}, fmt.Errorf("%q is not an entry point that gates an artifact", q.Entry)
 	}
 	man, err := ReadManifest("the manifest of the artifact", q.Manifest, ManifestLenient)
-	if err != nil {
-		return launch.Verdict{}, err
+	if err != nil { // check 1 denies it, and no other check reads what it does not read (ADR-048 decision 24)
+		v := launch.Verdict{Entry: q.Entry, Clauses: []launch.Clause{{Check: CheckManifest, Clause: string(RuleManifest), Outcome: launch.OutcomeDeny, Reason: err.Error()}}}
+		for n := CheckDefinitions; n <= CheckAttestation; n++ {
+			v.Clauses = append(v.Clauses, launch.Clause{Check: n, Outcome: launch.OutcomeNotEvaluated, Reason: "the manifest of the artifact does not read (check 1)"})
+		}
+		return v, nil
 	}
 	art := Artifact{ID: man.ID, Digest: q.Digest, Kept: Kept{Manifest: q.Manifest, Bundle: q.Bundle},
 		Record: Record{Signer: q.Signer, ID: man.ID, Version: man.Version, Runtimes: man.Runtimes, Attestation: q.Attestation}}

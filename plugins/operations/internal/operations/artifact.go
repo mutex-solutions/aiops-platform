@@ -663,6 +663,8 @@ func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (tr
 		return (f.name == id || f.name == "") && covers(t.signers[f.signer], a.ID, a.Runtimes)
 	})
 	switch owner, _, _ := strings.Cut(a.ID, "/"); {
+	case slices.Contains(a.Runtimes, "wasm"): // no signer covers what the schema does not serve
+		return a, refused("check 1: %s lists the runtime wasm, which this schema version does not serve (ADR-060 decision 58)", id)
 	case !slices.Contains(a.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
 		// As the gate's check 5: only the release key signs such an artifact, and no
 		// binary built at S2a carries one (ADR-020 decision 13).
