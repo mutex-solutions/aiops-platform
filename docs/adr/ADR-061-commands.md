@@ -8,13 +8,16 @@
   that code merges into `main`. Brought to ADR-062 on 2026-11-24, as its decision 16
   asks: decisions 10, 16, 17 and 32 and the scope name its transport and return the
   outcomes of its decision 11.
-- Status of the S2b part: **proposed 2026-11-27, awaiting the project owner.** The
-  section "S2b part, proposed 2026-11-27" holds it, as decisions 45 to 59 and questions
-  Q10 to Q16. ADR-063 decision 2 has it written as a dated addition to this ADR,
-  proposed before the code it governs and accepted before that code merges into `main`.
-  It is accepted together with ADR-041 and the S2b parts of ADR-020, ADR-044, ADR-047
-  and ADR-048, or after them. Until the owner accepts it, decisions 1 to 44 stand as
-  they are.
+- Status of the S2b part: **accepted 2026-11-27 by the project owner.** The owner
+  answered questions Q10 to Q16 on the same date with the recommended option of each,
+  (a) in every case: Q11 with the rule on what a peer supplies, Q13 for all four
+  readings and Q15 on the condition that it names. The section "S2b part, proposed
+  2026-11-27" holds the part as decisions 45 to 59, and its section "Owner answers of
+  2026-11-27" records the answers as decisions 60 to 66. ADR-063 decision 2 had it
+  written as a dated addition to this ADR, proposed before the code it governs and
+  accepted before that code merges into `main`. The owner answered the questions of
+  ADR-041 and of the S2b parts of ADR-020, ADR-044, ADR-047 and ADR-048 on the same
+  date, and each is recorded in its own ADR.
 - Scope: ADR-060 decision 53 (its question Q17 (a)) and decision 41 (its question Q5
   (a)): the `commands` definition; the `cli` row, its dispatcher; the `aiops-cli` bundle
   and the `cli` profile; `cmd/aiopsctl` as the launcher of the `cli` profile, with
@@ -407,6 +410,7 @@
         Enable(ctx context.Context, r RowRequest) (Change, error)
         Disable(ctx context.Context, r RowRequest) (Change, error)
         Remove(ctx context.Context, r RemoveRequest) (Change, error)
+        Start(ctx context.Context, r StartRequest) (Started, error) // from S2b
         AddTrust(ctx context.Context, r TrustRequest) (Change, error)
         GenerateKey(ctx context.Context, r KeyRequest) (Written, error)
         Build(ctx context.Context, r BuildRequest) (launch.Built, error)
@@ -422,21 +426,23 @@
     |---|---|
     | `Caller`, embedded in every request | `Env`, the invocation's lookup of the environment (decision 2), the only way the library reads it; `Progress`, the writer of progress lines, stderr in `aiopsctl`. Every path in a request is absolute: a command row resolves it against `Invocation.Dir` |
     | `HomeRequest`, `ProfileRequest` | `Home`, `Profile` |
-    | `Home` | `Profiles`; for the profile asked, `Bundles` (its bundle list), `Enabled` (the `enabled` departures of its profile layer by row id) and `Locked` (id, digest and content digest of each entry of its `plugins.lock`); for the site, `Signers` (key id, ids, runtimes, signed), `Distributions` (key ids, and `release` for the default root), `AllowUnsigned`, `Records` (digest, kind, signer, plugin id), `Current` and `Image`; and `Snapshot`, whether an interrupted write left one (decision 17) |
+    | `Home` | `Profiles`; for the profile asked, `Bundles` (its bundle list), `Enabled` (the `enabled` departures of its profile layer by row id) and `Locked` (id, digest and content digest of each entry of its `plugins.lock`); for the site, `Signers` (key id, ids, runtimes, signed), `Distributions` (key ids, and `release` for the default root), `AllowUnsigned`, `Records` (digest, kind, signer, plugin id), `Current` and `Image`; and `Snapshot`, whether an interrupted write left one (decision 17). From S2b `Remote`: per installed remote plugin id, whether the home holds its unit, its line of the endpoint table and its pin (decision 46) |
     | `RenderRequest` | `launch.RenderRequest` with `Caller` |
-    | `NewRequest` | `Registry` (a registry or `connector`), `ID`, `Lang`, `Contrib`, `Against`, `Plugins`, `Dir` |
-    | `CheckRequest`, `CheckReport` | `Dir`, `Write`, `Against`; per step of `07:1565`-`1576` its number, `pass`, `fail`, `not applicable` or `skipped`, and its `launch.Diagnostic`s, and the attestation it would sign |
+    | `NewRequest` | `Registry` (a registry or `connector`), `ID`, `Lang`, `Contrib`, `Against`, `Plugins`, `Dir`. From S2b `Runtime`, `inproc` or `remote`; empty is the default of the language (decision 50) |
+    | `CheckRequest`, `CheckReport` | `Dir`, `Write`, `Against`; per step of `07:1565`-`1576` its number, `pass`, `fail`, `not applicable` or `skipped`, and its `launch.Diagnostic`s, and the attestation it would sign. From S2b a fifth outcome of a step, `not run`, and `NotRun`, the steps that did not run for want of a container runtime; `Passed` keeps its meaning, no step failed (decision 53) |
     | `Smoke` takes `BuildRequest` and returns `launch.Built` | `Plugin`, the plugin directory, `Against`, the release artifact by digest, `ModCache`, `Mirrors` and `Builder` (`image` or `local`); `Built.Rows`, each row of the test-only profile with its state and what it waits for, and its error says why smoke did not pass (ADR-060 decision 58, reading 1) |
     | `PackRequest`, `SignRequest`, `PushRequest`, `Pushed` | `Dir`, `Out`; `Out`, `Key`; `Out`, `Registry`; the spec by digest (ADR-047 decision 1) |
     | `SpecRequest`, `GateRequest` | `Spec`, and for `Verify` `Home`, whose `trust.yaml` it reads, `Builder`, and `Against`, `ModCache` and `Mirrors`, the release artifact by digest and the module source that in-process code builds on (ADR-060 decision 46); `Spec`, `Against` |
-    | `Inspected` | The digest; id, version and runtimes; each row with its config and content paths; that no signer was verified (ADR-047 decision 2) |
-    | `Verified` | The digest, the verified signer, each suite that ran with its result, and the verdict |
+    | `Inspected` | The digest; id, version and runtimes; each row with its config and content paths; that no signer was verified (ADR-047 decision 2). From S2b `Image`, the image reference of remote code, empty for other code (decision 56) |
+    | `Verified` | The digest, the verified signer, each suite that ran with its result, and the verdict. From S2b the step `image`, and the outcome `not-run` of a step beside `pass`, `fail` and `not-built` (decision 54) |
     | `InstallRequest`, `RowRequest`, `RemoveRequest` | `Home`, `Profile` and `Spec`, `Row` or `ID`; `ConnectWait` and `Wait`, the bounds of ADR-062 decisions 9 and 10 |
+    | `StartRequest`, from S2b | `Caller`, `Home` and `ID`, the plugin id (decision 46) |
+    | `Started`, from S2b | `ID`; `Outcome`, `started`, `restarted` or `running`; `Image`, the image reference by digest that the running container has; `Target`, `compose` or `systemd` (decision 48); `Kernel`, `attached`, `already-attached` or `none`, with the name of the kernel container; and `Change`, whose `Written` and `Notes` hold what the write phase wrote (decision 46) |
     | `TrustRequest` | `Home`, `KeyFile`, `IDs`, `Runtimes`, `Signed`, `Distribution` (ADR-020 decision 5) |
     | `KeyRequest`, `SignDistRequest`, `UseRequest` | `Prefix`; `Image`, `Key`; `Home`, `Image` |
     | `BuildRequest` | `launch.BuildRequest` with `Caller` |
     | `Written` | The paths written outside the home |
-    | `Change` | `Written`, the home paths written or removed; `Notes`, what the operator is told (a profile copied from the shipped template, an item kept, a snapshot restored); `Outcome` and `Reason`, `not-running` or `restart-required` with its reason, and for the four methods that submit over the socket of ADR-062, `Result`, `Error`, `IDs` and `Last`, its outcome (decision 17); `DistLines`, the `dist.yaml` lines of `rebuild-required` (`08:397`); `Verdict`, the clauses evaluated |
+    | `Change` | `Written`, the home paths written or removed; `Notes`, what the operator is told (a profile copied from the shipped template, an item kept, a snapshot restored); `Outcome` and `Reason`, `not-running` or `restart-required` with its reason, and for the four methods that submit over the socket of ADR-062, `Result`, `Error`, `IDs` and `Last`, its outcome (decision 17); `DistLines`, the `dist.yaml` lines of `rebuild-required` (`08:397`); `Verdict`, the clauses evaluated. From S2b `Unit`, for `Disable` and `Remove`: `stopped`, `not-running`, `left` or `not-stopped`, with the reason of the last; empty where the method stopped no unit (decision 49) |
 
     | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
     |---|---|---|---|---|---|
@@ -445,17 +451,19 @@
     | `VerifyProfile` | `profile verify` | No | Boot | `Render` | `08:366` |
     | `InitProfile` | `profile init <p>` | Yes | None | `Shipped` | `08:72` row 30; ADR-060 decision 27 |
     | `SanitizeProfile` | `profile sanitize [<p>]` | Yes | None | None | `08:72` row 30; dsh §3.4; question Q9 |
-    | `New` | `plugin new <registry>`, `plugin new connector` | No; writes the author's directory | None | `Template`; `Release` for a connector | `07:1551`; ADR-060 decision 24; ADR-047 decision 12 |
-    | `Check` | `plugin check <dir>` | No; with `--write`, the author's directory | `plugin check` step 7 | `ReadManifest`, `Generate`, `Vet`, `Suite`, `Scenario`, `Gate` | `07:1565`-`1576`; ADR-060 decision 23 |
-    | `Smoke` | `plugin smoke <dir> --against <release>` | No | `dist build`, run by the builder; boot, of the test-only profile | `Build` | `07:1578`; ADR-060 decision 58 |
-    | `Pack` | `plugin pack` | No; writes the layout | `plugin pack` | `ReadManifest`, `Suite`, `Scenario`, `Gate` | `07:1859`; ADR-060 decisions 18 and 49 |
+    | `New` | `plugin new <registry>`, `plugin new connector`; from S2b `plugin new <registry> <id> [--lang go\|python] [--runtime inproc\|remote]` | No; writes the author's directory | None | `Template`; `Release` for a connector | `07:1551`; ADR-060 decision 24; ADR-047 decision 12; decision 50 |
+    | `Check` | `plugin check <dir>` | No; with `--write`, the author's directory | `plugin check` step 7; from S2b, for remote code also the remote handshake, inside step 5 (`ADR-063:334-336`) | `ReadManifest`, `Generate`, `Vet`, `Suite`, `Scenario`, `Gate`; from S2b, for remote code `Image` | `07:1565`-`1576`; ADR-060 decision 23; decisions 51 and 53 |
+    | `Smoke` | `plugin smoke <dir> --against <release>` | No | `dist build`, run by the builder; boot, of the test-only profile. From S2b, for remote code: `plugin pack` and `plugin install`, on the throwaway home; boot, of the test-only profile; and the remote handshake inside that boot | `Build`; from S2b `Build` for `inproc`, and `Image`, `Unit` and `Boot` for `remote` | `07:1578`; ADR-060 decision 58; decision 55 |
+    | `Pack` | `plugin pack` | No; writes the layout | `plugin pack` | `ReadManifest`, `Suite`, `Scenario`, `Gate`; from S2b, for remote code `Image` | `07:1859`; ADR-060 decisions 18 and 49; ADR-063 decision 61 |
     | `Sign`, `Push` | `plugin sign`, `plugin push` | No | None | None | `07:1859`; ADR-020 decision 1; ADR-047 decision 1 |
-    | `Inspect` | `plugin inspect <spec>` | No | None | None | `08:373`; ADR-060 decision 58 |
-    | `Verify` | `plugin verify <spec>` | No | None | `Build`, `Suite` | ADR-060 decisions 31 and 46 |
+    | `Inspect` | `plugin inspect <spec>` | No | None | None | `08:373`; ADR-060 decision 58; decision 56 |
+    | `Verify` | `plugin verify <spec>` | No | None; from S2b, for remote code the remote handshake, inside the step `suites` | `Build`, `Suite`; from S2b, for remote code `Unit` and `Suite` | ADR-060 decisions 31 and 46; decision 54 |
     | `Gate` | `plugin gate <spec> --against <dist.yaml>` | No | `plugin gate --against` | `Gate` | `08:493` |
     | `Install` | `plugin install <spec> --profile <p>` | Yes | Both `plugin install` rows | `Gate`, `Render` | `08:374`, `:395`-`397`; ADR-047 decisions 5 to 10 and 17 |
-    | `Enable`, `Disable` | `plugin enable <row>`, `plugin disable <row>` | Yes | Boot, on the changed profile | `Render` | `08:375`; ADR-060 decision 47 |
-    | `Remove` | `plugin remove <id> --profile <p>` | Yes | Boot, on the changed profile | `Render` | ADR-047 decision 10 |
+    | `Enable` | `plugin enable <row>` | Yes | Boot, on the changed profile | `Render` | `08:375`; ADR-060 decision 47; decision 52 |
+    | `Disable` | `plugin disable <row>` | Yes | Boot, on the changed profile | `Render`; from S2b, for a remote row `Unit`, after the lock is released | `08:375`; ADR-060 decision 47; decision 49 |
+    | `Remove` | `plugin remove <id> --profile <p>` | Yes | Boot, on the changed profile | `Render`; from S2b, for remote code `Unit`, after the lock is released | ADR-047 decision 10; decision 49 |
+    | `Start`, from S2b | `plugin start <id>` | Yes, in its write phase alone: the pin of the id with its key pair, where the pin is absent, and the line of the id in the endpoint table, where the table lacks it (decision 60) | None | `Unit` | `08:1293`; `ADR-063:401-403`; decision 45 |
     | `AddTrust` | Both forms of `trust add` | Yes | None | None | `07:1861`; ADR-020 decisions 5, 6 and 13 |
     | `GenerateKey` | `key generate <prefix>` | No; writes `<prefix>.key` and `<prefix>.pub` | None | None | ADR-020 decisions 4 and 21 |
     | `Build` | `dist build` | No | `dist build`, run by the builder | `Build` | `08:402`; ADR-060 decision 22 |
@@ -471,6 +479,18 @@
     do not exist, and `SpecRequest` gains `Against`, `ModCache` and `Mirrors` for
     `plugin verify` of in-process code. `sdk/def/operations/v0` declares the methods in
     another order, with `ctx` first in each, and its `definition.yaml` records each minor.
+
+    Note of 2026-11-27, on the acceptance of the S2b part: the sketch and the two tables
+    above gain what decision 46 adds, each marked "from S2b": the method `Start` with
+    `StartRequest` and `Started`, `NewRequest.Runtime`, the outcome `not run` of a step
+    with `CheckReport.NotRun`, the step `image` and the outcome `not-run` of `plugin
+    verify`, `Inspected.Image`, `Change.Unit`, `Home.Remote`, and each row of its method
+    table. The error `ErrNotStopped` joins the errors of the definition with them, and
+    the refusals of `remote` in `Check`, `Pack` and `Install` end (ADR-063 decision 17).
+    All of it arrives with the next minor of the definition and a raised suite revision
+    (decision 46); until that minor merges, `sdk/def/operations/v0` holds none of it. A
+    line that an addition cites, as `08:1293` or `ADR-063:401-403`, is a line at
+    `bbfd839`, the commit that the S2b part cites.
 
 17. **Rules every provider keeps.** `08:369` reads, as plugin record §12 does: "Every
     operation is a submission to the reload queue, is audited and emits
@@ -548,7 +568,10 @@
       submits, removes the snapshot and releases the lock. `Remove` deletes the
       directories that no profile names any more only after a submission that kept the
       change, so the snapshot holds no copy of them, and a directory that a failure leaves
-      behind is removed by the next install (ADR-047 decision 10).
+      behind is removed by the next install (ADR-047 decision 10). Note of 2026-11-27, on
+      the acceptance of the S2b part (decision 49): for a remote row the stop of the unit
+      follows the removal of the snapshot and the release of the lock, so no failure of
+      the stop restores the pin, and none turns a kept change into a refusal.
     - **Restore.** On a failure, a refused submission or the end of `ctx`, the method
       restores the snapshot, copying each file back and removing each created path. It
       runs the restore under a context detached from `ctx`, bounded to 5 seconds, half
@@ -695,8 +718,13 @@
 19. **One lock per home** (question Q5 (a)): the file `$AIOPS_HOME/write.lock`. The
     operations plugin holds it for the whole of each method that writes the home
     (decision 16): from before the checks that read the home, through the renames and
-    the submission, to the removal or the restore of the snapshot (`08:374`; decision
-    17).
+    the submission, to the removal or the restore of the snapshot (`08:374`; decision 17).
+    Note of 2026-11-27, on the acceptance of the S2b part (decision 46): `Start` writes
+    the home and holds the lock for its write phase alone, from before the checks that
+    read the home, through the snapshot and the renames, to the removal of the snapshot.
+    It releases the lock before the container runtime pulls or starts anything, since a
+    pull of an image has no bound. `Disable` and `Remove` stop a unit after they release
+    the lock (decision 49).
     - It is the operating system's exclusive advisory lock on that open file, `flock(2)`
       on Linux and macOS through the standard library's `syscall` package, so the system
       releases it when the holder exits and a crash leaves no stale lock. A holder holds
@@ -794,8 +822,8 @@
     | `Release` | `Digest`; `Manifest`, the signed bytes; per instantiable plugin its id and the first entry of its `configSchema` examples (ADR-047 decision 12) |
     | `BuildRequest`, `Built` | `DistYAML`, `ModCache`, `Mirrors`, `AllowBump`, `Builder` (`image` or `local`), and for smoke and verify the plugin directory, or the module path, version and sum, with `Against`; the image, the signed manifest's bytes, the site's `aiopsctl`, the verdict, and for smoke each row's state and what it waits for |
     | `GenerateRequest` | `Dir`, `Write` |
-    | `SuiteRequest`, `SuiteReport` | `Dir`, the definitions with their versions, the halves and the fixtures directory; per definition its suite revision, the halves that ran and each failed obligation by id |
-    | `TemplateRequest` | `Registry`, `ID`, `Lang`, `Contrib` |
+    | `SuiteRequest`, `SuiteReport` | `Dir`, the definitions with their versions, the halves and the fixtures directory; per definition its suite revision, the halves that ran and each failed obligation by id. From S2b `SuiteRequest` also holds the runtime that a suite runs in (decision 47) |
+    | `TemplateRequest` | `Registry`, `ID`, `Lang`, `Contrib`; from S2b `Runtime` (decision 50) |
     | `ScenarioRequest`, `ScenarioReport` | `Dir`, `Name`; the scenario's name and version, the halves that ran and each failure (ADR-060 decision 49) |
 | `ModuleRequest`, `Module` | `Dir`, the root of the module of in-process code, and `Version`, the version it is packed at; its `Path`, `Version` and h1 `Sum`, and `Deps`, the rest of its build list as `go list -m -json all` reads it with the author's toolchain |
 
@@ -813,17 +841,30 @@
     | `Shipped` | The bundles and profiles that the binary embeds, by path | `boot`, from what `dist` hands it | `InitProfile` | ADR-060 decision 27 |
     | `Release` | The signed manifest that the binary embeds, or the one that `--against` names, with its instantiable plugins | `boot` | `New` | ADR-060 decisions 17 and 24; ADR-047 decision 12 |
     | `Build` | The builder, on the image path or the local path (ADR-044 decision 1); for smoke it also boots the test-only profile and reads its row states | `cmd/aiopsctl` | `Build`, `Smoke`, `Verify` | ADR-060 decision 22; ADR-044 |
-    | `Generate` | `plugingen` | `cmd/aiopsctl` | `Check` | ADR-060 decision 11 |
+    | `Generate` | `plugingen`; from S2b, for a Python plugin, it runs `aiops-sdk manifest` (decision 51) | `cmd/aiopsctl` | `Check` | ADR-060 decision 11; decision 47 |
     | `Vet` | The import analyzer and plugin vet | `cmd/aiopsctl` | `Check` | ADR-060 decision 23 |
-    | `Suite` | Runs a suite: an embedded test binary, or a module compiled with the toolchain | `cmd/aiopsctl` | `Check`, `Pack`, `Verify` | ADR-060 decision 46 |
+    | `Suite` | Runs a suite: an embedded test binary, or a module compiled with the toolchain. From S2b, for the runtime `remote`, it starts the subject and runs the embedded binary that drives a remote process: in `plugin check` the `entrypoint` of the manifest, as a local process, and in `plugin verify` the container of decision 65 | `cmd/aiopsctl` | `Check`, `Pack`, `Verify` | ADR-060 decision 46; decision 47 |
     | `Template` | The templates | `cmd/aiopsctl` | `New` | ADR-060 decision 24 |
     | `Scenario` | Runs a named, versioned scenario, the echo scenario at S2a, on a pack's rows replayed from its fixtures | `cmd/aiopsctl` | `Check`, as step 8; `Pack`, for the attestation | ADR-060 decision 49; `07:1576` |
+    | `Unit`, from S2b | For a home and a plugin id, one of four actions on the unit that install rendered: `state`, `pull`, `start` and `stop`, as decision 47 lists them | `cmd/aiopsctl` | `Start`, `Disable`, `Remove`, `Verify`, `Smoke` | Decisions 45 and 47 to 49 |
+    | `Image`, from S2b | Builds the plugin image of a plugin directory from its build file on the container runtime and returns it as an OCI layout with the digest of its manifest; for a Go plugin it compiles the binary first (decision 51) | `cmd/aiopsctl` | `Pack`; `Check`, in step 7; `Smoke` | ADR-063 decision 61; decision 47 |
+    | `Boot`, from S2b | Pulls the image of a release by digest, boots a profile of a home on it in the container form of ADR-047 decision 15, with no network, reads each row's state and what it waits for from `run/status.json`, and stops and removes the container | `cmd/aiopsctl` | `Smoke` | Decisions 47 and 55 |
 | `Module` | Reads the module of in-process code for the module layer and the SBOM of `plugin pack`: the h1 sum of its module zip and its build list | `cmd/aiopsctl` | `Pack` | ADR-047 decision 1 |
 
     Note of 2026-11-25: the sketch and the two tables are edited to launch 0.2 as built,
     whose `Tools` has a seventh method, `Module`, which `plugin pack` of in-process code
     calls for the module layer and the SBOM (ADR-047 decision 1); in `aiops` it answers
     `ErrNotCarried` as the other six do.
+
+    Note of 2026-11-27, on the acceptance of the S2b part (decision 47): the two tables
+    above gain the parts `Unit`, `Image` and `Boot`, the form of `Suite` for the runtime
+    `remote`, the form of `Generate` for a Python plugin, the field
+    `TemplateRequest.Runtime` and the runtime of `SuiteRequest`, each marked "from S2b".
+    The same minor of `launch` adds the error `ErrNoRuntime`, which a part that needs the
+    container runtime returns where the host has none or none that answers, and `Unit`
+    also where the host has no Compose. The sketch above stays launch 0.2 as built: the
+    three new methods of `Tools` take their signatures with the minor that adds them, and
+    in `aiops` each answers `ErrNotCarried` as the other parts do.
 
     `cmd/aiopsctl` passes one value of `Tools` to `boot` in its run options, and `boot`
     hands it on without importing what implements it (`08:1256`). In `aiops` it is
@@ -952,7 +993,7 @@
     | Row | Commands at S2a | Source |
     |---|---|---|
     | `command-profile` | `profile render`, `profile verify`, `profile init <p>`, and with question Q9 (a) `profile sanitize [<p>]` | `00:137`; `08:72` row 30, `:366`; ADR-060 decision 27; dsh §3.4 |
-    | `command-plugin` | `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`, `verify`, `gate --against`, `install`, `enable`, `disable`, `remove` | `00:137`; `07:1565`, `:1578`; `08:373`-`375`; ADR-060 decisions 23 and 47 |
+    | `command-plugin` | `plugin new`, `check`, `smoke`, `pack`, `sign`, `push`, `inspect`, `verify`, `gate --against`, `install`, `enable`, `disable`, `remove`; from S2b `start` | `00:137`; `07:1565`, `:1578`; `08:373`-`375`; ADR-060 decisions 23 and 47; decision 45 |
     | `command-trust` | `trust add` | `07:1861`; ADR-020 decision 6 |
     | `command-dist` | `dist build`, `dist sign`, `dist use` | `08:402`; `07:1852`, `:1869` |
     | `command-key` | `key generate <prefix>`, which writes `<prefix>.key` and `<prefix>.pub` in the format of ADR-020 decision 4 | ADR-020 decision 21, which leaves the name to the CLI spec (`00:137`) |
@@ -975,9 +1016,9 @@
     | `profile verify` | `profile verify` | `08:366` |
     | `profile init` | `profile init <p>` | `08:72` row 30; ADR-060 decision 27 |
     | `profile sanitize` | `profile sanitize [<p>]` | `08:72` row 30; dsh §3.4; question Q9 |
-    | `plugin new` | `plugin new <registry> <id> --lang go [--contrib]`; `plugin new connector <id> [--contrib] [--against <dist.yaml>] [--plugin <id>]...` | `07:1528`, `:1551`; ADR-047 decision 12; ADR-060 decision 24. `--lang python` arrives at S2b (`07:1551`). Note of 2026-11-27: from S2b the Go form also takes `--runtime remote`, with `inproc` the default (ADR-063 decision 60) |
+    | `plugin new` | `plugin new <registry> <id> --lang go [--contrib]`, and from S2b `plugin new <registry> <id> [--lang go\|python] [--runtime inproc\|remote] [--contrib]`; `plugin new connector <id> [--contrib] [--against <dist.yaml>] [--plugin <id>]...` | `07:1528`, `:1551`; ADR-047 decision 12; ADR-060 decision 24. `--lang python` arrives at S2b (`07:1551`). Note of 2026-11-27: from S2b the Go form also takes `--runtime remote`, with `inproc` the default (ADR-063 decision 60). Note of 2026-11-27, on the acceptance of the S2b part: `--lang` defaults to `go`, and `--runtime` to `inproc` for Go and to `remote` for Python (decision 50) |
     | `plugin check` | `plugin check [<dir>] [--write] [--json] [--against <dist.yaml>]` | `07:1531`, `:1543`, `:1565`; ADR-060 decision 23 |
-    | `plugin smoke` | `plugin smoke <dir> --against <release> [--builder image\|local]` | `07:1578`; ADR-044 decision 1 |
+    | `plugin smoke` | `plugin smoke <dir> --against <release> [--builder image\|local]`; from S2b `plugin smoke <dir> --against <release> [--modcache <dir>] [--mirror <prefix>=<site prefix>]... [--builder image\|local]` | `07:1578`; ADR-044 decision 1; decision 55: `--modcache` is required where the manifest lists `inproc`, and none of the three flags is read for a manifest that lists `remote` alone |
     | `plugin pack` | `plugin pack [<dir>] [--out <dir>]` | `07:1533`; ADR-047 decision 1 |
     | `plugin sign` | `plugin sign --key <file> [--out <dir>]` | `07:1859`; ADR-020 decision 4; ADR-047 decision 1 |
     | `plugin push` | `plugin push <registry> [--out <dir>]` | `07:1859`; ADR-047 decision 1 |
@@ -987,6 +1028,7 @@
     | `plugin install` | `plugin install <spec> [--profile <p>]` | `08:395`-`397` |
     | `plugin enable`, `disable` | `plugin enable <row> [--profile <p>]`; `plugin disable <row> [--profile <p>]` | `08:375`, `:395` |
     | `plugin remove` | `plugin remove <id> [--profile <p>]` | ADR-047 decision 10 |
+    | `plugin start`, from S2b | `plugin start <id>` | `08:1293` at `bbfd839`; decision 45 |
     | `trust add` | `trust add <public key file> --ids <pattern>[,...] [--runtimes <runtime>[,...]] [--signed <key or hook>[,...]]`; `trust add <public key file> --distribution` | ADR-020 decision 5 |
     | `key generate` | `key generate <prefix>` | ADR-020 decision 21, which leaves the name to this spec |
     | `dist build` | `dist build <dist.yaml> [--modcache <dir>] [--mirror <prefix>=<site prefix>]... [--allow-bump <module>]... [--builder image\|local]` | `08:402`; ADR-044 decisions 1, 7, 9 and 10 |
@@ -1000,6 +1042,11 @@
     `07:1855`) work against a running process; with no such file it is a usage error,
     and a step of the exit test with no running process passes `--profile`, as step C3
     of ADR-060 decision 30 does.
+
+    Note of 2026-11-27, on the acceptance of the S2b part: the row of `command-plugin`
+    gains `plugin start`, its fourteenth command, and the CLI spec gains the row of
+    `plugin start` and the S2b forms of `plugin new` and `plugin smoke` (decisions 45, 50
+    and 55). The help goldens change with the code that builds each.
 
 ### Tests
 
@@ -1057,7 +1104,8 @@
       (`08:373`), builds it.
     - `aiopsctl plugin start <id>` (`02:312`; `08:1288`) starts the compose deployment
       unit of a remote plugin: S2b, with the remote runtime and its one shared instance
-      per plugin (`08:695`).
+      per plugin (`08:695`). Note of 2026-11-27: settled by the S2b part, accepted on that
+      date, in decisions 45 to 49, with the systemd target as decision 64 answers it.
     - The guard of M2 for `commands`: question Q7.
     - How an operation of `aiopsctl` is audited: the step that builds `audit-chain`
       (S5, `08:698`; decision 17).
@@ -1571,11 +1619,12 @@ otherwise, the decision here holds.
 
 ## S2b part, proposed 2026-11-27
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** Decisions 45 to 59 are
-  proposed and questions Q10 to Q16 are open; the owner has answered none of them.
-  ADR-063 decision 2 has this part proposed to the owner before the code it governs and
-  accepted before that code merges into `main`. This text is the proposal as corrected
-  after its review of the same date.
+- Status: **accepted 2026-11-27 by the project owner.** Decisions 45 to 59 are accepted,
+  and the owner answered questions Q10 to Q16 on the same date, each with its
+  recommended option; "Owner answers of 2026-11-27" below records the answers as
+  decisions 60 to 66. ADR-063 decision 2 had this part proposed to the owner before the
+  code it governs and accepted before that code merges into `main`. The text of
+  decisions 45 to 59 is the proposal as corrected after its review of the same date.
 - Scope: what ADR-063 decision 34 has this part settle (`ADR-063:849-854`): `plugin
   start`, with `Start` in the operations definition as a minor with a raised suite
   revision; `plugin new --lang python`; the form of a remote Go plugin, which ADR-063
@@ -1597,6 +1646,11 @@ otherwise, the decision here holds.
   that one of them hands to it. This part is accepted together with those parts or
   after them. Where the accepted text of one differs from what decision 59 assumes,
   this part is corrected by a dated note before the code that the point governs merges.
+  Note of 2026-11-27: the owner answered the questions of those parts on the same date
+  as the questions of this one, so the parts are accepted together. Decision 59 is read
+  against their accepted text from that date. Decision 65 names one point where two of
+  those texts differ from this part, and the record of the answers leaves the comparison
+  of the other rows to a later commit.
 - Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
   is written against. The sections above cite `a3c85ae`, so a line number here differs
@@ -2745,6 +2799,7 @@ on both targets, since install writes the line whichever unit the site runs.
   decision 55), so a line that names another endpoint opens no stream. (b) is less code
   and changes what four written lines mean. Blocks: `Start`, the refusal of `Enable` and
   its case (`ADR-063:753-755`); needed before group 3 of ADR-063 decision 30.
+- **Answered 2026-11-27: (a)**, decision 60.
 
 **Q11. How does the exact command reach the output when the instance did not answer?**
 `aiopsctl` prints "the row, the reason the server gave and, where the instance did not
@@ -2785,6 +2840,7 @@ the proxy is third-party code (`ADR-063:813-816`).
   owner answers Q14 (b), or once a second client has to decide on the cause. Blocks:
   the failure text of the proxy (group 2 of ADR-063 decision 30), `Enable` and step C2;
   needed before the proxy merges.
+- **Answered 2026-11-27: (a)**, with the rule of decision 52, decision 61.
 
 **Q12. How does `plugin check` exit when step 7 did not run for want of a container
 runtime?** The check "exits non-zero on the first failing step", and step 7 "needs one
@@ -2824,6 +2880,7 @@ runs" (`ADR-063:1640-1641`).
   repository, reads the report that the check already writes. (d) adds a flag for what
   the report shows. Blocks: `Check` on remote code and `make plugin-check`; step P2 of
   the exit reads the report under every option.
+- **Answered 2026-11-27: (a)**, decision 62.
 
 **Q13. Four readings of `07:1583` for `remote`.** None changes what smoke requires of
 in-process code: each fills a point that the line leaves open for the runtime `remote`.
@@ -2852,6 +2909,7 @@ in-process code: each fills a point that the line leaves open for the runtime `r
   gains them.
 - (b) Answer each item on its own.
 - Recommended: (a). Blocks: `Smoke` of remote code and its cases (`ADR-063:758-760`).
+- **Answered 2026-11-27: (a)**, all four readings, decision 63.
 
 **Q14. What does `aiopsctl` do on a site that runs the systemd unit?** `08:1293` gives
 the two targets two start commands, "started with `aiopsctl plugin start <id>`" and "a
@@ -2895,6 +2953,7 @@ renders both unit files for every id, so no file of the home says which one a si
   with behaviours that the systemd job of ADR-063 decision 50 has to prove (decision
   48). Blocks: `Unit`, `Start`, the stop of decision 49 and that job; needed before
   group 3 of ADR-063 decision 30.
+- **Answered 2026-11-27: (a)**, decision 64.
 
 **Q15. How does `plugin verify` reach the container that it starts?** ADR-063 has a
 server dial only over mutual TLS, and its one exception is "The Unix socket of `plugin
@@ -2935,6 +2994,7 @@ the container, and the parts that were proposed with this one each leave it to a
   authenticated dial onto an operator's host. The owner decides, because (b) edits two
   accepted decisions of ADR-063. Blocks: `Verify` of remote code and its cases
   (`ADR-063:756-758`).
+- **Answered 2026-11-27: (a)**, on the condition that it names, decision 65.
 
 **Q16. One reading: `plugin enable` of a remote row while no process runs the
 profile.** `08:398`, `07:1870` and `02:326` say with no condition that `plugin enable`
@@ -2964,3 +3024,185 @@ With no process on the profile there is no verdict, and decision 17 answers
   `aiopsctl` from any dial and `Enable` from any runtime, and the row is still never
   ACTIVE without a handshake. Blocks: `Enable` of a remote row with no process, and the
   order of smoke (decision 55).
+- **Answered 2026-11-27: (a)**, decision 66.
+
+### Owner answers of 2026-11-27
+
+The project owner accepted the S2b part of this ADR on 2026-11-27, with decisions 45 to 59
+and the edits that "Edits on acceptance of the S2b part" makes whatever the answers, and
+answered questions Q10 to Q16 on the same date, each with its recommended option, which is
+(a) in every question. Each decision below names the question it answers. Where a decision
+of the part leaves a point to a question, the decision here settles it. The owner answered
+the questions of ADR-041 and of the S2b parts of ADR-020, ADR-044, ADR-047 and ADR-048 on
+the same date, and each is recorded in its own ADR.
+
+60. **`plugin enable` prints `aiopsctl plugin start <id>` when the endpoint is missing
+    from the table** (Q10 (a)): one command for both halves, the missing endpoint and the
+    instance that does not answer, as `08:398`, `07:1870` and `02:326` word it, and those
+    three lines stand. `plugin start` makes the command true: in its write phase, under
+    the write lock and on what it reads there, it writes the line that install writes, for
+    an id whose unit the home holds and whose line the endpoint table lacks, and it
+    submits nothing (decision 45). The text of refusal 1 is the one that decision 52 gives
+    for this answer. `plugin start` is therefore a writer of the endpoint table beside
+    `plugin install`, and the row of the table in ADR-047 decision 28 says so. The running
+    process learns the line at the generation that the next `plugin enable` submits, so
+    the provider `sidecars-static` reads the table at every generation or at every lookup,
+    and not once at boot, which the exit needs of it whatever this answer
+    (`ADR-063:676-678`). On a site that runs the systemd unit the command is the same
+    (decision 64). One point of the question stays open. With (a) the owner was also to
+    say which text carries the rule on when the provider reads the table, the S2b part of
+    ADR-047 or a part of its own, and the answer of 2026-11-27 names none. ADR-047
+    decision 29 leaves when the row reads the file again to the row, with the definition
+    `sidecars` (ADR-063 decision 39). The owner is asked again before `sidecars-static`
+    merges. Until a text carries the rule, it stands here as what this answer requires of
+    that provider.
+
+61. **The server's reason holds the exact command** (Q11 (a), with the rule on what a peer
+    supplies). Where the dial of a proxy got no answer, the reason with which its row
+    fails ends with the words `the instance of <id> did not answer: run "aiopsctl plugin
+    start <id>"`. `aiopsctl` prints the reason whole and decides nothing on it, and the
+    same words are in the log of the server process, at boot too, where an optional row
+    waits for its instance (`08:477`). Decision 52 fixes the words after `fail:` for its
+    rows 3 and 4. Because the text is printed as an instruction, the rule of decision 52
+    binds the proxy: the words `run "aiopsctl` are written by first-party code alone, as
+    the last clause of a reason; a reason holds nothing that the peer supplied but
+    numbers, a fingerprint that the kernel computed and a value from a closed list of
+    ADR-041; a free text of the peer, as `Hello.diagnostics`, is logged and enters no
+    reason; `aiopsctl` prints the text of a row through the function that quotes a control
+    character; and the peer case of decision 58 holds the rule. The wire of ADR-062 and
+    the definitions `composition` and `reload` do not change, and ADR-062 decision 7 gains
+    no note.
+
+62. **`plugin check` exits 0 when step 7 did not run for want of a container runtime and
+    no step failed, and `make check` needs no container runtime** (Q12 (a)). A step that
+    did not run is not a failed step. The report says `not run` and holds no attestation,
+    and `plugin pack` refuses on that machine (decisions 47 and 53). The gate still reads
+    the manifest, and a clause that denies fails step 7 with exit 1 (decision 53). `make
+    plugin-check` on a machine with no container runtime passes and prints each step that
+    did not run. The CI jobs that run `plugin check` on a remote plugin, the step of the
+    `test` job that runs `make plugin-check` among them, set a switch of the test that
+    runs the check, under which a step named in `NotRun` of the report fails the test.
+    Each of those jobs then holds a container runtime, and step 7 is proven on every
+    commit. `07:1570` gains the outcome and the exit. `plugin check` gains no flag, and
+    `07:1536` is not edited.
+
+63. **The four readings of `07:1583` for `remote` are accepted** (Q13 (a)), each landing
+    with the code that builds it, and decision 55 holds with them. (1) The released image
+    is the subject of the release artifact that `--against` names by digest; smoke pulls
+    it by that digest and builds no distribution for `remote`. (2) For `remote` the
+    test-only profile is the release's `aiops-core` and `aiops-selfhost` bundles, the two
+    that `dev` lists, plus the plugin's bundle with its row enabled, and the pass rule of
+    ADR-060 decision 58, reading 1, stands. (3) The module source is what the build of
+    in-process code needs: `--modcache` is required where the manifest lists `inproc` and
+    is not read for a manifest that lists `remote` alone. (4) Smoke attaches the image as
+    an operator does (`08:398`), on a throwaway home with a throwaway key, in the order of
+    decision 55: pack, sign, trust, install and enable with no process running, start the
+    instance, boot the released image on that home, and start again, which attaches the
+    kernel container. No second way to run an instance exists beside the unit. `07:1583`
+    gains the four.
+
+64. **One command of `aiopsctl` on every target, and the target is found on the host**
+    (Q14 (a)), as decision 48 states it. The first start of a systemd unit is the
+    operator's `systemctl enable --now`, as `08:1293` writes it. From then `aiopsctl
+    plugin start <id>` finds the unit in the service manager, runs no fragment, makes a
+    credential where the pin is absent, starts the unit where it is not active and
+    attaches the kernel container, and `plugin disable` and `plugin remove` stop the unit
+    through the service manager. The command that `plugin enable` prints is then true on
+    both targets. `aiopsctl` runs `systemctl` and never enables or disables a unit. Where
+    the service manager refuses the site user, the command exits 1 and prints what to run.
+    `08:1293`, `02:313` and plugin record §11 gain one sentence: on a site that runs the
+    systemd unit, `aiopsctl plugin start <id>` starts the unit that the operator enabled.
+    `08:398`, `07:1870` and `02:326` stand, and `07:1195` is not weakened. The program
+    `systemctl` waits for its reading (decision 57), and the systemd job of ADR-063
+    decision 50 proves the assumptions of decision 48.
+
+65. **`plugin verify` reaches the container that it starts as a unit, over mutual TLS**
+    (Q15 (a), on the condition that the option names). `plugin verify` makes a throwaway
+    home, renders the unit of the artifact into it with the renderer of install, makes a
+    throwaway key pair for each side as install makes them, and starts the unit on an
+    internal network of its own. The binary that runs the suites is the kernel side: it
+    dials the address of the container on that network with the throwaway kernel pair. The
+    container gets exactly what a unit gives an instance. ADR-063 decision 23 keeps its
+    one exception as written, so ADR-063 decisions 23 and 54 gain no note. The condition:
+    the answer rests on one behaviour that was read in no source, that a process on the
+    host reaches an address on an internal network of the container runtime. The case of
+    `ADR-063:756-758` proves it on the runtime of the exit. If that runtime does not give
+    it, the work stops on that point and the owner is asked again (ADR-063 decision 33),
+    with option (b), the Unix socket, as the other way. The option has ADR-041 gain the
+    dial of the check runner with a throwaway pair (decision 59). That edit is not made
+    with this record. Two texts that were proposed beside this part, and whose questions
+    the owner answered on the same date, give `plugin verify` the other channel: ADR-041
+    decision 27 and ADR-044 decision 38 have the runner reach the container over the Unix
+    socket of `plugin check`, with no network in the container, which is option (b) of
+    this question, and neither decision was put to the owner as a question. ADR-020
+    decision 34 admits either channel. This answer is recorded as the owner gave it, the
+    difference is put to the owner with this record, and `Verify` of remote code does not
+    merge before the owner's word on it is recorded in the ADRs that it changes.
+
+66. **`plugin enable` of a remote row keeps its files and answers `not-running` while no
+    process runs the profile** (Q16 (a)). The half "does not answer the handshake" of
+    `08:398`, `07:1870` and `02:326` is the server's and holds while a process runs the
+    profile. With none, `plugin enable` of a remote row whose endpoint and pin the home
+    holds keeps the files, exits 0 and answers `not-running`, with one more line on
+    stderr: `the instance of <id> is not checked until a process runs <p>: start it with
+    "aiopsctl plugin start <id>"`. Refusals 1 and 2 of decision 52 stand with no process
+    too. At the next start the row follows the matrix row "Remote unreachable or handshake
+    mismatch" (`08:477`; ADR-063 decision 66). `08:398`, `07:1870`, `02:326` and plugin
+    record §11 gain "while a process runs the profile" for that half. `Enable` gains no
+    toolbox part and makes no dial, and ADR-062 decision 27 gains no note.
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:999`), and that commit makes the edits that "Edits on acceptance of the S2b part"
+names for the options chosen:
+
+- this ADR: the two Status lines, with a dated note at the acceptance order of the part;
+  in decision 16, the method `Start`, the types and fields of decision 46 and the rows of
+  its method table; the dated notes at decisions 17 and 19; in decision 21, the parts
+  `Unit`, `Image` and `Boot`, the two forms, the error `ErrNoRuntime` and the fields of
+  decision 47; in decision 30, `plugin start` in the row of `command-plugin` and the CLI
+  spec rows of `plugin start`, `plugin new` and `plugin smoke`; and the dated note at the
+  item of `plugin start` in decision 32;
+- `00:137`: `start` among the `plugin` commands of P0;
+- `07:1556`: the registries that have a remote form and the default runtime of each
+  language (decision 50); `07:1566`: the two remote modules of the remote Go form
+  (decision 51); `07:1570`: the outcome `not run` of step 7, the gate that still reads the
+  manifest, no attestation, and the exit of decision 62; `07:1583`: the four readings of
+  decision 63;
+- `08:1293`, `02:313` and plugin record §11: the sentence of decision 64;
+- `08:398`, `07:1870`, `02:326` and plugin record §11: "while a process runs the profile"
+  for the half that the server decides (decision 66);
+- ADR-047 decision 28: the row of the endpoint table names `plugin start` as the writer of
+  a missing line (decision 60).
+
+Lines that restate edited text are edited with them: plugin record §14, which restates
+what smoke needs from `07:1583` (decision 63).
+
+Not edited: `02:95` names the `plugin` commands by their range, and `02:206` and `08:430`
+list a part of them, so none restates the list of `00:137`. `07:1536`, `07:1549` and
+`07:1195` stand as written (decisions 62 and 64). ADR-062 and ADR-063 are not edited: no
+chosen option names a line of them. The licence record, the community record and the
+upstream register are not edited: decision 57 enters each item in the commit that first
+uses it. The round records under `docs/design/community-r4/` stand as text of their date.
+An option that the owner did not choose edits nothing.
+
+Left to later commits, each named:
+
+- the ADR table of `08` §3, with the commit that updates that table for the parts accepted
+  on 2026-11-27;
+- the dial of `plugin verify` in ADR-041 decision 27, in the test case and the row of
+  ADR-020 that restate it there, and in ADR-044 decision 38, with the commit that records
+  the owner's word on the difference of decision 65;
+- the text that carries the rule on when `sidecars-static` reads the endpoint table, with
+  the commit that records the owner's word on the open point of decision 60;
+- the card of the figure `07-install-distribution`, whose source
+  `docs/architecture/diagrams/src/07-install-distribution.json` restates `08:398` without
+  the condition of decision 66, with the commit that next renders that figure;
+- the rows of decision 59 marked "open", and what the answers to the questions of ADR-041
+  and of the S2b parts of ADR-020, ADR-044, ADR-047 and ADR-048 change in what decision 59
+  assumes, each by a dated note here before the code that the point governs merges, as the
+  head of this part says;
+- the minors of `operations` and `launch` with their suite revisions and the regenerated
+  `requires`, and the help goldens, with the code of group 3 of ADR-063 decision 30
+  (decisions 46 and 47);
+- the licence-record rows and the register entries of decision 57, each in the commit that
+  first uses its item.

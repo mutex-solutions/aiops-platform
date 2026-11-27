@@ -1146,7 +1146,7 @@ to 22 and the code at `bbfd839` leaves ten gaps:
 
     | Path under `$AIOPS_HOME` | Written by | The kernel mounts it | Source |
     |---|---|---|---|
-    | `sidecars.json`, the endpoint table (decision 29) | `aiopsctl` `install`, `remove`; and `plugin start`, if the S2b part of ADR-061 has it write a missing line | Read-only; the row `sidecars-static` reads it | `08:1293`; `02:215`; ADR-063 decisions 17 and 39 |
+    | `sidecars.json`, the endpoint table (decision 29) | `aiopsctl` `install`, `remove`; and `plugin start`, which writes a missing line (ADR-061 decisions 45 and 60, its question Q10 (a), answered 2026-11-27) | Read-only; the row `sidecars-static` reads it | `08:1293`; `02:215`; ADR-063 decisions 17 and 39 |
     | `remote/units/<plugin id>/`: `compose.yaml`, the compose fragment, and `<unit name>.service`, the systemd unit (decision 31) | `aiopsctl` `install`, `remove` | Read-only, and the kernel does not read it: the host starts the instance from it | ADR-063 decisions 25 and 50 |
     | `remote/kernel/`: the key pair and the certificate of the kernel | `aiopsctl` `install`, on first need; what deletes it is ADR-041's | Read-only; the proxy reads it | ADR-063 decisions 23 and 55; `00:413` |
     | `remote/pins/`: the pin of the certificate of each installed instance, one entry per plugin id | `aiopsctl`: `install` writes it, `disable` and `remove` delete it; the command that writes a pin again after a revocation is ADR-041's | Read-only; the proxy reads it at every dial | ADR-063 decision 55; `00:412` |
