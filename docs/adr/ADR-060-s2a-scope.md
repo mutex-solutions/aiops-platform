@@ -181,7 +181,14 @@ gaps:
    (`boot.RuleDeprecated`). Boot and `profile render` print it with the diagnostics; the
    other entry points give it as the reason of the pass of check 2, which `plugin gate
    --against` prints and `plugin check` shows as a warning. It never denies (`08:510`).
-   No definition is deprecated at S2a, so no shipped profile prints one.
+   No definition is deprecated at S2a, so no shipped profile prints one. Note of
+   2026-11-27 (ADR-044, S2b part, decisions 35 and 43, its question Q17 (a)): from S2b
+   `serves` gains two fields, which its one writer writes and the reader of `boot`
+   requires from the same commit (ADR-063 decision 46). Each served major of each
+   definition carries `remote`, the mark of its `definition.yaml`: `contrib`,
+   `callback` or `no`. Beside `pluginApi`, `remoteProtocol` lists the protocol majors
+   the binary speaks; it is always written and holds `[]` for a binary that speaks
+   none. The kernel part gains no field.
 10. **The suite revision** is the integer `suite` of `definition.yaml`, raised when a
     suite adds tests inside a minor (`07:540`). The attestation names it (decision 18).
 11. **`plugingen` writes the generated half of `plugin.yaml`.** It is a package of the
@@ -338,6 +345,11 @@ gaps:
     differs. The builder takes any release input in that form: a release build's module
     table is the one its input lists, and a site's begins with the one its release's
     signed manifest records, so a site builds on the test release of decision 38 too.
+    Note of 2026-11-27 (ADR-044, S2b part, decision 40, its question Q14 (a)): from S2b
+    the pins of a release's signed manifest also hold, for each of the six modules the
+    release serves, the hash of its zip and of its `go.mod` as the release's module
+    source holds them, whether or not a release binary compiles the module, beside the
+    `go.sum` lines of the release's build.
 21. **SDK module versions outside the repository.** Inside the repository the three SDK
     modules require each other at `v0.0.0` through `replace` lines, and the root module
     reaches them the same way; that stays, for work inside the repository only.
@@ -1647,7 +1659,18 @@ to a question, the decision here settles it.
     the artifact's attestation names, and its reason names those suites (`07:1512`). On
     the image path the step is not built and says so: the builder image's `aiopsctl` runs
     `dist build`, which runs no suite of a registry, so `--builder local` runs them until
-    the image takes a request of verify.
+    the image takes a request of verify. Note of 2026-11-27 (ADR-044, S2b part,
+    decisions 41 and 44, its questions Q15 (a) and Q18 (a)): from S2b a release build
+    also compiles one test binary that drives a remote process,
+    `suites/runtime-remote.test`, which the release `aiopsctl` embeds beside the pack
+    binaries and runs once for step 4 and once for step 5 of `plugin check` in the
+    runtime `remote`; the pack binaries stay as this decision has them. An `aiopsctl`
+    that embeds no binary compiles the same test with the Go toolchain at hand when the
+    plugin's directory lies in the root module of the repository: the toolbox takes the
+    text of the test file from the function of the builder that gives it to the release
+    build, writes it into a build overlay, compiles it in the root module and runs the
+    result as it runs an embedded binary. Outside the root module the answer stays
+    `launch.ErrNotCarried`.
 
 47. **`enable`, `disable` and `remove` are built at S2a, `purge` at S3** (Q11 (a)). The
     three run on the operations library; `enable` and `disable` write only a departure

@@ -4,8 +4,11 @@
   questions on the same date with the recommended option of each; the section "Owner
   answers of 2026-11-23" records them as decisions 15 to 27. ADR-060 decision 2 required
   this acceptance before the builder code merges into `main`. The S2b part, the last
-  section of this file, is **proposed 2026-11-27, awaiting the project owner**: nothing
-  in it is decided, and it changes no decision above.
+  section of this file, is **accepted 2026-11-27 by the project owner**: the owner
+  answered its six questions, Q14 to Q19, on that date with the recommended option of
+  each, and the section "Owner answers of 2026-11-27" at the end of that part records
+  them as decisions 40 to 45. It changes no decision above; decision 8 gains a dated
+  note.
 - Scope: ADR-044 as `08:1175` and `00:778` state it (the builder image, the module cache
   format, when `--allow-bump` is acceptable, the content of the `init` deny-list), with
   the points ADR-060 decision 33 adds: the base layer and SBOM tool of the builder image
@@ -319,7 +322,11 @@ Registration in `init`, read in the same cache:
    prints it, and the signed manifest records it marked as checked against nothing,
    since no field of the site's `dist.yaml` can carry a hash and a refusal would leave
    the site no way to build. The hash of every module enters the SBOM and the pins of
-   the signed manifest.
+   the signed manifest. Note of 2026-11-27 (S2b part, decision 40, its question Q14
+   (a)): from S2b the signed manifest of a release also records, for each of the six
+   modules the release serves, the hash of its zip and of its `go.mod` as the release's
+   module source holds them, whether or not a release binary compiles the module. The
+   pins hold these lines beside the `go.sum` lines of the release's build.
 9. **What E7 needs** (`01:285`, `:384`).
    - In the site's registry, by digest: the artifact that `release` names; on the image
      path, the builder image it names (decision 1); the artifact of each in-process
@@ -856,7 +863,8 @@ settles it.
     modules are, inside the exit job (ADR-060 decision 40). Note of 2026-11-27: from
     S2b a release serves six modules, the five SDK modules and the root module
     (ADR-063 decision 43). The S2b part of this ADR, which ADR-063 decision 34 lists,
-    is a dated addition proposed apart.
+    is a dated addition, the last section of this file, proposed apart and accepted by
+    the owner on 2026-11-27.
 
 24. **A registry package's own registration counts** (Q10 (a)), as decision 11 writes. A
     server binary that links the package `prometheus` of the Prometheus client or
@@ -962,12 +970,14 @@ it.
 
 ## S2b part, proposed 2026-11-27
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** Decisions 28 to 39 are
-  proposals and questions Q14 to Q19 are open; nothing below is decided until the owner
-  answers. The code this part governs merges into `main` only after it is accepted
-  (ADR-063 decision 2). The proposal was revised on the same date after its review
-  round: decisions 28 to 37 were corrected, and decisions 38 and 39 and questions Q18
-  and Q19 were added.
+- Status: **accepted 2026-11-27 by the project owner.** The owner answered questions
+  Q14 to Q19 on that date with the recommended option of each, (a); the section "Owner
+  answers of 2026-11-27" at the end of this part records the answers as decisions 40 to
+  45. ADR-063 decision 2 required this acceptance before the code this part governs
+  merges into `main`. The proposal was revised on the same date after its review
+  round, before the owner answered: decisions 28 to 37 were corrected, and decisions
+  38 and 39 and questions Q18 and Q19 were added. The heading of this part keeps the
+  date of the proposal.
 - Scope: the S2b part of this ADR, as ADR-063 decision 34 lists it: the release modules
   the builder serves; the suite binaries that drive a remote process; the writer of the
   new `serves` fields, `remoteProtocol` and the `remote` mark (ADR-063 decision 46); and
@@ -1170,7 +1180,8 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
     module source for exact versions only (decision 7), so it changes no build of that
     release.
 30. **A release module that no release binary compiles** has its hashes recorded as
-    question Q14 decides. The facts that the question rests on:
+    question Q14 decides: answered (a), decision 40. The facts that the question rests
+    on:
     - `sdk/remotehost` is the kernel module inside a Go plugin process, and its
       importer is the `main` that the remote form of the Go template writes (ADR-063
       decisions 8 and 60; `07:32`). This part expects that no binary of a release
@@ -1196,9 +1207,9 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
       marked as checked against nothing only where the plugin's zip holds no `go.sum`,
       or one without that line.
 31. **One binary drives a remote process**, as question Q15 decides: with (a),
-    `suites/runtime-remote.test`. It carries what steps 4 and 5 of `plugin check` run
-    in the runtime `remote` (ADR-063 decision 17) and what `plugin verify` re-runs
-    against a pulled image (decision 38).
+    `suites/runtime-remote.test` (answered (a), decision 41). It carries what steps 4
+    and 5 of `plugin check` run in the runtime `remote` (ADR-063 decision 17) and what
+    `plugin verify` re-runs against a pulled image (decision 38).
     - **Why a test binary.** A suite takes a `*testing.T`
       (`sdk/def/echoers/v0/conformance/conformance.go:69`; ADR-059 decision 32), and
       `kerneltest.New` takes a `testing.TB`, which keeps a kernel with both binding maps
@@ -1215,7 +1226,7 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
       test -c`, `-trimpath`, cgo off and the tag `grpcnotrace`, and the release
       `aiopsctl` embeds it (ADR-060 decision 46; `suites.go:163-177`;
       `build.go:349-350`).
-    - **Inside the repository**, as question Q18 decides.
+    - **Inside the repository**, as question Q18 decides: answered (a), decision 44.
     - A definition name holds no hyphen (`internal/plugingen/defs.go:53`), so the name
       of the binary collides with the suite binary of no registry.
 32. **What the binary links, and what it does not.**
@@ -1267,9 +1278,9 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
       ships nowhere, serves it through a plugin of its table that provides its key. Its
       binary therefore links that fake, and the callback half of the binary runs on
       the `aiopsctl` that ADR-063 decision 37 names.
-    - **`boot`**, for the handshake entry of the gate, as question Q16 decides. With
-      (a) the key through which the proxy reaches that entry is provided by `boot`'s
-      code, and the binary links no fake of that key.
+    - **`boot`**, for the handshake entry of the gate, as question Q16 decides:
+      answered (a), decision 42. With (a) the key through which the proxy reaches that
+      entry is provided by `boot`'s code, and the binary links no fake of that key.
     - **No module of its own.** The graph of the binary holds no package of a module
       that the graph of the release's server, of its `aiopsctl` or of a pack binary
       does not hold. The release build fails otherwise, so no linked module enters a
@@ -1279,7 +1290,8 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
     plugin-side host. It links no code of the plugin under check, in any language.
 
     **The Unix dial and its fence.** A server has no unauthenticated dial, by no flag,
-    config field or fallback (ADR-063 decision 23). With question Q19 (a):
+    config field or fallback (ADR-063 decision 23). With question Q19 (a), the
+    owner's answer (decision 45):
     - The dial of a Unix socket is code of `internal/remotesuite` and of no other
       package. The list of toolbox packages of the import check gains that package
       (`internal/vet/imports.go:46`), so `make check` refuses it in the dependency
@@ -1429,8 +1441,8 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
     - **`remoteProtocol`**, beside `pluginApi`: the protocol majors the binary speaks, a
       list of non-negative integers in ascending order, none twice, the form of
       `requires.remoteProtocol` (ADR-048 decision 12; `boot/manifest.go:505-510`).
-      Whether it is always written is question Q17; with (a) it is a required field
-      that holds `[]` for a binary that speaks none.
+      Whether it is always written is question Q17, answered (a), decision 43: it is
+      a required field that holds `[]` for a binary that speaks none.
     - **Where the majors come from.** A binary speaks the protocol exactly when the
       package graph that its manifest is written from, the graph of the server's main
       package (`manifest.go:28-31`), holds the kernel side of the protocol. Its majors
@@ -1737,10 +1749,13 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
 
 ### Edits on acceptance of the S2b part
 
-Until the owner answers, nothing outside this file is edited. The commit that records
-the answers edits this section, its status and the decisions that the answers settle,
-and the status of this ADR in `00:782` and in the ADR table of `08` §3 (`08:1178`),
-which then name the S2b part. For the recommended options it adds a dated note to:
+Nothing outside this file was edited before the owner answered. The commit that
+records the answers of 2026-11-27 edits this section, its status and the decisions that
+the answers settle, and the status of this ADR in `00:782`, which then names the S2b
+part. The row of this ADR in the ADR table of `08` §3 (`08:1178`) is left to the commit
+that updates that table ("Edits made with this record", in the section "Owner answers
+of 2026-11-27"). The owner chose the recommended option of each question, so the commit
+adds a dated note to:
 
 - decision 8 above and ADR-060 decision 20, for the hashes of the served modules in the
   pins (Q14 (a));
@@ -1752,9 +1767,10 @@ which then name the S2b part. For the recommended options it adds a dated note t
 - ADR-063 decision 9, for the dial of the kernel-side package (Q19 (a));
 - ADR-063 decision 36, for the row of `internal/remotesuite` (decision 32).
 
-With Q18 (b), ADR-063 decision 31 gains a dated note in place of the note for Q18 (a).
-No recommended option edits a line of `00` to `08` beyond the two status lines. An
-option the owner does not choose edits nothing.
+With Q18 (b), ADR-063 decision 31 would have gained a dated note in place of the note
+for Q18 (a); the owner chose (a), so it gains none. No recommended option edits a line
+of `00` to `08` beyond the two status lines. An option the owner did not choose edits
+nothing.
 
 ### Questions for the owner on the S2b part
 
@@ -1788,6 +1804,7 @@ checked.
   against the release's signature by every build that resolves it, and nothing is
   linked that no binary runs. Blocks: the builder change that serves `sdk/remote` and
   `sdk/remotehost`.
+- **Answered 2026-11-27: (a)**, decision 40.
 
 **Q15. How many binaries drive a remote process?** ADR-060 decision 46 embeds one test
 binary per registry suite, each for the rows of a pack. Step 4 of the runtime `remote`
@@ -1807,6 +1824,7 @@ suite of each registry the plugin contributes to (ADR-063 decision 17).
   case, the code that dials is linked once, and the pack binaries stay as ADR-060
   decision 46 has them. Blocks: steps 4 and 5 of `plugin check` for the runtime
   `remote`.
+- **Answered 2026-11-27: (a)**, decision 41.
 
 **Q16. Where does the check runner evaluate the handshake?** On the socket of `plugin
 check` the handshake and check 3 run as on a server (ADR-063 decision 54, reading 2),
@@ -1852,6 +1870,7 @@ connection, on what the connection brings.
   crosses a process boundary, and the binary links `boot` as its neighbours do. Blocks:
   steps 4 and 5 of `plugin check` for the runtime `remote`, and the handshake row of
   ADR-063 decision 16 at that step.
+- **Answered 2026-11-27: (a)**, decision 42.
 
 **Q17. Is `serves.remoteProtocol` always written?** `requires.remoteProtocol` is
 present exactly when `runtimes` holds `remote`, with at least one major (ADR-048
@@ -1867,6 +1886,7 @@ of it (decision 35).
 - Recommended: (a). Check 3 denies a remote manifest in both cases, and only (a) makes
   the reader refuse a manifest that predates the field. Blocks: the reader and the
   writer of the new `serves` fields, and with them the majors clause of check 3.
+- **Answered 2026-11-27: (a)**, decision 43.
 
 **Q18. How does `make plugin-check` run steps 4 and 5 on the remote examples?** ADR-063
 decision 31: "`make plugin-check` and CI run `plugin check` and a T3 boot on every
@@ -1903,6 +1923,7 @@ any step that neither passed nor is not applicable (`Makefile:139-150`;
   running a suite, only a second way of obtaining the one binary. Blocks: steps 4 and 5
   of `plugin check` on the remote examples, and with them the merge of the first remote
   example.
+- **Answered 2026-11-27: (a)**, decision 44.
 
 **Q19. Does the kernel side of the protocol hold the Unix dial?** ADR-063 decision 9
 names "the dial, the handshake, the stream and the stubs" as one package: "The proxy
@@ -1930,3 +1951,95 @@ gRPC code cannot be the fence.
   has to read. The S2b part of ADR-041 names the dial function and is worded to this
   answer. Blocks: the exported functions of the kernel side of the protocol, the proxy
   and the binary.
+- **Answered 2026-11-27: (a)**, decision 45.
+
+### Owner answers of 2026-11-27
+
+The project owner accepted the S2b part on 2026-11-27 and answered every question of
+"Questions for the owner on the S2b part" on the same date, each with its recommended
+option, (a). The decisions below continue the numbering of this ADR, and each names the
+question it answers. Where a decision of this part leaves a point to a question, the
+decision here settles it. Decisions 1 to 39 stand.
+
+40. **The signed manifest of a release records a hash for each module the release
+    serves** (Q14 (a)). The release build records, for each of the six modules it
+    serves, the hash of its zip and of its `go.mod` as its module source holds them,
+    whether or not a release binary compiles it. A site's build checks each against
+    the signed manifest, and a plugin's `go.sum` that holds another hash fails as two
+    sources that differ. The pins hold these lines beside the `go.sum` lines of the
+    release's build, and decision 8 and ADR-060 decision 20 carry a dated note that
+    says so. No package of `sdk/remotehost` is linked into a release binary for its
+    hash.
+
+41. **One binary drives a remote process, `suites/runtime-remote.test`** (Q15 (a)). It
+    links the proxy, the kernel side of the protocol and gRPC once, and every `contrib`
+    registry of the release with its suite and its adapter (decision 32). `aiopsctl`
+    runs it once for step 4 and once for step 5 (decision 33). The pack binaries stay
+    as ADR-060 decision 46 has them, and that decision carries a dated note.
+
+42. **The check runner evaluates the handshake with `boot`'s code, inside the binary**
+    (Q16 (a)), a change of ADR-063 decisions 16 and 57. The binary links `boot`, as the
+    pack binaries do, and evaluates the handshake entry with `boot`'s code in its own
+    process: the path changes from `Toolbox.Gate` in the `aiopsctl` process to `boot`'s
+    code in the child. The manifest is the bytes that `Toolbox.Release` gave that run
+    of `aiopsctl`, the embedded one or the one `--against` names, which `aiopsctl`
+    writes as a file of the private run directory; the binary reads a manifest from no
+    other path. In the binary the key of ADR-063 decision 57 is provided by `boot`'s
+    handshake entry on that manifest: no fake provides it, and the launch fake answers
+    nothing for it. No copy of check 3 exists outside `boot`. ADR-063 decisions 16 and
+    57 carry the two notes in the words that question Q16 gives, dated 2026-11-27.
+
+43. **`serves.remoteProtocol` is always written** (Q17 (a)): a required field of
+    `serves`, which holds `[]` for a binary that speaks none. The strict reader refuses
+    a manifest of the earlier writer by the name of the missing field. ADR-060 decision
+    9 carries a dated note for the two fields that `serves` gains (decision 35).
+
+44. **An `aiopsctl` that embeds no binary compiles the same test inside the root
+    module** (Q18 (a)), which keeps ADR-063 decision 31 as written. It compiles the
+    test with the Go toolchain at hand when the plugin's directory lies in the root
+    module of the repository. One function of the builder gives the text of the test
+    file to the release build and to the toolbox. The toolbox writes it into a build
+    overlay, never onto disk, compiles it in the root module with `go test -c` and the
+    tag, and runs the result as it runs an embedded binary: the same start, the same
+    contract and the same report (decision 33). Outside the root module the answer
+    stays `launch.ErrNotCarried`. ADR-060 decision 46 carries a dated note. Of the
+    tests of decision 37, those it gives for Q18 (a) are built and those it gives for
+    Q18 (b) are not.
+
+45. **The kernel side of the protocol holds no Unix dial** (Q19 (a)), a reading of
+    ADR-063 decision 9. "The dial" of that decision is the mutual-TLS dial. The Unix
+    dial is code of `internal/remotesuite` alone, which the import check and the
+    builder refuse in every server graph, and the kernel-side package serves a
+    connection that its caller made, under the rule of the seam (decision 32). ADR-063
+    decision 9 carries the dated note: the dial of that package is the mutual-TLS dial,
+    and the check runner brings its own connection to the handshake, the stream and
+    the stubs.
+
+**Edits made with this record.** The commit that records these answers makes the edits
+that "Edits on acceptance of the S2b part" names for the options chosen: the status of
+this ADR and of this part; `00:782`, which names the S2b part; the dated notes at
+decision 8 above, at ADR-060 decisions 9, 20 and 46 and at ADR-063 decisions 9, 16, 36
+and 57; and, with the note at ADR-063 decision 36, the row of `internal/remotesuite` in
+the table of that decision (decision 32). In this file, lines that restate edited text
+are edited with them: the note of 2026-11-27 at decision 23, which called this part
+proposed, and the sentences of decisions 30, 31, 32 and 35 that left a point to a
+question, each of which now names the answer and its decision. No other line of `00`
+to `08` is edited, and the plugin record, the licence record, the community record and
+the upstream register are not edited: no chosen option names a line of them. An option
+the owner did not choose edits nothing.
+
+Left to later commits, each named:
+
+- `08:1178`, the row of this ADR in the ADR table of `08` §3, with the commit that
+  updates that table for the S2b parts accepted on 2026-11-27;
+- the lines of the S2b part of ADR-061 that call this part proposed or not accepted
+  (its status, its "Acceptance order" and its decision 59 with its two tables), with
+  the commit that records the owner's answers on ADR-061 for S2b;
+- the cap of `internal/remotesuite` in `ci.yml` and the Makefile, with the package's
+  first commit (decision 32);
+- the reason of the gRPC entry in the exceptions table of the deny-list and the
+  condition of the grpc-go register entry, with the commit that first imports gRPC
+  directly (decision 36).
+
+The lines of the S2b parts of ADR-020 and ADR-048 that say this ADR holds no S2b part
+at `bbfd839` are not edited: each states what that commit held.

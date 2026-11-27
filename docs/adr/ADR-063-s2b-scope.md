@@ -261,7 +261,12 @@ gaps:
    check runner of `aiopsctl` both use it (`00:305`), so one implementation serves a
    server and `plugin check`. This is a placement change, which question Q6 puts to the
    owner: `07:42` and plugin record §14 name what `aiopsctl` carries "the host side of
-   `sdk/remotehost`", and `sdk/remotehost` is the plugin-side host (`07:32`).
+   `sdk/remotehost`", and `sdk/remotehost` is the plugin-side host (`07:32`). Note of
+   2026-11-27 (ADR-044, S2b part, decision 45, its question Q19 (a)): the dial of that
+   package is the mutual-TLS dial, and the check runner brings its own connection to
+   the handshake, the stream and the stubs. The Unix dial of `plugin check` is code of
+   `internal/remotesuite` alone, which the import check and the builder refuse in every
+   server graph.
 10. **`plugin.FromManifest`** arrives in `sdk/plugin` with its first consumer, the proxy
     (`07:29`, `:232`; ADR-060 decision 4), with the signature that `07:232` sketches: a
     manifest and an `apply` function give a `kernel.Plugin`. It builds the plugin from
@@ -363,7 +368,11 @@ gaps:
     minor and a raised suite revision; which key is question Q20, and the check runner
     of `plugin check` uses the same entry through the toolbox it already holds
     (`sdk/def/launch/v0/toolbox.go:31-33`). `boot` stays the one home of the gate
-    (ADR-060 decision 14), and no second copy of check 3 exists outside it.
+    (ADR-060 decision 14), and no second copy of check 3 exists outside it. Note of
+    2026-11-27 (ADR-044, S2b part, Q16 (a)): the check runner is `aiopsctl` and the
+    suite binary that it embeds and runs as its child. The binary reaches the handshake
+    entry in `boot`'s code, which it links, in its own process, on the signed manifest
+    that `aiopsctl` hands it, and not through `Toolbox.Gate` (`toolbox.go:31-33`).
 
     | Entry point | Check 3 | Check 9 |
     |---|---|---|
@@ -955,6 +964,10 @@ gaps:
     this ADR. Every package the table does not name keeps its S2a exit cap. Whether
     generated files count is question Q16. The hand-written Python of `aiops-sdk` gets a
     provisional cap of 2,500 lines, counted by the Python job, under the same exit rule.
+    Note of 2026-11-27 (ADR-044, S2b part, decision 32): the table gains the row of
+    `internal/remotesuite`, the runner of the binary that drives a remote process, with
+    a provisional cap of 800 lines, enforced from the package's first commit and
+    settled at the S2b exit under the rule above.
 
 | Package | Measured at `50665fa` | S2a exit cap, proposed | Cap during S2b |
 |---|---|---|---|
@@ -969,6 +982,7 @@ gaps:
 | `plugins/command-plugin` | 466 | 600 | 800, provisional |
 | `internal/authoring` | 827 | 1,000 | 1,500, provisional |
 | `internal/packsuite` | 310 | 400 | 800, provisional |
+| `internal/remotesuite` (note of 2026-11-27) | new | | 800, provisional |
 | `templates` | 121 | 200 | 300, provisional |
 | each toy definition package; its fake; its suite | 67 and 66; 175; 428 | 100; 200; 500 | 100; 300; 700, provisional |
 | the kernel side of the protocol, hand-written (decision 9) | new | | 1,500, provisional |
@@ -1947,7 +1961,9 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     stated: `00:246`, `07:564`, row 45 of the dsh checklist at `08:87` and row 45 of
     plugin record §15, which the answer amends (decision 4). `dist/dist.yaml` gains the
     line with the key. The check runner keeps the toolbox that the operations row
-    already resolves.
+    already resolves. Note of 2026-11-27 (ADR-044, S2b part, Q16 (a)): the check runner
+    reaches the handshake entry as the note at decision 16 says. In its binary this key
+    is provided by `boot`'s code and by no fake.
 
 58. **The first message carries the digest of `plugin.yaml`** (Q21 (a)): the SHA-256 of
     the `plugin.yaml` that the plugin was built with. The kernel compares it with the
