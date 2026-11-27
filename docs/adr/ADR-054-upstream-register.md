@@ -5,7 +5,7 @@
   answers of 2026-11-23" records them as decisions 17 to 25.
 - S2b part: **proposed 2026-11-27, awaiting the project owner.** The section "2026-11-27
   proposed addition: the S2b part" at the end of this file holds it, as decisions 26 to
-  43 and questions Q10 to Q12. No decision above changes before the owner accepts it.
+  44 and questions Q10 to Q21. No decision above changes before the owner accepts it.
 - Scope: ADR-054 of `00` §9 (`00:788`) and of the open ADR index (`08:1185`), due at S2a
   (`08:694`): the register schema of `tools/upstream-components.yaml`, which of the
   checks U1 to U8 run from S2a and which before the first community release, the
@@ -875,8 +875,11 @@ owner did not choose edits nothing.
   ADR-063 decision 2 has the S2b part of this ADR written as a dated addition, proposed
   to the owner before the code it governs and accepted before that code merges into
   `main`. Until it is accepted it blocks the first import of grpc-go or protobuf-go, and
-  so all protocol code and all generated Go; the first Python dependency; and the
-  extended lints and the register check in CI (ADR-063 decisions 35, 37 and 42).
+  so all protocol code and all generated Go; the first file of `python/` and the first
+  Python dependency; the entries of Compose and of the container runtime, and so the
+  compose fragment, `plugin start`, `plugin pack` of remote code and the exit; and the
+  extended lints and the register check in CI (ADR-063 decisions 35, 37, 42, 50 and
+  61).
 - Scope: the five points that ADR-063 decision 34 gives this part, with the item that
   the note at decision 21 leaves to it: (1) the register entries and the importers of
   grpc-go and protobuf-go (ADR-063 decision 42) and the item of that exception in the
@@ -884,9 +887,23 @@ owner did not choose edits nothing.
   a plugin base image; (3) the names of Python, of gRPC and of Protocol Buffers that the
   name lint refuses under `sdk/` and in a proto; (4) the reach of U1, U2 and U3 over
   `python/`, `.proto` imports and generated code (ADR-063 decision 37); (5) the checks
-  over the dependency set of `aiops-sdk` (ADR-063 decision 52). It changes no decision
-  above and no answer of ADR-063. A point that no written line fixes is a question
-  below, and `00` is edited in the commit that records the answer (`08:999`).
+  over the dependency set of `aiops-sdk` (ADR-063 decision 52). It also gives the form
+  of the two entries that ADR-063 decisions 35 and 50 require before the compose
+  fragment and the exit: Compose and the tool that builds a plugin image (decision 34).
+- What it amends. It changes no answer of ADR-063; questions Q15 and Q20 ask what one
+  of them covers. On acceptance it amends decisions above, and only these: decision 3
+  gains two keys (decision 29) and, with question Q13 (a), an exemption in the Required
+  cell of `role`; the table of decision 9 gains one row (decision 26) and, with
+  question Q10 (a) or (b), an item for the Python language; decision 12 gains clauses
+  and U7 two modules (decisions 28 and 42); decisions 13, 14 and 15 gain places and
+  languages (decisions 37 to 40), and with question Q10 (b) decision 15 gains an item
+  whose places exempt a fake and a suite; decision 17 gains importers (decision 27;
+  questions Q17 and Q21); and where decision 18 puts a module of another project in
+  `contains`, a Python package that another one requires is an entry of its own
+  (decision 30). Questions Q13, Q14, Q15, Q19 and Q20 ask how a written line or an
+  answer of the owner binds, and each option that edits a line names it. A point that
+  no written line fixes is a question below, and `00` is edited in the commit that
+  records the answer (`08:999`).
 - Citations: `00`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `00:268` is line 268 of `00` at commit `bbfd839`; the sections above cite
   that line as `00:267`. "licence" and "harness" are
@@ -895,8 +912,8 @@ owner did not choose edits nothing.
   licence:222. A path with a line, as `tools/register/names.go:153`, is a file of the
   repository at that commit, and "register:278" is line 278 of
   `tools/upstream-components.yaml`. ADR-063 is cited by decision. A licence read for
-  this part is cited as `module@version/FILE`; a reading that ADR-063 decision 35
-  records is cited there, with its pin.
+  this part is cited as `module@version/FILE`, or as a file of a package by its name
+  and SHA-256; a reading that ADR-063 decision 35 records is cited there, with its pin.
 
 ### Context of the S2b part
 
@@ -920,8 +937,13 @@ the licence texts of the libraries bundled inside the two native extensions are 
 before the first Python dependency merges (ADR-063 decision 52). U1 and U3 are extended
 to `python/`, and U2 to the imports of `.proto` files and of the Python under `python/`,
 each with a case that fails on a name or an import outside the exception (ADR-063
-decision 37). Nothing merges unread, and what ADR-063 decision 35 read on 2026-11-27
-prepares the entries and replaces none.
+decision 37). S2b builds the compose fragment and the systemd unit and runs both, with
+Compose "read and pinned first", and `plugin pack` builds the plugin image "on the
+container runtime at hand" (ADR-063 decisions 50 and 61). The callback path and the
+remote listener path are proven on a test definition marked `callback` and a test hook
+marked remote, and the two stubs of the matrix are processes that the harness builds
+(ADR-063 decisions 51 and 64). Nothing merges unread, and what ADR-063 decision 35 read
+on 2026-11-27 prepares the entries and replaces none.
 
 **What the register and the checks hold at `bbfd839`.**
 
@@ -932,78 +954,151 @@ prepares the entries and replaces none.
   in one row that gives no version (licence:48) and holds the gRPC runtime of the Python
   SDK as `unverified`, read before the step that first uses it (licence:68; `08:1348`
   L13).
+- The entry `sigstore-go` records two conditions for the gRPC module: its `NOTICE.txt`
+  in `THIRD_PARTY_LICENSES/` of "Every artifact that links it", and "The builder builds
+  every binary with the tag grpcnotrace", with the codec exemption at v1.82.1
+  (register:202, :204; ADR-020 decision 27). `make check` and CI set the tag in
+  `GOFLAGS`, and the builder and the test harness build with the same flags
+  (`Makefile:9`; `ci.yml:20`; `internal/plugingen/flags.go:5-11`). Without the tag the
+  module links `golang.org/x/net/trace`
+  (`google.golang.org/grpc@v1.82.1/trace_withtrace.go:1`), whose `init` puts two handlers
+  on the default mux (ADR-044, "What was read").
 - The register check reads the package graphs of four modules: the root, `sdk`,
   `sdk/kernel` and `sdk/testkit` (`tools/register/main.go:47`). An entry has no key for a
   package of a language other than Go: only an item of `contains` names a `package`
   (`tools/register/main.go:98-122`, `:136`; register:105-107). An entry of form `process`
   needs a `role` unless its modes are only `tool` or `none`
-  (`tools/register/main.go:220-223`). The L7 lists of the check hold no PSF-2.0
-  (`tools/register/main.go:161-163`).
+  (`tools/register/main.go:220-223`). The L7 lists of the check hold no id of a Python
+  licence (`tools/register/main.go:161-163`), and L7 names `Python-2.0` only among the
+  "build-only licences" that "are recorded exceptions and never enter a shipped
+  artifact" (`08:1342`).
 - U1 and U3 read every file and every path under `sdk/`, `boot/` and `loader/`, a
   `.proto` included, and nothing under `python/` (`tools/register/names.go:153-177`).
   The lint asks every entry for each of its names. A place is free for a name only
   through an item of `exceptions` that lists the token, or through the plugins and the
-  importers of that same entry (`tools/register/names.go:31-49`, `:57-74`).
+  importers of that same entry, a directory with every file under it
+  (`tools/register/names.go:31-49`, `:57-74`).
 - U2 reads Go files only and enters no `testdata` directory
   (`internal/vet/imports.go:265`; `internal/vet/module.go:24`). A definition package
   imports the standard library, `sdk/kernel` and other definitions, and nothing else
-  (`internal/vet/imports.go:195-198`).
-- Run at `bbfd839` with the names of decision 34 added to an entry, the lint finds
+  (`internal/vet/imports.go:195-198`). Its analyzer is the package that
+  `tools/kernelcheck` and `aiopsctl` share (decision 13).
+- Run at `bbfd839` with the names of decision 35 added to an entry, the lint finds
   `grpc` in the Decision column of row 1 of `00` §2.1 (`00:44`); `protobuf` at
   `sdk/remote/handshake/handshake_test.go:6`; and `python` in a comment at
   `boot/digest_test.go:13`, in the fake of the `operations` definition
   (`sdk/def/operations/v0/fake/author.go:26`) and in its suite
   (`sdk/def/operations/v0/conformance/conformance.go:457`), where the word is the
-  language of a template. With `proto`, `proto2` and `proto3` added as well, it finds
-  the two files of `sdk/remote/handshake` by path and by line, the same cell of `00:44`,
-  and the identifier `CheckRemoteProto` at `boot/gate.go:52` and `:83`,
-  `boot/gate_test.go:271` and `boot/checks_test.go:566`, where the part abbreviates
-  "protocol".
+  language of a template, and in no other file. With `proto`, `proto2` and `proto3`
+  added as well, it finds the two files of `sdk/remote/handshake` by path and by line,
+  the same cell of `00:44`, and the identifier `CheckRemoteProto` at `boot/gate.go:52`
+  and `:83`, `boot/gate_test.go:271` and `boot/checks_test.go:566`, where the part
+  abbreviates "protocol".
+- Run with `compose`, `docker` and `systemd` added to an entry, the lint finds `compose`
+  in 207 places, 159 under U1 and 48 under U3: across `boot/`, where it is the verb for
+  what `boot/compose.go` does to the layers of a profile, in the definitions `launch`,
+  `operations` and `reload` with their fakes and suites, and in rows 3 and 8 of `00`
+  §2.1, where it names the compose file of a deployment. It finds `docker` in six: the
+  header `Docker-Content-Digest` that the test registry sends
+  (`sdk/testkit/ocitest/ocitest.go:237`, `:256`, `:298`) and a comment of the same file
+  (`:8`), the variable `DOCKER_CONFIG` in the comment at
+  `sdk/def/operations/v0/operations.go:157`, and "laptops without Docker" in row 9 of
+  `00` §2.1 (`00:52`). It finds `systemd` in one: row 10 of `00` §2.1 (`00:53`).
+- The environment of the S2a exit runs the daemon of the job's own container runtime,
+  which the runner provides at no pinned version and which has no entry
+  (`test/authoring/env_test.go:95`, `:117-145`). The licence record lists Compose as a
+  tool, Apache-2.0, with no pin (licence:60).
+- The test definitions of the repository are packages of the root module under
+  `test/dist/def/` (ADR-060 decision 28), which a nested module with a closed require
+  list cannot import (ADR-063 decision 43).
 - The repository holds four Python scripts, none under a place of U1 and none run by a
   CI job (`scripts/diagrams/build_page.py`, `test/differential/oracle/acquire.py` and
   two files under `test/differential/corpus/`), and the register has no entry for an
   interpreter.
+
+**What was read for this part**, beside the readings of ADR-063 decision 35, on
+2026-11-27:
+
+- `google.golang.org/grpc@v1.82.1/LICENSE` and `NOTICE.txt`, and
+  `google.golang.org/protobuf@v1.36.11/LICENSE` and `PATENTS`, in the module cache at
+  the sums that ADR-063 decision 35 names.
+- The wheel `typing_extensions-4.16.0-py3-none-any.whl`, SHA-256
+  `481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8`. Its `METADATA`
+  declares `License-Expression: PSF-2.0`. Its `licenses/LICENSE` holds five texts, under
+  the headings "PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2", "BEOPEN.COM LICENSE
+  AGREEMENT FOR PYTHON 2.0", "CNRI LICENSE AGREEMENT FOR PYTHON 1.6.1", "CWI LICENSE
+  AGREEMENT FOR PYTHON 0.9.0 THROUGH 1.2" and "ZERO-CLAUSE BSD LICENSE FOR CODE IN THE
+  PYTHON DOCUMENTATION". The file was compared word by word with the texts of the SPDX
+  list at v3.29.0, the pin of the register (register:505;
+  `github.com/spdx/license-list-data@v3.29.0+incompatible/json/details/`). The text of
+  `PSF-2.0` is the first of the five and no more, and the list's own comment calls it
+  "part of the complete Python license text". Every word of the text of `Python-2.0.1`
+  stands in the file, in order, and covers the first four; 92 of the 1,479 words of the
+  text of `Python-2.0` do not. The fifth is the Zero-Clause BSD text, `0BSD` in that
+  list, which L7 allows.
+- The wheel `protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl`, SHA-256
+  `89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2`: its one top-level
+  directory is `google`, which holds `protobuf/` and `_upb/` and no module file of its
+  own, so the name `google` is a namespace that another distribution can fill. The
+  `grpcio` wheel of ADR-063 decision 35 names `grpc` as its one top-level module, and
+  the `typing-extensions` wheel is the one module `typing_extensions`.
+
+Not read for this part: the two sdists and the `pytest` wheel, on which the lines of
+decision 30 rest on ADR-063 decision 35 alone; the interpreter, the base image, the
+compiler release, Compose and the container runtime, each read before its entry merges.
 
 **Gaps.**
 
 - The exception stands in `00:268` and has no row in the table of decision 9 and no
   item under `exceptions`, so no check reads a place for it (decision 26).
 - ADR-063 decision 42 names the importers by what they are. The register needs
-  directories, and three of the four do not exist yet (decision 27).
-- One entry's `contains` pins the two modules today, and two new Go modules will each
-  select a version of them (decision 28).
+  directories, and three of the four do not exist yet (decision 27). No line gives a
+  home to the wire code of the test definition and the test hook of ADR-063 decision 51
+  (question Q21).
+- One entry's `contains` pins the two modules today and carries their conditions, and
+  two new Go modules will each select a version of them (decisions 27 and 28).
 - The schema has keys for Go modules, images and content, and none for a Python package;
   L3 and licence record §7.2 list the keys (`08:1338`; licence:222) (decisions 29 to
   33).
 - Two entries will carry the name `grpc` and two the name `protobuf`, with different
-  importers (decisions 26 and 34).
+  importers (decisions 26 and 35).
 - The Python name stands in a fake and a suite, which no list of importers may hold
-  (`00:268`) (question Q10).
-- `proto` is a word of the repository's own files (question Q11).
+  (`00:268`) (question Q10). `proto` and `compose` are words of the repository's own
+  files (questions Q11 and Q16), and `docker` stands in a definition (question Q17).
+- No line places the standard library that `aiops-sdk` imports, under L7 or outside it
+  (question Q19), and the name that the owner recorded for `typing-extensions` covers
+  the first of the five texts of its licence file (question Q20).
 - "A check fails on a package of the set that has none" names neither the file that
-  states the set nor what the check reads of the licence record (decisions 40 and 41;
+  states the set nor what the check reads of the licence record (decisions 41 and 42;
   question Q12).
 
 ### Decision of the S2b part
 
 #### The item of the exception
 
-26. **The table of decision 9 gains one row**, and `exceptions` in the register one item
-    with the same content, in the commit that first imports either module:
+26. **The table of decision 9 gains one row.** A dated note at decision 9 adds it in the
+    commit that records the acceptance of this part. The register gains the item under
+    `exceptions`, with the same content, in the commit that first imports either
+    module, with the two entries of decision 27; until that commit no entry carries a
+    token of the item, and the lint has nothing to ask.
 
     | Item | Tokens | Where they may appear | Source |
     |---|---|---|---|
-    | gRPC and Protocol Buffers, the wire of the remote protocol, among the protocols with several implementations | `grpc`, `protobuf`, `protocol-buffers` | `sdk/remote/` and `sdk/remotehost/`; the directory of the proxy plugin, of the adapter generator and of the check runner of `aiopsctl` (decision 27); `python/`; row 1 of `00` §2.1, where the token names the contract; ids, as decision 19 gives every item of the list of `00:268` | `00:44`, `:268`; ADR-063 decisions 18, 42 and 43; decisions 19 and 22 |
+    | gRPC and Protocol Buffers, the wire of the remote protocol, among the protocols with several implementations | `grpc`, `protobuf`, `protocol-buffers` | `sdk/remote/` and `sdk/remotehost/`; the directory of the proxy plugin, of the adapter generator and of the check runner of `aiopsctl` (decision 27); `python/`; row 1 of `00` §2.1, where the token names the contract | `00:44`, `:268`; ADR-063 decisions 18, 42 and 43; decision 22 |
 
     The tokens stand nowhere else: not in `sdk/kernel`, `sdk/plugin`, `sdk/testkit`,
     `boot/` or `loader/`, and not in a definition package, its proto, its fake or its
     suite. No definition package imports either module, and a list of places never
     holds a definition with its fake and suite (`00:268`; ADR-063 decisions 42 and 44).
-    No id carries either token at S2b. The item is one of its own and not a part of the
-    item of the eight protocols (register:746-749): its places are directories, on
-    which the other tokens of that item have no claim. The places come from the item
-    and not from the importers of each entry, because two entries carry `grpc` and two
-    carry `protobuf` (decision 34), and the lint asks each entry in turn
+    The item lists no `ids`. Of the items of decision 9 only the item of the eight
+    protocols gives its tokens to ids (register:746-749); the query dialect item and
+    the stack item keep theirs out of every id. No id needs either token at S2b and the
+    two entries are `needs-approval` (decision 27), so an id that later needs one gets
+    it by a note at decision 9, as any place does. The item is one of its own and not a
+    part of the item of the eight protocols: its places are directories, on which the
+    other tokens of that item have no claim. The places come from the item and not from
+    the importers of each entry, because two entries carry `grpc` and two carry
+    `protobuf` (decision 35), and the lint asks each entry in turn
     (`tools/register/names.go:31-49`).
 
 #### The entries of grpc-go and protobuf-go
@@ -1013,19 +1108,19 @@ prepares the entries and replaces none.
 
     | Key | `grpc-go` | `protobuf-go` | Source |
     |---|---|---|---|
-    | `names` | Decision 34 | Decision 34 | decision 3 |
+    | `names` | Decision 35 | Decision 35 | decision 3 |
     | `form`, `behind` | `library`, `none` | The same | No definition declares the wire: the remote protocol is the module `sdk/remote` (`07:32`) |
     | `modules` | `google.golang.org/grpc` | `google.golang.org/protobuf` | ADR-063 decision 35 |
     | `pin` | The one version that the build list of every module of the repository selects; v1.82.1 at `bbfd839` | The same; v1.36.11 | decision 6; `go.mod:102-103` |
     | `licence` | Apache-2.0, in `google.golang.org/grpc@v1.82.1/LICENSE`; the module carries `NOTICE.txt`, "Copyright 2014 gRPC authors." | BSD-3-Clause, in `google.golang.org/protobuf@v1.36.11/LICENSE`, "Copyright (c) 2018 The Go Authors"; a patent grant in `PATENTS` | Read in those files on 2026-11-27; ADR-063 decision 35 |
-    | `verdict` | `ok` | `ok` | licence:48; decision 7 |
+    | `verdict` | `ok-with-conditions` | `ok`, as the entry `x-mod`, which has the same licence and a `PATENTS` file (register:410-420) | decisions 3 and 7; licence:48 |
+    | `conditions` | Two, the rows of register:202 and :204 as far as they name this module: its `NOTICE.txt` in `THIRD_PARTY_LICENSES/` of every artifact that links it (row L7); and the tag `grpcnotrace` with the codec exemption of package `google.golang.org/grpc/encoding/proto` at v1.82.1, read again at every version bump (row L16) | None | ADR-020 decisions 16 and 27; ADR-044 decision 21 |
     | `modes` | `link` | `link`, and `tool` for its command `protoc-gen-go` (decision 33) | licence:24, :26; ADR-063 decisions 35 and 45 |
     | `mark`, `default` | `needs-approval`, `false` | The same | decision 3; no shipped profile composes a proxy row (ADR-063 decisions 22 and 41) |
     | `importers` | The list below | The same list | ADR-063 decision 42 |
     | `contains` | `golang.org/x/net` v0.59.0, `golang.org/x/sys` v0.48.0, `golang.org/x/text` v0.43.0 and `google.golang.org/genproto/googleapis/rpc` v0.0.0-20260523011958-0a33c5d7ca68, the modules that its packages `grpc` and `credentials` reach in the build list of the root module at `bbfd839`, each with the licence that register:271-277 records | None: its packages reach no module of another project | decision 18 |
 
-    The importers are those of ADR-063 decision 42 and no other, and each line names
-    that decision:
+    The importers are those of ADR-063 decision 42, and each line names that decision:
     - `sdk/remote`: the remote protocol, its kernel side, and the generated Go of the
       handshake, of the protocol and of each `contrib` definition under
       `sdk/remote/def/` (ADR-063 decisions 9, 43 and 44);
@@ -1037,17 +1132,38 @@ prepares the entries and replaces none.
       `plugin check` (ADR-063 decisions 9 and 17).
 
     Each of the last three directories is written into both entries by the commit in
-    which a file of it first imports either module (decision 16). Nothing else imports
-    either module. A test tree, an example, a template and the stub remote plugins of
-    the failure matrix (ADR-063 decision 64) are no importers: they reach the wire
-    through the packages of the two remote modules, and one that needs a direct import
-    waits for an accepted decision that adds it (decision 17). The licence record gains
-    a row for each module with its pin, in place of the two names in licence:48
-    (decision 7). The two conditions that the entry `sigstore-go` records for the gRPC
-    module, its `NOTICE.txt` in `THIRD_PARTY_LICENSES/` and the build tag `grpcnotrace`
-    with the codec exemption at v1.82.1 (register:202, :204), hold for every binary
-    that links the module and stay recorded there. A move of the pin reads that
-    exemption again, which is the S2b part of ADR-044 (ADR-063 decision 34).
+    which a file of it first imports either module (decision 16). An example and a
+    template are no importers: a remote Go plugin reaches the wire through
+    `sdk/remotehost` (ADR-063 decision 60). ADR-063 decisions 51 and 64 require three
+    more pieces of wire code, the generated Go of the test definition marked `callback`,
+    that of the test hook marked remote, and the two stubs of the matrix, and no
+    written line gives them a directory: question Q21 asks, and its answer adds an
+    importer or says that none is needed. Any other direct import waits for an accepted
+    decision that adds it (decision 17). The licence record gains a row for each module
+    with its pin and its verdict, in place of the two names in licence:48 (decision 7).
+
+    The two conditions move to the entry `grpc-go`, which is the entry that a bump of
+    the module moves: "The register entry records the exemption, and it is read again
+    at every version bump" (ADR-020 decision 27). The entry `sigstore-go` keeps its
+    other conditions and a pointer to this entry for the two. What each reaches:
+    - The notice condition binds every artifact that links the module.
+    - The tag and the exemption reach the binaries that the builder writes, in the
+      words of register:204 and of ADR-044 ("applies to every binary the builder
+      writes"), and what `make check` and CI build under their `GOFLAGS`, the test
+      binaries of the two nested modules, the adapter generator and the two stubs of
+      the matrix among them when those jobs build them (`Makefile:9`; `ci.yml:20`).
+    - Neither reaches a binary that an author builds. The plugin binary of the remote
+      Go template and of a remote example is built from the build file of the plugin
+      directory, by the author's toolchain or by `plugin pack` (ADR-063 decisions 19,
+      60 and 61), and no written line sets the tag there or runs the init scan on it.
+      This part records that reach and does not widen it. Whether the build file that
+      `plugin new --lang go --runtime remote` writes sets the tag is the S2b part of
+      ADR-061, and whether the init scan reads a remote plugin binary is the S2b part
+      of ADR-044 (ADR-063 decision 34); each is accepted before the code it governs
+      merges (ADR-063 decision 2).
+
+    A move of the pin reads the exemption again, which is the S2b part of ADR-044
+    (ADR-063 decision 34).
 
 28. **One pin over every module of the repository.** The register check reads the
     package graph of each Go module of the repository, so its list of modules gains
@@ -1069,8 +1185,8 @@ prepares the entries and replaces none.
 
     | Key | Holds | Required | Source |
     |---|---|---|---|
-    | `packages` | The names of the Python packages that the upstream publishes and that a pin file of `python/` holds (decision 40), each as the package index writes it | When a Python package is linked or run as a tool | ADR-063 decision 52 |
-    | `imports` | What U2 matches in the two languages whose imports are not Go module paths: under `python`, the top-level module names that the entry's packages provide; under `proto`, the path prefixes of the `.proto` files that the upstream publishes | `python` with `packages`; `proto` when a `.proto` file of the repository imports a file of the upstream | ADR-063 decision 37 |
+    | `packages` | The names of the Python packages that the upstream publishes and that a pin file of `python/` holds (decision 41), each as the package index writes it | When a Python package is linked or run as a tool | ADR-063 decision 52 |
+    | `imports` | What U2 matches in the two languages whose imports are not Go module paths. Under `python`: the dotted module prefixes that the entry's packages provide and that a file of its importers may import, as `grpc`, `google.protobuf` and `typing_extensions`. A prefix matches on whole segments, so `google.protobuf` covers `google.protobuf.message` and covers neither `google.api` nor `google.protobuf_x`, and a prefix is never a namespace that distributions share, as `google`. Under `proto`: the path prefixes of the `.proto` files that the upstream publishes, matched on whole path segments | `python` with `packages`; `proto` when a `.proto` file of the repository imports a file of the upstream | ADR-063 decision 37 |
 
     A Python package "has an entry" (decision 5) when its name is in the `packages` of
     exactly one entry. A package of another language gets its form with the first one
@@ -1080,47 +1196,58 @@ prepares the entries and replaces none.
     ADR-063 decision 52 says "Each package", and it names `typing-extensions`, a package
     that the gRPC runtime requires. A package that another one requires is therefore an
     entry, not an item of `contains`, which is where decision 18 puts a Go module of
-    another project.
+    another project; this amends decision 18 for Python packages only.
 
     | Key | Value | Source |
     |---|---|---|
-    | `id`, `names` | The package name in kebab-case; decision 34 | decision 3 |
+    | `id`, `names` | The package name in kebab-case; decision 35 | decision 3 |
     | `form`, `behind` | `library`, `none` | licence:222 |
-    | `packages`, `imports` | The one package name; under `python`, its top-level modules | decision 29 |
+    | `packages`, `imports` | The one package name; under `python`, its dotted prefixes | decision 29 |
     | `pin` | The version that the pin file selects | decision 6 |
-    | `licence` | The expression as read in the licence files inside each file of the package at the pin, `A AND B` where one file holds several texts | decision 3 |
+    | `licence` | One rule for every package: the expression over the texts of the licence files inside each file of the package at the pin, `A AND B` where one file holds several texts. What the package declares in its `METADATA` is recorded in `evidence` and is not the expression where the file holds more | decision 3, "The SPDX expression as read" |
     | `modes` | `link` for a package of the dependency set, which a package of the project imports; `tool` for one that only builds, generates or checks | licence:24, :26; ADR-063 decision 52 |
-    | `evidence` | One item for each file read: the file name with its tags, its SHA-256 and the files read inside it, the form of the table of ADR-063 decision 35 | ADR-063 decisions 27 and 35 |
+    | `evidence` | One item for each file read: the file name with its tags, its SHA-256, the files read inside it and the expression that its `METADATA` declares, the form of the table of ADR-063 decision 35 | ADR-063 decisions 27 and 35 |
     | `contains` | What the files of the package bundle from other projects: each library built into a native extension and each data file under another licence, with the version that the release bundles and its licence, each read by hand, with the reading in `evidence` | The owner's condition of ADR-063 decision 52 |
-    | `conditions` | For MPL-2.0, one that cites L8; for PSF-2.0, on `typing-extensions` alone, one that cites L7 and says that the owner recorded the licence by name | `08:1342`, `:1343`; ADR-063 decision 52 |
-    | `importers` | `python/`, or the one directory under it that imports the package, by ADR-063 decision 18 | decision 17 |
+    | `conditions` | For MPL-2.0, one that cites L8, as question Q15 decides what it binds; for the licence that the owner recorded by name for `typing-extensions`, on that package alone, one that cites L7 and says so | `08:1342`, `:1343`; ADR-063 decision 52 |
+    | `importers` | `python`, for every package of a pin file. The pin file and the project file of `python/` carry the name of each package, and the lint gives a name its importer directory whole (`tools/register/names.go:71-73`), so a narrower directory would fail those two files | decision 17; ADR-063 decision 18 |
     | `mark`, `default` | `needs-approval`, `false` | decision 3 |
 
     What the entries hold as far as ADR-063 decision 35 read, at the pins it read; a
-    moved pin is read again (decision 6):
+    moved pin is read again (decision 6). The lines on the two sdists and on `pytest`
+    rest on that decision alone:
 
     | Package and pin | `licence` as read | `conditions` and `contains` | Read before the entry merges |
     |---|---|---|---|
-    | `grpcio` 1.85.4 | `Apache-2.0 AND BSD-3-Clause AND MPL-2.0`, the three texts of its one licence file | MPL-2.0 covers `roots.pem`: a condition that cites L8. `contains`: the nine libraries under `third_party/` of its sdist | The licence text of each of the nine at the bundled version |
-    | `typing-extensions` 4.16.0 | `PSF-2.0` | A condition that cites L7: recorded by name | Nothing more |
+    | `grpcio` 1.85.4 | `Apache-2.0 AND BSD-3-Clause AND MPL-2.0`, the three texts of its one licence file; its `METADATA` declares `Apache-2.0` | MPL-2.0 covers `roots.pem`: a condition that cites L8 (question Q15). `contains`: the nine libraries under `third_party/` of its sdist | The licence text of each of the nine at the bundled version |
+    | `typing-extensions` 4.16.0 | By the rule above, `Python-2.0.1 AND 0BSD`, the five texts of its one licence file; its `METADATA` declares `PSF-2.0`, the name the owner recorded. Question Q20 asks which of the two the entry and L7 carry | A condition that cites L7: recorded by name | Nothing more |
     | `protobuf` 7.36.2 | `BSD-3-Clause` | `contains`: `utf8_range`; the headers of `upb` name the same BSD licence | The text that the headers of `utf8_range` name, which the sdist does not carry |
     | `pytest` 9.2.0 | `MIT` | None | The four packages it requires on CPython 3.12 (`iniconfig`, `packaging`, `pluggy`, `pygments`), each an entry |
 
-    Reading 5 of question Q12 says which artifacts the condition that cites L8 binds.
+    That `pytest` is imported by the testing part of `aiops-sdk` alone, so that "no
+    plugin image needs it to run" (ADR-063 decision 18), is not held by its importer
+    line. It is held by how `aiops-sdk` declares its testing part, which is in the
+    scope that ADR-041 fixes (ADR-063 decision 34), and by review.
 
 31. **An interpreter.** One entry for each interpreter release that CI or the exit runs,
     since an entry has one `pin`; the exit runs CPython 3.12 on glibc, and ADR-041 fixes
     the supported versions (ADR-063 decisions 27 and 34). Its form is that of the entry
     `nodejs` (register:531-546): `form: process`, `behind: none`, `pin` the release
-    version, `licence` the expression over the complete licence file of that release,
-    and `evidence` that names the archive with its checksum, or the image with its
-    digest in `images`, and the file read in it. Its modes are `tool`, for what CI, the
-    Python job and the exit run, fetched by pinned version and checksum or by image
-    digest (`08:1375`), and `user-installs`, for the interpreter that an author installs
-    and for the four scripts that a contributor runs (decision 4; licence:29). It names
-    no `role` (reading 3 of question Q12). Its names are in decision 34. A CI action
-    that sets up the interpreter gets an entry like the three actions
-    (register:632-669), pinned by commit.
+    version, `licence` the expression over the complete licence file of that release as
+    read, by the rule of decision 30, and `evidence` that names the archive with its
+    checksum, or the image with its digest in `images`, and the file read in it. Its
+    modes are `tool`, for what CI, the Python job and the exit run, fetched by pinned
+    version and checksum or by image digest (`08:1375`), and `user-installs`, for the
+    interpreter that an author installs and for the four scripts that a contributor runs
+    (decision 4; licence:29). Whether an entry of those two modes names a `role` is
+    question Q13. Its names are in decision 35. A CI action that sets up the interpreter
+    gets an entry like the three actions (register:632-669), pinned by commit.
+
+    The standard library that `aiops-sdk` imports is not placed by this decision.
+    licence:24 gives the mode `link` to what is "Compiled into our binary or imported by
+    our package", and decision 8 made the Go standard library an entry of mode `link`,
+    apart from the toolchain, because "L7 applies to the standard library that every
+    binary links". Question Q19 asks whether the Python standard library is such an
+    entry or a part of the interpreter that the user installs.
 
 32. **A plugin base image.** The Python template names a base image by digest, read
     before the template merges (ADR-063 decisions 19 and 35), and the Go template names
@@ -1130,15 +1257,14 @@ prepares the entries and replaces none.
     key, the name under which the build file of the template holds it; `pin` the tag or
     version; `licence` the expression over the packages of its layers as read; and
     `evidence` that names what was read inside the image at that digest, the form of
-    the entry `distribution-registry` (register:614-630; `08:1348` L13). Its modes are
-    `pull`, since a file of the project names the image by digest and the author's
-    machine pulls it from its publisher, and `tool`, for the exit, whose pipeline
-    fetches it by digest (licence:22, :26; ADR-063 decision 27). It carries a condition
-    that cites L5: named by digest, never mirrored, and in no image that the project
-    publishes (`08:1340`). If a release ever publishes an image built on it, the entry
-    gains the mode `ship` with `sbom`, `source` and its layers in `contains` (decisions
-    3 and 12). Reading 4 of question Q12 asks the owner to confirm the modes and the
-    reach of L5.
+    the entry `distribution-registry` (register:614-630; `08:1348` L13). It carries the
+    mode `tool`, for the exit, whose pipeline fetches it by digest (licence:26; ADR-063
+    decision 27), and a condition that cites L5: named by digest, never mirrored, and in
+    no image that the project publishes (`08:1340`). No line gives the mode of an image
+    that a template names for the author's machine to pull, nor says whether the
+    template carries its licence texts: question Q14 asks both. If a release ever
+    publishes an image built on it, the entry gains the mode `ship` with `sbom`, `source`
+    and its layers in `contains` (decisions 3 and 12).
 
 33. **The generators.** `protoc-gen-go` is a command of the module of the entry
     `protobuf-go` and has no entry of its own: that entry carries the mode `tool`
@@ -1151,12 +1277,48 @@ prepares the entries and replaces none.
     made before the entry merges; this part fixes the form only. Where a committed
     generated file carries the name of the compiler, the name stands there because the
     compiler's entry lists that directory as an importer, by this decision: `sdk/remote`,
-    `python/` and the directory of the adapter generator. `protoc-gen-go` writes Go
-    only, into `sdk/remote`, which its entry lists already (decision 27).
+    `python` and the directory of the adapter generator. `protoc-gen-go` writes Go
+    only, into `sdk/remote`, which its entry lists already (decision 27). The `.proto`
+    files that the Protocol Buffers project publishes have their `imports.proto` on the
+    entry whose pinned release the compiler reads them from, which is this entry if its
+    reading finds them in the archive. No `.proto` file of the repository imports one
+    at `bbfd839`, and the key is written by the commit that adds the first such import
+    (decision 39).
+
+34. **Compose and the container runtime.** ADR-063 decision 35 lists, among what is read
+    before its first use, "the tool that builds a plugin image in the exit, which is
+    the build command of the environment's container runtime, and Compose, which
+    licence:60 lists with no pin", and ADR-063 decision 50 has Compose "read and pinned
+    first". Each gets an entry, written with its reading in the commit that first runs
+    it (decision 16). This part fixes the form only.
+
+    | Key | Compose | The container runtime | Source |
+    |---|---|---|---|
+    | `form`, `behind` | `process`, `none` | The same | licence:222 |
+    | `role` | As question Q13 decides | The same | decision 3 |
+    | `pin` | The release version that CI and the exit fetch | The version whose build command the exit runs | decision 6; `08:1375` |
+    | `licence` | The expression over the licence files of the release at the pin, those of what its binary bundles included | The same, over each program that an environment runs: the daemon, the client with its build command and the programs they start (`test/authoring/env_test.go:95`) | ADR-063 decision 35; licence:60 |
+    | `modes` | `tool`, for CI and the exit; `user-installs`, for the operator on whose host `plugin start` runs a compose fragment | `tool`, for the exit and the jobs that pack an image; `user-installs`, for the author whose `plugin pack` runs "the container runtime at hand" and for the host whose runtime runs a systemd unit | licence:26, :29; ADR-063 decisions 25, 27, 50 and 61 |
+    | `evidence` | The archive, its SHA-256 and the files read in it | The same, or the image with its digest | ADR-063 decision 35 |
+    | `conditions` | Fetched by pinned version and checksum, never copied into the repository and baked into no image of the project (row L5) | The same | `08:1340`, `:1375` |
+    | `mark`, `default` | `needs-approval`, `false` | The same | decision 3 |
+    | `names` | Question Q16 | Question Q17 | decision 8 |
+
+    No decided line names one runtime for an author or an operator: the lines say "the
+    container runtime at hand" and "the container runtime of the host" (ADR-063
+    decisions 25 and 61). The entry is the runtime that the exit runs. An entry needs a
+    pin (decisions 3 and 6), and a tool that CI runs is "fetched by pinned version and
+    checksum or image digest" (`08:1375`), while the environment of the S2a exit runs
+    the runner's own runtime at no pinned version. How the S2b exit comes to a pinned
+    build command belongs to its harness and is fixed with the reading. If the runner's
+    own runtime at an unpinned version proves the only way, the work stops on that point
+    and the owner is asked (ADR-063 decision 33). The row licence:60 gives way to rows
+    with pins (decision 7). Whether the init of the runner on which the systemd job
+    starts a unit is an entry is question Q18.
 
 #### The names
 
-34. **The `names` of each entry**, under the rule of decision 3, every name of the
+35. **The `names` of each entry**, under the rule of decision 3, every name of the
     upstream project, in lowercase:
 
     | Entry | `names` |
@@ -1166,19 +1328,21 @@ prepares the entries and replaces none.
     | The gRPC runtime of the Python SDK, `grpcio` | `grpc`, `grpcio` |
     | The message runtime of the Python SDK, `protobuf` | `protobuf`, `protocol-buffers` |
     | `typing-extensions`, `pytest` and each other package of the dependency set | The package name |
-    | An interpreter | `python`, `cpython` |
+    | An interpreter | `python`, `cpython`, as question Q10 decides |
+    | Compose; the container runtime | As questions Q16 and Q17 decide, with the other names that the reading of each finds |
     | The proto compiler release; a plugin base image | Entered with the reading of each (decisions 32 and 33) |
 
     A name that is a word the repository's own files must carry goes to the owner
-    before its entry merges (decision 8). Two do so here: `python` (question Q10) and
-    `proto` with `proto2` and `proto3` (question Q11).
+    before its entry merges (decision 8). Four do so here: `python` (question Q10),
+    `proto` with `proto2` and `proto3` (question Q11), `compose` (question Q16) and
+    `docker` (question Q17).
 
-35. **What the name lint refuses.** With the item of decision 26 and these names:
+36. **What the name lint refuses.** With the item of decision 26 and these names:
     - `grpc`, `protobuf` and `protocol-buffers` fail in every place of decision 14
       outside the places of decision 26: in every definition package with its proto, in
       its fake and its suite (U3), in `sdk/kernel`, `sdk/plugin` and `sdk/testkit`, in
-      `boot/` and `loader/`, in the schema of a row and in a golden dump of a shipped
-      profile.
+      `boot/` and `loader/`, in an id, in the schema of a row and in a golden dump of a
+      shipped profile.
     - A proto beside a definition therefore names neither upstream. It holds its
       `syntax` line, its package, its messages and its service, and it imports nothing
       (ADR-063 decision 44). The frozen handshake file and the protos of the protocol
@@ -1187,20 +1351,25 @@ prepares the entries and replaces none.
       `grpcio`, `typing-extensions`, `pytest` and the names of the other packages) fails
       outside the importers of that entry (decision 17).
     - `python` and `cpython` fail wherever the answer to question Q10 gives them no
-      place.
+      place, and the names of Compose and of the container runtime wherever the answers
+      to questions Q16 and Q17 give them none.
 
-    With the recommended answers to questions Q10 and Q11, one line of the repository
-    fails at `bbfd839`: the comment at `boot/digest_test.go:13`, which the commit that
-    adds the interpreter entry rewords, as decision 14 reworded its findings. `grpc` in
-    `00:44` stands in row 1 of `00` §2.1 under the item, and `protobuf` in
-    `sdk/remote/handshake/handshake_test.go:6` stands in an importer.
+    With the recommended answers to questions Q10, Q11, Q16 and Q17, three lines of the
+    repository fail at `bbfd839`: the comment at `boot/digest_test.go:13`, the comment
+    at `sdk/def/operations/v0/operations.go:157` and row 9 of `00` §2.1 (`00:52`). The
+    commit that adds the entry which carries the name rewords each, as decision 14
+    reworded its findings. `grpc` in `00:44` stands in row 1 of `00` §2.1 under the
+    item, and `protobuf` in `sdk/remote/handshake/handshake_test.go:6` stands in an
+    importer.
 
 #### The reach of U1, U2 and U3
 
-36. **U1 and U3 over `python/`.** Every file and every path under `python/` joins the
-    places of decision 14, read as the files under `sdk/` are: a binary file by its
-    path only (`tools/register/names.go:166-168`). A name stands there through the item
-    of decision 26, through an importer of its entry, or as question Q10 decides for
+37. **U1 and U3 over `python/`.** Every file and every path under `python/` joins the
+    places of decision 14 in the commit that creates the directory, as decision 14 has
+    a new place enter "in the commit that creates the first of each (`08:678`)". The
+    files are read as the files under `sdk/` are: a binary file by its path only
+    (`tools/register/names.go:166-168`). A name stands there through the item of
+    decision 26, through an importer of its entry, or as question Q10 decides for
     `python`. The pass is the one of today: a finding is U3 where the path is a fake or
     a suite of a definition, and U1 elsewhere (`tools/register/names.go:31-49`,
     `:90-94`). `python/` holds no fake and no suite of a definition at S2b: the fixture
@@ -1209,15 +1378,33 @@ prepares the entries and replaces none.
     own test, and a directory named `fake` or `conformance` under `python/` is read as
     one under `sdk/def/` is.
 
-37. **U2 over the Python under `python/`.** U2 reads the `import` and `from` statements
-    of every Python file under `python/`, a generated one included. An import passes
-    when it names a module of the standard library of the pinned interpreter, a module
-    of `python/` itself, or a module under `imports.python` of an entry that lists the
-    directory of the file among its importers. Any other import fails, an import of a
-    package that has no entry included. A name that a statement computes when it runs
-    is not read, and review holds it.
+38. **U2 over the Python under `python/`.** From the commit that creates the directory,
+    U2 reads the `import` and `from` statements of every Python file under `python/`, a
+    generated one included. A relative import names a module of `python/`. A `from`
+    statement is read as the module it names and, where that module is only the head
+    of a prefix, as that module joined with each name it imports, so `from google
+    import protobuf` is read as `google.protobuf`. An import passes when it names:
+    - a module of the standard library. The list is a committed data file under
+      `tools/`: the names that the interpreter reports for its own standard library
+      (`sys.stdlib_module_names`), taken from the lowest interpreter version that
+      ADR-041 supports, so that an import which only a later version can serve fails.
+      `make check` runs no interpreter and reads the file. The Python job of CI, which
+      runs every supported version (ADR-063 decision 37), fails when the file differs
+      from what the lowest one reports;
+    - a module of `python/` itself;
+    - a module under a prefix of `imports.python` of an entry that lists the directory
+      of the file among its importers (decision 29).
 
-38. **U2 over the imports of `.proto` files.** U2 reads the `import` statements of every
+    Any other import fails, an import of a package that has no entry included, and so
+    does an import that shares only the head of a prefix, as `google.api` beside
+    `google.protobuf`. Before the first Python dependency lands no entry carries
+    `imports.python`, and every import outside the first two rules fails. A name that a
+    statement computes when it runs is not read, and review holds it. This clause and
+    the clause of decision 39 are code of `tools/` alone. They are no part of the
+    analyzer that `tools/kernelcheck` and `aiopsctl` share (decision 13), `plugin check`
+    never runs them, and `aiopsctl` parses no Python (ADR-063 decision 54, reading 6).
+
+39. **U2 over the imports of `.proto` files.** U2 reads the `import` statements of every
     `.proto` file of the repository outside a `testdata` directory.
     - A `.proto` file under `sdk/def/` imports nothing (ADR-063 decision 44; `08:1256`).
     - `sdk/remote/handshake/handshake.proto` imports nothing: its freeze test lets the
@@ -1228,27 +1415,40 @@ prepares the entries and replaces none.
       importing file import the directory of the imported one (`07:28`, `:32`). An
       import that names no file of the repository names a file that an upstream
       publishes. It passes only when its path has a prefix under `imports.proto` of an
-      entry that lists the directory of the importing file among its importers.
+      entry that lists the directory of the importing file among its importers
+      (decision 33).
 
-    The roots against which an import path is resolved are those that the adapter
-    generator gives the compiler (ADR-063 decision 13); this part does not fix them.
+    An import path is resolved against a list of roots, each a directory of the
+    repository. The list is one committed file, written by the commit that lands this
+    clause: U2 reads it, and the adapter generator reads the same file for the roots it
+    gives the compiler (ADR-063 decision 13), so the two cannot differ. Which
+    directories it holds follows from where ADR-041 puts the files of `aiops.remote.v0`
+    (ADR-063 decision 34) and is not fixed here. U2 fails when the list names a path
+    outside the repository, and when an import resolves under no root and has no prefix
+    of an entry. The include directory of the compiler release is no root of the list:
+    a file found only there is a file that an upstream publishes.
 
-39. **Generated code is read as written.** U1, U2 and U3 read a generated file where it
+40. **Generated code is read as written.** U1, U2 and U3 read a generated file where it
     is committed, as they read any file, and a header that marks it as generated exempts
     nothing. The generated Go of the handshake, of the protocol and of each `contrib`
     definition lies under `sdk/remote/`, an importer of both entries, and the generated
     Python under `python/` (ADR-063 decisions 13, 18 and 44). No generated wire type and
     no adapter lies under `sdk/def/`: there U2 refuses an import of either module
-    (`internal/vet/imports.go:195-198`), and U1 and U3 refuse the names (decision 35). A
-    golden file of the generator's own tests under a `testdata` directory is data that
-    no Go build compiles and U2 does not read (`internal/vet/module.go:24`); U1 reads it
-    where it lies under one of its places. Whether a committed file equals what the
-    generator writes now is the parity check of ADR-063 decision 13, not a check of
-    this ADR.
+    (`internal/vet/imports.go:195-198`), and U1 and U3 refuse the names (decision 36).
+    ADR-063 decision 44 places the generated Go of a `contrib` definition and of no
+    other mark. The generated Go of the test definition marked `callback` and of the
+    test hook marked remote is placed by the answer to question Q21. A real `callback`
+    definition arrives after S2b with its definition (ADR-063 decision 51), and its
+    generated Go is placed then: under `sdk/remote/` it needs no new importer, and
+    anywhere else it needs an accepted decision (decision 17). A golden file of the
+    generator's own tests under a `testdata` directory is data that no Go build
+    compiles and U2 does not read (`internal/vet/module.go:24`); U1 reads it where it
+    lies under one of its places. Whether a committed file equals what the generator
+    writes now is the parity check of ADR-063 decision 13, not a check of this ADR.
 
 #### The checks over the dependency set of `aiops-sdk`
 
-40. **The dependency set** is what an installer resolves for `aiops-sdk` with its
+41. **The dependency set** is what an installer resolves for `aiops-sdk` with its
     testing part on an interpreter and a platform that ADR-041 supports: the packages
     that `aiops-sdk` needs to run, `pytest` for `aiops_sdk.testing` (`07:1212`; ADR-063
     decision 18), and every package that any of these requires, to the end. One pin file
@@ -1259,7 +1459,7 @@ prepares the entries and replaces none.
     pinned apart and is a tool. Reading 1 of question Q12 asks the owner to confirm the
     line between the two.
 
-41. **The register check gains these clauses** (U7; ADR-063 decisions 37 and 52). It
+42. **The register check gains these clauses** (U7; ADR-063 decisions 37 and 52). It
     reads the pin files and the register and nothing on the network (decision 1). It
     fails when:
     - a package of the dependency set, or a tool package, is in the `packages` of no
@@ -1278,35 +1478,46 @@ prepares the entries and replaces none.
       `contains` carries no licence, or one outside L7, read as the entry's own licence
       is. No scan of the project reads a wheel, so this clause is the L7 control of what
       a package bundles;
-    - an entry carries PSF-2.0 and its `packages` is not `typing-extensions` alone, or it
-      has no condition that cites L7 (ADR-063 decision 52). MPL-2.0 keeps the clause of
-      decision 12: a condition that cites L7 or L8.
+    - an entry of mode `link` carries the id that the owner recorded by name, as
+      question Q20 fixes it, and its `packages` is not `typing-extensions` alone, or it
+      has no condition that cites L7 (ADR-063 decision 52). With question Q19 (b) the
+      entry of the standard library carries the id that the owner records for it, under
+      a clause of the same form. MPL-2.0 keeps the clause of decision 12: a condition
+      that cites L7 or L8.
 
     The clauses of decision 12 hold for these entries as for any other: an `unverified`
-    entry fails, and so does an unknown key. L7 does not reach an entry whose only mode
-    is `tool` (`08:1342`: shipped artifacts "are scanned separately from build tooling").
+    entry fails, and so does an unknown key. L7 does not reach an entry that has no
+    mode `link` (`08:1342`: shipped artifacts "are scanned separately from build
+    tooling"), so the entry of an interpreter, of a base image or of a tool package
+    carries the id that its reading finds, a Python licence included, and passes.
 
-42. **What stays with the reading and with review.** The check cannot tell that a text
+43. **What stays with the reading and with review.** The check cannot tell that a text
     was read. Before the first Python dependency merges, the licence text of each
     library bundled inside the two native extensions is read at the bundled version and
     recorded in `evidence` and `contains`; if a text that L7 denies until reviewed is
     found, the dependency does not merge and the owner is asked with that text (ADR-063
-    decision 52). Review holds the reading and that the row of the licence record
-    agrees with the entry (decisions 7 and 16). That the pinned set is closed is proven
-    by the exit, whose environments reach the package directory and nothing else
-    (ADR-063 decision 27).
+    decision 52). Each file is fetched for its reading from the package index by its
+    name, version and SHA-256, the two sdists and the `pytest` wheel at the hashes of
+    ADR-063 decision 35 among them; no wheel and no sdist is committed (ADR-063 decision
+    18), and the entry's `evidence` holds the name and the hash by which the next
+    reader fetches the same file. Review holds the reading and that the row of the
+    licence record agrees with the entry (decisions 7 and 16). That the pinned set is
+    closed is proven by the exit, whose environments reach the package directory and
+    nothing else (ADR-063 decision 27).
 
 #### Order
 
-43. **When each part lands**, each with a case that fails on its base (ADR-063 decisions
+44. **When each part lands**, each with a case that fails on its base (ADR-063 decisions
     29 and 37):
 
-    | Part | Lands with | Its failing case |
+    | Part | Lands with | Its cases |
     |---|---|---|
-    | The item of decision 26, the two entries, the two remote modules in the list of U7 | The commit that first imports either module | A token of the item in a definition package; an import of either module outside the importers; a remote module that selects another version than the pin |
-    | The clause of U2 on `.proto` imports | The first `.proto` file after the handshake file | An import in a proto under `sdk/def/`; an import of an upstream's file outside the places of decision 27 |
-    | The keys of decision 29, the entries of the Python packages, the clauses of decision 41, and U1, U2 and U3 over `python/` | The commit that brings the first Python dependency, after the readings of decision 42 | A package of the pin file with no entry, with no row, at another version, or with an unread file; a name and an import outside their places under `python/` |
-    | The entry of an interpreter | The commit in which CI first runs it | A `process` entry of the modes `tool` and `user-installs` with no `role`, which passes |
+    | The register item of decision 26, the two entries, the two remote modules in the list of U7 | The commit that first imports either module | Failing: a token of the item in a definition package; an import of either module outside the importers; a remote module that selects another version than the pin |
+    | The clause of U2 on `.proto` imports, with its list of roots | The first `.proto` file after the handshake file | Failing: an import in a proto under `sdk/def/`; an import of an upstream's file outside the importers of its entry; a root outside the repository |
+    | U1 and U3 over `python/`; the clause of U2 on Python imports with its standard-library list | The commit that creates `python/` | Failing: a name outside its places under `python/`; an import that is neither of the standard library nor of `python/`; a file with a generated header that holds either, which fails as a written file does |
+    | The keys of decision 29, the entries of the Python packages, the entry rule of decision 38 and the clauses of decision 42 | The commit that brings the first Python dependency, after the readings of decision 43 | Failing: a package of a pin file with no entry, with no row, at another version, or with an unread file; an import of `google.api` beside an entry whose prefix is `google.protobuf`; an entry of mode `link` other than the one recorded by name that carries its id. Passing: an entry of mode `tool` that carries that id |
+    | The entry of an interpreter and, with question Q19 (b), of its standard library | The commit in which CI first runs the interpreter | As question Q13 decides; with (a), a `process` entry of the modes `tool` and `user-installs` with no `role`, which passes |
+    | The entries of Compose and of the container runtime | The commit that first runs each, after its reading | None of its own: the clauses of decision 12, and the names as questions Q16 and Q17 decide |
     | The entry of the base image | The commit that adds the Python template | None of its own: the clauses of decision 12 |
     | The entry of the proto compiler release | The commit that first runs it, after its reading | None of its own |
 
@@ -1318,35 +1529,41 @@ prepares the entries and replaces none.
 ### Consequences of the S2b part
 
 - The first import of grpc-go or protobuf-go may merge once this part is accepted, with
-  the item, the two entries and the wider list of U7 in the same commit. No definition
-  package, and nothing of `boot/`, `loader/` or `sdk/kernel`, imports or names either.
-- The importers of the two modules are a closed list of five directories. A test tree
-  or a stub that needs a direct import needs the owner's word first.
+  the register item, the two entries and the wider list of U7 in the same commit. No
+  definition package, and nothing of `boot/`, `loader/` or `sdk/kernel`, imports or names
+  either.
+- The importers of the two modules are the five directories of ADR-063 decision 42 and
+  what the answer to question Q21 adds. Any other direct import needs the owner's word
+  first.
+- The entry `grpc-go` is `ok-with-conditions` and carries the notice condition and the
+  tag with the codec exemption; `sigstore-go` points to it. The tag reaches what the
+  builder, `make check` and CI build, and no binary that an author builds; ADR-061 and
+  ADR-044 settle that point in their S2b parts.
 - The register schema gains `packages` and `imports`. On acceptance licence:222 and
   `08:1338` (L3) gain the two keys, and harness:223 keeps naming the schema of licence
   record §7.2.
-- On acceptance the table of decision 9 gains the row of decision 26, and the lines
-  that give the reach of U1 to U3 name `python/` beside `sdk/`, and the imports of
-  `.proto` files and of Python beside Go modules: `00:268`, `07:50`, `:1512`, `08:1272`
-  and harness:210, :227-229. With question Q10 (a) or (b), `00:268`, `07:527` and
+- On acceptance a note at decision 9 adds the row of decision 26, and the lines that
+  give the reach of U1 to U3 name `python/` beside `sdk/`, and the imports of `.proto`
+  files and of Python beside Go modules: `00:268`, `07:50`, `:1512`, `08:1272` and
+  harness:210, :227-229. With question Q10 (a) or (b), `00:268`, `07:527` and
   harness:217 gain the Python item. Each edit lands in the commit that records the
   answer (`08:999`).
-- `08:1342` (L7) and licence:214 gain PSF-2.0 for `typing-extensions`, by name, and
-  licence:48, :60 and :68 give way to rows with pins, each in the commit that adds the
-  entry (ADR-063 decision 52 and the edits it leaves to later commits).
+- `08:1342` (L7) and licence:214 gain the licence of `typing-extensions`, by name, under
+  the id that question Q20 fixes, and licence:48, :60 and :68 give way to rows with
+  pins, each in the commit that adds the entry (ADR-063 decision 52 and the edits it
+  leaves to later commits).
 - The first Python dependency stays blocked after acceptance until the readings of
-  decision 42 are made, and the proto compiler until its release is read (ADR-063
-  decisions 45 and 52).
+  decision 43 are made; the proto compiler, Compose and the container runtime until each
+  release is read (ADR-063 decisions 35, 45, 50 and 52).
 - U7 reads six Go modules, the pin files of `python/` and the licence record. U1 and U3
-  read `python/`. U2 reads Python and `.proto` imports. All of it is in `tools/` and
-  the shared analyzer (decisions 1 and 13), and no production package of `sdk/kernel`,
-  `boot/` or `loader/` changes.
-- This part leaves three things to others. The entry of Compose comes with its reading
-  (ADR-063 decisions 35 and 50), and its name is a word of the repository's own files,
-  as in `boot/compose.go`, so it goes to the owner before that entry merges (decision
-  8). The supported interpreter versions, the pins and the form of the pin file are
-  ADR-041's. A library that derives a config schema, if one is taken, is the S2b part
-  of ADR-048 and takes the form of decision 30.
+  read `python/` from the commit that creates it. U2 reads Python and `.proto` imports,
+  in `tools/` alone; the analyzer that `aiopsctl` shares reads Go as today, and no
+  production package of `sdk/kernel`, `boot/` or `loader/` changes.
+- This part leaves three things to others. The supported interpreter versions, the
+  pins, the form of the pin file and the places of the protocol's `.proto` files are
+  ADR-041's. The build file of the remote Go template and the reach of the init scan
+  are the S2b parts of ADR-061 and ADR-044. A library that derives a config schema, if
+  one is taken, is the S2b part of ADR-048 and takes the form of decision 30.
 - The row of this ADR in the ADR table of `08` §3 keeps "accepted 2026-11-23"
   (`08:1188`). On acceptance of this part, the status line at the head of this file and
   the note at decision 21 record it.
@@ -1354,7 +1571,9 @@ prepares the entries and replaces none.
 ### Questions for the owner on the S2b part
 
 Each question gives its options, the recommended one, why, and what the answer blocks.
-An option that changes a written line says so and names the lines.
+An option that changes a written line says so and names the lines. Questions Q13 to Q15
+were readings 3 to 5 of question Q12 in the first draft of this part; each narrows a
+written line and is a question of its own.
 
 **Q10. Is the Python language a stated exception, and where?** `00:268` excepts "the Go
 language, in which definitions are declared", and nothing of Python. Decision 3 keeps
@@ -1363,10 +1582,10 @@ every name of an upstream project in `names`, so the entry of an interpreter car
 18), and the fake and the suite of the `operations` definition, where it is the language
 that `plugin new <registry> --lang python` names (`07:1213`, `:1556`;
 `sdk/def/operations/v0/fake/author.go:26`;
-`sdk/def/operations/v0/conformance/conformance.go:457`); the launch definition carries
-the same field (`sdk/def/launch/v0/toolbox.go:295`). A list of importers never holds a
-definition with its fake and suite (`00:268`), so only a stated exception can give the
-word those places.
+`sdk/def/operations/v0/conformance/conformance.go:457`). The launch definition carries
+the field `Lang` and not the word (`sdk/def/launch/v0/toolbox.go:295`). A list of
+importers never holds a definition with its fake and suite (`00:268`), so only a stated
+exception, or a name left out of the entry, can give the word those places.
 - (a) The Python language joins the Go language in the last stated exception of
   `00:268`: "the Go language, in which definitions are declared, the Python language, in
   which a remote plugin is written, and SPDX identifiers". The item of decision 9 gains
@@ -1374,18 +1593,27 @@ word those places.
   restate it. Nothing is reworded, and U1 never looks for the word.
 - (b) `00:268` gains a stated exception with named places: the Python language, where
   it names the language of a plugin, of a template or of `aiops-sdk`. Decision 9 records
-  the tokens `python` and `cpython` with the places `python/`, `sdk/def/operations/` and
-  `sdk/def/launch/`, and never an id. `07:527` and harness:217 restate it. The comment at
-  `boot/digest_test.go:13` is reworded. A later place is added by a note at decision 9.
+  the tokens `python` and `cpython` with the places `python/` and `sdk/def/operations/`,
+  and never an id. Decision 15 gains the item beside the PostgreSQL and query dialect
+  items, since its places hold a fake and a suite. `07:527` and harness:217 restate it.
+  The comment at `boot/digest_test.go:13` is reworded. A later place is added by a note
+  at decision 9.
 - (c) No exception. The value of `--lang` and the directory take a word that is no name
   of the interpreter, which changes `07:1213`, `:1533` and `:1556`, the table of ADR-061
   decision 30 and ADR-063 decisions 18, 19 and 27.
+- (d) No exception, and the entry carries `cpython` and not `python`, as the owner's
+  word of 2026-11-26 kept `distribution` and `registry` out of the names of the registry
+  image (decision 8). No line of `00` is edited and nothing is reworded. U1 then never
+  looks for the word, in `sdk/kernel` and in an id included. It narrows the rule of
+  decision 3 for a word that, unlike those two, is the upstream's own name in every
+  place it stands, and a dated note at decision 8 records it.
 - Recommended: (b). The exception is as wide as the decided lines need and no wider, so
   U1 still refuses the word in `sdk/kernel`, `boot/`, `loader/` and every id, where
   nothing needs it and the mark policy of its owner is unread. It costs one reworded
   comment. (a) is simpler and is what decision 21 did for Go, whose name every Go file
-  carries; (c) changes written lines. Blocks: the entry of an interpreter, and so the
-  first CI job that runs Python.
+  carries; (c) changes written lines; (d) edits least and gives up the lint for the
+  word everywhere. Blocks: the entry of an interpreter, and so the first CI job that
+  runs Python.
 
 **Q11. Is `proto` a name of Protocol Buffers?** Decision 8 sends to the owner a name
 that is a word the repository's own files must carry. The documents use the word as a
@@ -1395,7 +1623,7 @@ and opens with `syntax = "proto3"` (`sdk/remote/handshake/handshake.proto:11`), 
 `boot` holds the identifier `CheckRemoteProto`, where the part abbreviates "protocol"
 (`boot/gate.go:52`).
 - (a) Not a name. The entries carry `protobuf`, `protocol-buffers` and their own
-  technical names (decision 34), and `proto`, `proto2` and `proto3` are words of the
+  technical names (decision 35), and `proto`, `proto2` and `proto3` are words of the
   schema language that U1 does not look for, as the owner's word of 2026-11-26 kept
   `distribution` and `registry` out of the names of the registry image (decision 8).
 - (b) Names, with the item of decision 26 giving the three tokens every place. U1 then
@@ -1406,36 +1634,238 @@ and opens with `syntax = "proto3"` (`sdk/remote/handshake/handshake.proto:11`), 
   "protocol" in `boot`, and the names that tell the upstream apart stay under the lint.
   Blocks: the entry `protobuf-go`, and so the first import.
 
-**Q12. Five readings.** None changes what a line requires. Each fills a point that the
-lines leave open, and each is in the decision that names it.
-1. **The dependency set** (decision 40). ADR-063 decision 52 holds "the dependency set
+**Q12. Two readings.** Neither changes what a line requires. Each fills a point that the
+lines leave open, on the stricter side, and each is in the decision that names it.
+1. **The dependency set** (decision 41). ADR-063 decision 52 holds "the dependency set
    of `aiops-sdk`" to L7 and does not list it. Reading: it is what an installer resolves
    for `aiops-sdk` with its testing part, so `pytest` and what it requires are in it and
    are held to L7, and a package that only builds, generates or checks is a tool, which
    L7 does not reach (`08:1342`).
-2. **"Has none"** (decision 41). ADR-063 decision 52: "Each package has a register
+2. **"Has none"** (decision 42). ADR-063 decision 52: "Each package has a register
    entry and a licence-record row, and a check fails on a package of the set that has
    none." Reading: the check fails when either is missing, and it reads the row of the
    licence record by the package name in the first cell.
-3. **The role of a program that the user installs** (decision 31). Decision 3 requires
-   `role` of an entry of form `process`, and the check reads that an entry whose modes
-   are only `tool` or `none` fills no container role (`tools/register/main.go:15-17`).
-   Reading: the same holds for the mode `user-installs`, since nothing of the project
-   ships or deploys such a program (licence:29).
-4. **The base image of the Python template** (decision 32). No line gives the mode of
-   an image that a template names. Reading: `pull` and `tool`, with the role
-   `remote-plugin`; and the licence texts that L5 has charts and compose files ship
-   (`08:1340`; licence:22) are asked of those two kinds of file, so the template names
-   the image by digest and carries no licence text of it. The register entry holds the
-   reading.
-5. **L8 for a file that no artifact of the project holds** (decision 30). L8 gives
-   every linked MPL-2.0 component one `NOTICE` line "in every artifact" (`08:1343`).
-   The MPL-2.0 file of the gRPC runtime is inside that runtime's own package, which
-   the installer fetches beside `aiops-sdk`, and the exit installs the two as separate
-   packages (ADR-063 decision 27). Reading: the condition binds every artifact of the
-   project that holds the file, and the package `aiops-sdk` holds none of its
-   dependencies; the entry records the file, its licence and its source.
-- (a) Accept the five readings, each landing with the code that builds it.
+- (a) Accept the two readings, each landing with the code that builds it.
 - (b) Answer each item on its own.
-- Recommended: (a). Blocks: the first Python dependency (readings 1, 2 and 5), the
-  entry of an interpreter (reading 3) and the Python template (reading 4).
+- Recommended: (a). Blocks: the first Python dependency.
+
+**Q13. Does a program of the modes `tool` and `user-installs` name a `role`?** A
+narrowing of decision 3, which requires `role` of every entry of form `process` or
+`service`. The check exempts an entry whose modes are only `tool` or `none`, as a
+reading that its file states (`tools/register/main.go:15-17`, `:220-223`). Three
+entries of this part are programs that CI runs and that a user also installs: an
+interpreter, Compose and the container runtime (decisions 31 and 34). None fills a
+container of `00` §3.2 or an `ext-` id of §3.3.
+- (a) Amend decision 3: `role` is not required of an entry whose modes are only `tool`,
+  `none` or `user-installs`, since nothing of the project ships or deploys such a
+  program (licence:29). The Required cell of `role` in decision 3 gains the three modes
+  by a dated note, and the check follows with the first such entry.
+- (b) No amendment. The three entries carry the mode `tool` alone, and the register
+  does not record that an author or an operator installs the same program. Decision 4
+  keeps `user-installs` for a program that only the user runs.
+- (c) No amendment, and each entry names a role. `00` §3.3 gains an `ext-` id for a
+  program on the author's or the operator's machine, which edits `00`.
+- Recommended: (a). The register then says what is true of the three, and the rule
+  loses nothing: a role names where the project deploys a program, and the project
+  deploys none of them. Blocks: the entries of an interpreter, of Compose and of the
+  container runtime.
+
+**Q14. Which mode has the base image of the Python template, and does the template
+carry its licence texts?** No line gives the mode of an image that a template names.
+The mode `pull` is "A chart or compose file of ours names the upstream image by digest;
+the user's machine pulls it from upstream", and it triggers "We ship the upstream
+licence text beside the chart and nothing else" (licence:22); L5 has "Charts and
+compose files ship each component's licence text in `THIRD_PARTY_LICENSES/`"
+(`08:1340`). The build file that the template writes is neither a chart nor a compose
+file. It names the image by digest, the author's machine pulls it, and the author who
+packs an image on it conveys its layers.
+- (a) `pull` beside `tool`, with the duty of licence:22 kept. The template writes a
+  `THIRD_PARTY_LICENSES/` directory beside the build file, with the text of each
+  licence of the entry's expression as read at the digest and one line that names the
+  image by digest. The template job fails when the texts and the entry differ.
+  licence:22 and `08:1340` gain the words "or a template's build file", which widens
+  both.
+- (b) `pull` beside `tool`, with no licence text. The duty of licence:22 is read as
+  bound to charts and compose files, and the register entry alone holds the reading.
+  This narrows licence:22, which gains the words "a template's build file names an
+  image by digest and carries no licence text".
+- (c) `user-installs` beside `tool`: the image is the author's to pull and to convey,
+  and the terms bind the author (licence:29). No licence text is written. Decision 4
+  gains a note that the mode covers an image, which it words for a program today.
+- Recommended: (a). It keeps the consequence that the licence record gives the mode,
+  and the texts serve the author, who becomes the one that conveys the layers. It costs
+  one directory in the template, which moves with the digest. Blocks: the Python
+  template.
+
+**Q15. What does the condition of L8 bind for the MPL-2.0 file of the gRPC runtime?**
+The owner's answer puts "the MPL-2.0 file ... under the condition of L8" (ADR-063
+decision 52). L8 has three clauses: every MPL-2.0 component "is linked unmodified",
+"gets one `NOTICE` line with its source URL and exact module version (MPL-2.0 §3.2) in
+every artifact", and "The release keeps an archive of the exact source of every linked
+MPL-2.0 module" (`08:1343`). The file is `roots.pem`, inside the package `grpcio`,
+which the installer fetches beside `aiops-sdk`; the package `aiops-sdk` holds none of
+its dependencies (ADR-063 decisions 27 and 35). The entry of `grpcio` has the mode
+`link`, which triggers "Ship, plus the licence must be on the allow-list" (licence:24).
+- (a) L8 as written, on the artifact that requires the file. The package `aiops-sdk`
+  carries one `NOTICE` line for `roots.pem`, with the source URL and the exact version
+  of `grpcio`. The Python template writes the same line into the plugin directory, so
+  the image that an author packs carries it. Nothing of the project modifies the file.
+  The release keeps the sdist of `grpcio` at the pin, the form in which its publisher
+  gives the exact source, until the question Q7 that L8 names says whether a pointer
+  to upstream is enough (`08:1505`). No written line is edited.
+- (b) L8 binds an artifact of the project that holds the file, and at S2b none does:
+  no `NOTICE` line and no archive, and the register entry records the file, its licence
+  and its source. This narrows `08:1343`, which gains "in every artifact that holds
+  it", and a dated note at ADR-063 decision 52 says that the condition binds nothing
+  until the project builds an image that holds the runtime.
+- Recommended: (a). The owner's condition then binds something at S2b, the mode `link`
+  keeps the consequence that licence:24 gives it, and the cost is one line in two
+  places and one archive, at a hash that ADR-063 decision 35 records. Blocks: the first
+  Python dependency.
+
+**Q16. Is `compose` a name of the Compose entry?** Decision 8 sends to the owner a name
+that is a word the repository's own files must carry. With the word added to an entry
+the lint finds it in 207 places at `bbfd839`, 159 under U1 and 48 under U3: it is the
+verb for what `boot` does to the layers of a profile (`boot/compose.go`), it stands in
+the definitions `launch`, `operations` and `reload` with their fakes and suites, where
+no list of importers may give it a place (`00:268`), and rows 3 and 8 of `00` §2.1
+name the compose file.
+- (a) Not a name. The entry carries the other names that its reading finds and not the
+  bare word, as the owner's word of 2026-11-26 kept `distribution` and `registry` out
+  of the names of the registry image (decision 8). U1 does not look for the word.
+- (b) A name, under a stated exception of `00:268` that gives the token every place.
+  `00:268`, `07:527` and harness:217 gain the item, and U1 never finds the word.
+- (c) A name with no exception. The 207 places are reworded, `boot/compose.go` and the
+  identifiers of three definitions among them, which changes the wire of `reload`
+  (`sdk/def/reload/v0/testdata/wire-v1.golden`).
+- Recommended: (a). The word is the repository's own verb in `boot/` and in the three
+  definitions, which is the case that the owner's word of 2026-11-26 decided. Blocks:
+  the entry of Compose, and so the compose fragment, `plugin start` and the exit.
+
+**Q17. Does the entry of the container runtime carry `docker`, and where may the word
+stand?** The harness of the exit names the daemon `dockerd` and the socket `docker.sock`
+of the runtime (`test/authoring/env_test.go:95`, `:130`), so its reading is expected to
+find the name. With the word added to an entry the lint finds six places at `bbfd839`:
+the header `Docker-Content-Digest`, which a registry sends and the test registry of the
+testkit must send (`sdk/testkit/ocitest/ocitest.go:237`, `:256`, `:298`), a comment of
+that file (`:8`), the variable `DOCKER_CONFIG` in a comment of the `operations`
+definition (`sdk/def/operations/v0/operations.go:157`) and "laptops without Docker" in
+row 9 of `00` §2.1 (`00:52`). In each the word is the upstream's own name.
+- (a) A name, as decision 3 has it. The entry lists `sdk/testkit/ocitest` as an
+  importer, by this answer, for the header that the wire fixes (decision 17). The
+  comment in the definition, which no list of importers may hold, is reworded to name
+  the credential file of the caller's client, and row 9 of `00` §2.1 says "a container
+  runtime". Edits `00:52`.
+- (b) Not a name. U1 does not look for the word. The owner's word of 2026-11-26 kept
+  out two words that the repository uses in a sense of its own, which is not the case
+  here, so this narrows the rule of decision 3 for one entry, and a dated note at
+  decision 8 records it.
+- Recommended: (a). The rule of decision 3 holds as written, at the cost of two
+  reworded lines and one importer, and U1 keeps refusing the word in a definition, in
+  `boot/` and in an id. Blocks: the entry of the container runtime, and so `plugin
+  pack` of remote code in CI and the exit.
+
+**Q18. Is the init of the runner an entry?** ADR-063 decision 50 has a CI job start the
+systemd unit "on a runner whose init is systemd". ADR-063 decision 35 lists what is
+read before its first use and does not list that init. The mode `tool` is "a program
+that CI, a test or the lab runs, fetched by pin and never shipped" (decision 4), and
+whether every tool that CI runs has an entry stays with review (decision 12). The init
+comes with the image of the runner (`ci.yml:25`), as its kernel and its shell do; no
+file of the project fetches, pins, bakes or ships it. With `systemd` as a name the lint
+finds one place, row 10 of `00` §2.1 (`00:53`), and the documents name the target of a
+unit by that word (`07:1854`; `08:435`).
+- (a) No entry. The init is part of the machine that the job runs on, and the register
+  holds what the project fetches, links, bakes in or ships. The word is then no name of
+  the register, and a deployment target may carry it. The job records the version it
+  ran on in its log.
+- (b) An entry of form `process` and the modes `tool` and `user-installs`, whose `pin`
+  is the version that the job asserts on its runner and whose licence is read at that
+  version. `systemd` is then a name: row 10 of `00` §2.1 is reworded (`00:53`), and
+  the word stands in no file under `sdk/`, `boot/` or `loader/`, in no id and in no
+  command path, so a target of `plugin install` takes a role name there.
+- Recommended: (a). Nothing of the init is fetched by a pin, so the mode `tool` as
+  decision 4 words it does not describe it, and S2a took the same line for the kernel,
+  the shell and the container runtime of its runners. The container runtime differs
+  from S2b on, because ADR-063 decision 35 lists it by name. Blocks: the CI job that
+  runs the systemd unit.
+
+**Q19. Is the Python standard library that `aiops-sdk` imports under L7?** The mode
+`link` is "Compiled into our binary or imported by our package" (licence:24). Decision
+8 made the Go standard library an entry of mode `link`, apart from the toolchain,
+because "L7 applies to the standard library that every binary links". `aiops-sdk`
+imports modules of the standard library of the interpreter that the author installs;
+no artifact of the project holds them. The licence file of an interpreter release is
+unread (ADR-063 decision 35). The lists of L7 hold no Python licence, and the owner
+recorded one by name for `typing-extensions` alone (ADR-063 decision 52).
+- (a) Outside L7. The standard library is part of the interpreter, whose entry has the
+  modes `tool` and `user-installs`, and its terms bind the user who installs it
+  (licence:29). This narrows licence:24, which gains "a module of the standard library
+  of an interpreter that the user installs is not linked", and a dated note at
+  decision 8 says why Python differs from Go: a Go binary of the project holds the
+  library, and no Python artifact of the project does.
+- (b) Under L7, as written. Each supported interpreter release has a second entry for
+  its standard library, of form `library` and mode `link`, as decision 8 split Go. Its
+  licence is the expression over the licence file of the release as read at the pin,
+  and the owner records it by name in L7, as for `typing-extensions`: `08:1342` and
+  licence:214 gain the standard library of the supported interpreter versions. If the
+  reading finds a text that L7 denies until reviewed, the owner is asked again with
+  it.
+- Recommended: (b). It keeps licence:24 and decision 8 as written, and the owner has
+  already held to L7 a package that no artifact of the project holds (ADR-063 decision
+  52). The cost is one reading for each supported version, which the entry of the
+  interpreter needs in any case, and one more record by name. Blocks: the first file
+  of `python/` that imports the standard library.
+
+**Q20. Which licence does the name recorded for `typing-extensions` cover?** The
+owner's answer records "PSF-2.0 ... by name for `typing-extensions`" (ADR-063 decision
+52), the expression that the package declares. Decision 3 has `licence` hold "The SPDX
+expression as read", and the entry of `grpcio` records the three texts of its file,
+though that package declares one (decision 30). The licence file of `typing-extensions`
+4.16.0 holds five texts. At the SPDX list v3.29.0, `PSF-2.0` is the first of them,
+`Python-2.0.1` is the first four together, and the fifth is `0BSD`, which L7 allows
+(Context, "What was read for this part"). The table that the owner answered on says
+that the file "is the Python licence stack" (ADR-063 decision 35).
+- (a) The file as read. The entry records `Python-2.0.1 AND 0BSD`, with the declared
+  `PSF-2.0` in `evidence`. L7 and licence:214 name `Python-2.0.1` for
+  `typing-extensions`, with the words "which the package declares as PSF-2.0". The
+  clause of decision 42 is keyed to `Python-2.0.1`. A dated note at ADR-063 decision
+  52 records the id.
+- (b) The expression as declared. The entry records `PSF-2.0`, the owner's word
+  unchanged, and its `evidence` lists the four other texts of the file. The rule of
+  decision 30 gains one exception: where the owner recorded a declared id by name, the
+  entry carries that id, and the record covers every text of that file at that pin.
+  The clause of decision 42 is keyed to `PSF-2.0`.
+- Recommended: (a). One rule then holds for every package, and the record in L7 names
+  all that the file holds, which is what the owner was shown when answering. With (b)
+  the id on the entry covers one of five texts. Blocks: the entry of
+  `typing-extensions`, and so the first Python dependency.
+
+**Q21. Where does the wire code of the tests live?** ADR-063 decision 51 proves the
+callback path and the remote listener path on "a test definition marked `callback` and
+a test hook marked remote", of which "nothing ... ships in a release table", and
+ADR-063 decision 64 has two stubs, one that hangs a call and one that ignores
+`Deactivate`, as processes that the harness builds. Generated wire types import
+protobuf-go directly. ADR-063 decision 44 places the generated Go of a `contrib`
+definition under `sdk/remote/def/` and of no other. The test definitions are packages
+of the root module under `test/dist/def/`, which the nested module `sdk/remote` cannot
+import, and a list of importers never holds a definition (`00:268`). A stub that
+ignores `Deactivate` misbehaves at the level of the protocol, which a well-behaved
+`sdk/remotehost` may not be able to express.
+- (a) One directory of the root module under `test/`, apart from the test definition
+  packages, as the generated Go of a `contrib` definition lies apart from its
+  definition. It holds the generated Go of the test definition and of the test hook,
+  and the two stubs. Both entries list it as an importer, with ADR-063 decisions 51
+  and 64 as its decision. No test code and no fault switch enters a shipped module.
+- (b) Inside the module `sdk/remote`, in a package that no release table names. The
+  test definition and the test hook move there with their generated Go, and the stubs
+  use it. No importer is added. Every author of a remote Go plugin then downloads test
+  code with the module, and the test definitions leave the home that ADR-060 decision
+  28 gave them.
+- (c) As (a) for the generated Go, and the stubs import neither module: each is a
+  plugin on `sdk/remotehost` whose contribution hangs or whose disposer never returns.
+  If the protocol of ADR-041 lets `sdk/remotehost` answer `Deactivate` by itself, the
+  second stub cannot be written this way, and the owner is asked again.
+- Recommended: (a). It adds one importer with a cited decision, keeps test code out of
+  the modules that authors download, and lets a stub misbehave on the wire without a
+  switch in shipped code. Blocks: the callback path, the remote listener path and the
+  S2b cells of the failure matrix.
