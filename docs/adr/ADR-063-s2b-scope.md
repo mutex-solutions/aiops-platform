@@ -1906,6 +1906,12 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     before the first Python dependency merges (decision 35). If a text that L7 denies
     until reviewed is found, the dependency does not merge and the owner is asked with
     that text, with Q15 (c) as the other way.
+    Note of 2026-11-27, with the owner's answer to question Q20 of the S2b part of
+    ADR-054 (decision 55 there): the name recorded for `typing-extensions` covers its
+    licence file as read, and the id is `Python-2.0.1`, which the package declares as
+    PSF-2.0. The register entry records `Python-2.0.1 AND 0BSD`, and L7 and the licence
+    record name `Python-2.0.1` for `typing-extensions` in the commit that adds the
+    entry.
 
 53. **A generated file counts against no line cap** (Q16 (a)). A file that the adapter
     parity check regenerates is listed and summed apart, as `dist/modules.go` counts
