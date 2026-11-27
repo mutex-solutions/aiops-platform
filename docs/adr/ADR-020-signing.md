@@ -1146,3 +1146,503 @@ code has no entry, and neither `07:1841` nor `:1855` gains the lock entry of in-
 code that "Edits on acceptance" names for them. `00:478`, `01:282` and `02:206` lock only a remote plugin or a pack with no code,
 so they already agree and are not edited, and ADR-047 decisions 8 and 18 stand as
 written.
+
+## 2026-11-27 proposed addition: the S2b part, remote artifacts
+
+- Status: **proposed 2026-11-27, awaiting the project owner.** This section is the S2b
+  part of this ADR, the dated addition that ADR-063 decisions 2 and 34 ask for. It is
+  proposed before the code it governs and is accepted before that code merges into
+  `main`. It blocks the install and the `plugin verify` of remote code, the attestation
+  that `plugin pack` writes for remote code, and the trust cases of ADR-063 decision 28.
+  Decisions 1 to 30 above stand as written. The decisions of this section are numbered
+  from 31 and its questions from Q13, and each question is answered before the code it
+  names merges.
+- Scope: the five points that ADR-063 decision 34 gives this part: the record of a
+  remote artifact, which has no `module` (decision 10); whether the attestation names the
+  runtimes its suites ran in; `plugin verify` against a pulled image; the `signed` clause
+  for a remote listener on a hook with a raw field (decision 7); and whether
+  `allowUnsigned` (decision 8) admits an unsigned artifact of the runtime `remote`. The
+  part adds no signature format, no key format, no linked module, no tool and no image,
+  so the licence rule of ADR-063 decision 35 asks no reading of it; a module that the
+  work finds it needs is read first, as that decision says.
+- Citations: `00`, `01`, `07` and `08` are the files of `docs/architecture/` with those
+  numbers, and `08:503` is line 503 of `08` at commit `bbfd839`. The decisions above cite
+  an earlier commit: `07:443` there is `07:450` here, and `08:404` there is `08:406`. A
+  path with a line, as `boot/trust.go:289`, is a file of the repository at `bbfd839`;
+  `artifact.go`, `install.go` and `author.go` are files of
+  `plugins/operations/internal/operations/`. The plugin record,
+  `docs/design/plugin-system-2026-11.md`, is cited by section, and every ADR by decision
+  number.
+
+### Context
+
+What the documents fix for remote code, and this part keeps:
+
+- **The artifact.** A remote plugin is published as one OCI artifact with its signature
+  and attestation as referrers. It holds the image reference by digest, `plugin.yaml`,
+  a bundle of exactly one disabled row at S2b and an SBOM (`08:393`; `07:1850`; ADR-063
+  decisions 17 and 67). `plugin pack` builds the image and records its digest, and
+  `plugin push` pushes the image and then the artifact (ADR-063 decision 61).
+- **Install** verifies the signature, the trust policy for this id and runtime, the gate
+  and the attestation. It writes the lock entry by digest, the kept files, the verified
+  record, the bundle and the unit, pulls no image and runs no third-party code
+  (`08:398`; `07:1842`, `:1851`, `:1868`; `00:482`; ADR-063 decision 17).
+- **Trust.** A signer entry covers an artifact when its id matches a pattern and every
+  runtime its manifest lists is in the entry's `runtimes`, so a remote artifact needs an
+  entry that lists `remote` (decision 6; `07:1866`). Remote code has no module, so under
+  `aiops/` or `contrib/` only a key of the release pipeline that the binary carries
+  signs it (`08:503`; ADR-048 decision 14).
+- **The attestation.** Its one subject is the digest of the artifact's OCI manifest,
+  and the artifact's own field pins the image (decisions 9 and 24; ADR-063 decision
+  17). `plugin pack` records what passed, and `plugin check` runs T1 and T2 in every
+  runtime the manifest lists (`07:134`, `:1519`, `:1578`). Through the remote adapter the
+  obligations half of a suite runs and the guard half never does, since a remote plugin
+  provides no key (ADR-063 decision 14; `07:1115`).
+- **What ties a remote row to its code.** The kernel never launches a plugin process
+  (`08:447`), so it never sees which image runs. The unit runs the image by the digest
+  that the artifact pins and by no tag (ADR-063 decision 25). The instance proves a key
+  pair that install made for that plugin id, and the kernel holds its pin (ADR-063
+  decision 55). The first message carries the digest of the `plugin.yaml` that the
+  plugin was built with, a drift check that authenticates nothing (ADR-063 decision 58).
+- **`plugin verify`** is "the explicit, optional re-run against a pulled image", is not
+  part of install, and is a proof of conformance at S2b with cases of its own (`07:1519`;
+  plugin record §11; `08:940`; ADR-063 decisions 17 and 28).
+- **Remote listeners** are allowed only on the hooks marked remote, under a deadline,
+  and receive the scrubbed form of the payload; "a field the definition marks raw
+  forces the `signed` class" (`07:450`, `:1116`; plugin record §8). A hook in a signer's
+  `signed` list counts for every runtime the entry covers (decision 7). S2b builds the
+  remote listener path on a test hook marked remote, and the scrubbed payload arrives
+  at S5 with `pii` (ADR-063 decisions 26 and 51; `00:74`; `07:1503`).
+- **`allowUnsigned`** lists exact ids, is empty in hosted and is printed at every boot
+  elsewhere, and on a self-host only the ids the site lists run unsigned (decision 8;
+  `08:406`; `01:303`; `07:1884`). `plugin install` "takes a signed OCI artifact"
+  (`00:482`), and the S2b exit installs "from signed artifacts" (`08:697`).
+
+What the code holds at `bbfd839`:
+
+- `plugin pack` and `plugin install` refuse `remote` (`artifact.go:91`;
+  `install.go:123`), and ADR-063 decision 17 lifts both refusals.
+- The verification that install and `plugin verify` share already holds the signer to
+  the runtimes of the manifest, refuses a reserved owner on an artifact with no module,
+  and records `unsigned` for an id that `allowUnsigned` lists, whatever its runtime
+  (`artifact.go:622-681`).
+- The reader of `record.yaml` takes `runtimes: [remote]` and refuses a record that
+  states `module` unless `runtimes` holds `inproc` (`boot/trust.go:236-258`,
+  `:289-290`). The writer adds `module` only for in-process code (`install.go:367-370`).
+- Check 5 holds the record's id, version and runtimes to the kept manifest and the
+  signer to `trust.yaml` for those runtimes (`boot/checks.go:315-325`). The `signed`
+  clause of check 7 counts a hook of a signer's `signed` list for every runtime and a
+  key for `inproc` only (`boot/checks.go:363-393`). Check 10 compares the module that an
+  artifact pins only where the record holds one (`boot/checks.go:510`).
+- The suites step of `plugin verify` reads every artifact that lists a runtime as
+  in-process code and fetches its module layer (`artifact.go:694-717`).
+- The statement names definitions, a scenario and the tests that did not run, and no
+  runtime (`boot/trust.go:34-62`). Two writers fill it: step 5 of `plugin check`
+  (`author.go:402-411`) and the builder (`internal/builder/manifest.go:181`).
+- A hook of `definition.yaml` and of `serves` carries its stages, its access class and
+  a remote mark of `yes` or `no`, and nothing marks a field raw
+  (`tools/deflint/main.go:395-396`; `boot/distribution.go:306-308`; ADR-060 decision 7).
+
+### Decision
+
+31. **A remote artifact is signed and trusted as every artifact is.** `plugin sign`
+    signs the digest of the artifact's OCI manifest in the one format of decision 2, and
+    signs the attestation, both as referrers (`07:1850`). No format, key form or field
+    of `trust.yaml` is added. An entry of `signers` covers a remote artifact when its id
+    matches a pattern and its `runtimes` holds `remote` (decision 6): `aiopsctl trust
+    add <key> --ids <pattern> --runtimes remote` (`08:398`; `07:1866`). An entry with no
+    runtimes covers packs only, and one that lists `inproc` alone does not cover remote
+    code. Remote code has no module, so the reserved-owner clause of check 5 applies to
+    it as written: under `aiops/` or `contrib/` its verified signer is a key of the
+    release pipeline that the binary carries, and no pattern of `trust.yaml` admits
+    another (`08:503`; ADR-048 decision 14; `artifact.go:668-671`;
+    `boot/checks.go:319`). The signature covers the image through the artifact: the
+    image reference by digest is a layer of the manifest whose digest is signed
+    (decision 9; ADR-063 decisions 17 and 25). Whether the image also carries a
+    signature of its own is reading 1 of question Q15.
+32. **The record of a remote artifact** is the record of decision 10 without `module`.
+    `plugin install` writes it, and no other command does: under the profile write
+    lock, after every clause that install evaluates has passed, into
+    `$AIOPS_HOME/verified/sha256-<hex>/`, named by the digest of the artifact's OCI
+    manifest, the digest that `plugins.lock` names (decision 10; `07:1851`, `:1853`). It
+    holds `record.yaml` with `kind: artifact`, that digest, the signer's key id, the
+    plugin id, the version and `runtimes: [remote]`; `signature.sigstore.json` and
+    `attestation.sigstore.json` as pulled; and `attestation.json`, the statement that
+    was verified. It states no `module`, and the reader refuses a remote record that
+    states one (`boot/trust.go:289-290`). Whether it also states the image digest is
+    question Q13.
+    - Boot finds the record of a remote row through the digest of its lock entry, not
+      by plugin id as for in-process code, which has no entry (decision 10; `07:1853`;
+      ADR-047 decision 8).
+    - At every composition check 5 holds the kept files to the locked digest, the
+      record to the kept manifest by id, version and runtimes, and the recorded signer
+      to the present `trust.yaml` for the id and the runtime `remote` (`08:503`; ADR-047
+      decision 18; `boot/checks.go:315-325`). A signer entry that loses `remote`, or is
+      deleted, denies the row at the next boot with no record touched (decision 10).
+    - The module tie of decision 12 has no counterpart for remote code. Boot cannot hold
+      the pinned image equal to the image that runs, because the kernel never launches a
+      plugin process (`08:447`). The record vouches for the artifact, and the artifact
+      pins the image. What makes an instance run that image is outside boot: the unit
+      that install renders from the verified artifact, by digest and by no tag, and the
+      key pair that install makes for that plugin id (ADR-063 decisions 25 and 55). The
+      digest of the first message is a drift check and authenticates nothing (ADR-063
+      decision 58). A remote row is therefore as strong as the files of the home, as a
+      record is (decision 11), and no check of the gate claims more.
+    - The record of a manifest that lists `inproc` and `remote` follows the reader's
+      rule, `module` exactly when `runtimes` holds `inproc`. Whether such a manifest
+      packs and installs at all is the S2b part of ADR-048 (ADR-063 decision 34).
+33. **The attestation of a remote artifact** is the statement of decision 9. Its one
+    subject is `<id>@<version>` with the digest of the artifact's OCI manifest, and it
+    is an OCI referrer of the artifact (decisions 9 and 24). The statement names neither
+    the image digest nor `requires.remoteProtocol`: the subject digest covers the layer
+    that pins the image and the `plugin.yaml` that check 3 reads (ADR-048 decision 16).
+    - `definitions` names every definition of `requires` with its version and, for each
+      registry the plugin contributes to, the suite revision and `halves:
+      ["obligations"]`, the one half that runs through the adapter (ADR-060 decision 56;
+      ADR-063 decision 14).
+    - `plugin pack` records the statement only when step 5 passed in every runtime that
+      the manifest lists: it records what passed, and step 5 fails on a failure in any
+      runtime listed (`07:134`, `:1519`, `:1578`).
+    - Check 10 evaluates every clause of `08:508` on a remote row as on any row. Its
+      clause on a pinned module reads a record that holds one, and so reads nothing here
+      (`boot/checks.go:510`).
+    - Whether the statement also names the runtimes in which the suites ran is question
+      Q14.
+34. **`plugin verify` of remote code** is the explicit, optional re-run against a pulled
+    image (`07:1519`; plugin record §11). It is no part of install, and install still
+    pulls no image and runs none (ADR-063 decision 17).
+    - **Order.** It verifies the signature of the artifact digest with each signer of
+      `trust.yaml` that covers the id and the runtime `remote`, then the attestation with
+      the key that verified, and uses no other blob before both hold, as for every
+      artifact (decision 14; ADR-047 decision 2; `artifact.go:622-681`). A failure is a
+      refusal that names check 5 or check 10, as at install. Only then does it fetch
+      `plugin.yaml`, the bundle and the image: the image by the digest that the
+      artifact pins and by no tag, with its content checked against that digest before
+      any of it runs (ADR-047 decision 2). That no image is pulled before the signature
+      and the attestation hold is reading 2 of question Q15.
+    - **What runs.** The check runner of `aiopsctl` starts the pulled image and drives
+      it through the handshake and the obligations half of the suite of each definition
+      that the attestation names with a suite revision, with the suites that this
+      `aiopsctl` embeds; an `aiopsctl` that embeds none reports the step as not built,
+      as today (ADR-060 decision 46; ADR-063 decisions 9 and 17). The handshake
+      evaluates checks 3 and 9 as on a server, the digest clause included: the digest
+      of the first message equals the SHA-256 of the artifact's `plugin.yaml` (ADR-063
+      decisions 16, 54, reading 2, and 58).
+    - **The fence.** `plugin verify` runs a third party's code on the machine of
+      whoever runs it, which install never does (`07:1842`). The container that it
+      starts gets no more than the unit of ADR-063 decisions 24 and 25 gives an
+      instance; that is reading 3 of question Q15. How the runner reaches that
+      container and what identifies each side are ADR-041's, and the flags, the step
+      names and the texts are the S2b part of ADR-061 (ADR-063 decision 34).
+    - **It passes** only when the suites pass and what ran is what the attestation
+      names: the definitions, their versions, the suite revisions and the halves, the
+      rule that holds `plugin verify` of in-process code (ADR-060 decision 46, second
+      note of 2026-11-25; `artifact.go:773-805`), and with question Q14 (b) the
+      runtimes.
+    - **It fails and names what differs** (ADR-063 decision 28): a blob that does not
+      hash to its descriptor, with both digests; a manifest rewritten after signing,
+      whose digest no verified signature names, with check 5; an image whose content
+      does not hash to the pinned digest, with both digests; a first message whose
+      digest differs, with check 3 and both digests; and suites that ran other than the
+      attestation names, with both lists.
+    - **Without a container runtime** the suites step is reported as not run and names
+      what it lacks, and `plugin verify` does not pass, since a step that did not run is
+      a step that did not pass (`sdk/def/operations/v0/operations.go:502-507`;
+      `07:1570`).
+    - **It writes nothing in the home**: no record, no lock entry, no unit and no
+      credential (ADR-061 decision 21). The record stays install's alone (decision 10),
+      so a passed `plugin verify` admits nothing and a failed one removes nothing.
+35. **The `signed` clause for a remote listener** is the clause of decision 7, read on
+    the row's own manifest.
+    - A remote plugin listens only on a hook marked remote, which check 9 holds, and the
+      kernel module refuses an `On` that the manifest's `hooks` does not declare. The
+      manifest therefore names every hook a remote row can listen on (`07:141`, `:446`,
+      `:1116`; ADR-048 decision 16; ADR-063 decisions 10 and 16).
+    - Where such a hook is of the `signed` class, the row passes check 7 only when an
+      entry of `signers` that covers its recorded signer for the id and the runtime
+      `remote` names the hook in its `signed` list (`08:505`; `boot/checks.go:384`). A
+      key in a `signed` list never counts for remote code, which injects no signed key
+      (decision 7; `07:565`). A signer recorded `unsigned` is never trusted for one
+      (decision 8).
+    - The clause reads the plugin id of the row, which is the artifact's own id, and the
+      manifest and the record of that artifact (ADR-063 decision 41). That the code of
+      every proxy is the first-party `aiops/remote` makes no remote row first-party for
+      this clause; reading 4 of question Q15 asks the owner to confirm it.
+    - Where no signer is known, at step 7 of `plugin check`, at `plugin pack` and at
+      `plugin gate --against`, the clause reports "not evaluated" with that reason for a
+      remote row, as for any row that is not first-party (decision 30, reading 3).
+    - S2b proves the clause on a remote row. The test definition of ADR-063 decision 51
+      owns a second test hook, marked remote and of access `signed`, and the cases of
+      decision 38 run on it, since each case has a test that fails on its base (ADR-063
+      decision 28). Nothing of it ships in a release table.
+    - Decision 7 has a field that the definition marks raw put a remote listener in the
+      `signed` class (`07:450`). No definition can say so today: `definition.yaml` and
+      `serves` hold no mark for a raw field, no hook marked remote in the table of `07`
+      §3.4 carries one (`07:460`, `:465`, `:466`), and the scrub that separates a raw
+      field from the others is S5 (ADR-060 decision 7; ADR-063 decision 26; `07:1503`).
+      How the definition marks such a field, what the clause then reads and when both
+      are built is question Q16.
+36. **`allowUnsigned` and the runtime `remote`.** Whether an id that `allowUnsigned`
+    lists is admitted as a remote artifact with no verified signature is question Q17.
+    Decision 8 and `01:303` name no runtime, and from S2b such an artifact is a unit
+    that runs an image for which no key vouches (ADR-063 decision 34). Whatever the
+    answer, these hold:
+    - `allowUnsigned` is empty in hosted and lists exact ids, and boot prints it at
+      every boot (decision 8; `08:406`; `07:1884`; `boot/trusted.go:188-189`).
+    - It never admits remote code under `aiops/` or `contrib/`: the reserved-owner
+      clause is evaluated first, and `unsigned` is no key of the release pipeline
+      (`08:503`; `boot/checks.go:319`; `artifact.go:668-671`).
+    - A signer recorded `unsigned` is never trusted for a `signed` hook (decision 8).
+    - The S2b exit installs signed artifacts only (`08:697`; ADR-063 decision 38). The
+      unsigned path is a case of decision 38, written for the answer either way (ADR-063
+      decision 28).
+37. **What each entry point verifies for remote code.** The table of decision 14 holds,
+    with these rows for remote code.
+
+    | Entry point | Verifies | A failure is |
+    |---|---|---|
+    | `plugin check` step 7, `plugin pack` | As decision 14, with a throwaway key: the signature, the attestation and the digest of the artifact, whose layer pins the image that `plugin pack` built (`07:1580`; ADR-063 decision 61). With no container runtime the step is not run and names what it lacks (`07:1570`; ADR-063 decision 17) | A failed step 7 |
+    | `plugin install` of remote code | As decision 14 for every kind, with a signer that covers `remote`. It fetches no image (ADR-063 decision 17) | Check 5 or check 10; nothing is written |
+    | `plugin verify` of remote code | The signature and the attestation as install does, then the pulled image against the pinned digest, the handshake and the suites (decision 34) | A refusal with check 5 or 10 before the image is pulled; after it, a failed verify that names what differs |
+    | `plugin gate --against` | No signature (decision 14); the majors of check 3 and check 9 on the manifest, and check 10 on the statement as read (ADR-063 decision 16) | Check 3, 9 or 10 |
+    | `plugin start` | No signature: it starts the unit that install rendered from the verified artifact (ADR-063 decisions 17 and 25) | None of this ADR |
+    | Boot, every live generation and the remote handshake | No signature (`08:406`): the lock, the kept files, the record and `trust.yaml` (decision 32). The handshake reads the kept `plugin.yaml` and writes no record (ADR-063 decisions 16 and 58) | Check 3, 5, 7, 9 or 10 |
+
+38. **The trust cases** of ADR-063 decision 28, as this part words them. Each has a test
+    that fails on its base (ADR-063 decisions 28 and 29), on the artifacts of the exit or
+    on copies of them.
+    - A remote artifact whose signer is listed for its id with no runtimes, and one whose
+      signer is listed for `inproc` alone: install refuses each with check 5 and writes
+      nothing.
+    - An installed remote artifact whose signer entry then loses `remote`: boot denies
+      its row with check 5, and the record is unchanged.
+    - A remote artifact under `aiops/` and one under `contrib/`, each signed by a key
+      that `trust.yaml` lists and that is no release key of the binary: check 5, at
+      install and at boot.
+    - A remote artifact whose attestation names another digest: check 10 at install.
+    - An unsigned remote artifact of an id that `allowUnsigned` lists, admitted or
+      refused as question Q17 decides; and one of an id that it does not list, refused
+      with check 5.
+    - A home whose record of a remote digest states other runtimes than the kept
+      manifest: boot denies the row with check 5.
+    - A remote row that listens on the test hook of access `signed`: admitted when the
+      signer's entry names the hook in `signed`; denied with check 7 when the entry does
+      not name it, and when the signer is recorded `unsigned`.
+    - `plugin verify`: the cases of ADR-063 decision 28; an artifact whose signature
+      does not verify, refused with no image pulled; an image built from another
+      `plugin.yaml` than the artifact holds, failed with check 3; and a run with no
+      container runtime, which does not pass.
+    - With question Q14 (b): a remote artifact whose statement names no runtime, or
+      `inproc` alone, denied with check 10 at install, at `plugin gate --against` and at
+      boot.
+39. **Not built at S2b** by this part:
+
+    | Part | Step | Why |
+    |---|---|---|
+    | The mark of a raw field and the clause that reads it, with question Q16 (b) | With the first definition that marks one | Decision 35; `08:680` |
+    | `quarantine`, which denies one exact version and revokes its instances | S6b | `07:1894` |
+    | `trust.yaml` and the records in platform tables, for hosted | S4b | Decision 17 |
+    | Keyless signing; `requireAttestations` | As decisions 22 and 26 place them | Decisions 22 and 26 |
+
+40. **What this part asks of the other S2b parts** (ADR-063 decision 34). Each is
+    proposed with its own ADR, and none relaxes a decision above.
+    - ADR-047: the layer that pins the image is a layer of the artifact's OCI manifest,
+      so the signed digest covers it; and its decision 2 gains what `plugin verify`
+      fetches for remote code, the image, after the signature and the attestation hold.
+    - ADR-061: the form of `plugin verify` for remote code, its step names, its texts
+      and its exit codes, inside decision 34.
+    - ADR-041: how the check runner reaches a container that `plugin verify` started and
+      what identifies each side there, inside decision 34 and reading 3 of question Q15.
+    - ADR-048: whether a manifest that lists `inproc` and `remote` packs. If it does,
+      its signer covers both runtimes (decision 6), its record states `module`
+      (decision 32) and its statement follows the answer to question Q14.
+    - ADR-044: the suite binaries that drive a remote process, which `plugin verify`
+      runs.
+
+### Consequences
+
+- Remote code needs no new trust concept: one flag of `trust add`, the record of
+  decision 10 without `module`, and the statement of decision 9.
+- Boot proves less for a remote row than for an in-process row. It holds the kept files
+  to the locked digest and the signer to `trust.yaml`, and it cannot hold the running
+  image to the pinned one. The unit by digest and the pinned key pair carry that link,
+  and decision 32 says so plainly.
+- `plugin verify` is the one command with which an operator runs a third party's image
+  before install. It runs it only after the signature and the attestation hold, and
+  inside the fence of the unit.
+- With question Q14 (b) the predicate gains one field and check 10 one clause. Both
+  writers of a statement change, and every statement of the repository is written again,
+  which the move of the toy registries to `0.2` requires in any case (ADR-063 decision
+  48).
+- With question Q16 (b) `definition.yaml`, `serves` and the definition lint do not change
+  at S2b.
+- With question Q17 (b) no code runs on a site unless a key that the site lists vouches
+  for it: a signer's key for a remote artifact, and the site's distribution key for
+  in-process code.
+- The line caps of ADR-063 decision 36 stand. This part names no package they do not
+  name.
+
+### Edits on acceptance
+
+The commit that records the owner's answers edits this section, the row of this ADR in
+the ADR table of `08` §3 (`08:1154`), which gains the S2b part with its date, and the
+lines that the chosen options name. With the recommended answers these are: `07:1519`,
+`08:508` and `08:897`, where the statement names the runtimes, with a dated note at
+ADR-060 decision 18 (Q14 (b)); `07:450` and plugin record §8, which say when the mark of
+a raw field arrives (Q16 (b)); and `00:482`, `01:303`, `07:1852`, `08:406`, `08:503` and
+plugin record §11, which say that `allowUnsigned` covers no remote code (Q17 (b)). `00`
+is edited in that same commit (`08:999`). Q13 (a) and Q15 (a) edit no line. An option
+the owner does not choose edits nothing.
+
+### Questions for the owner
+
+Each question gives its options, the recommended one, why, and what the answer blocks. An
+option that changes or defers a written line says so and names the lines it edits, and
+each such question holds the option that keeps the text as written.
+
+**Q13. Does the record of a remote artifact state the image digest?** Decision 10 lists
+the fields of a record and gives `module` to in-process code alone. A remote artifact
+pins its image by digest in a layer that the artifact digest covers, and boot cannot
+compare that digest with the image that runs (decision 32).
+- (a) No, as decision 10 lists the fields. The record states no image. Install reads
+  the image digest where it is pinned, in the artifact, when it renders the unit, and
+  `plugin verify` when it pulls. The reader stays as it is.
+- (b) Yes: `image: sha256:<hex>`, exactly when `runtimes` holds `remote`, as `module`
+  exactly when it holds `inproc`. `plugin start` compares the image of the unit with it
+  and refuses a unit that names another image. Boot reads the field and compares it
+  with nothing. The table of decision 10 and the reader gain the field.
+- Recommended: (a). The record vouches for a digest that already covers the image, so
+  the field would be a second copy with no comparison in boot, which `08:680` rules out.
+  The unit is a file of the home as the record is, so the comparison of (b) protects
+  nothing that the ownership of the home does not (decision 11; ADR-047 decision 14).
+  Blocks: the record that install writes for remote code.
+
+**Q14. Does the attestation name the runtimes in which its suites ran?** The statement
+names, per definition, the version, the suite revision and the halves (decision 9), and
+no runtime. `plugin check` runs T2 in every runtime the manifest lists (`07:134`,
+`:1578`), and `halves` does not tell a run through the adapter from a run in process: a
+plugin that only contributes runs the obligations half in either. The attestation type
+is published for third parties, who may write a statement with tools of their own
+(`08:938`).
+- (a) No field, as decision 9 has the predicate. The runtime is implied: the subject is
+  the artifact, its manifest lists the runtimes, and `plugin pack` records a statement
+  only when step 5 passed in each (decision 33). A statement then makes no claim about
+  where a suite ran.
+- (b) One list. The predicate gains `runtimes`, the runtimes in which step 5 ran the
+  suites that the statement names, as `["remote"]`. It is an added field of `v1`, which
+  decision 9 allows. Every statement of a subject whose manifest lists a runtime
+  carries it: `plugin pack` writes it, and the builder writes `["inproc"]` for an entry
+  of a module table; a pack's statement carries none. Check 10 gains a clause and denies
+  such a subject when the list lacks a runtime that its manifest lists, and `plugin
+  verify` holds the list to what it ran. No statement exists outside the repository
+  (`08:1349`, L14), and those of the repository are written again with the `0.2` minor
+  of the toy registries (ADR-063 decision 48). `07:1519`, `08:508` and `08:897` gain the
+  runtimes, with a dated note at ADR-060 decision 18.
+- (c) One list per definition: each entry that holds a suite revision gains `runtimes`.
+  As (b), with a list that could differ by definition, which no definition allows today,
+  since step 5 runs every suite of a plugin in every runtime listed.
+- Recommended: (b). The statement is the record of what passed (`07:1519`), and where a
+  suite passed is part of that: a signer who signs `runtimes: ["remote"]` claims the run
+  through the adapter, which (a) lets no statement claim and no check read. It also
+  holds as written if the S2b part of ADR-048 lets one manifest list both runtimes. It
+  costs one field and one clause, and nothing published changes. (c) carries the same
+  facts in more places. Blocks: the attestation that `plugin pack` writes for remote
+  code, and check 10 on a remote row.
+
+**Q15. Four readings.** None changes what a line requires or when it is built: each
+fills a point that the lines leave open for remote code.
+1. **The image carries no signature of its own.** `dist sign` signs the digest of the
+   distribution image, because the distribution manifest names no image (decision 12,
+   note of 2026-11-24). A plugin artifact names its image by digest in a layer that the
+   signed digest covers (decision 31). Reading: `plugin sign` signs the artifact and its
+   attestation and nothing else, and no command of S2b looks for a signature on a plugin
+   image. A registry policy that asks for a signature on every image finds none on a
+   plugin image.
+2. **No image before the signature.** ADR-047 decision 2 has a command that verifies
+   use no other blob until the signature verifies. The image is not a blob of the
+   artifact. Reading: `plugin verify` pulls no image until the signature and the
+   attestation hold, and an artifact that fails either is refused with nothing pulled
+   and nothing run (decision 34).
+3. **The fence of `plugin verify`.** The isolation of the remote runtime is the process
+   and a network policy (`08:388`; `07:1109`), and ADR-063 decisions 24 and 25 give a
+   unit no route out, a user that is neither the site user nor root, and no path of the
+   home but its own credential directory. No line says what fences the container that
+   `plugin verify` starts. Reading: that container runs the image by the pinned digest,
+   as such a user, with no path of the home, no credential of the site and no route
+   out, and only the check runner that started it reaches it, as only the check runner
+   opens the socket of `plugin check` (ADR-063 decisions 23 and 54, reading 2).
+4. **Which id the `signed` clause reads.** For the binding lists each proxy value counts
+   as `aiops/remote` (ADR-063 decision 41), and the `signed` clause passes a first-party
+   row (decision 7; `boot/checks.go:378`). Reading: the clause reads the row's plugin
+   id, the artifact's own, so a remote row is first-party only when its artifact is
+   under `aiops/` and signed by the release key, and never because its proxy code is
+   `aiops/remote` (decision 35).
+- (a) Accept the four readings, each landing with the code that builds it.
+- (b) Answer each item on its own.
+- Recommended: (a). Without reading 2 or 3 a command could run code that no check has
+  seen, or run it with the reach of the site user; without reading 4 every remote row
+  would pass a clause that exists to stop it. Reading 1 adds no signature that no check
+  reads. Blocks: `plugin sign` and `plugin verify` of remote code, and check 7 on a
+  remote row.
+
+**Q16. How is a raw field marked, and when is its clause built?** A deferral of written
+text under option (b). `07:450` and plugin record §8: a remote listener receives the
+scrubbed form of the payload, and "a field the definition marks raw forces the `signed`
+class". Decision 7 reads it for the listener: such a field puts a remote listener in the
+`signed` class. The hook of a definition carries `access` and `remote: yes|no` and no
+mark of a field (ADR-060 decision 7); no hook marked remote in `07` §3.4 carries a raw
+field (`07:460`, `:465`, `:466`); and the scrub is S5 (ADR-063 decision 26). The clause
+for a hook whose `access` is `signed` is built and is proven on a remote row at S2b
+under any option (decision 35).
+- (a) At S2b, on the test definition. The `remote` mark of a hook gains a third value,
+  `raw`: remote listeners are allowed and at least one field crosses unscrubbed. The
+  definition lint and the reader of `serves` take it, and check 7 puts a listener of an
+  artifact that lists `remote` on such a hook in the `signed` class, while an in-process
+  listener keeps the hook's `access`. The test definition of ADR-063 decision 51 owns a
+  third hook marked `raw`, and decision 38 gains its cases. The layout of ADR-060
+  decision 7 gains the value by a dated note, and `08:505` names the clause.
+- (b) With the first definition that marks a field of a remote hook raw, by the ADR of
+  that step, in the form of (a) unless that ADR says otherwise. Until then no definition
+  can mark one, and S2b changes neither `definition.yaml` nor `serves`. `07:450` and
+  plugin record §8 gain that the mark and its clause arrive with that definition.
+- (c) By the access class of the hook. A definition whose remote hook carries a raw
+  field declares the hook `access: signed`, a rule for whoever reviews a definition,
+  since nothing marks the field. The gate does not change. In-process listeners on that
+  hook then need the `signed` trust too, which `07:450` does not ask of them.
+- Recommended: (b). No hook on the roadmap carries a raw field and nothing scrubs before
+  S5, so (a) would build a mark whose only reader at S2b is a test, which `08:680` rules
+  out; ADR-063 decision 51 builds a path on a test definition only where a written line
+  names the part for S2b. The clause that a marked hook falls under is already built
+  and is proven at S2b. (c) is stricter than the line for in-process listeners and
+  cannot be checked. The owner decides, because `07:450` names no step. Blocks: nothing
+  at S2b under (b); the definition lint, `serves` and check 7 under (a).
+
+**Q17. Does `allowUnsigned` admit an unsigned remote artifact?** A narrowing of written
+text under option (b). Decision 8, `08:406` and `01:303` let a self-host run unsigned
+the ids that the site lists, and name no runtime. At S2a that never ran code for which
+no key vouched: a pack has no code, and in-process code enters only through a
+distribution that the site builds and signs (`07:1873`). From S2b an unsigned remote
+artifact is a unit that runs an unsigned image, while `00:482` and the exit speak of
+signed artifacts (`08:697`; ADR-063 decision 34). Decision 36 holds under either answer.
+- (a) As written. An id that `allowUnsigned` lists is admitted as a remote artifact with
+  no verified signature. Its signer is recorded `unsigned`, check 10 reads the statement
+  that `plugin pack` recorded (decision 8; decision 30, reading 2), and every other
+  clause applies. Install renders the unit, which runs the image by the digest that the
+  locked artifact pins, inside the same fence (ADR-063 decisions 24 and 25), and says
+  that the unit runs an unsigned image. `plugin verify` of such an artifact reads the
+  statement unsigned and reports the signer `unsigned`. No line is edited.
+- (b) `allowUnsigned` covers no artifact whose manifest lists `remote`. `plugin install`
+  and `plugin verify` refuse such an artifact with check 5, with nothing pulled and
+  nothing written, and boot denies with check 5 a remote row whose record names the
+  signer `unsigned`. Packs and in-process code keep decision 8. `00:482`, `01:303`,
+  `07:1852`, `08:406`, `08:503` and plugin record §11 say that `allowUnsigned` covers no
+  remote code.
+- Recommended: (b). It keeps what held at S2a: no code runs on a site unless a key that
+  the site lists vouches for it. An author who holds `aiopsctl` alone makes a key pair
+  and signs (decision 21), and the site lists that key with one `trust add`, so a site
+  that runs its own remote plugin loses little. The answer can be widened later without
+  breaking a site, which a narrowing after (a) could not. (a) keeps the text as written
+  and leaves the choice to the operator, who lists an exact id and types a digest, on a
+  self-host where a gate check is an honest refusal and not a lock (`08:510`). The owner
+  decides, because (b) narrows `01:303` and `00:482` is a line of `00`. Blocks: the
+  install of remote code and its unsigned case.
