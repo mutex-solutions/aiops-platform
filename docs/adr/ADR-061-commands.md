@@ -8,6 +8,11 @@
   that code merges into `main`. Brought to ADR-062 on 2026-11-24, as its decision 16
   asks: decisions 10, 16, 17 and 32 and the scope name its transport and return the
   outcomes of its decision 11.
+- Status of the S2b part: **proposed 2026-11-27, awaiting the project owner.** The
+  section "S2b part, proposed 2026-11-27" holds it, as decisions 45 to 55 and questions
+  Q10 to Q13. ADR-063 decision 2 has it written as a dated addition to this ADR,
+  proposed before the code it governs and accepted before that code merges into `main`.
+  Until the owner accepts it, decisions 1 to 44 stand as they are.
 - Scope: ADR-060 decision 53 (its question Q17 (a)) and decision 41 (its question Q5
   (a)): the `commands` definition; the `cli` row, its dispatcher; the `aiops-cli` bundle
   and the `cli` profile; `cmd/aiopsctl` as the launcher of the `cli` profile, with
@@ -1561,3 +1566,689 @@ otherwise, the decision here holds.
     the error of every row that exits 1, and `operations.ErrRebuildRequired` the
     `rebuild-required` of `Install`, which writes nothing and returns the `dist.yaml`
     lines in `Change.DistLines`.
+
+## S2b part, proposed 2026-11-27
+
+- Status: **proposed 2026-11-27, awaiting the project owner.** Decisions 45 to 55 are
+  proposed and questions Q10 to Q13 are open. ADR-063 decision 2 has this part proposed
+  to the owner before the code it governs and accepted before that code merges into
+  `main`.
+- Scope: what ADR-063 decision 34 has this part settle (`ADR-063:849-854`): `plugin
+  start`, with `Start` in the operations definition as a minor with a raised suite
+  revision; `plugin new --lang python`; the form of a remote Go plugin, which ADR-063
+  decision 60 decided; the text and the exit code of each refusal of `plugin enable`
+  (ADR-063 decision 17); what `plugin check` prints for a step that it cannot run for
+  want of a container runtime; and the forms of `plugin verify` and `plugin smoke` for
+  remote code. It blocks the operations library and the command rows of group 3 of
+  ADR-063 decision 30, the remote Go and Python templates, and steps G1, P1, C2 and C3
+  of the exit of ADR-063 decision 27. It changes no decision of `00` by itself: where an
+  answer edits a line of the architecture files, the question names the line.
+- Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
+  numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
+  is written against. The sections above cite `a3c85ae`, so a line number here differs
+  from theirs. ADR-063 is cited by decision and, inside a long decision, by line at the
+  same commit, as `ADR-063:401`. The other ADRs are cited by decision, the plugin
+  record by section, and code by file and line at the same commit. A decision number
+  with no ADR name is a decision of this ADR.
+
+### Context of the S2b part
+
+**What is written.**
+
+- **`plugin start`.** `plugin install` renders the deployment unit of a remote plugin
+  per target, and the compose target is "a fragment and a line in the `sidecars-static`
+  table, started with `aiopsctl plugin start <id>`" (`08:1293`; `02:313`; plugin record
+  §11). S2b builds the compose fragment, a file of its own under the home that `plugin
+  start` runs, and the systemd unit (ADR-063 decision 50). The kernel never launches or
+  stops a plugin process (`08:447`, `:1293`; `ADR-063:401-403`). `plugin start` creates
+  the network of an instance and attaches the instance and the kernel container to it
+  (`ADR-063:626-629`). Decision 32 left the command to S2b.
+- **The templates.** `aiopsctl plugin new <registry> --lang python` "writes a plugin
+  skeleton with its `plugin.toml`, a test and a row snippet" (`07:1213`), for each
+  registry marked `contrib` (`ADR-063:448-451`). A remote Go plugin is made with `plugin
+  new <registry> <id> --lang go --runtime remote`, with `inproc` the default (ADR-063
+  decision 60; `07:1556`). Each remote template writes the file from which the plugin's
+  image is built (`ADR-063:455-459`). CI generates a plugin from every template and
+  holds it to one state: it compiles, passes T0 and the generated tests, and fails
+  conformance on the stubs (`07:1568`; `ADR-063:451-452`).
+- **The refusal of `plugin enable`.** "`plugin enable` refuses, printing the exact
+  command, while the endpoint is missing from the `sidecars` table or does not answer
+  the handshake" (`08:398`; `07:1870`; `02:326`). The two halves come from two places
+  (`ADR-063:404-418`; ADR-063 decision 54, reading 4). `aiopsctl` reads the endpoint
+  table and refuses a row whose endpoint is missing before it submits anything. For a
+  listed endpoint it submits, the server process dials, and an instance that does not
+  answer or a denied handshake ends in the final result `rolled back`, the files
+  restored and exit 1, "with the row, the reason the server gave and, where the
+  instance did not answer, the exact command `aiopsctl plugin start <id>`". `aiopsctl`
+  never dials an instance.
+- **`plugin check` without a container runtime.** Steps 1 to 6 and step 8 need no
+  container runtime in any language, and "Step 7 needs one when it packs an image"
+  (`07:1570`). Without one the check "reports the step as not run and names what it
+  lacks" (`ADR-063:382-384`), and step P2 of the exit reads a `--json` report that shows
+  steps 1 to 6 passed and step 7 not run (`ADR-063:660-663`).
+- **`plugin verify` and `plugin smoke`.** `aiopsctl plugin verify <spec>` is "the
+  explicit, optional re-run of the suite against a pulled image; it is not part of
+  install" (plugin record §11). `plugin smoke ./ --against <release>` runs T3 per
+  runtime, and "For `remote` it attaches the plugin's image to the released image"
+  (`07:1583`). Both are proofs of conformance at S2b, and both have cases
+  (`ADR-063:424-427`, `:756-760`; `08:940`).
+
+**What the code holds at `bbfd839`.**
+
+- `sdk/def/operations/v0` is at version 0.4 with `compatibleFrom: "0.1"` and suite
+  revision 7, and its interface holds no `Start`
+  (`sdk/def/operations/v0/definition.yaml:25-30`;
+  `sdk/def/operations/v0/operations.go:453`).
+- `plugin new` refuses every language but Go
+  (`plugins/operations/internal/operations/author.go:39-40`;
+  `internal/authoring/tools.go:139-140`). Neither its request nor the template request
+  of the toolbox holds a runtime (`sdk/def/operations/v0/operations.go:267`;
+  `sdk/def/launch/v0/toolbox.go:294-297`), and `templates/` holds the Go templates of
+  three registries and the connector template (`templates/templates.go:30-34`).
+- A step of `plugin check` ends as `pass`, `fail`, `not applicable` or `skipped`, and a
+  report passes when no step failed (`sdk/def/operations/v0/operations.go:292-295`,
+  `:359-361`). The attestation that the check prints is made in step 7, with the digest
+  of the packed artifact as its subject
+  (`plugins/operations/internal/operations/artifact.go:209-218`; ADR-020 decision 9).
+- `plugin verify` prints the steps `signature`, `attestation` and `suites`, each `pass`,
+  `fail` or `not-built`, and exits 1 unless each passed
+  (`plugins/operations/internal/operations/artifact.go:592-596`, `:693`;
+  `plugins/command-plugin/plugin.go:334-340`).
+- `plugin smoke` requires `--against` and `--modcache` and builds a throwaway
+  distribution in every case (`plugins/command-plugin/plugin.go:96`;
+  `internal/authoring/smoke.go:80-84`).
+- The one place where `aiopsctl` runs a container runtime is the builder, a part of
+  `Tools` (`internal/builder/image.go:417`; `sdk/def/launch/v0/toolbox.go:46-49`).
+- The release artifact that `--against` names is a referrer of the release image: that
+  image is its subject (`internal/builder/image.go:46-49`, `:281-299`).
+- A generation that fails reaches `aiopsctl` as a result whose report holds, per row, an
+  id, an outcome, a state and a text, and no cause
+  (`sdk/def/reload/v0/wire.go:194-199`). `aiopsctl` prints that text after "rolled back
+  at generation" (`plugins/operations/internal/operations/install.go:474`, `:498-513`).
+
+**Gaps.**
+
+1. No line names the command that the refusal of a missing endpoint prints.
+   `ADR-063:415-416` names `aiopsctl plugin start <id>` for an instance that did not
+   answer; install, and not `plugin start`, writes the endpoint into the table
+   (`ADR-063:630-631`; ADR-063 decision 39); and the case of `ADR-063:753-755` wants
+   "the exact command".
+2. `aiopsctl` prints the exact command only "where the instance did not answer" and
+   makes no dial, and the result gives it the server's reason as a text, with nothing
+   that tells an instance that did not answer from a denied handshake.
+3. No line says how `plugin check` exits when step 7 did not run.
+4. `07:1583` words the test-only profile of smoke for S2a, "the release's `aiops-core`
+   bundle plus the plugin's bundle with its rows enabled". A proxy row waits for
+   `sidecars` (`07:1150`), whose provider ships in `aiops-selfhost` (ADR-063 decision
+   39). And smoke requires `--modcache`, while a remote plugin adds no module to a
+   build.
+5. No line says through which code the operations library reaches the container
+   runtime. From S6a `plugin-manager` consumes `operations` in a server process
+   (decision 15), and the kernel never launches or stops a plugin process (`08:447`).
+
+### Decision of the S2b part
+
+#### `plugin start` and `Start`
+
+45. **`plugin start <id>` is a command of `command-plugin`**, the row of its group
+    (decision 30). The row then registers fourteen commands, under its cap of 800 lines
+    (ADR-063 decision 36).
+    - **Form.** `plugin start <id>`: one argument, the plugin id of an installed remote
+      artifact, and no flag. It takes no `--profile`, because the unit and its instance
+      belong to the site and not to a profile: one shared instance per plugin serves the
+      site (`08:1293`), and a site holds one digest of a plugin id (ADR-047 decision 7).
+      It takes no flag that changes what runs: the unit is rendered from a fixed
+      template with three inputs and no other (ADR-063 decision 25), and `plugin start`
+      runs it as rendered. The home is `$AIOPS_HOME`; with none, the command is a usage
+      error and exits 2 (decisions 10 and 17).
+    - **What it does.** It runs the compose fragment that `plugin install` rendered for
+      that id (`08:1293`; ADR-063 decision 50) on the container runtime of the host,
+      with Compose, which the clean machine of the exit holds as "what `plugin start`
+      needs" (`ADR-063:620-621`). It creates the network of the instance and attaches
+      the instance and the kernel container to it (`ADR-063:626-629`).
+    - **What it does not do.** It enables no row, writes no profile and submits nothing:
+      `08:398` has "start the instance" and `plugin enable <row>` as two steps. It makes
+      no dial and does not wait for the listener of the instance, since `aiopsctl` never
+      dials an instance and needs no route to one (`ADR-063:406-407`): it returns when
+      the container runtime reports the container of the unit running. An instance that
+      is still starting when a generation dials it falls under the deadlines that
+      ADR-041 fixes for the proxy (`ADR-063:809-812`). It does not start a systemd unit,
+      which `systemctl enable --now` starts (`08:1293`).
+    - **Result.** After exit 0 one container of that id runs, with the image by the
+      digest that the unit names and by no tag (ADR-063 decision 25; step C3,
+      `ADR-063:683-684`). Run on an instance that already runs so, it starts nothing and
+      exits 0. It prints `started <id>: <image reference by digest>`, or `running <id>:
+      <image reference by digest>`, on stderr, and nothing on stdout (decision 11).
+    - **Refusals**, each with exit 1 and nothing started (decision 10): the home holds
+      no compose fragment for the id; the host has no container runtime or no Compose,
+      with the text of decision 47; or the container runtime does not start the unit,
+      with the error it gave.
+
+46. **`Start` joins the `operations` definition in its next minor**, 0.5 where no other
+    S2b change takes that number first, with `compatibleFrom: "0.1"` kept: for a
+    consumer a new method is an additive change (`07:547`). The suite revision rises
+    from 7 (ADR-060 decision 10; `ADR-063:849-850`). The same minor carries the field
+    `Runtime` of `NewRequest` (decision 48) and the end of the refusals of `remote` in
+    `Check`, `Pack` and `Install`, which ADR-063 decision 17 lifts (`ADR-063:366-367`).
+    The pull request that raises the minor regenerates the `requires` of the five
+    command rows (ADR-060 decision 32, rule 4).
+
+    | Method or type | What it is |
+    |---|---|
+    | `Start` | Takes the caller's context first and a `StartRequest`, and returns a `Started`. Once the provider is released it returns an error that matches `kernel.ErrInactive`, as every method does (decision 16) |
+    | `StartRequest` | `Caller`, `Home` and `ID`, the plugin id |
+    | `Started` | `ID`; `Image`, the image reference by digest that the unit names; `Running`, whether the instance already ran; and with question Q10 (a) the `Change` of the one line it wrote |
+
+    The method table of decision 16 gains the row:
+
+    | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
+    |---|---|---|---|---|---|
+    | `Start` | `plugin start <id>` | No; with question Q10 (a), the line of the id in the endpoint table, where the table lacks it | None | `Unit` (decision 47) | `08:1293`; `ADR-063:401-403` |
+
+    Rules every provider keeps, beside those of decision 17:
+    - `Start` refuses an id for which the home holds no compose fragment, with an error
+      that matches `ErrRefused`, and starts nothing. With no home it returns an error
+      that matches `ErrUsage` (decision 17).
+    - It reads the home as a reader does, with no lock (decision 19), and it holds no
+      lock while the container runtime pulls or starts an image: a holder holds the
+      write lock only through bounded steps (decision 19). With question Q10 (a) it
+      takes the lock for the one write, with the snapshot of decision 17, and releases
+      it before it runs the unit.
+    - It passes on the error of decision 47 where the host has no container runtime.
+
+    **Fake and suite** (decision 18). The fake takes from its config what it cannot
+    compute without a container runtime, as it takes each signature verdict: the ids
+    whose unit and whose endpoint the home holds, and what the runtime answers for each,
+    started, already running, or no runtime. It records each call. The new suite
+    revision adds a case for each rule that the methods can show: `Start` of an id with
+    no unit is refused and starts nothing; `Start` of an installed id answers the image
+    by digest; a second `Start` answers that the instance runs and starts nothing;
+    `Start` with no container runtime returns the error that names what the host lacks;
+    `Start` with no home is a usage error; `Start` after release returns `ErrInactive`;
+    and `Enable` of a remote row whose endpoint the table lacks is refused, writes
+    nothing and submits nothing (decision 50). With question Q10 (a) one more: `Start`
+    writes a missing line again under the lock. The fake passes the suite. The cases
+    that need the files or a container runtime are T1 tests of `plugins/operations` and
+    steps of the exit (decision 54).
+
+47. **The container runtime is reached through `Tools`.** At `bbfd839` the one place
+    where `aiopsctl` runs a container runtime is the builder, a part of `Tools`
+    (`internal/builder/image.go:417`; `sdk/def/launch/v0/toolbox.go:46-49`). `Start`
+    follows it. The minor that `launch` gains at S2b (`ADR-063:351-352`) adds to `Tools`
+    one part, `Unit`: it starts or stops the compose fragment of a plugin id of a home on
+    the container runtime of the host, and reports whether the container of that unit
+    runs and with which image digest. `cmd/aiopsctl` implements it.
+    - In `aiops` it answers `ErrNotCarried`, as every part of `Tools` does (decision 21;
+      `sdk/def/launch/v0/toolbox.go:20`). So no server process starts or stops a unit,
+      whoever consumes `operations` there: the kernel never launches or stops a plugin
+      process (`08:447`, `:1293`), and from S6a `plugin-manager` consumes `operations`
+      in a server process (decision 15).
+    - `Disable` and `Remove` stop the unit through the same part, where ADR-063 decision
+      68 has them stop it. In a server process the part is absent, which is why
+      `aiopsctl plugin disable` stops a unit only when "run on the host" (`07:1195`).
+    - **`ErrNoRuntime`.** The same minor adds the error `ErrNoRuntime` to `launch`. A
+      part of `Tools` that needs a container runtime returns an error that matches it
+      where the host has none, or none that answers, and `Unit` also where the host has
+      no Compose. Its text names what the host lacks, as ADR-063 has `plugin check` name
+      it (`ADR-063:382-384`): `no container runtime: <program>: <error>`, with the
+      program that the part ran and the error of that run. A command decides on the
+      error and prints the text: `plugin start` and `plugin smoke` exit 1 with it,
+      `plugin check` reports step 7 as `not run` (decision 51), and `plugin verify`
+      reports a step as `not-run` (decision 52).
+    - `TemplateRequest` gains the field `Runtime` (decision 48).
+    - The parts through which `plugin pack` builds an image and through which the check
+      runner drives a remote process are named by the S2b parts of ADR-047 and of
+      ADR-044, which settle that code (`ADR-063:826-828`, `:862-863`), in the same minor
+      of `launch`. The tables of decision 21 gain `Unit` and each of those.
+
+#### The templates
+
+48. **`plugin new` gains the language `python` and the flag `--runtime`.** The CLI spec
+    of decision 30 reads `plugin new <registry> <id> [--lang go|python] [--runtime
+    inproc|remote] [--contrib]`; the connector form does not change.
+
+    | Form | What it writes | Source |
+    |---|---|---|
+    | `plugin new <registry> <id>`, with or without `--lang go` and `--runtime inproc` | The Go template of S2a, unchanged | ADR-063 decision 60; ADR-060 decision 24 |
+    | `plugin new <registry> <id> --lang go --runtime remote` | The remote Go form of decision 49 | ADR-063 decision 60; `07:1556` |
+    | `plugin new <registry> <id> --lang python`, with or without `--runtime remote` | The Python template of decision 49 | `07:1213`; `ADR-063:448-451` |
+
+    - `--lang` defaults to `go`, as at S2a (`plugins/command-plugin/plugin.go:89`).
+      `--runtime` defaults to `inproc` for Go, so the S2a form is unchanged (ADR-063
+      decision 60), and to `remote` for Python, its one runtime: "A Python plugin is
+      always remote" (`07:1203`).
+    - The remote forms exist for each registry marked `contrib` (`ADR-063:448-449`),
+      which at S2b are `echoers` and `stampers` at `0.2` (ADR-063 decisions 14 and 48).
+    - `New` refuses, with exit 1 and before the first write, as every refusal of `New`
+      comes (`plugins/operations/internal/operations/author.go:31-34`): `--lang python`
+      with `--runtime inproc`; a remote form of a registry that is not marked `contrib`,
+      which at S2b is `commands`, a registry with no remote contribution (`00:222`;
+      decision 1); and a language or a runtime outside the two of its flag. The text
+      names the registry or the value, and the forms that exist.
+    - `--contrib` writes the `contrib` id owner in every form (`07:1533`; `08:409`).
+    - `plugin new connector` reads neither flag: a pack has no code and its `runtimes`
+      is empty (`07:134`), and at S2a it reads no `--lang`
+      (`plugins/operations/internal/operations/author.go:39`).
+    - `NewRequest` and `TemplateRequest` each gain the field `Runtime`, in the minors of
+      decisions 46 and 47.
+    - Every form needs `aiopsctl` and nothing else (`07:1533`): the templates are
+      compiled into `aiopsctl` (`07:1556`), and writing the Python template runs no
+      Python.
+
+49. **What each remote template writes.** Both write a plugin of one registry that
+    declares `scope: [process]` (ADR-063 decision 54, reading 1) and a bundle of exactly
+    one row, disabled (`08:393`; ADR-063 decision 67).
+
+    | File | The remote Go form | The Python template | Source |
+    |---|---|---|---|
+    | The plugin code | The files of the Go template: the same plugin package, with one stub per method of the definition | A package whose `__main__.py` holds one class per contribution, marked with `@contributes`, each method a stub that fails as "not implemented", and the call of `serve()` | `07:1560-1561`; ADR-063 decision 60; `07:1208`, `:1211`, `:1216-1232` |
+    | The program that the unit starts | `cmd/<name>/main.go`: a `main` that serves the package's `Plugin` value through `sdk/remotehost` and holds nothing else, so that value is the one that passes the suite in both runtimes | The package itself | ADR-063 decision 60; `07:1198`; `07:148` |
+    | The hand-written manifest half | `plugin.yaml`, with `runtimes: [remote]` | `plugin.toml`; no `plugin.yaml`, which `aiops-sdk manifest` writes | ADR-063 decision 60; `07:148`, `:1210`, `:1213` |
+    | Dependencies | `go.mod`, which requires the SDK module, the test kit and the two remote modules | The file that names `aiops-sdk` as its one dependency, in the form that ADR-041 fixes | `07:51`, `:1566`; `ADR-063:822-825` |
+    | The test | `plugin_test.go` of the Go template | `tests/test_<name>.py`, which runs the suite through `aiops_sdk.testing.host()` | `07:1562`; `07:1212`, `:1236-1243` |
+    | The image | The file from which the image is built: one static binary on no base layer, so it names no base image | The file from which the image is built: it names a base image by digest, read under ADR-063 decision 35 before the template merges | `ADR-063:455-459` |
+    | The rest | `bundle.yaml`, `fixtures/`, `README.md` with the row snippet, `LICENSE` and a CI workflow, as the Go template has them | The same | `07:1564-1566`; `07:1213` |
+
+    - **The state after `plugin new`.** The remote Go form, after `plugin check
+      --write`, compiles and holds a `requires` with `remoteProtocol` and `definitions`
+      and no `pluginApi` (ADR-063 decision 60; ADR-048 decision 12). The Python template
+      holds its `plugin.yaml` after `aiops-sdk manifest` (step P1, `ADR-063:656-659`).
+      Each then passes steps 1 to 4 of `plugin check` and fails at step 5 with exactly
+      one line per obligation of the suite (`07:1568`; `ADR-063:450-452`, `:658-659`),
+      step 5 run in the runtime `remote` (`ADR-063:368-374`).
+    - **The template job** generates a plugin from every template and asserts that
+      state (`07:1568`; `ADR-063:451-452`, `:986`): at S2b the three Go templates, the
+      remote Go form and the Python template of `echoers` and of `stampers`, and the
+      connector template.
+    - The keys of `plugin.toml`, and whether `plugin.yaml` carries `entrypoint` and in
+      which grammar, are the S2b part of ADR-048 (`ADR-063:833-836`). The names of the
+      Python base classes, of their methods and of the fixture are fixed with the
+      Python parts at S2b (`07:66` R8; `ADR-063:822-825`). The name and the format of
+      the file from which `plugin pack` builds the image are the S2b part of ADR-047
+      (ADR-063 decision 61; `ADR-063:826-827`). The templates write each in the form
+      that those parts fix.
+
+#### The refusals of `plugin enable`
+
+50. **Each refusal exits 1 and leaves the home as it was** (decision 10; ADR-059
+    decision 29). `plugin enable` of a remote row keeps its S2a form, `plugin enable
+    <row> [--profile <p>] [--connect-wait <duration>] [--wait <duration>]`. `Enable`
+    reaches no instance and no container runtime: its one toolbox part stays `Render`
+    (decision 16), so "`aiopsctl` made no dial" holds by construction (step C2,
+    `ADR-063:678-682`). A row is a remote row when it sits under the group of an
+    installed artifact whose kept `plugin.yaml` lists the runtime `remote`, and its
+    plugin id is that artifact's (ADR-047 decision 5; ADR-063 decision 41).
+
+    | Refusal | Who decides it, and when | Files | Exit | What stderr holds |
+    |---|---|---|---|---|
+    | The endpoint of the row's plugin is missing from the endpoint table | `aiopsctl`, under the write lock, among the checks that read the home, before the snapshot, any rename and any submission (decision 17; `ADR-063:408-410`) | Nothing written | 1 | The home, the plugin id, the row and the exact command that question Q10 gives |
+    | The instance did not answer | The server process: its proxy dials inside the generation that `aiopsctl` submitted, the row is not ACTIVE and the verdict fails (`ADR-063:410-416`; `08:477`) | Restored from the snapshot (ADR-062 decision 11) | 1 | The final result `rolled back`, the row, the reason the server gave and the exact command `aiopsctl plugin start <id>`, which reaches the output as question Q11 decides |
+    | The handshake is denied: no common protocol major, another clause of check 3 or of check 9 that the handshake evaluates, or a peer whose identity the kernel refuses | The server process, in the same generation (ADR-063 decisions 16, 23 and 66) | Restored from the snapshot | 1 | The final result `rolled back`, the row and the denial as the server gave it, which names the check and, for no common major, holds both lists of majors (`ADR-063:345-347`, `:706-713`). It holds no command to start the instance, which runs |
+    | The changed profile is not admitted: a clause that boot evaluates on the manifest denies the row, from S2b the majors clause of check 3 and check 9 among them | `aiopsctl`, in the render of the changed profile before any rename (decision 17; ADR-063 decision 16) | Nothing written | 1 | The denial with its check, as at S2a |
+
+    **The texts.** Each is in the one line that the `cli` row prints for a failed
+    command, `aiopsctl: plugin enable: <error>` (decision 10). `<home>`, `<id>`, `<row>`
+    and `<p>` stand for the home, the plugin id, the row and the profile.
+
+    - The missing endpoint, with question Q10 (a):
+
+      ```text
+      aiopsctl: plugin enable: operations: refused: the endpoint table of <home> holds no endpoint of <id>, the plugin of the row <row>: run "aiopsctl plugin start <id>"
+      ```
+
+      With Q10 (b) the text after the last colon is `run "aiopsctl plugin remove <id>
+      --profile <p>", then install it again`.
+    - The instance that did not answer. The line is the one that a failed generation
+      prints at S2a, which holds the result, the generation and one part per failed row
+      (`plugins/operations/internal/operations/install.go:474`, `:498-513`). The part of
+      the row reads:
+
+      ```text
+      row <row> fail: the instance of <id> did not answer: run "aiopsctl plugin start <id>"
+      ```
+
+      With question Q11 (a) the words after `fail:` are the reason that the server gave.
+    - The denied handshake: the same line, whose part of the row reads `row <row> fail:`
+      and then the denial that the server gave.
+
+    Where no process runs the profile, `plugin enable` of a remote row whose endpoint is
+    listed is no refusal: it keeps the files and exits 0 with `not-running`, as for any
+    row (decision 17), and at the next start the row follows the matrix row "Remote
+    unreachable or handshake mismatch" (`08:477`; ADR-063 decision 66). Every other
+    outcome of a submission keeps the table of decision 17.
+
+#### `plugin check` without a container runtime
+
+51. **A step that cannot run for want of a container runtime is reported `not run`.** A
+    step of `plugin check` gains a fifth outcome beside `pass`, `fail`, `not applicable`
+    and `skipped` (`sdk/def/operations/v0/operations.go:292-295`).
+    - **Which step.** Only step 7, and only on a plugin whose manifest lists `remote`:
+      steps 1 to 6 and step 8 need no container runtime in any language, and step 7
+      needs one when it packs an image (`07:1570`; `ADR-063:382-384`). For in-process
+      code and for a pack, step 7 packs no image and runs as at S2a.
+    - **What it prints.** On stderr, in the form of every step
+      (`plugins/command-plugin/plugin.go:183`), the line `step 7 pack and verify: not
+      run`, and under it the text of decision 47, which names what the host lacks. In
+      the `--json` report step 7 holds the outcome `not run` and one diagnostic of check
+      `7` with that text (step P2, `ADR-063:660-663`). Step 8 after it is `not
+      applicable`, as for all code.
+    - **No attestation.** In the place of "the attestation it would sign" the check
+      prints the line `no attestation: step 7 did not run`, and the report holds none:
+      the subject of the attestation is the digest of the artifact that step 7 packs
+      (ADR-020 decision 9; `plugins/operations/internal/operations/artifact.go:209-218`).
+    - **`not run` is never `pass`.** On that machine `plugin pack` refuses for want of
+      the same runtime, since it builds the image (ADR-063 decision 61), so nothing is
+      packed, signed or pushed from a check whose step 7 did not run.
+    - A step after a failed step stays `skipped`, and the check still stops at the first
+      failed step (`07:1570`). How the command exits when step 7 is `not run` and no
+      step failed is question Q12.
+
+#### `plugin verify` and `plugin smoke` for remote code
+
+52. **`plugin verify <spec>` of remote code re-runs the suites against the pulled
+    image** (plugin record §11; `ADR-063:424-427`). It is a command of its own and no
+    part of install, which pulls no image and runs none (`ADR-063:392-394`).
+    - **Form.** `plugin verify <spec>`, as at S2a. The flags `--builder`, `--against`,
+      `--modcache` and `--mirror` name the build of in-process code (ADR-060 decision
+      46; ADR-044 decision 1) and are not read for an artifact that holds no module. It
+      writes no home and reads the `trust.yaml` of the home, as at S2a.
+    - **Steps.** It prints the digest and the signer, then each step as `step <name>:
+      <outcome>: <reason>` on stdout (`plugins/command-plugin/plugin.go:334`):
+      `signature`, `attestation`, `image` and `suites`.
+
+      | Step | Passes when | Names on a failure |
+      |---|---|---|
+      | `signature`, `attestation` | As at S2a (ADR-047 decision 2; ADR-020 decision 14) | As at S2a |
+      | `image` | The container runtime pulled the image under the digest that the artifact pins (`08:393`; `ADR-063:385-391`) | The pinned digest and what the registry answered |
+      | `suites` | The obligations half of each suite passes through the adapter against a container of that image, as step 5 of `plugin check` runs it against a local process (`ADR-063:368-374`). The guard half never runs remote (`ADR-063:328-329`) | Each failed obligation, by its id |
+
+      On a copy whose image or whose layer was changed after signing, the command fails
+      and names what differs (`ADR-063:756-758`).
+    - **Order.** Nothing but `plugin.yaml` is fetched before the signature and the
+      attestation verified (ADR-047 decision 2), so no image is pulled and no code runs
+      of a signer that the home does not trust for the id and the runtime `remote`
+      (`07:1866`). Whether an unsigned remote artifact is admitted is the S2b part of
+      ADR-020 (`ADR-063:845-848`).
+    - **The container.** It is started for the `suites` step and removed when the
+      command returns. It gets no more than a unit gives an instance, no route out and
+      no path of the home (ADR-063 decisions 24 and 25), since the command runs on an
+      operator's host the image that install only pins. How the check runner reaches it
+      is the S2b part of ADR-044 (`ADR-063:862-863`), under reading 2 of ADR-063
+      decision 54.
+    - **Outcomes and exit.** A step is `pass`, `fail` or `not-built`, as at S2a
+      (`sdk/def/operations/v0/operations.go:257-259`), or `not-run` where the host has
+      no container runtime, for `image` and `suites`, with the text of decision 47. The
+      command exits 0 only when every step passed and exits 1 otherwise, naming the
+      steps (`plugins/command-plugin/plugin.go:334-340`): a step that did not run did
+      not pass. So `plugin verify` of remote code needs a container runtime.
+    - What the `suites` step compares with the attestation, and whether the attestation
+      names the runtimes its suites ran in, is the S2b part of ADR-020
+      (`ADR-063:842-844`).
+
+53. **`plugin smoke <dir> --against <release>` of remote code attaches the plugin's
+    image to the released image** (`07:1583`). The points that `07:1583` leaves open for
+    `remote` are the four readings of question Q13. With them:
+    - **Form.** `plugin smoke <dir> --against <release> [--modcache <dir>] [--mirror
+      <prefix>=<site prefix>]... [--builder image|local]`. Smoke runs T3 per runtime
+      that the manifest lists (`07:1583`). `--modcache`, `--mirror` and `--builder` name
+      the module build of in-process code: `--modcache` is required where the manifest
+      lists `inproc`, as at S2a (`plugins/command-plugin/plugin.go:96`), and none of the
+      three is read for a manifest that lists `remote` alone (reading 3).
+    - **What it needs.** A container runtime and what `plugin start` needs (`07:1537`,
+      `:1583`; decision 45). Without one it exits 1 with the text of decision 47. No
+      step of smoke is `not run`: smoke is not part of the check because it needs a
+      container runtime (`07:1549`).
+    - **The released image** is the subject of the release artifact that `--against`
+      names by digest, pulled by that digest; smoke builds no distribution for `remote`
+      (reading 1).
+    - **The path.** Smoke packs the plugin directory, which builds the plugin's image
+      (ADR-063 decision 61), and signs the artifact with a throwaway key, as step 7 of
+      `plugin check` does (`07:1580`). On a throwaway home that trusts that key for the
+      id and the runtime `remote` (`07:1866`) it does what `08:398` gives an operator:
+      it installs the artifact into the test-only profile, starts the unit and enables
+      the row, and it boots the released image on that home in the container form of
+      ADR-047 decision 15 (reading 4). The instance therefore runs behind the unit, the
+      credential and the network that a site gives it (ADR-063 decisions 23 to 25).
+    - **The test-only profile** is the release's `aiops-core` and `aiops-selfhost`
+      bundles plus the plugin's bundle with its row enabled (reading 2).
+    - **Pass, output and exit.** The rule of ADR-060 decision 58, reading 1, stands:
+      smoke passes when every row is ACTIVE or says what it waits for, and a row of the
+      plugin that does not mount fails it. It prints each row on stdout as at S2a, `row
+      <id>: <state>` with the keys it waits for
+      (`plugins/command-plugin/plugin.go:310-313`), and exits 1 unless it passed.
+    - **What it leaves.** It removes the containers, the network and the home that it
+      made, and writes no home of the site and nothing beside the plugin, as at S2a
+      (`sdk/def/operations/v0/operations.go:484`). `Smoke` keeps its request and its
+      result (decision 16).
+
+#### Tests
+
+54. Under the working rules of ADR-063 decisions 29 and 31, each with a test that fails
+    on its base:
+    - the suite cases of decision 46, on the plugin and on the fake;
+    - the help goldens of `plugin start`, `plugin new` and `plugin smoke` under
+      `testdata/help/` of `command-plugin`, and the cases of `plugin start` in its
+      `fixtures/commands/` (decisions 5 and 30);
+    - exit codes, beside those of decision 31: `plugin start` with no home exits 2; each
+      refusal of decision 45 exits 1; each refusal of decision 50 exits 1 with its text,
+      the missing endpoint with nothing submitted (`ADR-063:753-755`); `plugin check`
+      with step 7 `not run` exits as question Q12 decides and prints no attestation; and
+      `plugin verify` of remote code with no container runtime exits 1;
+    - a test that `Unit` answers `ErrNotCarried` in `aiops`, as the other parts of
+      `Tools` do;
+    - each refusal of `New` in decision 48, with nothing written;
+    - the template job with the remote Go form and the Python template of each `contrib`
+      registry (decision 49; `ADR-063:986`);
+    - the cases of `plugin verify` and `plugin smoke` that ADR-063 decision 28 lists
+      (`ADR-063:756-760`).
+
+    The exit takes from this part:
+
+    | Step of ADR-063 decision 27 | What it uses |
+    |---|---|
+    | G1 | The remote Go form (decisions 48 and 49), and step 7 of `plugin check` run on a machine that holds a container runtime (decision 51) |
+    | P1 | The Python template and its state (decisions 48 and 49) |
+    | C2 | `plugin enable` before `plugin start`: the refusal of an instance that did not answer, with its text (decision 50) |
+    | C3 | `plugin start` (decisions 45 to 47), then `plugin enable` with the final result `passed` |
+
+#### What the S2b part does not settle
+
+55. Each item names where it is settled.
+    - The files of the unit, the endpoint table and the credentials under the home;
+      which target an install renders for a site; the network of an instance and of a
+      kernel container, and how `aiopsctl` names the kernel container: the S2b part of
+      ADR-047 (`ADR-063:826-832`).
+    - The image that `plugin pack` builds, the file it builds it from and the part of
+      `Tools` it uses: the S2b part of ADR-047 (ADR-063 decision 61).
+    - `entrypoint`, every `plugin.toml` key, and what a manifest that lists `inproc` and
+      `remote` packs, installs and smokes: the S2b part of ADR-048 (`ADR-063:833-841`).
+    - The commands of `aiops-sdk`, among them how step 2 of `plugin check` runs
+      `aiops-sdk manifest` (`07:1575`) and what `--write` does on a Python plugin; the
+      fixture and the command of `aiopsctl` that it wraps; the deadlines of the proxy's
+      dial; and what `plugin enable`, `disable` and `remove` write of the instance's
+      credential: ADR-041 (`ADR-063:799-825`).
+    - What `plugin verify` compares with the attestation, and an unsigned remote
+      artifact: the S2b part of ADR-020 (`ADR-063:842-848`).
+    - The suite binaries that drive a remote process, at step 5 of `plugin check` and in
+      `plugin verify`: the S2b part of ADR-044 (`ADR-063:862-863`).
+    - When a shared unit stops and what `remove` deletes: ADR-063 decision 68.
+    - Compose, its pin and the form in which `aiopsctl` runs it: the reading that
+      ADR-063 decision 35 requires before its first use (`ADR-063:913-915`).
+    - The command that starts a systemd unit or applies a Helm entry: the operator's, as
+      `08:1293` words it. `plugin enable` names the command of the compose target
+      (decision 50).
+
+### Consequences of the S2b part
+
+- `command-plugin` registers fourteen commands. `operations` holds twenty-four methods
+  at its next minor, with a raised suite revision, and `launch` gains `Unit`,
+  `ErrNoRuntime` and the field `Runtime` in the minor that also brings the key of
+  ADR-063 decision 57. No definition and no key is added.
+- No server binary can start or stop a plugin process: the one part that reaches the
+  container runtime for a unit is absent from `aiops`.
+- `aiopsctl` runs a container runtime in more places than at S2a, `Unit` and the parts
+  that the S2b parts of ADR-047 and ADR-044 name, and runs Compose for the first time.
+  This part links no new module: Compose is run and not linked, and it is read and
+  pinned first (ADR-063 decision 35).
+- `templates/` holds eight templates where S2a holds four, under its cap of 300 lines of
+  Go (ADR-063 decision 36), and the template job needs a Python interpreter with
+  `aiops-sdk` for two of them.
+- With the recommended answer to Q10, the endpoint table has two writers, `plugin
+  install` and `plugin start`, and `Start` takes the write lock for that one write.
+- With the recommended answer to Q11, one line of the proxy's failure text is fixed by
+  this ADR and names a command of `aiopsctl`.
+- With the recommended answer to Q12, `plugin check` on a machine with no container
+  runtime exits 0 on remote code and prints no attestation, and every job of this
+  repository that checks a remote plugin holds a container runtime.
+- The command that `plugin enable` names is the compose target's. A site that runs the
+  systemd unit reads `08:1293` for its own.
+- The line caps of ADR-063 decision 36 stand, and the kernel does not change (ADR-063
+  decision 3).
+
+### Edits on acceptance of the S2b part
+
+Made in the commit that records the owner's answers (`08:999`):
+
+- This ADR: the two Status lines; in decision 16, the row of `Start`, the types
+  `StartRequest` and `Started` and the field `Runtime` of `NewRequest`; in decision 21,
+  the part `Unit`, the error `ErrNoRuntime` and the field `Runtime` of
+  `TemplateRequest`; in decision 30, `plugin start` in the row of `command-plugin` and
+  the CLI spec rows of `plugin start`, `plugin new` and `plugin smoke`; and a dated note
+  at the item of `plugin start` in decision 32.
+- `00:137`: `start` among the `plugin` commands of P0, which `02:313` and `08:1293`
+  already name.
+- `07:1556`: the sentence "The Python template arrives with the Python SDK at S2b" gains
+  the registries that have a remote form and the default runtime of each language
+  (decision 48).
+- `07:1570`: the outcome `not run` of step 7 and, with the answer to Q12, how the check
+  then exits.
+- `07:1583`: with the answer to Q13, the released image, the test-only profile of
+  `remote` and the flags that `remote` does not read.
+- `08:398`, `07:1870`, `02:326` and plugin record §11: with Q10 (b), the command of each
+  half. With Q10 (a) none of the four is edited.
+- With Q10 (a), the row of the endpoint table in the home table of ADR-047 decision 13
+  names `plugin start` beside `plugin install`, in the S2b part of ADR-047. With Q11
+  (b), ADR-062 decision 7 gains a dated note. With Q12 (b), `07:1536` gains the
+  container runtime. An option that the owner does not choose edits nothing.
+
+### Questions for the owner on the S2b part
+
+Each question gives its options, the recommended one, why, and what the answer blocks.
+An option that changes a written line says so and names every line it edits.
+
+**Q10. Which command does `plugin enable` print when the endpoint is missing from the
+table?** `08:398`, `07:1870` and `02:326` give one "exact command" for both halves, the
+missing endpoint and the instance that does not answer, and plugin record §11 writes the
+sentence after the commands that start an instance per target. ADR-063 names `aiopsctl
+plugin start <id>` for the instance that did not answer (`ADR-063:415-416`) and wants
+"the exact command" for the missing endpoint without naming it (`ADR-063:753-755`).
+Install writes the endpoint into the table (`ADR-063:630-631`; ADR-063 decision 39), so
+at a site whose install completed the line is there before `plugin start` runs (step C2,
+`ADR-063:678-682`), and a missing line is a table that was edited or damaged.
+- (a) `aiopsctl plugin start <id>`, one command for both halves, as the three lines word
+  it. `plugin start` then makes that command true: where the table lacks the line of an
+  id whose unit the home holds, it writes the line that install writes for that id,
+  under the write lock and with the snapshot of decision 17, releases the lock and runs
+  the unit. The write submits nothing and answers as decision 43 has a write that the
+  wire does not carry. The table then has two writers.
+- (b) The command that takes the artifact out, printed exactly, `aiopsctl plugin remove
+  <id> --profile <p>`, and the words "then install it again": the home does not keep the
+  spec that an artifact was installed from (ADR-047 decision 5). Install stays the one
+  writer of the table, and `Start` writes no file of the home and takes no lock.
+  `08:398`, `07:1870`, `02:326` and plugin record §11 gain the clause that the first
+  half names another command than the one that starts the instance. Where another
+  profile still names the id, `remove` keeps the rendered files (ADR-063 decision 68),
+  so the install that follows has to write a missing line again, which the S2b part of
+  ADR-047 would then have to say.
+- Recommended: (a). It keeps the three lines as written, one command repairs the home
+  whichever half refused, and it depends on no other part. Its cost is a second writer
+  of the table and a lock in `Start` for one write. The dial stays authenticated
+  against the pinned certificate whatever the table holds (ADR-063 decision 55), so a
+  line that names another endpoint opens no stream. (b) is less code and changes what
+  four written lines mean. Blocks: `Start`, the refusal of `Enable` and its case
+  (`ADR-063:753-755`); needed before group 3 of ADR-063 decision 30.
+
+**Q11. How does the exact command reach the output when the instance did not answer?**
+`aiopsctl` prints "the row, the reason the server gave and, where the instance did not
+answer, the exact command" (`ADR-063:414-416`), and for a denied handshake it prints the
+denial (step D2, `ADR-063:706-713`). It makes no dial (`ADR-063:406-407`), and the
+result carries per row a text and no cause (`sdk/def/reload/v0/wire.go:194-199`). The
+causes of the wire are a closed list on the error of a result, on which "A client
+decides on `status` and `causes` and prints `text`" (ADR-062 decision 7).
+- (a) The server's reason holds it. Where the dial of a proxy got no answer, the reason
+  with which its row fails ends with the words `the instance of <id> did not answer: run
+  "aiopsctl plugin start <id>"`. `aiopsctl` prints the reason whole and decides nothing
+  on it. The same words are in the log of the server process, at boot too, where an
+  optional row waits for its instance (`08:477`). The proxy, a first-party row, then
+  names a command of `aiopsctl`, as a server that finds a snapshot names `aiopsctl
+  profile sanitize <profile>` (decision 17), and it names the command of the compose
+  target at a site that runs another target.
+- (b) A cause per row. Each row of the report gains a closed list `causes`, with
+  `remote-unreachable` and `remote-denied` at S2b, and `aiopsctl` adds the line `start
+  the instance: aiopsctl plugin start <id>` for the first. A field is additive inside
+  version 1 of the wire (ADR-062 decision 6). `composition`, whose row report the wire
+  renders, and `reload` each gain a minor with a raised suite revision, the proxy's
+  failure has to reach the judge as an error of a definition that both import, and
+  ADR-062 decision 7 gains a dated note.
+- (c) `aiopsctl` adds the line for every row of a remote plugin that a failed generation
+  reports, worded "if its instance is not running". No wire changes and no server text
+  is fixed. It departs from `ADR-063:415-416`, "where the instance did not answer": the
+  output of step D2 would hold the command although the instance runs.
+- Recommended: (a). It changes neither the wire nor a definition, `aiopsctl` matches no
+  text, and an operator who reads only the server log finds the same command. (b) is the
+  form to take once a second client has to decide on the cause. Blocks: the failure text
+  of the proxy (group 2 of ADR-063 decision 30), `Enable` and step C2; needed before the
+  proxy merges.
+
+**Q12. How does `plugin check` exit when step 7 did not run for want of a container
+runtime?** The check "exits non-zero on the first failing step", and step 7 "needs one
+when it packs an image" (`07:1570`). The check is "The one command before a pull
+request" and needs "A toolchain for code; PostgreSQL only for a plugin with its own
+schema" (`07:1536`); smoke "is not part of the check, because it needs a container
+runtime" (`07:1549`); and a Python author needs no container runtime for T0 to T2
+(`07:51`, `:1236`; `ADR-063:436-439`). ADR-063 has the step reported as not run and
+gives no exit code (`ADR-063:382-384`), and step P2 reads the `--json` report
+(`ADR-063:660-663`).
+- (a) Exit 0. A step that did not run is not a failed step. The report says `not run`
+  and holds no attestation (decision 51), and `plugin pack` refuses on that machine. The
+  jobs of this repository that run `plugin check` on a remote plugin, `make
+  plugin-check` among them (ADR-063 decision 31), read the `--json` report and fail on a
+  `not run` step, so each holds a container runtime.
+- (b) Exit 1. Every step passes or does not apply, or the check fails. A remote author
+  with no container runtime then never gets exit 0 from the one command, and reads the
+  report to see that step 7 alone is open. `07:1536` gains the container runtime among
+  what the check needs for remote code.
+- (c) As (a), with a flag of `plugin check` under which a `not run` step exits 1, for a
+  job that must not pass without step 7. The CLI spec gains the flag.
+- Recommended: (a). It is what `07:1536` and `07:1549` say the check needs, a `not run`
+  step can publish nothing, and the one place that must not pass without step 7, the CI
+  of this repository, reads the report that the check already writes. (c) adds a flag
+  for what the report shows. Blocks: `Check` on remote code; step P2 of the exit reads
+  the report under every option.
+
+**Q13. Four readings of `07:1583` for `remote`.** None changes what smoke requires of
+in-process code: each fills a point that the line leaves open for the runtime `remote`.
+1. **The released image.** `07:1583` says "the released image", and `--against
+   <release>` names the release artifact by digest (ADR-044 decision 1). Reading: the
+   released image is the subject of that artifact, which is a referrer of the release
+   image (`internal/builder/image.go:46-49`, `:281-299`); smoke pulls it by that digest
+   and builds no distribution for `remote`.
+2. **The test-only profile.** `07:1583` words it for S2a: "the release's `aiops-core`
+   bundle plus the plugin's bundle with its rows enabled". A proxy row waits for
+   `sidecars` (`07:1150`), whose provider ships in `aiops-selfhost` (ADR-063 decisions
+   22 and 39). Reading: for `remote` the profile is the release's `aiops-core` and
+   `aiops-selfhost` bundles, the two that `dev` lists, plus the plugin's bundle with its
+   row enabled, and the pass rule of ADR-060 decision 58, reading 1, stands.
+3. **The module source.** "Smoke needs a container runtime and a module proxy or cache"
+   (`07:1583`), and `--modcache` is required at S2a
+   (`plugins/command-plugin/plugin.go:96`). Reading: the module source is what the build
+   of in-process code needs; `--modcache` is required where the manifest lists `inproc`
+   and is not read for a manifest that lists `remote` alone.
+4. **"Attaches".** Reading: smoke attaches the image as an operator does (`08:398`), on
+   a throwaway home with a throwaway key: pack, sign, trust, install, start and enable,
+   and a boot of the released image on that home (decision 53). No second way to run an
+   instance exists beside the unit.
+- (a) Accept the four readings, each landing with the code that builds it; `07:1583`
+  gains them.
+- (b) Answer each item on its own.
+- Recommended: (a). Blocks: `Smoke` of remote code and its cases (`ADR-063:758-760`).
