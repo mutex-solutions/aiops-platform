@@ -382,7 +382,7 @@
   column: "While running"
   outcome: "Breaker opens; calls fail fast; dispatcher falls back; unload after the budget"
   fault: [stub-remote-hang]
-  expect: {exit: running, ready: true, states: {fault: UNLOADING}, diagnostic: "breaker"}
+  expect: {exit: running, ready: true, states: {fault: PENDING}, diagnostic: "breaker"}
   since: S2b
 
 - failure: "Remote unreachable or handshake mismatch"

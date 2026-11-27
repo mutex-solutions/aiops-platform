@@ -1,16 +1,21 @@
 # ADR-041 (provisional): The remote protocol at major 0 and the identity of a remote instance on a single-tenant self-host
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** The ADR is provisional by
-  its row in the ADR table (`08:1175`): it is ratified at S5 for the policy callbacks and
-  at S4b for one tenant per connection and activations across replicas. It is proposed
-  before the first commit of groups 1 to 3 of ADR-063 decision 30 and of the exit
-  harness, and it is accepted before that code merges into `main` (ADR-063 decision 2).
-  It blocks the protocol packages `sdk/remote` and `sdk/remotehost`, the proxy plugin and
-  its authenticated dial, the deployment unit, every command that reads or writes a
+- Status: **answers recorded 2026-11-27; accepted when the three runs of decision 38 are
+  recorded.** The project owner answered all 14 questions on 2026-11-27, each with its
+  recommended option, Q9 while nothing is published; the section "Owner answers of
+  2026-11-27" records them as decisions 40 to 53. By the answer to Q14 (decision 53) the
+  ADR is accepted only after the three throwaway runs of decision 38 are recorded here.
+  The answers stand as given, and a run result that changes a decision comes back to the
+  owner as a revised proposal. The ADR is provisional by its row in the ADR table
+  (`08:1175`): it is ratified at S5 for the policy callbacks and at S4b for one tenant
+  per connection and activations across replicas. It was proposed before the first
+  commit of groups 1 to 3 of ADR-063 decision 30 and of the exit harness, and it is
+  accepted before that code merges into `main` (ADR-063 decision 2). It blocks the
+  protocol packages `sdk/remote` and `sdk/remotehost`, the proxy plugin and its
+  authenticated dial, the deployment unit, every command that reads or writes a
   credential (`plugin install`, `start`, `enable`, `disable` and `remove`), `serve()`
   and the fixture of the Python SDK, the stubs of the failure matrix and `test/remote/`.
-  The proposal was revised on 2026-11-27 after its review. The owner has answered no
-  question of it.
+  The proposal was revised on 2026-11-27 after its review.
 - Scope: what ADR-063 decision 34 says this ADR settles. The messages of
   `aiops.remote.v0` and which side sends each field of the first message; how the plugin
   learns the chosen major; where the call that carries `Hello` is declared; one stream or
@@ -1197,6 +1202,10 @@ Made in the commit that records the owner's answers (`08:999`), for the options 
 owner chooses. An edit of the plugin record is an amendment of it and is marked so in
 the record, with the date and this ADR (ADR-063 decision 4).
 
+Note of 2026-11-27: the owner answered on that date. The section "Owner answers of
+2026-11-27" says which of these edits are made with the record of the answers and which
+wait, each with the commit that makes it.
+
 With no question:
 
 - `00:779` and `08:1175`: the row of ADR-041 is accepted, provisional, with the date,
@@ -1335,6 +1344,7 @@ record §10, which ADR-036:30 quotes, hold "one stream per remote row". ADR-063 
   for, a hung or slow call cannot hold the stream that carries callbacks and
   `Deactivate`, and nothing the transport already does is written twice. Blocks: the
   protocol packages and the adapter generator.
+- **Answered 2026-11-27: (a)**, decision 40.
 
 **Q2. Is the handshake call frozen with the message?** `00:267` and `07:553` freeze "the
 handshake message" from its first release, and ADR-060 decision 42 holds the file to
@@ -1349,6 +1359,7 @@ find it under the same name.
 - Recommended: (a). The message it carries is already frozen, the call has no shape of
   its own beyond two names, and a later rename would strand every published plugin at
   the first step. Blocks: the handshake package.
+- **Answered 2026-11-27: (a)**, decision 41.
 
 **Q3. What state does an instance that does not answer leave the row in, and what
 brings the proxy back?** `07:1196` and `03:493`: an exhausted budget "unloads the proxy
@@ -1387,6 +1398,7 @@ dial again.
   written lines; (b) saves a timer and leaves a row waiting for a command; (d) adds a
   second holder of the kernel's key. Blocks: the proxy, the definition `sidecars`, the
   provider and the matrix cells.
+- **Answered 2026-11-27: (a)**, decision 42.
 
 **Q4. What are the lifetime and the rotation of the two pairs?** `00:412-413` leave
 both to this ADR, and ADR-063 decision 55 gives no date and no rotation. The instance's
@@ -1412,6 +1424,7 @@ able to write the home, can stand in for the kernel towards every instance of th
   of the site out and in again. An instance's pair already has three commands. (d) adds
   an outage that no component is there to prevent. Blocks: `plugin install`, `start`,
   `disable` and `remove`, and with (b) the new command.
+- **Answered 2026-11-27: (b)**, decision 43.
 
 **Q5. How does the instance's user read its credential?** The unit names a user that is
 neither the site user nor root and binds the one directory of the home that holds the
@@ -1430,6 +1443,7 @@ the home with mode 0600 under the site user, which that other user cannot read.
 - Recommended: (a). One file per key, readable by one group more and no new mechanism;
   on the host the home still admits the site user alone. It has not been run under each
   user mapping (decision 38). Blocks: the unit, `plugin install` and `plugin start`.
+- **Answered 2026-11-27: (a)**, decision 44.
 
 **Q6. How does the proxy dial once plugin vet refuses a dial outside `dialer`?**
 `07:1405` and harness:58 give the dial rule "one named exception", the operations
@@ -1452,6 +1466,7 @@ rule binds from the step that builds `dialer` (ADR-061 decision 38).
   and would be decided again for hosted. Blocks: nothing before the dial rule is built;
   the answer is needed before the proxy merges, so that each dial is one function that
   a list can name.
+- **Answered 2026-11-27: (a)**, decision 45.
 
 **Q7. Which interpreters does `aiops-sdk` support at S2b?** ADR-063 decision 35 read the
 wheels of one interpreter and platform, and its decision 27 admits another only after
@@ -1465,6 +1480,7 @@ its files are read.
   the two native extensions, the four packages that `pytest` requires, the interpreter,
   the base image or the build backend (decision 34). Widening the set later is an
   addition that changes no message. Blocks: the Python job and the package metadata.
+- **Answered 2026-11-27: (a)**, decision 46.
 
 **Q8. Does the protocol hold a deadline for a remote listener on a gate?** The ADR table
 gives this ADR "deadlines for remote listeners on gate hooks" (`08:1175`), `07:450` has
@@ -1478,6 +1494,7 @@ definition (delivery:367).
 - Recommended: (a). A definition is first-party and a core change, so its value is
   already reviewed, and one number cannot fit both a pacing check and a policy engine.
   Blocks: the listener path of the proxy.
+- **Answered 2026-11-27: (a)**, decision 47.
 
 **Q9. Does the package pin its dependencies exactly?** ADR-063 decision 52 holds the
 dependency set of `aiops-sdk` to L7, each package with a register entry and a reading.
@@ -1490,6 +1507,7 @@ dependency set of `aiops-sdk` to L7, each package with a register entry and a re
 - Recommended: (a) while nothing is published. The choice for the public package index
   is made when L14 clears, with that index (ADR-063 decision 26). Blocks: the package
   metadata and the template.
+- **Answered 2026-11-27: (a), while nothing is published**, decision 48.
 
 **Q10. How does a provider of `sidecars` ask the kernel to check availability again?**
 Options (a), (b) and (d) of question Q3 need it, for the withdrawal after a report and
@@ -1518,6 +1536,7 @@ nothing.
   the call can re-check one key and nothing else. (b) is the general form, and the
   first provider that needs it for a second key is the place to propose it. Blocks:
   `sidecars-static`, the launch definition and the proxy's return.
+- **Answered 2026-11-27: (a)**, decision 49.
 
 **Q11. Which command makes the new pair of an instance after a revocation?** A revoked
 pair never returns (ADR-063 decision 23), so a plugin that is disabled and enabled
@@ -1541,6 +1560,7 @@ enable --now`.
 - Recommended: (a). The instance reads its key when it starts, so the command that
   starts it is the one place where a new key cannot be missed, and disable stays a
   pause. Blocks: `plugin start`, `plugin enable` and the unit.
+- **Answered 2026-11-27: (a)**, decision 50.
 
 **Q12. Are the seeding arguments of the fixture and `calls()` fixed at S2b?** `07:66`
 (R8) fixes "the method names of the Python base classes and of the test fixture ... the
@@ -1555,6 +1575,7 @@ definition, the test definition, which ships in no release (ADR-063 decision 51)
   accepted and do nothing.
 - Recommended: (a). A name that seeds nothing is a part with no consumer (`08:680`),
   and the names of a fake belong with its definition. Blocks: the fixture.
+- **Answered 2026-11-27: (a)**, decision 51.
 
 **Q13. Does the 2 s bound the handshake or the whole mount?** Plugin record §10 and
 ADR-036:30: "a tree with remote rows mounts within the handshake deadline (2 s against
@@ -1571,6 +1592,7 @@ own `Apply` has returned.
 - Recommended: (a). One `Plugin` value should meet one bound in both runtimes
   (`07:1198`), and ADR-036 already defers the figure to a measurement. Blocks: the
   proxy's `Apply`.
+- **Answered 2026-11-27: (a)**, decision 52.
 
 **Q14. Does acceptance wait for the three runs of decision 38?** Three things this ADR
 writes were not run: the certificate form against the pinned `grpcio`, the thread model
@@ -1589,3 +1611,202 @@ systemd.
   and a refusal found after acceptance reopens the identity that ADR-063 decision 55
   settled. The runs are small. Blocks: with (a), acceptance; with (b), group 2 for the
   certificate form and group 3 for the modes.
+- **Answered 2026-11-27: (a)**, decision 53.
+
+## Owner answers of 2026-11-27
+
+The project owner answered every question of the section "Questions for the owner" on
+2026-11-27, each with its recommended option, one of them for as long as a condition
+holds (decision 48). Each decision below names the question it answers. Where a decision
+above leaves a point to a question, the decision here settles it. The answers do not
+accept this ADR: by decision 53 it is accepted when the three runs of decision 38 are
+recorded, and until then its status is "answers recorded".
+
+40. **"One stream" is one connection with one session, and a contribution call is a call
+    of the service of its definition** (Q1 (a)). One connection per proxy row carries
+    one session stream, for the activation and the callbacks, and each contribution call
+    and each listener call is a call of the service that the definition's proto
+    declares, on that connection (decision 4). Deadlines, cancellation and the server
+    stream of a harness are the transport's own. `07:1151`, `02:213`, `02:290` and
+    `02:336` say one connection with one session. Plugin record §10 is amended (ADR-063
+    decision 4), and a dated note in ADR-036 gives the budget line of ADR-036:30, and
+    ADR-036:364 with it, this reading: one connection with one open stream while idle,
+    and one more stream of the transport per call in flight.
+
+41. **The handshake call is frozen with the message** (Q2 (a)). The call of decision 1
+    is frozen-additive from the commit that adds it: the package, the service name, the
+    call name and its two message types never change, a call may be added, and a freeze
+    test holds `call.proto` to that. `00:267` and `07:553` say "the handshake message
+    and its call".
+
+42. **An instance that does not answer leaves the row PENDING, through `sidecars`, and
+    the proxy returns as decision 18 has it** (Q3 (a)). The proxy reports, the provider
+    withdraws the endpoint and offers it again on a timer, from 5 s to 60 s, and a new
+    `plugin enable` dials at once through the attempt value of the table line. A denial
+    leaves the row FAILED for `restart-policy`. The definition `sidecars` gains the
+    report, `sidecars-static` gains a timer, and the provider asks for the re-check by
+    the path of decision 49. `07:1196`, `03:493` and plugin record §11, which the answer
+    amends, say so, and `03:113` and `07:1150` hold the report, the offer on a timer and
+    the attempt value. One matrix cell is edited, from the transition to the end state:
+    the cell "while running" of the row "Remote unreachable or handshake mismatch"
+    (`test/failure-matrix/matrix.yaml:381-385`) keeps its outcome and its diagnostic and
+    states `{fault: PENDING}`. This answer is the owner's word that the edit needs under
+    ADR-063 decision 20. The three other S2b cells of the row, `08:477` and the 30 s
+    that the harness gives a cell stand as written.
+
+43. **Neither pair has an expiry, and one command renews the kernel's pair alone**
+    (Q4 (b)). The lifetime and the rotation of both pairs are those of decision 25. The
+    instance's pair is renewed by `plugin disable`, `plugin start` and `plugin enable`.
+    The kernel's pair is renewed by one command of `aiopsctl`: under the write lock it
+    makes a new pair, writes `kernel.pem` into every instance's directory, replaces
+    `remote/kernel/` and restarts the units it finds running. Every instance returns
+    inside the reconnect budget, and the command submits no generation. Its form is the
+    S2b part of ADR-061 (decision 39). The lifetime and revocation cells of `00:412` and
+    `00:413` read as decisions 25 and 26 have them, in place of "fixed by ADR-041", with
+    the command in the cells of the kernel's pair.
+
+44. **The instance's user reads its credential through the site user's group** (Q5 (a)).
+    The directory `remote/instances/<plugin id>/` is of mode 0750 and its three files
+    are of mode 0640, and the unit gives the instance the site user's group as its only
+    group (decision 24). ADR-047 decision 14 gains the exception, and the home table of
+    its decision 13 the rows of `remote/`, by the S2b part of ADR-047. The modes have
+    not been run under each user mapping. That is the third run of decision 38, and if
+    the group does not reach the files under one mapping, question Q5 is asked again for
+    that mapping.
+
+45. **The dial rule gains two named entries** (Q6 (a)). When plugin vet refuses a dial
+    outside `dialer`, `aiops/remote` may call the TLS dial of decision 28 and
+    `aiops/operations` the Unix dial, on the list of ADR-062 decision 14. The proxy does
+    not dial through `dialer`, and its injects gain nothing (`03:72`). `07:1405` and
+    harness:58 name the two entries beside the first, and ADR-062 decision 14 gains a
+    dated note.
+
+46. **`aiops-sdk` supports one interpreter on one platform at S2b** (Q7 (a)): CPython
+    3.12 on Linux x86-64 with glibc, and nothing else until more is read (decision 30).
+    No line is edited.
+
+47. **The protocol holds no deadline for a remote listener** (Q8 (a)). The deadline is
+    that of the owner's dispatch, a dispatch with none is refused, and a miss denies on
+    a gate (decision 15). Each product hook states its value at S5. No line is edited.
+
+48. **The package pins its dependencies exactly, while nothing is published** (Q9 (a)):
+    exact versions in the package metadata, and one constraints file with hashes
+    (decision 34). The answer holds while nothing is published. The choice for the
+    public package index is made when L14 clears, with that index (ADR-063 decision 26).
+    No line is edited.
+
+49. **A provider of `sidecars` asks for the re-check through a consumer-bound key of the
+    launch definition** (Q10 (a)). Boot provides the key, which carries one call that
+    takes no argument and notifies the key `sidecars` alone. Its one consumer is
+    `aiops/sidecars-static`; the test provider of S4b and `sidecars-kubernetes` join the
+    list with their steps. The kernel does not change. `sidecars-static` injects that
+    key and `clock`, which `03:113` and a dated note at ADR-063 decision 39 say. The
+    count of consumer-bound keys is 15, where ADR-063 decision 57 made it 14, in
+    `00:246`, `07:564`, row 45 of the dsh checklist at `08:87` and row 45 of plugin
+    record §15, which the answer amends. The key is named with the minor of `launch`
+    that adds it. The count of the launch keys rises by one more, and `dist/dist.yaml`
+    gains the line with the key, in the commit that adds the key (listed below).
+
+50. **`plugin start` makes the new pair of an instance after a revocation, on every
+    target** (Q11 (a)). With no pin it makes the pair, writes the files and the pin, and
+    starts the unit or restarts it when it is running (decision 26). After a `plugin
+    disable` the operator of a systemd target also runs `aiopsctl plugin start <id>`.
+    The holder cell of `00:412`, `02:483` and `08:1293` say so, and ADR-063 decision 55
+    gains a dated note.
+
+51. **S2b fixes three names of the fixture** (Q12 (a)): `host`, its argument `plugin`,
+    and `run_conformance`. The seeding arguments and `calls()` are fixed at S3, with the
+    first callback definition that ships, by an addition to this ADR (decision 33).
+    `07:66` (R8) says so, and `07:1236-1243` stays a sketch.
+
+52. **The 2 s bounds the handshake, up to the verdict of the gate** (Q13 (a)). The
+    activation has what is left of the kernel's load deadline, as an in-process `Apply`
+    has (decision 16). The mount of a tree with remote rows within 2 s is a budget that
+    S4b measures (ADR-036:364). Plugin record §10 says so by an amendment and ADR-036 by
+    a dated note.
+
+53. **Acceptance waits for the three runs of decision 38** (Q14 (a)). The certificate
+    form of decision 20 against the pinned `grpcio`, the thread model of decision 31 on
+    it, and the file modes of decision 24 under each user mapping are run before
+    acceptance, as throwaway runs that commit nothing. Their results are recorded in
+    this ADR by a dated note, and this ADR is accepted only after that record. The
+    answers of decisions 40 to 52 stand as given, and a run result that changes a
+    decision comes back to the owner as a revised proposal. Until the runs are recorded
+    the status of this ADR is "answers recorded", and its row in the tables of `00` §9
+    and `08` §3 stays as it is.
+
+The edits of the section "Edits on acceptance" are made in the commit that records these
+answers (`08:999`), for the chosen options and for its list "With no question", except
+the lines listed below as left. Lines are cited at `bbfd839`, as above, and no edit of
+`docs/architecture/` adds or removes a line. Decisions 40 to 52 name the lines of their
+questions. The edits made with no question are:
+
+- `07:67` (R9): the message names of `07` §5 are those of decision 8;
+- `07:1127` and `07:1128`: the call that carries `Hello`, how the plugin learns the
+  major, and the two first messages with the sender of each field (decisions 1, 3 and
+  6);
+- `07:1161`, `07:1162` and `07:1164`: `Open`, `Identify`, `Activated`, `UpdateConfig`,
+  `Bye` and `Unregister` beside the three messages named there, and the metadata
+  `aiops-activation` and `aiops-effect` of a call (decisions 8 and 9); plugin record
+  §11, amended, with the reason `inactive-effect` where it wrote `INACTIVE_EFFECT`;
+- plugin record §16, amended: in the S2b row the connection carries the tenant binding,
+  and the first message the activation id (decisions 6 and 22);
+- `07:1169`: the callback set grows by addition inside a major (decision 13);
+- `07:1196` and `03:493`: the budget of 30 s (decision 18);
+- `02:215`, `02:336`, `07:1195` and `08:1293`: the words "the leader can revoke" are
+  scoped to the issued certificate, from S4b, and the sentence on the pinned key pair
+  names decision 26;
+- `00:412`, the revocation cell: an open session ends at the proxy's next liveness check
+  when the pin is gone. `02:483`, item 25, and `03:495`: the credentials are the two
+  pairs of decision 20;
+- `07:1211` and `07:1212`: the concurrency of `serve()` and the command that the fixture
+  wraps (decisions 31 and 33);
+- ADR-034, G13 point 10, by a dated note: the message is `UpdateConfig`, and an instance
+  that does not take it is activated again (decision 16).
+
+Text that restates an edited line is edited with it: the paragraph of plugin record §11
+on starting a remote instance, which restates `08:1293`; `08:646`, which had
+`sidecars-static` inject nothing and now has it inject none of the three keys that the
+line names; and the list of amendments at the head of the plugin record.
+
+Left to later commits, each named:
+
+- the status of this ADR where another document states it: the rows of ADR-041 at
+  `00:779` and `08:1175`; the lines that are to name it as accepted for S2b, `01:383`,
+  `03:629`, `05:845`, `06:805` and community:164; the row of ADR-041 in plugin record
+  §18; and the closing of item 25 of `02` §6 (`02:483`). Each waits for the commit that
+  records the three runs of decision 38 and sets this ADR accepted (decision 53). Until
+  then each names an ADR that is not accepted, which is the case;
+- the rows of `remote/` in the home table and the exception to "each file with mode
+  0600", in ADR-047 decisions 13 and 14, with the record of the owner's answers on the
+  S2b part of ADR-047 (decision 44);
+- the form of the command that renews the kernel's pair, with the S2b part of ADR-061,
+  which names no such command at this commit; it blocks group 3 (decisions 39 and 43).
+  `00:413` says what the command does and gives it no name;
+- the count of the launch keys, which decision 49 raises by one more, in `00:212`,
+  `00:250`, `03:63`, `07:563`, `07:1367`, `08:86`, plugin record §5, row 44 of plugin
+  record §15 and ADR-059 decision 35, and the line of `dist/dist.yaml`, with the commit
+  that adds the key to the launch definition, where the key gets its name. ADR-063
+  leaves the same lines to the commit of its decision 57. Until then these lines count
+  the launch definition as it stands, and `00:246` and `07:564` mark both keys "from
+  S2b";
+- the catalogue rows of `sidecars`, `00:219` and the row of plugin record §5, which
+  state `Endpoint(name)` alone, with the S2b part of ADR-047, which fixes the definition
+  beyond the report (decision 36);
+- a dated note at ADR-063 decision 55 on the form of the kernel's certificate, only if
+  the first run of decision 38 changes the form of decision 20, with the revised
+  proposal that the owner then answers;
+- the row of the gRPC runtime of the Python SDK in the licence record (licence:68), with
+  the commit that first uses it (decision 34).
+
+Not edited. `08:477` and the three other S2b cells of its matrix row stand under
+decision 42. `03:72` stands: decision 45 gives the proxy no `dialer`. `07:1236-1243`
+stays a sketch (decision 51). `03:489`, community:160-161 and `08:894` restate rows 2
+and 3 of the table of `07` §5 as they stood and hold nothing that an answer changes. The
+words "to 14" of ADR-063 decision 57, the heading "one named exception" of ADR-062
+decision 22 and the sentences of the S2b parts of ADR-047 and ADR-061 that cite this ADR
+as proposed stand as text of their date. The sections "Decision", "Consequences", "Edits
+on acceptance" and "Questions for the owner" of this ADR keep the text of the proposal,
+with each question marked answered. The ADR table of `08` is not edited. The community
+record and the licence record are not edited: the one line of each that an answer
+touches is in the list above.

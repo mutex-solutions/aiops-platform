@@ -1773,7 +1773,11 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     view, the leader and `sidecars-kubernetes` stay where they are. The lines that
     placed the two at S4a are edited: `00:573`, `02:215`, `08:646`, `08:699`,
     community:45 and the S4a row of plugin record §16, which the answer amends (decision
-    4).
+    4). Note of 2026-11-27, with the owner's answers on ADR-041 (its decisions 42 and
+    49): `sidecars-static` no longer injects nothing. It injects `clock`, for the timer
+    on which it offers an endpoint again, and the consumer-bound key of the launch
+    definition by which a provider of `sidecars` asks the kernel to run the
+    availability check again. The row of the two providers in `03` §2.2 says so.
 
 40. **The proxy injects no `tenantMint` at S2b** (Q3 (a)). It gains that inject at S4a
     with the handle, as the two-tenant tests wait for S4a (ADR-060 decision 43). `03:72`
@@ -1921,7 +1925,12 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     where there are several tenants and a leader to issue it, at S4b. ADR-041 writes the
     answer out, inside the points of decision 23. `00` §5.4 gains the two credential
     classes, and the open point closes in `02:213`, `02:336`, `02:483`, `03:162`,
-    `03:490` and `07:1159`.
+    `03:490` and `07:1159`. Note of 2026-11-27, with the owner's answers on ADR-041 (its
+    decision 50): `plugin install` is not the only command that makes the pair of an
+    instance. A revoked pair never returns (decision 23), so after a `plugin disable`
+    the command `plugin start` makes a new pair, on every target, systemd among them.
+    `00` §5.4, item 25 of `02` §6 and the row of the deployment unit in `08` §4.1 say
+    so.
 
 56. **A remote manifest that lists a `network` entry is refused until the list can be
     enforced** (Q19 (a)). `plugin install` refuses a remote artifact whose manifest

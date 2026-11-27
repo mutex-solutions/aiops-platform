@@ -369,6 +369,17 @@ The prototype reading is kept in its own column as history.
 | Pod per (tenant, remote plugin) | Not measured in S0 | n/a | the same | deferred to S4b |
 | Leak budget per replica | No numeric value in the record | n/a | the same | **open until S4b** (owner, 2026-11-22; item 3) |
 
+Note of 2026-11-27, with the owner's answers on ADR-041 (its decisions 40 and
+52). The budget line "Remote mount" (line 30) is quoted as the plugin record
+had it on 2026-11-20, and the line "Remote mount within handshake (2 s) and one
+stream per row" of the table above restates it. Both read as follows. The 2 s
+bounds the handshake, up to the verdict of the gate; the mount of a tree with
+remote rows within it is the budget that S4b measures, not a bound that the
+protocol enforces. "One stream per remote row" is one connection with one
+session, so one open stream, while the row is idle, and each call in flight is
+one more stream of the transport on that connection. The line stays deferred to
+S4b.
+
 **Reading, accepted 2026-11-22.** The S0 bench passes every measured budget
 line on the final port, on all three backends, `kernel` included. The smallest
 margin is the `kernel` retained heap for 500 trees of width 4 (2.77 MiB under

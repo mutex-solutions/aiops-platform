@@ -1835,7 +1835,12 @@ and 5.
     remote instance as a protocol message; in a Go plugin `sdk/remotehost` applies it
     through the hand-off that the plugin's own `Define` has, and `aiops-sdk` hands the
     new config to the contribution. `FromManifest` gives a proxy row no hand-off and
-    the kernel does not change (ADR-063 decision 49); ADR-041 names the message.
+    the kernel does not change (ADR-063 decision 49); ADR-041 names the message. Note of
+    2026-11-27, with the owner's answers on ADR-041: the message is `UpdateConfig`,
+    which the instance answers with `ConfigUpdated`. An instance that answers with an
+    error, or not inside 2 s, does not take the update: the kernel ends the session
+    and the instance is activated again, with the committed config (ADR-041 decisions
+    8 and 16).
 
 ### Concurrency contract
 

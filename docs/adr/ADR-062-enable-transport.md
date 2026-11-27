@@ -447,7 +447,12 @@
     plugin of ADR-060 decision 41 may call `net.DialUnix`, with the network `unix`, for
     the socket of decision 3. The rule stays as written for every other plugin and for
     every other dial. The OCI client that ADR-060 decision 41 puts in the same plugin
-    meets the same written rule; this ADR does not decide that case.
+    meets the same written rule; this ADR does not decide that case. Note of 2026-11-27,
+    with the owner's answers on ADR-041 (its decision 45): when the dial rule is built,
+    the same list gains two more named entries, for the two dial functions of the
+    remote protocol. `aiops/remote` may call the TLS dial and `aiops/operations` the
+    Unix dial (ADR-041 decision 28). The T0 row of the test tiers in `07` §8.1 and
+    harness:58 name the three entries.
 
 ### `admin-api` at S4a and after
 
