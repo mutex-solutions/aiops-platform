@@ -1627,7 +1627,12 @@ Read for this part in `google.golang.org/grpc@v1.82.1`:
       plugin-side host inside the container listens on the socket in it, told by the
       variable of ADR-041, and the binary dials the same file on the host. No port is
       published and no TCP connection is made. Reading 2 of ADR-063 decision 54 holds
-      as for a local process.
+      as for a local process. Note of 2026-11-27: the owner's answer to question Q15 of
+      the S2b part of ADR-061, recorded on the same date as its decision 65, gives
+      `plugin verify` the other channel, mutual TLS to a container that runs as a unit.
+      The difference is with the owner as question Q17 of that part. This bullet and
+      the words "the binary gains no second dial" follow the answer, and `Verify` of
+      remote code does not merge before it.
     - **"A process that it started"** is, for a container, the container that this run
       of `aiopsctl` created from the image and removes when the run ends. A container
       that exists before the run, or that another command started, is never dialled:

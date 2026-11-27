@@ -631,7 +631,7 @@ Open ADRs this document depends on:
 - ADR-045 (S0 spike, S3): the cross-plugin transaction on the real stack.
 - ADR-046 (S5): gate availability when an expected listener is FAILED.
 - ADR-047 (S2a for the artifact form and the gate rule, S8a start for the definitions): vendor-neutral connectors: `tools` as the read seam and `tool-mcp` with the digest of the recorded tool list carried by the pack, the `signals` fields and busy reply, `evidenceSources`, the insert-only rule of gate check 8, and the `dialer-guarded` ranges on self-host (§4, A11, A23).
-- ADR-048 (S2a, S6a): manifest schema 1.0 and index format 1.0, which the gate, `plugin-manager` and `plugin-index` read (§2.1).
+- ADR-048 (S2a, S2b, S6a): manifest schema 1.0 and index format 1.0, which the gate, `plugin-manager` and `plugin-index` read (§2.1).
 - ADR-049 (owner; the tenant case before S4b): the boundary between the community and the enterprise edition, which decides whether a self-host gets tenant create and delete as operator actions (§3).
 - ADR-051 (S8a start): the harness definition: the contract, the ten departures and their fallbacks, the provider-bound class, hook dispatch by pillar and kind (§4, A24).
 - ADR-052 (S8a start): the first-party loop: `agentLoop`, the two hooks and what a listener may change, and the loop rows (§4, §8.1). The reading of principle 6 for a loop in the kernel process is decided (00-decisions §2.4 W12).

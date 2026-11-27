@@ -3206,3 +3206,70 @@ Left to later commits, each named:
   (decisions 46 and 47);
 - the licence-record rows and the register entries of decision 57, each in the commit that
   first uses its item.
+
+### Points for the owner after the records of 2026-11-27
+
+Note of 2026-11-27. The owner's answers on ADR-041 and on the S2b parts of ADR-020,
+ADR-034, ADR-044, ADR-047, ADR-048 and ADR-054 were recorded on the same date as the
+answers above, and the runs of ADR-041 decision 38 and of ADR-047 decision 39 were
+recorded after them. This section holds the two points of this part that wait for the
+owner, as questions Q17 and Q18, and what those records ask of this part. The part
+stays accepted. `Verify` of remote code waits for Q17, and `sidecars-static` for Q18.
+
+**Q17. Which channel does `plugin verify` use?** This is the difference that decision
+65 puts to the owner. Decision 65 (Q15 (a)) has `plugin verify` reach the container as
+a unit, over mutual TLS with throwaway pairs. ADR-041 decision 27 and ADR-044 decision
+38 have the runner reach it over the Unix socket of `plugin check`, with no network in
+the container, which is option (b) of Q15; neither was put to the owner as a question.
+ADR-020 decision 34 admits either channel.
+- (a) Decision 65 holds. The row of `plugin verify` in ADR-041 decision 27, ADR-044
+  decision 38, where the binary "gains no second dial", and the lines of ADR-020 that
+  restate them are revised to it, and ADR-041 gains the dial of the check runner with a
+  throwaway pair. The condition of the option is run before `Verify` of remote code is
+  written. Row 4 of ADR-047 decision 39, run on 2026-11-27, bears on it: on the network
+  of ADR-047 decision 32, in the gateway mode `isolated`, the host holds no IPv4
+  address in the network. Whether a process on the host then reaches the container was
+  not run. Where it does not, the runner dials from a container that joins the network,
+  as the kernel container does, or (b) is the other way, as decision 65 says.
+- (b) The Unix socket. ADR-041 decision 27 and ADR-044 decision 38 hold as written,
+  decision 65 is reversed, and ADR-063 decisions 23 and 54 gain the dated note that Q15
+  (b) names. The container has no network and gets one writable bind.
+- Recommended: (a), with its condition run first. It is the answer that the owner gave
+  to the one question that set both channels out, and (b) edits two accepted decisions
+  of ADR-063. The run of the condition is small and decides whether (a) can be built as
+  worded. Blocks: `Verify` of remote code and its cases (`ADR-063:756-758`).
+
+**Q18. Which text carries the rule on when `sidecars-static` reads the endpoint
+table?** This is the open point of decision 60: the provider reads the table at every
+generation or at every lookup, and not once at boot, and the answer of 2026-11-27 names
+no text for that rule.
+- (a) The S2b part of ADR-047, in its decision 29, which defines the file and now
+  leaves "when it reads it again" to the row. That part is still proposed, and its
+  revision takes the rule with the attempt value that ADR-041 decision 42 gives a line
+  of the table.
+- (b) A part of its own, for the definition `sidecars` and its provider (ADR-063
+  decision 39).
+- Recommended: (a). The rule is about one file, the part that defines the file is open
+  for revision now, and no document is added. Blocks: `sidecars-static`.
+
+**What the other records ask of this part,** each by an addition to this ADR or a dated
+note here before the code that the point governs merges, and none a question:
+- **`plugin smoke` of remote code needs a repository.** The owner's answer to question
+  Q8 of the S2b part of ADR-047 (its decision 42) has `plugin install` and `plugin
+  verify` of remote code refuse a local-path spec, and has smoke push its throwaway
+  artifact to a repository that the author names, "in a form that the S2b part of
+  ADR-061 fixes". Decision 55 names no repository and no push. The form is an addition,
+  due before `Smoke` of remote code merges. The row of decision 59 on what `plugin
+  verify` does with a local-path spec is settled by the same answer: it refuses, naming
+  `plugin push`.
+- **The command that renews the kernel's pair** (ADR-041 decision 43, its question Q4
+  (b)) has no form in this part. The form is an addition, due before group 3 of ADR-063
+  decision 30.
+- **`plugin enable` writes the attempt value** of the row's line of the endpoint table
+  (ADR-041 decisions 18 and 42). Decision 60 names `plugin install` and `plugin start`
+  as the writers of that table, and `Enable` joins them with the revision of ADR-047
+  decision 29.
+- **`plugin start`, decision 45,** follows the answers to questions Q16, Q17 and Q18 of
+  the S2b part of ADR-047, which come from the runs of its decision 39: when a network
+  that already exists is checked, what follows the first attach of the kernel
+  container, and whether a stopped container is started again or replaced.

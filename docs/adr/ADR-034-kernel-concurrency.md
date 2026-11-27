@@ -2355,8 +2355,10 @@ that come with the code" asks.
   `boot/gate.go`, `sdk/def/loader/v0`, `internal/vet`, `sdk/plugin/plugin.go`,
   `dist/dist.yaml` and `test/dist/dist.yaml` are the same at both. Lines of this ADR are
   given as "line N", numbered as before the record of 2026-11-27. That record added
-  three lines after line 1685 and five in point 10, so a line from 1686 to 1838 is now
-  three lines lower and a line from 1839 to 2323 eight lines lower, and lines 1829-1838
+  three lines after line 1685 and five in point 10, and the record of the owner's answers
+  on ADR-041, of the same date, added four more at the end of point 10, so a line from
+  1686 to 1838 is now three lines lower and a line from 1839 to 2323 twelve lines lower,
+  and lines 1829-1838
   are point 10 as it read before decision 21 rewrote one sentence of its note. A line of
   another ADR is given as `ADR-063:866`. "Point N" is a point of
   the decision of G13 (lines 1753-1838), which this section continues from point 11.
@@ -3086,7 +3088,7 @@ Left to later commits, each named:
   cannot both be built as written. The chosen option names no line of ADR-041, so this
   record edits none: the point is one for the owner under ADR-063 decision 33, before
   the update message is built, and those lines are left to the commit that records how
-  the two are reconciled;
+  the two are reconciled. The point is put to the owner as question Q20 of ADR-041;
 - the result of the call-path gate on `d124a40`, recorded in this ADR when it has run
   ("What this section blocks"). No result of it is recorded with this answer.
 

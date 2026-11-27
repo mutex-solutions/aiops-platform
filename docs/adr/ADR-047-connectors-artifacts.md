@@ -4,14 +4,18 @@
   answered all seven questions on the same date with the recommended option of each; the
   section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
   ADR-047 stays for S8a start, as the scope below says.
-- S2b part: **answers recorded 2026-11-27; accepted when the rows of decision 39 have
-  recorded results.** The section "S2b part" at the end of this file holds it, with
-  decisions 23 to 41 and questions Q8 to Q14 (ADR-063 decisions 2 and 34). The owner
-  answered the seven questions on 2026-11-27 with the recommended option of each, Q11 on
-  its condition; the section "Owner answers of 2026-11-27" records them as decisions 42
-  to 48. By decision 48 the part stays proposed until each row of decision 39 has a
-  recorded result. Until the owner accepts it, nothing above changes but the two dated
-  notes that the answers to Q8 and Q9 add, at decisions 1 and 14.
+- S2b part: **proposed; answers recorded 2026-11-27 and the runs of decision 39 recorded
+  2026-11-27, all ten rows holding; with the owner on two points, questions Q15 and
+  Q16.** The section "S2b part" at the end of this file holds it, with decisions 23 to
+  41 and questions Q8 to Q14 (ADR-063 decisions 2 and 34). The owner answered the seven
+  questions on 2026-11-27 with the recommended option of each, Q11 on its condition; the
+  section "Owner answers of 2026-11-27" records them as decisions 42 to 48. By decision
+  48 the part stayed proposed until each row of decision 39 had a recorded result; the
+  section "Runs of decision 39, recorded 2026-11-27" records them. The part stays
+  proposed for the modes of the directory of an instance (Q15) and for the order in
+  which `plugin start` checks a network that already exists (Q16). Until the owner
+  accepts it, nothing above changes but the two dated notes that the answers to Q8 and
+  Q9 add, at decisions 1 and 14.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -833,19 +837,25 @@ edited for this point.
 
 ## S2b part: the artifact of remote code, its rows of the home and its network
 
-- Status: **answers recorded 2026-11-27; accepted when the rows of decision 39 have
-  recorded results.** This part is an addition to ADR-047, written as ADR-063 decision 2
-  has the S2b parts of accepted ADRs written, and it is accepted before the code it
-  governs merges into `main`. The owner answered the seven questions, Q8 to Q14, on
-  2026-11-27, each with its recommended option, Q11 on its condition; the section "Owner
-  answers of 2026-11-27" at the end of this part records the answers as decisions 42 to
-  48. By decision 48 the part stays proposed until each row of decision 39 has a
-  recorded result. Decisions 1 to 22 stand as accepted; where a decision of this part
-  adds to one of them, it names it.
-  - No behaviour of a container runtime was run for this part, and the project pins no
-    container runtime yet. Decision 39 lists what was read, at which version, and what
-    a run has to show; question Q14 asks whether the part is accepted before those
-    runs, and decision 48 holds the answer: it is not.
+- Status: **proposed; answers recorded 2026-11-27 and the runs of decision 39 recorded
+  2026-11-27, all ten rows holding; with the owner on two points, questions Q15 and
+  Q16.** This part is an addition to ADR-047, written as ADR-063 decision 2 has the S2b
+  parts of accepted ADRs written, and it is accepted before the code it governs merges
+  into `main`. The owner answered the seven questions, Q8 to Q14, on 2026-11-27, each
+  with its recommended option, Q11 on its condition; the section "Owner answers of
+  2026-11-27" records the answers as decisions 42 to 48. By decision 48 the part stayed
+  proposed until each row of decision 39 had a recorded result. The section "Runs of
+  decision 39, recorded 2026-11-27" at the end of this part holds the results: every row
+  holds, and the condition of decision 45 is met. The part stays proposed for two points
+  only. Decision 43 and the answer recorded on ADR-041 give the directory of an instance
+  different modes (Q15), and row 7 shows that the order of decision 33 lets an instance
+  start on a network that is not the network of decision 32 (Q16). Decisions 1 to 22
+  stand as accepted; where a decision of this part adds to one of them, it names it.
+  - No behaviour of a container runtime was run for the proposal of this part, and the
+    project pins no container runtime yet. Decision 39 lists what was read, at which
+    version, and what a run has to show; question Q14 asks whether the part is accepted
+    before those runs, and decision 48 holds the answer: it is not. The runs were made
+    on 2026-11-27, after the answers.
   - Values that no written line gives are proposed here, and the owner accepts them
     with the part: the depth of the SBOM of remote code (decision 26); the port 7443
     (decision 29); the path `/aiops/identity`, the numeric user 65532 and the absence
@@ -1522,26 +1532,31 @@ to 22 and the code at `bbfd839` leaves ten gaps:
     first use.
 
     The behaviours that the decisions above need of the runtime, with what the source
-    of those tags says of each. None was run.
+    of those tags says of each. None was run for the proposal. Note of 2026-11-27: each
+    row was run once on that date (decision 48). The two last columns hold the version
+    and the result, and the section "Runs of decision 39, recorded 2026-11-27" holds
+    the commands and what was observed.
 
-    | # | Behaviour, and the decision that needs it | Read | A run has to show | If the runtime does not give it |
-    |---|---|---|---|---|
-    | 1 | A build exports exactly one image manifest (decision 24) | Build plugin, `docs/reference/buildx_build.md`: the output type `oci` writes "the result image or manifest list" as an OCI image layout tarball, and "By default, a minimal provenance attestation will be created for the build result", which `--provenance=false` disables | The layout of a build with no attestation names one `application/vnd.oci.image.manifest.v1+json` and no index | `plugin pack` refuses (decision 24); the work stops on the point |
-    | 2 | The registry serves the pushed manifest byte for byte, and the runtime pulls and runs the image by that digest (decisions 24 and 31; steps G2 and C3) | The registry keeps the pushed bytes of a manifest (decision 4). The pull of the engine was not read | The digest of `image.json` is the digest that the registry serves and that the runtime pulls | The work stops on the point |
-    | 3 | A container reports the reference by digest from which it was created (decisions 33 and 36; step C3) | Not read | The runtime reports that reference for a running container | The work stops on the point |
-    | 4 | An internal network gives the instance no route out and the host no address in it (decision 32, points 1 and 2) | Engine, `daemon/libnetwork/drivers/bridge/setup_ipv4_linux.go`, `setupBridgeIPv4`: the bridge of the host is given the address of the network unless the gateway mode is `isolated` or an option inhibits the address, and the gateway of the containers is set only when the network is not internal. `bridge_linux.go`: the mode `isolated` "can only be used for an internal network" | Points 1 and 2 of decision 32, from inside an instance, on the daemon settings of the exit's clean machine | The work stops on the point |
-    | 5 | The resolver answers the instance for no name outside its network (decision 32, point 3) | Engine, `daemon/libnetwork/sandbox.go`, `hasExternalAccess`, `sandbox_dns_unix.go`, `startResolver`, and `resolver.go`, `forwardExtDNS`: a container whose only networks are internal gets a resolver that does not forward a request from the namespace of the host | Point 3 of decision 32 | The work stops on the point |
-    | 6 | The kernel container, started in the no-network mode, joins the network of an instance and resolves the unit name there (decision 33) | Engine, `daemon/container_operations.go`, `updateNetworkSettings`: a connect is refused while one of the container's networks is `none`, with "container cannot be connected to multiple networks with one of the networks in private (none) mode". `DisconnectFromNetwork` in the same file detaches a running container from a network and has no exception for `none` | A running container is detached from the no-network mode and then attached, without a restart, and resolves the name of the instance | Question Q11 (b) |
-    | 7 | Compose runs the fragment: it takes the keys that the template writes, starts nothing on a second run, replaces a container whose fragment changed, and leaves alone a container that it did not create on its network | Not read | Each of the four, and what Compose does with a network or a container of the unit name that it did not create | The work stops on the point (ADR-063 decision 50) |
-    | 8 | The runtime reports the uid of a container's first process as the host sees it (decisions 30 and 36) | Not read | The report, under the mapping of the exit | `plugin start` refuses a runtime that reports a rootless mode or a remapped user namespace, where the number of the template is not the uid on the host |
-    | 9 | The systemd unit, copied by root, creates the network and runs the container, and a container stopped through the runtime is not started again (decisions 31 and 37) | Not read | Both, in the systemd job | The work stops on the point (ADR-063 decision 50) |
-    | 10 | The user of the unit reads the bound directory (decision 30; question Q9) | Not read | The instance opens its key under the answer to Q9, and no file of the home | The owner is asked again with Q9 |
+    | # | Behaviour, and the decision that needs it | Read | A run has to show | If the runtime does not give it | Version run on 2026-11-27 | Result |
+    |---|---|---|---|---|---|---|
+    | 1 | A build exports exactly one image manifest (decision 24) | Build plugin, `docs/reference/buildx_build.md`: the output type `oci` writes "the result image or manifest list" as an OCI image layout tarball, and "By default, a minimal provenance attestation will be created for the build result", which `--provenance=false` disables | The layout of a build with no attestation names one `application/vnd.oci.image.manifest.v1+json` and no index | `plugin pack` refuses (decision 24); the work stops on the point | Build plugin v0.39.1 on the default builder (driver `docker`, BuildKit v0.35.0), engine 29.10.0 with the containerd image store | Holds: one image manifest and no index |
+    | 2 | The registry serves the pushed manifest byte for byte, and the runtime pulls and runs the image by that digest (decisions 24 and 31; steps G2 and C3) | The registry keeps the pushed bytes of a manifest (decision 4). The pull of the engine was not read | The digest of `image.json` is the digest that the registry serves and that the runtime pulls | The work stops on the point | The pinned registry 3.1.2; engine 29.10.0, containerd v2.4.2, runc 1.5.3 | Holds: the registry served the pushed bytes under the digest of the layout, and the runtime pulled and ran the image by it |
+    | 3 | A container reports the reference by digest from which it was created (decisions 33 and 36; step C3) | Not read | The runtime reports that reference for a running container | The work stops on the point | Engine 29.10.0 with the containerd image store; Compose v5.8.0 | Holds: `Image` is the manifest digest; `Config.Image` is the string that the creator passed |
+    | 4 | An internal network gives the instance no route out and the host no address in it (decision 32, points 1 and 2) | Engine, `daemon/libnetwork/drivers/bridge/setup_ipv4_linux.go`, `setupBridgeIPv4`: the bridge of the host is given the address of the network unless the gateway mode is `isolated` or an option inhibits the address, and the gateway of the containers is set only when the network is not internal. `bridge_linux.go`: the mode `isolated` "can only be used for an internal network" | Points 1 and 2 of decision 32, from inside an instance, on the daemon settings of the exit's clean machine | The work stops on the point | Engine 29.10.0 with its default settings, and a nested engine 29.10.0 with the flags of the S2a exit | Holds on both, with the gateway mode `isolated` |
+    | 5 | The resolver answers the instance for no name outside its network (decision 32, point 3) | Engine, `daemon/libnetwork/sandbox.go`, `hasExternalAccess`, `sandbox_dns_unix.go`, `startResolver`, and `resolver.go`, `forwardExtDNS`: a container whose only networks are internal gets a resolver that does not forward a request from the namespace of the host | Point 3 of decision 32 | The work stops on the point | As row 4 | Holds on both: `SERVFAIL` for every name outside the network |
+    | 6 | The kernel container, started in the no-network mode, joins the network of an instance and resolves the unit name there (decision 33) | Engine, `daemon/container_operations.go`, `updateNetworkSettings`: a connect is refused while one of the container's networks is `none`, with "container cannot be connected to multiple networks with one of the networks in private (none) mode". `DisconnectFromNetwork` in the same file detaches a running container from a network and has no exception for `none` | A running container is detached from the no-network mode and then attached, without a restart, and resolves the name of the instance | Question Q11 (b) | As row 4 | Holds on both: detached from `none` and attached with no restart, and the unit name resolved, 2.6 s after the first attach. The condition of decision 45 is met |
+    | 7 | Compose runs the fragment: it takes the keys that the template writes, starts nothing on a second run, replaces a container whose fragment changed, and leaves alone a container that it did not create on its network | Not read | Each of the four, and what Compose does with a network or a container of the unit name that it did not create | The work stops on the point (ADR-063 decision 50) | Compose v5.8.0, engine 29.10.0 | Holds, the four. Compose uses a network of the unit name that it did not create, with a warning: question Q16 |
+    | 8 | The runtime reports the uid of a container's first process as the host sees it (decisions 30 and 36) | Not read | The report, under the mapping of the exit | `plugin start` refuses a runtime that reports a rootless mode or a remapped user namespace, where the number of the template is not the uid on the host | Engine 29.10.0, rootful, with no remapped user namespace; and the nested engine | Holds: the first process has the user 65532 as the host sees it |
+    | 9 | The systemd unit, copied by root, creates the network and runs the container, and a container stopped through the runtime is not started again (decisions 31 and 37) | Not read | Both, in the systemd job | The work stops on the point (ADR-063 decision 50) | systemd 259 as the first process of an unprivileged container, with the client and the socket of engine 29.10.0 | Holds: the unit made the network and ran the container, and a container stopped through the runtime was not started again |
+    | 10 | The user of the unit reads the bound directory (decision 30; question Q9) | Not read | The instance opens its key under the answer to Q9, and no file of the home | The owner is asked again with Q9 | Engine 29.10.0, rootful, with no remapped user namespace | Holds under Q9 (a): the unit's user reads the key and no file of the home. Question Q15 |
 
     The exit proves rows 1 to 8 and 10 in steps G2, C2 and C3 and the systemd job
     proves row 9. A row whose last column stops the work goes to the owner with the
     lines an answer would edit (ADR-063 decision 33). The owner said on 2026-11-27 that
     an isolated sandbox can be provided for this work; whether the rows are run there
-    before this part is accepted is question Q14.
+    before this part is accepted is question Q14. The runs of 2026-11-27 were throwaway
+    runs before any code of this part: the exit and the systemd job still prove the
+    rows on what is built.
 
 40. **What this part asks of the other S2b parts** (ADR-063 decision 34). Each is
     proposed with its own ADR, and the texts are made one before any of them goes to
@@ -1954,7 +1969,10 @@ here settles it.
     pinned runtime before `plugin start` merges. If the run fails, option (b) of Q11 is
     the other way, and the owner is asked again with the two lines it changes, ADR-063
     decision 27 and decision 15 (ADR-063 decision 33). This settles step 4 of `plugin
-    start` in decision 33.
+    start` in decision 33. Note of 2026-11-27: row 6 was run on that date on Docker
+    Engine 29.10.0 and holds, so the condition is met, Q11 stays (a) and the owner is not
+    asked again. What the run shows of the resolver after the first attach is question
+    Q17.
 
 46. **The name of a unit is one derived form for every id** (Q12 (b)): `remote-plugin-`,
     then `<owner>--<name>` cut to its first 32 bytes with any hyphen at its end removed,
@@ -2032,3 +2050,206 @@ Left to later commits, each named:
     can share, and install refuses the second of them;
 - the commit that builds the clause in the one gate text (ADR-060 decision 16): `08:506`,
   as the section "Edits on acceptance of the S2b part" says.
+
+### Runs of decision 39, recorded 2026-11-27
+
+Note of 2026-11-27. Each row of decision 39 was run once on that date, as a throwaway
+run on the tree of commit `3dc2c41`. The runs committed nothing, and every container,
+network, image and file that they made was removed. The table of decision 39 holds the
+version and the result of each row; this section holds the commands, what was observed
+and what the results touch. All ten rows hold, and no row is listed as not run.
+
+**The part stays proposed for two points only**, questions Q15 and Q16 below. Q15 is
+the one that the record of the owner's answers already leaves to the owner: decision 43
+and the answer recorded on ADR-041 give the directory of an instance different modes.
+Q16 comes from row 7: as decision 33 orders the steps, an instance can start on a
+network that is not the network of decision 32. Questions Q17 and Q18 are smaller
+points of the runs and block `plugin start`, not the part. Decisions 42 and 44 to 47
+stand as the owner gave them, and the condition of decision 45 is met: row 6 holds, so
+Q11 stays (a), and ADR-063 decision 27 and decision 15 stand as written.
+
+#### Versions and stand-ins
+
+- The client and the engine of `docker` 29.10.0, with containerd v2.4.2 and runc 1.5.3,
+  on the containerd image store with the overlay snapshotter; the build plugin v0.39.1
+  on the default builder, whose driver is `docker`, with BuildKit v0.35.0; Compose
+  v5.8.0; systemd 259. These are the versions that the first table of decision 39
+  read. The host is Ubuntu 26.04.1 on Linux 7.0.0-43, linux/amd64, with AppArmor and
+  without SELinux, and its engine is rootful with no remapped user namespace.
+- The registry is the one that the project pins,
+  `registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c`.
+  The base image of the plugin image is
+  `python@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b`.
+- Rows 4, 5, 6 and 8 were run twice: on the engine of the host with its default
+  settings, and on a nested engine,
+  `docker:29.10.0-dind@sha256:4bbc7223f81db790097c6dea42fb93e05b8fead4f0431fbe6ccaba6e8473201c`,
+  started with the flags of the S2a exit, `--bridge none --iptables=false
+  --ip6tables=false --userland-proxy=false`. The two agree. The settings of the clean
+  machine of the S2b exit are not in the repository yet.
+- Stand-ins. The instance is a small Python listener on port 7443, and the kernel is
+  one static Go process (`go1.26.8`) as the first process of a container in the S2a
+  form: `--network none`, the user of the site, the home bound read-only and `run/`
+  read-write. The compose fragment, the systemd unit and the push are renderings of
+  decisions 24 and 30 to 32 made for the runs, since the repository holds no template
+  and no `plugin push` of remote code yet. The names of the credential files are
+  stand-ins too: ADR-041 fixes them.
+- Limits. Row 9 ran systemd as the first process of an unprivileged container that
+  held the client of `docker` and the socket of the host's engine. It is not a host
+  whose service manager is systemd, and root there is the root of that container. Not
+  run: a rootless runtime or one with a remapped user namespace; an image store other
+  than the containerd one; SELinux.
+
+#### Commands and what was observed
+
+| # | Command | Observed |
+|---|---|---|
+| 1 | `docker buildx build --platform linux/amd64 --provenance=false -f ctx/Containerfile --output type=oci,dest=a.tar ctx`, then `index.json` of the layout. Contrasts: the same build with no `--provenance` flag, and with `--provenance=true` | `index.json` named one descriptor of the media type `application/vnd.oci.image.manifest.v1+json`, for linux/amd64, and no index. Its blob is 1244 bytes and hashes to its digest, `sha256:ad0139412b40d065427b7e686edd35e2b599357a8c7537e50d7f4b1cb173d86b`. The build made no image and no tag in the store. With no `--provenance` flag this builder exported the same one manifest with no attestation, so the default that the row quotes from the documentation was not added here. With `--provenance=true` it exported an index of the image manifest and an attestation manifest, the case that `plugin pack` refuses |
+| 2 | Each blob of the layout was uploaded and the bytes of the manifest were `PUT` to `/v2/<repository>/manifests/sha256:ad01...` of the registry, then read back with `GET`. Then `docker pull <registry>/<repository>@sha256:ad01...` and `docker run -d ... <registry>/<repository>@sha256:ad01...`, and a second image run with no pull before it | The `PUT` answered 201 and the `GET` 200, both with `Docker-Content-Digest: sha256:ad0139412b40...`. The served body was the 1244 bytes of the layout, with that hash. `docker pull` printed that digest, and `docker image inspect` gave it as the id and in `RepoDigests`. Both containers ran from their reference by digest, and the nested engine pulled and ran the image by digest as well. The push was a script of the run and not `plugin push` |
+| 3 | `docker inspect <unit> --format '{{.Config.Image}} {{.Image}}'` and `docker ps --no-trunc`. Extra: a tag of the same image, and a container created from the tag | For the containers made by `docker run`, by Compose and by the systemd unit, `Config.Image` was the reference by digest and `Image` the manifest digest, and `docker ps` showed the same reference. The container made from a tag reported the tag in `Config.Image` and the manifest digest in `Image`. `Config.Image` is the string that the creator passed; `Image` is the manifest digest on the containerd image store |
+| 4 | `docker network create --internal --ipv6=false -o com.docker.network.bridge.gateway_mode_ipv4=isolated -o com.docker.network.bridge.gateway_mode_ipv6=isolated <unit>`; `docker run -d --name <unit> --network <unit> --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges --mount type=bind,src=<home>/remote/instances/<id>,dst=/aiops/identity,readonly <reference>`; then TCP dials from inside the instance, with a listener on every address of the host | The network reported `Internal=true`, a subnet and no gateway. The bridge of the host held no IPv4 address, only an IPv6 link-local address, which `docker network inspect` does not report. Inside the instance the one route was its own subnet with no gateway, and IPv6 was off on its interface. From inside: its own name on port 7443 connected; the default bridge of the host, the address of the host on its local network and on its overlay network, the registry, the other instance on port 7443, a public address on port 443 and the link-local address of the bridge all failed with `Network is unreachable`. Controls: the same dials connected from a container on a network that is not internal, and the host reached its own listener on the link-local address. Contrast: on an internal network in the default gateway mode the bridge held the gateway address of the network and the instance connected to the listener of the host there, as the row read in the source |
+| 5 | From inside the instance, `getaddrinfo` and a raw `A` query to the name server of `/etc/resolv.conf`, for its own name, the other unit, the registry container, two public names and `host.docker.internal` | `resolv.conf` named the resolver of the runtime. The instance's own unit name answered with its address. Every other name answered `SERVFAIL` with no answer. Once the kernel container had joined, its name resolved from the instance, as a member. Control: on a network of the same daemon that is not internal a public name resolved. The kernel container, whose only networks are internal, got `SERVFAIL` for a public name too |
+| 6 | `docker run -d --name K --network none ...`; `docker network connect <unit> K`; `docker network disconnect none K`; `docker network connect <unit> K`; `docker inspect K`; `docker logs K`. Extras: a second network, the stop steps of decision 37, an attach from no network at all, `docker restart K` | The connect in the no-network mode failed with the message that the row quotes. The disconnect from `none` succeeded and left no network. The connect then succeeded with no restart: the same process, the same start time, a restart count of 0. The process that booted before the attach resolved the unit name and read the instance's line on port 7443. Two limits. Started in the no-network mode, the kernel container's `resolv.conf` named the upstream of the host; the attach rewrote it to the resolver of the runtime, and the running Go process took 2.6 s to use it, while a later attach of a second network resolved in under 1 s. And `HostConfig.NetworkMode` still read `none` afterwards: `NetworkSettings.Networks` alone shows the networks. Extras: the kernel on two networks of instances dialled both and reached nothing else, and the first instance could not reach the second through it; removing a network with the kernel attached failed with `has active endpoints`, and succeeded after the disconnect; after `docker restart` the container kept the network of the instance |
+| 7 | `docker compose -f <home>/remote/units/<id>/compose.yaml config -q`; `up -d` a first time, again unchanged, after a change of the image digest and after `docker stop`, each with a kernel container attached; `down`; `up -d` after `docker run` of a container of the unit name; `up -d` after `docker network create` of the unit name, isolated and then plain | The fragment: a top-level name; one service with `container_name`, the image by digest, `user: "65532:65532"`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]` and one read-only bind with `create_host_path: false`; one network with its name, the driver `bridge`, `internal: true`, `enable_ipv6: false` and the two options of the gateway mode; no restart policy and no port. The four hold. The container had every key of the fragment. A second run printed `Running`, with the same container. A changed digest printed `Recreate`: a new container on the same network, which the kernel process dialled, and the kernel container kept its process and its attachment throughout. Not created by Compose: with a container of the unit name, running or stopped, `up` failed with `Conflict. The container name ... is already in use` and left it untouched; with a network of the unit name, `up` printed a warning, `exists but was not created by compose`, used it and exited 0. On a plain network of that name, not internal, the instance started on it, connected to a public address and resolved a public name. Other: a stopped container that the fragment made is started again as the same container, not replaced; `down` with the kernel attached removed the container and left the network (`Resource is still in use`, exit 0); Compose adds the service name as a second name on the network; the bind is reported under `Mounts`, and `HostConfig.Binds` is null |
+| 8 | `docker info --format '{{json .SecurityOptions}}'`; `docker inspect <unit> --format '{{.State.Pid}}'`; `Uid` of `/proc/<pid>/status` and `/proc/<pid>/uid_map`; `docker top <unit>` and `docker top <unit> -eo uid,gid,pid,args` | The security options listed AppArmor, seccomp and the cgroup namespace, with no rootless and no user namespace entry. `/proc/<pid>/status` of the first process showed the user and the group 65532, no effective capability and `NoNewPrivs` 1, and the `uid_map` was the identity. `docker top` showed the user 65532. On the nested engine, whose host has the `ps` of busybox, `docker top <unit> -eo uid` failed: `docker top` runs the `ps` of the host |
+| 9 | `install -o root -g root -m 0644 <home>/remote/units/<id>/<unit>.service <the unit directory of the service manager>`; `systemctl daemon-reload`; `systemctl enable --now <unit>.service`; `docker inspect`; then `docker stop -t 5 <unit>`, `docker network disconnect <unit> K`, `docker network rm <unit>`, and `systemctl show` 20 s later | The unit file: `ExecStartPre=-docker network create` with the options of row 4, `ExecStart=docker run --rm` with the flags of the template and the image by digest, `ExecStop=docker stop`, no `Restart=`, `WantedBy=multi-user.target`. `enable --now` exited 0, and the unit was active and enabled with `Restart=no`. It created the network, internal with both isolated options and no gateway, and ran the container with the manifest digest, the user 65532:65532, every capability dropped, no privilege gain and the one read-only bind. The instance read its key and reached nothing outside, and the kernel container attached and dialled it. After `docker stop` the unit was `failed` (exit status 137: the stand-in ignores the termination signal), and 20 s later it was unchanged: no restart, no container, no network. Extras: `systemctl start` made the network and the container again; a start while the network existed worked, because the unit ignores a failed network create; `systemctl stop` left the network in place |
+| 10 | The home of mode 0700; `remote/`, `remote/instances/` and `remote/instances/<owner>/` of mode 0700; the directory of the instance of mode 0755 with files of mode 0644, bound read-only at `/aiops/identity`; reads and writes from inside the instance as `65532:65532` with every capability dropped. Contrasts: the whole home bound into a container of the same user; the directory of mode 0700 with a file of mode 0600; the directory of mode 0755 with a file of mode 0600 | The instance listed `/aiops/identity` and read the key and the two certificates. A write failed with `Read-only file system`. No path of the home existed in the container, and its one bind was the directory of the instance, read-only. The daemon made the bind although the three directories above are of mode 0700. With the whole home bound, the user 65532 got `Permission denied` on the home, on the key through the closed directories and on `plugins.lock`. Contrasts: decision 14 to the letter, 0700 and 0600, gave `Permission denied` on the directory and on the key; 0755 with a key of mode 0600 listed the directory and gave `Permission denied` on the key. The same read worked on the nested engine and from the container that the systemd unit started |
+
+#### What the results touch
+
+- **Q11 stays (a).** Row 6 holds on Docker Engine 29.10.0, on the engine of the host
+  and on a nested engine with the flags of the S2a exit. The condition of decision 45
+  is met, and option (b) is not needed.
+- **Decision 33, the order of steps 2 and 3, with decisions 31 and 36** (row 7).
+  Compose uses a network of the unit name that it did not create, with a warning and
+  exit 0, and on a plain network of that name the instance had a route out. As written,
+  the fragment runs before the network is checked, so third-party code would run with a
+  route out until the check stops it, against ADR-063 decision 24. The systemd unit of
+  decision 31 has the same gap: it creates the network where it is absent, checks
+  nothing of one that exists, and starts the instance before any `plugin start`.
+  Question Q16.
+- **Decision 43** (row 10) holds on rootful Docker, and so do the modes of ADR-041
+  decision 24 there (the third run of ADR-041 decision 38). Question Q15.
+- **Decision 33 with `plugin enable`** (row 6). After the first attach of a kernel
+  container that started in the no-network mode, the running process kept its old
+  resolver for 2.6 s. A `plugin enable` that follows `plugin start` at once can
+  therefore fail its dial, and step C4 of the exit follows step C3. Question Q17.
+- **Decision 33, step 2** (row 7). A stopped container that the fragment made is
+  started again as the same container, where the step says "replaced". Question Q18.
+- **What the part `Unit` reads** (decisions 33, 36 and 38; rows 3, 6, 7 and 8). These
+  are readings of the runtime and change no decision; the code of `Unit` takes them.
+  The networks of a container are read from `NetworkSettings.Networks`, since
+  `HostConfig.NetworkMode` keeps `none`. The image is read from `Image`, the manifest
+  digest, since `Config.Image` is the creator's string. A bind is read from `Mounts`.
+  The user as the host sees it is read from the process id of the container and
+  `/proc/<pid>/status`, since `docker top` depends on the `ps` of the host.
+- **Decisions 32 and 36, "the host holds no address"** (row 4). In the gateway mode
+  `isolated` the bridge has no IPv4 address and the network reports no gateway, and the
+  bridge still carries an IPv6 link-local address that the runtime does not report and
+  the instance cannot reach. Points 1 and 2 of decision 32 hold. The check of decision
+  36 reads what the runtime reports: no gateway, and the gateway mode `isolated`.
+- **Row 1.** On the default builder a build with no `--provenance` flag exported one
+  manifest with no attestation. Decision 24 does not change: `plugin pack` asks for no
+  attestation and refuses an index.
+- **Decision 37 needs no change.** `docker compose down` with the kernel container
+  attached leaves the network behind, so the three steps through the runtime are the
+  way to stop. A unit stopped that way ends `failed` in the service manager, which
+  `disable` and `remove` may say to the operator.
+- **The programs are not pinned by the project yet.** The rows ran at the versions that
+  the first table of decision 39 read. Each program still gets its register entry and
+  its row of the licence record in the commit that first uses it (decision 39).
+
+#### Questions for the owner after the runs
+
+Each question gives its options, the recommended one, and why.
+
+**Q15. Which modes does the directory of an instance have?** Decision 43 (Q9 (a)): the
+directory of mode 0755, its files of mode 0644, the unit's user `65532:65532` and no
+group of the host. ADR-041 decision 44 (its Q5 (a)), recorded on the same date: the
+directory of mode 0750, its files of mode 0640, and the site user's group as the only
+group of the instance, which is option (b) of Q9. Decision 40 has ADR-041 take the
+answer to Q9, and ADR-041 has this part take its decision 24. Row 10 holds under the
+first and the third run of ADR-041 decision 38 under the second, both on rootful Docker
+alone. The question is the same as question Q18 of ADR-041, and one answer settles
+both.
+- (a) Decision 43 holds, and ADR-041 decisions 24 and 44 are revised to it.
+- (b) ADR-041 decision 44 holds. Decision 43, the note at decision 14 and the user of
+  decision 30 are revised: the second number of the unit's user is the group of the
+  site user. By the text of Q9 it does not hold under a rootless runtime, which was not
+  run.
+- Recommended: (a), for the reasons of Q9: it needs nothing of the user mapping, gives
+  third-party code no group of the host, and its guard, the three closed directories,
+  is checked by the commands that write and use the key. Its cost stands as decision 43
+  states it. Needed before the unit and `plugin install` of remote code merge, and
+  before this part or ADR-041 is accepted.
+
+**Q16. When is a network of the unit name that already exists checked?** Decision 33
+runs the fragment in step 2 and makes the checks of decision 36 in step 3, and decision
+31 has the systemd unit create the network "where it is absent". Row 7 and row 9: on
+both targets a network of the unit name that something else made is used as it is.
+- (a) The check comes first, on both targets. `plugin start` reads a network of the
+  unit name before it runs the fragment and refuses, with the point named, one that
+  fails the network checks of decision 36; with none, the fragment creates it and the
+  checks follow as written. The systemd unit checks the same two settings of a network
+  that it finds before it runs the container, and fails to start on one that does not
+  have them. It edits steps 2 and 3 of decision 33, the systemd bullet of decision 31,
+  decision 36 and one case of decision 41. That the unit can make this check in the
+  service manager was not run, and is shown in the systemd job.
+- (b) Neither template creates the network. The fragment names it as an external
+  network, `plugin start` creates it through `Unit` after it has shown that none of
+  that name exists, and the systemd unit starts only on a network that `plugin start`
+  made. This changes "created by the unit" of decision 32 and the first start of a
+  systemd unit in decision 33 and `08:1293`, which then needs `plugin start` before
+  `systemctl enable --now`.
+- (c) The order stands as written. An instance can then run with a route out between
+  its start and the check, and on the systemd target until the first `plugin start`.
+  This weakens ADR-063 decision 24 and needs the owner's word (ADR-063 decision 33).
+- Recommended: (a). It closes the gap on both targets, keeps the network a thing of the
+  unit and keeps the flow of `08:1293`. Needed before this part is accepted and before
+  `plugin start` and the templates merge.
+
+**Q17. What follows the first attach of the kernel container?** Row 6: for 2.6 s after
+the first attach from the no-network mode the running kernel process still asked its
+old resolver, so the dial that a `plugin enable` causes at once can fail. The bound of
+that lag was read in no source.
+- (a) Nothing in the product changes. The text of `plugin start` says that the first
+  `plugin enable` after the first start may be refused once, and the exit waits between
+  steps C3 and C4.
+- (b) After an attach that takes the kernel container out of the no-network mode,
+  `plugin start` waits before it returns, for a bound that is read in the source of the
+  Go resolver before the code is written. Later attaches do not wait.
+- (c) Option (b) of Q11: the kernel container starts on an internal network of its own,
+  and its resolver is the runtime's from the start. This changes ADR-063 decision 27
+  and decision 15.
+- Recommended: (b). The command that `plugin enable` prints is then true the first time
+  it is followed, and no written line changes. Needed before `plugin start` merges; it
+  is the S2b part of ADR-061 that words the command.
+
+**Q18. Is a stopped container that the fragment made started again or replaced?**
+Decision 33, step 2: "One that is stopped or differs is replaced by the run of the
+fragment when the fragment made it". Row 7: Compose starts a stopped container of an
+unchanged fragment again as the same container.
+- (a) The step says "started again or replaced": a stopped container of an unchanged
+  fragment is started again, and the checks of decision 36 are made on it as on any
+  other.
+- (b) `plugin start` forces a new container at every start of a stopped one.
+- Recommended: (a). The checks of decision 36 hold the container to the rendered unit
+  either way, and (a) is what the runtime does. Needed before `plugin start` merges.
+
+**Also taken by the revision of this part,** from answers that the owner gave on other
+ADRs on 2026-11-27, and no question here:
+- the endpoint table of decision 29 gains the attempt value of a line, and `plugin
+  enable` as its writer (ADR-041 decision 42);
+- the text that carries the rule on when `sidecars-static` reads the table again is
+  question Q18 of the S2b part of ADR-061, whose recommended option is decision 29;
+- the table of decision 28 names `plugin start` as the command that makes a new pair
+  and writes the pin after a revocation (ADR-041 decision 50), and the command that
+  renews the kernel's pair when the S2b part of ADR-061 has named it (ADR-041 decision
+  43).
+
+#### Edits made with this record, and left
+
+Made: the status of this part; the two columns and a note in the table of decision 39;
+a note at decision 45; and this section. The row of ADR-047 in the ADR table of `08` §3
+names the S2b part as open with the owner. The edits of the section "Edits on acceptance
+of the S2b part" that no chosen option names are not made: they stay with the commit
+that marks the part accepted, after the answers to Q15 and Q16.

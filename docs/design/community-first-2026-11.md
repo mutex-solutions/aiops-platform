@@ -438,7 +438,7 @@ After the confirmation of 2026-11-11 the owner's open items of this record are O
 |---|---|---|
 | ADR-040 | Decided here: section 4.1 | |
 | ADR-047 | Vendor-neutral connectors: the read contract, D1 to D7, the pack artifact form and gate check 8, toolset proof as data, the dialer ranges on self-host, the naming rules; ADR-028 is re-scoped around `evidenceSources` | S2a for the artifact form and the gate rule; S8a start for the definitions |
-| ADR-048 | Manifest schema 1.0 and index format 1.0: the fields of 4.4 and 4.5, trust roots, the re-certification job and its trigger | S2a (manifest); S6a (index) |
+| ADR-048 | Manifest schema 1.0 and index format 1.0: the fields of 4.4 and 4.5, trust roots, the re-certification job and its trigger | S2a (manifest); S2b (the Python parts of the manifest, `entrypoint` and the contribution-set clause of gate check 9); S6a (index) |
 | ADR-049 | The community and enterprise boundary, the home of enterprise plugins, the community promise | Owner; before S9b is planned |
 | ADR-050 | The contributor agreement and the status of contributed plugins | Owner; before the first external pull request is merged |
 

@@ -1,12 +1,19 @@
 # ADR-041 (provisional): The remote protocol at major 0 and the identity of a remote instance on a single-tenant self-host
 
-- Status: **answers recorded 2026-11-27; accepted when the three runs of decision 38 are
-  recorded.** The project owner answered all 14 questions on 2026-11-27, each with its
-  recommended option, Q9 while nothing is published; the section "Owner answers of
-  2026-11-27" records them as decisions 40 to 53. By the answer to Q14 (decision 53) the
-  ADR is accepted only after the three throwaway runs of decision 38 are recorded here.
-  The answers stand as given, and a run result that changes a decision comes back to the
-  owner as a revised proposal. The ADR is provisional by its row in the ADR table
+- Status: **answers recorded 2026-11-27; the three runs of decision 38 recorded
+  2026-11-27; not accepted, and with the owner on questions Q15 to Q20.** The project
+  owner answered all 14 questions on 2026-11-27, each with its recommended option, Q9
+  while nothing is published; the section "Owner answers of 2026-11-27" records them as
+  decisions 40 to 53. By the answer to Q14 (decision 53) the ADR is accepted only after
+  the three throwaway runs of decision 38 are recorded here, and a run result that
+  changes a decision comes back to the owner. The section "Runs of decision 38, recorded
+  2026-11-27" holds the runs. The certificate form of decision 20 holds as written. One
+  sentence of decision 21 and two of decision 31 do not hold as worded, the modes of
+  decision 24 hold on rootful Docker and were not run on a rootless runtime or under
+  SELinux, and the record of the S2b part of ADR-047 gives the same directory other
+  modes. Those points are questions Q15 to Q19 of that section; Q20 is the payload of
+  `UpdateConfig`, against ADR-034 decision 21. The ADR is accepted when they are
+  answered. The ADR is provisional by its row in the ADR table
   (`08:1175`): it is ratified at S5 for the policy callbacks and at S4b for one tenant
   per connection and activations across replicas. It was proposed before the first
   commit of groups 1 to 3 of ADR-063 decision 30 and of the exit harness, and it is
@@ -1148,6 +1155,9 @@ list against the code and the texts at `bbfd839` shows these facts:
       and on the systemd target, and with SELinux labels where the host enforces them.
       If the group does not reach the files under one of them, question Q5 is asked
       again for that mapping.
+    - Note of 2026-11-27: the three were run on that date, and the section "Runs of
+      decision 38, recorded 2026-11-27" at the end of this ADR holds the versions, the
+      command and the result of each row.
 39. **What this ADR sends to an addition that does not exist yet.** None of the
     additions below exists at the commit that proposes this ADR, so no reference into
     them can be checked. Each is a dependency that blocks the code named beside it, and
@@ -1622,6 +1632,10 @@ above leaves a point to a question, the decision here settles it. The answers do
 accept this ADR: by decision 53 it is accepted when the three runs of decision 38 are
 recorded, and until then its status is "answers recorded".
 
+Note of 2026-11-27: the runs are recorded in the section "Runs of decision 38, recorded
+2026-11-27". Three rows fail and two were not run, so the ADR is not accepted by that
+record, and the points go to the owner as questions Q15 to Q20 of that section.
+
 40. **"One stream" is one connection with one session, and a contribution call is a call
     of the service of its definition** (Q1 (a)). One connection per proxy row carries
     one session stream, for the activation and the callbacks, and each contribution call
@@ -1810,3 +1824,269 @@ on acceptance" and "Questions for the owner" of this ADR keep the text of the pr
 with each question marked answered. The ADR table of `08` is not edited. The community
 record and the licence record are not edited: the one line of each that an answer
 touches is in the list above.
+
+## Runs of decision 38, recorded 2026-11-27
+
+Note of 2026-11-27. The three runs that decision 53 puts before acceptance were made on
+that date, as throwaway runs on the tree of commit `3dc2c41`. They committed nothing, and
+every container, key and file that they made was removed. This section is the record
+that decision 53 asks for: the versions, the command and the result of each row. A row
+"holds" when the run showed what this ADR writes, "fails" when it showed otherwise, and
+is "not run" where the host could not make it. Nothing is inferred for a row that was
+not run.
+
+**The ADR is not accepted by this record.** The certificate form of decision 20 holds,
+and the fallback is not needed. Three rows fail, each on one sentence: the fourth bullet
+of decision 21, and the third and the fourth bullet of decision 31. Two rows of the
+third run were not run. By decision 53 a result that changes a decision comes back to
+the owner, so the status stays "answers recorded", and questions Q15 to Q19 below go to
+the owner, each with the lines that an option edits. Question Q20 is not from a run: it
+is the point that the record of ADR-034 leaves for this ADR. Decisions 40 to 53 stand as
+the owner gave them, except where a question below names one.
+
+### Versions
+
+- Go `go1.26.8` on linux/amd64, with the `crypto/tls` of its standard library,
+  `google.golang.org/grpc` v1.82.1 at the hash that ADR-063 records, and
+  `google.golang.org/protobuf` v1.36.11.
+- CPython 3.12.16 on Debian 13 with glibc 2.41, x86-64, from the image
+  `python@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b`.
+- `grpcio` 1.85.4, `protobuf` 7.36.2 and `typing-extensions` 4.16.0, installed with `pip
+  --require-hashes` against the three SHA-256 values that ADR-063 records.
+- Docker Engine 29.10.0, rootful, with no remapped user namespace, on the overlay
+  filesystem and under the AppArmor profile `docker-default`; Docker Compose v5.8.0;
+  systemd 259. The host is Ubuntu 26.04.1 on Linux 7.0.0-43. Its site user is
+  `1000:1000`; the home is of mode 0700, and `remote/kernel/*.pem` and the pin are of
+  mode 0600.
+- The host holds no Podman and no other second runtime, and it does not enforce SELinux.
+
+Two throwaway programs were written for the runs and are in no commit. `probe` is a Go
+program on the standard library. `probe gen` makes a home with the pairs of decision 20
+(ECDSA P-256, `x509.CreateCertificate`, a serial of 128 random bits, `NotAfter`
+9999-12-31T23:59:59Z, one URI name, a PKCS#8 key) and a directory of certificates that
+decision 21 has to refuse. `probe dial` dials with TLS 1.3 as its lowest version and no
+chain: its `VerifyConnection` accepts the peer only when the presented certificate
+equals the pin and its URI name is `aiops://plugin/<id>`. `serve_tls.py` is a `grpcio`
+server with `grpc.ssl_server_credentials(((key, cert),), root_certificates=kernel.pem,
+require_client_auth=True)`, whose `Hello` handler compares `x509_pem_cert` of the auth
+context with `kernel.pem`. `<home>` below is the throwaway home, and `<id>` is
+`aiops-d38-echo`.
+
+### Run 1: the certificate form (decisions 20 and 21)
+
+The server of every row: `docker run -d --user 12345:1000 -v
+<home>/remote/instances/<id>:/run/aiops/credentials:ro -e
+AIOPS_REMOTE_LISTEN=0.0.0.0:50051 -e AIOPS_REMOTE_CREDENTIALS=/run/aiops/credentials
+python@sha256:1910... python -I serve_tls.py`.
+
+| Row | What was run | Command | Result | Observed |
+|---|---|---|---|---|
+| R1-A1 | The kernel in Go dials `serve()` with the certificate form of decision 20 as written: the kernel's certificate self-signed, not a certificate authority (critical), key usage digital signature alone, extended usage client authentication, and given to `grpcio` as its only root. Both sides authenticated | `probe gen -home <home> -rogue <dir> -id <id>`, then `probe dial -addr <address of the container>:50051 -key remote/kernel/key.pem -cert remote/kernel/cert.pem -pin remote/pins/<id>/cert.pem` | holds | Go: code `OK`, the reply received, TLS 1.3 with `TLS_AES_128_GCM_SHA256`, and the instance's certificate equal to the pin, with the URI name `aiops://plugin/aiops-d38-echo`. `serve()`: the presented fingerprint equal to that of `kernel.pem`; the auth context held `transport_security_type` `ssl`, the common name `aiops-kernel`, the URI `aiops://kernel` and `ssl_tls_version` `TLSv1.3`. `grpcio` 1.85.4 accepts a certificate that is not a certificate authority and has no certificate-signing usage as its own trust root. OpenSSL 3.5.5 printed the form: version 3, key usage critical, basic constraints critical with `CA:FALSE`, not after 9999-12-31 23:59:59 GMT. Go marks the key usage critical, and the table of decision 20 does not say. The row was repeated after the refusals below, with the same result |
+| R1-A2 | A dialler with a certificate signed by the kernel's key, in two variants: the subject `mallory`, and the subject `aiops-kernel`, equal to the issuer | `probe dial` with each of those pairs; the server ran with `GRPC_VERBOSITY=DEBUG GRPC_TRACE=handshaker,tsi` | holds | Both were refused inside the TLS of `grpcio`, before any code of the SDK ran: no `Hello` reached the handler, and the library wrote `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`. The Go dialler got `Unavailable` with `error reading server preface: EOF`: its own handshake had completed, and it saw no alert and no reason. In the form as written no key of the site mints an identity by the form itself, as decision 20 and ADR-063 decision 55 say |
+| R1-A4 | The other peers of decision 21 against `serve()`: another self-signed certificate of the same form, no client certificate, and plaintext | `probe dial` with the other self-signed pair; `probe dial -mode nocert`; `probe dial -mode plaintext` | holds | All three were refused by `grpcio` before any code of the SDK: `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`, `PEER_DID_NOT_RETURN_A_CERTIFICATE` and `WRONG_VERSION_NUMBER`. Go saw `Unavailable` with `error reading server preface: EOF` each time |
+| R1-A7 | The kernel side refuses an instance by exact comparison on the Go standard library, with no chain (decision 21, first bullet): the pin is another certificate; the pin is right and the row is another plugin id | `probe dial ... -pin <the other self-signed certificate>`; `probe dial ... -pin <the right pin> -id some-other-plugin` | holds | Go: `Unavailable`, with `presented certificate is not the pin` and with `URI name is not aiops://plugin/some-other-plugin`. No `Hello` reached `serve()`, which logged `SSLV3_ALERT_BAD_CERTIFICATE` for both. The Go side accepted the instance's certificate, which is not a certificate authority, has the extended usage server authentication and expires in 9999, with no chain and no host name check |
+| R1-LOG | Decision 21, fourth bullet, "the refusing side logs the fingerprint it saw", for `serve()` where the TLS of `grpcio` makes the refusal | The same server with no `GRPC_*` variable; the refused dials of R1-A2 and R1-A4; the log of the container | fails | On every refusal of R1-A2 and R1-A4 no Python code ran, so the SDK never saw the presented certificate. At the default verbosity the library wrote one line per refusal, with a reason and no fingerprint. In the form as written every dialler that `serve()` refuses is refused at that layer. Whether another interface of `grpcio` hands a refused certificate to Python was not tested. The success line of decision 21 works: `x509_pem_cert` is in the auth context of each call |
+| R1-FB | The fallback of decision 20, run for the record: the kernel's certificate a certificate authority with a path length of 0, and its key usage with certificate signing | `probe gen -ca`, the same server and the same nine dials | holds | It behaves as decision 20 describes it. The kernel's pair: `OK` at TLS 1.3. Both certificates signed by the kernel's key completed the TLS handshake and were refused by the comparison in the `Hello` handler: Go got `Unauthenticated`, and `serve()` logged the refusal with the fingerprint it saw. Another self-signed certificate authority of the same form, no certificate and plaintext were refused as in R1-A4. The form as written was not refused, so the fallback is not needed |
+
+### Run 2: the thread model (decision 31)
+
+`threads.py` is a `grpcio` server of the synchronous interface on the same interpreter
+and packages, with a client channel of `grpcio` in the same process over the loopback
+address. It ran as `docker run --rm --network none --user 12345:1000 ... python -I
+threads.py`. It is sized as decision 31 with 4 calls in place of 32: a
+`ThreadPoolExecutor` of 6 workers, which counts the tasks that run and that wait, and
+`maximum_concurrent_rpcs=6`. Its handlers are `Session`, a stream in both directions
+that answers a ping and a deactivate; `Block`, a unary call that waits on an event; and
+`Stream`, a server stream that yields one item and waits.
+
+| Row | What was run | Result | Observed |
+|---|---|---|---|
+| R2-SESSION | An open `Session` stream holds one thread of the pool for as long as it is open, and a streamed call one for the whole of its stream | holds | Idle: no task and no thread. One `Session` open and a ping answered: one task running. A second ping 1 s later: still one task, on the same thread, so reading the requests of the stream takes no second thread. One streamed call with its stream open: a second thread, until its handler returned. Each unary call: one thread. After the release and the close of the client: none running |
+| R2-FULL | What a full pool answers, and that the session, the liveness check and `Deactivate` still work (decisions 31 and 37) | holds | With 6 running and the limit at 6, the next call got `RESOURCE_EXHAUSTED` with the details `Concurrent RPC limit exceeded!` and empty trailing metadata, so no `aiops-reason`, after about 1 ms, and its handler did not run. The open `Session` answered the ping and the deactivate with the pool full. After the handlers returned the next call was `OK`. Control: with no `maximum_concurrent_rpcs` a third call on a pool of 2 waited in the queue and ended `DEADLINE_EXCEEDED` at its deadline of 1 s. The refusal comes from the transport's limit, as decision 31 sets it, and not from the pool |
+| R2-PRE | "The transport makes that refusal before any code of the SDK runs" (decision 31, fourth bullet) | fails | A `grpc.ServerInterceptor` in the same server recorded each call of `intercept_service`. For each refused call the interceptor ran first, on the one thread of the server that accepts every call, and only then was the call rejected: in `grpc/_server.py` of the wheel, lines 1082-1113, `_handle_call` looks the method handler up, which runs the interceptors, before it tests the limit. No handler ran and nothing was put on the pool, and the refusal carried no trailing metadata. The sentence is therefore true only where `serve()` installs no interceptor |
+| R2-SIZE | The sizes of decision 31, third bullet: "serves N calls at once", and two threads more kept for the `Session` and for a reconnect that overlaps it | fails | The limit is one counter over sessions and calls together. With one `Session` open, call N+1, the fifth, was accepted and ran, 6 of 6. With the pool then full, a second `Session`, the overlapping reconnect, was refused with `RESOURCE_EXHAUSTED`. With two sessions open the fifth call was refused, as decision 31 intends. With one session the instance therefore serves N+1 calls, and the room for a reconnect is not reserved: calls can take it. Nothing in the limit of `grpcio` can reserve it; a count of calls kept by `serve()` would |
+| R2-CANCEL | A call that the kernel cancels keeps its thread until the method returns (decision 31, sixth bullet) | holds | The client saw `CANCELLED` at once. The pool still had 6 running, and the next call was still refused with `RESOURCE_EXHAUSTED`: the count of the transport falls only when the handler has returned. A method that outlives its deadline or its cancellation keeps one thread and one unit of the limit until it returns |
+
+### Run 3: the modes (decision 24, question Q5 (a))
+
+`modes.py` prints the user, the group and the groups of its process, reads and lists
+the bound directory, tries to write into it and tries each other path of the home.
+
+| Row | What was run | Command | Result | Observed |
+|---|---|---|---|---|
+| R3-DOCKER | Rootful Docker with a given user: the directory of mode 0750, the three files of mode 0640, owner and group the site user's; the instance with a user id that is neither the site user's nor 0 and the site user's group as its only group; that one directory bound read-only | `docker run --rm --network none --user 12345:1000 -v <home>/remote/instances/<id>:/run/aiops/credentials:ro python@sha256:1910... python -I modes.py`; the same with `--user 12345:12345` | holds | User 12345, group 1000, groups 1000 alone. `key.pem`, `cert.pem` and `kernel.pem` were read and the directory listed. Opening `key.pem` for writing: `Permission denied`; creating a file: `Read-only file system`. `remote/kernel/`, `remote/pins/`, the home and `run/reload.sock`, by their paths on the host: no such file, since nothing else is bound. With the group 12345: `Permission denied` on the directory and on the key, so the group is what reaches the files. In run 1 `grpcio` as `12345:1000` loaded the key of mode 0640 through the group and served TLS with it |
+| R3-COMPOSE | The same on the compose target | `docker compose -f compose.yaml up`, with a service of `user: "12345:1000"`, `network_mode: none` and one bind of the directory, read-only; then `docker compose down --volumes` | holds | As R3-DOCKER: user 12345, group 1000, groups 1000; the three files read; the write refused; every other path of the home absent |
+| R3-SYSTEMD | The same on the systemd target, where the unit runs the image through the container runtime of the host (ADR-063 decision 25) | `systemd-run --user --wait --collect --pipe --quiet docker run --rm --network none --user 12345:1000 -v <home>/remote/instances/<id>:/run/aiops/credentials:ro ... modes.py` | holds | The unit exited 0, with the output of R3-DOCKER. The limits of this row: it was a transient unit of the user's service manager. It was not a unit of the system, which the host could not run without the rights of root, not a unit rendered from the template, which does not exist yet, and not a systemd unit over Podman |
+| R3-HOST | "On the host the 0700 home keeps every other user out of the directory, whatever their group" (decision 24), and the three paths of decision 37 that the instance's user must fail to open | A copy of the home under a parent of mode 0755, the parent bound whole; a live Unix socket of mode 0600 at `run/reload.sock`; `docker run` as `12345:1000`, as `12345:12345` and, as the control, as `1000:1000`: list the home, read the instance's key through the home, read `remote/kernel/key.pem`, list `remote/pins`, connect to the socket | holds | As `12345:1000` and as `12345:12345`: the parent listed, then `Permission denied` on the home, on the instance's key through the home, on `remote/kernel/key.pem`, on `remote/pins` and on the connect to the socket. The control as `1000:1000` read all of them and connected. On rootful Docker with no user namespace the user 12345 of the container is the user 12345 in the permission check of the host. No second login user of the host was used |
+| R3-PODMAN | Rootless with the user kept, the second mapping of ADR-047 decision 14 (rootless Podman with `--userns=keep-id`), on the compose target and on the systemd target | None | not run | The host holds no Podman, and its Docker is rootful alone. Nothing is known from these runs about whether a user that is neither the site user nor 0, inside a user namespace that keeps the site user's id, has the site user's group on the bound files |
+| R3-SELINUX | The binds with SELinux labels where the host enforces them | None | not run | The host does not enforce SELinux. The read-only bind and the read through the group worked under the AppArmor profile `docker-default`, which says nothing of a label of SELinux (the `z` option of ADR-047 decision 14) |
+
+### What the results touch
+
+- **Decision 20 and ADR-063 decision 55, the identity: no change.** `grpcio` 1.85.4
+  accepts the kernel's certificate in the form as written as its own root, and refuses
+  a certificate signed by the kernel's key inside TLS. The fallback is not needed, the
+  owner is not asked about the form, and ADR-063 decision 55 gains no note.
+- **Decision 21, fourth bullet,** does not hold for `serve()` as written (R1-LOG): a
+  dialler that the TLS of `grpcio` refuses is refused where no code of the SDK runs.
+  Question Q15. The same refusal reaches the kernel as `Unavailable` with no reason, so
+  under decisions 10 and 18 the kernel acts on the code alone.
+- **Decision 31, fourth bullet,** holds only where `serve()` installs no server
+  interceptor (R2-PRE). Question Q16. The code and the empty trailers are as written,
+  and no message changes.
+- **Decision 31, third bullet,** does not hold as written (R2-SIZE): the two threads
+  more are not kept for sessions. Question Q17. By decision 38 this is a revision of the
+  sizes and of the answer of decision 31, and no message changes.
+- **Decision 24 and decision 44** hold on rootful Docker with a given user, on the
+  compose target and through a transient systemd unit, and Q5 is not asked again for
+  that mapping. They are not determined for rootless with the user kept or under
+  SELinux. The record of the owner's answers on the S2b part of ADR-047 gives the same
+  directory other modes (its decision 43), and row 10 of its decision 39 holds under
+  those. Questions Q18 and Q19.
+- `07:1211` restates of decision 31 only that `serve()` is synchronous and runs calls on
+  a pool of threads, and no option below edits it.
+
+### Questions for the owner after the runs
+
+Each question gives its options, the recommended one, and why. The ADR is accepted when
+Q15 to Q20 are answered and the rows that the answer to Q19 requires are recorded.
+
+**Q15. What does `serve()` log when the TLS of `grpcio` refuses a dialler?** Decision
+21, fourth bullet: "the refusing side logs the fingerprint it saw". R1-LOG: in the form
+as written every dialler that `serve()` refuses is refused inside the TLS of the
+library, which logs a reason and no fingerprint.
+- (a) The clause is revised for `serve()`. A side logs the fingerprint it saw where its
+  own comparison makes the refusal: the kernel side and `sdk/remotehost` always, and
+  `serve()` in its comparison of decision 21. Where the TLS of `grpcio` refuses the
+  dialler first, the line of the library is the record: it holds the reason and no
+  fingerprint. The refusal itself is unchanged. It edits the fourth bullet of decision
+  21 and the case of decision 37 that reads that log, and no line of
+  `docs/architecture/`.
+- (b) The kernel's certificate takes the fallback form of decision 20, so that a
+  certificate signed by the kernel's key reaches the comparison of `serve()` and its
+  fingerprint is logged (R1-FB). "No key of the site can mint an identity" then holds by
+  the comparison and no longer by the form, which changes the words of ADR-063 decision
+  55. Another self-signed certificate, no certificate and plaintext are still refused
+  inside TLS with no fingerprint.
+- (c) A further run looks for an interface of `grpcio` that hands a refused certificate
+  to Python, before acceptance. None was tested, and none is known to exist.
+- Recommended: (a). The form as written holds and every refusal is made; only the log
+  of one side differs. (b) weakens the form for one of four cases, and (c) delays the
+  ADR for a log line.
+
+**Q16. Does `serve()` install a server interceptor?** Decision 31, fourth bullet: "The
+transport makes that refusal before any code of the SDK runs". R2-PRE: on `grpcio`
+1.85.4 an interceptor runs before the limit is tested, on the one thread that accepts
+every call.
+- (a) `serve()` installs no server interceptor. The comparison of decision 21 and the
+  bounds of decision 19 are made in the handlers that the SDK generates, as run 1 made
+  the comparison in the `Hello` handler. The sentence then holds as written, and the
+  bullet gains that condition.
+- (b) `serve()` may install interceptors, and the sentence is revised: for a call that
+  is then refused, the interceptors of the SDK run first, on the thread that accepts
+  every call, and must not block. The code and the empty trailers stay as written.
+- Recommended: (a). It keeps the sentence that the owner accepted and keeps code of the
+  SDK off the one accepting thread. No message changes under either option.
+
+**Q17. How are the sizes of decision 31 held?** Decision 31, third bullet: `serve()`
+serves N calls at once, and the pool and the transport's limit hold two more, for the
+`Session` and for a reconnect that overlaps it. R2-SIZE: the limit is one counter, so
+with one session open N+1 calls are served, and a reconnecting session, with its
+`Hello`, is then refused with `RESOURCE_EXHAUSTED`.
+- (a) `serve()` counts the calls itself. The pool and the transport's limit stay at N+2,
+  and `serve()` refuses the call that would be number N+1 with `RESOURCE_EXHAUSTED` and
+  no `aiops-reason`, so the kernel still acts on the code alone (decision 10). The two
+  units more are then kept for sessions. That refusal is code of the SDK, where the
+  fourth bullet has the transport make it; with Q16 (a) the count is kept in the
+  generated handlers. Whether the count keeps the two units free under load was not
+  run, and is run before group 4 merges.
+- (b) The text says what the transport does. The N+2 units are shared by sessions and
+  calls: with one session open the instance serves N+1 calls, and a reconnect that
+  finds the instance full is refused and returns inside the reconnect budget of
+  decision 18. `serve()` gains no code.
+- Recommended: (a). It gives what the bullet states, N calls and room for the reconnect.
+  R2-CANCEL shows why the room matters: a cancelled call keeps its unit until its method
+  returns, so after a lost session a full instance would refuse the session that
+  replaces it for as long as its methods run. No message changes under either option.
+
+**Q18. Which modes does the directory of an instance have?** Two answers of 2026-11-27
+differ. Decision 44 (Q5 (a)): the directory of mode 0750, its files of mode 0640, and
+the instance with the site user's group as its only group. ADR-047 decision 43 (its Q9
+(a)): the directory of mode 0755, its files of mode 0644, and the unit's user
+`65532:65532`, with no group of the host. Each ADR has the other take its answer. Run 3
+holds under the first on rootful Docker, and row 10 of ADR-047 decision 39 holds under
+the second on the same runtime.
+- (a) ADR-047 decision 43 holds. Decisions 24 and 44 are revised to it. The key is
+  readable by every user by its mode, and on the host the home and the three
+  directories of mode 0700 above it are the guard, which `aiopsctl` checks and sets at
+  every install of remote code and every `plugin start`. Third-party code holds no
+  group of the host. The cost is the one that ADR-047 decision 43 states: a copy that
+  keeps the modes and lands outside a closed directory exposes the key.
+- (b) Decision 44 holds. ADR-047 decision 43, the note at its decision 14 and the user
+  of its decision 30 are revised: the second number of the unit's user is the site
+  user's group. The key is readable by one group. By the text of ADR-047 question Q9 it
+  fails under a rootless runtime, which was not run (R3-PODMAN), and the instance holds
+  the site user's group on the host for as long as it runs.
+- Recommended: (a). The modes of the files of the home are ADR-047's (its decisions 13
+  and 14), and ADR-063 decision 34 gives that part the credentials as rows of the home
+  with the one directory a unit binds. Its option needs nothing of the user mapping and
+  gives third-party code no group of the host. Either option was run on rootful Docker
+  alone.
+
+**Q19. The two rows of run 3 that were not run.** Decision 53 has the modes run "under
+each user mapping" before acceptance. R3-PODMAN and R3-SELINUX were not run: the host
+has neither. With Q18 (a) the question of the group falls away, and what is not run is
+whether the unit's user reads the bound directory under a rootless runtime and under a
+label of SELinux.
+- (a) Both rows are run before acceptance, on a host that has rootless Podman and on
+  one that enforces SELinux, which the owner provides. Decision 53 stands as answered.
+- (b) The ADR is accepted on the mapping that was run. At S2b a unit is supported on a
+  rootful runtime with a given user alone; `plugin start` refuses a runtime that
+  reports a rootless mode or a remapped user namespace, and the two rows are run before
+  the step that lifts that refusal. This narrows ADR-047 decision 14 for the units of
+  remote code and changes decision 53, so it needs the owner's word (ADR-063 decision
+  33).
+- Recommended: (a). It is what the owner answered in Q14, and the ADR waits for Q15 to
+  Q18 in any case. (b) is the way if no such host can be had.
+
+**Q20. What does `UpdateConfig` carry?** This is not a result of a run. Decisions 8, 16
+and 31 have `UpdateConfig` carry what the loader's event carries: the committed config
+with every reference left out and the changed leaves as `paths`, which the instance
+merges. The owner's answer on the S2b part of ADR-034 (its decision 21, 2026-11-27) has
+the proxy hold the committed config through a hand-off, with each reference resolved
+again at that commit, and forward it whole; the proxy does not hear the loader's event.
+The two cannot both be built as written.
+- (a) ADR-034 decision 21 holds. `UpdateConfig` carries the committed config whole, in
+  the form in which `Activate` carries the config, and the instance replaces the config
+  of its activation with it. Decisions 8, 16 and 31 are revised: the field `paths` and
+  the merge at `paths` leave, or `paths` stays as a hint that the revision words. The
+  dated note at ADR-034 G13 point 10 on `UpdateConfig` stands.
+- (b) Decisions 8, 16 and 31 hold as written, and the proxy listens to the loader's
+  event. That reverses ADR-034 decision 21, which the owner gave on the same date, and
+  ADR-034 is asked again.
+- Recommended: (a). ADR-034 decision 21 answers a question that set both ways out, and
+  this ADR put the payload to the owner in no question. Blocks: the update message, in
+  group 2.
+
+**Also open, and no question of this ADR.** Decision 27 gives `plugin verify` the Unix
+socket with no network, and the owner's answer to question Q15 of the S2b part of
+ADR-061 (its decision 65) gives it mutual TLS as a unit. ADR-061 puts that difference to
+the owner (its question Q17), and the row of decision 27 follows the answer. The form of
+the command that renews the kernel's pair (decision 43) is in no text yet: the S2b part
+of ADR-061 names it as an addition that blocks group 3. The endpoint table of ADR-047
+decision 29 holds no attempt value and does not name `plugin enable` as a writer, which
+decision 42 needs of it; the revision of that part takes both.
+
+### Edits made with this record, and left
+
+Made: the status of this ADR; a note at decision 38 that points here; and this section.
+The row of this ADR in the ADR table of `08` §3 says that the answers and the runs are
+recorded and that the ADR waits for the owner, and its row in `00` §9 stays as it is
+(decision 53). No other line is edited: an option that the owner has not chosen edits
+nothing.
+
+Left, each to the commit that records the owner's answers to Q15 to Q20: the revised
+text of decisions 8, 16, 21, 24, 31 and 44 as the answers have it; `07:1211`, which
+restates decisions 25, 26 and 31, read again against the revision; and every line that
+the section "Owner answers of 2026-11-27" leaves to the commit that sets this ADR
+accepted.

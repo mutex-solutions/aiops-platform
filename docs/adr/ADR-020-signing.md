@@ -1486,7 +1486,12 @@ What the code holds at `bbfd839`:
       own pull by digest, whose check is then the runtime's and not `aiopsctl`'s, as it
       is for the unit of an installed instance (ADR-063 decision 25). The S2b part of
       ADR-047 says which of the two is built. If neither serves a local-path spec, the
-      work stops on that point and the owner is asked (ADR-063 decision 33).
+      work stops on that point and the owner is asked (ADR-063 decision 33). Note of
+      2026-11-27, with the owner's answers on the S2b part of ADR-047: `plugin verify`
+      and `plugin install` of remote code refuse a local-path spec and name `plugin
+      push` (ADR-047 decision 42, its question Q8 (a)). The sentence above on a
+      local-path spec is therefore not built: `plugin verify` of remote code reads an
+      image for a registry spec alone, and no layout beside the artifact is read.
     - **What runs.** The check runner of `aiopsctl` starts a container of that image and
       drives it through the handshake and the obligations half of the suite of each
       definition that the attestation names with a suite revision (ADR-063 decisions 9,

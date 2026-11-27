@@ -1109,6 +1109,13 @@ Reading the sources against each other and against the code at `bbfd839` shows:
       its source in that addition. Where a target cannot take a name of every admitted id,
       that addition either maps the id to a name of fixed length or proposes a tighter
       bound as an amendment of this ADR, before the first community release (decision 2).
+      Note of 2026-11-27, with the owner's answers on the S2b part of ADR-047: the name
+      of a unit is `remote-plugin-`, the start of the id and 16 hexadecimal digits of
+      the SHA-256 of the id (ADR-047 decision 46, its question Q12 (b)). That is the map
+      to a name of bounded length, and no bound on the ids of remote code enters this
+      ADR. The function is not injective: two ids can share a name, and install refuses
+      an id whose unit name another installed id of the site has. On one site two ids
+      therefore never share a unit, by that refusal and not by the function.
     - The certificate of an instance names the plugin id (ADR-063 decision 55). Which
       field holds it, and that the field takes every id that the schema admits, is asked
       of ADR-041 (decision 41).
