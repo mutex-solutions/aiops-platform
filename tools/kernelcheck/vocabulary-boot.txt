@@ -1,0 +1,35 @@
+# Words boot/ must not contain (whole word, case-insensitive); ADR-060 decision 45.
+# Not tenant: boot legitimately handles it, a scope class of its closed vocabulary.
+# Every word here is also in vocabulary-loader.txt and vocabulary.txt (TestVocabularyLists).
+
+# Domain words.
+incident
+alert
+approval
+dashboard
+pillar
+harness
+remediation
+estate
+
+# Upstream names (00-decisions.md §3.2 and §4.3), as lowercase technical names, that no
+# entry of tools/upstream-components.yaml carries yet. A name leaves the three lists in
+# the commit that adds its register entry, from which the name lint U1 reads it over
+# sdk/, boot/ and loader/ (ADR-054 decisions 14 and 20; TestVocabularyLists). Words split
+# at case changes, so PostgreSQL reads as Postgre and SQL.
+envoy
+seaweedfs
+mimir
+alertmanager
+loki
+tempo
+pyroscope
+kafka
+grafana
+holmesgpt
+goalert
+tetragon
+nats
+jetstream
+krr
+chromium

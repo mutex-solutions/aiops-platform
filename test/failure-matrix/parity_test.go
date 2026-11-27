@@ -218,7 +218,6 @@ func TestConfigRefsRuleByKeyCitesItsDecision(t *testing.T) {
 // decisions that settle its points, and a comment cites the decision that settled its
 // point instead of it.
 func TestDecision37SettlesNothingItself(t *testing.T) {
-	cites := regexp.MustCompile(`\bdecision 37\b`)
 	accepted := regexp.MustCompile(`\baccepted as built\b|\bstands at s1\b`)
 	n := 0
 	writtenFiles(t, "../..", func(rel string, lines []string) {
@@ -234,7 +233,7 @@ func TestDecision37SettlesNothingItself(t *testing.T) {
 				if !strings.Contains(text, "decisions 40 to 49 settle") {
 					t.Errorf("%s:%d decision 37 does not name decisions 40 to 49, which settle its points", rel, p.line)
 				}
-			case filepath.Ext(rel) != ".md" && cites.MatchString(text):
+			case filepath.Ext(rel) != ".md" && citesDecision37(text):
 				n++
 				t.Errorf("%s:%d cites decision 37; cite the decision of 40 to 49 that settled its point", rel, p.line)
 			}
@@ -242,6 +241,38 @@ func TestDecision37SettlesNothingItself(t *testing.T) {
 	})
 	if n == 0 {
 		t.Fatal("found neither decision 37 nor a citation of it; the parser is out of date")
+	}
+}
+
+var decision37 = regexp.MustCompile(`(\badr-(\d+),? )?\bdecision 37\b`)
+
+// citesDecision37 reports whether the lower-cased text cites the 37th decision of
+// ADR-059: the phrase alone or after "adr-059". A citation that names another ADR,
+// such as the 37th decision of ADR-060 (the toy caller), is not one.
+func citesDecision37(text string) bool {
+	for _, m := range decision37.FindAllStringSubmatch(text, -1) {
+		if m[2] == "" || m[2] == "059" {
+			return true
+		}
+	}
+	return false
+}
+
+// A citation of the 37th decision names ADR-059's unless it names another ADR:
+// ADR-060's 37th decision is the toy caller, which code may cite.
+func TestDecision37CitationNamesADR059(t *testing.T) {
+	for text, want := range map[string]bool{
+		"see decision 37.":                     true,
+		"(adr-059 decision 37)":                true,
+		"adr-059, decision 37":                 true,
+		"the toy caller (adr-060 decision 37)": false,
+		"adr-060 decision 37 and decision 37":  true,
+		"adr-060 decisions 37 and 38":          false,
+		"decision 370":                         false,
+	} {
+		if got := citesDecision37(text); got != want {
+			t.Errorf("citesDecision37(%q) = %v, want %v", text, got, want)
+		}
 	}
 }
 

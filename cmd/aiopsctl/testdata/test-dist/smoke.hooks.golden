@@ -1,5 +1,5 @@
 # aiopsctl profile render --dump-hooks
-digest sha256:7ee850af64eeae35052cca79971d1f10b1ecec99449e48314aeb9d99f0e2d141
+digest sha256:c56a2fdd60b323b7f742c5e96d5b02ced6391d98100763a426bc49f4f8dda975
 roles all
 
 hook composition/applied

@@ -275,6 +275,12 @@ entry, and cosign is pinned as a CI tool with its entry (ADR-060 decisions 23 an
    commit that writes the register adds `loader/NOTICE` with both MIT notices. A tool image
    records no layers, since `contains` asks for layers in mode `ship` only.
 
+   Owner word of 2026-11-26 on the names of the registry image the exit runs (ADR-060
+   decision 34): the entry `distribution-registry` keeps the one name `docker-distribution`.
+   `distribution` and `registry` are words the repository's own files carry, for the signed
+   distribution manifest and for any OCI registry, and they are not added to the entry's
+   `names`, so U1 does not look for them.
+
 ### The exception list
 
 9. **The exception list is the list of `00:267`**, recorded under `exceptions` with, for
@@ -292,6 +298,14 @@ entry, and cosign is pinned as a CI tool with its entry (ADR-060 decisions 23 an
    | The Cordis semantics of the kernel port | `cordis`, `deepseek`, `dsh` | `sdk/kernel/`, `loader/`, `test/differential/` and `test/spike/s0/`, their notices included | `00:267`; `08:1341` L12 |
    | The default stack bundle (`aiops-stack`, `agent-base` and the agent bundles) | The `names` of every entry whose `plugins` sit in one of those bundles, read from the register | The code and content of those plugins and their config in the golden dumps, as the wire names, syntax and file paths those upstreams define; never an id, where the marks of `00:649` and T1 hold | `00:267`, `:649`, `:651`; `04:9`, `:14`; harness:211; upstreams design §1.1 |
    | With question Q5 (a): the Go language and SPDX identifiers | `go`, `golang`, `spdx` | Every place | question Q5 |
+   | With the owner answer of 2026-11-26: the SPDX id `PostgreSQL` on the licence allow-list of gate check 6, an SPDX identifier of decision 21 | `postgresql` | `boot/` | S2a report, open question 7 |
+
+   Note of 2026-11-26, on the owner's answer to open question 7 of the S2a report: the
+   SPDX id `PostgreSQL`, which L7 allows, is an SPDX identifier of decision 21, and the
+   register's item for it gives the token `postgresql` the place `boot/` alone, so that
+   the allow-list of gate check 6 (`boot.Licensed`) holds every licence that L7 allows.
+   `00:267` already names SPDX identifiers and is not edited. The database entry keeps its
+   names, and its other token, `postgres`, stays refused in `boot/`.
 
 ### The base provider allow-list
 
@@ -755,7 +769,11 @@ to a question, the decision here settles it.
     plugin of ADR-060 decision 41, which the entries of the YAML library, the OCI client
     and the signature library list as an importer, is a row of the `aiops-cli` bundle of
     the `cli` profile at S2a, not of `aiops-core` (owner, 2026-11-23), so decision 23
-    holds unchanged.
+    holds unchanged. Note of 2026-11-25: an importer may carry `tests: true`, and then
+    names the test files of its directory only, for U2 and U1 alike, so a golden dump
+    under it is no place of its names. The YAML library's importers are the list of
+    ADR-060 decision 41 as the owner amended it that day: with `internal/vet`,
+    `internal/packsuite` and, with `tests: true`, `cmd/aiopsctl`.
 
 18. **A module of another project is listed in the `contains` of the entry that brings
     it in** (Q2 (b)). An entry's `modules` holds the modules its upstream publishes; each

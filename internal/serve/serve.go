@@ -29,7 +29,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/internal/runfile"
@@ -37,14 +40,16 @@ import (
 )
 
 // Distribution is what a server binary links: the module table as Go values, the
-// part of the distribution manifest the launcher reads, the limits, and the bundles
+// signed distribution manifest it embeds (ADR-060 decision 20), with the release key
+// of a release binary (ADR-020 decision 13), the limits, and the bundles
 // and profiles shipped inside the binary ("bundles/<bundle>/bundle.yaml ... embedded
 // in the binary", 08-profiles-roadmap-adrs.md:1233; "profiles/<profile>/ shipped
 // profile.yaml templates"). Shipped may be nil. A file of the home or of --bundles
 // wins over a shipped one of the same path.
 type Distribution struct {
 	Registry boot.Registry
-	Manifest boot.DistManifest
+	Signed   []byte
+	Release  *boot.Release
 	Limits   boot.Limits
 	Shipped  fs.FS
 	// Kernel is boot.RunOptions.Kernel with the runtime directory of the home: a seam
@@ -56,14 +61,19 @@ type Distribution struct {
 type Env struct {
 	Args    []string // program name excluded
 	Getenv  func(string) string
+	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Signals <-chan os.Signal
 }
 
 // StatusFile is the name, in the runtime directory of the home, of the file that
-// holds the launcher's last status as JSON.
-const StatusFile = "status.json"
+// holds the launcher's last status as JSON; ProcessLock that of the file whose flock(2)
+// the server process holds while it runs.
+const (
+	StatusFile  = "status.json"
+	ProcessLock = "process.lock"
+)
 
 type list []string
 
@@ -74,7 +84,8 @@ const usage = `usage: %s --profile <name> [flags]
 
   --profile <name>   profile to run (required)
   --home <dir>       home with profiles/<name>/ and the runtime directory run/ (default $AIOPS_HOME)
-  --bundles <dir>    directory with bundles/<name>/bundle.yaml (default: the home)
+  --bundles <dir>    directory with bundles/<name>/bundle.yaml (default: the home; another
+                     directory refuses a profile that enables reload-socket)
   --role <role>      edge, api, worker or all (default: all)
   --patch <file>     layer 4 overlay; repeat for several
   --limits <file>    limits.yaml replacing the limits of the distribution
@@ -117,9 +128,37 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 	// A bad command line writes no status: it may not name the home of this process,
 	// and "aiops --help" must not mark a server that runs on $AIOPS_HOME stopped.
 	runDir := runfile.Dir(*home)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
+	if err := os.MkdirAll(runDir, 0o700); err != nil { // only the site user enters run/ (ADR-047 decision 14)
 		fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return boot.ExitInternal
+	}
+	if err := ownRun(*home, runDir, e.Stderr); err != nil {
+		fmt.Fprintf(e.Stderr, "error: %v\n", err)
+		return boot.ExitRefused
+	}
+	// One server process runs on a home until S4b (ADR-062 decision 2): a second one
+	// refuses before it writes the status that aiopsctl reads of the first. A command of
+	// aiopsctl holds a shared lock for an instant to see whether one runs, so the lock is
+	// tried for a little while.
+	p := filepath.Join(runDir, ProcessLock)
+	lock, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		fmt.Fprintf(e.Stderr, "error: %v: the server opens it to hold the home (ADR-062 decision 2); remove it as the user who owns it, as a run as another user leaves it\n", err)
+		return boot.ExitRefused
+	}
+	defer lock.Close() // the system releases the lock with it, and when the process dies
+	for i := 0; ; i++ {
+		if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil || !errors.Is(err, syscall.EWOULDBLOCK) || i == 10 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		fmt.Fprintf(e.Stderr, "error: another process runs on the home %s: %s is held; one server process runs on a home (ADR-062 decision 2)\n", *home, p)
+		return boot.ExitRefused
+	} else if err != nil {
+		fmt.Fprintf(e.Stderr, "error: lock %s: %v\n", p, err)
+		return boot.ExitRefused
 	}
 	publish := func(s boot.ProcessStatus) {
 		if err := runfile.Write(runDir, StatusFile, statusJSON(s)); err != nil {
@@ -146,8 +185,19 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		Flags: map[string]string{"profile": *profile, "home": *home, "bundles": *bundles, "role": *role, "refs-dir": *refsDir},
 		Home:  overlay{os.DirFS(*home), d.Shipped}, Bundles: overlay{os.DirFS(*bundles), d.Shipped},
 		Env: e.Getenv, Signals: e.Signals, Stdout: e.Stdout, Stderr: e.Stderr,
-		Registry: d.Registry, Dist: d.Manifest, Limits: lim, Clock: boot.SystemClock(),
+		// The streams of the process are the launcher's own; a server fills neither the
+		// working directory nor the environment that cmdline serves (ADR-061 decision 13).
+		Stdio:    boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr},
+		Registry: d.Registry, Signed: d.Signed, Release: d.Release, Limits: lim, Clock: boot.SystemClock(),
 		Publish: publish,
+		// The toolbox reads the shipped files and the absolute paths of a request; a server
+		// carries no Tools, so each answers ErrNotCarried (ADR-061 decision 21).
+		Shipped: d.Shipped, Files: os.DirFS("/"),
+	}
+	opts.BuildInfo, _ = debug.ReadBuildInfo()
+	if w, err := os.Open(filepath.Join(*home, "write.lock")); err == nil { // a writer holds it exclusively
+		opts.WriteHeld = errors.Is(syscall.Flock(int(w.Fd()), syscall.LOCK_SH|syscall.LOCK_NB), syscall.EWOULDBLOCK)
+		_ = w.Close()
 	}
 	if d.Kernel != nil {
 		opts.Kernel = func(root *kernel.Root) { d.Kernel(root, runDir) }
@@ -156,6 +206,29 @@ func Run(ctx context.Context, name string, e Env, d Distribution) int {
 		opts.Patches = append(opts.Patches, patchFile(p))
 	}
 	return bootRun(ctx, opts)
+}
+
+// ownRun refuses a home or a run/ that the effective user does not own, so that a run
+// as another user, root among them, writes nothing there (ADR-047 decision 14); and sets
+// a run/ of another mode, as the S1 server created it with 0755, to 0700, saying so,
+// since only the site user enters it (ADR-062 decision 4).
+func ownRun(home, runDir string, stderr io.Writer) error {
+	for _, p := range []string{home, runDir} {
+		st, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		if s, ok := st.Sys().(*syscall.Stat_t); ok && int(s.Uid) != os.Geteuid() {
+			return fmt.Errorf("%s belongs to uid %d, and this process runs as uid %d: the user who owns the home runs its server (ADR-047 decision 14)", p, s.Uid, os.Geteuid())
+		}
+		if p == runDir && st.Mode().Perm() != 0o700 {
+			if err := os.Chmod(p, 0o700); err != nil {
+				return err
+			}
+			fmt.Fprintf(stderr, "warning: %s had mode %#o; set to 0700, since only the site user enters it (ADR-047 decision 14)\n", p, st.Mode().Perm())
+		}
+	}
+	return nil
 }
 
 // bootRun is boot.Run; a test replaces it to see the options and the status file.
@@ -170,10 +243,24 @@ type Status struct {
 	Digest  string `json:"digest"`
 	Exit    int    `json:"exit"`
 	Detail  string `json:"detail"`
+	// Rows is each row's state and what it waits for, absent until boot read them
+	// (ADR-059 decision 31 as amended).
+	Rows []StatusRow `json:"rows,omitempty"`
+}
+
+// StatusRow is one row of Status.
+type StatusRow struct {
+	ID       string   `json:"id"`
+	State    string   `json:"state"`
+	WaitsFor []string `json:"waitsFor,omitempty"`
 }
 
 func statusJSON(s boot.ProcessStatus) []byte {
-	b, _ := json.MarshalIndent(Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail}, "", "  ")
+	st := Status{string(s.Phase), s.Ready, s.Profile, s.Role, s.Digest, s.Exit, s.Detail, nil}
+	for _, r := range s.Rows {
+		st.Rows = append(st.Rows, StatusRow{ID: r.ID, State: string(r.State), WaitsFor: r.WaitsFor})
+	}
+	b, _ := json.MarshalIndent(st, "", "  ")
 	return append(b, '\n')
 }
 

@@ -1,0 +1,846 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package operations
+
+import (
+	"cmp"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"slices"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"go.yaml.in/yaml/v3"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/content/oci"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
+	def "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+)
+
+// The artifact of ADR-047 decisions 1 to 3, with the prefix of its decision 20, and its
+// attestation and signatures as referrers in the bundle form that cosign writes
+// (ADR-020 decisions 2, 9, 24 and 25).
+const (
+	artifactType   = "application/vnd.aiops.plugin.v1"
+	layerManifest  = "application/vnd.aiops.plugin.manifest.v1+yaml"
+	layerBundle    = "application/vnd.aiops.plugin.bundle.v1+yaml"
+	layerModule    = "application/vnd.aiops.plugin.module.v1+json"
+	layerContent   = "application/vnd.aiops.plugin.content.v1.tar"
+	layerFixtures  = "application/vnd.aiops.plugin.fixtures.v1.tar"
+	layerSBOM      = "application/spdx+json"
+	contentPaths   = "aiops.plugin.content.paths"
+	attestationURI = "https://github.com/mutex-solutions/aiops-platform/attestation/conformance/v1"
+	signURI        = "https://sigstore.dev/cosign/sign/v1"
+	predicateKey   = "dev.sigstore.bundle.predicateType"
+	statementV1    = "https://in-toto.io/Statement/v1"
+)
+
+func title(name string) map[string]string { return map[string]string{ocispec.AnnotationTitle: name} }
+
+// say writes a progress line of the caller.
+func say(c def.Caller, format string, a ...any) {
+	if c.Progress != nil {
+		fmt.Fprintf(c.Progress, format+"\n", a...)
+	}
+}
+
+// Pack is plugin pack (ADR-047 decision 1; ADR-060 decisions 18 and 19): the suites
+// of plugin check that the attestation records, then step 7 of plugin check into the
+// layout, with the artifact tagged by its version and the statement, unsigned, as its
+// referrer, and the gate at its entry. A denial refuses, naming the suite binaries
+// where they did not run (ADR-060 decisions 23 and 46), and a refusal leaves no layout.
+func (l Library) Pack(ctx context.Context, r def.PackRequest) (def.Written, error) {
+	if err := errors.Join(absolute("the plugin directory", r.Dir), absolute("the layout", r.Out)); err != nil {
+		return def.Written{}, err
+	}
+	entries, err := os.ReadDir(r.Out)
+	switch {
+	case err == nil && len(entries) > 0:
+		return def.Written{}, refused("%s exists and is not empty: a layout holds one artifact (ADR-047 decision 1)", r.Out)
+	case err != nil && !errors.Is(err, fs.ErrNotExist):
+		return def.Written{}, err
+	}
+	existed := err == nil
+	sum, diags, err := l.Box.ReadManifest(ctx, launch.ManifestRequest{Dir: r.Dir})
+	if err != nil {
+		return def.Written{}, refused("plugin.yaml of %s: %v", r.Dir, err)
+	}
+	for _, d := range diags {
+		if !d.Warning {
+			return def.Written{}, refused("plugin.yaml: %s", d.Text)
+		}
+	}
+	if slices.Contains(sum.Runtimes, "remote") {
+		return def.Written{}, refused("a remote plugin is packed from S2b, with the remote runtime (ADR-060 decision 29)")
+	}
+	c := &checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: r.Dir}, sum: sum, code: len(sum.Runtimes) > 0}
+	ran, ds, err := c.attested()
+	switch {
+	case err != nil:
+		return def.Written{}, err
+	case hasError(ds):
+		return def.Written{}, refused("plugin check fails: %s", texts(ds))
+	case !ran:
+		say(r.Caller, "pack: %s, so the attestation names no suite revision and no scenario", notCarried)
+	}
+	v, err := c.seal(r.Out)
+	var denied []string
+	for _, c := range v.Clauses {
+		switch c.Outcome {
+		case launch.OutcomeDeny:
+			denied = append(denied, fmt.Sprintf("check %d %s: %s", c.Check, c.Clause, c.Reason))
+		case launch.OutcomeNotEvaluated: // ADR-060 decision 17
+			say(r.Caller, "pack: check %d %s is not evaluated: %s", c.Check, c.Clause, c.Reason)
+		case launch.OutcomePass: // a deprecated major warns and never denies (ADR-060 decision 9)
+			if c.Reason != "" {
+				say(r.Caller, "pack: check %d passes: %s", c.Check, c.Reason)
+			}
+		}
+	}
+	if err == nil && len(denied) > 0 {
+		if !ran { // the suites that write what check 10 reads did not run
+			denied = append(denied, notCarried)
+		}
+		err = refused("the gate at plugin pack denies: %s", strings.Join(denied, "; "))
+	}
+	if err != nil {
+		err = errors.Join(err, os.RemoveAll(r.Out))
+		if existed {
+			err = errors.Join(err, os.Mkdir(r.Out, 0o755))
+		}
+		return def.Written{}, err
+	}
+	return def.Written{Paths: []string{r.Out}}, nil
+}
+
+// packed is what a plugin directory packs to before its digest is known.
+type packed struct {
+	manifest, bundle []byte
+	layers           []blob
+}
+
+// layers reads the layers of the plugin directory: plugin.yaml and bundle.yaml, the
+// module of in-process code, for a pack the content and the fixtures as canonical tars,
+// and the SBOM. In-process code with a content/ directory is refused.
+func (l Library) layers(ctx context.Context, dir string, sum launch.ManifestSummary) (packed, error) {
+	var p packed
+	var err error
+	if p.manifest, err = os.ReadFile(filepath.Join(dir, "plugin.yaml")); err != nil {
+		return p, refused("%v", err)
+	}
+	if p.bundle, err = os.ReadFile(filepath.Join(dir, "bundle.yaml")); err != nil {
+		return p, refused("every artifact carries a bundle of its rows, all disabled (ADR-060 decision 19): %v", err)
+	}
+	var m struct{ License string }
+	if err := yaml.Unmarshal(p.manifest, &m); err != nil {
+		return p, refused("plugin.yaml: %v", err)
+	}
+	p.layers = []blob{{layerManifest, p.manifest, title("plugin.yaml")}, {layerBundle, p.bundle, title("bundle.yaml")}}
+	doc := newSBOM(sum.ID, sum.Version, m.License)
+	if slices.Contains(sum.Runtimes, "inproc") {
+		// module.json, {"path", "version", "sum"}, and the build list in the SBOM, licences
+		// not asserted (ADR-047 decision 1), from the module zip of the toolbox.
+		mod, err := l.Box.Module(ctx, launch.ModuleRequest{Dir: dir, Version: "v" + sum.Version})
+		if err != nil {
+			return p, refused("the module of in-process code in %s: %v", dir, err)
+		}
+		for _, m := range append([]launch.Module{mod}, mod.Deps...) {
+			doc.module(m.Path, m.Version, m.Sum)
+		}
+		b, _ := json.Marshal(struct {
+			Path    string `json:"path"`
+			Version string `json:"version"`
+			Sum     string `json:"sum"`
+		}{mod.Path, mod.Version, mod.Sum})
+		p.layers = append(p.layers, blob{layerModule, b, title("module.json")})
+	}
+	for _, t := range []struct {
+		dir, mediaType string
+		on             bool
+	}{{"content", layerContent, true}, {"fixtures", layerFixtures, len(sum.Runtimes) == 0}} {
+		files, err := regularFiles(filepath.Join(dir, t.dir))
+		switch {
+		case err != nil:
+			return p, refused("%s/: %v (ADR-047 decision 3)", t.dir, err)
+		case t.dir == "content" && files != nil && len(sum.Runtimes) > 0:
+			return p, refused("content/: in-process code carries no content, which is a pack's (ADR-060 decision 19)")
+		case !t.on || files == nil:
+			continue
+		}
+		b, paths := canonicalTar(files)
+		ann := title(t.dir + ".tar")
+		if t.dir == "content" {
+			j, _ := json.Marshal(paths)
+			ann[contentPaths] = string(j)
+		}
+		p.layers = append(p.layers, blob{t.mediaType, b, ann})
+		for _, f := range paths {
+			doc.file("./"+t.dir+"/"+f, files[f], m.License)
+		}
+	}
+	sb, err := json.MarshalIndent(doc, "", "  ")
+	p.layers = append(p.layers, blob{layerSBOM, sb, title("sbom.spdx.json")})
+	return p, errors.Join(err, ctx.Err())
+}
+
+// seal is step 7 on the plugin directory of c (07-c4-plugin-sdk.md:1573; ADR-020
+// decision 14): its layers packed into the OCI image layout out, the artifact tagged by
+// its version with the statement of what c ran, whose subject is its digest, as the
+// unsigned referrer; a signature of that digest and the statement signed with a
+// throwaway key held in memory, each verified against the digest; and the verdict of
+// the gate at the entry plugin check on the artifact (ADR-060 decision 17).
+func (c *checkRun) seal(out string) (launch.Verdict, error) {
+	a, err := c.l.layers(c.ctx, c.r.Dir, c.sum)
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	d, raw, err := manifestOf(artifactType, nil, nil, a.layers)
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	c.attestation = c.statement(d.Digest.Encoded())
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	for _, st := range [][]byte{signatureOf(c.sum.ID+"@"+c.sum.Version, d.Digest.Encoded()), c.attestation} {
+		b, err := SignStatement(k, st)
+		if err == nil {
+			_, err = VerifyStatement(&k.PublicKey, b, mustDecode(d.Digest.Encoded()))
+		}
+		if err != nil {
+			return launch.Verdict{}, refused("step 7: the signature and the attestation of %s, signed with a throwaway key, do not verify: %v", d.Digest, err)
+		}
+	}
+	if err := writeLayout(c.ctx, out, d, raw, a.layers, c.sum.Version, c.attestation); err != nil {
+		return launch.Verdict{}, err
+	}
+	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
+	q := launch.GateRequest{Entry: entryCheck, Manifest: a.manifest, Bundle: a.bundle, Attestation: c.attestation, Digest: d.Digest.String(), Signer: keyID(der)}
+	if err == nil && c.r.Against != "" {
+		q.Against, err = os.ReadFile(c.r.Against)
+	}
+	if err != nil {
+		return launch.Verdict{}, err
+	}
+	return c.l.Box.Gate(c.ctx, q)
+}
+
+// The in-toto Statement v1 of a signature (ADR-020 decision 9); the attestation is
+// def.Statement's.
+type (
+	statement struct {
+		Type          string      `json:"_type"`
+		Subject       []subjectOf `json:"subject"`
+		PredicateType string      `json:"predicateType"`
+		Predicate     any         `json:"predicate"`
+	}
+	subjectOf struct {
+		Name   string            `json:"name"`
+		Digest map[string]string `json:"digest"`
+	}
+)
+
+// signatureOf is the statement that a signature of the artifact name at the hex digest
+// signs: the predicate type of cosign sign, which plugin sign writes (ADR-020 decision 9).
+func signatureOf(name, digest string) []byte {
+	b, _ := json.Marshal(statement{Type: statementV1, PredicateType: signURI, Predicate: map[string]any{},
+		Subject: []subjectOf{{Name: name, Digest: map[string]string{"sha256": digest}}}})
+	return b
+}
+
+// pushBundle pushes the bundle b of a DSSE envelope as a referrer of subject in the
+// bundle form of cosign, its predicate type in the annotation that cosign writes
+// (ADR-020 decision 2).
+func pushBundle(ctx context.Context, dst content.Pusher, subject *ocispec.Descriptor, predicateType string, b []byte) (ocispec.Descriptor, error) {
+	return pushArtifact(ctx, dst, bundleType, subject, map[string]string{predicateKey: predicateType, "dev.sigstore.bundle.content": "dsse-envelope"},
+		blob{bundleType, b, nil})
+}
+
+func mustDecode(s string) []byte {
+	b, _ := hex.DecodeString(s)
+	return b
+}
+
+// writeLayout writes the OCI image layout dir: the artifact tagged with version, and
+// the statement as its referrer.
+func writeLayout(ctx context.Context, dir string, d ocispec.Descriptor, raw []byte, layers []blob, version string, st []byte) error {
+	s, err := oci.NewWithContext(ctx, dir)
+	if err == nil {
+		err = push(ctx, s, d, raw, layers)
+	}
+	if err == nil {
+		err = s.Tag(ctx, d, version)
+	}
+	if err == nil {
+		_, err = pushArtifact(ctx, s, statementType, &d, nil, blob{statementType, st, nil})
+	}
+	return err
+}
+
+// layoutArtifact returns the one manifest of artifactType that index.json of the
+// layout dir names (ADR-047 decision 1).
+func layoutArtifact(ctx context.Context, src content.Fetcher, dir string) (ocispec.Descriptor, error) {
+	var index ocispec.Index
+	b, err := os.ReadFile(filepath.Join(dir, ocispec.ImageIndexFile))
+	if err == nil {
+		err = json.Unmarshal(b, &index)
+	}
+	if err != nil {
+		return ocispec.Descriptor{}, refused("%s is not the OCI image layout of an artifact: %v", dir, err)
+	}
+	var found []ocispec.Descriptor
+	for _, d := range index.Manifests {
+		if m, err := manifest(ctx, src, d); err == nil && m.ArtifactType == artifactType && m.Subject == nil {
+			found = append(found, d)
+		}
+	}
+	if len(found) != 1 {
+		return ocispec.Descriptor{}, refused("index.json of %s names %d manifests of artifactType %s, not one (ADR-047 decision 1)", dir, len(found), artifactType)
+	}
+	return found[0], nil
+}
+
+// source is where a spec names an artifact: a repository or a layout.
+type source interface {
+	content.ReadOnlyGraphStorage
+}
+
+// open returns the source of spec and the descriptor of its artifact.
+func open(ctx context.Context, c def.Caller, spec string) (source, ocispec.Descriptor, error) {
+	if strings.HasPrefix(spec, "oci://") {
+		repo, err := remoteRepo(c, spec)
+		if err != nil {
+			return nil, ocispec.Descriptor{}, err
+		}
+		d, err := resolve(ctx, repo)
+		return repo, d, err
+	}
+	return openLayout(ctx, spec)
+}
+
+// openLayout returns the OCI image layout dir, read only, and its artifact.
+func openLayout(ctx context.Context, dir string) (*oci.ReadOnlyStore, ocispec.Descriptor, error) {
+	if err := absolute("the layout", dir); err != nil {
+		return nil, ocispec.Descriptor{}, err
+	}
+	s, err := oci.NewFromFS(ctx, os.DirFS(dir))
+	if err != nil {
+		return nil, ocispec.Descriptor{}, refused("%s is not an OCI image layout: %v", dir, err)
+	}
+	d, err := layoutArtifact(ctx, s, dir)
+	return s, d, err
+}
+
+// Inspect is plugin inspect: the image manifest, plugin.yaml and the bundle of the
+// artifact, and no other blob; no signer is verified (ADR-047 decision 2; ADR-060
+// decision 58, reading 2).
+func (l Library) Inspect(ctx context.Context, r def.SpecRequest) (def.Inspected, error) {
+	src, d, err := open(ctx, r.Caller, r.Spec)
+	if err != nil {
+		return def.Inspected{}, err
+	}
+	m, err := manifest(ctx, src, d)
+	if err != nil {
+		return def.Inspected{}, err
+	}
+	man, bun := layer(m, layerManifest), layer(m, layerBundle)
+	if m.ArtifactType != artifactType || man == nil || bun == nil {
+		return def.Inspected{}, refused("%s is not a plugin artifact with plugin.yaml and a bundle (ADR-047 decision 1)", r.Spec)
+	}
+	in := def.Inspected{Digest: d.Digest.String()}
+	var items []struct {
+		Insert []struct {
+			ID, Plugin string
+			Config     map[string]any
+		}
+	}
+	pm, err := pluginOf(ctx, src, m)
+	var bb []byte
+	if err == nil {
+		bb, err = fetch(ctx, src, *bun)
+	}
+	if err == nil {
+		err = yaml.Unmarshal(bb, &items)
+	}
+	if c := layer(m, layerContent); err == nil && c != nil {
+		err = json.Unmarshal([]byte(c.Annotations[contentPaths]), &in.Content)
+	}
+	if err == nil {
+		err = readable(pm, in.Content)
+	}
+	if err != nil {
+		return def.Inspected{}, refused("%s: %v", r.Spec, err)
+	}
+	in.ID, in.Version, in.Runtimes = pm.ID, pm.Version, pm.Runtimes
+	for _, it := range items {
+		for _, row := range it.Insert {
+			in.Rows = append(in.Rows, def.Row{ID: row.ID, Plugin: row.Plugin, Config: row.Config})
+		}
+	}
+	return in, nil
+}
+
+// readable refuses what boot's reader and install refuse of what inspect hands on to
+// be printed: an id that is not <owner>/<name> in kebab-case, a version that is not
+// Semantic Versioning 2.0.0 by the expression of semver.org, and a content path
+// outside the rules of ADR-047 decision 3, a control character among them.
+func readable(pm pluginYAML, paths []string) error {
+	kebab := `[a-z][a-z0-9]*(-[a-z0-9]+)*`
+	switch {
+	case !regexp.MustCompile(`^` + kebab + `/` + kebab + `$`).MatchString(pm.ID):
+		return fmt.Errorf("%q is not a plugin id <owner>/<name>, each kebab-case", pm.ID)
+	case !regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\+[0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*)?$`).MatchString(pm.Version):
+		return fmt.Errorf("%q is not a version of Semantic Versioning 2.0.0", pm.Version)
+	}
+	for _, p := range paths {
+		if !utf8.ValidString(p) || !fs.ValidPath(p) || p == "." || strings.ContainsFunc(p, unicode.IsControl) {
+			return fmt.Errorf("the content path %q is not valid UTF-8, clean and free of control characters (ADR-047 decision 3)", p)
+		}
+	}
+	return nil
+}
+
+// bundles returns the bundle of each referrer of d in src whose predicate type is
+// predicateType, in the bundle form of cosign (ADR-020 decision 2).
+func bundles(ctx context.Context, src source, d ocispec.Descriptor, predicateType string) ([][]byte, error) {
+	ms, err := referrers(ctx, src, d, bundleType)
+	var out [][]byte
+	for _, m := range ms {
+		if l := layer(m.Manifest, bundleType); err == nil && l != nil && m.Annotations[predicateKey] == predicateType {
+			var b []byte
+			b, err = fetch(ctx, src, *l)
+			out = append(out, b)
+		}
+	}
+	return out, err
+}
+
+// pluginYAML is what the library reads of the plugin.yaml of an artifact, and the file.
+type pluginYAML struct {
+	ID, Version string
+	Runtimes    []string
+	file        []byte
+}
+
+// pluginOf reads plugin.yaml of the artifact m in src.
+func pluginOf(ctx context.Context, src content.Fetcher, m ocispec.Manifest) (pluginYAML, error) {
+	var pm pluginYAML
+	l := layer(m, layerManifest)
+	if l == nil {
+		return pm, refused("the artifact holds no plugin.yaml (ADR-047 decision 1)")
+	}
+	b, err := fetch(ctx, src, *l)
+	if err == nil {
+		err = yaml.Unmarshal(b, &pm)
+	}
+	pm.file = b
+	return pm, err
+}
+
+// statementOf returns the subject name and predicate type of a statement.
+func statementOf(st []byte) (name, predicateType string) {
+	var s struct {
+		PredicateType string
+		Subject       []struct{ Name string }
+	}
+	if json.Unmarshal(st, &s) != nil || len(s.Subject) != 1 {
+		return "", ""
+	}
+	return s.Subject[0].Name, s.PredicateType
+}
+
+// Sign is plugin sign: a signature of the artifact's digest and the attestation that
+// pack recorded, each signed with the private key file as a bundle and written as a
+// referrer in the bundle form of cosign; the unsigned statement is then removed
+// (ADR-020 decisions 2, 9 and 24). Signing again, with another key, signs the
+// statement that the attestation bundle carries. A statement whose one subject is not
+// the artifact's digest, named <id>@<version> of its plugin.yaml, is refused.
+func (l Library) Sign(ctx context.Context, r def.SignRequest) (def.Written, error) {
+	if err := errors.Join(absolute("the layout", r.Out), absolute("the key file", r.Key)); err != nil {
+		return def.Written{}, err
+	}
+	k, err := privateKey(r.Caller, r.Key)
+	if err != nil {
+		return def.Written{}, err
+	}
+	if _, err := os.Stat(filepath.Join(r.Out, ocispec.ImageIndexFile)); err != nil {
+		return def.Written{}, refused("%s is not an OCI image layout: %v", r.Out, err)
+	}
+	s, err := oci.NewWithContext(ctx, r.Out)
+	if err != nil {
+		return def.Written{}, err
+	}
+	d, err := layoutArtifact(ctx, s, r.Out)
+	if err != nil {
+		return def.Written{}, err
+	}
+	unsigned, err := referrers(ctx, s, d, statementType)
+	if err != nil {
+		return def.Written{}, err
+	}
+	var st []byte
+	if len(unsigned) > 0 && len(unsigned[0].Layers) == 1 {
+		st, err = fetch(ctx, s, unsigned[0].Layers[0])
+	} else if bs, berr := bundles(ctx, s, d, attestationURI); berr == nil && len(bs) > 0 {
+		b, lerr := load(bs[0])
+		if err = lerr; err == nil {
+			st = b.GetDsseEnvelope().GetPayload()
+		}
+	}
+	name, pt := statementOf(st)
+	if err != nil || pt != attestationURI {
+		return def.Written{}, refused("the layout %s holds no attestation that pack recorded: %v", r.Out, err)
+	}
+	m, err := manifest(ctx, s, d)
+	var pm pluginYAML
+	if err == nil {
+		pm, err = pluginOf(ctx, s, m)
+	}
+	if got, serr := subject(st); err != nil || serr != nil || name != pm.ID+"@"+pm.Version || hex.EncodeToString(got) != d.Digest.Encoded() {
+		return def.Written{}, refused("the attestation in %s names %s at %x, and the artifact is %s@%s at %s (ADR-020 decisions 9 and 24): %v",
+			r.Out, name, got, pm.ID, pm.Version, d.Digest, errors.Join(err, serr))
+	}
+	sig := signatureOf(name, d.Digest.Encoded())
+	for _, b := range []struct {
+		predicateType string
+		statement     []byte
+	}{{signURI, sig}, {attestationURI, st}} {
+		signed, err := SignStatement(k, b.statement)
+		if err != nil {
+			return def.Written{}, refused("%v", err)
+		}
+		if _, err := pushBundle(ctx, s, &d, b.predicateType, signed); err != nil {
+			return def.Written{}, err
+		}
+	}
+	for _, u := range unsigned {
+		if err := s.Delete(ctx, u.desc); err != nil {
+			return def.Written{}, err
+		}
+	}
+	return def.Written{Paths: []string{r.Out}}, nil
+}
+
+// Push is plugin push: the artifact of the layout and its referrers copied to the
+// repository and tagged with its version; the spec by digest (ADR-047 decision 1).
+func (l Library) Push(ctx context.Context, r def.PushRequest) (def.Pushed, error) {
+	src, d, err := openLayout(ctx, r.Out)
+	if err != nil {
+		return def.Pushed{}, err
+	}
+	repo, err := remoteRepo(r.Caller, r.Registry)
+	if err != nil {
+		return def.Pushed{}, err
+	}
+	if repo.Reference.Reference != "" {
+		return def.Pushed{}, usage("plugin push takes a repository, %s, with no tag or digest", r.Registry)
+	}
+	if _, err := oras.ExtendedCopy(ctx, src, d.Digest.String(), repo, d.Annotations[ocispec.AnnotationRefName], oras.DefaultExtendedCopyOptions); err != nil {
+		return def.Pushed{}, err
+	}
+	return def.Pushed{Spec: "oci://" + repo.Reference.Registry + "/" + repo.Reference.Repository + "@" + d.Digest.String()}, nil
+}
+
+// covers reports whether the signer s covers the plugin id and every runtime of its
+// manifest (ADR-020 decision 6).
+func covers(s def.Signer, id string, runtimes []string) bool {
+	owner, _, _ := strings.Cut(id, "/")
+	return (slices.Contains(s.IDs, id) || slices.Contains(s.IDs, owner+"/*")) &&
+		!slices.ContainsFunc(runtimes, func(rt string) bool { return !slices.Contains(s.Runtimes, rt) })
+}
+
+// Verify is plugin verify (ADR-047 decision 2; ADR-020 decision 14): the signature
+// with each signer of trust.yaml, then the attestation with the key that verified it,
+// before any other blob but plugin.yaml, which names the runtimes the signer must
+// cover and is fetched only once a signature verified or where allowUnsigned lists an
+// id; an id that allowUnsigned lists may carry neither and is read with the statement
+// that pack recorded. The suites then run as plugin check runs them, and the verdict
+// passes when they pass.
+func (l Library) Verify(ctx context.Context, r def.SpecRequest) (def.Verified, error) {
+	h, err := l.home(r.Home)
+	if err != nil {
+		return def.Verified{}, err
+	}
+	src, d, err := open(ctx, r.Caller, r.Spec)
+	if err != nil {
+		return def.Verified{}, err
+	}
+	a, err := verified(ctx, h, src, d)
+	v := def.Verified{Digest: d.Digest.String(), Signer: a.signer}
+	if err != nil {
+		return v, err
+	}
+	id := a.ID + "@" + a.Version
+	v.Steps = []def.VerifyStep{{Name: "signature", Outcome: "pass", Reason: "signer " + v.Signer},
+		{Name: "attestation", Outcome: "pass", Reason: "names " + id + " at " + d.Digest.String()}}
+	st, err := l.verifySuites(ctx, r, src, a)
+	v.Steps = append(v.Steps, st)
+	v.Passed = st.Outcome == "pass"
+	return v, err
+}
+
+// trusted is an artifact whose signature and attestation verified: its image
+// manifest, raw and read, plugin.yaml as pluginOf reads it, the signer's key id or
+// unsigned, and the bundles and the statement that install records (ADR-020 decision
+// 10); and for install the module of in-process code.
+type trusted struct {
+	m   ocispec.Manifest
+	raw []byte
+	pluginYAML
+	signer              string
+	sig, att, statement []byte
+	mod                 *launch.Module
+}
+
+// verified verifies the signature of d with each signer of trust.yaml of h, then the
+// attestation with the key that verified it, before any other blob but plugin.yaml,
+// which names the runtimes the signer must cover and is fetched only once a signature
+// verified or where allowUnsigned lists an id; an id that allowUnsigned lists may carry
+// neither and is read with the statement that pack recorded. A signature's one subject
+// names <id>@<version>, as plugin sign writes it, or nothing, as cosign sign writes it;
+// the digest it signs fixes plugin.yaml either way (ADR-020 decision 2). An artifact
+// with no module under a reserved owner is refused (ADR-047 decision 2; ADR-020
+// decisions 8, 13 and 14).
+func verified(ctx context.Context, h Home, src source, d ocispec.Descriptor) (trusted, error) {
+	var a trusted
+	t, err := readTrust(h.path("trust.yaml"))
+	if err != nil {
+		return a, err
+	}
+	sigs, err := bundles(ctx, src, d, signURI)
+	if err != nil {
+		return a, err
+	}
+	type signed struct {
+		signer int    // the index of the entry of signers
+		name   string // the subject name of the signed statement
+		bundle []byte
+	}
+	var found []signed
+	for i := range t.signers {
+		for _, b := range sigs {
+			st, err := VerifyStatement(t.signerKeys[i], b, mustDecode(d.Digest.Encoded()))
+			if n, pt := statementOf(st); err == nil && pt == signURI {
+				found = append(found, signed{i, n, b})
+			}
+		}
+	}
+	if len(found) == 0 && len(t.allow) == 0 {
+		return a, refused("check 5: no signature of %s verifies with a key that trust.yaml lists, and allowUnsigned lists no id", d.Digest)
+	}
+	seen := map[string]bool{}
+	twice := func(l ocispec.Descriptor) bool { t := seen[l.MediaType]; seen[l.MediaType] = true; return t }
+	if a.raw, err = fetch(ctx, src, d); err == nil && (json.Unmarshal(a.raw, &a.m) != nil || a.m.MediaType != ocispec.MediaTypeImageManifest || slices.ContainsFunc(a.m.Layers, twice)) {
+		err = refused("%s is not the OCI image manifest of a plugin artifact, each layer type once (ADR-047 decision 1)", d.Digest)
+	}
+	if err == nil {
+		a.pluginYAML, err = pluginOf(ctx, src, a.m)
+	}
+	if err != nil {
+		return a, err
+	}
+	id := a.ID + "@" + a.Version
+	var key *ecdsa.PublicKey
+	i := slices.IndexFunc(found, func(f signed) bool {
+		return (f.name == id || f.name == "") && covers(t.signers[f.signer], a.ID, a.Runtimes)
+	})
+	switch owner, _, _ := strings.Cut(a.ID, "/"); {
+	case slices.Contains(a.Runtimes, "wasm"): // no signer covers what the schema does not serve
+		return a, refused("check 1: %s lists the runtime wasm, which this schema version does not serve (ADR-060 decision 58)", id)
+	case !slices.Contains(a.Runtimes, "inproc") && (owner == "aiops" || owner == "contrib"):
+		// As the gate's check 5: only the release key signs such an artifact, and no
+		// binary built at S2a carries one (ADR-020 decision 13).
+		return a, refused("check 5: %s has no module and its id is under the reserved owner %s, which only the release key the binary carries signs (ADR-048 decision 14)", id, owner)
+	case i >= 0:
+		key, a.signer, a.sig = t.signerKeys[found[i].signer], t.signers[found[i].signer].KeyID, found[i].bundle
+	case slices.Contains(t.allow, a.ID):
+		a.signer = "unsigned"
+	default:
+		return a, refused("check 5: no signature of %s verifies with a key that trust.yaml lists for %s and the runtimes %v, and allowUnsigned does not list it", d.Digest, id, a.Runtimes)
+	}
+	a.statement, a.att, err = attestation(ctx, src, d, key, id)
+	return a, err
+}
+
+// verifySuites is the step suites of plugin verify: the suites of plugin check, run as
+// plugin check runs them on the pack that the artifact carries, its manifest, bundle
+// and fixtures unpacked into a directory of its own (ADR-060 decisions 46 and 49). It
+// fails where boot's strict reader refuses that manifest, or reads it as another plugin
+// than pm, the one that the signature and the attestation name. In-process code is
+// built by the builder of the toolbox from the module that module.json records, on the
+// release that r names, which runs its tests and step 5 of plugin check on that build
+// list; the step then holds the manifest of that build to the artifact (ranSuites).
+func (l Library) verifySuites(ctx context.Context, r def.SpecRequest, src source, a trusted) (def.VerifyStep, error) {
+	m, pm := a.m, a.pluginYAML
+	st := def.VerifyStep{Name: "suites", Outcome: "not-built"}
+	if len(pm.Runtimes) > 0 {
+		var mod struct{ Path, Version, Sum string }
+		b, err := fetchLayer(ctx, src, m, layerModule)
+		if err != nil || json.Unmarshal(b, &mod) != nil {
+			return st, refused("module.json of %s@%s: %v (ADR-047 decision 1)", pm.ID, pm.Version, err)
+		}
+		if r.Against == "" || r.ModCache == "" {
+			st.Reason = "plugin verify builds the module of in-process code on the release artifact of --against, from the module source of --modcache (ADR-044 decision 1)"
+			return st, nil
+		}
+		built, err := l.Box.Build(ctx, launch.BuildRequest{Module: mod.Path, Version: mod.Version, Sum: mod.Sum, Against: r.Against, ModCache: r.ModCache,
+			Mirrors: r.Mirrors, Builder: cmp.Or(r.Builder, "image")})
+		switch {
+		case errors.Is(err, launch.ErrNotCarried):
+			st.Reason = err.Error()
+		case ctx.Err() != nil:
+			return st, ctx.Err()
+		case err != nil:
+			st.Outcome, st.Reason = "fail", err.Error()
+		default:
+			st.Outcome, st.Reason = ranSuites(built.Manifest, pm, a.statement, mod.Path+" "+mod.Version)
+		}
+		return st, nil
+	}
+	dir, err := os.MkdirTemp("", "aiops-verify-")
+	if err != nil {
+		return st, err
+	}
+	defer os.RemoveAll(dir)
+	for _, d := range m.Layers {
+		// No other layer is fetched: not the SBOM, which install never fetches either, nor
+		// a type this reader does not know (ADR-047 decisions 1 and 2).
+		name := map[string]string{layerManifest: "plugin.yaml", layerBundle: "bundle.yaml", layerFixtures: "fixtures"}[d.MediaType]
+		if name == "" {
+			continue
+		}
+		b, err := fetch(ctx, src, d)
+		if err == nil && name == "fixtures" {
+			err = untar(b, func(name string, data []byte) error {
+				f := filepath.Join(dir, "fixtures", filepath.FromSlash(name))
+				return errors.Join(os.MkdirAll(filepath.Dir(f), 0o700), os.WriteFile(f, data, 0o600))
+			})
+		} else if err == nil {
+			err = os.WriteFile(filepath.Join(dir, name), b, 0o600)
+		}
+		if err != nil {
+			return st, err
+		}
+	}
+	sum, ds, err := l.Box.ReadManifest(ctx, launch.ManifestRequest{Dir: dir})
+	switch {
+	case err != nil:
+		return st, refused("plugin.yaml of the artifact: %v", err)
+	case hasError(ds):
+		st.Outcome, st.Reason = "fail", texts(ds)
+		return st, nil
+	case sum.ID != pm.ID || sum.Version != pm.Version:
+		st.Outcome, st.Reason = "fail", fmt.Sprintf("boot's reader reads plugin.yaml as %s@%s, and the artifact is %s@%s", sum.ID, sum.Version, pm.ID, pm.Version)
+		return st, nil
+	}
+	ran, ds, err := (&checkRun{l: l, ctx: ctx, r: def.CheckRequest{Caller: r.Caller, Dir: dir}, sum: sum}).attested()
+	switch {
+	case err != nil:
+	case hasError(ds):
+		st.Outcome, st.Reason = "fail", texts(ds)
+	case !ran:
+		st.Reason = notCarried
+	default:
+		st.Outcome, st.Reason = "pass", "step 5 and the echo scenario of plugin check"
+	}
+	return st, err
+}
+
+// ranSuites holds the manifest that the build of verify wrote for the module mod to the
+// artifact: it must hold the plugin pm with the artifact's plugin.yaml byte for byte, and
+// the statement it records of the suites that step 5 ran on the build must name the
+// definitions, suite revisions and halves that the artifact's attestation names
+// (07-c4-plugin-sdk.md:1512). It returns the outcome, and a reason that names the suites
+// that ran.
+func ranSuites(manifest []byte, pm pluginYAML, attestation []byte, mod string) (string, string) {
+	var d struct {
+		Plugins map[string]struct{ Manifest, Attestation string }
+	}
+	if err := yaml.Unmarshal(manifest, &d); err != nil {
+		return "fail", fmt.Sprintf("the manifest of the build of %s: %v", mod, err)
+	}
+	p, ok := d.Plugins[pm.ID]
+	if !ok || p.Manifest != string(pm.file) || p.Attestation == "" {
+		return "fail", fmt.Sprintf("the build of %s holds no plugin %s with the artifact's plugin.yaml and a statement of the suites that ran", mod, pm.ID)
+	}
+	defs := func(statement []byte) map[string]def.Attested {
+		var s struct {
+			Predicate struct{ Definitions map[string]def.Attested }
+		}
+		_ = json.Unmarshal(statement, &s)
+		return s.Predicate.Definitions
+	}
+	ran, named := defs([]byte(p.Attestation)), defs(attestation)
+	if !maps.EqualFunc(ran, named, func(a, b def.Attested) bool { return reflect.DeepEqual(a, b) }) {
+		got, _ := json.Marshal(ran)
+		want, _ := json.Marshal(named)
+		return "fail", fmt.Sprintf("step 5 on the build of %s ran %s, and the attestation names %s", mod, got, want)
+	}
+	var suites []string
+	for _, name := range slices.Sorted(maps.Keys(ran)) {
+		if a := ran[name]; a.Suite != nil {
+			suites = append(suites, fmt.Sprintf("%s at revision %d, %s", name, *a.Suite, strings.Join(a.Halves, " and ")))
+		}
+	}
+	return "pass", fmt.Sprintf("the tests of %s and step 5 of plugin check on the build list of the release; the suites that ran, as the attestation names them: %s", mod,
+		cmp.Or(strings.Join(suites, "; "), "none"))
+}
+
+// attestation checks the attestation of d: with key, the bundle that verifies, and
+// with none the statement that pack recorded; its subject must be id at d (check 10).
+func attestation(ctx context.Context, src source, d ocispec.Descriptor, key *ecdsa.PublicKey, id string) (st, bundle []byte, err error) {
+	type found struct{ st, bundle []byte }
+	var sts []found
+	if key == nil {
+		ms, err := referrers(ctx, src, d, statementType)
+		for _, m := range ms {
+			if len(m.Layers) == 1 && err == nil {
+				var st []byte
+				st, err = fetch(ctx, src, m.Layers[0])
+				sts = append(sts, found{st, nil})
+			}
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		bs, err := bundles(ctx, src, d, attestationURI)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, b := range bs {
+			if st, err := VerifyStatement(key, b, mustDecode(d.Digest.Encoded())); err == nil {
+				sts = append(sts, found{st, b})
+			}
+		}
+	}
+	for _, f := range sts {
+		name, pt := statementOf(f.st)
+		got, err := subject(f.st)
+		if pt == attestationURI && name == id && err == nil && hex.EncodeToString(got) == d.Digest.Encoded() {
+			return f.st, f.bundle, nil
+		}
+		if pt == attestationURI {
+			return nil, nil, refused("check 10: the attestation names another subject, %s, and the artifact is %s at %s", name, id, d.Digest)
+		}
+	}
+	return nil, nil, refused("check 10: the conformance attestation of %s is missing or does not verify with the signer's key", id)
+}

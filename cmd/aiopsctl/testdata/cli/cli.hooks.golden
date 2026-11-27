@@ -1,0 +1,17 @@
+# aiopsctl profile render --dump-hooks
+digest sha256:8a6d8350f7928d27e900bed5babfa6a417d1c66e9bef673aece2cbb623438be0
+roles all
+
+hook composition/applied
+  1. stage 0 (default) plugin aiops/readiness row readiness
+
+hook internal/config sealed to aiops/config-refs
+  1. stage 0 (default) plugin aiops/config-refs row config-refs
+
+hook internal/status sealed to aiops/readiness, aiops/restart-policy
+  1. stage 0 (default) plugin aiops/readiness row readiness
+  2. stage 0 (default) plugin aiops/restart-policy row restart-policy
+
+hook reload/operation
+  1. stage 0 (default) plugin aiops/readiness row readiness
+  2. stage 0 (default) plugin aiops/restart-policy row restart-policy

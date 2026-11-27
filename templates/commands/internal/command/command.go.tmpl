@@ -1,0 +1,31 @@
+// Package command is the command of {{.ID}}: its spec, and one stub per method of
+// commands.Command, each returning ErrNotImplemented until it is written.
+package command
+
+import (
+	"context"
+	"errors"
+
+	commands "github.com/mutex-solutions/aiops-platform/sdk/def/commands/v0"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+)
+
+// ErrNotImplemented is the answer of a stub.
+var ErrNotImplemented = errors.New("not implemented")
+
+// Spec is the command line of the command: aiopsctl example, with no argument and no
+// flag. fixtures/commands/paths.json lists it.
+func Spec() commands.Spec {
+	return commands.Spec{Path: []string{"example"}, Summary: "An example command."}
+}
+
+// Command runs for the activation of the plugin that registered it.
+type Command struct{ c *kernel.Context }
+
+// New returns the command of the activation c.
+func New(c *kernel.Context) Command { return Command{c: c} }
+
+// Run runs the command: it writes only to the streams of inv and returns when ctx ends.
+func (x Command) Run(ctx context.Context, inv commands.Invocation) error {
+	return ErrNotImplemented
+}

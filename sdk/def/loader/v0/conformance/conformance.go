@@ -4,7 +4,9 @@
 // and the fake must both do (07-c4-plugin-sdk.md, T2 "every provider and the fake
 // behave the same"). It drives a loader through its interface and its three hooks
 // and checks the outcomes, the refusals, the mount state and fiber state of each
-// entry, and the payloads the hooks carry. It imports the standard library,
+// entry, the payloads the hooks carry, that a call after the provider's release
+// fails with kernel.ErrInactive, and that the provided value has no method outside
+// the interface. It imports the standard library,
 // sdk/kernel and definitions only.
 package conformance
 
@@ -16,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mutex-solutions/aiops-platform/sdk/def/internal/deftest"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -29,9 +32,11 @@ type Setup struct {
 	Volatile map[string][]string
 }
 
-// Mount returns a loader with no entry, set up as s says, that dispatches its hooks
-// in the returned root, on which the suite mounts its listener.
-type Mount func(t *testing.T, s Setup) (loader.Loader, *kernel.Root)
+// Mount mounts a provider of loader.Key with no entry, set up as s says, on a root of
+// its own, and returns the root and the provider's fiber, ACTIVE. The suite reads the
+// loader through a consumer of the key, mounts its listener on the root and releases
+// the provider by disposing the fiber.
+type Mount func(t *testing.T, s Setup) (*kernel.Root, *kernel.Fiber)
 
 // The process role and the two plugins that rows name. Neither plugin does anything.
 const (
@@ -44,7 +49,8 @@ const group = loader.GroupPlugin
 
 // Run runs the suite, each case on a loader of its own.
 func Run(t *testing.T, mount Mount) {
-	t.Run("mount states", func(t *testing.T) {
+	rec := deftest.Ran(t, "loader", "obligations", "guard")
+	rec.Run(t, "mount states", func(t *testing.T) {
 		s := start(t, mount, nil)
 		off, other, h := row("off", p), row("w", p), row("h", group)
 		off.Enabled, other.Roles, h.Enabled = false, []string{"worker"}, false
@@ -70,7 +76,7 @@ func Run(t *testing.T, mount Mount) {
 		s.heard([]string{"a", "g", "g:c", "h", "h:c"})
 	})
 
-	t.Run("a refused plan changes nothing", func(t *testing.T) {
+	rec.Run(t, "a refused plan changes nothing", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created a", "created g"}, create(row("a", p)), create(row("g", group)))
 		orphan, under, moved, changed := row("x", p), row("x", p), row("a", p), row("a", p)
@@ -103,7 +109,7 @@ func Run(t *testing.T, mount Mount) {
 		s.is("a", loader.Mounted, kernel.Active)
 	})
 
-	t.Run("updates", func(t *testing.T) {
+	rec.Run(t, "updates", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		a, off, g := row("a", p), row("off", p), row("g", group)
 		a.Config, off.Enabled = map[string]any{"level": "info", "port": int64(1)}, false
@@ -141,7 +147,7 @@ func Run(t *testing.T, mount Mount) {
 	// A volatile value that is or becomes a reference restarts the entry, as the tree
 	// holds it unresolved; a literal changed beside an unchanged reference is committed
 	// in place, and loader/volatile-update leaves the reference out (ADR-059 decision 17).
-	t.Run("volatile changes and references", func(t *testing.T) {
+	rec.Run(t, "volatile changes and references", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		ref := launch.Ref{Scheme: "env", Name: "AIOPS_REF_PORT"}
 		a := row("a", p)
@@ -168,7 +174,7 @@ func Run(t *testing.T, mount Mount) {
 	// so a volatile-only change restarts it and announces nothing; an entry under a
 	// group that never activated has no fiber and nothing to mount it from, so a change
 	// of its config changes nothing until the group mounts it.
-	t.Run("updates of inactive entries", func(t *testing.T) {
+	rec.Run(t, "updates of inactive entries", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		failed := row("nil", p)
 		failed.Config = map[string]any{"level": "info"}
@@ -198,7 +204,7 @@ func Run(t *testing.T, mount Mount) {
 	// The operations apply in order against the tree as the earlier ones leave it. A
 	// later operation that retires an entry takes back what an earlier one did to its
 	// activation: none is left to tell on loader/volatile-update.
-	t.Run("an update then the remove of the entry", func(t *testing.T) {
+	rec.Run(t, "an update then the remove of the entry", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		a := row("a", p)
 		for _, tc := range []struct {
@@ -226,7 +232,7 @@ func Run(t *testing.T, mount Mount) {
 	// whatever the order of the operations. When the child's comes first, the
 	// replacement of the group makes its commit in place a restart and takes back the
 	// announce.
-	t.Run("a child of a group the plan replaces", func(t *testing.T) {
+	rec.Run(t, "a child of a group the plan replaces", func(t *testing.T) {
 		s := start(t, mount, map[string][]string{p: {"level"}})
 		g, c := row("g", group), child("g", "c", p)
 		c.Config = map[string]any{"level": "info"}
@@ -251,7 +257,31 @@ func Run(t *testing.T, mount Mount) {
 		}
 	})
 
-	t.Run("remove takes the entries beneath", func(t *testing.T) {
+	// No use after release (07-c4-plugin-sdk.md:518): every method of the value kept
+	// from before the provider's release that has an error result returns
+	// kernel.ErrInactive. Locate has none.
+	rec.Run(t, "a call after release fails with ErrInactive", func(t *testing.T) {
+		s := start(t, mount, nil)
+		s.apply([]string{"created a"}, create(row("a", p)))
+		deftest.Dispose(t, s.root, s.provider)
+		ctx := t.Context()
+		_, errApply := s.ld.Apply(ctx, []loader.Op{create(row("b", p))})
+		_, errAwait := s.ld.Await(ctx, "a")
+		for name, err := range map[string]error{"Apply": errApply, "Create": s.ld.Create(ctx, row("b", p)),
+			"Update": s.ld.Update(ctx, row("a", p)), "Remove": s.ld.Remove(ctx, "a"), "Await": errAwait} {
+			if !errors.Is(err, kernel.ErrInactive) {
+				t.Errorf("%s after release = %v, want ErrInactive", name, err)
+			}
+		}
+	})
+
+	rec.Run(t, "no side door", func(t *testing.T) {
+		if doors := deftest.SideDoors[loader.Loader](start(t, mount, nil).ld); len(doors) > 0 {
+			t.Errorf("the provided value has methods outside loader.Loader: %v", doors)
+		}
+	})
+
+	rec.Run(t, "remove takes the entries beneath", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created g", "created g:c", "created a"}, create(row("g", group)), create(child("g", "c", p)), create(row("a", p)))
 		s.is("g:c", loader.Mounted, kernel.Active)
@@ -270,7 +300,7 @@ func Run(t *testing.T, mount Mount) {
 	// or returns no context, vetoes the entry, which is FAILED; the entries under a
 	// vetoed group wait, PENDING. entry-init carries the context the entry was mounted
 	// from, the one the chain returned.
-	t.Run("patch-context and entry-init", func(t *testing.T) {
+	rec.Run(t, "patch-context and entry-init", func(t *testing.T) {
 		s := start(t, mount, nil)
 		s.apply([]string{"created ok", "created veto", "created veto:c", "created nil"},
 			create(row("ok", p)), create(row("veto", group)), create(child("veto", "c", p)), create(row("nil", p)))
@@ -290,10 +320,11 @@ func Run(t *testing.T, mount Mount) {
 }
 
 type suite struct {
-	t    *testing.T
-	ld   loader.Loader
-	h    *heard
-	root *kernel.Root
+	t        *testing.T
+	ld       loader.Loader
+	h        *heard
+	root     *kernel.Root
+	provider *kernel.Fiber
 }
 
 func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
@@ -302,8 +333,9 @@ func start(t *testing.T, mount Mount, volatile map[string][]string) *suite {
 	for _, id := range []string{p, q} {
 		plugins[id] = kernel.Define(kernel.Plugin{ID: id, Apply: func(*kernel.Context, any) error { return nil }})
 	}
-	ld, root := mount(t, Setup{Role: role, Plugins: plugins, Volatile: volatile})
-	return &suite{t: t, ld: ld, h: listen(t, root), root: root}
+	root, provider := mount(t, Setup{Role: role, Plugins: plugins, Volatile: volatile})
+	_, _, ld := deftest.Consume(t, root, loader.Key)
+	return &suite{t: t, ld: ld, h: listen(t, root), root: root, provider: provider}
 }
 
 // apply applies ops and wants the outcomes, as "<outcome> <id>".

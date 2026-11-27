@@ -1,0 +1,13 @@
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# A test definition: a fixture of the launcher's tests, in no shipped distribution,
+# with no suite (ADR-060 decisions 28 and 55). It declares three keys, so `key` names
+# the definition and `class` lists each key.
+key: toy
+version: "0.1"
+stability: experimental
+class:
+  toy.store: {provider: open, consumer: open}
+  toy.policy: {provider: bound, consumer: open}
+  toy.fault: {provider: open, consumer: open}
+remote: "no"
+suite: 0

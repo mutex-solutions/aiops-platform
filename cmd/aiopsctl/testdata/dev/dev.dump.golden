@@ -1,0 +1,59 @@
+# aiopsctl profile render --dump
+digest sha256:effc0f9499293c3a25a3075c27b2545c7f48609fba05e007650871af2f4bd113
+roles all
+
+##  (layer 0)
+
+row loader plugin=aiops/loader enabled=true required=true group=false roles=-
+  config null
+
+## bundle:aiops-core (layer 1)
+
+row clock plugin=aiops/clock enabled=true required=false group=false roles=api,edge,worker
+  config {}
+
+row config-refs plugin=aiops/config-refs enabled=true required=false group=false roles=api,edge,worker
+  config {maxFileBytes: int(65536)}
+
+row restart-policy plugin=aiops/restart-policy enabled=true required=false group=false roles=api,edge,worker
+  config {backoffMax: "10s", backoffMin: "100ms", factor: int(2), infrastructure: ["clock"], maxFailures: int(5), window: "1m"}
+
+row reload plugin=aiops/reload enabled=true required=false group=false roles=api,edge,worker
+  config {history: int(32), queue: int(8)}
+
+row reload-socket plugin=aiops/reload-socket enabled=true required=false group=false roles=api,edge,worker
+  config {}
+
+row readiness plugin=aiops/readiness enabled=true required=false group=false roles=api,edge,worker
+  config {}
+
+## required set
+rows loader, readiness, reload, restart-policy
+keys clock
+closure clock, loader, readiness, reload, restart-policy
+
+## providers
+key clock: clock
+key composition: loader
+key configRefsDryRun: config-refs
+key configRefsReady: config-refs
+key loader: loader
+key reload: reload
+
+## distribution
+trust: the default release root, key test-release, is trusted; the built-in record of sha256:d8d756aaef8d6e3a68443adf60912acc531ffd93abfac94f7678b79630a18d8d is in use (ADR-020 decision 13)
+
+## gate
+check 1 Manifest schema and author API: pass (later: exemptions (compatibility.yaml) are S6b)
+check 2 Definition versions: pass (later: exemptions (compatibility.yaml) are S6b)
+check 3 Remote protocol: not evaluated until S2b
+check 4 Stability: pass (later: exemptions (compatibility.yaml) are S6b)
+check 5 Trust: pass (later: the index clause is S6a)
+check 6 Licence: pass
+check 7 Key and hook classes: pass
+check 8 Layer rules: pass (later: the tenant overlay is S4b, the scope: tenant clause S4a)
+check 9 Remote scope: not evaluated until S2b
+check 10 Attestation: pass
+
+## diagnostics
+none

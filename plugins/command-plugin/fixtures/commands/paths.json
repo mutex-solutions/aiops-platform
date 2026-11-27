@@ -1,0 +1,15 @@
+[
+  {"path": "plugin new", "summary": "Write a new plugin from the template of a registry, or a connector pack of a release."},
+  {"path": "plugin check", "summary": "Run the eight steps of the plugin check on a plugin directory."},
+  {"path": "plugin smoke", "summary": "Build a throwaway distribution with the plugin and boot its test-only profile."},
+  {"path": "plugin pack", "summary": "Pack a plugin directory into the layout of an artifact."},
+  {"path": "plugin sign", "summary": "Sign the packed artifact and its attestation."},
+  {"path": "plugin push", "summary": "Push the signed artifact to a registry."},
+  {"path": "plugin inspect", "summary": "Show what a spec names, fetching only its manifest and its bundle."},
+  {"path": "plugin verify", "summary": "Verify the signer of an artifact and run its suites."},
+  {"path": "plugin gate", "summary": "Run the clauses of the gate on an artifact against a published release."},
+  {"path": "plugin install", "summary": "Install an artifact into a profile of the home."},
+  {"path": "plugin enable", "summary": "Enable a row in a profile of the home."},
+  {"path": "plugin disable", "summary": "Disable a row in a profile of the home."},
+  {"path": "plugin remove", "summary": "Remove an installed plugin from a profile of the home."}
+]

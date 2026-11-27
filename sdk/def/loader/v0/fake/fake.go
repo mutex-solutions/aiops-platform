@@ -57,7 +57,9 @@ type entry struct {
 var _ loader.Loader = (*Loader)(nil)
 
 // New returns an empty loader and the plugin that provides it under loader.Key.
-// Each call returns a new plugin value, a new entry of its own.
+// Each call returns a new plugin value, a new entry of its own. The plugin provides
+// the methods of loader.Loader only: SetState, Entries and Patch are the test's (no
+// side door, 07-c4-plugin-sdk.md §4.3).
 func New() (*Loader, kernel.Plugin) {
 	f := &Loader{entries: map[string]entry{}}
 	return f, kernel.Define(kernel.Plugin{
@@ -69,7 +71,7 @@ func New() (*Loader, kernel.Plugin) {
 			f.patch = loader.PatchContext.Bind(c)
 			f.setLC(c)
 			c.Defer("loader-fake", func(context.Context) error { f.setLC(nil); return nil })
-			return loader.Key.Provide(c, f)
+			return loader.Key.Provide(c, struct{ loader.Loader }{f})
 		},
 	})
 }
@@ -346,10 +348,17 @@ func (f *Loader) Remove(ctx context.Context, id string) error {
 	return f.one(ctx, loader.Op{Kind: loader.OpRemove, Entry: loader.EntrySpec{ID: id}})
 }
 
-// Await returns the scripted state of a mounted entry at once.
+// Await returns the scripted state of a mounted entry at once, and
+// kernel.ErrInactive once the plugin's activation is released.
 func (f *Loader) Await(ctx context.Context, id string) (kernel.State, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
+	}
+	f.mu.Lock()
+	released := f.lc == nil
+	f.mu.Unlock()
+	if released {
+		return "", kernel.ErrInactive
 	}
 	e, ok := f.Locate(id)
 	switch {
@@ -401,6 +410,14 @@ func (f *Loader) Entries() []loader.Entry {
 	}
 	slices.SortFunc(out, func(a, b loader.Entry) int { return cmp.Compare(a.Spec.ID, b.Spec.ID) })
 	return out
+}
+
+// Inventory lists what the callers left behind: the id of every entry of the tree,
+// sorted (ADR-060 decision 12).
+func (f *Loader) Inventory() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Sorted(maps.Keys(f.entries))
 }
 
 // Patch dispatches loader/patch-context for an entry mounted from c and returns the

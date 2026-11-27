@@ -16,7 +16,10 @@ package failurematrix
 //	| Optional row at boot | the fault is an optional row (id "fault", with a row "dependant" |
 //	|                      | that injects what it provides) in a --patch file; or, for a      |
 //	|                      | layer failure, a missing --patch file. Run until it exits or     |
-//	|                      | the launcher says it is running.                                |
+//	|                      | the launcher says it is running. A fault that is an installed    |
+//	|                      | artifact is in the home before boot (installFault), and a patch  |
+//	|                      | enables the row "fault" that its bundle inserted disabled, which |
+//	|                      | mounts under the artifact's group as "<fault>:fault".            |
 //	| Required at boot     | the same with "required: true" on the row; for a layer failure   |
 //	|                      | a profile that names a bundle that does not exist.               |
 //	| Live recomposition   | the process boots healthy with a live layer file as the last     |
@@ -165,9 +168,12 @@ type plan struct {
 	// then are more runs of the cell, each with an expect of its own, for the parts of the
 	// outcome that the first run cannot show in the same process.
 	then []variant
+	// install: the fault plugin that the fresh home holds as an installed artifact
+	// (installFault).
+	install string
 }
 
-// leakLabel is the label of the open work of each leak fault (test/dist/plugins/fault).
+// leakLabel is the label of the open work of each leak fault (test/dist/plugins/<fault>).
 var leakLabel = map[string]string{"leaky-goroutine": "leaky", "slow-dispose": "slow-dispose"}
 
 type variant struct {
@@ -211,6 +217,11 @@ func planFor(row, col, fault string) (plan, bool) {
 			plan{base: []string{"unknown-plugin.required.yml"}, code: boot.ExitRefused},
 			plan{live: "unknown-plugin.optional.yml"}, plan{}), true
 	case "gate":
+		if fault != "rogue-provider" { // an installed artifact, whose row under its group a patch enables
+			return byColumn(col, plan{install: fault, base: []string{opt + ".yml"}},
+				plan{install: fault, base: []string{req + ".yml"}, code: boot.ExitRefused},
+				plan{install: fault, live: opt + ".yml"}, plan{}), true
+		}
 		return byColumn(col, plan{base: []string{"rogue-provider.optional.yml"}},
 			plan{base: []string{"rogue-provider.required.yml"}, code: boot.ExitRefused},
 			plan{live: "rogue-provider.optional.yml"}, plan{}), true
@@ -444,8 +455,11 @@ func rejectedProblems(before, s harness.Snapshot) []string {
 	return bad
 }
 
-func runScenario(bin string, e boot.Expect, p plan) result {
+func runScenario(t *testing.T, bin string, e boot.Expect, p plan) result {
 	opts := harness.Options{Profile: p.profile, Env: p.env}
+	if p.install != "" {
+		opts.Install = func(home string) error { return installFault(home, p.install) }
+	}
 	var livePath string
 	for _, f := range p.base {
 		opts.Patches = append(opts.Patches, harness.PatchFile(f))
@@ -479,7 +493,7 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			return result{problems: []string{err.Error()}}
 		}
 	}
-	proc, err := harness.Start(bin, opts)
+	proc, err := harness.Start(t, bin, opts)
 	if err != nil {
 		return result{problems: []string{err.Error()}}
 	}
@@ -576,7 +590,11 @@ func runScenario(bin string, e boot.Expect, p plan) result {
 			last = append(last, "the process did not exit within the budget")
 		}
 	}
-	return result{problems: last, output: snap.Output + "\n" + reloadText(snap)}
+	out := snap.Output + "\n" + reloadText(snap)
+	if why := faultDenial[p.install]; !strings.Contains(out, why) {
+		last = append(last, fmt.Sprintf("the denial does not say %q: the artifact carries another defect", why))
+	}
+	return result{problems: last, output: out}
 }
 
 func status(s harness.Snapshot) string {
@@ -650,9 +668,9 @@ func TestFailureMatrix(t *testing.T) {
 					if !ok {
 						res = result{problems: []string{"the harness has no procedure for this cell: an S1 cell may not be skipped"}}
 					} else {
-						res = runScenario(bin, c.Expect, p)
+						res = runScenario(t, bin, c.Expect, p)
 						for _, v := range p.then {
-							r := runScenario(bin, v.expect, v.plan)
+							r := runScenario(t, bin, v.expect, v.plan)
 							for _, pr := range r.problems {
 								res.problems = append(res.problems, v.name+": "+pr)
 							}

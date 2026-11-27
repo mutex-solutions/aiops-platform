@@ -1,20 +1,27 @@
-// Command kernelcheck enforces structural rules on the kernel module.
+// Command kernelcheck enforces structural rules on the kernel module. Its imports and
+// pluginvet commands run the package internal/vet, which aiopsctl plugin check shares
+// (ADR-060 decision 23).
 package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/mutex-solutions/aiops-platform/internal/vet"
 )
 
 func main() {
@@ -25,7 +32,7 @@ func main() {
 }
 
 func run(args []string) error {
-	usage := fmt.Errorf("usage: kernelcheck modfile <dir> | vocab <dir> <wordlist> | lines <dir> <cap> [provisional] | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> | pluginvet <dir>...")
+	usage := fmt.Errorf("usage: kernelcheck modfile <dir> [allowed-module]... | vocab <dir> <wordlist> | lines <dir>[:<dir>] <cap> [provisional] [subpackage-dir]... | coverage <profile> <import-path> | testctor <repo-root> | imports <repo-root> <register> | pluginvet <dir>...")
 	if len(args) == 0 {
 		return usage
 	}
@@ -33,19 +40,19 @@ func run(args []string) error {
 		if len(args) < 2 {
 			return usage
 		}
-		return checkPluginVet(args[1:])
+		return vet.PluginVet(os.Stdout, args[1:])
 	}
-	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 2}
+	need := map[string]int{"modfile": 2, "vocab": 3, "lines": 3, "coverage": 3, "testctor": 2, "imports": 3}
 	n, ok := need[args[0]]
-	if args[0] == "lines" && len(args) == 4 && args[3] == "provisional" {
-		n = 4
+	if (args[0] == "lines" || args[0] == "modfile") && len(args) > n {
+		n = len(args)
 	}
 	if !ok || len(args) != n {
 		return usage
 	}
 	switch args[0] {
 	case "modfile":
-		return checkModfile(args[1])
+		return checkModfile(args[1], args[2:]...)
 	case "vocab":
 		return checkVocab(args[1], args[2])
 	case "lines":
@@ -53,11 +60,20 @@ func run(args []string) error {
 		if err != nil || c < 0 {
 			return fmt.Errorf("invalid cap %q", args[2])
 		}
-		return checkLines(args[1], c, len(args) == 4)
+		subs := args[3:]
+		provisional := len(subs) > 0 && subs[0] == "provisional"
+		if provisional {
+			subs = subs[1:]
+		}
+		return checkLines(args[1], c, provisional, subs...)
 	case "testctor":
 		return checkTestCtor(args[1])
 	case "imports":
-		return checkImports(args[1], goListDeps)
+		reg, err := vet.ReadRegister(args[2])
+		if err != nil {
+			return err
+		}
+		return vet.Imports(args[1], reg, vet.GoListDeps)
 	default:
 		return checkCoverage(args[1], args[2])
 	}
@@ -142,21 +158,44 @@ func checkTestCtor(root string) error {
 	return nil
 }
 
-var directive = regexp.MustCompile(`^(require|replace|exclude)\b`)
-
-func checkModfile(dir string) error {
-	f, err := os.Open(filepath.Join(dir, "go.mod"))
+// checkModfile fails on any exclude directive of dir/go.mod, and on a require or
+// replace directive for a module not in allowed. With no allowed module, as for
+// sdk/kernel, every require and replace line fails. The go command parses the
+// file, so the block and single-line forms read alike.
+func checkModfile(dir string, allowed ...string) error {
+	out, err := exec.Command("go", "mod", "edit", "-json", filepath.Join(dir, "go.mod")).Output()
 	if err != nil {
+		msg := err.Error()
+		if ee, ok := err.(*exec.ExitError); ok {
+			msg = strings.TrimSpace(string(ee.Stderr))
+		}
+		return fmt.Errorf("%s/go.mod: %s", dir, msg)
+	}
+	var m struct {
+		Require, Exclude []struct{ Path string }
+		Replace          []struct{ Old struct{ Path string } }
+	}
+	if err := json.Unmarshal(out, &m); err != nil {
 		return err
 	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for n := 1; sc.Scan(); n++ {
-		if m := directive.FindString(strings.TrimSpace(sc.Text())); m != "" {
-			return fmt.Errorf("%s/go.mod:%d: forbidden %q directive", dir, n, m)
+	var bad []string
+	for _, r := range m.Require {
+		if !slices.Contains(allowed, r.Path) {
+			bad = append(bad, "require "+r.Path)
 		}
 	}
-	return sc.Err()
+	for _, r := range m.Replace {
+		if !slices.Contains(allowed, r.Old.Path) {
+			bad = append(bad, "replace "+r.Old.Path)
+		}
+	}
+	for _, r := range m.Exclude {
+		bad = append(bad, "exclude "+r.Path)
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("%s/go.mod: forbidden directives (allowed modules: %q):\n%s", dir, allowed, strings.Join(bad, "\n"))
+	}
+	return nil
 }
 
 // sourceFiles lists non-test .go files directly in dir.
@@ -177,15 +216,15 @@ func sourceFiles(dir string) ([]string, error) {
 
 var wordToken = regexp.MustCompile(`[A-Za-z0-9]+`)
 
-// splitCamel splits "tenantID" into "tenant", "ID" and "HTTPServer" into
-// "HTTP", "Server".
+// splitCamel splits "tenantID" into "tenant", "ID", "HTTPServer" into "HTTP",
+// "Server" and "Kafka3" into "Kafka", "3".
 func splitCamel(s string) []string {
 	r := []rune(s)
 	var parts []string
 	start := 0
 	for i := 1; i < len(r); i++ {
 		prev, cur := r[i-1], r[i]
-		boundary := (unicode.IsLower(prev) || unicode.IsDigit(prev)) && unicode.IsUpper(cur) ||
+		boundary := unicode.IsLower(prev) && unicode.IsUpper(cur) || unicode.IsDigit(prev) != unicode.IsDigit(cur) ||
 			unicode.IsUpper(prev) && unicode.IsUpper(cur) && i+1 < len(r) && unicode.IsLower(r[i+1])
 		if boundary {
 			parts = append(parts, string(r[start:i]))
@@ -195,19 +234,48 @@ func splitCamel(s string) []string {
 	return append(parts, string(r[start:]))
 }
 
-func checkVocab(dir, wordlist string) error {
+// readWords returns the words of a word list, one per line and lower-cased; "#"
+// starts a comment.
+func readWords(wordlist string) (map[string]bool, error) {
 	data, err := os.ReadFile(wordlist)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	banned := map[string]bool{}
+	words := map[string]bool{}
 	for _, l := range strings.Split(string(data), "\n") {
 		if i := strings.Index(l, "#"); i >= 0 {
 			l = l[:i]
 		}
 		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
-			banned[l] = true
+			words[l] = true
 		}
+	}
+	return words, nil
+}
+
+// citations are the document names that the checked code cites. A citation names a
+// document, not a concept of the code, so its words are not checked.
+var citations = []string{"08-profiles-roadmap-adrs.md"}
+
+// inflections are the endings a banned word may carry and still be the word:
+// "tenants", "aliases", "tenanted", "tenanting".
+var inflections = []string{"", "s", "es", "ed", "ing"}
+
+// banned reports whether the lower-cased part w is a word of the list, as it is or
+// with one of the inflections.
+func banned(words map[string]bool, w string) bool {
+	for _, end := range inflections {
+		if stem, ok := strings.CutSuffix(w, end); ok && words[stem] {
+			return true
+		}
+	}
+	return false
+}
+
+func checkVocab(dir, wordlist string) error {
+	words, err := readWords(wordlist)
+	if err != nil {
+		return err
 	}
 	files, err := sourceFiles(dir)
 	if err != nil {
@@ -220,10 +288,13 @@ func checkVocab(dir, wordlist string) error {
 			return err
 		}
 		for n, line := range strings.Split(string(src), "\n") {
+			for _, c := range citations {
+				line = strings.ReplaceAll(line, c, "")
+			}
 			// Underscores are not token characters, so they split too.
 			for _, tok := range wordToken.FindAllString(line, -1) {
 				for _, part := range splitCamel(tok) {
-					if w := strings.ToLower(part); banned[w] {
+					if w := strings.ToLower(part); banned(words, w) {
 						bad = append(bad, fmt.Sprintf("%s:%d: forbidden word %q", p, n+1, w))
 					}
 				}
@@ -238,26 +309,34 @@ func checkVocab(dir, wordlist string) error {
 
 // checkLines holds dir to one package and a line cap. A provisional cap is
 // printed as such: it stands until the budget is fixed by ADR-059 decision 11.
-func checkLines(dir string, limit int, provisional bool) error {
-	clean := filepath.Clean(dir)
-	err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
+// Each of subs names a direct subdirectory that is a package of its own with a cap
+// of its own, as the fake and the suite of a definition are (ADR-060 decision 35):
+// it is neither counted nor refused. dirs may name more than one directory, a list of
+// paths as PATH is, each held to one package, whose lines add up under the one cap.
+func checkLines(dirs string, limit int, provisional bool, subs ...string) error {
+	var files []string
+	for _, dir := range filepath.SplitList(dirs) {
+		clean := filepath.Clean(dir)
+		err := filepath.WalkDir(clean, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() && (d.Name() == "testdata" || filepath.Dir(p) == clean && slices.Contains(subs, d.Name())) {
+				return filepath.SkipDir
+			}
+			if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
+				return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && d.Name() == "testdata" {
-			return filepath.SkipDir
+		fs, err := sourceFiles(dir)
+		if err != nil {
+			return err
 		}
-		if !d.IsDir() && filepath.Dir(p) != clean && strings.HasSuffix(p, ".go") {
-			return fmt.Errorf("%s: .go file in subdirectory; a second package needs an ADR", p)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	files, err := sourceFiles(dir)
-	if err != nil {
-		return err
+		files = append(files, fs...)
 	}
 	total := 0
 	for _, p := range files {

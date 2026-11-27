@@ -192,10 +192,6 @@ func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 	for _, e := range []ModuleEntry{
 		listener("o/sealed-listener", sealedEv.Use(kernel.DefaultStage)),
 		listener("o/open-listener", openEv.Use(kernel.DefaultStage)),
-		// Entries read from modules.yaml carry the classes of the definitions instead.
-		{ID: "o/yaml-bound", Provides: []string{"ypk"}, Needs: []string{"ycb"}, Hooks: []HookDecl{{Hook: "y/sealed"}},
-			Classes: &ModuleClasses{ProviderBound: []string{"ypk"}, ConsumerBound: []string{"ycb"}, SealedHooks: []string{"y/sealed"}}},
-		{ID: "o/yaml-open", Provides: []string{"yok"}, Hooks: []HookDecl{{Hook: "y/open"}}, Classes: &ModuleClasses{}},
 		toy(toySpec{id: "o/policy", provides: []kernel.AnyKey{policyKey}}),
 		toy(toySpec{id: "o/cbprov", provides: []kernel.AnyKey{cbKey}}),
 		toy(toySpec{id: "o/cbuser", needs: []kernel.AnyKey{cbKey}}),
@@ -228,10 +224,6 @@ func TestGateReadsClassesFromTheDefinitions(t *testing.T) {
 			[]string{"7 a sealed-hook stop=false"}},
 		{"sealed by its definition, listed", rows("id: a, plugin: o/sealed-listener"), "sealedHooks: {d20/sealed: [o/sealed-listener]}", nil},
 		{"open by its definition, listed for another plugin", rows("id: a, plugin: o/open-listener"), "sealedHooks: {d20/open: [o/plain]}", nil},
-		{"bound and sealed by the classes of modules.yaml, not listed", rows("id: a, plugin: o/yaml-bound"), "",
-			[]string{"7 a provider-binding stop=false", "7 a consumer-binding stop=false", "7 a sealed-hook stop=false"}},
-		{"open by the classes of modules.yaml, listed", rows("id: a, plugin: o/yaml-open"),
-			"providers: {yok: [o/plain]}\nsealedHooks: {y/open: [o/plain]}", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var patches []string
@@ -253,11 +245,17 @@ func TestGateSlotsAndResult(t *testing.T) {
 	if len(infos) != NumChecks || len(g.Slots) != NumChecks {
 		t.Fatalf("want ten slots, got %d and %d", len(infos), len(g.Slots))
 	}
-	wantUntil := []string{"S2a", "S2a", "S2b", "S2a", "S2a", "S2a", "", "", "S2b", "S2a"}
+	// Checks 3 and 9 are S2b everywhere; given no signed distribution manifest the gate evaluates 7 and 8
+	// only, and says why for each other check and each clause it leaves out.
+	wantUntil := []string{"", "", "S2b", "", "", "", "", "", "S2b", ""}
 	for i, s := range g.Slots {
-		if s.N != i+1 || s.Until != wantUntil[i] || s.Evaluated != (wantUntil[i] == "") {
-			t.Errorf("slot %d: %+v", i+1, s.CheckInfo)
+		evaluated := i+1 == CheckKeyHookClass || i+1 == CheckLayerRules
+		if s.N != i+1 || s.Until != wantUntil[i] || s.Evaluated != evaluated || !evaluated && s.Until == "" && s.Reason == "" {
+			t.Errorf("slot %d: %+v", i+1, s)
 		}
+	}
+	if c := g.Slots[CheckKeyHookClass-1].Clauses; len(c) != 2 || !strings.HasPrefix(c[0], "fake: ") || !strings.HasPrefix(c[1], "signed: ") {
+		t.Errorf("clauses of check 7: %q", c)
 	}
 	for _, tc := range []struct {
 		check  int
@@ -269,7 +267,7 @@ func TestGateSlotsAndResult(t *testing.T) {
 		{CheckKeyHookClass, "a", StatusFail, RuleProviderBinding, ""},
 		{CheckKeyHookClass, "b", StatusPass, "", ""},
 		{CheckLayerRules, "a", StatusPass, "", ""},
-		{CheckManifest, "a", StatusNotEvaluated, "", "S2a"},
+		{CheckManifest, "a", StatusNotEvaluated, "", ""},
 		{CheckRemoteProto, "b", StatusNotEvaluated, "", "S2b"},
 		{0, "m", StatusFail, RuleModuleMissing, ""},
 		{0, "a", StatusPass, "", ""},
@@ -281,7 +279,8 @@ func TestGateSlotsAndResult(t *testing.T) {
 		if r.Status != tc.status || r.Rule != tc.rule || r.Until != tc.until {
 			t.Errorf("Result(%d, %q) = %+v", tc.check, tc.row, r)
 		}
-		if tc.status == StatusNotEvaluated && tc.until != "" && !strings.HasPrefix(r.Reason, "not evaluated until ") {
+		if tc.status == StatusNotEvaluated && tc.until != "" && !strings.HasPrefix(r.Reason, "not evaluated until ") ||
+			tc.check == CheckManifest && !strings.Contains(r.Reason, "no signed distribution manifest") {
 			t.Errorf("reason %q", r.Reason)
 		}
 	}
@@ -296,5 +295,48 @@ func TestGateSlotsAndResult(t *testing.T) {
 	}
 	if g.Pass || g.Refused || len(g.Detached) != 1 || len(g.Inactive) != 1 {
 		t.Errorf("verdict %+v", g)
+	}
+}
+
+// Every entry point reports each clause it does not evaluate with the reason, and a
+// denial names the row and the check that denied (ADR-060 decision 17): a check of a
+// later step, a check or a clause that the entry point's inputs do not decide, a row
+// result such a clause would have given, and the clauses a later step adds; a denial by
+// a check and one by the module table lookup. A result with no denial is no error.
+func TestGateReportsWhatItDoesNotEvaluateAndWhoDenied(t *testing.T) {
+	c := comp(t, rows("id: a, plugin: o/other", "id: b, plugin: o/open", "id: m, plugin: x/none"))
+	g := Gate(c, mustMods(t, gateMods), mustDist(t, gateDist))
+	g.Slots[CheckLicence-1].Open = []RowResult{{Check: CheckLicence, Row: "b", Reason: "its clause is not evaluated"}}
+	got := strings.Join(g.NotEvaluated(), "\n")
+	for _, want := range []string{"check 3 Remote protocol: not evaluated until S2b\n",
+		"check 1 Manifest schema and author API: not evaluated at profile render: no signed distribution manifest is given\n",
+		"check 7 Key and hook classes: not evaluated at profile render: signed: no signed distribution manifest is given\n",
+		"check 8 Layer rules: not evaluated until a later step: the tenant overlay is S4b",
+		"check 6 Licence: not evaluated on row b: its clause is not evaluated\n"} {
+		if !strings.Contains(got+"\n", want) {
+			t.Errorf("the report lacks %q:\n%s", want, got)
+		}
+	}
+	// What dist build prints of its gate adds a line for each check that passed on every
+	// row, and for each warning of a deprecated major (ADR-060 decisions 9 and 22).
+	g.Warnings = []RowResult{{Check: CheckDefinitions, Row: "b", Status: StatusPass, Rule: RuleDeprecated, Reason: "row \"b\": of a deprecated major"}}
+	rep := strings.Join(g.Report(), "\n") + "\n"
+	for _, want := range []string{"check 8 Layer rules: pass\n", "check 2 Definition versions: warning: row \"b\": of a deprecated major\n", got + "\n"} {
+		if !strings.Contains(rep, want) {
+			t.Errorf("the report of dist build lacks %q:\n%s", want, rep)
+		}
+	}
+	if strings.Contains(rep, "check 7 Key and hook classes: pass") {
+		t.Errorf("the report of dist build passes check 7, which denies row a:\n%s", rep)
+	}
+	err := g.Denied()
+	for _, want := range []string{"the gate at profile render denies row m by the module table lookup, which runs before the ten checks: ",
+		"the gate at profile render denies row a by check 7 Key and hook classes (provider-binding): "} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("the denial lacks %q: %v", want, err)
+		}
+	}
+	if err := (GateResult{Slots: g.Slots[CheckLayerRules-1:]}).Denied(); err != nil {
+		t.Errorf("no denial: %v", err)
 	}
 }

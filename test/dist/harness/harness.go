@@ -21,14 +21,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
 	"github.com/mutex-solutions/aiops-platform/test/internal/proc"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // PollInterval is the period of every poll of the process's files.
@@ -67,7 +70,7 @@ func Binary(t testing.TB) string {
 			return
 		}
 		buildBin = filepath.Join(buildDir, "aiops-test")
-		cmd := exec.Command("go", "build", "-o", buildBin, ".")
+		cmd := exec.Command("go", slices.Concat([]string{"build"}, plugingen.BuildFlags, []string{"-o", buildBin, "."})...)
 		cmd.Dir = filepath.Join(distDir(), "cmd", "aiops-test")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)
@@ -98,6 +101,17 @@ var Limits = func() string {
 	return string(b)
 }()
 
+// Signed is the signed distribution manifest that the binary embeds,
+// test/dist/distribution.yaml, read from disk as Limits is. Start writes the records
+// by which a fresh home trusts it (test/trusted).
+var Signed = func() []byte {
+	b, err := os.ReadFile(filepath.Join(distDir(), "distribution.yaml"))
+	if err != nil {
+		panic(err) // the suites run from a checkout, where the file is beside this one
+	}
+	return b
+}()
+
 // Options is how a process is started.
 type Options struct {
 	Profile string          // default "smoke"
@@ -107,6 +121,9 @@ type Options struct {
 	Limits  string          // content of the --limits file; default Limits
 	RefsDir string          // --refs-dir, the directory of ${file:} references; default: not passed
 	Context context.Context // ends the process when done (a test timeout); default Background
+	// Install writes more into the fresh home once it trusts the signed manifest and
+	// before the process starts: what plugin install keeps (trusted.Install). Optional.
+	Install func(home string) error
 }
 
 // syncBuf is the combined output of the process.
@@ -128,9 +145,10 @@ type Proc struct {
 	code   int
 }
 
-// Start runs the binary with a fresh home. The caller must call Stop or Kill; a test
+// Start runs the binary with a fresh home, which trusts Signed through the
+// operations row mounted for tb (test/trusted). The caller must call Stop or Kill; a test
 // registers it with t.Cleanup.
-func Start(bin string, o Options) (*Proc, error) {
+func Start(tb testing.TB, bin string, o Options) (*Proc, error) {
 	home, err := os.MkdirTemp("", "aiops-test-home-")
 	if err != nil {
 		return nil, err
@@ -138,6 +156,12 @@ func Start(bin string, o Options) (*Proc, error) {
 	lim := o.Limits
 	if lim == "" {
 		lim = Limits
+	}
+	trusted.Write(tb, home, Signed)
+	if o.Install != nil {
+		if err := o.Install(home); err != nil {
+			return nil, err
+		}
 	}
 	limFile := filepath.Join(home, "limits.yaml")
 	if err := os.WriteFile(limFile, []byte(lim), 0o644); err != nil {

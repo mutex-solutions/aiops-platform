@@ -37,6 +37,7 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
 // New returns the readiness row, which has no config. Its activations share whether
@@ -44,15 +45,18 @@ import (
 // binary makes one value, which its module table holds.
 func New() kernel.Plugin {
 	unknown := new(atomic.Bool)
-	return kernel.Define(kernel.Plugin{
+	return plugin.Define(plugin.Spec[Config]{
 		ID: "aiops/readiness",
 		Inject: []kernel.Dep{kernel.Need(launch.ProfileContextKey), kernel.Need(launch.CatalogKey),
 			kernel.Need(launch.ReadyKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
 		Hooks: []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Applied.Use(kernel.DefaultStage),
 			reload.Operation.Use(kernel.DefaultStage)},
-		Apply: func(c *kernel.Context, _ any) error { return apply(c, unknown) },
+		Apply: func(c *kernel.Context, _ *Config) error { return apply(c, unknown) },
 	})
 }
+
+// Config is the config of the row, which has none.
+type Config struct{}
 
 func apply(c *kernel.Context, unknown *atomic.Bool) error {
 	r := &latch{
@@ -104,9 +108,11 @@ type latch struct {
 	log     *slog.Logger
 	unknown *atomic.Bool // the state of the tree is unknown: the latch stays dropped
 
-	mu    sync.Mutex
-	known bool
-	last  string
+	mu       sync.Mutex
+	known    bool
+	last     string
+	wasReady bool // the required set was ACTIVE once: a drop after it is a warning
+	ended    bool // the launcher ended the latch: the process stops, and a drop is no fault
 }
 
 // evaluate sets or drops the latch from the live states and logs a change of what the
@@ -127,6 +133,9 @@ func (r *latch) evaluate() {
 	if r.unknown.Load() {
 		unmet = append(unmet, "a known state of the tree (reload)")
 	}
+	// Only this row sets and drops the latch, and the launcher ends it when the process
+	// stops (boot's stop): a latch that is down while this row last held it up is that end.
+	r.ended = r.ended || r.known && r.last == "" && !r.ready.IsReady()
 	if len(unmet) == 0 {
 		r.ready.Set()
 	} else {
@@ -134,9 +143,13 @@ func (r *latch) evaluate() {
 	}
 	if now := strings.Join(unmet, " "); !r.known || now != r.last {
 		r.known, r.last = true, now
-		if len(unmet) == 0 {
+		switch {
+		case len(unmet) == 0:
+			r.wasReady = true
 			r.log.Info("readiness: ready, the required set is ACTIVE")
-		} else {
+		case !r.wasReady || r.ended: // a boot is not ready until its rows are ACTIVE, nor a stop after: no fault
+			r.log.Info("readiness: not ready, the required set is not ACTIVE", "waiting", unmet)
+		default:
 			r.log.Warn("readiness: not ready, the required set is not ACTIVE", "waiting", unmet)
 		}
 	}

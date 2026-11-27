@@ -1,5 +1,5 @@
 # aiopsctl profile render --dump
-digest sha256:7ee850af64eeae35052cca79971d1f10b1ecec99449e48314aeb9d99f0e2d141
+digest sha256:c56a2fdd60b323b7f742c5e96d5b02ced6391d98100763a426bc49f4f8dda975
 roles all
 
 ##  (layer 0)
@@ -61,17 +61,20 @@ key toy.policy: store
 key toy.spine: spine
 key toy.store: store
 
+## distribution
+trust: no release key and no built-in record: the distribution that dist use made current is trusted (ADR-020 decision 13)
+
 ## gate
-check 1 Manifest schema and author API: not evaluated until S2a
-check 2 Definition versions: not evaluated until S2a
+check 1 Manifest schema and author API: pass (later: exemptions (compatibility.yaml) are S6b)
+check 2 Definition versions: pass (later: exemptions (compatibility.yaml) are S6b)
 check 3 Remote protocol: not evaluated until S2b
-check 4 Stability: not evaluated until S2a
-check 5 Trust: not evaluated until S2a
-check 6 Licence: not evaluated until S2a
-check 7 Key and hook classes: pass (not read yet: signed keys and hooks and fakes in a server graph need trust data (S2a))
-check 8 Layer rules: pass (not read yet: the insert-only bundle of an installed artifact is S2a; the tenant overlay is S4b)
+check 4 Stability: pass (later: exemptions (compatibility.yaml) are S6b)
+check 5 Trust: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12); later: the index clause is S6a)
+check 6 Licence: pass
+check 7 Key and hook classes: pass
+check 8 Layer rules: pass (later: the tenant overlay is S4b, the scope: tenant clause S4a)
 check 9 Remote scope: not evaluated until S2b
-check 10 Attestation: not evaluated until S2a
+check 10 Attestation: pass (not evaluated: tie: no binary runs the module table: boot ties each module to the build information of the binary (ADR-020 decision 12))
 
 ## diagnostics
 none

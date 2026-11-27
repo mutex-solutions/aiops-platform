@@ -1,0 +1,6 @@
+[
+  {"path": "profile render", "summary": "Compose a profile as the server would, admit it, and print the dumps asked for."},
+  {"path": "profile verify", "summary": "Print every departure of the distribution from the release bindings."},
+  {"path": "profile init", "summary": "Copy the shipped template of a profile into the home."},
+  {"path": "profile sanitize", "summary": "Set aside each layer file of the home that stops the composition of a profile, cli by default."}
+]

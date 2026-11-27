@@ -14,8 +14,6 @@ package reload
 import (
 	"context"
 	"errors"
-	"fmt"
-	"math"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/reload/internal/engine"
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
@@ -23,10 +21,11 @@ import (
 	loader "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	def "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
-// Config is the config of the row. The docs ask for a bounded queue and a bounded
-// history and give no number.
+// Config is the config of the row, decoded by the rules of sdk/plugin. The docs ask
+// for a bounded queue and a bounded history and give no number.
 type Config struct {
 	Queue   int // the most operations that wait; a Submit beyond it is refused. At least 1.
 	History int // the results kept of final operations. At least 1.
@@ -41,13 +40,13 @@ const id = "aiops/reload"
 // its module table holds and its binding maps list.
 func New() kernel.Plugin {
 	m := engine.NewMemory()
-	return kernel.Define(kernel.Plugin{
+	return plugin.Define(plugin.Spec[Config]{
 		ID: id,
 		Inject: []kernel.Dep{kernel.Need(loader.Key), kernel.Need(launch.ProfileContextKey),
 			kernel.Need(launch.CatalogKey)},
 		Provides: []kernel.AnyKey{def.Key},
-		Decode:   decode,
-		Apply:    func(c *kernel.Context, cfg any) error { return apply(c, cfg.(Config), m) },
+		Validate: validate,
+		Apply:    func(c *kernel.Context, cfg *Config) error { return apply(c, *cfg, m) },
 	})
 }
 
@@ -73,51 +72,23 @@ func apply(c *kernel.Context, conf Config, m *engine.Memory) error {
 		},
 	}, m, conf.Queue, conf.History)
 	c.Go("reload", e.Run)
-	return def.Key.Provide(c, e)
+	return def.Key.Provide(c, served{e})
 }
 
-func decode(raw any) (any, error) {
-	var conf Config
-	switch v := raw.(type) {
-	case Config:
-		conf = v
-	case map[string]any:
-		for k, e := range v {
-			n, err := integer(e)
-			switch k {
-			case "queue":
-				conf.Queue = n
-			case "history":
-				conf.History = n
-			default:
-				err = errors.New("unknown field")
-			}
-			if err != nil {
-				return nil, fmt.Errorf("reload: %s: %w", k, err)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("reload: config is %T, want Config or a map", raw)
-	}
+// served is what the reload key serves: the methods of def.Reload and no other, so no
+// consumer reaches the engine's loop by a type assertion (07-c4-plugin-sdk.md:516).
+type served struct{ e *engine.Engine }
+
+func (s served) Submit(ctx context.Context, op def.Op) (def.ID, error) { return s.e.Submit(ctx, op) }
+func (s served) Result(id def.ID) (def.Result, bool)                   { return s.e.Result(id) }
+func (s served) Await(ctx context.Context, id def.ID) (def.Result, error) {
+	return s.e.Await(ctx, id)
+}
+
+// validate holds the bounds to at least 1.
+func validate(conf *Config) error {
 	if conf.Queue < 1 || conf.History < 1 {
-		return nil, errors.New("reload: queue and history must be at least 1")
+		return errors.New("reload: queue and history must be at least 1")
 	}
-	return conf, nil
-}
-
-// integer reads a whole number from a parsed config value.
-func integer(v any) (int, error) {
-	switch n := v.(type) {
-	case int64:
-		if n == int64(int(n)) {
-			return int(n), nil
-		}
-	case int:
-		return n, nil
-	case float64:
-		if n == math.Trunc(n) && math.Abs(n) < 1<<31 {
-			return int(n), nil
-		}
-	}
-	return 0, fmt.Errorf("want a whole number, got %T", v) // never the value: it may be a resolved reference
+	return nil
 }

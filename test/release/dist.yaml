@@ -1,0 +1,44 @@
+# The input of the S2a test release, in the form of dist/dist.yaml (ADR-060 decisions 20,
+# 22 and 38): the release module table plus the dispatcher, the toy instantiable echoer
+# and the toy caller of examples/, and the control row teststate of test/dist, with the
+# bindings and the required set of the release and the entries of teststate as in
+# test/dist/dist.yaml. CI builds it with the builder and a throwaway release key, with
+# the aiopsctl of that distribution (ADR-060 decision 28); the exit installs into its
+# dev composition. No shipped distribution holds it, and the shipped table gains nothing.
+modules:
+  - github.com/mutex-solutions/aiops-platform/loader
+  - github.com/mutex-solutions/aiops-platform/plugins/cli
+  - github.com/mutex-solutions/aiops-platform/plugins/clock
+  - github.com/mutex-solutions/aiops-platform/plugins/command-dist
+  - github.com/mutex-solutions/aiops-platform/plugins/command-key
+  - github.com/mutex-solutions/aiops-platform/plugins/command-plugin
+  - github.com/mutex-solutions/aiops-platform/plugins/command-profile
+  - github.com/mutex-solutions/aiops-platform/plugins/command-trust
+  - github.com/mutex-solutions/aiops-platform/plugins/config-refs
+  - github.com/mutex-solutions/aiops-platform/plugins/operations
+  - github.com/mutex-solutions/aiops-platform/plugins/readiness
+  - github.com/mutex-solutions/aiops-platform/plugins/reload
+  - github.com/mutex-solutions/aiops-platform/plugins/reload-socket
+  - github.com/mutex-solutions/aiops-platform/plugins/restart-policy
+  # The toy plugins of the test release and its control row.
+  - github.com/mutex-solutions/aiops-platform/examples/caller
+  - github.com/mutex-solutions/aiops-platform/examples/dispatch
+  - github.com/mutex-solutions/aiops-platform/examples/echoer
+  - github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate
+providers:
+  configRefsDryRun: [aiops/config-refs]
+  configRefsReady: [aiops/config-refs]
+consumers:
+  appExit: [aiops/restart-policy, aiops/cli]
+  registry: [aiops/restart-policy]
+  # test-state reads the loader, composes a candidate through profileContext and reads
+  # the results of the reload queue.
+  loader: [aiops/reload, aiops-test/test-state]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/operations, aiops-test/test-state]
+  reload: [aiops/reload-socket, aiops-test/test-state]
+  operations: [aiops/command-profile, aiops/command-plugin, aiops/command-dist, aiops/command-trust, aiops/command-key]
+sealedHooks:
+  internal/status: [aiops/restart-policy, aiops/readiness]
+  internal/config: [aiops/config-refs]
+requiredKeys: [clock]
+requiredRows: [loader, restart-policy, reload, readiness]

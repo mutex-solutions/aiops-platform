@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // File names a file inside a file system. The Path is also the name used in
@@ -31,12 +32,15 @@ type File struct {
 //	layer 6  not a layer of rows: see ReadKillSwitches
 //
 // Home holds profiles/<Profile>/profile.yaml, which is required. Layer 5, the
-// tenant overlay, arrives at S4b (08-profiles-roadmap-adrs.md:111).
+// tenant overlay, arrives at S4b (08-profiles-roadmap-adrs.md:111). Append names
+// bundles that follow those of profile.yaml in layer 1, as install appends the bundle
+// of an artifact (ADR-047 decision 17).
 type Sources struct {
 	Profile string
 	Home    fs.FS
 	Bundles fs.FS
 	Patches []File
+	Append  []string
 }
 
 // Options tune a composition.
@@ -71,7 +75,7 @@ type Options struct {
 // rule "the last enabled provider of a bound key cannot be disabled" needs the
 // distribution manifest and is not checked here.
 func Compose(src Sources, opt Options) (Composition, []Warning, error) {
-	c := &composer{opt: opt, index: map[string]int{}}
+	c := &composer{opt: opt, index: map[string]int{}, unread: map[string]string{}}
 	if !okIdent(src.Profile) {
 		return Composition{}, nil, &Error{File: src.Profile, Rule: RuleSyntaxID, Msg: "profile name is not a name"}
 	}
@@ -80,12 +84,18 @@ func Compose(src Sources, opt Options) (Composition, []Warning, error) {
 	if err != nil {
 		return Composition{}, nil, fileError(profile.Path, err)
 	}
-	bundles, err := parseProfile(profile.Path, data)
+	bundles, min, err := parseProfile(profile.Path, data)
 	if err != nil {
 		return Composition{}, nil, err
 	}
-	for _, name := range bundles {
+	c.min = min
+	for _, name := range slices.Concat(bundles, src.Append) {
+		// The bundle of an installed artifact, named by its plugin id, is read from the
+		// home only (ADR-047 decision 5).
 		f := File{FS: src.Bundles, Path: path.Join("bundles", name, "bundle.yaml")}
+		if strings.Contains(name, "/") {
+			f.FS = src.Home
+		}
 		if err := c.layer(f, 1, "bundle:"+name, false); err != nil {
 			return Composition{}, nil, err
 		}
@@ -142,11 +152,14 @@ func fileError(file string, err error) error {
 }
 
 type composer struct {
-	opt   Options
-	rows  []*crow
-	index map[string]int
-	warns []Warning
-	read  int // bytes of the layer files and of each include mount, against MaxComposeBytes
+	opt     Options
+	rows    []*crow
+	index   map[string]int
+	warns   []Warning
+	read    int               // bytes of the layer files and of each include mount, against MaxComposeBytes
+	min     string            // minStability of profile.yaml
+	clashes []string          // the installed artifacts whose group id was taken (artifact)
+	unread  map[string]string // the installed artifacts whose kept bundle does not read (layer)
 }
 
 // The ten fields in canonical order, as indexes of crow.origin.
@@ -181,15 +194,28 @@ func interceptField(key string) FieldName { return FieldIntercept + "." + FieldN
 // skipped.
 func (c *composer) layer(f File, number int, source string, optional bool) error {
 	data, err := readFile(f)
-	if err != nil {
-		if optional && errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return fileError(f.Path, err)
+	if optional && errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	items, err := c.parseItems(f, data)
-	if err != nil {
+	var items []Item
+	if err == nil {
+		items, err = c.parseItems(f, data)
+	} else {
+		err = fileError(f.Path, err)
+	}
+	id, ok := strings.CutPrefix(source, "bundle:")
+	installed := ok && strings.Contains(id, "/")
+	switch {
+	case installed && err != nil:
+		// The kept bundle of an installed artifact that does not read inserts nothing, and
+		// the gate denies the artifact: a composition error would stop every profile that
+		// holds it (ADR-047 decisions 6 and 18).
+		c.unread[id] = err.Error()
+		return nil
+	case err != nil:
 		return err
+	case installed:
+		items = c.artifact(id, items)
 	}
 	l := Layer{Number: number, Source: source, File: f.Path, Items: items}
 	for _, it := range l.Items {
@@ -205,6 +231,37 @@ func (c *composer) layer(f File, number int, source string, optional bool) error
 		}
 	}
 	return nil
+}
+
+// artifact mounts the rows that the bundle of the installed artifact id inserts under one
+// core:group row named by the <name> segment of id, enabled, with every role that one of
+// them states, or none when one states none, so it mounts wherever a row does (ADR-047
+// decision 5). The bundle places no row outside the group, so its other items change
+// nothing, and gate check 8 denies the artifact for them. When a row composed before it
+// holds the group's id, or the id is the loader's, it inserts nothing and records the
+// clash (ADR-047 decision 6).
+func (c *composer) artifact(id string, items []Item) []Item {
+	_, name, _ := strings.Cut(id, "/")
+	if _, clash := c.index[name]; clash || name == LoaderRowID {
+		c.clashes = append(c.clashes, id)
+		return nil
+	}
+	g := ParsedRow{Row: Row{ID: name, Plugin: pluginGroup, Enabled: true, Config: Value{Kind: KindList}}}
+	every := false
+	for _, it := range items {
+		for _, r := range it.Insert {
+			g.Children, every = append(g.Children, r), every || len(r.Roles) == 0
+			for _, role := range r.Roles {
+				if !slices.Contains(g.Roles, role) {
+					g.Roles = append(g.Roles, role)
+				}
+			}
+		}
+	}
+	if slices.Sort(g.Roles); every {
+		g.Roles = nil
+	}
+	return []Item{{Insert: []ParsedRow{g}}}
 }
 
 // parseItems parses a layer file or a mount of an included one. Each counts
@@ -379,7 +436,7 @@ func (c *composer) finish() Composition {
 		rows[i] = ComposedRow{Row: cr.row, Provenance: prov, Refs: refs}
 		plain[i] = cr.row
 	}
-	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks)}
+	return Composition{Rows: rows, Digest: EncodeDigest(plain, c.opt.Modules, c.opt.Locks), MinStability: c.min, Clashes: c.clashes, Unread: c.unread}
 }
 
 // collectRefs appends the references of a value, in document order for lists

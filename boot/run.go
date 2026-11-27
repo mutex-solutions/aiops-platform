@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -30,7 +32,10 @@ import (
 // Exit codes of Run. The documents say only that boot "exits non-zero when the
 // required set is not met" (08-profiles-roadmap-adrs.md:520, :538) and that a
 // process is replaced in three cases (03-c3-kernel.md:372); the numbers are this
-// package's, adopted as written (ADR-059 decision 29).
+// package's, adopted as written (ADR-059 decision 29). Under RunOptions.Command 0, 1
+// and 2 are also the codes of the command, a signal or the end of ctx is
+// ExitInterrupted, and the launcher never returns ExitUsage, so 0 and 2 are always the
+// command's (ADR-061 decision 13).
 const (
 	ExitOK       = 0 // stopped by a signal or by the caller's context, tree disposed in time
 	ExitRefused  = 1 // boot stopped before any row mounted: a layer, the gate, the static graph, the distribution
@@ -40,6 +45,9 @@ const (
 	ExitGaveUp   = 5 // replaced: restart-policy gave up on an infrastructure provider
 	ExitInternal = 6 // the launcher failed: the kernel refused its config, a launch key could not be provided
 	ExitRestore  = 7 // replaced: a restore failed
+	// ExitInterrupted is the stop by a signal or the end of ctx under RunOptions.Command
+	// (ADR-061 decision 13).
+	ExitInterrupted = 8
 )
 
 // LoaderID is the module-table id of the loader plugin, which boot mounts first
@@ -57,7 +65,8 @@ const (
 // the loader or composition key has no provider.
 func WithLoader(c Composition) Composition {
 	row := ComposedRow{Row: Row{ID: LoaderRowID, Plugin: LoaderID, Enabled: true, Required: true}}
-	return Composition{Rows: append([]ComposedRow{row}, c.Rows...), Digest: c.Digest}
+	c.Rows = append([]ComposedRow{row}, c.Rows...)
+	return c
 }
 
 // BatchFunc is (*kernel.Root).Batch, the one function the loader gets to commit
@@ -151,6 +160,17 @@ type ProcessStatus struct {
 	Digest  string // hex of the composition the process booted
 	Exit    int    // set in PhaseStopped
 	Detail  string // why the process stopped, one line
+	// Rows is each mounted row's state and what it waits for, set at settle and at every
+	// committed generation (ADR-059 decision 31 as amended; ADR-061 decision 21).
+	Rows []RowStatus
+}
+
+// RowStatus is one row of ProcessStatus: its state, "" while it has no fiber, and the
+// keys it needs that have no ACTIVE provider, sorted.
+type RowStatus struct {
+	ID       string
+	State    State
+	WaitsFor []string
 }
 
 // RunOptions are the inputs of Run. They are values: nothing here is read from
@@ -174,12 +194,45 @@ type RunOptions struct {
 	// Signals delivers SIGINT and SIGTERM; any value starts a clean stop.
 	Signals <-chan os.Signal
 
+	// Stdout and Stderr are where the launcher writes its own lines. Stdio holds the
+	// streams of the process that cmdline serves (launch 0.2): in aiops they are the
+	// same, and aiopsctl discards what the launcher writes on stdout (ADR-061 decision
+	// 25). Dir and Environ are the working directory and the environment that cmdline
+	// serves, which only aiopsctl fills (ADR-061 decision 13).
 	Stdout, Stderr io.Writer
+	Stdio          Stdio
+	Dir            string
+	Environ        []string
 
 	Registry Registry
-	Dist     DistManifest
-	Limits   Limits
-	Clock    Clock
+	// Signed is the signed distribution manifest the binary embeds (ADR-060 decision
+	// 20), and BuildInfo the build information of the binary, which ties the module
+	// table to it (ADR-020 decision 12). Release is the release key of a release
+	// binary, nil for any other (ADR-020 decision 13).
+	Signed    []byte
+	BuildInfo *debug.BuildInfo
+	Release   *Release
+	Limits    Limits
+	Clock     Clock
+
+	// Command is set by aiopsctl, whose cli row runs one command and requests the exit
+	// with its code (ADR-061 decision 13).
+	Command bool
+	// WriteHeld says that a write of aiopsctl holds write.lock of the home, so a
+	// snapshot/ is that live write's, which restores or keeps its files under its lock:
+	// the server boots the files, as the process that replaces one killed mid-submission
+	// must (ADR-062 decision 10). Only a stopped write's snapshot refuses a server.
+	WriteHeld bool
+	// Tools are the parts of the toolbox that only aiopsctl links, nil in aiops, where
+	// each answers launch.ErrNotCarried; Shipped holds the bundles and profiles that the
+	// binary embeds; Files is the file system, rooted at "/", that the toolbox reads the
+	// absolute paths of a request from (ADR-061 decision 21). Each may be nil.
+	Tools   launch.Tools
+	Shipped fs.FS
+	Files   fs.FS
+	// Lint is the data of the lints of step 1 that the toolbox's ReadManifest runs, which
+	// only aiopsctl hands in (ADR-061 decision 21).
+	Lint ManifestLint
 
 	// Publish receives the status at every change, one call at a time. Optional.
 	Publish func(ProcessStatus)
@@ -187,6 +240,12 @@ type RunOptions struct {
 	// anything is mounted: a seam of the test binary (test/dist/cmd/aiops-test), which
 	// records the kernel's fibers beside the state file. Nil in a release binary.
 	Kernel func(*kernel.Root)
+}
+
+// Stdio are the three streams of the process.
+type Stdio struct {
+	In       io.Reader
+	Out, Err io.Writer
 }
 
 // Run boots the composition and runs it until a signal, an exit request of a row
@@ -221,6 +280,8 @@ type run struct {
 	pub      *publisher
 	root     *kernel.Root
 	cat      *catalog
+	pc       *profileContext
+	loader   *kernel.Fiber
 	ready    *latch
 	exits    chan launch.ExitRequest
 	leakPing chan struct{}
@@ -251,7 +312,11 @@ func (r *run) run(ctx context.Context) int {
 	}
 	role, roles, err := parseRunRole(o.Role)
 	if err != nil {
-		return r.fail(ExitUsage, "%v", err)
+		code := ExitUsage
+		if o.Command {
+			code = ExitInternal
+		}
+		return r.fail(code, "%v", err)
 	}
 	cat, err := newCatalog(o.Registry)
 	if err != nil {
@@ -262,11 +327,23 @@ func (r *run) run(ctx context.Context) int {
 	if !ok || o.Registry.LoaderConfig == nil {
 		return r.fail(ExitRefused, "distribution: the module table has no %s or no LoaderConfig", LoaderID)
 	}
-	mods := o.Registry.Modules
-	dist := o.Dist
+	signed, err := ReadDistribution("the embedded distribution manifest", o.Signed)
+	if err != nil {
+		return r.fail(ExitRefused, "distribution: %v", err)
+	}
+	mods := signed.place(o.Registry.Modules)
+	dist := signed.Bindings()
+	tie, tied := tieModules(signed, o.BuildInfo)
+	// The commands of aiopsctl are the writers that finish a stopped write; a write that
+	// holds its lock is live, and restores or keeps its files itself.
+	if stopped(o.Home) && !o.Command && !o.WriteHeld {
+		return r.fail(ExitRefused, "%s: run aiopsctl profile sanitize %s, then start again", stoppedWrite, o.Profile)
+	}
 
 	// 1. Compose layers 0 to 4 (03-c3-kernel.md:355).
-	opt := Options{Server: true, Modules: mods}
+	// The server rule holds for every run but that of aiopsctl, whose cli profile is no server
+	// profile and whose rows state no roles (ADR-061 decision 25).
+	opt := Options{Server: !o.Command, Modules: mods, Locks: lockDigests(o.Home, o.Profile)}
 	src := Sources{Profile: o.Profile, Home: o.Home, Bundles: o.Bundles, Patches: o.Patches}
 	comp, warns, err := Compose(src, opt)
 	if err != nil {
@@ -275,14 +352,26 @@ func (r *run) run(ctx context.Context) int {
 	for _, w := range warns {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
+	// The writes of aiopsctl compose with the bundles of the home; a server that composes
+	// with others does not serve their submissions (ADR-062 decision 2).
+	if b, h := o.Flags["bundles"], o.Flags["home"]; !o.Command && b != "" && strings.TrimSuffix(b, "/") != strings.TrimSuffix(h, "/") &&
+		slices.ContainsFunc(comp.Rows, func(r ComposedRow) bool { return r.Plugin == "aiops/reload-socket" && r.Enabled }) {
+		return r.fail(ExitRefused, "--bundles %s is not the home %s, and the profile enables reload-socket, which carries the writes of aiopsctl, "+
+			"whose composition reads the bundles of the home: move the bundles into the home, or disable reload-socket (ADR-062 decision 2)", b, h)
+	}
 	if err := CheckReserved(comp); err != nil {
 		return r.fail(ExitRefused, "%v", err)
 	}
 	// 2 and 3. Admit, then the static graph and the static required audit
 	// (03-c3-kernel.md:357-359). The admitted tree holds the loader as a row, so that
 	// the graph sees what it provides and the required row "loader"
-	// (08-profiles-roadmap-adrs.md:455) is satisfied by boot's own mount.
-	a := Admit(WithLoader(comp), mods, dist, roles)
+	// (08-profiles-roadmap-adrs.md:455) is satisfied by boot's own mount. The gate
+	// reads what boot holds (bootInput), whose trust state boot prints at every boot.
+	in, lines := bootInput(o.Home, o.Profile, WithLoader(comp), mods, signed, o.Release, tie)
+	for _, l := range append(lines, tied...) {
+		fmt.Fprintln(r.errw, l)
+	}
+	a := AdmitWith(WithLoader(comp), in, roles)
 	for _, l := range a.Diagnostics() {
 		fmt.Fprintln(r.errw, l)
 	}
@@ -297,9 +386,12 @@ func (r *run) run(ctx context.Context) int {
 	// 4. Build the kernel and prepare (03-c3-kernel.md:360).
 	// The committed composition is what the loader mounts: the admitted copy, without
 	// the loader's own row.
+	committed := a.Admitted
+	committed.Rows = committed.Rows[1:]
 	pc := &profileContext{profile: o.Profile, role: role, src: src, opt: opt, mods: mods, dist: dist, roles: roles,
-		committed: Composition{Rows: a.Admitted.Rows[1:], Digest: comp.Digest}, known: map[Digest]Composition{}}
-	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }}
+		signed: signed, release: o.Release, tie: tie, committed: committed, known: map[Digest]Composition{}, commits: make(chan struct{}, 1)}
+	pc.box = &toolbox{Tools: cmp.Or[launch.Tools](o.Tools, launch.NoTools{}), p: pc, files: orNone(o.Files), shipped: orNone(o.Shipped), signed: o.Signed, lint: o.Lint}
+	r.ready = &latch{changed: func(v bool) { r.pub.update(func(s *ProcessStatus) { s.Ready = v }) }, booted: make(chan struct{})}
 	cfg, err := r.kernelConfig(cat, dist)
 	if err != nil {
 		return r.fail(ExitRefused, "distribution: %v", err)
@@ -334,6 +426,7 @@ func (r *run) run(ctx context.Context) int {
 	}()
 	loader := root.Plugin(loaderPlugin, o.Registry.LoaderConfig(entrySpecs(a.Admitted), root.Batch, cat.plugins))
 	root.Plugin(r.auditPlugin(), nil)
+	r.pc, r.loader = pc, loader
 
 	// 5. Settle under a bound, then the required audit over the live tree
 	// (03-c3-kernel.md:361).
@@ -349,15 +442,17 @@ func (r *run) run(ctx context.Context) int {
 	stopBoot()
 	switch {
 	case <-signalled:
-		return r.stop(ctx, ExitOK, "signal")
+		return r.stop(ctx, r.interrupted(), "signal", false)
 	case ctx.Err() != nil:
-		return r.stop(ctx, ExitOK, "context ended")
+		return r.stop(ctx, r.interrupted(), "context ended", false)
 	}
 	if serr != nil {
 		fmt.Fprintf(r.errw, "warning: settle: %v\n", serr)
 	}
 	// The audit reads the tree whatever happens to ctx meanwhile: the run loop sees its end.
-	errs, wls := AuditRequired(a.Graph, a.Required, r.view(context.WithoutCancel(ctx), loader))
+	// The status carries what it read, whatever the audit finds.
+	v := r.publishRows(context.WithoutCancel(ctx), a.Graph)
+	errs, wls := AuditRequired(a.Graph, a.Required, v)
 	for _, w := range wls {
 		fmt.Fprintf(r.errw, "warning: %s\n", w)
 	}
@@ -365,10 +460,12 @@ func (r *run) run(ctx context.Context) int {
 		fmt.Fprintf(r.errw, "error: %s\n", e.Error())
 	}
 	if len(errs) > 0 {
-		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)))
+		return r.stop(ctx, ExitRequired, fmt.Sprintf("the required set is not met: %d finding(s)", len(errs)), false)
 	}
 	// The latch is the readiness row's, not boot's (03-c3-kernel.md:67): a distribution
-	// that links no readiness row is never ready, and says so by its required set.
+	// that links no readiness row is never ready, and says so by its required set. Boot
+	// has ended: Booted closes, and the cli row of aiopsctl dispatches (launch 0.2).
+	close(r.ready.booted)
 	r.pub.update(func(s *ProcessStatus) { s.Phase = PhaseRunning })
 	fmt.Fprintf(r.out, "aiops: booted profile=%s role=%s\n", o.Profile, role)
 	return r.loop(ctx)
@@ -428,12 +525,18 @@ func (r *run) auditPlugin() kernel.Plugin {
 // key and hook names to values (03-c3-kernel.md:360; 07-c4-plugin-sdk.md:1358).
 func (r *run) kernelConfig(cat *catalog, dist DistManifest) (kernel.Config, error) {
 	l := r.o.Limits
+	// aiopsctl keeps the warnings and the errors of the rows on stderr, and not their
+	// progress (ADR-061 decision 25).
+	level := slog.LevelInfo
+	if r.o.Command {
+		level = slog.LevelWarn
+	}
 	cfg := kernel.Config{
 		LoadDeadline: l.LoadDeadline, DrainDeadline: l.DrainDeadline, DisposeDeadline: l.DisposeDeadline,
 		ArchiveLimit: l.ArchiveLimit, EventWindow: l.EventWindow, ObserverQueue: l.ObserverQueue,
 		OwnerInbox: l.OwnerInbox, TerminalLimit: l.TerminalLimit,
 		ObserverLog: func(err error) { fmt.Fprintf(r.errw, "warning: observer: %v\n", err) },
-		LogHandler:  slog.NewTextHandler(r.errw, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		LogHandler:  slog.NewTextHandler(r.errw, &slog.HandlerOptions{Level: level}),
 	}
 	var errs []error
 	resolve := func(side string, bs []Binding) kernel.Bindings {
@@ -488,7 +591,7 @@ func (r *run) prepare(pc *profileContext, cat *catalog) error {
 	return errors.Join(
 		launch.ProfileContextKey.Provide(c, pc),
 		launch.CatalogKey.Provide(c, cat),
-		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags, env: envOf(o.Env)}),
+		launch.CmdlineKey.Provide(c, cmdline{args: o.Args, flags: o.Flags, env: envOf(o.Env), stdio: o.Stdio, dir: o.Dir, environ: o.Environ}),
 		launch.ReadyKey.Provide(c, r.ready),
 		launch.KillSwitchesKey.Provide(c, switches(ReadKillSwitches(envOf(o.Env)))),
 		launch.AppExitKey.Provide(c, appExit{reqs: r.exits}),
@@ -613,11 +716,14 @@ func (r *run) loop(ctx context.Context) int {
 	for {
 		select {
 		case <-r.o.Signals:
-			return r.stop(ctx, ExitOK, "signal")
+			return r.stop(ctx, r.interrupted(), "signal", false)
 		case <-ctx.Done():
-			return r.stop(ctx, ExitOK, "context ended")
+			return r.stop(ctx, r.interrupted(), "context ended", false)
 		case req := <-r.exits:
-			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail))
+			if req.Reason == launch.ExitCommand && r.o.Command && req.Code >= ExitOK && req.Code <= ExitUsage {
+				return r.stop(ctx, req.Code, fmt.Sprintf("%s: %s", req.Reason, req.Detail), true)
+			}
+			return r.stop(ctx, exitCodeOf(req.Reason), fmt.Sprintf("process replaced: %s: %s", req.Reason, req.Detail), false)
 		case <-r.leakPing:
 			if graceUp == nil {
 				r.ready.end()
@@ -628,11 +734,35 @@ func (r *run) loop(ctx context.Context) int {
 				graceUp = done
 			}
 		case <-graceUp:
-			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline")
+			return r.stop(ctx, ExitLeak, "process replaced: dispose-leak: a fiber leaked past its drain or dispose deadline", false)
+		case <-r.pc.commits:
+			r.pc.mu.Lock()
+			c := r.pc.committed
+			r.pc.mu.Unlock()
+			g, _, _ := BuildGraph(WithLoader(c), r.pc.mods, r.pc.dist, r.pc.roles)
+			r.publishRows(ctx, g)
 		}
 	}
 }
 
+// publishRows reads the tree and publishes the rows that g mounts with their states,
+// and returns what it read.
+func (r *run) publishRows(ctx context.Context, g Graph) StateView {
+	v := r.view(ctx, r.loader)
+	r.pub.update(func(s *ProcessStatus) { s.Rows = rowStates(g, v) })
+	return v
+}
+
+// interrupted is the code of a stop that a signal or the end of ctx began.
+func (r *run) interrupted() int {
+	if r.o.Command {
+		return ExitInterrupted
+	}
+	return ExitOK
+}
+
+// exitCodeOf is the code of an exit request other than a command's: ExitCommand with no
+// Command, or with a code other than 0, 1 and 2, is a launcher failure.
 func exitCodeOf(why launch.ExitReason) int {
 	switch why {
 	case launch.ExitDisposeLeak:
@@ -647,13 +777,16 @@ func exitCodeOf(why launch.ExitReason) int {
 
 // stop is the bounded shutdown: drop readiness, close the kernel under the
 // shutdown bound, report. why is one line. A shutdown that overran its bound, or
-// that saw a fiber leak, is a replacement, not a clean stop.
-func (r *run) stop(ctx context.Context, code int, why string) int {
+// that saw a fiber leak, is a replacement, not a clean stop: it replaces ExitOK and the
+// code of a command, which command marks.
+func (r *run) stop(ctx context.Context, code int, why string, command bool) int {
 	r.ready.end()
 	r.pub.update(func(s *ProcessStatus) { s.Phase, s.Detail = PhaseStopping, why })
-	if code == ExitOK {
+	switch {
+	case command: // the command returned and said what it did
+	case code == ExitOK:
 		fmt.Fprintf(r.errw, "aiops: stopping: %s\n", why)
-	} else {
+	default:
 		fmt.Fprintf(r.errw, "aiops: exit %d: %s\n", code, why)
 	}
 	bctx, cancel := r.bound(context.WithoutCancel(ctx), r.o.Limits.ShutdownBound)
@@ -666,7 +799,7 @@ func (r *run) stop(ctx context.Context, code int, why string) int {
 	// The observer of the root sees the events of Close, and the diagnostic of Close
 	// says it too.
 	leaked := r.leakSeen.Load() || errors.Is(err, kernel.ErrLeaked)
-	if code == ExitOK && (timedOut || leaked) {
+	if (code == ExitOK || command) && (timedOut || leaked) {
 		// The detail says why the process asks to be replaced, not what began the stop.
 		code, why = ExitLeak, fmt.Sprintf("shutdown did not finish cleanly: the bound of %s passed", r.o.Limits.ShutdownBound)
 		if leaked {

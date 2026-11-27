@@ -1,0 +1,7 @@
+[
+  {"argv": ["greet"], "outcome": "ok", "stdout": "hello world\n"},
+  {"argv": ["greet", "--name", "you"], "outcome": "ok", "stdout": "hello you\n"},
+  {"argv": ["greet", "--name="], "outcome": "usage", "stdout": "", "stderr": "--name is empty"},
+  {"argv": ["greet", "--color", "red"], "outcome": "usage", "stdout": "", "stderr": "usage: aiopsctl greet"},
+  {"argv": ["greet", "--name", "nobody"], "outcome": "error", "stdout": "", "stderr": "aiopsctl: greet: nobody is there"}
+]

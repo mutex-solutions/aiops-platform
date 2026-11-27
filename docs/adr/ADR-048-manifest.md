@@ -77,7 +77,7 @@ What boot reads at `8e1f7b9` is not schema 1.0:
 
 | What boot reads | From | In schema 1.0 |
 |---|---|---|
-| `ModuleEntry.ID` | `kernel.Plugin.ID` (`dist/dist.go`), or the key of `modules.yaml` | `id` |
+| `ModuleEntry.ID` | `kernel.Plugin.ID` (the table of `dist/dist.go` at `8e1f7b9`, which `go run ./tools/plugingen --write .` now generates into `dist/modules.go`; ADR-060 decision 20), or the key of `modules.yaml` | `id` |
 | `Module`, `Version`, `Sum` | `Module` and `Version` from the constants `ModulePath` and `Version` of `dist/dist.go`, or `modules.yaml`; `Sum` from `modules.yaml` only | Not manifest fields: the module table of the signed distribution manifest (ADR-060 decisions 19 and 20) |
 | `Provides` | The key names of `kernel.Plugin.Provides` | `provides`, with the major of each key |
 | `Needs`, `Wants` | `kernel.Plugin.Inject`, split by `Optional()` | `uses`, with the major and `as` |

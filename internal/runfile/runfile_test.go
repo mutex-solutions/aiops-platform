@@ -24,6 +24,21 @@ func TestWriteReplacesAtomically(t *testing.T) {
 	}
 }
 
+// Write creates a missing runtime directory with mode 0700 (ADR-047 decision 14).
+func TestWriteCreatesTheDirectoryWithMode0700(t *testing.T) {
+	dir := Dir(t.TempDir())
+	if err := Write(dir, "f.json", nil); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o700 {
+		t.Fatalf("run/ has mode %v; want 0700", fi.Mode().Perm())
+	}
+}
+
 func TestWriteErrors(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "file")

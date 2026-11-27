@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package dist is the distribution of the production server binary cmd/aiops: the
-// module table as Go values, the part of the distribution manifest the launcher
-// reads (dist.yaml) and the launcher's limits (limits.yaml)
-// (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233).
-//
-// At S1 the module table is written by hand; the distribution builder that
-// generates it is S2a (08-profiles-roadmap-adrs.md:402). There is no init()
-// registry: Registry builds the table when called, from the list in modules below.
+// Package dist is the distribution of the production binaries cmd/aiops and
+// cmd/aiopsctl, one module table for both (ADR-061 decision 24): the module table as Go
+// values, the signed distribution manifest the binaries embed (distribution.yaml), the
+// launcher's limits (limits.yaml) and the shipped bundles and profiles
+// (07-c4-plugin-sdk.md:1339, :1355; 08-profiles-roadmap-adrs.md:1233). dist.yaml is
+// the builder's input: the module list, the bindings and the required set of the
+// release (ADR-060 decision 20); go run ./tools/plugingen --write . generates from it
+// the module table, Modules in modules.go, each plugin with its manifest, which the root
+// package embeds, and writes distribution.yaml from it and from the binary's package
+// graph; make check fails when either differs. There is no init() registry: Table
+// builds the table when called, from the list in Modules.
 //
 // This package, like cmd/aiops, must never import a test plugin, a fake or
 // sdk/testkit (07-c4-plugin-sdk.md:47, :564). test/dist is the separate
@@ -15,69 +18,73 @@
 package dist
 
 import (
-	_ "embed" // dist.yaml and limits.yaml are embedded
+	"embed" // distribution.yaml, limits.yaml, bundles/ and profiles/ are embedded
+	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/loader"
-	"github.com/mutex-solutions/aiops-platform/plugins/clock"
-	configrefs "github.com/mutex-solutions/aiops-platform/plugins/config-refs"
-	"github.com/mutex-solutions/aiops-platform/plugins/readiness"
-	"github.com/mutex-solutions/aiops-platform/plugins/reload"
-	restartpolicy "github.com/mutex-solutions/aiops-platform/plugins/restart-policy"
 	loaderdef "github.com/mutex-solutions/aiops-platform/sdk/def/loader/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 )
 
-//go:embed dist.yaml
-var distYAML []byte
+//go:embed distribution.yaml
+var signed []byte
 
 //go:embed limits.yaml
 var limitsYAML []byte
 
-// Module is the declared data of one plugin of the module table that its kernel.Plugin
-// does not carry. Provides, Needs, Wants and Hooks of the entry are read from the
-// plugin; Run checks the entry against it.
+// shipped holds the bundles and the profiles of the release: aiops-core, aiops-cli and the
+// profiles dev and cli (ADR-060 decision 27; ADR-061 decision 29).
+//
+//go:embed all:bundles all:profiles
+var shipped embed.FS
+
+// Module is one plugin of the module table: its value and its manifest, plugin.yaml
+// (07-c4-plugin-sdk.md:1344).
 type Module struct {
 	Plugin   kernel.Plugin
-	Volatile []string // config paths a change commits in place (ADR-059 decision 10)
+	Manifest []byte
 }
 
-// Entry returns the boot.ModuleEntry of the module, with the module path and version
-// of the repository's own root module.
-func (m Module) Entry() boot.ModuleEntry {
-	e := boot.ModuleEntry{ID: m.Plugin.ID, Module: ModulePath, Version: Version, Plugin: m.Plugin, Volatile: m.Volatile}
-	for _, k := range m.Plugin.Provides {
-		e.Provides = append(e.Provides, k.Name())
+// Entry returns the boot.ModuleEntry of the module, read from its manifest with the
+// gate's lenient reader (ADR-048 decisions 15 and 18): what it provides, uses and
+// listens on, and the volatile paths of its configSchema, so no list of them is
+// written by hand (ADR-060 decision 4). Boot takes the module of each entry from the
+// signed distribution manifest. Run checks the entry against the plugin.
+func (m Module) Entry() (boot.ModuleEntry, error) {
+	man, err := boot.ReadManifest("plugin.yaml of "+m.Plugin.ID, m.Manifest, boot.ManifestLenient)
+	if err != nil {
+		return boot.ModuleEntry{}, err
 	}
-	for _, u := range m.Plugin.Hooks {
-		// The ordinal of the stage is the definition's; the plugin value carries only its
-		// name, so the dump orders by plugin id until S2a generates the table.
-		e.Hooks = append(e.Hooks, boot.HookDecl{Hook: u.Hook(), StageName: u.Stage()})
-	}
-	for _, d := range m.Plugin.Inject {
-		if d.Optional() {
-			e.Wants = append(e.Wants, d.Key().Name())
-		} else {
-			e.Needs = append(e.Needs, d.Key().Name())
-		}
-	}
-	return e
+	e := man.Entry()
+	e.Plugin = m.Plugin
+	return e, nil
 }
 
-// ModulePath and Version stand in for the module data that the builder will read from
-// go.mod and the lock file.
-const (
-	ModulePath = "github.com/mutex-solutions/aiops-platform"
-	Version    = "v0.0.0-s1"
-)
+// Manifest returns dir/plugin.yaml of fsys, or nil, which Entry refuses.
+func Manifest(fsys fs.FS, dir string) []byte {
+	b, _ := fs.ReadFile(fsys, dir+"/plugin.yaml")
+	return b
+}
 
-// Table builds the module table and the registry around it from a list of modules.
-// The test distribution calls it with this list plus its own.
-func Table(mods ...Module) boot.Registry {
+// ModulePath is the path of the repository's root module.
+const ModulePath = "github.com/mutex-solutions/aiops-platform"
+
+// Table builds the module table and the registry around it from a list of modules,
+// each entry under the id of its manifest. The test distribution calls it with this
+// list plus its own.
+func Table(mods ...Module) (boot.Registry, error) {
 	t := boot.ModuleTable{}
+	var errs []error
 	for _, m := range mods {
-		t[m.Plugin.ID] = m.Entry()
+		e, err := m.Entry()
+		errs = append(errs, err)
+		t[e.ID] = e
+	}
+	if err := errors.Join(errs...); err != nil {
+		return boot.Registry{}, err
 	}
 	return boot.Registry{
 		Modules: t,
@@ -88,34 +95,24 @@ func Table(mods ...Module) boot.Registry {
 		LoaderConfig: func(rows []loaderdef.EntrySpec, batch boot.BatchFunc, plugins map[string]kernel.Plugin) any {
 			return loader.Config{Rows: rows, Batch: batch, Plugins: plugins}
 		},
-	}
+	}, nil
 }
 
-// Modules is the compiled-in list of plugins of the release distribution. ADD A
-// PLUGIN HERE: one Module per plugin, and its bindings in dist.yaml. At S1 the list
-// holds the loader and the five core rows of S1; the others arrive with their own
-// steps. The bindings of each are in dist.yaml.
-func Modules() []Module {
-	return []Module{
-		{Plugin: loader.New()},
-		{Plugin: clock.Plugin},
-		{Plugin: configrefs.Plugin},
-		{Plugin: readiness.New()},
-		{Plugin: reload.New()},
-		{Plugin: restartpolicy.New()},
-	}
-}
+// Shipped returns the bundles and profiles of the release, by their paths under the
+// home: bundles/<name>/bundle.yaml and profiles/<name>/profile.yaml. Both binaries embed
+// them, and a file of the home wins over a shipped one.
+func Shipped() fs.FS { return shipped }
 
-// Load returns the registry, the distribution manifest and the limits of the
+// Load returns the registry, the signed distribution manifest and the limits of the
 // release distribution.
-func Load() (boot.Registry, boot.DistManifest, boot.Limits, error) {
-	man, err := boot.ParseDist("dist.yaml", distYAML)
-	if err != nil {
-		return boot.Registry{}, boot.DistManifest{}, boot.Limits{}, fmt.Errorf("dist: %w", err)
-	}
+func Load() (boot.Registry, []byte, boot.Limits, error) {
 	lim, err := boot.ParseLimits("limits.yaml", limitsYAML)
 	if err != nil {
-		return boot.Registry{}, boot.DistManifest{}, boot.Limits{}, fmt.Errorf("dist: %w", err)
+		return boot.Registry{}, nil, boot.Limits{}, fmt.Errorf("dist: %w", err)
 	}
-	return Table(Modules()...), man, lim, nil
+	reg, err := Table(Modules()...)
+	if err != nil {
+		return boot.Registry{}, nil, boot.Limits{}, fmt.Errorf("dist: %w", err)
+	}
+	return reg, signed, lim, nil
 }

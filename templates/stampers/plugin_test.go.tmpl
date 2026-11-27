@@ -1,0 +1,30 @@
+package {{.Package}}_test
+
+import (
+	"testing"
+
+	plug "{{.Module}}"
+	"github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/conformance"
+	"github.com/mutex-solutions/aiops-platform/sdk/def/stampers/v0/fake"
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+)
+
+// TestConformance runs the obligations of the stampers suite on the plugin (T2). Each
+// failed obligation prints one line that starts with its id.
+func TestConformance(t *testing.T) {
+	conformance.Run(t, func(t *testing.T) (conformance.Subject, *kernel.Root) {
+		root := kerneltest.New(t)
+		return conformance.Contribution(root.Plugin(plug.Plugin, nil)), root
+	})
+}
+
+// TestSolo mounts the plugin alone, with the recording fake of stampers (T1).
+func TestSolo(t *testing.T) {
+	root := kerneltest.New(t)
+	rec, p := fake.New()
+	kerneltest.Mount(root, p, plug.Plugin)
+	if got := rec.Inventory(); len(got) != 1 {
+		t.Fatalf("the plugin registered %v, want one stamper", got)
+	}
+}

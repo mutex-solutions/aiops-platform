@@ -154,7 +154,24 @@
    it, since in hosted the profile layer is a platform table written only through
    `plugin-manager` (`00:491`); and from S4b, where several processes may run on one home,
    the lock of decision 4 lets the first serve the socket and fails the row in the others,
-   so ADR-038 states which process serves it.
+   so ADR-038 states which process serves it. Note of 2026-11-26 (review round over the
+   whole step): until S4b one server process runs on a home. `internal/serve` takes the
+   exclusive `flock(2)` of `<home>/run/process.lock` before it writes `status.json`, and
+   a second process on the home exits 1 naming that file and writes no status, which
+   would otherwise make `aiopsctl` read the first process as stopped or as running
+   another profile. S4b, which lets several processes share a home, replaces the rule.
+   Note of 2026-11-27 (round 2): a later layer can enable the row in the profile `cli`,
+   the site layer among them, so the patch of `aiops-cli` alone does not keep `aiopsctl`
+   from listening. The row applies with no effect in a process whose launcher fills the
+   working directory of `cmdline`, which only that of `aiopsctl` does (launch 0.2), and
+   `plugin enable` refuses the row in the profile `cli`. And the four writes compose a
+   profile with the bundles of the home, while `aiops --bundles <dir>`, a flag of S1,
+   composes with another directory's, so a write would be refused, or write nothing and
+   exit 0, for a profile that the process runs otherwise. A server whose `--bundles`
+   names another directory than its home therefore refuses to start while its profile
+   enables `reload-socket`, naming both remedies: the bundles move into the home, or the
+   row is disabled, and then the writes do not reach that process (upgrade note of the
+   S2a report).
 
 ### The socket and who may open it
 
@@ -310,7 +327,15 @@
    ADR-059 decision 30 revisits at S3, so a site whose `--limits` raises those deadlines
    raises the flag. When nothing answers in the window it keeps the files, prints
    `restart-required: <socket> did not answer; the change applies at the next start`
-   (`00:490`) and exits 1.
+   (`00:490`) and exits 1. Note of 2026-11-27 (review round over the whole step, round
+   2): a server that was killed leaves a `status.json` that says it runs. So `aiopsctl`
+   first tries a shared, non-blocking `flock(2)` of `run/process.lock`, which a server
+   holds for its life (decision 2), and releases it at once; where it takes it, no
+   process runs and the outcome is not-running, exit 0, as for a status that says
+   `stopped`; a server that starts in that instant tries its own lock again for a
+   moment. Skipping the window where the profile composes no enabled `reload-socket`
+   row was not taken: the render of the home after the write does not show what the
+   running process composed, and the window still ends.
 10. **Timeouts and a second submission.** The row reads the request within 5 s of the
     accept and writes each reply line within 5 s. It notices a client that closed its end
     within 1 s and stops awaiting for it; the operation itself goes on in `reload`. The
@@ -553,7 +578,19 @@
       row, exits 1 and keeps the files; with the row disabled while the process runs,
       `enable` answers `restart-required` and exits 1; with no `status.json`, it exits 0
       and changes the files only. `test-submit` stays the submitter of the S1 suites
-      (ADR-059 decision 9).
+      (ADR-059 decision 9). Note of 2026-11-26, as built:
+      `TestEnableOutcomesOnARunningProcess` of `cmd/aiopsctl`, which `make s1-suites`
+      runs, holds each case of this bullet, with `extra` and `flaky` in a bundle of the
+      home's `dev` and the test binary running as the `aiopsctl` of the test distribution
+      in a process of its own; the change of `inject` and of `history` are each asserted
+      by the rows that test-state reports the loader restarted in that generation
+      (`reload-socket`; `reload`), and the restart of the dependant `reload-socket` after
+      the change of `history`, which the kernel makes through its epoch (`08:189`) and
+      the loader does not list, by the new socket file that its next activation listens
+      on; the case of a disabled `reload-socket` runs on a second process started with a
+      patch that disables it. The client case of disabling
+      `reload-socket` and `reload` is `TestDisableOfTheRowsOfTheSubmission` of the
+      operations plugin.
     - `plugin smoke`: with question Q9 (a), the composition that smoke boots holds
       `reload-socket` disabled by the patch and every other row of `aiops-core` ACTIVE;
       with (b), smoke under the runtime of the exit's clean machine finds the row ACTIVE.

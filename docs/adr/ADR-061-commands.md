@@ -5,7 +5,9 @@
   Q9, (b) for Q8. The section "Owner answers of 2026-11-23" records them as decisions 33
   to 41, with the boot changes this ADR names. ADR-060 decision 53 had it proposed before
   the first command row merges, and ADR-060 decision 2 required this acceptance before
-  that code merges into `main`.
+  that code merges into `main`. Brought to ADR-062 on 2026-11-24, as its decision 16
+  asks: decisions 10, 16, 17 and 32 and the scope name its transport and return the
+  outcomes of its decision 11.
 - Scope: ADR-060 decision 53 (its question Q17 (a)) and decision 41 (its question Q5
   (a)): the `commands` definition; the `cli` row, its dispatcher; the `aiops-cli` bundle
   and the `cli` profile; `cmd/aiopsctl` as the launcher of the `cli` profile, with
@@ -14,10 +16,10 @@
   reach the operations library, the builder and the gate; and where `plugingen` runs. It
   also settles the point that ADR-048 decision 20 leaves to it: how the strict reading
   reaches the `plugin check` row (ADR-048 decision 15). The transport by which `aiopsctl`
-  submits a generation to a running process is the ADR that ADR-060 decision 48 asks
-  for, and is not settled here. This ADR changes no decision of `00` by itself: where an
-  answer edits `00`, the question names the lines, and `00` is edited in the commit that
-  records the answer (`08:997`).
+  submits a generation to a running process is ADR-062, the ADR that ADR-060 decision 48
+  asks for, and is not settled here. This ADR changes no decision of `00` by itself: where
+  an answer edits `00`, the question names the lines, and `00` is edited in the commit
+  that records the answer (`08:997`).
 - Citations: `00`, `02`, `03`, `06`, `07` and `08` are the files of `docs/architecture/`
   with those numbers, and `08:369` is line 369 of `08` at commit `a3c85ae`. "harness" is
   `docs/design/harness-and-upstreams-2026-11.md`, cited the same way. The plugin record,
@@ -222,6 +224,11 @@
      join at S4a with a raised suite revision, as for the toy registries (ADR-060
      decision 43), once S4a decides what `admin-api` may dispatch (decision 32).
      `commands` holds no tenant data, and the S2a revision holds no skipped case.
+   - Note of 2026-11-25: each of the five command rows runs `conformance.Run` on the
+     cases of its `fixtures/commands/`; `command-plugin` gained `run.json`, a case of
+     outcome `ok` for each of its thirteen commands, and `cancel.json`, so `plugin
+     check` passes step 5 on it and its attestation names the obligations half that ran
+     (ADR-060 decisions 32 and 50).
 
 6. **A template.** S2a writes the Go template of `commands` in `templates/`, and `plugin
    new commands <id> --lang go` writes it, because CI generates a plugin from the
@@ -233,7 +240,12 @@
    on its missing file (`07:1541`). ADR-060 decision 24 gains it. The template serves the
    authors of first-party and `contrib/` command rows, which reach the `cli` profile
    through `aiops-cli` (decision 29), and the author of any other plugin as far as
-   question Q8 lets its rows reach that profile.
+   question Q8 lets its rows reach that profile. Note of 2026-11-25, a departure
+   recorded as built: `fixtures/commands/` holds the README, which names the three case
+   files, and `run.json` and `cancel.json` with one case each of `example`, which the
+   stub fails with "not implemented"; `paths.json` is the author's to write, so
+   `commands/paths` fails on its missing file. Each obligation still fails once, as the
+   template job holds (ADR-060 decision 24), and the two case files show their form.
 
 ### The `cli` row, the dispatcher
 
@@ -276,11 +288,10 @@
 
     | Outcome | Code | stderr |
     |---|---|---|
-    | `Run` returned `nil`; help that was asked for; a write whose submission outcome is `applied`, `not-running` or `restart-required` (decision 17) | 0 | Warnings, and `restart-required: <reason>` where that is the outcome |
+    | `Run` returned `nil`; help that was asked for; a write whose submission ends in a row of the table of ADR-062 decision 11 that exits 0, or that answers `not-running`, or `restart-required` with the reason `not-submitted` or `image` (decision 17) | 0 | Warnings, and `restart-required: <reason>` where that is the outcome |
     | A usage error: of parsing, an error of `Run` that matches `ErrUsage`, or a path that no row registered while every row that needs `commands` is ACTIVE | 2 | The error and the synopsis |
     | A denial, a failed step, `rebuild-required`, any other error of `Run`, or a panic of `Run`, which `Dispatch` recovers (decision 3) | 1 | `aiopsctl: <path>: <reason>`, with the stack for a panic |
-    | A write whose submission the running process refused; the files are restored (decision 17) | 1 | The verdict, and that the files were restored |
-    | A write whose submission got no answer within its bound; the files stay | 1 | That the outcome in the running process is unknown |
+    | A write whose submission ends in a row of the table of ADR-062 decision 11 that exits 1; the files are restored or kept as that row says (decision 17) | 1 | What that row prints: the result, the error line, `restart-required`, or each id and the last status; and whether the files were restored |
     | A path that no row registered while a row that needs `commands` is not ACTIVE | 1 | That row, its state and what it waits for |
     | A signal before the command returned: launcher code 8 (decision 13) | 1 | `interrupted`, and whether the snapshot was restored or left for the next writer (decision 17) |
     | The boot of the `cli` profile failed (launcher codes 1 and 3 to 7), or after the command returned a fiber leaked or the shutdown overran its bound (launcher code 4) | 1 | The launcher's reason |
@@ -378,7 +389,7 @@
         SanitizeProfile(ctx context.Context, r ProfileRequest) (Change, error)
         New(ctx context.Context, r NewRequest) (Written, error)
         Check(ctx context.Context, r CheckRequest) (CheckReport, error)
-        Smoke(ctx context.Context, r SmokeRequest) (SmokeReport, error)
+        Smoke(ctx context.Context, r BuildRequest) (launch.Built, error)
         Pack(ctx context.Context, r PackRequest) (Written, error)
         Sign(ctx context.Context, r SignRequest) (Written, error)
         Push(ctx context.Context, r PushRequest) (Pushed, error)
@@ -408,17 +419,17 @@
     | `RenderRequest` | `launch.RenderRequest` with `Caller` |
     | `NewRequest` | `Registry` (a registry or `connector`), `ID`, `Lang`, `Contrib`, `Against`, `Plugins`, `Dir` |
     | `CheckRequest`, `CheckReport` | `Dir`, `Write`, `Against`; per step of `07:1565`-`1576` its number, `pass`, `fail`, `not applicable` or `skipped`, and its `launch.Diagnostic`s, and the attestation it would sign |
-    | `SmokeRequest`, `SmokeReport` | `Dir`, `Against`, `Builder` (`image` or `local`); each row of the test-only profile with its state and what it waits for, and whether smoke passed (ADR-060 decision 58, reading 1) |
+    | `Smoke` takes `BuildRequest` and returns `launch.Built` | `Plugin`, the plugin directory, `Against`, the release artifact by digest, `ModCache`, `Mirrors` and `Builder` (`image` or `local`); `Built.Rows`, each row of the test-only profile with its state and what it waits for, and its error says why smoke did not pass (ADR-060 decision 58, reading 1) |
     | `PackRequest`, `SignRequest`, `PushRequest`, `Pushed` | `Dir`, `Out`; `Out`, `Key`; `Out`, `Registry`; the spec by digest (ADR-047 decision 1) |
-    | `SpecRequest`, `GateRequest` | `Spec`, and `Builder` for `Verify`; `Spec`, `Against` |
+    | `SpecRequest`, `GateRequest` | `Spec`, and for `Verify` `Home`, whose `trust.yaml` it reads, `Builder`, and `Against`, `ModCache` and `Mirrors`, the release artifact by digest and the module source that in-process code builds on (ADR-060 decision 46); `Spec`, `Against` |
     | `Inspected` | The digest; id, version and runtimes; each row with its config and content paths; that no signer was verified (ADR-047 decision 2) |
     | `Verified` | The digest, the verified signer, each suite that ran with its result, and the verdict |
-    | `InstallRequest`, `RowRequest`, `RemoveRequest` | `Home`, `Profile` and `Spec`, `Row` or `ID` |
+    | `InstallRequest`, `RowRequest`, `RemoveRequest` | `Home`, `Profile` and `Spec`, `Row` or `ID`; `ConnectWait` and `Wait`, the bounds of ADR-062 decisions 9 and 10 |
     | `TrustRequest` | `Home`, `KeyFile`, `IDs`, `Runtimes`, `Signed`, `Distribution` (ADR-020 decision 5) |
     | `KeyRequest`, `SignDistRequest`, `UseRequest` | `Prefix`; `Image`, `Key`; `Home`, `Image` |
     | `BuildRequest` | `launch.BuildRequest` with `Caller` |
     | `Written` | The paths written outside the home |
-    | `Change` | `Written`, the home paths written or removed; `Notes`, what the operator is told (a profile copied from the shipped template, an item kept, a snapshot restored); `Outcome` and `Reason` (decision 17); `DistLines`, the `dist.yaml` lines of `rebuild-required` (`08:397`); `Verdict`, the clauses evaluated |
+    | `Change` | `Written`, the home paths written or removed; `Notes`, what the operator is told (a profile copied from the shipped template, an item kept, a snapshot restored); `Outcome` and `Reason`, `not-running` or `restart-required` with its reason, and for the four methods that submit over the socket of ADR-062, `Result`, `Error`, `IDs` and `Last`, its outcome (decision 17); `DistLines`, the `dist.yaml` lines of `rebuild-required` (`08:397`); `Verdict`, the clauses evaluated |
 
     | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
     |---|---|---|---|---|---|
@@ -446,6 +457,14 @@
 
     `Purge` joins at S3 with `durable` (ADR-060 decision 47).
 
+    Note of 2026-11-25: the sketch and the tables above are edited to the definition as
+    built. `Build` and `BuildRequest` arrived at its minor 0.3; at 0.4 `Smoke` takes
+    `BuildRequest` and returns `launch.Built`, since smoke is a build of the toolbox's
+    builder that also boots the test-only profile, so `SmokeRequest` and `SmokeReport`
+    do not exist, and `SpecRequest` gains `Against`, `ModCache` and `Mirrors` for
+    `plugin verify` of in-process code. `sdk/def/operations/v0` declares the methods in
+    another order, with `ctx` first in each, and its `definition.yaml` records each minor.
+
 17. **Rules every provider keeps.** `08:369` reads, as plugin record §12 does: "Every
     operation is a submission to the reload queue, is audited and emits
     `plugin-manager/changed`. ... The manager cannot disable itself, a required row, the
@@ -464,7 +483,21 @@
     - **Enable and Disable.** They write only a departure from the bundle layers into the
       profile layer, with no `--tenant` (`08:375`; ADR-060 decision 47), and only after
       `Render` has admitted the changed profile as boot would (ADR-060 decision 17, boot
-      row), so a change that boot would refuse writes nothing.
+      row), so a change that boot would refuse writes nothing. Note of 2026-11-25, as
+      built: under the lock they render the changed profile in a view of the home, a
+      temporary directory that holds the changed files and links every other entry into
+      the home, and rename nothing until that render admits it; the view is removed
+      before they return. Until that date they renamed the change first and restored the
+      snapshot on a refusal, so a refused layer stood in the home until the restore.
+      Note of 2026-11-26 (review round over the whole step): "only a departure" is
+      read against a render of the profile with the profile layer and the site layer
+      set aside (`RenderRequest.Aside`). Where the bundle layers already give the row
+      the value asked for, the item of the row loses its `enabled` field, or goes when
+      only its id stays, and where the layer holds none nothing is written or submitted;
+      until that date each command set or appended `{id, enabled}` whatever the bundle
+      layers gave. With no process on the profile, a changed profile that still renders
+      the row otherwise is named as overridden by the site layer, not as a change that
+      applies at the start. Suite revision 6 of `operations` holds the drop.
     - **What the manager cannot disable.** `Disable` and `Remove` refuse, and write
       nothing for, a change that disables or removes: a row of `aiops-cli` in the profile
       `cli`, or that bundle itself, since that is the manager, and without the rule one
@@ -473,7 +506,12 @@
       last enabled provider in the profile of a provider-bound or consumer-bound key
       (`00:245`). Both are read from the `Rendered` of the changed profile, since
       disabling the last provider of a key that is not required leaves its consumers
-      PENDING (`08:471`) and is no refusal of admission. An operation changes only the
+      PENDING (`08:471`) and is no refusal of admission. Note of 2026-11-25, as built, a
+      departure: `CannotDisable` and `CannotRemove` read the `Rendered` of the current
+      profile, in which the row is still enabled, and count the row, or the artifact's
+      rows, as gone, which decides each of these clauses as the changed profile would
+      with no second render; the render of the changed profile then decides admission.
+      An operation changes only the
       profile its request names, which is the reading of "another profile" for a CLI
       that writes any profile of the home; from S6a `plugin-manager` names only the
       profile of its own process, and the ADR of S6a says so (decision 32). An operator
@@ -514,25 +552,53 @@
       `plugins/operations` run an install in a child process that stops after its first
       rename, kill it, and check that the next write first restores the home to its state
       before the install; kill a restore in the middle and check the same; and interrupt
-      the install at the same point and check exit 1 with the home restored.
+      the install at the same point and check exit 1 with the home restored. Note of
+      2026-11-26 (review round over the whole step): the end of `ctx` restores only
+      before a request reached the row. After it, the row may have accepted the
+      operation and the process may apply it, so the files stay and the outcome is
+      `verdict-unknown`, with each id and the last status, as ADR-062 decision 11 has an
+      accepted operation whose verdict is unknown keep them. A write marks its snapshot
+      before it submits, and the next writer drops a marked snapshot that a killed write
+      left, keeps the files and says that the verdict is unknown, instead of restoring
+      it; a write whose submission it restores unmarks it first, so a stopped restore
+      goes on. A server process does not boot a home that holds `snapshot/paths.json`:
+      it exits 1 and names `aiopsctl profile sanitize <profile>`, whose write finishes
+      the stopped one first; `aiopsctl` itself boots, since its commands are those
+      writers, and `profile render` prints a warning that names the snapshot. Note of
+      2026-11-27 (round 2): only where no writer holds `write.lock`; a snapshot under a
+      held lock is a live write's, which restores or keeps its files itself, so the
+      server boots, as the process that replaces one killed mid-submission must (ADR-062
+      decision 10).
     - **Submission** (`08:369`, `:446`; `07:1855`). Every method that writes the home ends
-      with a submission while it holds the lock. `Install`, `Enable`, `Disable`,
-      `Remove`, `InitProfile` and `SanitizeProfile` submit the profile they changed, and
-      `AddTrust` the profile that `run/status.json` names, since every composition reads
-      `trust.yaml`. `UseDist` answers `restart-required` with the reason `image`, since a
-      new image is a new process (`07:1869`). The other methods write no home and submit
-      nothing. The transport is the ADR of ADR-060 decision 48, which keeps these
-      outcomes or amends this decision; every `restart-required` carries its reason, as
-      dsh's does (dsh §4.4).
+      with the outcome below while it holds the lock. `Install`, `Enable`, `Disable` and
+      `Remove` submit the profile they changed over `<home>/run/reload.sock`, the
+      transport of ADR-062, within the bounds `ConnectWait` and `Wait` of their requests,
+      which the command rows take from `--connect-wait` and `--wait` (ADR-062 decisions 9
+      and 10). They return the outcome of ADR-062 decision 11, whose table decides the
+      files and the exit: `Change.Result`, the final result as the wire carries it; or,
+      without one, `Change.Error`, the error line before an id, `Change.Outcome`, or each
+      operation id and the last status (ADR-062 decision 16). `Disable` refuses the
+      transport's own rows (ADR-062 decision 12). Until S6a version 1 of the wire carries
+      those four commands only (ADR-062 decisions 6 and 15), so `InitProfile`,
+      `SanitizeProfile` and `AddTrust` submit nothing and answer by `run/status.json`
+      alone, for the profile they changed or, for `AddTrust`, the profile that the file
+      names, since every composition reads `trust.yaml`. `UseDist` answers
+      `restart-required` with the reason `image`, since a new image is a new process
+      (`07:1869`). The other methods write no home and submit nothing. Every
+      `restart-required` carries its reason, as dsh's does (dsh §4.4).
 
-      | Case | `Change.Outcome` | Files | Exit (decision 10) |
+      | Case | `Change` | Files | Exit (decision 10) |
       |---|---|---|---|
-      | No `run/status.json` of the home names a running process of that profile | `not-running`: the change applies at the next start | Kept | 0 |
-      | A process runs it and no transport exists, which is every S2a commit before the transport ADR merges | `restart-required`, reason `no-transport` | Kept | 0 |
-      | The process has no `reload` row (`03:65`) | `restart-required`, reason `no-reload` | Kept | 0 |
-      | The generation is applied and judged | `applied` (`07:1855`) | Kept | 0 |
-      | The generation is rejected, or its verdict fails | `refused`, with the verdict | Restored | 1 |
-      | No answer within the bound that the transport ADR fixes | `unknown` | Kept | 1 |
+      | Any of them but `UseDist`: no `run/status.json` of the home names a running process of that profile (ADR-062 decision 9) | `Outcome` `not-running`: the change applies at the next start | Kept | 0 |
+      | `Install`, `Enable`, `Disable` or `Remove`: a final result `passed` that shows the change | `Result` | Kept | 0, with the generation and the digest |
+      | The same: a final result `passed` that does not show the change | `Result` | Kept | 1, naming the row and the later layer that overrides the change |
+      | The same: a final result `rejected`, `rolled back` or `rollback failed`, or `abandoned` with `state-unknown` | `Result` | Restored | 1, with the result; with `state-unknown`, the restart text |
+      | The same: an error line before an id exists, `peer`, `busy`, `request` or `version`, or a refusal of `Submit` | `Error` | Restored | 1, with the text; with `state-unknown`, the restart text |
+      | The same: no final result on the second submission either | `IDs` and `Last` | Restored after `abandoned` without `state-unknown`; kept otherwise | 1, with each id and the last status |
+      | The same: `--wait` elapsed, or the connection was lost beyond the connect window, after the operation was accepted | `IDs` and `Last` | Kept | 1, with the id and the last status |
+      | The same: a process runs the profile and nothing answers within `--connect-wait` (ADR-062 decision 9) | `Outcome` `restart-required` | Kept | 1, `restart-required: <socket> did not answer` |
+      | `InitProfile`, `SanitizeProfile` or `AddTrust` while a process runs the profile | `Outcome` `restart-required`, reason `not-submitted`: the process reads the change at its next start | Kept | 0 |
+      | `UseDist` | `Outcome` `restart-required`, reason `image` | Kept | 0 |
 
     - **Audit.** "Is audited" waits for `audit-chain` (S5, `08:698`), which no profile of
       S2a composes. The step that builds it says how an operation of `aiopsctl` is
@@ -584,11 +650,38 @@
       of `trust add`; each outcome of a submission, with the files kept or restored; a
       write after an interrupted one restores first; a second writer waits and fails
       after its bound; and `ErrInactive` after release (`07:512`, `:520`). The fake
-      passes it.
+      passes it. Note of 2026-11-26, as built: suite revision 5 of `operations` adds
+      O26, the outcomes of a submission with no final result, each set by `Setup.Socket`:
+      `refused` restores the files, and `no-final-result`, `verdict-unknown` and
+      `restart-required` with the reason `no-answer` keep them, each with
+      `ErrSubmission` naming its outcome; and `trust add` while a process runs the
+      profile answers `restart-required` with the reason `not-submitted`. The mount of
+      the operations row scripts its socket so, and the fake takes `Socket` in its
+      config. No cap was raised. Note on the owner's answer of 2026-11-26 (item 6 of
+      the S2a report's open questions), as built: suite revision 7 of `operations` adds
+      O27, the group clash with an artifact of another owner: with `acme/connector-x`
+      installed into `dev`, `plugin install` of `beta/connector-x` is refused naming
+      `acme/connector-x`, and writes nothing (ADR-047 decision 17). The mount of the
+      operations row reads the id of a plugin directory from its `plugin.yaml`, and the
+      fake packs under that id and names the artifact the profile holds; the signed
+      manifests and the golden dumps that print their digest are regenerated.
     - The cases that need the files are T1 tests of `plugins/operations`, which may
       import the YAML library (ADR-060 decision 41): the rename order, the content of
       the snapshot and the restore after a kill (decision 17), the modes and the owner
-      of decision 17, and the record in `write.lock` (decision 19).
+      of decision 17, and the record in `write.lock` (decision 19). Note of 2026-11-26,
+      as built: `TestAnInstallKilledOrInterruptedKeepsItsFiles` of `cmd/aiopsctl` runs an
+      install in a process of its own, the test binary as the `aiopsctl` of the test
+      distribution, against a process that runs `dev` and whose socket takes the request
+      and answers nothing, so the install stops after its renames, with its request
+      taken: killed, it leaves its snapshot and the next writer keeps the files, drops
+      the snapshot and says that the verdict is unknown; interrupted, it keeps them
+      itself and exits 1 with `verdict-unknown` (decision 31; the note of 2026-11-26 to
+      decision 17, until which the case was `TestAnInstallKilledOrInterruptedIsRestored`
+      and wanted the home restored). A stop after the first rename alone stays the
+      generic write of `TestKilledWriteIsRestoredByTheNextWriter`, since the built binary
+      has no hook to stop there. Note of 2026-11-26, the owner's word: the owner accepted
+      on 2026-11-26 that departure, the stop after the first rename alone held by the
+      generic write test only (open question 8 of the S2a report).
 
 ### The profile write lock
 
@@ -679,6 +772,7 @@
         Suite(ctx context.Context, r SuiteRequest) (SuiteReport, error)
         Template(ctx context.Context, r TemplateRequest) (map[string][]byte, error)
         Scenario(ctx context.Context, r ScenarioRequest) (ScenarioReport, error)
+        Module(ctx context.Context, r ModuleRequest) (Module, error)
     }
     ```
 
@@ -688,7 +782,7 @@
     | `Clause`, `Verdict` | `Check` (1 to 10), `Clause`, `Outcome` (`pass`, `deny` or `not-evaluated`) and `Reason`; `Entry`, the entry point of ADR-060 decision 17, its `Clauses`, and `RebuildRequired` |
     | `RenderRequest` | `Home`, `Profile`, `Bundles`, `Patches`, `Roles`, `Server` and `Dumps`, the flags of `profile render` (decision 27); `Append`, the bundle of an artifact appended as install would append it (ADR-047 decision 17) |
     | `Rendered` | `Composition`, `Admission` and `Required`, the types of launch 0.1; `Keys`, each key with its class and the enabled rows that provide it; `Departures` from the release bindings (`08:366`); `Dumps` by flag; `Diagnostics`; `Distribution`, the digest of the manifest it admitted with (decision 26) |
-    | `GateRequest` | `Entry`; the artifact's `Manifest`, `Bundle` and `Attestation` bytes and its `Digest`; `Signer`, the key id that the caller verified, `unsigned`, or empty where the entry point verifies none; `Home` and `Profile` for install; `Against`, the bytes of a published signed manifest |
+    | `GateRequest` | `Entry`; the artifact's `Manifest`, `Bundle` and `Attestation` bytes and its `Digest`; `Signer`, the key id that the caller verified, `unsigned`, or empty where the entry point verifies none; `Home` and `Profile` for install; `Against`, the bytes of a published signed manifest; `Module`, what `module.json` of in-process code records at install, which the record that boot judges holds (note of 2026-11-27, review round over the whole step, round 2: without it checks 5 and 10 passed at install what they deny at the next boot) |
     | `ManifestRequest`, `ManifestSummary` | `Dir`, `Against`; `ID`, `Version`, `Runtimes`, `Provides`, `Registers` and `Definitions` (`requires.definitions`) |
     | `Release` | `Digest`; `Manifest`, the signed bytes; per instantiable plugin its id and the first entry of its `configSchema` examples (ADR-047 decision 12) |
     | `BuildRequest`, `Built` | `DistYAML`, `ModCache`, `Mirrors`, `AllowBump`, `Builder` (`image` or `local`), and for smoke and verify the plugin directory, or the module path, version and sum, with `Against`; the image, the signed manifest's bytes, the site's `aiopsctl`, the verdict, and for smoke each row's state and what it waits for |
@@ -696,6 +790,7 @@
     | `SuiteRequest`, `SuiteReport` | `Dir`, the definitions with their versions, the halves and the fixtures directory; per definition its suite revision, the halves that ran and each failed obligation by id |
     | `TemplateRequest` | `Registry`, `ID`, `Lang`, `Contrib` |
     | `ScenarioRequest`, `ScenarioReport` | `Dir`, `Name`; the scenario's name and version, the halves that ran and each failure (ADR-060 decision 49) |
+| `ModuleRequest`, `Module` | `Dir`, the root of the module of in-process code, and `Version`, the version it is packed at; its `Path`, `Version` and h1 `Sum`, and `Deps`, the rest of its build list as `go list -m -json all` reads it with the author's toolchain |
 
     `launch` gains no type of the manifest schema. `ManifestSummary` holds six fields
     copied from boot's own reading, so the reader stays boot's and there is no second
@@ -716,6 +811,12 @@
     | `Suite` | Runs a suite: an embedded test binary, or a module compiled with the toolchain | `cmd/aiopsctl` | `Check`, `Pack`, `Verify` | ADR-060 decision 46 |
     | `Template` | The templates | `cmd/aiopsctl` | `New` | ADR-060 decision 24 |
     | `Scenario` | Runs a named, versioned scenario, the echo scenario at S2a, on a pack's rows replayed from its fixtures | `cmd/aiopsctl` | `Check`, as step 8; `Pack`, for the attestation | ADR-060 decision 49; `07:1576` |
+| `Module` | Reads the module of in-process code for the module layer and the SBOM of `plugin pack`: the h1 sum of its module zip and its build list | `cmd/aiopsctl` | `Pack` | ADR-047 decision 1 |
+
+    Note of 2026-11-25: the sketch and the two tables are edited to launch 0.2 as built,
+    whose `Tools` has a seventh method, `Module`, which `plugin pack` of in-process code
+    calls for the module layer and the SBOM (ADR-047 decision 1); in `aiops` it answers
+    `ErrNotCarried` as the other six do.
 
     `cmd/aiopsctl` passes one value of `Tools` to `boot` in its run options, and `boot`
     hands it on without importing what implements it (`08:1256`). In `aiops` it is
@@ -751,7 +852,9 @@
     output. A Go plugin needs a Go toolchain for it, as the check does (`07:1531`); a pack
     does not. In this repository `tools/plugingen` runs the same package for the parity
     check of CI (`tools/plugingen/main.go` at `502a355`), and `make check` runs the built
-    `aiopsctl` (ADR-060 decisions 11 and 32).
+    `aiopsctl` (ADR-060 decisions 11 and 32). Note of 2026-11-25: `make plugin-check`,
+    the last step of `make check`, runs the built `aiopsctl`'s `plugin check` on every
+    plugin under `plugins/` and `examples/` (ADR-060 decision 32, standing rule 2).
 
 ### `aiopsctl` as the launcher of the `cli` profile
 
@@ -818,7 +921,8 @@
     over the test distribution's module table and the counterpart of `aiops-test`
     (`cmd/aiops/main.go`). It is signed as ADR-060 decision 28 states and kept out of
     `cmd/aiopsctl` by its link guard, and the commit that moves the goldens regenerates
-    and reviews them.
+    and reviews them. Amended by decision 42: `aiopsctl` keeps `--dist`, and the goldens
+    of the test distribution stay in `cmd/aiopsctl` and compose through it.
 
 28. **No command code in a `main`.** The import analyzer fails when a package under
     `cmd/` imports `sdk/def/commands` or `sdk/def/operations`, as dsh refuses an entry
@@ -860,7 +964,7 @@
     | Command | Synopsis | Source |
     |---|---|---|
     | `help` | `help [<word>...]`; `--help` or `-h` after any words | Decision 9 |
-    | `profile render` | `profile render --profile <p> [--home <dir>] [--bundles <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]` | `08:359`-`364`; `cmd/aiopsctl/run.go` at S1, less `--dist` (decision 27) |
+    | `profile render` | `profile render --profile <p> [--home <dir>] [--bundles <dir>] [--dist <dir>] [--patch <file>]... [--role <role>]... [--server] [--dump] [--dump-hooks] [--dump-config-schema]` | `08:359`-`364`; `cmd/aiopsctl/run.go` at S1, with `--dist` (decision 42) |
     | `profile verify` | `profile verify` | `08:366` |
     | `profile init` | `profile init <p>` | `08:72` row 30; ADR-060 decision 27 |
     | `profile sanitize` | `profile sanitize [<p>]` | `08:72` row 30; dsh §3.4; question Q9 |
@@ -922,10 +1026,13 @@
 
 32. Each item names its trigger.
     - The transport of the submission before `admin-api`, its plugin vet rule, its bound,
-      and how it relates to `admin-api`: the ADR of ADR-060 decision 48, before the exit
-      test. Until it merges every submission answers `no-transport` (decision 17). That
-      ADR also keeps the `cli` profile's own `reload` row, which `aiopsctl` composes with
-      `aiops-core`, from serving the transport.
+      and how it relates to `admin-api`: ADR-062, the ADR of ADR-060 decision 48. The row
+      `reload-socket` of `aiops-core` serves `<home>/run/reload.sock` from S2a to S6a, and
+      the `aiops-cli` bundle disables it, so the `cli` profile, which `aiopsctl` composes
+      with `aiops-core`, serves no socket (ADR-062 decisions 1 and 2). Its version 1
+      carries `install`, `enable`, `disable` and `remove`; the other writes of the home
+      answer as decision 17 says until S6a, when the commands move to `admin-api` and
+      `plugin-manager` (ADR-062 decision 15).
     - Commands of rows outside `aiops-cli`: `slack manifest` (`00:137`; `06:312`) and
       `oncall override` (`06:638`, `:764`) are contributions of rows of server bundles,
       while the `cli` profile lists `aiops-core` and `aiops-cli` only (`08:253`).
@@ -937,9 +1044,10 @@
       and runs a second profile inside the `aiopsctl` process, an additive minor of
       `launch`, or records another form.
     - `aiopsctl tree --effects` (`07:345`; `08:57` row 15; plugin record §15 row 15)
-      prints the effect ledger of a running process. It needs a read of that process:
-      the transport ADR of ADR-060 decision 48, or `plugin-inventory` at S6a, whose
-      listing shows effects (`08:373`). The first of the two to merge builds it.
+      prints the effect ledger of a running process. It needs a read of that process.
+      The socket of ADR-062 carries only the submissions of four commands until S6a
+      (ADR-062 decision 15), so `plugin-inventory` at S6a, whose listing shows effects
+      (`08:373`), builds it.
     - `aiopsctl plugin start <id>` (`02:312`; `08:1288`) starts the compose deployment
       unit of a remote plugin: S2b, with the remote runtime and its one shared instance
       per plugin (`08:695`).
@@ -1357,7 +1465,23 @@ it.
     and the home still passed, prints which file stopped the first boot, and dispatches.
     The first boot stops as `08:465` says; the second composes no layer of the home, so a
     command in it does not see the site's patches of the `cli` profile, and stderr says
-    so. ADR-060 decision 23 gains the command.
+    so. ADR-060 decision 23 gains the command. Note of 2026-11-25, a departure recorded
+    as built: the first boot is predicted, not run. Before it boots, the launcher of
+    `internal/aiopsctl` composes the `cli` profile of the home with `boot.Compose`,
+    which is what boot runs first, and when that stops on the site layer or the profile
+    layer of `cli` it boots once, with the shipped `cli` profile alone and the home
+    still passed, and prints the file and the stop; so the output and the outcome are
+    those of a first boot that stops as `08:465` says, with one boot less. Note of
+    2026-11-26 (review round over the whole step): `profile sanitize <p>` also sets
+    aside `profiles/<p>/plugins.lock` where it does not read, whose rows boot detaches,
+    so `plugin remove` can take the artifact again; and `plugin install` names, and does
+    not stop on, a lock of another profile that does not read, which it then does not
+    check for another digest of the id (ADR-047 decision 7). Note of 2026-11-27 (round
+    2): with the layers it sets aside read as absent, `profile sanitize` renders the
+    profile once more; where that render still holds an error, a `profile.yaml`, a
+    bundle or a profile that exists nowhere, it keeps what it set aside and exits 1
+    naming the error and what to do, and says that nothing stops the profile only when
+    nothing does.
 
 **Edits made with this record.** `00` is edited in the commit that records the answers
 (`08:997`), and that commit makes the edits that "Edits on acceptance" names for the
@@ -1387,3 +1511,53 @@ the steps that build `oncall override` and `slack manifest` (P1, `00:137`) edit 
 build their command rows by decision 40 (decision 32). Until then those lists omit
 `aiops-chatops-slack-cli`, which `00` §4.4 and `08` §1.4 list. An option the owner did not
 choose edits nothing.
+
+## Owner answers of 2026-11-24
+
+The project owner answered on 2026-11-24 three points that the work of S2a raised after
+the acceptance of this ADR. Each decision below records one; where a decision above says
+otherwise, the decision here holds.
+
+42. **`aiopsctl` keeps `--dist`** (amends decision 27). `profile render` keeps the flag
+    `--dist <dir>`, which renders against the signed manifest `distribution.yaml` of a
+    directory instead of the one `aiopsctl` embeds. The goldens of the test distribution
+    stay in `cmd/aiopsctl/testdata/test-dist/` and compose through `--dist`. The option
+    that decision 27 recommended, a separate `aiopsctl-test` binary under
+    `test/dist/cmd/` over the test distribution's module table, is declined, so no such
+    binary is signed or guarded. The CLI spec of decision 30 lists `--dist` for `profile
+    render`.
+
+43. **A write that the wire does not carry answers `restart-required` and exits 0 while
+    a process runs.** `profile init`, `profile sanitize` and `trust add` answer
+    `Outcome` `restart-required` with the reason `not-submitted` and exit 0 when
+    `run/status.json` names a running process of the profile they changed, or for `trust
+    add` of the profile the file names, as the table of decision 17 says. Version 1 of
+    the wire of ADR-062 carries `plugin install`, `enable`, `disable` and `remove` only
+    (ADR-062 decisions 6 and 15), so the running process reads the change at its next
+    start; the files are kept.
+
+44. **`Change` carries the submission of the four commands, and `Outcome` only for
+    `not-running` and `restart-required`**, as decision 16 says. For `Install`,
+    `Enable`, `Disable` and `Remove`, `Change` carries `Result`, the final result as the
+    wire carries it, or with none `Error`, the error line before an id, or `IDs` and
+    `Last`, each operation id and the last status. `Outcome` is set only where no
+    process runs the profile (`not-running`) and where one runs and nothing answers
+    (`restart-required`). The rows of the table of ADR-062 decision 11 that end with no
+    final result take the names below, which the definition `sdk/def/operations/v0`
+    fixes when the four methods join it, and with which the text of the error of each
+    begins; `aiopsctl` exits 1 on each.
+
+    | Row of ADR-062 decision 11 | Name | `Change` | Files |
+    |---|---|---|---|
+    | An error line before an id exists, `peer`, `busy`, `request` or `version`, or a refusal of `Submit` | `refused` | `Error` | Restored |
+    | No final result on the second submission either | `no-final-result` | `IDs` and `Last` | Restored after `abandoned` without `state-unknown`; kept otherwise |
+    | `--wait` elapsed, or the connection was lost beyond the connect window, after the operation was accepted | `verdict-unknown` | `IDs` and `Last` | Kept |
+    | A process runs the profile and nothing answers within `--connect-wait` | `restart-required`, reason `no-answer` | `Outcome` and `Reason` | Kept |
+
+    A final result that does not show the change keeps its status as its name:
+    `rejected`, `rolled back`, `rollback failed` and `abandoned` with `state-unknown`
+    restore the files, and a `passed` that does not show the change keeps them and names
+    the row and the later layer that overrides it. `operations.ErrSubmission` matches
+    the error of every row that exits 1, and `operations.ErrRebuildRequired` the
+    `rebuild-required` of `Install`, which writes nothing and returns the `dist.yaml`
+    lines in `Change.DistLines`.

@@ -21,16 +21,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/config-refs/internal/refs"
 	refsdef "github.com/mutex-solutions/aiops-platform/sdk/def/configrefs/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
-// Config is the config of the row. The field is the plugin's own: the docs name a
-// bound and give no number (08-profiles-roadmap-adrs.md:162).
+// Config is the config of the row, decoded by the rules of sdk/plugin. The field is
+// the plugin's own: the docs name a bound and give no number
+// (08-profiles-roadmap-adrs.md:162).
 type Config struct {
 	// MaxFileBytes is the largest file a ${file:} reference reads. It must be positive.
 	MaxFileBytes int64
@@ -51,20 +52,28 @@ var ReadyKey = kernel.NewKey[struct{}]("configRefsReady", 0, kernel.ProviderBoun
 
 // Plugin is the config-refs row. It also provides the dry run of the configrefs
 // definition, provider-bound to it in dist.yaml (ADR-059 decision 16).
-var Plugin = kernel.Define(kernel.Plugin{
+var Plugin = plugin.Define(plugin.Spec[Config]{
 	ID:       "aiops/config-refs",
 	Inject:   []kernel.Dep{kernel.Need(launch.CmdlineKey)},
 	Provides: []kernel.AnyKey{ReadyKey, refsdef.Key},
 	Hooks:    []kernel.HookUse{kernel.InternalConfig.Use(kernel.DefaultStage)},
-	Decode:   decode,
+	Validate: validate,
 	Apply:    apply,
 })
 
 // dryRun resolves a config with the listener's resolver, hands the resolved tree to
-// decode, the row's own Decode, and drops it.
-type dryRun struct{ r *refs.Resolver }
+// decode, the row's own Decode, and drops it. Once the activation that provided it
+// unloads, it resolves nothing and returns an error that matches kernel.ErrInactive
+// ("No use after release", 07-c4-plugin-sdk.md §4.3).
+type dryRun struct {
+	r   *refs.Resolver
+	std context.Context // of the activation that provided it
+}
 
 func (d dryRun) Check(_ context.Context, config any, decode func(any) error) error {
+	if d.std.Err() != nil {
+		return fmt.Errorf("config-refs: dry run after release: %w", kernel.ErrInactive)
+	}
 	out, _, err := d.r.Resolve(config)
 	if err != nil || decode == nil {
 		return err
@@ -72,8 +81,7 @@ func (d dryRun) Check(_ context.Context, config any, decode func(any) error) err
 	return decode(out)
 }
 
-func apply(c *kernel.Context, cfg any) error {
-	conf := cfg.(Config)
+func apply(c *kernel.Context, conf *Config) error {
 	cl := launch.CmdlineKey.Of(c)
 	r := &refs.Resolver{Env: cl.Env, Flag: cl.Flag, RootFlag: fileRootFlag, MaxBytes: conf.MaxFileBytes}
 	kernel.InternalConfig.On(c, kernel.DefaultStage, func(_ context.Context, _ any, next kernel.Next[any]) (any, error) {
@@ -85,47 +93,13 @@ func apply(c *kernel.Context, cfg any) error {
 		}
 		return v, err
 	})
-	return errors.Join(refsdef.Key.Provide(c, dryRun{r}), ReadyKey.Provide(c, struct{}{}))
+	return errors.Join(refsdef.Key.Provide(c, dryRun{r, c.Std()}), ReadyKey.Provide(c, struct{}{}))
 }
 
-func decode(raw any) (any, error) {
-	var conf Config
-	switch v := raw.(type) {
-	case Config:
-		conf = v
-	case map[string]any:
-		for k, e := range v {
-			var err error
-			switch k {
-			case "maxFileBytes":
-				conf.MaxFileBytes, err = integer(e)
-			default:
-				err = errors.New("unknown field")
-			}
-			if err != nil {
-				return nil, fmt.Errorf("config-refs: %s: %w", k, err)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("config-refs: config is %T, want Config or a map", raw)
-	}
+// validate holds the bound to a positive number.
+func validate(conf *Config) error {
 	if conf.MaxFileBytes <= 0 {
-		return nil, errors.New("config-refs: maxFileBytes must be positive")
+		return errors.New("config-refs: maxFileBytes must be positive")
 	}
-	return conf, nil
-}
-
-// integer reads a whole number from a parsed config value.
-func integer(v any) (int64, error) {
-	switch n := v.(type) {
-	case int64:
-		return n, nil
-	case int:
-		return int64(n), nil
-	case float64:
-		if n == math.Trunc(n) && math.Abs(n) < 1<<53 {
-			return int64(n), nil
-		}
-	}
-	return 0, fmt.Errorf("want a whole number, got %T", v) // never the value: it may be a resolved reference
+	return nil
 }

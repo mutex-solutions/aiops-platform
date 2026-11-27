@@ -2,15 +2,23 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"io/fs"
+	"maps"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
+
+	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/dist"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // world is the S1 fixture distribution of the boot package, under /work of an
-// in-memory file system, plus a rogue row and a patch for the refusal cases.
+// in-memory file system, with a home that trusts its signed manifest, plus a rogue row
+// and a patch for the refusal cases.
 func world(t *testing.T) fstest.MapFS {
 	t.Helper()
 	m := fstest.MapFS{}
@@ -26,6 +34,10 @@ func world(t *testing.T) fstest.MapFS {
 	if err != nil {
 		t.Fatal(err)
 	}
+	files := trusted.Files(t, m["work/dist/distribution.yaml"].Data)
+	for name, data := range files {
+		m["work/home/"+name] = &fstest.MapFile{Data: data}
+	}
 	m["work/p/ok.yml"] = &fstest.MapFile{Data: []byte("- {id: metrics, config: {endpoint: 'http://p3.example.test'}}\n- {id: ghost, enabled: false}\n")}
 	m["work/p/bad.yml"] = &fstest.MapFile{Data: []byte("- {id: metrics, plugin: aiops/x}\n")}
 	m["work/p/rogue.yml"] = &fstest.MapFile{Data: []byte("- insert: [{id: rogue, plugin: aiops/kek-kms, roles: [api]}]\n")}
@@ -39,11 +51,50 @@ type result struct {
 	out, errOut string
 }
 
+// do runs aiopsctl as main runs it, on fsys rooted at "/" and with the environment env,
+// whose PWD is the working directory, the root when it is empty. It runs as a release
+// binary, which carries a release key, so its own boot trusts the manifest it embeds
+// without a home (ADR-061 decision 26; ADR-060 decision 50).
 func do(t *testing.T, fsys fs.FS, env map[string]string, args ...string) result {
 	t.Helper()
-	var out, errOut bytes.Buffer
-	code := run(args, strings.NewReader(""), &out, &errOut, fsys, func(k string) string { return env[k] })
+	return doWith(t, fsys, env, &boot.Release{KeyID: "test-release"}, args...)
+}
+
+// doWith is do with the release key of the binary, nil for a binary built without one.
+func doWith(t *testing.T, fsys fs.FS, env map[string]string, release *boot.Release, args ...string) result {
+	t.Helper()
+	reg, signed, lim, err := dist.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var environ []string
+	for k, v := range env {
+		environ = append(environ, k+"="+v)
+	}
+	var out, errOut syncBuffer
+	code := run(t.Context(), args, process{In: strings.NewReader(""), Out: &out, Err: &errOut, Environ: environ, Dir: cmp.Or(env["PWD"], "/"), Files: fsys},
+		distribution{Registry: reg, Signed: signed, Release: release, Limits: lim, Shipped: dist.Shipped()})
 	return result{code, out.String(), errOut.String()}
+}
+
+// syncBuffer is a buffer safe for concurrent writes, as the files of the process are:
+// boot writes its log to stderr from its own goroutines while a command writes to the
+// same stream.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
 
 var base = []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "dist", "--server"}
@@ -81,8 +132,9 @@ func TestRunDumps(t *testing.T) {
 	if r := do(t, w, env, with()...); r.code != 0 || r.out != "" || r.errOut == "" {
 		t.Errorf("no dump: %+v", r)
 	}
-	// The same input gives the same bytes.
-	if again := do(t, w, env, with("--dump", "--dump-hooks", "--dump-config-schema")...); again != all {
+	// The same input gives the same bytes on stdout; stderr carries the time of the
+	// kernel's log lines.
+	if again := do(t, w, env, with("--dump", "--dump-hooks", "--dump-config-schema")...); again.out != all.out || again.code != all.code {
 		t.Error("two runs differ")
 	}
 }
@@ -99,7 +151,9 @@ func TestRunRolesPathsAndPatches(t *testing.T) {
 	if !strings.Contains(two.out, "\nroles api,worker\n") {
 		t.Errorf("repeated roles:\n%s", two.out)
 	}
-	// A relative patch keeps its relative name in provenance, and an unknown id warns.
+	// A relative patch keeps its relative name in provenance, so a dump holds no absolute
+	// path that the operator did not write, as at S1 (ADR-061 decision 27); an unknown id
+	// warns.
 	r := do(t, w, env, with("--patch", "p/ok.yml", "--dump")...)
 	if r.code != 0 || !strings.Contains(r.out, "(patch:p/ok.yml) p/ok.yml:1") || !strings.Contains(r.errOut, `unknown id "ghost"`) {
 		t.Errorf("relative patch: %+v", r)
@@ -110,11 +164,11 @@ func TestRunRolesPathsAndPatches(t *testing.T) {
 			t.Errorf("patch %s: exit %d %s", p, r.code, r.errOut)
 		}
 	}
-	// Home from the environment, bundles from another directory, an absolute dist.
-	env2 := map[string]string{"PWD": "/work/p", "AIOPS_HOME": "/work/home"}
-	r = do(t, w, env2, "profile", "render", "--profile", "demo", "--bundles", "../home", "--dist", "/work/dist", "--server", "--dump")
+	// Bundles from another directory and an absolute dist, from another working directory.
+	env2 := map[string]string{"PWD": "/work/p"}
+	r = do(t, w, env2, "profile", "render", "--profile", "demo", "--home", "../home", "--bundles", "../home", "--dist", "/work/dist", "--server", "--dump")
 	if r.code != 0 {
-		t.Errorf("env home: %+v", r)
+		t.Errorf("another directory: %+v", r)
 	}
 	// An empty or missing PWD means the root of the file system.
 	rootEnv := map[string]string{"PWD": ""}
@@ -143,7 +197,7 @@ func TestRunRefusals(t *testing.T) {
 		{"isolate on a bound key", with("--patch", "/abs/iso.yml", "--dump"), "static graph"},
 		// boot mounts the loader itself, so it refuses a composition that holds the row; render must too.
 		{"a row with the reserved id of the loader", with("--patch", "p/loader.yml", "--dump"), `the row id "loader" is reserved`},
-		{"no dist directory", []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "none"}, "modules.yaml"},
+		{"no dist directory", []string{"profile", "render", "--profile", "demo", "--home", "home", "--dist", "none"}, "distribution.yaml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := do(t, w, env, tc.args...)
@@ -152,24 +206,19 @@ func TestRunRefusals(t *testing.T) {
 			}
 		})
 	}
-	// A dist file that is read but malformed, in each of the two files.
-	for _, file := range []string{"modules.yaml", "dist.yaml"} {
-		bad := fstest.MapFS{}
-		for k, v := range w {
-			bad[k] = v
-		}
-		bad["work/dist/"+file] = &fstest.MapFile{Data: []byte("x: [")}
-		if r := do(t, bad, env, with()...); r.code != 1 || !strings.Contains(r.errOut, file) {
-			t.Errorf("%s: %+v", file, r)
-		}
+	// A signed manifest that is read but malformed.
+	bad := maps.Clone(w)
+	bad["work/dist/distribution.yaml"] = &fstest.MapFile{Data: []byte("x: [")}
+	if r := do(t, bad, env, with()...); r.code != 1 || !strings.Contains(r.errOut, "distribution.yaml") {
+		t.Errorf("a malformed manifest: %+v", r)
 	}
-	missing := fstest.MapFS{}
-	for k, v := range w {
-		missing[k] = v
-	}
-	delete(missing, "work/dist/dist.yaml")
-	if r := do(t, missing, env, with()...); r.code != 1 || !strings.Contains(r.errOut, "dist.yaml") {
-		t.Errorf("no dist.yaml: %+v", r)
+	// A home whose trust.yaml does not list the key that signed the manifest: render
+	// denies every row, as boot does (ADR-020 decision 12), and says how to recover.
+	untrusted := maps.Clone(w)
+	delete(untrusted, "work/home/trust.yaml")
+	if r := do(t, untrusted, env, with("--dump")...); r.code != 1 || !strings.Contains(r.errOut, "distributions of trust.yaml does not list") ||
+		!strings.Contains(r.errOut, "to recover") || !strings.Contains(r.out, "check 5 Trust: ") {
+		t.Errorf("an untrusted manifest: %+v", r)
 	}
 }
 
@@ -179,29 +228,18 @@ func TestRunUsage(t *testing.T) {
 	for name, args := range map[string][]string{
 		"no arguments":       nil,
 		"one word":           {"profile"},
-		"unknown subcommand": {"profile", "verify"},
 		"unknown command":    {"plugin", "render"},
+		"unknown group":      {"nope"},
 		"unknown flag":       with("--nope"),
 		"flag without value": {"profile", "render", "--profile"},
 		"no profile":         {"profile", "render", "--home", "home", "--dist", "dist"},
-		"no dist":            {"profile", "render", "--profile", "demo", "--home", "home"},
-		"no home":            {"profile", "render", "--profile", "demo", "--dist", "dist"},
 		"stray argument":     with("extra"),
 		"unknown role":       with("--role", "api,boss"),
 	} {
 		r := do(t, w, env, args...)
-		if r.code != 2 || !strings.Contains(r.errOut, "usage: aiopsctl profile render") || r.out != "" {
+		if r.code != 2 || !strings.Contains(r.errOut, "usage: aiopsctl ") || r.out != "" {
 			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.out, r.errOut)
 		}
-	}
-}
-
-func TestListFlag(t *testing.T) {
-	var l list
-	_ = l.Set("a")
-	_ = l.Set("b")
-	if l.String() != "a,b" {
-		t.Errorf("String = %q", l.String())
 	}
 }
 

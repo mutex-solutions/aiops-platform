@@ -49,7 +49,9 @@ type Generation struct {
 }
 
 // Reader is what the composition key serves. It has no mutating method and every
-// value it returns is a copy that the caller may keep.
+// value it returns is a copy that the caller may keep. It has no error result, so a
+// call after the provider's release cannot return kernel.ErrInactive
+// (07-c4-plugin-sdk.md:518) until the definition's next minor gives it one.
 type Reader interface {
 	// Committed returns the committed generation of scope, and false when the
 	// scope has none.

@@ -5,11 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
@@ -614,6 +618,31 @@ func TestScalarTyping(t *testing.T) {
 	}
 }
 
+// ParseConfig reads one row config as a layer does and returns the tree the launcher
+// hands the row; every rule of the layer parser holds.
+func TestParseConfig(t *testing.T) {
+	got, err := ParseConfig("cycle.yaml", []byte("n: 10\nr: 0.5\nname: \"yes\"\nl: [a, true]\nm: {k: ~}\nref: ${env:AIOPS_REF_X}\n"))
+	want := map[string]any{"n": int64(10), "r": 0.5, "name": "yes", "l": []any{"a", true}, "m": map[string]any{"k": nil},
+		"ref": launch.Ref{Scheme: "env", Name: "AIOPS_REF_X"}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseConfig = %#v, %v", got, err)
+	}
+	for src, rule := range map[string]Rule{
+		strings.Repeat("#", MaxFileBytes+1): RuleLimit,
+		"# only a comment\n":                RuleEmpty,
+		"a: [\n":                            RuleSyntax,
+		"a: 1\n---\nb: 2\n":                 RuleDocument,
+		"- a\n":                             RuleType,
+		"n: 012\n":                          RuleType,
+		"n: &v 1\nm: *v\n":                  RuleAlias,
+	} {
+		var e *Error
+		if _, err := ParseConfig("cycle.yaml", []byte(src)); !errors.As(err, &e) || e.Rule != rule || e.File != "cycle.yaml" {
+			t.Errorf("ParseConfig(%.20q) = %v, want rule %s", src, err, rule)
+		}
+	}
+}
+
 func TestParseRef(t *testing.T) {
 	good := map[string]Ref{
 		"${env:AIOPS_REF_X}":     {RefEnv, "AIOPS_REF_X"},
@@ -698,6 +727,68 @@ func TestYamlLine(t *testing.T) {
 	for in, want := range map[string]int{"yaml: line 7: x": 7, "no line": 0, "line x": 0, "line 99999999999999": 0} {
 		if got := yamlLine(errors.New(in)); got != want {
 			t.Errorf("%q: %d, want %d", in, got, want)
+		}
+	}
+}
+
+// A kept bundle that is missing or does not parse inserts none of the artifact's rows,
+// and the rest of the profile composes: the gate denies the artifact by check 5 or 8
+// (ADR-047 decisions 6 and 18). A composition error would stop every profile that holds
+// it.
+func TestComposeLeavesOutAnInstalledBundleThatDoesNotRead(t *testing.T) {
+	for name, files := range map[string]fstest.MapFS{
+		"missing":   {},
+		"malformed": {"bundles/acme/pack/bundle.yaml": {Data: []byte("- insert:\n    - {id: e1}\n")}},
+	} {
+		home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b, acme/pack]")}, "bundles/b/bundle.yaml": {Data: []byte(rows("id: x, plugin: o/x"))}}
+		maps.Copy(home, files)
+		c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home}, Options{})
+		if err != nil || len(c.Rows) != 1 || c.Unread["acme/pack"] == "" {
+			t.Errorf("%s: %v %+v", name, err, c)
+		}
+	}
+	if _, _, err := Compose(Sources{Profile: "p", Home: fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}}}, Options{}); err == nil {
+		t.Error("a missing first-party bundle composes")
+	}
+}
+
+// Boot mounts the rows of an installed artifact's bundle under one core:group row it
+// adds, named by the <name> segment of the plugin id, enabled, with every role a row
+// states (ADR-047 decision 5). The bundle places no row outside it, so a patch item
+// changes nothing (check 8 denies the artifact). A group whose id a row composed before
+// it holds inserts none of the artifact's rows, and the rest composes (decision 6).
+func TestComposeMountsAnInstalledArtifact(t *testing.T) {
+	compose := func(base, pack string) Composition {
+		t.Helper()
+		home := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b, acme/pack]")},
+			"bundles/b/bundle.yaml": {Data: []byte(base)}, "bundles/acme/pack/bundle.yaml": {Data: []byte(pack)}}
+		c, _, err := Compose(Sources{Profile: "p", Home: home, Bundles: home}, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	line := func(c Composition) string {
+		var out []string
+		for _, r := range c.Rows {
+			out = append(out, fmt.Sprintf("%s %s parent=%s enabled=%v roles=%v origin=%s", r.ID, r.Plugin, r.Parent, r.Enabled, r.Roles, installedBundle(r)))
+		}
+		return strings.Join(out, "; ") + fmt.Sprintf("; clashes %v", c.Clashes)
+	}
+	pack := rows("id: e, plugin: aiops/echo, roles: [api], enabled: false", "id: f, plugin: aiops/echo, roles: [worker], enabled: false") +
+		"- {id: x, enabled: false}\n"
+	for _, tc := range []struct{ base, pack, want string }{
+		{rows("id: x, plugin: o/x"), pack, "x o/x parent= enabled=true roles=[] origin=; " +
+			"pack core:group parent= enabled=true roles=[api worker] origin=acme/pack; " +
+			"pack:e aiops/echo parent=pack enabled=false roles=[api] origin=acme/pack; " +
+			"pack:f aiops/echo parent=pack enabled=false roles=[worker] origin=acme/pack; clashes []"},
+		{rows("id: x, plugin: o/x"), rows("id: e, plugin: aiops/echo, roles: [api], enabled: false", "id: f, plugin: aiops/echo, enabled: false"),
+			"x o/x parent= enabled=true roles=[] origin=; pack core:group parent= enabled=true roles=[] origin=acme/pack; " +
+				"pack:e aiops/echo parent=pack enabled=false roles=[api] origin=acme/pack; pack:f aiops/echo parent=pack enabled=false roles=[] origin=acme/pack; clashes []"},
+		{rows("id: pack, plugin: o/x"), pack, "pack o/x parent= enabled=true roles=[] origin=; clashes [acme/pack]"},
+	} {
+		if got := line(compose(tc.base, tc.pack)); got != tc.want {
+			t.Errorf("got  %s\nwant %s", got, tc.want)
 		}
 	}
 }

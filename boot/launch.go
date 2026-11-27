@@ -1,9 +1,11 @@
 package boot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"sort"
 	"strings"
@@ -67,7 +69,7 @@ func refsInject(r ComposedRow) []string {
 // again, so it sees a file that changed since boot; Admit and Plan work on
 // compositions that this launcher composed, which it remembers by digest: the
 // definition's Composition holds plain values and has no provenance, which gate
-// check 8 reads (08-profiles-roadmap-adrs.md:507). A composition it never made is
+// check 8 reads (08-profiles-roadmap-adrs.md:504). A composition it never made is
 // refused.
 type profileContext struct {
 	profile, role string
@@ -77,6 +79,11 @@ type profileContext struct {
 	dist          DistManifest
 	roles         []Role
 	root          *kernel.Root // read for config-refs's dry run; set before the services are provided
+	signed        Distribution
+	release       *Release
+	tie           map[string]Tie
+	commits       chan struct{} // pinged at each commit: the run loop publishes the rows
+	box           *toolbox
 
 	mu        sync.Mutex
 	committed Composition
@@ -125,6 +132,9 @@ func (p *profileContext) rememberLocked(c Composition) {
 // composition that is looked up again is the newest, so the one that reload plans from
 // is not forgotten while it is in use.
 func (p *profileContext) lookup(lc launch.Composition, newest bool) (Composition, error) {
+	if err := p.released(); err != nil {
+		return Composition{}, err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	d := Digest(lc.Digest)
@@ -141,6 +151,16 @@ func (p *profileContext) lookup(lc launch.Composition, newest bool) (Composition
 	return Composition{}, fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", d[:6])
 }
 
+// released is kernel.ErrInactive once the root that the services are provided from is
+// closing, which is the launcher's release, and nil before: Compose, and Admit, Plan,
+// Commit and RequiredOf through lookup, then refuse (07-c4-plugin-sdk.md:518).
+func (p *profileContext) released() error {
+	if p.root.Context().Std().Err() != nil {
+		return kernel.ErrInactive
+	}
+	return nil
+}
+
 // sameEnabled reports whether lc has the rows of c, each enabled as in c: the launcher's
 // copy differs from what it was composed from in that only.
 func sameEnabled(lc launch.Composition, c Composition) bool {
@@ -151,9 +171,16 @@ func sameEnabled(lc launch.Composition, c Composition) bool {
 // denies is disabled (GateResult.Admitted). The loader's row is not in it.
 func (p *profileContext) admitted(c Composition) Composition {
 	w := WithLoader(c)
-	a := Gate(w, p.mods, p.dist).Admitted(w)
+	a := GateWith(w, p.input(w)).Admitted(w)
 	a.Rows = a.Rows[1:]
 	return a
+}
+
+// input is what the gate reads at a live generation: the home is read again, so that
+// trust.yaml, plugins.lock and the records count as they are now (ADR-060 decision 17).
+func (p *profileContext) input(c Composition) GateInput {
+	in, _ := bootInput(p.src.Home, p.profile, c, p.mods, p.signed, p.release, p.tie)
+	return in
 }
 
 // Committed is the composition the process runs: the one it booted until reload commits
@@ -176,11 +203,12 @@ func (p *profileContext) Commit(lc launch.Composition) error {
 	}
 	c = p.admitted(c)
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.committed.Digest != c.Digest {
 		p.rememberLocked(p.committed)
 	}
 	p.committed = c
+	p.mu.Unlock()
+	ping(p.commits)
 	return nil
 }
 
@@ -194,6 +222,9 @@ func (p *profileContext) Required() launch.RequiredSet {
 	p.mu.Unlock()
 	return p.requiredOf(c)
 }
+
+// Toolbox returns the launcher's toolbox (toolbox.go).
+func (p *profileContext) Toolbox() launch.Toolbox { return p.box }
 
 // RequiredOf is the required set of a composition that Commit would take.
 func (p *profileContext) RequiredOf(lc launch.Composition) (launch.RequiredSet, error) {
@@ -210,10 +241,12 @@ func (p *profileContext) requiredOf(c Composition) launch.RequiredSet {
 }
 
 func (p *profileContext) Compose(ctx context.Context) (launch.Composition, error) {
-	if err := ctx.Err(); err != nil {
+	if err := cmp.Or(ctx.Err(), p.released()); err != nil {
 		return launch.Composition{}, err
 	}
-	c, _, err := Compose(p.src, p.opt)
+	opt := p.opt
+	opt.Locks = lockDigests(p.src.Home, p.profile)
+	c, _, err := Compose(p.src, opt)
 	if err == nil {
 		err = CheckReserved(c)
 	}
@@ -232,20 +265,17 @@ func (p *profileContext) Admit(ctx context.Context, lc launch.Composition) (laun
 	if err != nil {
 		return launch.Admission{}, err
 	}
-	a := Admit(WithLoader(c), p.mods, p.dist, p.roles)
+	w := WithLoader(c)
+	a := AdmitWith(w, p.input(w), p.roles)
 	// Every denied row is listed, a required one too: its denial is also an error that
 	// rejects the generation, and reload reports either as ErrDenied (ADR-059 decision 15).
-	var out launch.Admission
-	for _, id := range a.Gate.Rows {
-		if d, ok := a.Gate.Denial(id); ok {
-			out.Denied = append(out.Denied, launch.Denial{Row: id, Check: checkName(d.Check), Reason: d.Reason})
-		}
-	}
+	// A disabled row is detached already, so only check 8 denies it here, as it did before
+	// the gate evaluated an artifact's disabled rows (launchAdmission).
 	errs := p.configErrors(ctx, c)
 	if lines := errorLines(a); len(lines) > 0 {
 		errs = append([]error{errors.New(strings.Join(lines, "; "))}, errs...)
 	}
-	return out, errors.Join(errs...)
+	return launchAdmission(a), errors.Join(errs...)
 }
 
 // dryRun is the dry run that config-refs provides under configRefsDryRun
@@ -361,6 +391,8 @@ func decodes(decode func(any) (any, error), raw any) (err error) {
 	return err
 }
 
+// checkName names check n by its number and its name in the one gate text, or the
+// module table lookup that runs before the ten checks.
 func checkName(n int) string {
 	if n == checkResolve {
 		return "module table"
@@ -391,10 +423,13 @@ func (p *profileContext) Plan(ctx context.Context, from, to launch.Composition) 
 	if err != nil {
 		return launch.Plan{}, err
 	}
+	// The plan starts from what the tree runs: the committed composition is the copy the
+	// gate admitted when it was committed, and a candidate the tree runs passed Admit.
+	// Gating it again against the home as it is now would disable a row it still mounts.
 	f, t = WithLoader(f), WithLoader(t)
-	fa, ta := Gate(f, p.mods, p.dist).Admitted(f), Gate(t, p.mods, p.dist).Admitted(t)
+	ta := GateWith(t, p.input(t)).Admitted(t)
 	g, _, _ := BuildGraph(ta, p.mods, p.dist, p.roles)
-	return launchPlan(Diff(fa, ta, g)), nil
+	return launchPlan(Diff(f, ta, g)), nil
 }
 
 // catalog is the catalog service: the module table and the key table. It keeps the
@@ -423,11 +458,12 @@ func (c *catalog) Key(name string) (kernel.AnyKey, bool) {
 }
 
 // newCatalog builds the catalog from a registry. It checks that every entry of the
-// module table carries a defined kernel.Plugin whose own declarations agree with
-// the entry's (the static graph reads the entry and the kernel reads the plugin, so
-// a disagreement would be silent), and builds the key table from the keys the
-// plugins declare, the launch keys, the keys of the loader and composition
-// definitions, the built-in keys of the kernel and Registry.Keys.
+// module table carries a defined kernel.Plugin whose own declarations, its keys and
+// its hooks with their stages, agree with the entry's, which are read from its
+// manifest (the static graph, the gate and the dumps read the entry and the kernel
+// reads the plugin, so a disagreement would be silent), and builds the key table
+// from the keys the plugins declare, the launch keys, the keys of the loader and
+// composition definitions, the built-in keys of the kernel and Registry.Keys.
 func newCatalog(reg Registry) (*catalog, error) {
 	c := &catalog{byID: map[string]launch.CatalogEntry{}, plugins: map[string]kernel.Plugin{}, keys: map[string]kernel.AnyKey{}}
 	var errs []error
@@ -469,10 +505,17 @@ func newCatalog(reg Registry) (*catalog, error) {
 				needs = append(needs, d.Key().Name())
 			}
 		}
+		var hooks, declared []string
+		for _, u := range p.Hooks {
+			hooks = append(hooks, u.Hook()+"@"+u.Stage())
+		}
+		for _, h := range e.Hooks {
+			declared = append(declared, h.Hook+"@"+h.StageName)
+		}
 		for _, f := range []struct {
 			what       string
 			plugin, ds []string
-		}{{"provides", provides, e.Provides}, {"needs", needs, withoutRoot(e.Needs)}, {"wants", wants, e.Wants}} {
+		}{{"provides", provides, e.Provides}, {"needs", needs, withoutRoot(e.Needs)}, {"wants", wants, e.Wants}, {"hooks", hooks, declared}} {
 			if !sameSet(f.plugin, f.ds) {
 				errs = append(errs, fmt.Errorf("module %q: the plugin %s %v and the module entry %s %v differ", id, f.what, sorted(f.plugin), f.what, sorted(f.ds)))
 			}
@@ -524,11 +567,15 @@ func withoutRoot(in []string) []string {
 // cmdline is the cmdline service. Flag reads the flags the operator gave, plus the
 // home as "home" whether it came from --home or from AIOPS_HOME, so a row can read
 // where the process keeps its files (the documents name no flag but the references
-// ${flag:name}, 03-c3-kernel.md:68).
+// ${flag:name}, 03-c3-kernel.md:68). The streams, the directory and the environment
+// are what RunOptions holds (launch 0.2).
 type cmdline struct {
-	args  []string
-	flags map[string]string
-	env   func(string) string
+	args    []string
+	flags   map[string]string
+	env     func(string) string
+	stdio   Stdio
+	dir     string
+	environ []string
 }
 
 var _ launch.Cmdline = cmdline{}
@@ -550,16 +597,24 @@ func (c cmdline) Env(name string) (string, bool) {
 	return v, v != ""
 }
 
+func (c cmdline) Stdin() io.Reader  { return c.stdio.In }
+func (c cmdline) Stdout() io.Writer { return c.stdio.Out }
+func (c cmdline) Stderr() io.Writer { return c.stdio.Err }
+func (c cmdline) Dir() string       { return c.dir }
+func (c cmdline) Environ() []string { return slices.Clone(c.environ) }
+
 // latch is the ready service: a flag that readiness sets when the required set is
 // ACTIVE and drops while a provider restarts (03-c3-kernel.md:67). Every change
 // goes to changed, which the launcher publishes to the outside, under the latch's
 // lock, so that the outside reads what the latch holds. end drops it for good: after
 // a leak, and once the process stops, readiness has ended (ADR-059 decision 13) and
-// the readiness row's next Set changes nothing. changed must not call IsReady.
+// the readiness row's next Set changes nothing. changed must not call IsReady. booted
+// is the channel of Booted, which Run closes at the end of boot.
 type latch struct {
 	mu        sync.Mutex
 	on, ended bool
 	changed   func(bool)
+	booted    chan struct{}
 }
 
 var _ launch.Ready = (*latch)(nil)
@@ -583,6 +638,8 @@ func (l *latch) IsReady() bool {
 	defer l.mu.Unlock()
 	return l.on
 }
+
+func (l *latch) Booted() <-chan struct{} { return l.booted }
 
 // switches is the killSwitches service, layer 6, read once at boot from the
 // environment (08-profiles-roadmap-adrs.md:111, :126; ReadKillSwitches).

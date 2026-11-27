@@ -1,0 +1,17 @@
+# aiops-core: the process basics shared by the server, the CLI and tests, first in every
+# server profile and, with aiops-cli, the cli profile (00-decisions.md:276; ADR-060
+# decision 27). At S2a it holds the rows of the S1 core plugins and reload-socket, which
+# serves the reload queue to aiopsctl over <home>/run/reload.sock from S2a to S6a, with
+# the roles of the reload row and in no required set (ADR-062 decisions 1 and 19); the
+# others arrive with their steps. Its rows run in every role. The loader is boot's and
+# belongs to no bundle.
+- insert:
+    - {id: clock, plugin: aiops/clock, roles: [edge, api, worker]}
+    - {id: config-refs, plugin: aiops/config-refs, roles: [edge, api, worker], config: {maxFileBytes: 65536}}
+    - id: restart-policy
+      plugin: aiops/restart-policy
+      roles: [edge, api, worker]
+      config: {maxFailures: 5, window: 1m, backoffMin: 100ms, backoffMax: 10s, factor: 2, infrastructure: [clock]}
+    - {id: reload, plugin: aiops/reload, roles: [edge, api, worker], config: {queue: 8, history: 32}}
+    - {id: reload-socket, plugin: aiops/reload-socket, roles: [edge, api, worker]}
+    - {id: readiness, plugin: aiops/readiness, roles: [edge, api, worker]}

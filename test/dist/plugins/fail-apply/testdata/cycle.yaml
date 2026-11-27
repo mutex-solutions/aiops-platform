@@ -1,0 +1,5 @@
+# The row config the generated cycle test mounts the row with: a trigger in this
+# directory, where no file of that name exists, so Apply succeeds and the trigger never
+# fires.
+trigger: absent
+dir: testdata

@@ -1,7 +1,9 @@
-# Layout: 07-c4-plugin-sdk.md:529-537 (R13). Schema validation is a later step.
-# Contract: 03-c3-kernel.md:64 (`composition` is class `-`, provided by loader).
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: 03-c3-kernel.md:64 (`composition` is class `-`, provided by loader). The
+# definition owns no hook: composition/applied is owned by the reload key.
 key: composition
 version: "0.1"
 stability: preview
 class: {provider: open, consumer: open}
 remote: "no"
+suite: 1

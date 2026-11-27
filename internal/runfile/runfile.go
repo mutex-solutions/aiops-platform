@@ -15,9 +15,9 @@ func Dir(home string) string { return filepath.Join(home, "run") }
 
 // Write puts data in dir/name atomically: it writes a temporary file in dir and
 // renames it, so a reader sees the old file or the whole new one, never part of
-// one. It creates dir.
+// one. It creates dir with mode 0700, as ADR-047 decision 14 makes run/.
 func Write(dir, name string, data []byte) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(dir, "."+name+".*")

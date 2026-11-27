@@ -245,6 +245,8 @@ func (t *tree) fiberOf(id string) (*kernel.Fiber, string, error) {
 	defer t.mu.Unlock()
 	e := t.entries[id]
 	switch {
+	case t.lc == nil:
+		return nil, "", kernel.ErrInactive
 	case e == nil:
 		return nil, "", def.ErrNotFound
 	case t.mount(e) != def.Mounted:

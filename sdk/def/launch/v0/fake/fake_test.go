@@ -34,7 +34,7 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	l.Keys = map[string]kernel.AnyKey{"k": launch.CatalogKey}
 	l.Argv, l.Flags = []string{"--role", "api"}, map[string]string{"role": "api"}
 	l.Switches = map[string]bool{launch.AgentsPaused: true}
-	l.Environ = map[string]string{"AIOPS_REF_X": "v", "AIOPS_AGENTS_PAUSED": "1"}
+	l.Environment = map[string]string{"AIOPS_REF_X": "v", "AIOPS_AGENTS_PAUSED": "1"}
 	l.Current = launch.Composition{Digest: launch.Digest{7}}
 	l.Needed = launch.RequiredSet{Rows: []string{"r"}, Keys: []string{"sql"}}
 	cand := launch.Composition{Rows: []launch.Row{{ID: "a"}}, Digest: launch.Digest{1}}
@@ -157,6 +157,11 @@ func TestConsumerCallsEveryMethod(t *testing.T) {
 	}
 	if ex := l.Exits(); len(ex) != 1 || ex[0].Reason != launch.ExitGaveUp || ex[0].Detail != "sql" {
 		t.Fatalf("exits = %v", ex)
+	}
+	select {
+	case <-l.ExitRequested():
+	default:
+		t.Fatal("ExitRequested is open after an exit request")
 	}
 }
 
@@ -327,5 +332,57 @@ func TestSecondLauncherFails(t *testing.T) {
 	deftest.Active(t, root.Plugin(first, nil))
 	if err := deftest.Failure(t, root.Plugin(second, nil)); err == nil {
 		t.Fatal("no error")
+	}
+}
+
+// Boot closes Booted once, and a second Boot changes nothing.
+func TestBootClosesBootedOnce(t *testing.T) {
+	l, _ := fake.New()
+	select {
+	case <-l.Booted():
+		t.Fatal("Booted is closed before Boot")
+	default:
+	}
+	l.Boot()
+	l.Boot()
+	select {
+	case <-l.Booted():
+	default:
+		t.Fatal("Booted is not closed after Boot")
+	}
+}
+
+// Environ lists every variable of Environment, sorted, while Env serves only the names
+// with launch.EnvPrefix.
+func TestEnvironListsTheEnvironment(t *testing.T) {
+	l, _ := fake.New()
+	l.Environment = map[string]string{"HOME": "/h", "AIOPS_REF_A": "a"}
+	if got := l.Environ(); !slices.Equal(got, []string{"AIOPS_REF_A=a", "HOME=/h"}) {
+		t.Errorf("Environ = %q", got)
+	}
+	if _, ok := l.Env("HOME"); ok {
+		t.Error("Env served HOME")
+	}
+}
+
+// Toolbox returns Box; with none, every part of the toolbox answers ErrNotCarried.
+func TestToolboxIsTheBox(t *testing.T) {
+	l, _ := fake.New()
+	tb, ctx := l.Toolbox(), t.Context()
+	_, errRender := tb.Render(ctx, launch.RenderRequest{})
+	_, errGate := tb.Gate(ctx, launch.GateRequest{})
+	_, _, errRead := tb.ReadManifest(ctx, launch.ManifestRequest{})
+	_, errShipped := tb.Shipped(ctx)
+	_, errRelease := tb.Release(ctx, "")
+	for name, err := range map[string]error{"Render": errRender, "Gate": errGate, "ReadManifest": errRead,
+		"Shipped": errShipped, "Release": errRelease} {
+		if !errors.Is(err, launch.ErrNotCarried) {
+			t.Errorf("%s with no Box = %v, want ErrNotCarried", name, err)
+		}
+	}
+	box := struct{ launch.Toolbox }{tb}
+	l.Box = box
+	if got := l.Toolbox(); got != launch.Toolbox(box) {
+		t.Errorf("Toolbox = %v, want the Box", got)
 	}
 }

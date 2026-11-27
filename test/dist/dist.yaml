@@ -8,13 +8,17 @@ providers:
   # fault provides it too, and the gate denies that row (check 7).
   toy.policy: [aiops-test/toy-provider]
 consumers:
-  appExit: [aiops/restart-policy]
+  appExit: [aiops/restart-policy, aiops/cli]
   registry: [aiops/restart-policy]
   loader: [aiops/reload, aiops-test/test-state]
   # test-state composes a candidate through profileContext.
-  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops-test/test-state]
-  # test-submit submits; test-state reads the results.
-  reload: [aiops-test/test-submit, aiops-test/test-state]
+  profileContext: [aiops/loader, aiops/reload, aiops/readiness, aiops/operations, aiops-test/test-state]
+  # reload-socket submits as in the release; test-submit submits; test-state reads the
+  # results.
+  reload: [aiops/reload-socket, aiops-test/test-submit, aiops-test/test-state]
+  # The command rows that call the operations library, as in the release (ADR-061
+  # decision 20).
+  operations: [aiops/command-profile, aiops/command-plugin, aiops/command-dist, aiops/command-trust, aiops/command-key]
 sealedHooks:
   internal/status: [aiops/restart-policy, aiops/readiness]
   internal/config: [aiops/config-refs]

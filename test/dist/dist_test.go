@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,11 +15,14 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
+	"github.com/mutex-solutions/aiops-platform/dist"
 	"github.com/mutex-solutions/aiops-platform/internal/serve"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // These tests run the launcher in this process, with the real loader, the real kernel
@@ -78,6 +83,7 @@ func startEnv(t *testing.T, environ map[string]string, profile string, patches .
 func startDist(t *testing.T, d serve.Distribution, environ map[string]string, profile string, patches ...string) *proc {
 	t.Helper()
 	home := t.TempDir()
+	trusted.Write(t, home, d.Signed)
 	limits := filepath.Join(t.TempDir(), "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)
@@ -144,15 +150,59 @@ func TestDistributionHoldsTheReleaseTablePlusTheTestPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Registry.Modules) != 18 {
+	// The release table (14), the S1 test plugins (15) and the four toy plugins of the
+	// S2a test release (ADR-060 decision 38).
+	if len(d.Registry.Modules) != 33 {
 		t.Fatalf("%d modules", len(d.Registry.Modules))
 	}
 	// The test table is the release table plus the test plugins, never the other way.
 	if _, ok := d.Registry.Modules["aiops/loader"]; !ok {
 		t.Fatal("the release loader is missing")
 	}
+	// The volatile paths of toy-consumer are derived from its plugin.Volatile fields and
+	// read from the marks in its manifest, note the path the S1 hand list named, so a
+	// change of note or tag alone commits in place (ADR-048 decisions 9 and 18).
+	if v := d.Registry.Modules["aiops-test/toy-consumer"].Volatile; !slices.Equal(v, []string{"config.note", "config.tag"}) {
+		t.Fatalf("toy-consumer volatile paths %q, want [config.note config.tag]", v)
+	}
 	// The launcher checks every entry against its plugin and every key name against the
 	// key table when it starts, so a run of any profile proves the table is consistent.
+}
+
+// The test distribution ships its own bundles and profiles over the release's, aiops-core
+// and dev among them (ADR-060 decision 27), as one file system whose walk lists both, as
+// the launcher's toolbox walks it for profile init and plugin install.
+func TestShipsTheReleaseFilesUnderItsOwn(t *testing.T) {
+	d, err := Distribution()
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk := func(fsys fs.FS) map[string]string {
+		files := map[string]string{}
+		err := fs.WalkDir(fsys, ".", func(p string, e fs.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				var b []byte
+				b, err = fs.ReadFile(fsys, p)
+				files[p] = string(b)
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return files
+	}
+	got := walk(d.Shipped)
+	for p, data := range walk(dist.Shipped()) {
+		if got[p] != data {
+			t.Errorf("the test distribution ships %s as %q, the release as %q", p, got[p], data)
+		}
+	}
+	for _, p := range []string{"limits.yaml", "bundles/smoke/bundle.yaml", "profiles/smoke/profile.yaml", "profiles/dev/profile.yaml"} {
+		if _, ok := got[p]; !ok {
+			t.Errorf("the test distribution ships no %s", p)
+		}
+	}
 }
 
 func TestSmokeProfileInProcess(t *testing.T) {
@@ -171,6 +221,47 @@ func TestSmokeProfileInProcess(t *testing.T) {
 	st := p.readState()
 	if !st.Closing || st.Ready || len(st.Rows) != 12 || st.Digest == "" || st.Generation == 0 {
 		t.Fatalf("final state %+v", st)
+	}
+}
+
+// profile render composes exactly what the server composes (08-profiles-roadmap-adrs.md
+// §1.5): on the signed manifest the binary embeds and the same home, its digest is the
+// digest the process booted, the module of each plugin included (ADR-060 decision 20).
+func TestRenderComposesWhatTheProcessBooted(t *testing.T) {
+	p := start(t, "smoke")
+	p.ready()
+	booted := p.readStatus().Digest
+	d, err := Distribution()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := fstest.MapFS{}
+	for _, fsys := range []fs.FS{d.Shipped, os.DirFS(p.home)} {
+		err := fs.WalkDir(fsys, ".", func(name string, e fs.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				var data []byte
+				data, err = fs.ReadFile(fsys, name)
+				home[name] = &fstest.MapFile{Data: data}
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if code := p.stop(); code != boot.ExitOK {
+		t.Fatalf("exit %d; stderr:\n%s", code, p.errb.String())
+	}
+	man, err := boot.ReadDistribution("distribution.yaml", d.Signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := boot.Render(boot.Sources{Profile: "smoke", Home: home, Bundles: home}, true, man, nil)
+	if err != nil || a.Refused() {
+		t.Fatalf("render: %v %v", err, a.Diagnostics())
+	}
+	if got := fmt.Sprintf("%x", a.Comp.Digest[:]); got != booted {
+		t.Errorf("render composes %s, the process booted %s", got, booted)
 	}
 }
 
@@ -270,6 +361,7 @@ func TestSpineHasASlowButBoundedUnload(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
+	trusted.Write(t, home, d.Signed)
 	limits := filepath.Join(dir, "limits.yaml")
 	if err := os.WriteFile(limits, []byte(fastLimits), 0o644); err != nil {
 		t.Fatal(err)
@@ -340,7 +432,9 @@ func TestRequiredReferenceBootsOnTheReleaseRequiredSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.Manifest.RequiredKeys = slices.DeleteFunc(slices.Clone(d.Manifest.RequiredKeys), func(k string) bool { return k == "configRefsReady" })
+	if m, err := boot.ReadDistribution("distribution.yaml", d.Signed); err != nil || slices.Contains(m.Bindings().RequiredKeys, "configRefsReady") {
+		t.Fatalf("the test manifest requires configRefsReady, which hides what the release requires (%v)", err)
+	}
 	p := startDist(t, d, map[string]string{"AIOPS_REF_NOTE": "from-env"}, "smoke", "refs.required")
 	p.ready()
 	waitState(t, p, func(s teststate.State) bool { return s.Ready })

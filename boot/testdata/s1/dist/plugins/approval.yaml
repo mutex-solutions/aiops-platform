@@ -1,0 +1,19 @@
+manifestVersion: "1.0"
+id: aiops/approval
+version: 0.1.0
+title: Approval
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses:
+  - {key: sql, major: 0, as: need}
+provides:
+  - {key: approval, major: 0}
+registers: []
+hooks:
+  - {hook: approval/gates, stage: policy}
+configSchema: {}
+durable: []
+requires: {pluginApi: "0.1", definitions: {approval: ["0.1"]}}

@@ -1,0 +1,17 @@
+manifestVersion: "1.0"
+id: aiops/sql-pg
+version: 0.1.0
+title: SQL
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses: []
+provides:
+  - {key: sql, major: 0}
+registers: []
+hooks: []
+configSchema: {}
+durable: []
+requires: {pluginApi: "0.1", definitions: {}}

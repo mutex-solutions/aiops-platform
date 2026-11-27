@@ -1,0 +1,146 @@
+{
+ "classification": "PASS on b7071ed (A) and on main 17283a8 (B): four full callpath runs, protocol amendment 2, three candidates, alternating A, B, A, B; run 2, on B, is INVALID by host noise (timer-only control CV above 10% at 1 caller) and run 4 repeats the unchanged protocol and passes; the call-path gate of the G13 verification plan passes",
+ "protocol": "one session on the measurement host, one process per run, alternating by process: A, B, A, B (b7071ed, 17283a8, b7071ed, 17283a8), started back to back from 2026-11-24T02:30Z to 2026-11-24T14:36Z; each process ran the unchanged full gate with the argv and environment below",
+ "commits": {
+  "A": "b7071ed: the s2a/integration commit that carries G13 (ADR-034); the gate's source closure (sha256 8587699f04c00656cef5d6af2ef30c6a66b1976bf7ffbde2f4808c95d7e3608c) differs from that of B in go.mod and in sdk/kernel/config.go, key.go, owner.go and root.go only",
+  "B": "17283a8: main, which G13 merges into; the gate's source closure equals that of e3a72af in ../callpath-full-merged-ab/ and of fb0a86b in ../callpath-full-merge-commit/ (sha256 97b061daea2396632d0ea99d61d2d15e86e045123a8562ae53fbbb04074112ce)"
+ },
+ "protocolAmendment": 2,
+ "argv": [
+  "go",
+  "test",
+  "./test/spike/s0/callpath",
+  "-run",
+  "^TestFullCallpath$",
+  "-count=1",
+  "-timeout",
+  "8h",
+  "-v"
+ ],
+ "environment": {
+  "S0_CALLPATH_RUN": "1",
+  "S0_CALLPATH_OUT": "<out>/result",
+  "S0_CALLPATH_IDENTITY": "<out>/identity.json",
+  "GOMAXPROCS": "8"
+ },
+ "host": "dedicated KVM guest, 24 vCPU Intel Xeon Platinum 8481C, 245 GiB RAM, no swap, no other workload started by this job; load average 0.03 to 0.46 at the start and the end of every run (host-before.txt, host-after.txt)",
+ "kernelOwnerEnterLeaveKey": "baseline arm; p50NS and p99NS over all 10 runs; worstRunP99NS the highest single-run p99; runsWithP99Above1200NS the slow-mode windows of ADR-034, of 10",
+ "runs": [
+  {
+   "order": 1,
+   "commit": "b7071ed",
+   "directory": "1-b7071ed/",
+   "classification": "PASS: 9 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-24T02:31:01Z",
+   "elapsedSeconds": 10835.15,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 151,
+     "p99NS": 332,
+     "worstRunP99NS": 414,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 372,
+     "p99NS": 1290,
+     "worstRunP99NS": 1594,
+     "runsWithP99Above1200NS": 2
+    },
+    "c32": {
+     "p50NS": 371,
+     "p99NS": 1295,
+     "worstRunP99NS": 1614,
+     "runsWithP99Above1200NS": 2
+    }
+   }
+  },
+  {
+   "order": 2,
+   "commit": "17283a8",
+   "directory": "2-17283a8/",
+   "classification": "INVALID by host noise: the timer-only control throughput CV at 1 caller is 12.9% on reconciler and 12.0% on graph-lock, above 10%, which invalidates the timer overhead and the three baseline operations at 1 caller of each, 8 reasons; 14 observations of candidate variation above 10% with a clean control; the harness asks for the unchanged protocol to be repeated, and run 4 repeats it",
+   "startedUTC": "2026-11-24T05:32:42Z",
+   "elapsedSeconds": 10837.21,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 330,
+     "worstRunP99NS": 432,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 511,
+     "p99NS": 1504,
+     "worstRunP99NS": 1668,
+     "runsWithP99Above1200NS": 6
+    },
+    "c32": {
+     "p50NS": 488,
+     "p99NS": 1473,
+     "worstRunP99NS": 1636,
+     "runsWithP99Above1200NS": 5
+    }
+   }
+  },
+  {
+   "order": 3,
+   "commit": "b7071ed",
+   "directory": "3-b7071ed/",
+   "classification": "PASS: 8 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-24T08:34:22Z",
+   "elapsedSeconds": 10836.97,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 375,
+     "worstRunP99NS": 387,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 448,
+     "p99NS": 1449,
+     "worstRunP99NS": 1584,
+     "runsWithP99Above1200NS": 7
+    },
+    "c32": {
+     "p50NS": 446,
+     "p99NS": 1440,
+     "worstRunP99NS": 1649,
+     "runsWithP99Above1200NS": 7
+    }
+   }
+  },
+  {
+   "order": 4,
+   "commit": "17283a8",
+   "directory": "4-17283a8/",
+   "classification": "PASS: 10 observations of candidate variation above 10% with a clean control, none invalidating",
+   "startedUTC": "2026-11-24T11:36:01Z",
+   "elapsedSeconds": 10834.98,
+   "kernelOwnerEnterLeave": {
+    "c1": {
+     "p50NS": 150,
+     "p99NS": 327,
+     "worstRunP99NS": 405,
+     "runsWithP99Above1200NS": 0
+    },
+    "c8": {
+     "p50NS": 377,
+     "p99NS": 1348,
+     "worstRunP99NS": 1577,
+     "runsWithP99Above1200NS": 3
+    },
+    "c32": {
+     "p50NS": 392,
+     "p99NS": 1420,
+     "worstRunP99NS": 1614,
+     "runsWithP99Above1200NS": 4
+    }
+   }
+  }
+ ],
+ "allocationBound": "owner Enter+Leave: zero allocations in every run of every aggregate, all three candidates, both commits, the invalid run included",
+ "hostNoise": "no swap pages moved and no throttled periods in any of the 120 samples of any run, the invalid run included: the noise that invalidated run 2 shows in the timer-only control alone",
+ "conclusion": "The gate passes on G13: A passes in both its runs, and B passes in run 4, which repeats the unchanged protocol after run 2 was invalid by host noise. No measured operation runs new code (ADR-034, G13 verification plan item 4). The slow mode of the contended lease appears on both commits: 18 of 40 kernel windows at 8 and 32 callers on b7071ed, 7 of 20 in the valid run on 17283a8 (11 of 20 in the invalid run). The highest owner Enter+Leave window p99 of any candidate is 1,649 ns on b7071ed and 1,614 ns in the valid run on 17283a8 (1,668 ns in the invalid run), below the 1,762 and 1,795 ns of ../callpath-full-merged-ab/, where the slow mode took 14 and 27 of 40 windows. The difference between A and B lies within the spread of the slow mode that the section \"2026-11-22 call-path gate on the merge commit\" of ADR-034 describes, so it is no finding to explain before the merge. Item 4 also runs the gate again on the merge commit into main, once that merge exists.",
+ "note": "the report label (\"candidate evidence, not final-port evidence\") is fixed text in the harness. Raw per-run records stay on the measurement host, and the callpath.log of runs 1, 3 and 4 gives the path of the raw records as <out>/result; that of the invalid run 2 gives no path (\"raw records in the output directory\"). Each run directory also held commit.txt, the full SHA that identity.json names, and progress.txt, the start and exit lines; neither is copied. The invalid run exits 1, as the harness exits on any classification but pass."
+}

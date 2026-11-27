@@ -3,7 +3,9 @@
 // Package deftest holds helpers shared by the tests of the definitions. It
 // imports the standard library and sdk/kernel only. The bound kernel it builds
 // is kernel.New with binding maps, which kerneltest never builds
-// (07-c4-plugin-sdk.md:564), so a test can assert key classes.
+// (07-c4-plugin-sdk.md:564), so a test can assert key classes. Parse reads a
+// definition.yaml in its fixed layout, and Agree holds the file of a definition
+// package to the package's Go declarations (ADR-060 decision 7).
 package deftest
 
 import (

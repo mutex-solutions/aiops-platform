@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"time"
 
@@ -104,6 +105,8 @@ type State struct {
 
 // New returns the plugin. Config: interval (duration, default 25ms), dir (the
 // directory of the file, default <home>/run) and file (default test-state.json).
+// With no dir and no --home, as in the generated cycle test, it writes into a
+// directory of its own under the temporary directory and removes it when it unloads.
 func New() kernel.Plugin {
 	type cfg struct {
 		interval  time.Duration
@@ -126,10 +129,16 @@ func New() kernel.Plugin {
 			w := &writer{dir: cf.dir, file: cf.file, ready: launch.ReadyKey.Of(c), ld: loaderdef.Key.Of(c), rd: composition.Key.Of(c), rl: reload.Key.Of(c)}
 			if w.dir == "" {
 				home, ok := launch.CmdlineKey.Of(c).Flag("home")
-				if !ok {
-					return errors.New("test-state: no dir in the config and no --home")
-				}
 				w.dir = runfile.Dir(home)
+				if !ok {
+					dir, err := os.MkdirTemp("", "test-state-")
+					if err != nil {
+						return fmt.Errorf("test-state: %w", err)
+					}
+					// Deferred before the final write below, so it runs after it.
+					c.Defer("test-state-dir", func(context.Context) error { return os.RemoveAll(dir) })
+					w.dir = dir
+				}
 			}
 			comp, err := launch.ProfileContextKey.Of(c).Compose(c.Std())
 			if err != nil {

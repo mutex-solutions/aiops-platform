@@ -151,7 +151,17 @@ Registration in `init`, read in the same cache:
      the zip's hash in the scratch `go.sum` and in the smoke output, so the directory
      enters the build as every module does (decision 8). `plugin verify` takes the
      module path, version and sum from the pulled artifact (ADR-060 decision 19) and
-     resolves the module through the module source against that sum.
+     resolves the module through the module source against that sum. Note of
+     2026-11-25, as built: the pseudo-version is the zero pseudo-version of the module's
+     major, `v0.0.0-00010101000000-000000000000` at major 0; both commands take the
+     release artifact as `--against` and the module source as `--modcache`, and on the
+     image path the image's `aiopsctl` runs `plugin smoke` on the local path, or `dist
+     build` of the throwaway `dist.yaml` that `plugin verify` writes. Second note of
+     2026-11-25: `plugin verify` runs step 5 of `plugin check` on the module, which `dist
+     build` does not, so it takes the local path; on the image path it builds nothing and
+     its step is not built (ADR-060 decision 46). On the image path `plugin smoke` refuses
+     a release that `--against` does not name by digest before it runs the image, as the
+     local path does.
 
    Both paths of one release run one builder.
 2. **The builder sets the Go environment itself, on both paths.** It starts `go` with an
@@ -260,6 +270,16 @@ Registration in `init`, read in the same cache:
      distributor (`08:1337` L8; `08:1345` L16 says the same of a copyleft plugin's
      obligations), and `dist build` prints it. Whether a site's module source can stand
      in for the archive is not decided here; it waits for the licence record's Q7.
+
+   Note of 2026-11-25, as built: the release check is `go run ./tools/mplsources <dir>`
+   on the output directory of a release's second phase. It reads the signed manifest
+   there, whose `modules` record what the release image links with its sum and detected
+   licence, and fails, naming the module, when a module under MPL-2.0 has a sum that is
+   the h1 hash of no zip under `mpl-sources/`. `TestReleaseAndBuilderImage`, which the
+   CI job `builder-image` runs, runs it on the release it builds, and its own test holds
+   the MPL-2.0 case of decision 14. It is a tool beside the builder, not builder code,
+   since the builder is at its provisional cap (ADR-060 decision 35). The offline case of
+   decision 14 still waits for L14 (decision 19).
 
 ### Modules on one VM and on an air-gapped site
 
@@ -759,10 +779,12 @@ settles it.
 
 15. **The licence scan and the SBOM writer live in the builder package** (Q1 (a)).
     Detection links `github.com/google/licenseclassifier/v2` at v2.0.0, with `go-spew`
-    v1.1.1 and `go-diff` v1.1.0, over the corpus of decision 26. The SBOM is SPDX 2.3 in
-    JSON, written with the standard library from the build list and the layer inputs.
-    Both paths and the CI licence report (`08:1245`; ADR-060 decision 36) run the same
-    code, and the builder image holds no scanner and no SBOM tool.
+    v1.1.2-0.20180830191138-d8f796af33cc and `go-diff` v1.4.0, the versions the build
+    list selects, whose licences were read at those versions (owner, 2026-11-25), over
+    the corpus of decision 26. The SBOM is SPDX 2.3 in JSON, written with the standard
+    library from the build list and the layer inputs. Both paths and the CI licence
+    report (`08:1245`; ADR-060 decision 36) run the same code, and the builder image
+    holds no scanner and no SBOM tool.
 
 16. **The local path runs the pinned toolchain module, never the host's** (Q2 (a)). It
     takes `golang.org/toolchain` at the pinned version for the host's system and
@@ -806,7 +828,17 @@ settles it.
     reviewed pull request; a site adds none, and the table is empty at S2a. When gRPC
     enters the server binary, the builder builds every server binary with `-tags
     grpcnotrace`, and the table gains `google.golang.org/grpc/encoding/proto` with
-    `RegisterCodecV2`; `grpc.EnableTracing` then does nothing in a server binary.
+    `RegisterCodecV2`; `grpc.EnableTracing` then does nothing in a server binary. Note
+    of 2026-11-25: on the owner's word, the table also holds the three registrations
+    with `encoding/gob.Register` that sigstore-go brings in through go-openapi (ADR-020
+    decision 16): the `init` of `encoding/gob`, which registers gob's basic types
+    (`registerBasics` in `type.go`), at the toolchain pin, and the `init` of
+    `github.com/go-openapi/loads` at v0.25.0 (`spec.go`) and of
+    `github.com/go-openapi/spec` at v0.22.9 (`operation.go`), each registering
+    `map[string]any` and `[]any`. Each is keyed by package and version, fills only gob's
+    own type registry, which no row of a server uses, and counts under decision 24; a
+    version change of the toolchain or of either module needs a new review. The register
+    entry of sigstore-go records them, and ADR-020 decision 27 carries the same note.
 
 22. **A self-built distribution lists sealed-hook listeners and its raise of the required
     set in `bindings`** (Q8 (a)). `bindings` gains `sealedHooks`, the listeners a site
@@ -828,14 +860,33 @@ settles it.
     function values** (Q11 (a)), on the call graph that
     `golang.org/x/tools/go/callgraph/vta` builds over the SSA form of the whole program
     (decision 12). An edge that over-approximates a dynamic call and reaches a
-    registration is a finding, cleared only by an exception of decision 21.
+    registration is a finding, cleared only by an exception of decision 21. Note of
+    2026-11-26 (review round over the whole step): a function or closure that a reached
+    call of `time.AfterFunc`, `context.AfterFunc`, `runtime.SetFinalizer` or
+    `runtime.AddCleanup` hands to the runtime is reached too, since the runtime calls it
+    through no edge of the graph; one that a variable or a parameter carries to that call
+    is not. Following every function a reached function refers to as a value was tried
+    and refused: it finds closures that inits store as test hooks in gRPC and the HTTP
+    server's handler, which no init runs. Note of 2026-11-27 (round 2): so is a sequence
+    that a reached call of `iter.Pull` or `iter.Pull2` hands to the runtime's coroutine,
+    whose start has no body in the SSA form. Following each function that a reached call
+    passes to a function with no body, as suggested, was not taken: such a function need
+    not call it.
 
 26. **The classifier carries a corpus built from the SPDX License List data** (Q12 (b)),
     at a pinned version and embedded by the builder package. The classifier is linked
     without its package `assets`, and its names are SPDX ids, so no table maps them. The
     terms of the data are read at a primary source before the classifier merges. The
     header and supplement variants of the module's corpus are not carried; a text the
-    corpus cannot name is `unknown` and fails the build (L16).
+    corpus cannot name is `unknown` and fails the build (L16). Note of 2026-11-26 (review
+    round over the whole step): the classifier names a text at a confidence of 0.9 or
+    more with up to a tenth of its words foreign, and its tokenizer drops a copyright
+    line whole, so a text is also `unknown` when it holds a word that the text it names
+    does not, by the longest common run of their words, other than in place of words of
+    a variable of the SPDX template (any words where the variable's match takes any
+    text, else words of its match), or a word on a copyright line beyond its copyright
+    statements and a holder of ten words. The corpus carries each template's variables,
+    their original text and match, for that.
 
 27. **The header notices of the standard library enter `THIRD_PARTY_LICENSES/`** (Q13
     (a)). The release pipeline generates, at each toolchain pin and by a walk of the
@@ -872,7 +923,8 @@ following of this ADR (ADR-020 decision 18), and this record carries it as decid
   its `go.mod` holds no `replace` line, and every module of the table, the root module
   included, is reached at a version, so that build information records a sum for each.
 - *The one exemption of the `init` deny-list* is that of ADR-020 decision 27, as the
-  paragraph above states.
+  paragraph above states; the note of 2026-11-25 to decision 21 adds the three gob
+  registrations that the owner approved.
 - *The licence scan* honours the record of ADR-020 decision 30, reading 4: CC-BY-SA-4.0
   for `README.md` and `CONTRIBUTING.md` of `github.com/opencontainers/go-digest@v1.0.0`
   only, by module, version and file.
@@ -889,3 +941,14 @@ and `08:1390`, since the libraries of the licence scan are linked into `aiopsctl
 `08` §3, which the commit that updates that table for the ADRs accepted on 2026-11-23
 edits. The licence record keeps its date. An option the owner did not choose edits
 nothing.
+
+**The classifier's versions, edited on the owner's word of 2026-11-25.** Decision 15
+named `go-spew` v1.1.1 and `go-diff` v1.1.0 as accepted. The build list of the root
+module selects `github.com/sergi/go-diff` v1.4.0 and `github.com/davecgh/go-spew`
+v1.1.2-0.20180830191138-d8f796af33cc, which `certificate-transparency-go`, linked through
+sigstore-go (ADR-020 decision 16), requires; the builder links what the build list
+selects. Both licences were read again at those pins, MIT with the `APACHE-LICENSE-2.0`
+text of the ported library for go-diff and ISC for go-spew, and the register entry of the
+classifier and licence:57 record them. The owner answered on 2026-11-25 that decision 15
+names the selected versions, and it is edited to them, with `08:1386`, which restates
+it.

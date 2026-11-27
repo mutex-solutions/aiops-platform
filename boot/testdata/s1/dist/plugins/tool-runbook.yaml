@@ -1,0 +1,19 @@
+manifestVersion: "1.0"
+id: aiops/tool-runbook
+version: 0.1.0
+title: Runbook tool
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses:
+  - {key: tools, major: 0, as: need}
+provides: []
+registers: []
+hooks:
+  - {hook: approval/gates, stage: early}
+  - {hook: tool/call, stage: default}
+configSchema: {}
+durable: []
+requires: {pluginApi: "0.1", definitions: {approval: ["0.1"], tool: ["0.1"]}}

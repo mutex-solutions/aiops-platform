@@ -1,9 +1,14 @@
-# Layout: 07-c4-plugin-sdk.md:529-537 (R13).
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
 # Contract: 03-c3-kernel.md:63 (six keys, `P`, `profileContext` and `appExit` are
 # `PC`), 07-c4-plugin-sdk.md:556-557. One definition holds the six launch keys
-# (07-c4-plugin-sdk.md:1345); `class` lists each.
+# (07-c4-plugin-sdk.md:1345), so `key` names the definition and `class` lists each key.
+# 0.2 adds the optional Row.Origin, the services of ADR-061 decisions 13 and 34
+# (Cmdline's streams, Dir and Environ; Ready.Booted; ExitRequest.Code with the reason
+# ExitCommand) and the toolbox of ADR-061 decisions 21 and 33 (ProfileContext.Toolbox),
+# so a plugin built for 0.1 is admitted. Suite revision 2: the suite adds the cases of
+# those services inside the minor (ADR-060 decision 10).
 key: launch
-version: "0.1"
+version: "0.2"
 stability: preview
 class:
   profileContext: {provider: bound, consumer: bound}
@@ -13,3 +18,5 @@ class:
   killSwitches: {provider: bound, consumer: open}
   appExit: {provider: bound, consumer: bound}
 remote: "no"
+compatibleFrom: "0.1"
+suite: 2

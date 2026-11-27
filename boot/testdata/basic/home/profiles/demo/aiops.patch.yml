@@ -1,6 +1,6 @@
 # layer 2
 - id: metrics-query
-  config: {endpoint: "https://prometheus.example.internal"}
+  config: {endpoint: "https://metrics.example.internal"}
 - {id: notifier, enabled: true}
 - id: ghost
   enabled: false

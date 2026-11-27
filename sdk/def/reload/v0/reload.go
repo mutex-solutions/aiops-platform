@@ -5,6 +5,7 @@ package reload
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	composition "github.com/mutex-solutions/aiops-platform/sdk/def/composition/v0"
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
@@ -46,8 +47,9 @@ var (
 	// ErrQueueFull refuses a Submit while the queue holds its bound of waiting
 	// operations: backpressure, never a wait.
 	ErrQueueFull = errors.New("reload: queue is full")
-	// ErrClosed refuses a Submit once the reload fiber is unloading or disposed.
-	ErrClosed = errors.New("reload: closed")
+	// ErrClosed refuses a Submit once the reload fiber is unloading or disposed. It
+	// matches kernel.ErrInactive: a call after release (07-c4-plugin-sdk.md §4.3).
+	ErrClosed = fmt.Errorf("reload: closed: %w", kernel.ErrInactive)
 	// ErrNested refuses a nested submission: a Submit made under the context of the
 	// reload goroutine's own work, for example from a listener of composition/applied
 	// or of a loader hook (03-c3-kernel.md:83).
@@ -180,8 +182,8 @@ type Rollback struct {
 type Reload interface {
 	// Submit queues op and returns its id at once. It never waits, so it is safe in a
 	// leased call (plugin-system-2026-11.md §9). It returns ErrQueueFull, ErrClosed or
-	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the
-	// AsyncLocalStorage of dsh runExclusive does: a Submit made under it is a nested
+	// ErrStateUnknown. ctx marks the reload goroutine's own work, as the exclusive
+	// run of the reference design marks its own: a Submit made under it is a nested
 	// submission and is refused with ErrNested, and any other Submit only queues
 	// (ADR-059 decision 45).
 	Submit(ctx context.Context, op Op) (ID, error)

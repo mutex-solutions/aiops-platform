@@ -24,8 +24,6 @@ package restartpolicy
 import (
 	"context"
 	"errors"
-	"fmt"
-	"slices"
 	"time"
 
 	"github.com/mutex-solutions/aiops-platform/plugins/restart-policy/internal/retry"
@@ -34,11 +32,12 @@ import (
 	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
 )
 
 // Config is the config of the row; the docs name "N failures in a window" and "a
-// backoff" and give no number (03-c3-kernel.md:66). In a parsed tree the durations are
-// strings in the form of time.ParseDuration.
+// backoff" and give no number (03-c3-kernel.md:66). It is decoded by the rules of
+// sdk/plugin: the durations are strings in the form of time.ParseDuration.
 type Config struct {
 	MaxFailures int           // a fiber is given up on at the failure after this many in Window; at least 1
 	Window      time.Duration // failures older than this no longer count; positive
@@ -61,13 +60,13 @@ type Config struct {
 // its one kernel, which its module table holds and its binding maps list.
 func New() kernel.Plugin {
 	m := retry.NewMemory()
-	return kernel.Define(kernel.Plugin{
+	return plugin.Define(plugin.Spec[Config]{
 		ID: "aiops/restart-policy",
 		Inject: []kernel.Dep{kernel.Need(clock.Key), kernel.Need(launch.CatalogKey), kernel.Need(launch.AppExitKey),
 			kernel.Need(kernel.RegistryKey), kernel.Need(composition.Key), kernel.Need(kernel.LoggerKey)},
-		Hooks:  []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
-		Decode: decode,
-		Apply:  func(c *kernel.Context, cfg any) error { return apply(c, cfg.(Config), m) },
+		Hooks:    []kernel.HookUse{kernel.InternalStatus.Use(kernel.DefaultStage), reload.Operation.Use(kernel.DefaultStage)},
+		Validate: validate,
+		Apply:    func(c *kernel.Context, cfg *Config) error { return apply(c, *cfg, m) },
 	})
 }
 
@@ -94,99 +93,24 @@ func apply(c *kernel.Context, conf Config, m *retry.Memory) error {
 	return nil
 }
 
-func decode(raw any) (any, error) {
-	var conf Config
-	switch v := raw.(type) {
-	case Config:
-		conf = v
-	case map[string]any:
-		for k, e := range v {
-			var err error
-			switch k {
-			case "maxFailures":
-				conf.MaxFailures, err = integer(e)
-			case "factor":
-				conf.Factor, err = integer(e)
-			case "window":
-				conf.Window, err = duration(e)
-			case "backoffMin":
-				conf.BackoffMin, err = duration(e)
-			case "backoffMax":
-				conf.BackoffMax, err = duration(e)
-			case "stable":
-				conf.Stable, err = duration(e)
-			case "infrastructure":
-				conf.Infrastructure, err = names(e)
-			default:
-				err = errors.New("unknown field")
-			}
-			if err != nil {
-				return nil, fmt.Errorf("restart-policy: %s: %w", k, err)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("restart-policy: config is %T, want Config or a map", raw)
-	}
+// validate holds the numbers to what the rule needs. Its errors name the field and
+// never the value.
+func validate(conf *Config) error {
 	switch {
 	case conf.MaxFailures < 1:
-		return nil, errors.New("restart-policy: maxFailures must be at least 1")
+		return errors.New("restart-policy: maxFailures must be at least 1")
 	case conf.Window <= 0:
-		return nil, errors.New("restart-policy: window must be positive")
+		return errors.New("restart-policy: window must be positive")
 	case conf.BackoffMin <= 0:
-		return nil, errors.New("restart-policy: backoffMin must be positive")
+		return errors.New("restart-policy: backoffMin must be positive")
 	case conf.BackoffMax < conf.BackoffMin:
-		return nil, errors.New("restart-policy: backoffMax must not be below backoffMin")
+		return errors.New("restart-policy: backoffMax must not be below backoffMin")
 	case conf.Factor < 1:
-		return nil, errors.New("restart-policy: factor must be at least 1")
+		return errors.New("restart-policy: factor must be at least 1")
 	case conf.Stable < 0:
-		return nil, errors.New("restart-policy: stable must not be negative")
+		return errors.New("restart-policy: stable must not be negative")
 	case len(conf.Infrastructure) == 0:
-		return nil, errors.New("restart-policy: infrastructure must name at least one key")
+		return errors.New("restart-policy: infrastructure must name at least one key")
 	}
-	conf.Infrastructure = slices.Clone(conf.Infrastructure)
-	return conf, nil
-}
-
-// integer reads a whole number from a parsed config value. A refusal names the type
-// and never the value, which may be the text a reference resolved to (a secret).
-func integer(v any) (int, error) {
-	switch n := v.(type) {
-	case int64:
-		return int(n), nil
-	case int:
-		return n, nil
-	case float64:
-		if n == float64(int(n)) {
-			return int(n), nil
-		}
-	}
-	return 0, fmt.Errorf("want a whole number, got %T", v)
-}
-
-// duration reads a duration string. As for integer, a refusal does not quote the value,
-// so the error of time.ParseDuration, which does, is not wrapped.
-func duration(v any) (time.Duration, error) {
-	s, ok := v.(string)
-	if !ok {
-		return 0, fmt.Errorf("want a duration string such as \"30s\", got %T", v)
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0, errors.New("not a duration such as \"30s\"")
-	}
-	return d, nil
-}
-
-func names(v any) ([]string, error) {
-	list, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("want a list of key names, got %T", v)
-	}
-	out := make([]string, len(list))
-	for i, e := range list {
-		if out[i], ok = e.(string); !ok {
-			return nil, fmt.Errorf("item %d: want a key name, got %T", i, e)
-		}
-	}
-	return out, nil
+	return nil
 }

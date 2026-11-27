@@ -1,0 +1,5 @@
+# The dev profile: the server profile of a developer's machine and of the S2a and S2b
+# exits (08-profiles-roadmap-adrs.md:687, :1226). It lists only bundles that hold a
+# built row, at S2a aiops-core, whose reload-socket serves plugin enable (ADR-060
+# decision 27; ADR-062 decision 2); each later step adds its bundle with its first row.
+bundles: [aiops-core]

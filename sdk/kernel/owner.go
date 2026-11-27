@@ -290,7 +290,8 @@ func (r *core) mount(ctx context.Context, spec pluginSpec) (uint64, error) {
 
 // batch commits one validated desired-state prefix before any resulting work is
 // admitted. Results have the length and order of operations; only mount
-// positions carry new ids. It either returns the ids of a committed prefix or has
+// positions carry new ids, and the position of a hand-off its fiber's id
+// (batchOp.handOff). It either returns the ids of a committed prefix or has
 // no effect: cancellation before the owner claims the command changes nothing.
 func (r *core) batch(ctx context.Context, operations []batchOp) ([]uint64, error) {
 	if err := ctx.Err(); err != nil {
@@ -813,7 +814,10 @@ func (o *owner) batch(ctx context.Context, operations []batchOp) ([]uint64, erro
 	o.batchDepth++
 	for i, op := range prepared {
 		if op.cell != nil {
-			op.cell.retain(op.cfg)
+			op.cell.retain(op.cfg, op.handOff)
+		}
+		if op.handOff {
+			results[i] = op.Fiber
 		}
 		switch op.Kind {
 		case batchMount:
@@ -1478,16 +1482,21 @@ type batchOp struct {
 	// owner only takes cell.mu, which guards plain assignments.
 	cell *cfgCell
 	cfg  any
+	// handOff marks a CommitOp that hands its config off once the batch is admitted
+	// (G13). prepareBatch clears it when the batch ends that fiber's activation, and
+	// the batch then puts the fiber's id at its position of the results.
+	handOff bool
 }
 
 // prepareBatch copies declarations and checks every operation before any writer
 // mutates state. live is native state data read by the owner; it must not invoke
 // plugin code. False means absent or already disposing. ends lists the fibers whose
-// activation ends with that of a fiber; it is read only for a batch with a child mount.
+// activation ends with that of a fiber; it is read only for a batch with a child
+// mount or a hand-off.
 func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(*handle) bool, ends func(uint64) []uint64) ([]batchOp, error) {
 	prepared := slices.Clone(operations)
 	disposed, ended := make(map[uint64]bool), make(map[uint64]bool) // ended: its activation ends.
-	child := slices.ContainsFunc(operations, func(op batchOp) bool { return op.Parent != nil })
+	child := slices.ContainsFunc(operations, func(op batchOp) bool { return op.Parent != nil || op.handOff })
 	for i := range prepared {
 		op := &prepared[i]
 		switch op.Kind {
@@ -1522,6 +1531,9 @@ func prepareBatch(operations []batchOp, live func(uint64) bool, parentLive func(
 		default:
 			return nil, errors.New("unknown batch operation kind")
 		}
+	}
+	for i := range prepared { // over the whole batch: the hand-off follows the admission
+		prepared[i].handOff = prepared[i].handOff && !ended[prepared[i].Fiber]
 	}
 	return prepared, nil
 }

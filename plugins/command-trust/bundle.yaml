@@ -1,0 +1,5 @@
+# The row of aiops/command-trust as an artifact carries it: one row, disabled
+# (ADR-060 decision 19). Step 7 of plugin check packs it, and a distribution
+# composes the row from bundles of its own.
+- insert:
+    - {id: command-trust, plugin: aiops/command-trust, roles: [api, worker], enabled: false}

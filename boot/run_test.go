@@ -304,6 +304,15 @@ func TestLaunchServices(t *testing.T) {
 	if _, err := l.profile.Admit(ctx, c); err != nil {
 		t.Fatalf("the committed composition is kept: %v", err)
 	}
+	// A live generation reads the home again (ADR-060 decision 17): with verified/current
+	// gone, every Go module is absent from a trusted manifest, so check 5 denies every row.
+	cur := f.files["verified/current"]
+	delete(f.files, "verified/current")
+	adm, err = l.profile.Admit(ctx, c)
+	if err == nil || len(adm.Denied) == 0 || slices.ContainsFunc(adm.Denied, func(d launch.Denial) bool { return d.Check != "5 Trust" }) {
+		t.Fatalf("admit with no current distribution: %v %+v", err, adm)
+	}
+	f.files["verified/current"] = cur
 
 	if code := stopAndWait(t, f, done); code != ExitOK {
 		t.Fatalf("exit %d", code)
@@ -351,6 +360,12 @@ func TestRunRefusals(t *testing.T) {
 			e.Needs = []string{"cache"}
 			f.reg.Modules["t/user"] = e
 		}, code: ExitRefused, want: "differ"},
+		// The entry's hooks are read from the manifest, the kernel reads the plugin's.
+		{name: "entry and plugin hooks disagree", bundle: happyBundle, tweak: func(f *fixture) {
+			e := f.reg.Modules["t/user"]
+			e.Hooks = []HookDecl{{Hook: "internal/status", StageName: "default"}}
+			f.reg.Modules["t/user"] = e
+		}, code: ExitRefused, want: "the plugin hooks [] and the module entry hooks [internal/status@default] differ"},
 		{name: "key not in the table", bundle: happyBundle, tweak: func(f *fixture) {
 			e := f.reg.Modules["t/user"]
 			e.Wants = []string{"ghost"}
@@ -382,7 +397,7 @@ func TestRunRefusals(t *testing.T) {
 			}
 			var code int
 			if tc.name == "prepare fails" {
-				f.opt.Registry, f.opt.Dist = f.reg, f.dist
+				f.sign()
 				r := newRun(f.opt)
 				r.o.Kernel = func(root *kernel.Root) { _ = root.Close(context.Background()) }
 				code = r.main(t.Context())
@@ -396,6 +411,41 @@ func TestRunRefusals(t *testing.T) {
 				t.Fatalf("status %+v", s)
 			}
 		})
+	}
+}
+
+// A write of aiopsctl killed after its renames leaves its snapshot, and the files may
+// hold part of its change, which the next writer restores or keeps: a server does not
+// boot them, and says how to finish the write (ADR-061 decision 17). The cli profile of
+// aiopsctl, whose commands are those writers, boots.
+func TestRunRefusesAStoppedWrite(t *testing.T) {
+	for _, command := range []bool{false, true} {
+		f := newFixture(t, happyBundle)
+		f.files["snapshot/paths.json"] = &fstest.MapFile{Data: []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`)}
+		f.opt.Command = command
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second) // a boot runs until it ends
+		code := f.run(ctx)
+		cancel()
+		if refused := code == ExitRefused && strings.Contains(f.errb.String(), "aiopsctl profile sanitize p"); refused == command {
+			t.Errorf("command %v: exit %d; stderr:\n%s", command, code, f.errb.String())
+		}
+	}
+}
+
+// The writes of aiopsctl compose a profile with the bundles of the home: a server
+// whose --bundles names another directory refuses to start while its profile enables
+// reload-socket, which would carry the submissions of writes that compose otherwise
+// than it runs (ADR-062 decision 2).
+func TestRunRefusesBundlesApartFromTheHomeWithTheSocket(t *testing.T) {
+	for _, bundles := range []string{"/b", "/h"} {
+		f := newFixture(t, happyBundle+"    - {id: reload-socket, plugin: aiops/reload-socket, roles: [api]}\n")
+		f.opt.Flags = map[string]string{"home": "/h", "bundles": bundles}
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		code := f.run(ctx)
+		cancel()
+		if refused := code == ExitRefused && strings.Contains(f.errb.String(), "--bundles"); refused != (bundles == "/b") {
+			t.Errorf("--bundles %s: exit %d; stderr:\n%s", bundles, code, f.errb.String())
+		}
 	}
 }
 
@@ -1064,7 +1114,7 @@ func TestRunActsOnALeakAfterItsObserverOverflowed(t *testing.T) {
 	f.opt.Limits.DisposeDeadline = 30 * time.Millisecond
 	f.opt.Limits.LeakGrace = 7 * time.Millisecond
 	f.opt.Clock = f.clock
-	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	f.sign()
 	r := newRun(f.opt)
 	// boot's observer stalls on the first event after the trigger while the test appends
 	// more events than the queue holds, so that the kernel detaches it; an observer of the

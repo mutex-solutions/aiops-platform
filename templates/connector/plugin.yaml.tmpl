@@ -1,0 +1,16 @@
+# The hand-written half of the manifest of a connector pack, a pack with no code
+# (ADR-048 decision 13; ADR-047 decision 12). Fill in the description, source and
+# support. Its generated half is requires alone, the definitions of the registries its
+# rows feed, which plugin new wrote and plugin check --write writes again.
+manifestVersion: "1.0"
+id: {{.ID}}
+version: 0.1.0
+title: {{.Title}}
+description: A connector pack.
+license: Apache-2.0
+publisher: {id: {{.Owner}}}
+source: https://example.com/{{.Owner}}/{{.Name}}
+support: {url: https://example.com/{{.Owner}}/{{.Name}}/issues}
+stability: experimental
+scope: [process]
+runtimes: []

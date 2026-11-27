@@ -1,0 +1,7 @@
+# The row config the generated cycle test mounts the row with.
+maxFailures: 3
+window: 1m
+backoffMin: 20ms
+backoffMax: 100ms
+factor: 2
+infrastructure: [sql]

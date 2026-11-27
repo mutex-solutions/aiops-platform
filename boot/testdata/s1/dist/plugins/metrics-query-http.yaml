@@ -1,0 +1,22 @@
+manifestVersion: "1.0"
+id: aiops/metrics-query-http
+version: 0.1.0
+title: Metrics query over HTTP
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses: []
+provides:
+  - {key: metricsQuery, major: 0}
+registers: []
+hooks: []
+configSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  additionalProperties: false
+  properties:
+    endpoint: {type: string, format: uri, x-aiops-volatile: true}
+durable: []
+requires: {pluginApi: "0.1", definitions: {}}

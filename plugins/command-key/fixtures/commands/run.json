@@ -1,0 +1,5 @@
+[
+  {"argv": ["key", "generate", "k"], "outcome": "ok", "stdout": "", "stderr": "k.key"},
+  {"argv": ["key", "generate"], "outcome": "usage", "stdout": ""},
+  {"argv": ["key", "generate", "a", "b"], "outcome": "usage", "stdout": ""}
+]

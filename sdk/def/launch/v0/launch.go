@@ -5,6 +5,7 @@ package launch
 import (
 	"context"
 	"errors"
+	"io"
 	"slices"
 
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
@@ -53,7 +54,9 @@ type Ref struct{ Scheme, Name string }
 // and map[string]any; nothing else survives parsing (ADR-059 decision 6). Roles,
 // Inject and Isolate are sorted sets, Intercept maps a key name to the intercept
 // config of that key. A child of a group is a row of its own with the composed id
-// "<group>:<id>" and Parent set (08-profiles-roadmap-adrs.md:159).
+// "<group>:<id>" and Parent set (08-profiles-roadmap-adrs.md:159). Origin is the
+// plugin id of the installed artifact whose bundle inserted the row, "" for none
+// (ADR-060 decision 19); added at 0.2.
 type Row struct {
 	ID        string
 	Plugin    string // "<owner>/<name>", "core:group" or "core:include"
@@ -66,6 +69,7 @@ type Row struct {
 	Inject    []string
 	Isolate   []string
 	Intercept map[string]any
+	Origin    string
 }
 
 // Composition is one immutable composed tree: rows in final order, parents before
@@ -219,6 +223,10 @@ type ProfileContext interface {
 	// before it commits the candidate. c is one that Commit would take; for another it
 	// returns an error.
 	RequiredOf(c Composition) (RequiredSet, error)
+	// Toolbox returns the launcher's toolbox (added at 0.2; ADR-061 decision 33). The
+	// release manifest lists aiops/operations as a consumer of profileContext for it;
+	// every other consumer reaches it too, so it is that plugin's by review.
+	Toolbox() Toolbox
 }
 
 // RoleAll is the role of a process that mounts every row: "--role all mounts every
@@ -268,7 +276,9 @@ type Catalog interface {
 // (08-profiles-roadmap-adrs.md:162; ADR-059 decision 42).
 const EnvPrefix = "AIOPS_REF_"
 
-// Cmdline is the cmdline service: argv (plugin-system-2026-11.md §5).
+// Cmdline is the cmdline service: argv, the working directory, the environment of
+// aiopsctl and the standard streams (plugin-system-2026-11.md §5; ADR-061 decisions 13
+// and 34).
 type Cmdline interface {
 	// Args is the argument vector, program name excluded.
 	Args() []string
@@ -279,6 +289,17 @@ type Cmdline interface {
 	// the ${env:name} reference reads (03-c3-kernel.md:68). It serves only names with
 	// EnvPrefix: any other name is not set (08-profiles-roadmap-adrs.md:162).
 	Env(name string) (string, bool)
+	// Stdin, Stdout and Stderr are the streams of the process in every binary, and a
+	// test's buffers under the fake (added at 0.2).
+	Stdin() io.Reader
+	Stdout() io.Writer
+	Stderr() io.Writer
+	// Dir is the working directory and Environ the environment of the process, each
+	// "NAME=value", which the cli row copies into each invocation. Only the launcher of
+	// aiopsctl fills them; in aiops both are empty, so no server row reads the environment
+	// through cmdline (added at 0.2).
+	Dir() string
+	Environ() []string
 }
 
 // Ready is the readiness latch (03-c3-kernel.md:67; 07-c4-plugin-sdk.md:1348).
@@ -288,6 +309,10 @@ type Ready interface {
 	Set()
 	Drop()
 	IsReady() bool
+	// Booted is closed once the tree has settled and the run-time required audit has
+	// passed: the end of boot, after which the cli row dispatches (added at 0.2). It
+	// is never closed in a process that stops before.
+	Booted() <-chan struct{}
 }
 
 // Names of the kill switches (08-profiles-roadmap-adrs.md:126).
@@ -307,20 +332,25 @@ type KillSwitches interface {
 type ExitReason string
 
 // The reasons: the three cases in which the process is replaced rather than
-// restarted in place (03-c3-kernel.md:372).
+// restarted in place (03-c3-kernel.md:372), and the end of the one command that
+// aiopsctl runs (added at 0.2; ADR-061 decision 13).
 const (
 	ExitDisposeLeak ExitReason = "dispose-leak"   // a process-scope fiber leaked past its drain or dispose deadline
 	ExitRestoreFail ExitReason = "restore-fail"   // a restore failed
 	ExitGaveUp      ExitReason = "restart-giveup" // restart-policy gave up on an infrastructure provider
+	ExitCommand     ExitReason = "command"        // the command returned; Code is its exit code
 )
 
-// ExitRequest asks the launcher to end the process.
+// ExitRequest asks the launcher to end the process. Code is read only with the reason
+// ExitCommand: the launcher stops under its shutdown bound and returns it, and it is 0,
+// 1 or 2; any other code with that reason is a launcher failure (added at 0.2).
 type ExitRequest struct {
 	Reason ExitReason
 	Detail string // free text for the log, for example the key or fiber
+	Code   int
 }
 
-// AppExit is the appExit service: request a process exit
+// AppExit is the appExit service: request a process exit, with the code of a command
 // (plugin-system-2026-11.md §5). The launcher owns signals and bounded shutdown
 // (03-c3-kernel.md:63), so a request is not an exit: it never returns an exit code.
 type AppExit interface {

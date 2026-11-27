@@ -1,0 +1,31 @@
+# Words loader/ must not contain (whole word, case-insensitive): every word of
+# vocabulary-boot.txt, and tenant as at S1 (TestVocabularyLists).
+tenant
+
+# Domain words.
+incident
+alert
+approval
+dashboard
+pillar
+harness
+remediation
+estate
+
+# Upstream names, as in vocabulary-boot.txt.
+envoy
+seaweedfs
+mimir
+alertmanager
+loki
+tempo
+pyroscope
+kafka
+grafana
+holmesgpt
+goalert
+tetragon
+nats
+jetstream
+krr
+chromium

@@ -2,8 +2,8 @@
 //
 // The pure half reads a profile and its layers and builds one immutable
 // composition, admits it and plans changes (compose.go, gate.go, graph.go,
-// required.go, plan.go and the dumps). It reads no environment, no clock and no
-// process, and does not import the kernel.
+// required.go, plan.go and the dumps), and reads plugin manifests (manifest.go). It
+// reads no environment, no clock and no process, and does not import the kernel.
 //
 // The run half (run.go, launch.go, convert.go, limits.go) runs a composition on
 // the kernel: the five boot steps, the six launch services, signals, bounded
@@ -226,17 +226,28 @@ type Digest [32]byte
 // Composition is one immutable composed tree: the rows of layers 0 to 4 in
 // final order (parents before their children, inserts in layer order) and the
 // digest of 08-profiles-roadmap-adrs.md:184. The encoding behind Digest is
-// described at EncodeDigest.
+// described at EncodeDigest. MinStability is minStability of profile.yaml, ""
+// when absent, which sets no minimum; gate check 4 reads it (ADR-060 decision 14).
+// Clashes are the plugin ids of the installed artifacts whose group takes the id of a
+// row composed before it or of the loader's row, so none of their rows is inserted;
+// gate check 8 denies them (ADR-047 decision 6). Unread holds, by plugin id, why the
+// kept bundle of an installed artifact is missing or does not parse: none of its rows
+// is inserted, and gate check 5 or 8 denies it (ADR-047 decisions 6 and 18).
 type Composition struct {
-	Rows   []ComposedRow
-	Digest Digest
+	Rows         []ComposedRow
+	Digest       Digest
+	MinStability string
+	Clashes      []string
+	Unread       map[string]string
 }
 
-// ModuleEntry is what the launcher knows of one plugin of the module table.
-// Plugin holds the kernel.Plugin value that kernel.Define returned. Run checks its
-// declarations against this entry, and gate check 7 reads the classes of the keys it
-// provides and injects (classesOf); it takes no part in the digest, and an entry read
-// from modules.yaml has none.
+// ModuleEntry is what the launcher knows of one plugin of the module table: what its
+// manifest declares (Manifest.Entry; ADR-048 decision 18) and the module that the
+// signed distribution manifest lists for its package, which enters the digest
+// (Distribution.Table). Plugin holds the kernel.Plugin value that kernel.Define
+// returned where the process links it: Run checks its declarations against this
+// entry, and gate check 7 reads the classes of the keys it provides and injects
+// (classesOf). Plugin takes no part in the digest.
 type ModuleEntry struct {
 	ID       string // manifest id "<owner>/<name>"
 	Module   string // Go module path
@@ -253,29 +264,18 @@ type ModuleEntry struct {
 	// (07-c4-plugin-sdk.md:438). Added at S1 for --dump-hooks and the sealed
 	// hook part of gate check 7.
 	Hooks []HookDecl
-	// Volatile lists the config field paths that can change without a
-	// restart, until S2a derives them (ADR-059 decision 10). A path is
-	// dotted, as in RefUse.Path.
+	// Volatile lists the config field paths that can change without a restart,
+	// derived from Schema (ADR-060 decision 4). A path is dotted, as in RefUse.Path.
 	Volatile []string
-	// Classes are the classes that the definitions declare for the keys and hooks the
-	// entry names. An entry read from modules.yaml holds no Go value, so it carries
-	// them, and gate check 7 reads them as it reads the Go values' (ADR-059 decision
-	// 20). Nil when the entry carries none.
-	Classes *ModuleClasses
+	// Schema is the configSchema of the manifest, which --dump-config-schema merges
+	// (ADR-060 decision 14); nil when there is none.
+	Schema map[string]any
 }
 
-// ModuleClasses lists, of the keys and hooks that a module entry names, those whose
-// definitions bind or seal them: what kernel.KeyClasses and kernel.HookSealed report
-// of the Go values, written into modules.yaml. A key or hook it names and does not
-// list is open.
-type ModuleClasses struct {
-	ProviderBound, ConsumerBound, SealedHooks []string
-}
-
-// HookDecl is one hook a plugin listens on. Stage is the ordinal of the
-// declared stage in the definition that owns the hook: a chain runs by Stage
-// ascending, then plugin id (07-c4-plugin-sdk.md:438). StageName is for the
-// dump only. Added at S1.
+// HookDecl is one hook a plugin listens on, at the stage StageName. Stage is the
+// ordinal of that stage in the chain of the hook, which serves of the signed
+// distribution manifest holds (Distribution.Table): a chain runs by Stage ascending,
+// then plugin id (07-c4-plugin-sdk.md:438). Added at S1.
 type HookDecl struct {
 	Hook      string
 	Stage     int
@@ -300,8 +300,10 @@ type HookListeners struct {
 // DistManifest is the part of the signed distribution manifest that the
 // launcher reads (08-profiles-roadmap-adrs.md:451; 07-c4-plugin-sdk.md:1340).
 // No layer can change it. RequiredKeys must have an ACTIVE provider;
-// RequiredRows are named by id.
+// RequiredRows are named by id. Modules is the module table that a release input
+// lists, which only dist.yaml holds (ADR-060 decision 20).
 type DistManifest struct {
+	Modules      []string
 	Providers    []Binding
 	Consumers    []Binding
 	SealedHooks  []HookListeners

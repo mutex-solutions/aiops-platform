@@ -1,0 +1,14 @@
+usage: aiopsctl plugin new <registry> <id> [--lang go] [--contrib] [--against <dist.yaml>] [--plugin <id>]...
+
+Write a new plugin from the template of a registry, or a connector pack of a release.
+
+Flags:
+  --lang go              the language of the plugin
+  --contrib              write the plugin under the owner contrib
+  --against <dist.yaml>  the published signed manifest of the release to check against
+  --plugin <id>          an instantiable plugin of the release that a connector pack rows
+
+Exit codes:
+  0  success, or help that was asked for
+  1  a denial, a failed step, rebuild-required, an interrupt or a failed boot; the reason is on stderr
+  2  a usage error; a Go panic outside every fiber also exits 2, with the trace of the runtime

@@ -1,0 +1,30 @@
+# Layout: 07-c4-plugin-sdk.md:525-534 (R13), fixed by ADR-060 decision 7.
+# Contract: ADR-061 decisions 14 to 19. The operations library of the CLI and, from S6a,
+# of the plugin manager: class C, an open provider side and a bound consumer side, as
+# pluginManager (00-decisions.md:222), so the release manifest names who may call it
+# (ADR-061 decision 15). It holds no tenant data and owns no hook.
+# 0.2 adds Pack, Sign, Push, Inspect and Verify, the methods of the OCI artifact of
+# ADR-047, New and Check, plugin new and plugin check (ADR-060 decisions 23 and 24), and
+# Gate, Install, Enable, Disable and Remove, so a consumer built for 0.1 is admitted.
+# Suite revision 2: the suite adds their cases and those of dist sign and dist use on an
+# image reference inside the minor (ADR-060 decision 10). 0.3 adds Build, dist build
+# through the toolbox's builder (ADR-044; ADR-061 decision 16), and the OCI image
+# layout as an image of dist sign and dist use; suite revision 3 adds the case of
+# Build, and those of plugin remove of an installed artifact only and of one digest of
+# a plugin id per site. 0.4 adds Smoke, plugin smoke through the toolbox's builder
+# (ADR-060 decision 58, reading 1), and to the request of Verify the release and the
+# module source that in-process code builds on (ADR-060 decision 46); suite revision 4
+# adds the case of Smoke. Suite revision 5 adds the case of each outcome of a submission
+# with no final result and of a write the wire does not carry (ADR-061 decision 18).
+# Suite revision 6: plugin disable back to the value the bundle layers give a row drops
+# its departure, and writes none (08:375; review round of 2026-11-26). Suite revision 7
+# adds the case of an install of an artifact of the name of one the profile holds under
+# another owner, which is refused and writes nothing (ADR-047 decision 17; owner answer
+# of 2026-11-26).
+key: operations
+version: "0.4"
+stability: preview
+class: {provider: open, consumer: bound}
+remote: "no"
+compatibleFrom: "0.1"
+suite: 7

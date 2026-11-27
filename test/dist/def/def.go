@@ -1,61 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package def holds the keys of the toy and fault plugins of the test distribution
-// and the strict reader of their configs. It is a test-only definition: no shipped
-// distribution links it (ADR-059 decision 9; 07-c4-plugin-sdk.md:47).
+// Package def holds what the toy and fault plugins of the test distribution share: the
+// strict reader of their configs, bounded waits and the trigger file of a fault. Their
+// keys are the test definitions spine/v0 and toy/v0 below it, each with its
+// definition.yaml (ADR-060 decision 28). No shipped distribution links any of them
+// (ADR-059 decision 9; 07-c4-plugin-sdk.md:47).
 package def
 
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/mutex-solutions/aiops-platform/internal/runfile"
+	launch "github.com/mutex-solutions/aiops-platform/sdk/def/launch/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	spine "github.com/mutex-solutions/aiops-platform/test/dist/def/spine/v0"
+	toy "github.com/mutex-solutions/aiops-platform/test/dist/def/toy/v0"
 )
 
-// Store is what toy.store serves: the id of the plugin that provides it.
-type Store struct{ Owner string }
-
-// Spine is what toy.spine serves: the number of workers its provider holds, and Call,
-// a call into the provider under a lease of its fiber, as a dispatcher makes one.
-type Spine struct {
-	Workers int
-	call    func(hold time.Duration) error
+// Keys lists the keys of the test definitions for the key table.
+func Keys() []kernel.AnyKey {
+	return []kernel.AnyKey{toy.StoreKey, spine.Key, toy.PolicyKey, toy.FaultKey}
 }
 
-// NewSpine returns the value of a spine whose Call is call.
-func NewSpine(workers int, call func(hold time.Duration) error) Spine {
-	return Spine{Workers: workers, call: call}
-}
-
-// Call calls the provider and holds its lease for hold. It returns the error of the
-// provider: kernel.ErrInactive once the provider has begun to unload.
-func (s Spine) Call(hold time.Duration) error {
-	if s.call == nil {
-		return nil
+// TriggerPath is the file whose appearance fires a fault that has a trigger: name in
+// dir or, when dir is empty, in the runtime directory of the home. A test creates it
+// once the process has booted, so that the fault happens to a running process at a
+// moment the test chose, not after a guessed delay.
+func TriggerPath(c *kernel.Context, dir, name string) (string, error) {
+	if dir != "" {
+		return filepath.Join(dir, name), nil
 	}
-	return s.call(hold)
+	home, ok := launch.CmdlineKey.Of(c).Flag("home")
+	if !ok {
+		return "", errors.New("a trigger needs --home")
+	}
+	return filepath.Join(runfile.Dir(home), name), nil
 }
 
-// Policy is what toy.policy serves.
-type Policy struct{ Owner string }
-
-// Fault is what toy.fault serves, whichever fault plugin provides it.
-type Fault struct{ Owner string }
-
-// The keys of the test distribution. All are class "-" (open) but toy.policy, which
-// is provider-bound, so the rogue-provider fault has a bound key to provide.
-var (
-	StoreKey  = kernel.NewKey[Store]("toy.store", 0)
-	SpineKey  = kernel.NewKey[Spine]("toy.spine", 0)
-	PolicyKey = kernel.NewKey[Policy]("toy.policy", 0, kernel.ProviderBound())
-	FaultKey  = kernel.NewKey[Fault]("toy.fault", 0)
-)
-
-// Keys lists the keys above for the key table.
-func Keys() []kernel.AnyKey { return []kernel.AnyKey{StoreKey, SpineKey, PolicyKey, FaultKey} }
+// AwaitFile polls for the file until it exists or stop is closed, and reports whether
+// it exists. The poll is a timer, not a sleep of a fixed length that a test relies on.
+func AwaitFile(path string, stop <-chan struct{}) bool {
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		if !Wait(10*time.Millisecond, stop) {
+			return false
+		}
+	}
+}
 
 // Config reads the config of one plugin: a plain map with a closed set of fields,
 // the form that boot hands the kernel (launch.Row). A field that is not read, or a

@@ -288,18 +288,34 @@ func stateName(s State) string {
 	return string(s)
 }
 
-// waitsFor returns " and waits for k1, k2" for the keys of a row that have no
-// ACTIVE provider, or "".
-func waitsFor(g Graph, v StateView, id string) string {
+// waiting returns the keys of a row that have no ACTIVE provider, sorted.
+func waiting(g Graph, v StateView, id string) []string {
 	var ks []string
 	for _, k := range g.needs[id] {
 		if !v.Providers[k] {
 			ks = append(ks, k)
 		}
 	}
+	sort.Strings(ks)
+	return ks
+}
+
+// waitsFor returns " and waits for k1, k2" for the keys of a row that have no
+// ACTIVE provider, or "".
+func waitsFor(g Graph, v StateView, id string) string {
+	ks := waiting(g, v, id)
 	if len(ks) == 0 {
 		return ""
 	}
-	sort.Strings(ks)
 	return " and waits for " + strings.Join(ks, ", ")
+}
+
+// rowStates lists each row that g mounts with its state in v and what it waits for:
+// the rows of the status (ADR-059 decision 31 as amended).
+func rowStates(g Graph, v StateView) []RowStatus {
+	out := make([]RowStatus, 0, len(g.Active))
+	for _, id := range g.Active {
+		out = append(out, RowStatus{ID: id, State: v.Rows[id], WaitsFor: waiting(g, v, id)})
+	}
+	return out
 }

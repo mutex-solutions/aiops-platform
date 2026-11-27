@@ -3,6 +3,7 @@ package boot
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,12 +16,16 @@ import (
 // (08-profiles-roadmap-adrs.md:367). References are printed unresolved.
 
 // RenderDump is --dump: the composed tree grouped by the layer item that
-// introduced each row, with a comment naming every later layer that set a
+// introduced each row, with the origin artifact of a row that an installed
+// artifact's bundle inserted and a comment naming every later layer that set a
 // field of it; the gate result of a row the gate denied; the required set
 // with the static closure of its needs; and which row provides each key. The
 // capability coverage by signal and read tool needs descriptors that no S1
 // plugin declares, so the dump shows the provider of each key instead
-// (08-profiles-roadmap-adrs.md:362, 07-c4-plugin-sdk.md:1315).
+// (08-profiles-roadmap-adrs.md:362, 07-c4-plugin-sdk.md:1315). The lines boot prints
+// at every boot follow: the trust of the distribution, allowUnsigned, the accepted
+// licences, each departure from the release bindings and each broader credential
+// (08-profiles-roadmap-adrs.md:403).
 func RenderDump(a Admission) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# aiopsctl profile render --dump\ndigest %s\nroles %s\n", a.Comp.Digest, roleList(a.Roles, "all"))
@@ -44,11 +49,16 @@ func RenderDump(a Admission) string {
 		}
 		fmt.Fprintf(&b, "key %s%s: %s\n", p.Key, realm, strings.Join(p.Rows, ", "))
 	}
+	if len(a.Prints) > 0 {
+		fmt.Fprintf(&b, "\n## distribution\n%s\n", strings.Join(a.Prints, "\n"))
+	}
 	b.WriteString("\n## gate\n")
 	for _, s := range a.Gate.Slots {
 		switch {
-		case !s.Evaluated:
+		case s.Until != "":
 			fmt.Fprintf(&b, "check %d %s: not evaluated until %s\n", s.N, s.Name, s.Until)
+		case !s.Evaluated:
+			fmt.Fprintf(&b, "check %d %s: not evaluated at %s: %s\n", s.N, s.Name, a.Gate.Entry, s.Reason)
 		case len(s.Fails) == 0:
 			fmt.Fprintf(&b, "check %d %s: pass%s\n", s.N, s.Name, partial(s))
 		default:
@@ -66,11 +76,23 @@ func RenderDump(a Admission) string {
 	return b.String()
 }
 
+// partial says what an evaluated check left out: the clauses its entry point does not
+// evaluate, the rows they would have judged, and the clauses of a later step.
 func partial(s Slot) string {
-	if s.Partial == "" {
+	var parts []string
+	if len(s.Clauses) > 0 {
+		parts = append(parts, "not evaluated: "+strings.Join(s.Clauses, "; "))
+	}
+	if len(s.Open) > 0 {
+		parts = append(parts, fmt.Sprintf("%d row results not evaluated", len(s.Open)))
+	}
+	if s.Partial != "" {
+		parts = append(parts, "later: "+s.Partial)
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return " (not read yet: " + s.Partial + ")"
+	return " (" + strings.Join(parts, "; ") + ")"
 }
 
 func roleList(roles []Role, none string) string {
@@ -93,6 +115,9 @@ func writeRow(b *strings.Builder, r ComposedRow, gate GateResult) {
 	fmt.Fprintf(b, "\nrow %s plugin=%s enabled=%v required=%v group=%v roles=%s", r.ID, r.Plugin, r.Enabled, r.Required, r.Group, roleList(r.Roles, "-"))
 	if r.Parent != "" {
 		fmt.Fprintf(b, " parent=%s", r.Parent)
+	}
+	if o := installedBundle(r); o != "" {
+		fmt.Fprintf(b, " origin=%s", o)
 	}
 	b.WriteString("\n")
 	fmt.Fprintf(b, "  config %s\n", ShowValue(r.Config))
@@ -122,8 +147,17 @@ func writeRow(b *strings.Builder, r ComposedRow, gate GateResult) {
 		if f.Stop {
 			verb = "denied, stops boot"
 		}
-		fmt.Fprintf(b, "  # gate: %s: check %d, rule %s: %s\n", verb, f.Check, f.Rule, f.Reason)
+		fmt.Fprintf(b, "  # gate: %s: %s, rule %s: %s\n", verb, gateCheck(f.Check), f.Rule, f.Reason)
 	}
+}
+
+// gateCheck names the check of a denial by its number and its name in the one gate
+// text, or the module table lookup that runs before the ten checks.
+func gateCheck(n int) string {
+	if n == checkResolve {
+		return "module table lookup"
+	}
+	return fmt.Sprintf("gate check %d (%s)", n, GateChecks()[n-1].Name)
 }
 
 // ShowValue renders a config value on one line, deterministically: a map is
@@ -162,8 +196,9 @@ func ShowValue(v Value) string {
 // (07-c4-plugin-sdk.md:438; plugin-system-2026-11.md §8). Never by
 // registration order. Rows of one plugin on one stage are ordered by row id.
 // A chain whose hook is sealed to the distribution is marked, with its
-// listener list. A stage is its ordinal in the definition that owns the hook;
-// until S2a derives it from the manifest, the module table entry states it.
+// listener list. A stage is its ordinal in the chain of the hook, which serves of
+// the signed distribution manifest holds (Distribution.Table); -1 is a stage that
+// serves does not hold.
 func RenderHooks(a Admission) string {
 	type link struct {
 		stage int
@@ -220,66 +255,35 @@ func RenderHooks(a Admission) string {
 	return b.String()
 }
 
-// RenderConfigSchema is --dump-config-schema: one JSON Schema document for
-// the composition (08-profiles-roadmap-adrs.md:364). The documents merge the
-// configSchema of each plugin, which the manifest generator of S2a derives
-// (ADR-059 decision 10). Until then it states what S1 has: one property per
-// active row, holding the schema inferred from the composed config, the
-// plugin, and the volatile paths of its module entry. The inferred schema
-// types each key by its composed value and requires nothing. The
-// document states the limit in x-aiops-limit.
+// RenderConfigSchema is --dump-config-schema: one JSON Schema document for the
+// composition, merged from the configSchema of each plugin's manifest
+// (08-profiles-roadmap-adrs.md:364; ADR-060 decision 14). It has one property per
+// active row: the configSchema of its plugin, under the document's $schema, with
+// x-aiops-plugin, the plugin, and x-aiops-volatile, the volatile paths derived from it
+// (Manifest.Entry). A row of a group, or of a plugin whose manifest has no
+// configSchema, has the two marks alone.
 func RenderConfigSchema(a Admission) string {
 	props := map[string]any{}
 	for _, id := range a.Graph.Active {
 		r, _ := findRow(a.Admitted, id)
-		p := map[string]any{"x-aiops-plugin": r.Plugin}
-		if r.Plugin != pluginGroup && r.Plugin != pluginInclude {
-			p["type"] = "object"
-			p["additionalProperties"] = true
-			p["properties"] = inferProps(r.Config)
-			if v := a.Modules[r.Plugin].Volatile; len(v) > 0 {
-				p["x-aiops-volatile"] = v
-			}
+		e := a.Modules[r.Plugin]
+		p := map[string]any{}
+		maps.Copy(p, e.Schema)
+		delete(p, "$schema")
+		p["x-aiops-plugin"] = r.Plugin
+		if len(e.Volatile) > 0 {
+			p["x-aiops-volatile"] = e.Volatile
 		}
 		props[id] = p
 	}
 	doc := map[string]any{
-		"$schema":    "https://json-schema.org/draft/2020-12/schema",
+		"$schema":    jsonSchemaDialect,
 		"title":      "aiops composition " + a.Comp.Digest.String(),
 		"type":       "object",
 		"properties": props,
-		"x-aiops-limit": "S1: the per-plugin configSchema is not derived until S2a; " +
-			"each row's schema is inferred from its composed config",
 	}
-	// Every value is a string, bool, map or slice of them: Marshal cannot fail.
+	// Every value is what the YAML reader returns, or a string, bool, map or slice of
+	// them: Marshal cannot fail.
 	out, _ := json.MarshalIndent(doc, "", "  ")
 	return string(out) + "\n"
-}
-
-func inferProps(v Value) map[string]any {
-	out := map[string]any{}
-	for _, f := range v.Map {
-		out[f.Key] = inferSchema(f.Value)
-	}
-	return out
-}
-
-func inferSchema(v Value) any {
-	switch v.Kind {
-	case KindBool:
-		return map[string]any{"type": "boolean"}
-	case KindInt:
-		return map[string]any{"type": "integer"}
-	case KindFloat:
-		return map[string]any{"type": "number"}
-	case KindString:
-		return map[string]any{"type": "string"}
-	case KindRef:
-		return map[string]any{"type": "string", "x-aiops-ref": string(v.Ref.Scheme)}
-	case KindList:
-		return map[string]any{"type": "array"}
-	case KindMap:
-		return map[string]any{"type": "object", "properties": inferProps(v)}
-	}
-	return map[string]any{}
 }

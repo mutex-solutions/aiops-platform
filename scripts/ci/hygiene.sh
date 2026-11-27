@@ -12,6 +12,19 @@ if git grep -nIE "$pattern" -- . ':!scripts/ci/hygiene.sh'; then
   status=1
 fi
 
+# Built binaries never enter the repository: a Go binary carries the paths of the
+# machine that built it. Refuse any tracked executable (ELF, Mach-O, PE) and any
+# tracked file over 4 MiB.
+if ! git ls-files -z | perl -0ne '
+  chomp; next unless -f $_;
+  if (-s $_ > 4194304) { print STDERR "error: tracked file over 4 MiB: $_\n"; $bad = 1 }
+  open(my $fh, "<:raw", $_) or next; read($fh, my $m, 4); close $fh;
+  if ($m =~ /\A(\x7fELF|\xcf\xfa\xed\xfe|\xce\xfa\xed\xfe|\xfe\xed\xfa[\xce\xcf]|MZ)/) {
+    print STDERR "error: tracked executable: $_\n"; $bad = 1 }
+  END { exit($bad ? 1 : 0) }'; then
+  status=1
+fi
+
 if [ -n "${HYGIENE_DENYLIST:-}" ]; then
   # Print file names only, so the private terms never reach the log.
   if git grep -lIiE "$HYGIENE_DENYLIST" -- . >/tmp/hygiene-denied.txt; then

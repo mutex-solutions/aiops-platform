@@ -1,0 +1,11 @@
+usage: aiopsctl greet [--name <name>]
+
+Greet someone.
+
+Flags:
+  --name <name>  whom to greet
+
+Exit codes:
+  0  success, or help that was asked for
+  1  a denial, a failed step, rebuild-required, an interrupt or a failed boot; the reason is on stderr
+  2  a usage error; a Go panic outside every fiber also exits 2, with the trace of the runtime

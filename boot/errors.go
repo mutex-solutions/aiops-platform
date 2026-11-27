@@ -62,6 +62,57 @@ const (
 	RuleInclude Rule = "include"
 	// RuleMatrix: the failure matrix file breaks its schema.
 	RuleMatrix Rule = "matrix"
+	// RuleManifest: a plugin manifest breaks a rule of schema 1.0 or names a major
+	// this reader does not know; gate check 1 denies it (ADR-048 decisions 3 and 24).
+	RuleManifest Rule = "manifest"
+	// RuleAttestation: an attestation statement breaks its format (ADR-020 decision 9).
+	RuleAttestation Rule = "attestation"
+	// RuleTrust: trust.yaml breaks its format or holds a field that waits for S6a
+	// (ADR-020 decisions 5, 6 and 26).
+	RuleTrust Rule = "trust"
+	// RuleRecord: a record under verified/ breaks its format or vouches for another
+	// digest (ADR-020 decision 10).
+	RuleRecord Rule = "record"
+	// RuleLock: plugins.lock breaks its format (ADR-047 decision 8).
+	RuleLock Rule = "lock"
+	// RuleKept: a file that install kept is not the one whose digest install verified;
+	// check 5 denies every row of the artifact (ADR-047 decision 18).
+	RuleKept Rule = "kept"
+	// RuleDist: a signed distribution manifest breaks its format (ADR-060 decision 20).
+	RuleDist Rule = "distribution"
+	// RuleAuthorAPI: gate check 1, requires.pluginApi is not the author API the
+	// distribution serves, or runtimes lists wasm (ADR-060 decisions 8 and 58).
+	RuleAuthorAPI Rule = "author-api"
+	// RuleUnserved: gate check 2, a definition version of requires is not served.
+	RuleUnserved Rule = "unserved-definition"
+	// RuleDeprecated: a warning of gate check 2, never a denial: an admitted row uses a
+	// deprecated major (08-profiles-roadmap-adrs.md:510; ADR-060 decision 9).
+	RuleDeprecated Rule = "deprecated-major"
+	// RuleStability: gate check 4, a manifest below the profile's minStability.
+	RuleStability Rule = "stability"
+	// RuleModule: gate check 5, a Go module absent from a trusted distribution
+	// manifest or not the one it lists (ADR-020 decision 12).
+	RuleModule Rule = "module"
+	// RuleSigner: gate check 5, no verified signer recorded beside the digest, one
+	// that trust.yaml does not list for the id and runtimes (ADR-020 decisions 6 to 8),
+	// or, for an artifact with no module under a reserved owner, one that is not the
+	// release key the binary carries (ADR-048 decision 14).
+	RuleSigner Rule = "signer"
+	// RuleLicence: gate check 6, a module under a licence outside the L7 allow-list and
+	// not accepted, or an acceptance in the release (08-profiles-roadmap-adrs.md:1346).
+	RuleLicence Rule = "licence"
+	// RuleSignedClass: gate check 7, a signed key or hook used by an untrusted signer
+	// (ADR-020 decision 7).
+	RuleSignedClass Rule = "signed-class"
+	// RuleFake: gate check 7, a fake or sdk/testkit package in the package graph of a
+	// server binary (ADR-060 decision 58).
+	RuleFake Rule = "fake"
+	// RuleInstalled: gate check 8, the bundle of an installed artifact breaks the
+	// insert-only rule (ADR-047 decisions 11 and 19; ADR-060 decision 57).
+	RuleInstalled Rule = "installed-artifact"
+	// RuleGroupClash: gate check 8, the group of an installed artifact takes the id of a
+	// row composed before it, so none of its rows is inserted (ADR-047 decision 6).
+	RuleGroupClash Rule = "group-clash"
 )
 
 // Error is a composition error. It names the file, the line when the YAML

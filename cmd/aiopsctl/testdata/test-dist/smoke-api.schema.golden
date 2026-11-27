@@ -2,38 +2,53 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "clock": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {},
       "type": "object",
       "x-aiops-plugin": "aiops/clock"
     },
     "consumer": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "note": {
+        "applyDelay": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
           "type": "string"
+        },
+        "callEvery": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
+          "type": "string"
+        },
+        "callHold": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
+          "type": "string"
+        },
+        "note": {
+          "type": "string",
+          "x-aiops-volatile": true
+        },
+        "tag": {
+          "type": "string",
+          "x-aiops-volatile": true
         }
       },
       "type": "object",
       "x-aiops-plugin": "aiops-test/toy-consumer",
       "x-aiops-volatile": [
-        "config.note"
+        "config.note",
+        "config.tag"
       ]
     },
     "loader": {
-      "additionalProperties": true,
-      "properties": {},
-      "type": "object",
       "x-aiops-plugin": "aiops/loader"
     },
     "readiness": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {},
       "type": "object",
       "x-aiops-plugin": "aiops/readiness"
     },
     "refs": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "maxFileBytes": {
           "type": "integer"
@@ -43,7 +58,7 @@
       "x-aiops-plugin": "aiops/config-refs"
     },
     "reload": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "history": {
           "type": "integer"
@@ -56,24 +71,34 @@
       "x-aiops-plugin": "aiops/reload"
     },
     "restart-policy": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "backoffMax": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
           "type": "string"
         },
         "backoffMin": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
           "type": "string"
         },
         "factor": {
           "type": "integer"
         },
         "infrastructure": {
+          "items": {
+            "type": "string"
+          },
           "type": "array"
         },
         "maxFailures": {
           "type": "integer"
         },
+        "stable": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
+          "type": "string"
+        },
         "window": {
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
           "type": "string"
         }
       },
@@ -81,35 +106,18 @@
       "x-aiops-plugin": "aiops/restart-policy"
     },
     "spine": {
-      "additionalProperties": true,
-      "properties": {
-        "workers": {
-          "type": "integer"
-        }
-      },
-      "type": "object",
       "x-aiops-plugin": "aiops-test/toy-spine"
     },
     "state": {
-      "additionalProperties": true,
-      "properties": {},
-      "type": "object",
       "x-aiops-plugin": "aiops-test/test-state"
     },
     "store": {
-      "additionalProperties": true,
-      "properties": {},
-      "type": "object",
       "x-aiops-plugin": "aiops-test/toy-provider"
     },
     "submit": {
-      "additionalProperties": true,
-      "properties": {},
-      "type": "object",
       "x-aiops-plugin": "aiops-test/test-submit"
     }
   },
-  "title": "aiops composition sha256:7ee850af64eeae35052cca79971d1f10b1ecec99449e48314aeb9d99f0e2d141",
-  "type": "object",
-  "x-aiops-limit": "S1: the per-plugin configSchema is not derived until S2a; each row's schema is inferred from its composed config"
+  "title": "aiops composition sha256:c56a2fdd60b323b7f742c5e96d5b02ced6391d98100763a426bc49f4f8dda975",
+  "type": "object"
 }

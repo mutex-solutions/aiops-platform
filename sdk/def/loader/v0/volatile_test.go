@@ -15,7 +15,7 @@ type m = map[string]any
 type l = []any
 
 func TestVolatileOnly(t *testing.T) {
-	vol := []string{"window", "a.b", "rules.*.url", "list", "*.x"}
+	vol := []string{"window", "a.b", "rules.*.url", "list", "*.x", "labels.*"}
 	for _, tc := range []struct {
 		name     string
 		old, new any
@@ -40,6 +40,12 @@ func TestVolatileOnly(t *testing.T) {
 		{"list shrinks", m{"list": l{1, 2}}, m{"list": l{1}}, [][]string{{"list"}}, true},
 		{"element type changes", m{"rules": l{m{"url": "a"}}}, m{"rules": l{"x"}}, [][]string{{"rules", "0"}}, false},
 		{"wildcard over map keys", m{"k": m{"x": 1}, "j": m{"x": 1}}, m{"k": m{"x": 2}, "j": m{"x": 3}}, [][]string{{"j", "x"}, {"k", "x"}}, true},
+		{"wildcard over map values", m{"labels": m{"a": "1", "b": "x"}}, m{"labels": m{"a": "2", "b": "x"}}, [][]string{{"labels", "a"}}, true},
+		{"a key added under a wildcard", m{"labels": m{"a": "1"}}, m{"labels": m{"a": "2", "b": "x"}}, [][]string{{"labels"}}, false},
+		{"a key removed under a wildcard", m{"labels": m{"a": "1", "b": "x"}}, m{"labels": m{"a": "1"}}, [][]string{{"labels"}}, false},
+		{"a key added that a path names", m{"k": m{}}, m{"k": m{"x": 1}}, [][]string{{"k", "x"}}, true},
+		{"a field added under a wildcard", m{"rules": m{"r": m{}}}, m{"rules": m{"r": m{"url": "a"}}}, [][]string{{"rules", "r", "url"}}, true},
+		{"a key added beneath a covered path", m{"list": m{"k": 1}}, m{"list": m{"j": 2}}, [][]string{{"list", "j"}, {"list", "k"}}, true},
 		{"type change under a volatile path", m{"window": 1}, m{"window": "1"}, [][]string{{"window"}}, true},
 		{"int to float is a change", m{"window": int64(1)}, m{"window": float64(1)}, [][]string{{"window"}}, true},
 		{"map becomes scalar above a volatile field", m{"a": m{"b": 1}}, m{"a": 1}, [][]string{{"a"}}, false},
@@ -64,10 +70,10 @@ func TestVolatileOnly(t *testing.T) {
 }
 
 // A path is its list of keys, so a key that holds a dot stays one key: a change of the
-// label "k8s.pod" and a change of the field pod of the map k8s have different paths.
+// label "app.pod" and a change of the field pod of the map app have different paths.
 func TestVolatileOnlyPathsKeepADottedKey(t *testing.T) {
-	dotted, _ := loader.VolatileOnly(m{"labels": m{"k8s.pod": "a"}}, m{"labels": m{"k8s.pod": "b"}}, nil)
-	nested, _ := loader.VolatileOnly(m{"labels": m{"k8s": m{"pod": "a"}}}, m{"labels": m{"k8s": m{"pod": "b"}}}, nil)
+	dotted, _ := loader.VolatileOnly(m{"labels": m{"app.pod": "a"}}, m{"labels": m{"app.pod": "b"}}, nil)
+	nested, _ := loader.VolatileOnly(m{"labels": m{"app": m{"pod": "a"}}}, m{"labels": m{"app": m{"pod": "b"}}}, nil)
 	if reflect.DeepEqual(dotted, nested) {
 		t.Errorf("a dotted key and a nested field have the same paths: %q", dotted)
 	}

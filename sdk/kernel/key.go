@@ -434,6 +434,19 @@ func Define(p Plugin) Plugin {
 	return p
 }
 
+// WithCommit returns p with fn as its hand-off (ADR-034 G13), stamped as Define
+// stamps the entry token, and keeps p's entry. After Fiber.Commit or an admitted
+// CommitOp retains a config of a fiber of p, fn receives the value that the
+// running activation's Apply received and the committed config resolved as Apply
+// would receive it (see Fiber.Commit). plugin.Define gives one to a config type with
+// a Volatile field: fn runs on the committer's goroutine while the activation runs,
+// so it must publish what it writes safely, must not block and must not change the
+// config of any fiber. Plugin vet refuses a call of it in plugin code.
+func WithCommit(p Plugin, fn func(applied, committed any)) Plugin {
+	p.commit = fn
+	return p
+}
+
 // Bindings lists, per key, the Plugin values the module table allows
 // (07-c4-plugin-sdk.md:551). A key with no list admits no entry; a nil map never
 // disables enforcement.

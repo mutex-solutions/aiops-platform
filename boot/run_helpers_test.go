@@ -223,7 +223,7 @@ func shortLimits() Limits {
 // start runs the launcher in the test's goroutine pool and returns what it needs
 // to be waited for. Run has no goroutine of its own, so the test owns this one.
 func (f *fixture) start(ctx context.Context) <-chan int {
-	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	f.sign()
 	done := make(chan int, 1)
 	go func() { done <- Run(ctx, f.opt) }()
 	return done
@@ -231,7 +231,7 @@ func (f *fixture) start(ctx context.Context) <-chan int {
 
 // run runs to the end, for a boot that stops by itself.
 func (f *fixture) run(ctx context.Context) int {
-	f.opt.Registry, f.opt.Dist = f.reg, f.dist
+	f.sign()
 	return Run(ctx, f.opt)
 }
 

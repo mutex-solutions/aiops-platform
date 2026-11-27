@@ -1,0 +1,26 @@
+// Package stamp is the stamper of {{.ID}}: one stub per method of stampers.Stamper,
+// each returning ErrNotImplemented until it is written.
+package stamp
+
+import (
+	"context"
+	"errors"
+
+	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+)
+
+// ErrNotImplemented is the answer of a stub.
+var ErrNotImplemented = errors.New("not implemented")
+
+// Stamper stamps bodies for the activation of the plugin that registered it.
+type Stamper struct{ c *kernel.Context }
+
+// New returns the stamper of the activation c.
+func New(c *kernel.Context) Stamper { return Stamper{c: c} }
+
+// Stamp returns the stamp it puts on body: one line, not empty, the same each time for
+// the same body. It returns ctx's error when ctx is done, and kernel.ErrInactive once
+// the activation is released: take c.Enter() for the length of the call.
+func (s Stamper) Stamp(ctx context.Context, body string) (string, error) {
+	return "", ErrNotImplemented
+}

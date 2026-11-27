@@ -118,6 +118,12 @@ gaps:
 
    - The title annotation is `org.opencontainers.image.title`, so a generic OCI client
      lists the layers by file name. Each type appears at most once.
+   - Note of 2026-11-27 (review round over the whole step, round 2): ADR-060 decision 19
+     gives content to a pack, whose lock entry carries the content digest into the
+     generation digest (decision 8). In-process code has no lock entry, so an artifact
+     with a `content/` directory is a pack: `plugin pack` refuses in-process code with
+     one, install refuses an in-process artifact with a content layer, and boot denies
+     one that a home holds, naming ADR-060 decision 19.
    - A reader, `install` and the gate included, ignores a layer type it does not know and
      fetches no blob of it, as a reader of `plugin.yaml` ignores an unknown field of a
      higher minor; `plugin check` refuses one, as it refuses an unknown field (`07:120`).
@@ -257,7 +263,14 @@ gaps:
    exit reaches a referrer form, if ADR-020 picks one, through the tag schema. The image
    that runs it is pinned by digest, with its register entry and the licences of its
    layers, in the commit that adds the `s2a-exit` job, before S2a ends (ADR-060 decision
-   34).
+   34). Note of 2026-11-25: it is pinned ahead of that job. The register entry
+   `distribution-registry`, mode `tool`, pins the Docker Official Image
+   `registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c`,
+   whose `/bin/registry` reports v3.1.2; the module's licence was read again that day,
+   and the licences of the layers, Alpine 3.24.4 packages, in the image's
+   `/lib/apk/db/installed`, as the licence record row "Test registry of the S2a exit"
+   lists them. The layers hold GPL-2.0 packages, so the image is pulled in CI only and
+   never shipped (L5).
 
 ### The install
 
@@ -273,7 +286,13 @@ gaps:
      bundle, which is `aiops-<name>` (`00:658`). Boot reads such a bundle, and the
      `plugin.yaml` beside it, from the home only, never from `--bundles` or the bundles
      shipped in the binary (`internal/serve/serve.go`), and applies the installed-artifact
-     clause of check 8 to exactly those bundles (decision 11).
+     clause of check 8 to exactly those bundles (decision 11). Upgrade note of 2026-11-26
+     (review round over the whole step): S1 read a bundle named `<owner>/<name>` from
+     `--bundles` or the home like any other, so an S1 home whose profile lists one boots
+     under S2a with each of its rows denied by check 5 and, where they are required, exits
+     3. Such a bundle has to be renamed without `/`, in the profile and under `bundles/`,
+     before the upgrade; the denial of an artifact with no `artifact.json` and no lock
+     entry says so.
    - Boot mounts the rows of that bundle under one `core:group` row that it adds itself,
      whose id is the `<name>` segment of the plugin id, so a row id is `<name>:<row>`
      (`08:159`; `08:391`; `07:1817`). The group row is enabled, holds only the bundle's
@@ -458,7 +477,13 @@ gaps:
     does not test. Only the site user can then open `run/reload.sock`, the socket of
     ADR-062, and no other unprivileged user of the host reads or changes a file of the
     home between install and boot. Any protection of the records of install and `dist use`
-    beyond that is ADR-020's (`07:75` R17).
+    beyond that is ADR-020's (`07:75` R17). Note of 2026-11-27 (review round over the
+    whole step, round 2): the server holds the home to the same rule. It refuses a home
+    or a `run/` whose owner is not its effective user, before it creates
+    `run/process.lock`, and names a lock file it cannot open instead of calling it held
+    by another process. A `run/` of another mode, as the S1 server created it with mode
+    0755, is set to 0700 at the start of the server and at a write of `aiopsctl`, each of
+    which says so (upgrade note of the S2a report).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
     has on the host, read-only; `run/` bound over it at the same path, read-write; the
@@ -713,6 +738,12 @@ above leaves a point to a question, the decision here settles it.
     leaves the artifact's rows out and names the clash, and the operator then removes the
     artifact. "Two packs cannot collide" reads "two artifacts of one name never compose
     together: the second install is refused" in `08:391`, `07:1817` and community:298.
+    Note of 2026-11-27 (review round over the whole step, round 2): "as boot would"
+    includes the server rule of `08:156`. Install, enable, disable, remove and profile
+    sanitize render a profile other than `cli` in server mode, and the gate composes it
+    so at install; at `plugin check` and offline it composes a pack's bundle so, since a
+    pack installs into server profiles only (ADR-061 decision 40). A pack row that
+    states no roles is then denied by check 8 where the author and the installer see it.
 
 18. **Boot checks what install kept against the locked digest** (Q3 (a)). At every
     composition, boot hashes `bundles/<plugin id>/artifact.json` and compares it with the

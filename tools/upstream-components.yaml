@@ -1,0 +1,768 @@
+# The upstream register (ADR-054; 08-profiles-roadmap-adrs.md §5.1 L3; licence record
+# §7.2). One entry per upstream and per content source, with the keys of ADR-054
+# decision 3 and the values of decision 4; `exceptions`, the stated exceptions of
+# 00-decisions.md:267 (decision 9); `baseProviders`, the base provider allow-list
+# (decision 10). `go run ./tools/register .` runs the register check U7 (decision 12),
+# the name lint U1 (decisions 14 and 22) and suite neutrality U3 (decision 15);
+# `go run ./tools/kernelcheck imports . tools/upstream-components.yaml` runs the import
+# boundary U2 (decision 13).
+#
+# A dependency lands in one commit with its entry, its reading at the pinned version
+# and the row of the licence record (decisions 7 and 16). A version bump reads the
+# licence again in the same commit (decision 6). The entries at S2a are those of
+# decision 8 and the five items refused by name of decision 20.
+#
+# Completeness is over package graphs (decisions 12 and 18): every module that the
+# package graph of a module of the repository, tests included, reaches (go list -deps
+# -test) has an entry or sits in the contains of the entry that brings it in. A module
+# that a go.sum lists and no such graph reaches, as a dependency of an upstream's own
+# tests is (github.com/jackc/pgerrcode, github.com/robfig/cron/v3 and
+# github.com/stretchr/testify with its dependencies at S2a), is linked by nothing and
+# needs no entry; it gets one when a graph first reaches it.
+entries:
+  - id: go
+    names: [go, golang]
+    form: library
+    behind: none
+    pin: go1.26.8
+    licence: BSD-3-Clause
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64 LICENSE and PATENTS, read: "2026-11-23", version: go1.26.8}
+    mark: needs-approval
+    default: true
+
+  # The toolchain that CI runs, and the one the builder image bakes in (ADR-044
+  # decisions 4, 5 and 17; dist/builder/image.yaml): the module
+  # golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64, unmodified, extracted at its h1
+  # sum into the builder's cache inside the image, on no base layer.
+  - id: go-toolchain
+    role: builder
+    names: [go, golang]
+    form: process
+    behind: none
+    pin: go1.26.8
+    # Per directory (ADR-054 decision 8): BSD-3-Clause in LICENSE and in the vendored
+    # golang.org/x modules; Apache-2.0 in src/cmd/vendor/github.com/google/pprof; the
+    # OpenSSL and SSLeay licences, ISC and an Intel BSD-3-Clause text in
+    # src/crypto/internal/boring/LICENSE.
+    licence: BSD-3-Clause AND Apache-2.0 AND OpenSSL AND ISC
+    verdict: ok-with-conditions
+    modes: [tool, ship]
+    conditions:
+      - {condition: "No binary links the BoringSSL objects: they need GOEXPERIMENT=boringcrypto and cgo, and every build runs with cgo off", row: L7}
+      - {condition: "The builder image that ships the toolchain carries every licence text of it, with the acknowledgments the OpenSSL and SSLeay licences ask: a copy of each licence and notice file of the tree under THIRD_PARTY_LICENSES/, the module zips under lib/fips140/ opened, and the IANA statement of lib/time/README", row: L7}
+      - {condition: "Baked in unmodified at the h1 sum the release's signed manifest records, on no base layer, so the image holds no package under GPL, LGPL or AGPL and its source offer says so", row: L5}
+    evidence:
+      - {source: "golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64 LICENSE, PATENTS and the licence files under src/", read: "2026-11-23", version: go1.26.8}
+    mark: needs-approval
+    sbom: "builder.spdx.json of the builder image: the toolchain module, the modules of its three modules.txt files, the two golang.org/fips140 modules, and aiopsctl with its build list (ADR-044 decision 5)"
+    source: "the module zip of golang.org/toolchain at its pin, unmodified; THIRD_PARTY_LICENSES/ and SOURCE-OFFER of the builder image (ADR-044 decisions 5 and 17)"
+    default: false
+
+  # The builder image itself, an entry of its own as ADR-044 decision 5 asks of a
+  # shipped image (licence record §2.1, the builder row). The second phase of the
+  # release build writes it from dist/builder/image.yaml as one layer on no base layer,
+  # so it holds no upstream layer and no upstream name: what it bakes in is the entry
+  # go-toolchain, and aiopsctl is first-party, its build list under the entries of its
+  # modules. Its licence is that of the toolchain tree with aiopsctl's own Apache-2.0;
+  # its digest is each release's, which the release artifact names (ADR-044 decision 1),
+  # so the register pins none.
+  - id: builder-image
+    role: builder
+    names: []
+    form: process
+    behind: none
+    licence: BSD-3-Clause AND Apache-2.0 AND OpenSSL AND ISC
+    verdict: ok-with-conditions
+    modes: [ship]
+    conditions:
+      - {condition: "One layer on no base layer, holding the toolchain module unmodified at the release's pin, aiopsctl, and no shell, scanner, SBOM tool, C compiler or version control client", row: L5}
+      - {condition: "Carries THIRD_PARTY_LICENSES/ with every licence and notice file of the toolchain tree and of aiopsctl's build list, the NOTICE texts and MPL-2.0 lines of aiopsctl, builder.spdx.json and a source offer stating it holds no GPL, LGPL or AGPL package", row: L7}
+    evidence:
+      - {source: "dist/builder/image.yaml and the entry go-toolchain, read at golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64", read: "2026-11-25", version: go1.26.8}
+    mark: needs-approval
+    sbom: "builder.spdx.json of the image: the toolchain module, the modules of its three modules.txt files, the two golang.org/fips140 modules, aiopsctl with its build list and each embedded suite binary (ADR-044 decision 5)"
+    source: "SOURCE-OFFER and THIRD_PARTY_LICENSES/ of the image; the module zip of golang.org/toolchain at its pin, unmodified (ADR-044 decisions 5 and 17)"
+    default: false
+
+  - id: cordis
+    names: [cordis, deepseek, dsh]
+    form: port
+    behind: none
+    pin: fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159
+    licence: MIT
+    verdict: ok-with-conditions
+    modes: [copy]
+    conditions:
+      - {condition: "NOTICE, sdk/kernel, loader/ and the oracle carry both MIT notices, of the upstream author and of the repository that holds the modifications", row: L12}
+    evidence:
+      - {source: test/differential/oracle/vendor/cordis/LICENSE and test/differential/oracle/notices/DeepSeek-MIT.txt, read: "2026-11-23", version: "@deepseek-ai/cordis 4.1.0 at fcc0ad4621"}
+      - {source: test/differential/oracle/vendor/loader/LICENSE, read: "2026-11-23", version: "@deepseek-ai/cordis-plugin-loader 1.1.0 at fcc0ad4621"}
+    mark: never
+    contains:
+      - {package: "@deepseek-ai/cosmokit", version: 1.9.0, licence: MIT}
+      - {package: "@deepseek-ai/schemastery", version: 3.19.0, licence: MIT}
+      - {package: "@standard-schema/spec", version: 1.1.0, licence: MIT}
+    default: true
+
+  - id: go-yaml
+    names: [go-yaml]
+    form: library
+    behind: none
+    modules: [go.yaml.in/yaml/v3]
+    pin: v3.0.6
+    # LICENSE puts eight files ported from libyaml under MIT and the rest under
+    # Apache-2.0; the module carries a NOTICE.
+    licence: Apache-2.0 AND MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: go.yaml.in/yaml/v3@v3.0.6 LICENSE and NOTICE, read: "2026-11-23", version: v3.0.6}
+    mark: needs-approval
+    importers:
+      - {dir: boot, decision: ADR-059 decision 6}
+      - {dir: tools, decision: ADR-059 decision 6}
+      - {dir: internal/plugingen, decision: ADR-060 decision 41}
+      - {dir: internal/vet, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the import analyzer and plugin vet that tools/kernelcheck and aiopsctl share (decision 23) read the register"}
+      - {dir: plugins/operations, decision: ADR-060 decision 41}
+      - {dir: internal/builder, decision: "ADR-060 decision 41: the builder reads the site's dist.yaml and writes the signed distribution manifest"}
+      - {dir: internal/packsuite, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the suite binaries that aiopsctl embeds (decision 46) read the rows of a pack's bundle.yaml"}
+      - {dir: cmd/aiopsctl, tests: true, decision: "ADR-060 decision 41, owner answer of 2026-11-25: the test files of cmd/aiopsctl, never its other files"}
+    default: true
+
+  - id: river
+    names: [river, riverqueue]
+    form: library
+    behind: jobs
+    modules:
+      - github.com/riverqueue/river
+      - github.com/riverqueue/river/riverdriver
+      - github.com/riverqueue/river/riverdriver/riverpgxv5
+      - github.com/riverqueue/river/rivershared
+      - github.com/riverqueue/river/rivertype
+    pin: v0.51.2
+    # MPL-2.0 in the LICENSE of each of the five; MIT in rivershared/levenshtein.
+    licence: MPL-2.0 AND MIT
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked unmodified, with one NOTICE line per module that names its source URL and exact version in every artifact that links it", row: L8}
+    evidence:
+      - {source: "github.com/riverqueue/river{,/riverdriver,/riverdriver/riverpgxv5,/rivershared,/rivertype}@v0.51.2 LICENSE and rivershared@v0.51.2/levenshtein/License.txt", read: "2026-11-23", version: v0.51.2}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/jobs-river, decision: "07-c4-plugin-sdk.md:70, the S0 probes"}
+    contains:
+      - {module: github.com/tidwall/gjson, version: v1.20.0, licence: MIT}
+      - {module: github.com/tidwall/match, version: v1.2.0, licence: MIT}
+      - {module: github.com/tidwall/pretty, version: v1.2.1, licence: MIT}
+      - {module: github.com/tidwall/sjson, version: v1.2.5, licence: MIT}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+    default: false
+
+  - id: pgx
+    names: [pgx]
+    form: library
+    behind: sql
+    modules: [github.com/jackc/pgx/v5]
+    pin: v5.11.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: github.com/jackc/pgx/v5@v5.11.0 LICENSE, read: "2026-11-23", version: v5.11.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/jobs-river, decision: "07-c4-plugin-sdk.md:70, the S0 probes"}
+    contains:
+      - {module: github.com/jackc/pgpassfile, version: v1.0.0, licence: MIT}
+      - {module: github.com/jackc/pgservicefile, version: v0.0.0-20240606120523-5a60cdf6a761, licence: MIT}
+      - {module: github.com/jackc/puddle/v2, version: v2.2.3, licence: MIT}
+      - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
+    default: false
+
+  # The signature library of ADR-020: sigstore-go and the three modules that the operations
+  # library imports beside it, each at its pin (ADR-020 decisions 1, 16, 19 and 20). The
+  # licences are read in the module cache at these pins, from the licence file at the root
+  # of each module, classified by the texts it holds as ADR-020 decision 16 states; the
+  # other modules of the package graph are in the contains of sigstore-go.
+  - id: sigstore-go
+    names: [sigstore, sigstore-go]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/sigstore-go]
+    pin: v1.3.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked without its pkg/sign, which adds eleven modules, two of them MPL-2.0 (ADR-020 decision 20)", row: L7}
+      - {condition: "Every artifact that links it carries in THIRD_PARTY_LICENSES/ the NOTICE files of go-openapi/jsonpointer, go-openapi/jsonreference, go-openapi/runtime, go-tuf/v2 and grpc (NOTICE.txt), the PATENTS files of x/crypto, x/mod, x/net, x/sync, x/sys, x/term, x/text and protobuf, the full Apache-2.0 text beside the notices of json-canonicalization, in-toto/attestation and in-toto-golang, the licence files of the three OpenTelemetry modules whole, GO-LICENSE of go-pathspec beside its LICENSE, and the MIT file of go-openapi/runtime/middleware/denco (ADR-020 decision 16)", row: L7}
+      - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-020 decision 30, reading 4; ADR-047 decision 21)", row: L16}
+      - {condition: "The builder builds every binary with the tag grpcnotrace, which drops golang.org/x/net/trace and its two default-mux handlers, and its init deny-list exempts the codec of package google.golang.org/grpc/encoding/proto (RegisterCodecV2) at google.golang.org/grpc v1.82.1, read again at every version bump (ADR-020 decision 27; ADR-044 decision 21)", row: L16}
+      - {condition: "The deny-list scan finds three gob registrations that sigstore-go brings in through go-openapi: gob's own basic types (encoding/gob at the toolchain pin), and map[string]any and []any from the init of github.com/go-openapi/loads v0.25.0 and github.com/go-openapi/spec v0.22.9; the exceptions table of the builder names each by package and version, which the owner approved on 2026-11-25, and a version change of the toolchain or of either module needs a new review (ADR-044 decisions 21 and 24; ADR-020 decision 27)", row: L16}
+    evidence:
+      - {source: "github.com/sigstore/sigstore-go@v1.3.0 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.3.0}
+      - {source: "the root licence files of each module of contains at its version, in the module cache; github.com/opencontainers/go-digest@v1.0.0 LICENSE.docs and README.md", read: "2026-11-24", version: v1.3.0}
+      - {source: "golang.org/x/crypto@v0.57.0, golang.org/x/net@v0.59.0, golang.org/x/sys@v0.48.0 and golang.org/x/term@v0.46.0 LICENSE and PATENTS, each equal to the toolchain's, read again at the versions that x/tools raises them to", read: "2026-11-25", version: v1.3.0}
+      - {source: "the init of github.com/go-openapi/loads@v0.25.0 spec.go and of github.com/go-openapi/spec@v0.22.9 operation.go, each gob.Register of map[string]any and []any; registerBasics in src/encoding/gob/type.go of the toolchain at its pin", read: "2026-11-25", version: v1.3.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decision 1; ADR-060 decision 41"}
+    contains:
+      - {module: github.com/asaskevich/govalidator, version: v0.0.0-20230301143203-a9d515a09cc2, licence: MIT}
+      - {module: github.com/blang/semver, version: v3.5.1+incompatible, licence: MIT}
+      - {module: github.com/cenkalti/backoff/v5, version: v5.0.3, licence: MIT}
+      - {module: github.com/cespare/xxhash/v2, version: v2.3.0, licence: MIT}
+      - {module: github.com/cyberphone/json-canonicalization, version: v0.0.0-20241213102144-19d51d7fe467, licence: Apache-2.0}
+      - {module: github.com/digitorus/pkcs7, version: v0.0.0-20230818184609-3a137a874352, licence: MIT}
+      - {module: github.com/digitorus/timestamp, version: v0.0.0-20231217203849-220c5c2851b7, licence: BSD-2-Clause}
+      - {module: github.com/go-logr/logr, version: v1.4.4, licence: Apache-2.0}
+      - {module: github.com/go-logr/stdr, version: v1.2.2, licence: Apache-2.0}
+      - {module: github.com/go-openapi/analysis, version: v0.25.5, licence: Apache-2.0}
+      - {module: github.com/go-openapi/errors, version: v0.22.8, licence: Apache-2.0}
+      - {module: github.com/go-openapi/jsonpointer, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/jsonreference, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/loads, version: v0.25.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/runtime, version: v0.33.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/runtime/server-middleware, version: v0.30.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/spec, version: v0.22.9, licence: Apache-2.0}
+      - {module: github.com/go-openapi/strfmt, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/cmdutils, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/conv, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/fileutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/jsonname, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/jsonutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/loading, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/mangling, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/netutils, version: v0.27.0, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/pools, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/stringutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/typeutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/swag/yamlutils, version: v0.27.3, licence: Apache-2.0}
+      - {module: github.com/go-openapi/validate, version: v0.26.1, licence: Apache-2.0}
+      - {module: github.com/go-viper/mapstructure/v2, version: v2.5.0, licence: MIT}
+      - {module: github.com/google/certificate-transparency-go, version: v1.3.3, licence: Apache-2.0}
+      - {module: github.com/google/go-containerregistry, version: v0.21.7, licence: Apache-2.0}
+      - {module: github.com/google/uuid, version: v1.6.0, licence: BSD-3-Clause}
+      - {module: github.com/grpc-ecosystem/grpc-gateway/v2, version: v2.29.0, licence: BSD-3-Clause}
+      - {module: github.com/in-toto/attestation, version: v1.2.0, licence: Apache-2.0}
+      - {module: github.com/in-toto/in-toto-golang, version: v0.11.0, licence: Apache-2.0}
+      - {module: github.com/oklog/ulid/v2, version: v2.1.1, licence: Apache-2.0}
+      - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
+      - {module: github.com/pkg/errors, version: v0.9.1, licence: BSD-2-Clause}
+      - {module: github.com/shibumi/go-pathspec, version: v1.3.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: github.com/sigstore/rekor, version: v1.5.3, licence: Apache-2.0}
+      - {module: github.com/sigstore/rekor-tiles/v2, version: v2.3.0, licence: Apache-2.0}
+      - {module: github.com/sigstore/timestamp-authority/v2, version: v2.1.3, licence: Apache-2.0}
+      - {module: github.com/theupdateframework/go-tuf/v2, version: v2.4.2, licence: Apache-2.0}
+      - {module: github.com/transparency-dev/formats, version: v0.1.1, licence: Apache-2.0}
+      - {module: github.com/transparency-dev/merkle, version: v0.0.2, licence: Apache-2.0}
+      - {module: github.com/youmark/pkcs8, version: v0.0.0-20240726163527-a2c0da244d78, licence: MIT}
+      - {module: go.opentelemetry.io/auto/sdk, version: v1.2.1, licence: Apache-2.0}
+      - {module: go.opentelemetry.io/otel, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: go.opentelemetry.io/otel/metric, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: go.opentelemetry.io/otel/trace, version: v1.44.0, licence: Apache-2.0 AND BSD-3-Clause}
+      - {module: golang.org/x/crypto, version: v0.57.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/mod, version: v0.42.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/net, version: v0.59.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/sys, version: v0.48.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/term, version: v0.46.0, licence: BSD-3-Clause}
+      - {module: golang.org/x/text, version: v0.43.0, licence: BSD-3-Clause}
+      - {module: google.golang.org/genproto/googleapis/api, version: v0.0.0-20260526163538-3dc84a4a5aaa, licence: Apache-2.0}
+      - {module: google.golang.org/genproto/googleapis/rpc, version: v0.0.0-20260523011958-0a33c5d7ca68, licence: Apache-2.0}
+      - {module: google.golang.org/grpc, version: v1.82.1, licence: Apache-2.0}
+      - {module: google.golang.org/protobuf, version: v1.36.11, licence: BSD-3-Clause}
+      - {module: k8s.io/klog/v2, version: v2.140.0, licence: Apache-2.0}
+    default: false
+
+  - id: sigstore
+    names: [sigstore]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/sigstore]
+    pin: v1.10.8
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/sigstore/sigstore@v1.10.8 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v1.10.8}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 1 and 20: the signature package"}
+    default: false
+
+  - id: sigstore-protobuf-specs
+    names: [sigstore, protobuf-specs]
+    form: library
+    behind: operations
+    modules: [github.com/sigstore/protobuf-specs]
+    pin: v0.5.1
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/sigstore/protobuf-specs@v0.5.1 LICENSE and COPYRIGHT.txt", read: "2026-11-24", version: v0.5.1}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 1 and 20: the bundle messages"}
+    default: false
+
+  - id: go-securesystemslib
+    names: [go-securesystemslib, securesystemslib]
+    form: library
+    behind: operations
+    modules: [github.com/secure-systems-lab/go-securesystemslib]
+    pin: v0.11.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/secure-systems-lab/go-securesystemslib@v0.11.0 LICENSE", read: "2026-11-24", version: v0.11.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-020 decisions 4 and 20: dsse.PAE and the encrypted key format"}
+    default: false
+
+  # The OCI client of ADR-047 decision 4, which the operations library alone imports
+  # (ADR-060 decision 41). Chosen over a client on the standard library by measurement
+  # at the pin. Its first link, for the registry forms of dist sign and dist use, added
+  # 25 packages and 8,674 lines of Go to the package graph of aiopsctl and 717,301
+  # bytes (2.3 per cent) to its binary. Measured again on 2026-11-24, once plugin pack,
+  # sign, push, inspect and verify brought in its OCI image layout store, content/oci,
+  # with the graph, resolver and tarfs packages beside it: it adds 36 packages, 32 of
+  # oras-go, 2 of image-spec, and x/sync/semaphore and hash/maphash, which only oras-go
+  # imports, with 13,189 lines of Go. aiopsctl cannot be built without it now, since the
+  # library calls it, so the bytes are scaled: its symbols take 274,274 bytes of the
+  # 35,827,467 of aiopsctl (go tool nm -size), against 180,037 at its first link, whose
+  # binary grows by 727,605 bytes when rebuilt with this toolchain, so it adds about
+  # 1.1 MB (3.1 per cent). What a client on the standard library would write again is
+  # the part of oras-go it uses: registry/remote (2,551 lines), its auth (1,564), with
+  # the bearer-token and Basic challenges, its credentials (783), with config.json and
+  # the credential helpers, the referrers tag schema of a registry with no referrers
+  # API, which the exit's registry needs (ADR-047 decision 4), and the OCI image layout
+  # of ADR-047 decision 1, content/oci (1,170). Even a narrow copy of that is well over
+  # a thousand lines of protocol code in a library capped at 3,500 (ADR-060 decision
+  # 35), with none of upstream's tests, so writing it carries more risk than linking a
+  # pinned, Apache-2.0 module of three requirements, two of which the graph already
+  # holds. The conclusion is that of the first measurement.
+  - id: oras-go
+    names: [oras, oras-go]
+    form: library
+    behind: operations
+    modules: [oras.land/oras-go/v2]
+    pin: v2.7.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "LICENSE.docs of github.com/opencontainers/go-digest@v1.0.0 is CC-BY-SA-4.0 for its README.md and CONTRIBUTING.md only, which no binary links; the per-directory scan honours that record by module, version and file (ADR-047 decision 21; ADR-020 decision 30, reading 4)", row: L16}
+    evidence:
+      - {source: "oras.land/oras-go/v2@v2.7.0 LICENSE (Apache-2.0, Copyright 2021 ORAS Authors) and go.mod; the module has no NOTICE file", read: "2026-11-24", version: v2.7.0}
+      - {source: "github.com/opencontainers/go-digest@v1.0.0 LICENSE, LICENSE.docs and README.md; golang.org/x/sync@v0.24.0 LICENSE and PATENTS", read: "2026-11-24", version: v2.7.0}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-047 decision 4; ADR-060 decision 41"}
+      - {dir: internal/builder, decision: "ADR-044 decisions 1 and 6: the OCI image layout of the image dist build writes, its distribution manifest a referrer"}
+      - {dir: test/authoring, tests: true, decision: "ADR-060 decision 30: the release pipeline of the S2a exit pushes the release layout, and the host the site's image, into the registry of the job"}
+    contains:
+      - {module: github.com/opencontainers/go-digest, version: v1.0.0, licence: Apache-2.0}
+      - {module: golang.org/x/sync, version: v0.24.0, licence: BSD-3-Clause}
+    default: false
+
+  # The descriptor and manifest types of the OCI image specification, which the
+  # operations library imports beside oras-go (ADR-054 decision 18). Its go.mod also
+  # requires github.com/russross/blackfriday v1.6.0 (BSD-2-Clause) and
+  # github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 (Apache-2.0), which only its package
+  # schema imports: they enter no package graph, and the pruned module graph of the
+  # root module does not reach them, so go.sum lists neither (ADR-047 decision 4).
+  - id: oci-image-spec
+    names: [image-spec]
+    form: library
+    behind: operations
+    modules: [github.com/opencontainers/image-spec]
+    pin: v1.1.1
+    licence: Apache-2.0
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "github.com/opencontainers/image-spec@v1.1.1 LICENSE (Apache-2.0, Copyright 2016 The Linux Foundation) and go.mod; the module has no NOTICE file", read: "2026-11-24", version: v1.1.1}
+      - {source: "github.com/russross/blackfriday@v1.6.0 LICENSE.txt and github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 LICENSE", read: "2026-11-24", version: v1.1.1}
+    mark: needs-approval
+    importers:
+      - {dir: plugins/operations, decision: "ADR-047 decisions 1 and 4: the types of the OCI client"}
+      - {dir: internal/builder, decision: "ADR-044 decision 6: the manifest and the config of the image dist build writes"}
+      - {dir: test/authoring, tests: true, decision: "ADR-060 decisions 30 and 31: the S2a exit reads the layouts of the artifacts it checks and writes the copies of D1, D2 and plugin verify"}
+    default: false
+
+  # The module zip and its h1 sum that plugin pack takes for the module layer and the SBOM
+  # of in-process code (ADR-047 decision 1): the packages module, sumdb/dirhash and zip,
+  # with modfile through zip, which the go command itself uses, so the sum is the one
+  # go.sum records. They are the toolbox's, which aiopsctl alone links, and enter no
+  # server binary (ADR-044, Consequences, and the owner's decision of 2026-11-24): the
+  # closure check of kernelcheck imports refuses every package of the module in cmd/aiops
+  # but semver and sumdb/note, which sigstore-go links, at the same pin, into both
+  # binaries. Its go.mod requires golang.org/x/tools for its own tests only.
+  - id: x-mod
+    names: [x-mod]
+    form: library
+    behind: none
+    modules: [golang.org/x/mod]
+    pin: v0.42.0
+    licence: BSD-3-Clause
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "golang.org/x/mod@v0.42.0 LICENSE (BSD-3-Clause, Copyright 2009 The Go Authors), PATENTS and go.mod", read: "2026-11-24", version: v0.42.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/authoring, decision: "ADR-047 decision 1; ADR-044, Consequences: the module zip of the toolbox, for the module layer and the SBOM of in-process code"}
+      - {dir: internal/builder, decision: "ADR-044 decisions 7, 8, 10, 16 and 23: the scratch go.mod, the module zips and their h1 sums, the strict versions, the toolchain module and the served go.mod copies"}
+      - {dir: cmd/aiopsctl, decision: "ADR-044 decision 9: the case of dist build fills a module source with module zips, as a site does"}
+      - {dir: test/modsrc, decision: "ADR-044 decision 9; ADR-060 decision 40: the module sources of the tests that build with the builder, the module proxy of the S2a exit among them, a test package that no shipped distribution links"}
+      - {dir: tools/spdxcorpus, decision: "ADR-044 decision 26: the h1 sum of the SPDX data that the corpus is written from"}
+      - {dir: tools/mplsources, decision: "ADR-044 decision 6: the h1 hash of each zip of the MPL-2.0 archive of a release, for its release check"}
+    default: false
+
+  # The call graph of the init deny-list scan (ADR-044 decisions 12 and 25): go/packages,
+  # go/ssa, go/ssa/ssautil, go/callgraph and go/callgraph/vta, with their internal
+  # packages. Only the builder imports it, and the closure check of kernelcheck imports
+  # refuses every package of the module in cmd/aiops (ADR-044, Consequences). Adding it
+  # raises golang.org/x/net to v0.59.0 and golang.org/x/sys to v0.48.0, which its go.mod
+  # requires, and through x/net golang.org/x/crypto to v0.57.0 and golang.org/x/term to
+  # v0.46.0; the licence of each is read again at the new version (ADR-054 decision 6),
+  # under the entry that has it in contains.
+  - id: x-tools
+    names: [x-tools]
+    form: library
+    behind: none
+    modules: [golang.org/x/tools]
+    pin: v0.51.0
+    licence: BSD-3-Clause
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: "golang.org/x/tools@v0.51.0 LICENSE and PATENTS, each equal to the toolchain's (SHA-256 911f8f57... and 96f408bf...), and go.mod", read: "2026-11-25", version: v0.51.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/builder, decision: "ADR-044 decisions 12 and 25: the call graph of the init deny-list scan"}
+    default: false
+
+  # The licence classifier of the builder (ADR-044 decision 15), linked without its
+  # package assets: its corpus is built from the SPDX License List data
+  # (spdx-license-list, ADR-044 decision 26). Its root package imports go-diff and
+  # go-spew, at the versions the build list selects: certificate-transparency-go, which
+  # sigstore-go links, requires go-diff v1.4.0 and a go-spew commit after v1.1.1, above
+  # the v1.1.0 and v1.1.1 that the classifier's go.mod names and ADR-044 read; ADR-044
+  # decision 15 names the selected versions since the owner's word of 2026-11-25.
+  - id: licenseclassifier
+    names: [licenseclassifier]
+    form: library
+    behind: none
+    modules: [github.com/google/licenseclassifier/v2]
+    pin: v2.0.0
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [link]
+    conditions:
+      - {condition: "Linked without its package assets, whose 431 files state no source; the corpus is the builder's, from the pinned SPDX data (ADR-044 decision 26)", row: L7}
+      - {condition: "go-diff carries the Apache-2.0 text of the library it ports beside its MIT LICENSE, both in THIRD_PARTY_LICENSES/ of aiopsctl", row: L7}
+    evidence:
+      - {source: "github.com/google/licenseclassifier/v2@v2.0.0 LICENSE (Apache-2.0) and go.mod", read: "2026-11-25", version: v2.0.0}
+      - {source: "github.com/sergi/go-diff@v1.4.0 LICENSE (MIT, Copyright 2012-2016 The go-diff Authors) and APACHE-LICENSE-2.0; github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc LICENSE (ISC, Copyright 2012-2016 Dave Collins)", read: "2026-11-25", version: v2.0.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/builder, decision: "ADR-044 decision 15: the licence scan of the builder"}
+    contains:
+      - {module: github.com/sergi/go-diff, version: v1.4.0, licence: Apache-2.0 AND MIT}
+      - {module: github.com/davecgh/go-spew, version: v1.1.2-0.20180830191138-d8f796af33cc, licence: ISC}
+    default: false
+
+  - id: goleak
+    names: [goleak]
+    form: library
+    behind: none
+    modules: [go.uber.org/goleak]
+    pin: v1.3.0
+    licence: MIT
+    verdict: ok
+    modes: [link]
+    evidence:
+      - {source: go.uber.org/goleak@v1.3.0 LICENSE, read: "2026-11-23", version: v1.3.0}
+    mark: needs-approval
+    importers:
+      - {dir: sdk/testkit, decision: "ADR-060 decision 12; ADR-054 decision 17"}
+    default: false
+
+  - id: spdx-license-list
+    names: [spdx]
+    form: content
+    behind: none
+    pin: v3.29.0
+    # The short identifiers of the licenses and exceptions of the list, copied into
+    # internal/authoring/spdx.txt, which aiopsctl embeds for the SPDX lookup of step 1
+    # of plugin check (ADR-060 decision 23; ADR-048 decision 19); and the texts, the
+    # template texts and the standard headers of json/details/*.json and
+    # json/exceptions/*.json of the same data, which tools/spdxcorpus writes into
+    # internal/builder/spdx-corpus.tar.gz, the corpus of the licence classifier that
+    # aiopsctl embeds (ADR-044 decision 26). The published data states no licence of its
+    # own and points to its source repository, which holds no licence file and whose
+    # release notes put the .json files of the list under CC0-1.0.
+    licence: CC0-1.0
+    verdict: ok-with-conditions
+    modes: [copy]
+    conditions:
+      - {condition: "Data only: the identifiers of the list, and the licence texts of the list carried to recognise them, which the builder's scan matches and no binary runs; nothing of it is linked as code", row: L7}
+      - {condition: "spdx.txt names the version and the SHA-256 of the published files it was read from, internal/builder pins the module's h1 sum that tools/spdxcorpus checks, and a version bump reads the data and its terms again", row: L17}
+    evidence:
+      - {source: "github.com/spdx/license-list-data@v3.29.0+incompatible README.md (Licensing Information), json/licenses.json and json/exceptions.json", read: "2026-11-24", version: v3.29.0}
+      - {source: "github.com/spdx/license-list-XML@v3.29.0+incompatible RELEASE-NOTES.md (version 3.3: the .json, schema and .js files of the list under CC0-1.0); no LICENSE file at that version", read: "2026-11-24", version: v3.29.0}
+      - {source: "github.com/spdx/license-list-data@v3.29.0+incompatible, h1:zLVVtcoiXca+aMQmv9wyCUL3xfOXLv1LLjJow34CQnA=, json/details/*.json and json/exceptions/*.json, the files of the corpus", read: "2026-11-25", version: v3.29.0}
+    mark: needs-approval
+    importers:
+      - {dir: internal/authoring, decision: "ADR-060 decision 23: the SPDX list data embedded in aiopsctl"}
+      - {dir: internal/builder, decision: "ADR-044 decision 26: the corpus of the licence classifier, built from the SPDX list data"}
+    default: true
+
+  - id: nodejs
+    names: [nodejs, node.js]
+    form: process
+    behind: none
+    pin: v24.22.1
+    # The complete licence file: Node.js under MIT, and the bundled components, each
+    # under its own terms in the same file (s0-reference-pins.md).
+    licence: MIT AND LicenseRef-Node.js-bundled-components
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Fetched by checksum for the oracle job only and never shipped; the complete licence file is kept, not an MIT summary", row: L5}
+    evidence:
+      - {source: "https://raw.githubusercontent.com/nodejs/node/ce7aaf1cee78b8cf0ce17364260535c418d3ed26/LICENSE, SHA-256 5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace, equal to the LICENSE of the linux-x64 archive", read: "2026-11-23", version: v24.22.1}
+    mark: needs-approval
+    default: false
+
+  - id: gitleaks
+    names: [gitleaks]
+    form: process
+    behind: none
+    pin: v8.18.4
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: github.com/zricethezav/gitleaks/v8@v8.18.4 LICENSE, read: "2026-11-23", version: v8.18.4}
+    mark: needs-approval
+    default: false
+
+  # The signing tool of the release pipeline, which CI runs against aiopsctl in both
+  # directions in key mode and no artifact carries (ADR-060 decisions 34 and 36; ADR-020
+  # decisions 1 and 16). The cosign job builds it from its module at the pin with go
+  # install, by the toolchain go1.27.4 that the go 1.27 of its go.mod needs, each fetched
+  # through the module proxy and checked against the checksum database. Its go.mod
+  # requires ten MPL-2.0 HashiCorp modules (ADR-020 decision 16); since it is in no
+  # artifact, L7 and L8 do not reach its graph.
+  - id: cosign
+    names: [cosign]
+    form: process
+    behind: none
+    pin: v3.1.4
+    licence: Apache-2.0
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Built by CI from its module at the pin and run in CI only, never baked into an image or shipped (08:1379)", row: L5}
+    evidence:
+      - {source: "github.com/sigstore/cosign/v3@v3.1.4 LICENSE (Apache-2.0) and COPYRIGHT.txt, and go.mod, h1:d3UHS8oJebMf6XUhPtWv9weU1ZYRyXq9HJ7QPccmqvY=", read: "2026-11-25", version: v3.1.4}
+      - {source: "golang.org/toolchain@v0.0.1-go1.27.4.linux-amd64 LICENSE and PATENTS, the toolchain that builds it, each equal to that of go1.26.8", read: "2026-11-25", version: v3.1.4}
+    mark: needs-approval
+    default: false
+
+  - id: postgresql
+    names: [postgres, postgresql]
+    form: process
+    behind: none
+    images:
+      - {ref: "postgres:16.15-trixie@sha256:43f9275df91e012c3da3d86bea5d7bb5e67a473296cc906c5f9e80b8176b1a37", key: the postgres service of the CI jobs}
+    pin: 16.15-trixie
+    # The PostgreSQL licence in the core COPYRIGHT and MIT for the packaging of the
+    # Docker Official Image; its base layers are not read, so the image never ships.
+    licence: PostgreSQL AND MIT
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Pulled by digest in CI only, never shipped or mirrored, since its base layers are not read", row: L5}
+    evidence:
+      - {source: "s0-reference-pins.md:92-97, the core COPYRIGHT and the packaging LICENSE, each recorded by its hash", read: "2026-11-23", version: 16.15-trixie}
+    mark: needs-approval
+    default: false
+
+  # The registry that the s2a-exit job runs (ADR-060 decisions 30 and 34; ADR-047
+  # decision 4): the Docker Official Image of the registry program of
+  # github.com/distribution/distribution/v3, pinned by the digest of its index. The
+  # program is Apache-2.0; the image's layers are Alpine 3.24.4 packages, each licence
+  # read in /lib/apk/db/installed of its linux/amd64 image: GPL-2.0-only (busybox,
+  # apk-tools, alpine-baselayout, scanelf, ssl_client), MIT (musl, alpine-keys),
+  # MIT AND BSD-2-Clause AND GPL-2.0-or-later (musl-utils), MPL-2.0 AND MIT
+  # (ca-certificates), Apache-2.0 (OpenSSL 3) and Zlib (zlib). On the owner's word of
+  # 2026-11-26 (ADR-054 decision 8), the entry keeps the one name docker-distribution,
+  # the name the project was published under before; its own names, distribution and
+  # registry, are not added, since the repository's own files use those words.
+  - id: distribution-registry
+    names: [docker-distribution]
+    form: process
+    behind: none
+    images:
+      - {ref: "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c", key: the test registry of the s2a-exit job}
+    pin: v3.1.2
+    licence: Apache-2.0 AND GPL-2.0-only AND GPL-2.0-or-later AND MIT AND BSD-2-Clause AND MPL-2.0 AND Zlib
+    verdict: ok-with-conditions
+    modes: [tool]
+    conditions:
+      - {condition: "Pulled by digest in CI only, run as a separate process inside the exit job, never shipped, mirrored or baked into an image of ours, since its layers hold GPL-2.0 packages", row: L5}
+    evidence:
+      - {source: "github.com/distribution/distribution/v3@v3.1.2 LICENSE, the Apache License 2.0 with its appendix left as the template, SHA-256 cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14, and no NOTICE; module h1:/Bv2YIqqSR00HiO49FT93hovy6r9IlrzwUDsJjCN5qg=", read: "2026-11-25", version: v3.1.2}
+      - {source: "/lib/apk/db/installed of the linux/amd64 image sha256:52b489ad8e6f40d1a676702e3ce398ec796ce38f08fbb786e1f324baa12d84b8 of that index, on alpine:3.24, whose /bin/registry reports github.com/distribution/distribution/v3 3.1.2", read: "2026-11-25", version: v3.1.2}
+    mark: needs-approval
+    default: false
+
+  - id: actions-checkout
+    names: [checkout]
+    form: process
+    behind: none
+    pin: 11d5960a326750d5838078e36cf38b85af677262
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/checkout/11d5960a326750d5838078e36cf38b85af677262/LICENSE, read: "2026-11-23", version: 11d5960a326750d5838078e36cf38b85af677262}
+    mark: needs-approval
+    default: false
+
+  - id: actions-setup-go
+    names: [setup-go]
+    form: process
+    behind: none
+    pin: 40f1582b2485089dde7abd97c1529aa768e1baff
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/setup-go/40f1582b2485089dde7abd97c1529aa768e1baff/LICENSE, read: "2026-11-23", version: 40f1582b2485089dde7abd97c1529aa768e1baff}
+    mark: needs-approval
+    default: false
+
+  - id: actions-upload-artifact
+    names: [upload-artifact]
+    form: process
+    behind: none
+    pin: ea165f8d65b6e75b540449e92b4886f43607fa02
+    licence: MIT
+    verdict: ok
+    modes: [tool]
+    evidence:
+      - {source: https://raw.githubusercontent.com/actions/upload-artifact/ea165f8d65b6e75b540449e92b4886f43607fa02/LICENSE, read: "2026-11-23", version: ea165f8d65b6e75b540449e92b4886f43607fa02}
+    mark: needs-approval
+    default: false
+
+  # Refused by name (ADR-054 decision 20; 08 §5.1 L9): no artifact holds them.
+  - id: river-pro
+    names: [river-pro]
+    form: library
+    behind: jobs
+    licence: LicenseRef-River-Pro-EULA
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.1 (licence-audit-kernel-infra.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: seaweedfs-enterprise
+    names: [seaweedfs-enterprise]
+    form: process
+    behind: none
+    licence: LicenseRef-SeaweedFS-Enterprise-EULA
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: "licence record §2.1 (licence-audit-kernel-infra.md), the EULA updated 2025-11-19", read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: minio
+    names: [minio]
+    form: process
+    behind: none
+    licence: AGPL-3.0
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.1 (licence-audit-kernel-infra.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: litellm-enterprise
+    names: [litellm]
+    form: library
+    behind: none
+    licence: LicenseRef-LiteLLM-Enterprise
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.2 (licence-audit-agent-ai.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+  - id: langgraph-platform
+    names: [langgraph]
+    form: process
+    behind: none
+    licence: Elastic-2.0
+    verdict: replace-or-rebuild
+    modes: [none]
+    evidence:
+      - {source: licence record §2.2 (licence-audit-agent-ai.md), read: "2026-11-11", version: default branch}
+    mark: needs-approval
+    default: false
+
+# The stated exceptions of 00-decisions.md:267 (ADR-054 decisions 9, 19 and 21). U1 and
+# U3 read an item's place when it is `every place`, `ids`, a directory of the repository
+# with its trailing slash, or a documentation place of decision 22 written
+# `00 §2.1 row <n>` where the item's tokens name its contract; any other place is prose
+# that no check reads before its first case lands.
+exceptions:
+  - item: The PostgreSQL dialect behind sql, sql.Bound, platformSql and sqlDriver
+    tokens: [postgres, postgresql, pgx]
+    places: [those definitions and their suites, the sql fake and sdk/testkit/sqlfake, an import of pgx v5 in sdk/def/sql, the participants of sqlDriver, the suffix of a row on the allow-list that wraps it, 00 §2.1 row 9]
+    source: 00-decisions.md:267; ADR-054 decision 23
+  - item: The two query dialect keys, metricsQuery and logsQuery
+    tokens: [promql, prometheus, logql, loki]
+    places: [the definition of its key, its fake and its suite, in prose, doc comments and query text; logql and loki in prose only]
+    source: 00-decisions.md:267
+  - item: The protocols with several implementations
+    tokens: [s3, openai, oidc, smtp, oci, otlp, kubernetes, k8s, mcp]
+    places: [the definitions, fakes and suites that declare the protocol, ids]
+    source: 00-decisions.md:267; ADR-054 decision 19
+  - item: The Cordis semantics of the kernel port
+    tokens: [cordis, deepseek, dsh]
+    places: [sdk/kernel/, loader/, test/differential/, test/spike/s0/, their notices included, 00 §2.1 row 1]
+    source: 00-decisions.md:267; 08 §5.1 L12
+  - item: The default stack bundle (aiops-stack, agent-base and the agent bundles)
+    tokens: [the names of every entry whose plugins sit in one of those bundles]
+    places: [the code and content of those plugins and their config in the golden dumps, never an id]
+    source: 00-decisions.md:267
+  - item: The Go language and SPDX identifiers
+    tokens: [go, golang, spdx]
+    places: [every place]
+    source: ADR-054 decision 21
+  - item: The SPDX id PostgreSQL on the licence allow-list of gate check 6
+    tokens: [postgresql]
+    places: [boot/]
+    source: 00-decisions.md:267, SPDX identifiers; ADR-054 decision 21, owner answer of 2026-11-26
+
+# The base provider allow-list (ADR-054 decision 10).
+baseProviders: [sql-postgres, sql-platform, kv-postgres, blob-s3, llm-provider-openai-compatible, identity-oidc, notifier-email, jobs-river]

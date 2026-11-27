@@ -185,7 +185,11 @@
    go-securesystemslib v0.11.1, gRPC v1.84.0 and protobuf v1.36.12
    (`cosign/v3@v3.1.4/go.mod:35-39`, `:60`, `:288`), and `aiopsctl` the versions of
    decision 16. CI installs cosign's published release binary, pinned by checksum, because
-   its `go.mod` needs go 1.27; its licence is read in decision 16.
+   its `go.mod` needs go 1.27; its licence is read in decision 16. Note of 2026-11-25:
+   CI builds cosign v3.1.4 from its module with `go install` instead, by the toolchain
+   go1.27.4 that its `go.mod` needs, each fetched through the module proxy and checked
+   against the checksum database, so the job and `make cosign` build the same binary
+   (ADR-060 decision 36, its note of 2026-11-25).
 2. **One signature format: a Sigstore bundle v0.3 in key mode.** Every signature is a
    bundle of media type `application/vnd.dev.sigstore.bundle.v0.3+json` whose
    verification material is the key hint of decision 4, with no certificate, no
@@ -433,6 +437,23 @@
       (`08:401`). `dist use <image>` reads that referrer, verifies the bundle with each
       key of `distributions`, and writes the record and `current`, or refuses and writes
       nothing.
+    - Note of 2026-11-24: the distribution manifest names no image, and the subject of
+      its referrer is not signed, so a signed referrer copied onto another image verified
+      as well, and `dist use` wrote that image into `image.yaml`, from which the host
+      starts the kernel container with the home bound (ADR-047 decisions 13 and 15); a
+      check inside the image cannot help, since the image is the attacker's. `dist sign`
+      therefore also signs the image's digest as `plugin sign` signs an artifact's: a
+      DSSE envelope of an in-toto statement of predicate type
+      `https://sigstore.dev/cosign/sign/v1` whose one subject is the digest of the image
+      manifest, pushed as one more referrer of the image in the bundle form of cosign,
+      the form `cosign sign --key` writes, so the release pipeline signs the release
+      image with it. `dist use` writes nothing unless the key of `distributions` that
+      verifies the manifest's bundle also verifies such a signature over the digest of
+      the image it resolved. The record of decision 10 keeps the manifest's bundle only:
+      the signature of the image vouches for `image.yaml`, not for the manifest. An image
+      signed with the same key whose own embedded manifest is not the one `dist use`
+      made current boots no kernel, since boot trusts the embedded manifest only where
+      its digest is current.
 
 ### The default release root
 
@@ -462,7 +483,11 @@
       `trust.yaml` that lists the key under `distributions` and the record and `current`
       into a throwaway `$AIOPS_HOME`, and runs that `aiopsctl` against it. No exemption
       narrows checks 5 or 10; the tie of such a binary is the in-repository form of
-      decision 12.
+      decision 12. Note of 2026-11-25: `TestPluginCheckOnEveryPlugin` and
+      `TestBootOfEachPluginsRow` of `cmd/aiopsctl`, which `make plugin-check` and the CI
+      step of that name run, build it so and write the home with `test/trusted`; check 10
+      at its boot reads statements that name the suites that ran (ADR-060 decision 50).
+      The template job still runs the toolbox in its own test process.
     - When no trusted root covers the embedded manifest, boot prints the recovery beside
       the refusal: `- key: release` under `distributions` restores the default root, and an
       `aiopsctl` built from the current distribution boots on its record (question Q11).
@@ -478,7 +503,7 @@
     |---|---|---|
     | `plugin check` step 7, `plugin pack` | Signs with a throwaway key held in memory and verifies the bundle and the attestation against it (`07:1573`) | A failed step 7 |
     | `plugin install`, every kind | For each signer entry that covers the id and runtimes, the signature bundle against that key and the artifact's digest; the first that verifies gives the signer. Then the attestation bundle against the same key | No verifying signature: check 5. No verifying attestation: check 10, missing. One that verifies and names another digest: check 10, another subject (ADR-060 decision 30, step D2) |
-    | `dist use` | The manifest's bundle against each key of `distributions` | A refusal; no record is written |
+    | `dist use` | The manifest's bundle against each key of `distributions`, and with the key that verifies it a signature of the image's digest (decision 12, note of 2026-11-24) | A refusal; no record and no `image.yaml` is written |
     | `plugin gate --against` | No signature, since check 5 is not evaluated there (ADR-060 decision 17); it reads the statement from the attestation bundle's payload | Check 10, on the statement as read |
     | `dist build` | No signature; checks 5 and 10 are not evaluated there (ADR-060 decision 17) | None of this ADR |
     | Boot and every live generation | No signature (`08:404`): records, `trust.yaml` and the embedded manifest, as decisions 10 and 12 state | Check 5, 7 or 10 |
@@ -1038,7 +1063,14 @@ to a question, the decision here settles it.
     codec table. The register entry records the exemption, and it is read again at every
     version bump. The deny-list stays whole for every other package. `08:402` and
     `07:1860`, with the deny-list content that ADR-060 decision 33 gives ADR-044, gain
-    the exemption by package and version.
+    the exemption by package and version. Note of 2026-11-25: on the owner's word, the
+    deny-list also exempts the three registrations with `encoding/gob.Register` that
+    sigstore-go brings in through go-openapi (decision 16): the `init` of `encoding/gob`
+    itself at the toolchain pin, and the `init` of `github.com/go-openapi/loads` v0.25.0
+    and of `github.com/go-openapi/spec` v0.22.9. Each fills only gob's own type registry
+    and is keyed by package and version in the reviewed exceptions table of ADR-044
+    decision 21, whose note of the same date records them, and a version change needs a
+    new review. The register entry of sigstore-go records them.
 
 28. **Boot ties a module with no recorded sum by path** (Q10 (b)). For the main module
     and a replaced module the manifest records the path, and for a replaced module its

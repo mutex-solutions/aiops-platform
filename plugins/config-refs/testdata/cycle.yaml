@@ -1,0 +1,2 @@
+# The row config the generated cycle test mounts the row with.
+maxFileBytes: 65536

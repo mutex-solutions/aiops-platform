@@ -19,7 +19,9 @@ import (
 // every loader and the fake decide alike.
 //
 // The two trees are compared node by node:
-//   - two maps compare key by key; a key in one map only is a change at its path;
+//   - two maps compare key by key; a key in one map only is a change at its path,
+//     unless a volatile path covers that key only through a "*" in its place, when
+//     the maps are one change, at the path of the map;
 //   - two lists of one length compare index by index, the index being the path
 //     segment; lists of different lengths are one change, at the path of the list;
 //   - anything else, including a change of type (a map that became a scalar, an
@@ -35,13 +37,15 @@ import (
 //
 // A change whose old or new value holds a launch.Ref is not volatile either (ADR-059,
 // owner decision 17): the tree holds references unresolved and config-refs resolves
-// them only when a fiber activates, so such a change restarts the fiber. A literal
+// them when a fiber activates, and again when a commit hands a Volatile value off
+// (ADR-034 G13), so such a change restarts the fiber. A literal
 // changed beside a reference that did not change is volatile; loader/volatile-update
 // carries the new config through WithoutRefs, so the event never carries a reference.
 // The launcher's plan (boot Diff) calls VolatileOnly too.
 
-// changedPaths appends to out each path at which a and b differ.
-func changedPaths(path []string, a, b any, out [][]string) [][]string {
+// changedPaths appends to out each path at which a and b differ, over the volatile
+// path patterns.
+func changedPaths(path []string, a, b any, patterns [][]string, out [][]string) [][]string {
 	switch x := a.(type) {
 	case map[string]any:
 		if y, ok := b.(map[string]any); ok {
@@ -51,13 +55,15 @@ func changedPaths(path []string, a, b any, out [][]string) [][]string {
 					keys = append(keys, k)
 				}
 			}
+			oneSided := func(k string) bool { _, ina := x[k]; _, inb := y[k]; return ina != inb }
+			if slices.ContainsFunc(keys, func(k string) bool { return oneSided(k) && wildOnly(patterns, with(path, k)) }) {
+				break // a change of the map's keys, at its path
+			}
 			for _, k := range keys {
-				va, ina := x[k]
-				vb, inb := y[k]
-				if ina && inb {
-					out = changedPaths(with(path, k), va, vb, out)
-				} else {
+				if oneSided(k) {
 					out = append(out, with(path, k))
+				} else {
+					out = changedPaths(with(path, k), x[k], y[k], patterns, out)
 				}
 			}
 			return out
@@ -65,7 +71,7 @@ func changedPaths(path []string, a, b any, out [][]string) [][]string {
 	case []any:
 		if y, ok := b.([]any); ok && len(x) == len(y) {
 			for i := range x {
-				out = changedPaths(with(path, strconv.Itoa(i)), x[i], y[i], out)
+				out = changedPaths(with(path, strconv.Itoa(i)), x[i], y[i], patterns, out)
 			}
 			return out
 		}
@@ -136,6 +142,23 @@ func covers(pattern, path []string) bool {
 	return len(pattern) <= len(path) && slices.EqualFunc(pattern, path[:len(pattern)], func(p, s string) bool { return p == "*" || p == s })
 }
 
+// wildOnly reports whether the patterns cover path, the path of a key that one map
+// only has, only through a "*" in place of that key: none names the key or ends
+// above it. A Volatile value of such a map has a cell at its key, and the running
+// activation has no cell for a key that its map lacks.
+func wildOnly(patterns [][]string, path []string) bool {
+	wild := false
+	for _, p := range patterns {
+		if covers(p, path) {
+			if len(p) < len(path) || p[len(path)-1] != "*" {
+				return false
+			}
+			wild = true
+		}
+	}
+	return wild
+}
+
 // VolatileOnly returns the paths at which the trees differ, each as its list of keys
 // and sorted, the Paths of VolatileUpdateArgs, and whether every one of them is
 // covered by one of the volatile paths while neither its old nor its new value holds a
@@ -146,7 +169,7 @@ func VolatileOnly(old, updated any, volatile []string) (paths [][]string, only b
 		patterns[i] = strings.Split(v, ".")
 	}
 	only = true
-	paths = changedPaths(nil, old, updated, nil)
+	paths = changedPaths(nil, old, updated, patterns, nil)
 	for _, d := range paths {
 		if HoldsRef(at(old, d)) || HoldsRef(at(updated, d)) || !slices.ContainsFunc(patterns, func(p []string) bool { return covers(p, d) }) {
 			only = false

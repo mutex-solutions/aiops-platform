@@ -1,0 +1,30 @@
+manifestVersion: "1.0"
+id: aiops/tool-search
+version: 0.1.0
+title: Search tool
+license: Apache-2.0
+publisher: {id: aiops}
+stability: preview
+scope: [process]
+runtimes: [inproc]
+uses:
+  - {key: approval, major: 0, as: need}
+  - {key: metricsQuery, major: 0, as: want}
+provides:
+  - {key: tools, major: 0}
+registers: []
+hooks:
+  - {hook: approval/gates, stage: early}
+configSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  additionalProperties: false
+  properties:
+    timeout: {type: integer, x-aiops-volatile: true}
+    auth:
+      type: object
+      properties:
+        token: {type: string, x-aiops-volatile: true}
+        url: {type: string}
+durable: []
+requires: {pluginApi: "0.1", definitions: {approval: ["0.1"], tool: ["0.1"]}}

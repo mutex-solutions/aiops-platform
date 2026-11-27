@@ -1,0 +1,24 @@
+# {{.Title}}
+
+`{{.ID}}` is a connector pack: rows of instantiable plugins of the release, their
+config, and the fixtures that prove them, with no code. `aiopsctl plugin new connector
+{{.ID}}` wrote it, with one row per instantiable plugin of the release it ran against.
+
+State here what the pack connects to, and the versions of that system the fixtures were
+recorded against.
+
+## Checking it
+
+`aiopsctl plugin check ./` runs, for each registry the rows feed, that registry's suite
+on the rows, each obligation replayed from its recorded case under `fixtures/`, and the
+echo scenario. A fresh pack fails with one line per obligation; that list is the work
+list. The check needs `aiopsctl` alone: no Go toolchain and no container runtime.
+
+## The rows
+
+`bundle.yaml` inserts every row disabled. Once the pack is installed, enable each with
+`aiopsctl plugin enable {{.Name}}:<row>`. A row's config is set in the profile layer,
+since a patch replaces the whole config and the bundle holds no `${env:}` or `${file:}`
+reference:
+
+    - {id: {{.Name}}:<row>, config: {...}}

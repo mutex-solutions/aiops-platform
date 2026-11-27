@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -22,19 +23,33 @@ import (
 	reloadfake "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0/fake"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
 	"github.com/mutex-solutions/aiops-platform/sdk/testkit/kerneltest"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
-func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
-	reg, man, lim, err := Load()
+// bindings returns the bindings and the required set of the signed manifest.
+func bindings(t *testing.T, signed []byte) boot.DistManifest {
+	t.Helper()
+	d, err := boot.ReadDistribution("distribution.yaml", signed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/restart-policy"} {
+	return d.Bindings()
+}
+
+func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
+	reg, signed, lim, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	man := bindings(t, signed)
+	for _, id := range []string{"aiops/loader", "aiops/clock", "aiops/config-refs", "aiops/readiness", "aiops/reload", "aiops/reload-socket", "aiops/restart-policy",
+		"aiops/cli", "aiops/command-profile", "aiops/command-plugin", "aiops/command-trust", "aiops/command-dist", "aiops/command-key",
+		"aiops/operations"} {
 		if _, ok := reg.Modules[id]; !ok {
 			t.Errorf("%s is missing from the module table", id)
 		}
 	}
-	if len(reg.Modules) != 6 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
+	if len(reg.Modules) != 14 || reg.LoaderConfig == nil || len(reg.Hooks) != 3 {
 		t.Fatalf("%d modules, %d hooks", len(reg.Modules), len(reg.Hooks))
 	}
 	if !slices.Equal(man.RequiredRows, []string{"loader", "readiness", "reload", "restart-policy"}) || !slices.Equal(man.RequiredKeys, []string{"clock"}) {
@@ -43,6 +58,10 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	if lim.LoadDeadline == 0 || lim.ShutdownBound == 0 {
 		t.Fatalf("limits %+v", lim)
 	}
+	// reload-socket is the one row that submits to reload (ADR-062 decision 1).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "reload" }); i < 0 || !slices.Equal(man.Consumers[i].Plugins, []string{"aiops/reload-socket"}) {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
 	listeners := map[string][]string{}
 	for _, h := range man.SealedHooks {
 		listeners[h.Hook] = h.Plugins
@@ -50,23 +69,123 @@ func TestLoadHoldsTheCoreRowsAndTheirBindings(t *testing.T) {
 	if !slices.Equal(listeners["internal/config"], []string{"aiops/config-refs"}) || !slices.Contains(listeners["internal/status"], "aiops/readiness") {
 		t.Fatalf("sealed hooks %v", listeners)
 	}
+	// appExit is consumer-bound, and the cli row requests the exit of aiopsctl with the
+	// code of its command (ADR-061 decision 7).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "appExit" }); i < 0 || !slices.Contains(man.Consumers[i].Plugins, "aiops/cli") {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
+	// operations is consumer-bound: the release lists the command rows that call the
+	// operations library (ADR-061 decisions 15 and 20).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "operations" }); i < 0 ||
+		!slices.Equal(man.Consumers[i].Plugins, []string{"aiops/command-dist", "aiops/command-key", "aiops/command-plugin", "aiops/command-profile", "aiops/command-trust"}) {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
+	// The operations library reaches the toolbox of the launcher through profileContext,
+	// and no command row does (ADR-061 decisions 20 and 33).
+	if i := slices.IndexFunc(man.Consumers, func(b boot.Binding) bool { return b.Key == "profileContext" }); i < 0 ||
+		!slices.Equal(man.Consumers[i].Plugins, []string{"aiops/loader", "aiops/operations", "aiops/readiness", "aiops/reload"}) {
+		t.Fatalf("consumers %+v", man.Consumers)
+	}
+}
+
+// The release ships aiops-core, aiops-cli and the cli profile, which lists the two in that
+// order (ADR-061 decision 29; ADR-060 decision 27). aiops-cli inserts cli, operations
+// and the five command rows. The cli profile composes from them alone with every row a
+// plugin of the module table and cli required, and it is no server profile: its rows of
+// aiops-cli state no roles.
+func TestShipsTheCLIProfile(t *testing.T) {
+	reg, _, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Shipped()
+	src := boot.Sources{Profile: "cli", Home: s, Bundles: s}
+	c, _, err := boot.Compose(src, boot.Options{Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range c.Rows {
+		ids = append(ids, r.ID)
+		if _, ok := reg.Modules[r.Plugin]; !ok || r.ID == "cli" && !r.Required {
+			t.Errorf("row %s: plugin %s in the table %v, required %v", r.ID, r.Plugin, ok, r.Required)
+		}
+	}
+	want := []string{"clock", "config-refs", "restart-policy", "reload", "reload-socket", "readiness",
+		"cli", "operations", "command-profile", "command-plugin", "command-trust", "command-dist", "command-key"}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("rows %v, want %v", ids, want)
+	}
+	if _, _, err := boot.Compose(src, boot.Options{Server: true, Modules: reg.Modules}); err == nil || !strings.Contains(err.Error(), "roles") {
+		t.Fatalf("the server rule on the cli profile: %v", err)
+	}
+}
+
+// The release ships the profile dev, which lists aiops-core alone at S2a: the rows of the
+// S1 core plugins and reload-socket (ADR-060 decision 27). reload-socket is a row of
+// aiops-core with the roles of the reload row it serves, no config and no required mark,
+// so every server profile that lists aiops-core runs it, dev included; the aiops-cli
+// bundle disables it with a bundle-layer patch, so aiopsctl never listens (ADR-062
+// decisions 1, 2 and 19).
+func TestAiopsCoreServesTheSocketAndAiopsCLIDisablesIt(t *testing.T) {
+	reg, _, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Shipped()
+	row := func(c boot.Composition, id string) boot.Row {
+		t.Helper()
+		for _, r := range c.Rows {
+			if r.ID == id {
+				return r.Row
+			}
+		}
+		t.Fatalf("no row %s", id)
+		return boot.Row{}
+	}
+	core, _, err := boot.Compose(boot.Sources{Profile: "dev", Home: s, Bundles: s}, boot.Options{Server: true, Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range core.Rows {
+		if ids = append(ids, r.ID); !r.Enabled {
+			t.Errorf("row %s of dev is disabled", r.ID)
+		}
+	}
+	if want := []string{"clock", "config-refs", "restart-policy", "reload", "reload-socket", "readiness"}; !slices.Equal(ids, want) {
+		t.Fatalf("dev composes %v, want %v", ids, want)
+	}
+	sock, rl := row(core, "reload-socket"), row(core, "reload")
+	if sock.Plugin != "aiops/reload-socket" || !sock.Enabled || sock.Required || !slices.Equal(sock.Roles, rl.Roles) || len(sock.Config.Map) != 0 {
+		t.Fatalf("reload-socket in aiops-core: %+v, reload roles %v", sock, rl.Roles)
+	}
+	cli, _, err := boot.Compose(boot.Sources{Profile: "cli", Home: s, Bundles: s}, boot.Options{Modules: reg.Modules})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := row(cli, "reload-socket"); r.Enabled {
+		t.Fatalf("reload-socket is enabled in the cli profile: %+v", r)
+	}
 }
 
 // Gate check 7 on the release manifest detaches an optional row that the kernel would
 // refuse with ErrBinding or ErrSealed, instead of letting it fail and be given up on:
-// reload has no consumer yet, and the loader's hooks are sealed by their definition.
+// x/needreload is not a listed consumer of reload, and the loader's hooks are sealed by
+// their definition.
 func TestGateDetachesARowOutsideTheReleaseBindings(t *testing.T) {
-	reg, man, _, err := Load()
+	reg, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	man := bindings(t, signed)
 	reg.Modules["x/needreload"] = boot.ModuleEntry{ID: "x/needreload", Needs: []string{"reload"}}
 	reg.Modules["x/entryinit"] = boot.ModuleEntry{ID: "x/entryinit", Hooks: []boot.HookDecl{{Hook: "loader/entry-init"}}}
 	c := boot.Composition{Rows: []boot.ComposedRow{
 		{Row: boot.Row{ID: "needreload", Plugin: "x/needreload", Enabled: true}},
 		{Row: boot.Row{ID: "entryinit", Plugin: "x/entryinit", Enabled: true}},
 	}}
-	g := boot.Gate(c, reg.Modules, man)
+	g := boot.GateWith(c, boot.GateInput{Entry: boot.EntryBoot, Mods: reg.Modules, Bindings: man})
 	if !slices.Equal(g.Detached, []string{"entryinit", "needreload"}) || g.Refused {
 		t.Fatalf("detached %v, refused %v: %+v", g.Detached, g.Refused, g.Slots[boot.CheckKeyHookClass-1].Fails)
 	}
@@ -91,15 +210,16 @@ func releaseHome(refs, window string) fstest.MapFS {
 
 func admitRelease(t *testing.T, home fstest.MapFS) boot.Admission {
 	t.Helper()
-	reg, man, _, err := Load()
+	reg, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	man := bindings(t, signed)
 	c, _, err := boot.Compose(boot.Sources{Profile: "p", Home: home, Bundles: home}, boot.Options{Server: true, Modules: reg.Modules})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return boot.Admit(boot.WithLoader(c), reg.Modules, man, nil)
+	return boot.AdmitWith(boot.WithLoader(c), boot.GateInput{Entry: boot.EntryBoot, Mods: reg.Modules, Bindings: man}, nil)
 }
 
 // A required row of the release set that holds a reference pulls config-refs into the
@@ -113,11 +233,16 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 	if !slices.Contains(a.Required.Keys, "configRefsReady") || !slices.Contains(a.Required.Rows, "refs") {
 		t.Fatalf("required set %+v", a.Required)
 	}
-	reg, man, lim, err := Load()
+	reg, signed, lim, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	home := releaseHome("", "${env:AIOPS_REF_WINDOW}")
+	files := trusted.Files(t, signed)
+	for name, data := range files {
+		home[name] = &fstest.MapFile{Data: data}
+	}
+	bi, _ := debug.ReadBuildInfo()
 	sig, ready := make(chan os.Signal, 1), make(chan struct{})
 	var once sync.Once
 	var stderr strings.Builder
@@ -132,7 +257,7 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 				return ""
 			},
 			Stdout: io.Discard, Stderr: writerFunc(func(p []byte) (int, error) { mu.Lock(); defer mu.Unlock(); return stderr.Write(p) }),
-			Registry: reg, Dist: man, Limits: lim, Clock: boot.SystemClock(),
+			Registry: reg, Signed: signed, BuildInfo: bi, Limits: lim, Clock: boot.SystemClock(),
 			Publish: func(s boot.ProcessStatus) {
 				if s.Ready {
 					once.Do(func() { close(ready) })
@@ -158,10 +283,11 @@ func TestReleaseProfileWithAReferenceInARequiredRowBoots(t *testing.T) {
 // every binding, listener list and required key or row of the release is in it as it
 // is, so no suite runs with a release entry changed or dropped (ADR-059 decision 18).
 func TestTestManifestHoldsTheReleaseManifest(t *testing.T) {
-	_, rel, _, err := Load()
+	_, signed, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
+	rel := bindings(t, signed)
 	data, err := os.ReadFile("../test/dist/dist.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -230,22 +356,37 @@ func TestReleaseProfileWithAReferenceInAProviderOfARequiredKeyNeedsConfigRefs(t 
 	}
 }
 
-func TestEntryReadsTheDeclarationsOfThePlugin(t *testing.T) {
+// An entry of the module table is boot's lenient reading of the plugin's manifest,
+// the gate's (ADR-048 decisions 15 and 18): what it provides, uses and listens on, and
+// the volatile paths of its configSchema, so no list of it is written by hand (ADR-060
+// decision 4). The loader is written with kernel.Define, so its schema is {} and it
+// has no volatile path.
+func TestEntryReadsTheManifest(t *testing.T) {
 	m := Modules()[0]
-	m.Volatile = []string{"config.x"}
-	e := m.Entry()
-	if e.Module != ModulePath || e.Version != Version || e.ID != "aiops/loader" || !slices.Equal(e.Volatile, []string{"config.x"}) {
+	e, err := m.Entry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Module != "" || e.ID != "aiops/loader" || e.Volatile != nil || e.Plugin == nil {
 		t.Fatalf("entry %+v", e)
 	}
-	if !slices.Contains(e.Needs, "profileContext") || !slices.Contains(e.Needs, "catalog") {
-		t.Fatalf("needs %v", e.Needs)
+	if !slices.Equal(e.Needs, []string{"catalog", "profileContext"}) || !slices.Equal(e.Provides, []string{"composition", "loader"}) {
+		t.Fatalf("needs %v, provides %v", e.Needs, e.Provides)
 	}
 	reg, _, _, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[0].Hook != "internal/status" || h[0].StageName != "default" {
+	if h := reg.Modules["aiops/readiness"].Hooks; len(h) != 3 || h[1].Hook != "internal/status" || h[1].StageName != "default" {
 		t.Fatalf("hooks %+v", h)
+	}
+	// A manifest that the reader refuses fails the entry and the table, naming the plugin.
+	m.Manifest = []byte("id: aiops/loader\n")
+	if _, err := m.Entry(); err == nil || !strings.Contains(err.Error(), "aiops/loader") {
+		t.Fatalf("Entry of a broken manifest: %v", err)
+	}
+	if _, err := Table(m); err == nil {
+		t.Fatal("Table took a broken manifest")
 	}
 }
 

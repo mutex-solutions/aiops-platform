@@ -11,10 +11,55 @@ import (
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
+	"github.com/mutex-solutions/aiops-platform/internal/plugingen"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
-	"github.com/mutex-solutions/aiops-platform/test/dist/def"
+	"github.com/mutex-solutions/aiops-platform/sdk/plugin"
+	toy "github.com/mutex-solutions/aiops-platform/test/dist/def/toy/v0"
 	"github.com/mutex-solutions/aiops-platform/test/dist/plugins/teststate"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
+
+// flipHand is the hand-written half of the manifest of the plugin flip, which the
+// test adds to the module table. Its generated half is written at test time from
+// the plugin's value, as plugingen writes it, so none of it is written by hand
+// (ADR-060 decision 13).
+const flipHand = `manifestVersion: "1.0"
+id: aiops-test/flip
+version: 0.1.0
+title: Flip
+license: Apache-2.0
+publisher: {id: aiops-test}
+stability: experimental
+scope: [process]
+runtimes: [inproc]
+`
+
+// flipManifest returns flipHand with the generated half of p: what plugin.Generate
+// reads from the value, and requires from the definition of toy, the one definition
+// p uses; plugingen.Requires fails on a key of any other.
+func flipManifest(t *testing.T, p kernel.Plugin) []byte {
+	t.Helper()
+	g, err := plugin.Generate(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(filepath.Join("def", "toy", "v0", "definition.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := plugingen.ParseDefinition(dist.ModulePath+"/test/dist/def/toy/v0", src)
+	if err == nil {
+		err = plugingen.Requires(&g, []plugingen.Definition{d})
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := plugingen.Rewrite([]byte(flipHand), g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
 
 // A live generation restarts a provider, and a dependant of it that was ACTIVE fails
 // once on the activation the restart gives it. The verdict fails ("was ACTIVE and is not
@@ -25,9 +70,9 @@ import (
 // adrs.md §1.6: a live Apply error is rolled back, not left in a failed rollback).
 func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 	var failNext atomic.Bool
-	flip := kernel.Define(kernel.Plugin{ID: "aiops-test/flip", Inject: []kernel.Dep{kernel.Need(def.StoreKey)},
+	flip := kernel.Define(kernel.Plugin{ID: "aiops-test/flip", Inject: []kernel.Dep{kernel.Need(toy.StoreKey)},
 		Apply: func(c *kernel.Context, _ any) error {
-			_ = def.StoreKey.Of(c)
+			_ = toy.StoreKey.Of(c)
 			if failNext.CompareAndSwap(true, false) {
 				return errors.New("flip: fails once")
 			}
@@ -37,9 +82,17 @@ func TestRollbackRestartsADependantThatFailedInTheGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := d.Registry.Keys
-	d.Registry = dist.Table(append(Modules(), dist.Module{Plugin: flip})...)
+	keys, man := d.Registry.Keys, flipManifest(t, flip)
+	if d.Registry, err = dist.Table(append(Modules(), dist.Module{Plugin: flip, Manifest: man})...); err != nil {
+		t.Fatal(err)
+	}
 	d.Registry.Keys = keys
+	// The signed manifest lists flip in its module table as the builder would, its
+	// statement naming toy at suite revision 0, as the test plugins' do (ADR-060
+	// decision 55).
+	if d.Signed, err = trusted.With(d.Signed, dist.ModulePath+"/test/dist", man, `{"toy": {"version": "0.1", "suite": 0}}`); err != nil {
+		t.Fatal(err)
+	}
 
 	live := filepath.Join(t.TempDir(), "live.yml")
 	write := func(body string) {

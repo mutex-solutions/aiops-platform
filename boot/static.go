@@ -53,7 +53,7 @@ const (
 	RuleRequiredKey Rule = "required-key"
 	// RuleRequiredClosure: the static need closure of a required key or row
 	// holds a provider outside the required set (gate check 7;
-	// 08-profiles-roadmap-adrs.md:491).
+	// 08-profiles-roadmap-adrs.md:503).
 	RuleRequiredClosure Rule = "required-closure"
 )
 

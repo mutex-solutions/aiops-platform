@@ -1,0 +1,3 @@
+# The cli profile: the profile of aiopsctl (00-decisions.md:515; 08-profiles-roadmap-adrs.md:253;
+# ADR-061 decision 29).
+bundles: [aiops-core, aiops-cli]

@@ -10,6 +10,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -36,8 +37,12 @@ type Launcher struct {
 	Argv        []string
 	Flags       map[string]string
 	Switches    map[string]bool
-	Environ     map[string]string  // for Cmdline.Env, which serves only names with launch.EnvPrefix
+	Environment map[string]string  // the environment of the process: Cmdline.Env serves its names with launch.EnvPrefix, Environ lists every one
+	In          io.Reader          // for Cmdline.Stdin
+	Out, ErrOut io.Writer          // for Cmdline.Stdout and Stderr
+	WorkDir     string             // for Cmdline.Dir
 	Current     launch.Composition // for ProfileContext.Committed; Commit sets it
+	Box         launch.Toolbox     // what ProfileContext.Toolbox returns; nil answers ErrNotCarried from every part
 	Needed      launch.RequiredSet // the distribution's required rows and keys, for ProfileContext.Required
 
 	ComposeFn func(context.Context) (launch.Composition, error)
@@ -45,10 +50,15 @@ type Launcher struct {
 	PlanFn    func(context.Context, launch.Composition, launch.Composition) (launch.Plan, error)
 	CommitFn  func(launch.Composition) error // a non-nil error refuses the commit, before the digest is checked
 
-	mu    sync.Mutex
-	ready bool
-	exits []launch.ExitRequest
-	known map[launch.Digest]bool // composed or replaced by a commit
+	mu     sync.Mutex
+	ready  bool
+	ended  bool // End was called: Set does nothing
+	boot   sync.Once
+	booted chan struct{}
+	exit   sync.Once
+	exited chan struct{}
+	exits  []launch.ExitRequest
+	known  map[launch.Digest]bool // composed or replaced by a commit
 }
 
 var (
@@ -62,18 +72,24 @@ var (
 
 // New returns an empty launcher and the plugin that provides the six launch keys.
 // Each call returns a new plugin value, which a test lists in the provider binding
-// map to stand for the launcher.
+// map to stand for the launcher. Each key serves a value with the methods of its own
+// interface only: Exits is the test's (no side door, 07-c4-plugin-sdk.md §4.3). The
+// profileContext of an activation refuses its calls once that activation is
+// released, as served.
 func New() (*Launcher, kernel.Plugin) {
-	f := &Launcher{known: map[launch.Digest]bool{}}
+	f := &Launcher{known: map[launch.Digest]bool{}, booted: make(chan struct{}), exited: make(chan struct{})}
 	return f, kernel.Define(kernel.Plugin{
 		ID: "aiops/launch-fake",
 		Provides: []kernel.AnyKey{launch.ProfileContextKey, launch.CatalogKey, launch.CmdlineKey,
 			launch.ReadyKey, launch.KillSwitchesKey, launch.AppExitKey},
 		Apply: func(c *kernel.Context, _ any) error {
 			for _, err := range []error{
-				launch.ProfileContextKey.Provide(c, f), launch.CatalogKey.Provide(c, f),
-				launch.CmdlineKey.Provide(c, f), launch.ReadyKey.Provide(c, f),
-				launch.KillSwitchesKey.Provide(c, f), launch.AppExitKey.Provide(c, f),
+				launch.ProfileContextKey.Provide(c, served{f, c.Std()}),
+				launch.CatalogKey.Provide(c, struct{ launch.Catalog }{f}),
+				launch.CmdlineKey.Provide(c, struct{ launch.Cmdline }{f}),
+				launch.ReadyKey.Provide(c, struct{ launch.Ready }{f}),
+				launch.KillSwitchesKey.Provide(c, struct{ launch.KillSwitches }{f}),
+				launch.AppExitKey.Provide(c, struct{ launch.AppExit }{f}),
 			} {
 				if err != nil {
 					return err
@@ -82,6 +98,49 @@ func New() (*Launcher, kernel.Plugin) {
 			return nil
 		},
 	})
+}
+
+// served is what an activation provides under profileContext: the profileContext,
+// whose methods with an error result return kernel.ErrInactive once that activation
+// is released, as the launcher's do (07-c4-plugin-sdk.md:518).
+type served struct {
+	launch.ProfileContext
+	std context.Context
+}
+
+func (s served) Compose(ctx context.Context) (launch.Composition, error) {
+	if s.std.Err() != nil {
+		return launch.Composition{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Compose(ctx)
+}
+
+func (s served) Admit(ctx context.Context, c launch.Composition) (launch.Admission, error) {
+	if s.std.Err() != nil {
+		return launch.Admission{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Admit(ctx, c)
+}
+
+func (s served) Plan(ctx context.Context, from, to launch.Composition) (launch.Plan, error) {
+	if s.std.Err() != nil {
+		return launch.Plan{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.Plan(ctx, from, to)
+}
+
+func (s served) Commit(c launch.Composition) error {
+	if s.std.Err() != nil {
+		return kernel.ErrInactive
+	}
+	return s.ProfileContext.Commit(c)
+}
+
+func (s served) RequiredOf(c launch.Composition) (launch.RequiredSet, error) {
+	if s.std.Err() != nil {
+		return launch.RequiredSet{}, kernel.ErrInactive
+	}
+	return s.ProfileContext.RequiredOf(c)
 }
 
 // Exits returns the exit requests received so far, oldest first.
@@ -159,6 +218,37 @@ func (f *Launcher) knownLocked(c launch.Composition) error {
 		return fmt.Errorf("composition %x was not composed by this launcher (or was forgotten)", c.Digest[:6])
 	}
 	return nil
+}
+
+// Toolbox returns Box, or with none a toolbox whose every part answers ErrNotCarried.
+func (f *Launcher) Toolbox() launch.Toolbox {
+	if f.Box != nil {
+		return f.Box
+	}
+	return notCarried{}
+}
+
+// notCarried is the toolbox of a fake that was given none.
+type notCarried struct{ launch.NoTools }
+
+func (notCarried) Render(context.Context, launch.RenderRequest) (launch.Rendered, error) {
+	return launch.Rendered{}, launch.ErrNotCarried
+}
+
+func (notCarried) Gate(context.Context, launch.GateRequest) (launch.Verdict, error) {
+	return launch.Verdict{}, launch.ErrNotCarried
+}
+
+func (notCarried) ReadManifest(context.Context, launch.ManifestRequest) (launch.ManifestSummary, []launch.Diagnostic, error) {
+	return launch.ManifestSummary{}, nil, launch.ErrNotCarried
+}
+
+func (notCarried) Shipped(context.Context) (map[string][]byte, error) {
+	return nil, launch.ErrNotCarried
+}
+
+func (notCarried) Release(context.Context, string) (launch.Release, error) {
+	return launch.Release{}, launch.ErrNotCarried
 }
 
 // Required is RequiredOf(Current).
@@ -241,25 +331,60 @@ func (f *Launcher) Env(name string) (string, bool) {
 	if !strings.HasPrefix(name, launch.EnvPrefix) {
 		return "", false
 	}
-	v, ok := f.Environ[name]
+	v, ok := f.Environment[name]
 	return v, ok
+}
+
+func (f *Launcher) Stdin() io.Reader  { return f.In }
+func (f *Launcher) Stdout() io.Writer { return f.Out }
+func (f *Launcher) Stderr() io.Writer { return f.ErrOut }
+func (f *Launcher) Dir() string       { return f.WorkDir }
+
+// Environ lists Environment as "NAME=value", sorted.
+func (f *Launcher) Environ() []string {
+	var out []string
+	for n, v := range f.Environment {
+		out = append(out, n+"="+v)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Ready.
 
-func (f *Launcher) Set()  { f.setReady(true) }
-func (f *Launcher) Drop() { f.setReady(false) }
+func (f *Launcher) Set()  { f.setReady(true, false) }
+func (f *Launcher) Drop() { f.setReady(false, false) }
 
-func (f *Launcher) setReady(v bool) {
+// End ends the latch, as the launcher does when the process stops: it drops it, and
+// Set does nothing from then on.
+func (f *Launcher) End() { f.setReady(false, true) }
+
+func (f *Launcher) setReady(v, end bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.ready = v
+	f.ended = f.ended || end
+	f.ready = v && !f.ended
 }
 
 func (f *Launcher) IsReady() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.ready
+}
+
+// Boot closes the channel of Booted, as the launcher does once the tree has settled;
+// a second call changes nothing.
+func (f *Launcher) Boot() { f.boot.Do(func() { close(f.booted) }) }
+
+func (f *Launcher) Booted() <-chan struct{} { return f.booted }
+
+// Inventory lists what the callers left behind: "ready" while the latch is set
+// (ADR-060 decision 12).
+func (f *Launcher) Inventory() []string {
+	if f.IsReady() {
+		return []string{"ready"}
+	}
+	return nil
 }
 
 // KillSwitches.
@@ -272,4 +397,9 @@ func (f *Launcher) RequestExit(r launch.ExitRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.exits = append(f.exits, r)
+	f.exit.Do(func() { close(f.exited) })
 }
+
+// ExitRequested is closed at the first exit request, so a test waits for one without
+// polling Exits.
+func (f *Launcher) ExitRequested() <-chan struct{} { return f.exited }

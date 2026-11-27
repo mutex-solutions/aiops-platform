@@ -63,6 +63,9 @@ var (
 // row's inject, intercept and isolate are applied to the entry's context
 // (07-c4-plugin-sdk.md:1347, :1375). Only an entry that is Enabled and whose Roles
 // include the process role is mounted (03-c3-kernel.md:64; 07-c4-plugin-sdk.md:1360).
+// Origin is the plugin id of the installed artifact whose bundle inserted the row, ""
+// for none: the loader records it with the entry, so the row's secret scope and purge
+// key are the artifact's (03-c3-kernel.md:64; ADR-060 decision 19); added at 0.2.
 type EntrySpec struct {
 	ID        string // the composed id, "<group>:<id>" for a child
 	Parent    string // composed id of the enclosing group, or ""
@@ -73,6 +76,7 @@ type EntrySpec struct {
 	Inject    []string
 	Isolate   []string
 	Intercept map[string]any // key name -> intercept config
+	Origin    string
 }
 
 // Mount says whether an entry has a fiber, and if not why.
@@ -157,6 +161,9 @@ type Result struct {
 // itself first, whose Isolate names the key, or the root, as in the launcher's static
 // graph. A fiber restarted in place keeps its plugin and its realm, so it is not held:
 // the launcher admits no composition with two providers of one key in one realm.
+//
+// Once the activation that provides the loader is released, every method with an
+// error result returns kernel.ErrInactive (07-c4-plugin-sdk.md:518).
 type Loader interface {
 	// Apply applies the operations in order against the tree as the earlier ones
 	// leave it. It validates everything first: a refused operation refuses the whole

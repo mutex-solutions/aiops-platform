@@ -1,0 +1,5 @@
+# The rows of {{.ID}}: one, disabled, with the roles that a row of a server bundle
+# states (08-profiles-roadmap-adrs.md:156). Once the plugin is installed, aiopsctl
+# plugin enable {{.Name}}:{{.Name}} enables it.
+- insert:
+    - {id: {{.Name}}, plugin: {{.ID}}, roles: [api, worker], enabled: false}

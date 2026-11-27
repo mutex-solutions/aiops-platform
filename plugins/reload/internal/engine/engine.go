@@ -607,7 +607,7 @@ func operations(p launch.Plan, from, to launch.Composition) []loader.Op {
 
 func spec(r launch.Row) loader.EntrySpec {
 	return loader.EntrySpec{ID: r.ID, Parent: r.Parent, Plugin: r.Plugin, Config: r.Config, Enabled: r.Enabled,
-		Roles: r.Roles, Inject: r.Inject, Isolate: r.Isolate, Intercept: r.Intercept}
+		Roles: r.Roles, Inject: r.Inject, Isolate: r.Isolate, Intercept: r.Intercept, Origin: r.Origin}
 }
 
 // activeBefore lists the rows of the composition c, the one the tree runs, that are ACTIVE

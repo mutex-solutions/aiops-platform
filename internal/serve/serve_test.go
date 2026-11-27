@@ -10,15 +10,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/mutex-solutions/aiops-platform/boot"
 	"github.com/mutex-solutions/aiops-platform/dist"
+	reload "github.com/mutex-solutions/aiops-platform/sdk/def/reload/v0"
 	"github.com/mutex-solutions/aiops-platform/sdk/kernel"
+	"github.com/mutex-solutions/aiops-platform/test/trusted"
 )
 
 // readyWriter is a stdout that tells the test when the launcher says it is ready.
@@ -51,14 +55,14 @@ func (s *safeBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(
 // and has nothing to wait for. The release distribution is run by test/loader-smoke.
 func distribution(t *testing.T) Distribution {
 	t.Helper()
-	reg, _, lim, err := dist.Load()
+	reg, signed, lim, err := dist.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.Modules = boot.ModuleTable{boot.LoaderID: reg.Modules[boot.LoaderID]}
 	// The loader reads the role from profileContext, which is consumer-bound.
-	man := boot.DistManifest{Consumers: []boot.Binding{{Key: "profileContext", Plugins: []string{boot.LoaderID}}}}
-	return Distribution{Registry: reg, Manifest: man, Limits: lim}
+	signed = trusted.Rebind(signed, "{consumers: {profileContext: [aiops/loader]}}")
+	return Distribution{Registry: reg, Signed: signed, Limits: lim}
 }
 
 func env(args ...string) (Env, *safeBuf, chan os.Signal) {
@@ -67,9 +71,11 @@ func env(args ...string) (Env, *safeBuf, chan os.Signal) {
 	return Env{Args: args, Getenv: func(string) string { return "" }, Stdout: &safeBuf{}, Stderr: &stderr, Signals: sig}, &stderr, sig
 }
 
+// home is a home that trusts the signed manifest of distribution (test/trusted).
 func home(t *testing.T, bundle string) string {
 	t.Helper()
 	h := t.TempDir()
+	trusted.Write(t, h, distribution(t).Signed)
 	for name, data := range map[string]string{"profiles/p/profile.yaml": "bundles: [b]", "bundles/b/bundle.yaml": bundle} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(h, name)), 0o755); err != nil {
 			t.Fatal(err)
@@ -118,11 +124,86 @@ func TestRunBootsAndStops(t *testing.T) {
 	}
 }
 
+// One server process runs on a home (ADR-062 decision 2, until S4b): a second process on
+// the home refuses at once, exit 1, naming the process lock, and writes no status, so
+// status.json keeps saying that the first one runs its profile, and aiopsctl submits to
+// it.
+func TestASecondProcessOnTheHomeRefuses(t *testing.T) {
+	h := home(t, "[]")
+	out := &readyWriter{ready: make(chan struct{})}
+	e, _, sig := env("--profile", "p", "--home", h)
+	e.Stdout = out
+	done := make(chan int, 1)
+	go func() { done <- Run(context.Background(), "aiops", e, distribution(t)) }()
+	select {
+	case <-out.ready:
+	case code := <-done:
+		t.Fatalf("the first process exited with %d", code)
+	}
+	defer func() { sig <- syscall.SIGTERM; <-done }()
+	e2, stderr2, sig2 := env("--profile", "other", "--home", h)
+	second := make(chan int, 1)
+	go func() { second <- Run(context.Background(), "aiops", e2, distribution(t)) }()
+	select {
+	case code := <-second:
+		if code != boot.ExitRefused || !strings.Contains(stderr2.String(), "process.lock") {
+			t.Errorf("the second process: exit %d, stderr %q; want exit 1 naming run/process.lock", code, stderr2.String())
+		}
+	case <-time.After(10 * time.Second):
+		sig2 <- syscall.SIGTERM
+		<-second
+		t.Errorf("a second process ran on the home: %s", stderr2.String())
+	}
+	if s := readStatus(t, h); s.Phase != "running" || s.Profile != "p" {
+		t.Errorf("status.json after the second process: %+v; want the first one's, running p", s)
+	}
+}
+
+// A snapshot/ that a live write of aiopsctl holds, under the flock of write.lock, is
+// that write's, which restores or keeps its files under its lock: a server that
+// replaces one killed mid-submission boots, so that the write's await reaches it
+// (ADR-062 decision 10). A snapshot that no writer holds is a stopped write's, and the
+// server refuses it, naming profile sanitize (ADR-061 decision 17).
+func TestRunBootsTheSnapshotOfALiveWrite(t *testing.T) {
+	h := home(t, "[]")
+	if err := os.MkdirAll(filepath.Join(h, "snapshot"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h, "snapshot", "paths.json"), []byte(`{"Replaced":["profiles/p/aiops.patch.yml"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitRefused || !strings.Contains(stderr.String(), "profile sanitize") {
+		t.Fatalf("a snapshot that no writer holds: exit %d, %s; want 1 naming profile sanitize", code, stderr.String())
+	}
+	lock, err := os.OpenFile(filepath.Join(h, "write.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err == nil {
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	out := &readyWriter{ready: make(chan struct{})}
+	e, stderr, sig := env("--profile", "p", "--home", h)
+	e.Stdout = out
+	done := make(chan int, 1)
+	go func() { done <- Run(context.Background(), "aiops", e, distribution(t)) }()
+	select {
+	case <-out.ready:
+		sig <- syscall.SIGTERM
+		<-done
+	case code := <-done:
+		t.Fatalf("a snapshot that a live write holds: exit %d, %s; want the server to boot", code, stderr.String())
+	}
+}
+
 func TestRunUsesTheHomeFromTheEnvironmentAndShippedFiles(t *testing.T) {
 	h := t.TempDir()
 	shipped := fstest.MapFS{"profiles/p/profile.yaml": {Data: []byte("bundles: [b]")}, "bundles/b/bundle.yaml": {Data: []byte("[]")}}
 	d := distribution(t)
 	d.Shipped = shipped
+	trusted.Write(t, h, d.Signed)
 	e, stderr, _ := env("--profile", "p", "--role", "bogus")
 	e.Getenv = func(n string) string {
 		if n == "AIOPS_HOME" {
@@ -218,6 +299,10 @@ func TestRunLimitsFile(t *testing.T) {
 
 func TestRunRuntimeDirectoryFails(t *testing.T) {
 	h := home(t, "[]")
+	// aiopsctl creates run/ with the home (ADR-047 decision 15); a file stands there here.
+	if err := os.Remove(filepath.Join(h, "run")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(h, "run"), nil, 0o644); err != nil { // a file where the directory belongs
 		t.Fatal(err)
 	}
@@ -257,6 +342,46 @@ func TestRunPassesTheRefsDirAsAFlag(t *testing.T) {
 	e, stderr, _ := env("--profile", "p", "--home", h, "--refs-dir", dir)
 	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK || flags["refs-dir"] != dir {
 		t.Fatalf("exit %d, flags %v: %s", code, flags, stderr.String())
+	}
+}
+
+// The status file carries each row's state and what it waits for (ADR-059 decision 31
+// as amended), and leaves the field out before boot has read the rows.
+func TestStatusFileCarriesTheRows(t *testing.T) {
+	var got map[string]any
+	data := statusJSON(boot.ProcessStatus{Phase: boot.PhaseRunning, Rows: []boot.RowStatus{
+		{ID: "store", State: boot.StateActive}, {ID: "user", State: boot.StatePending, WaitsFor: []string{"store"}}}})
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []any{map[string]any{"id": "store", "state": "ACTIVE"},
+		map[string]any{"id": "user", "state": "PENDING", "waitsFor": []any{"store"}}}
+	if !reflect.DeepEqual(got["rows"], want) {
+		t.Errorf("rows = %#v, want %#v", got["rows"], want)
+	}
+	got = nil
+	if err := json.Unmarshal(statusJSON(boot.ProcessStatus{Phase: boot.PhaseStarting}), &got); err != nil || got["rows"] != nil {
+		t.Errorf("rows before boot read them = %#v, %v", got["rows"], err)
+	}
+}
+
+// A server hands boot the streams of the process for cmdline, and neither a working
+// directory nor an environment (ADR-061 decision 13).
+func TestRunPassesTheStreamsAndNoEnviron(t *testing.T) {
+	h := home(t, "[]")
+	var got boot.RunOptions
+	stubBoot(t, func(_ context.Context, o boot.RunOptions) int { got = o; return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	e.Stdin = strings.NewReader("in")
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if got.Stdio != (boot.Stdio{In: e.Stdin, Out: e.Stdout, Err: e.Stderr}) || got.Dir != "" || got.Environ != nil {
+		t.Errorf("Stdio %+v, Dir %q, Environ %q", got.Stdio, got.Dir, got.Environ)
+	}
+	// The toolbox of a server reads the root of the file system and carries no Tools.
+	if got.Tools != nil || got.Files == nil || got.Command {
+		t.Errorf("Tools %v, Files %v, Command %v", got.Tools, got.Files, got.Command)
 	}
 }
 
@@ -322,8 +447,92 @@ func TestRunReplacesAStaleStatusBeforeBoot(t *testing.T) {
 	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	if seen != (Status{Phase: "starting", Profile: "p"}) {
+	if !reflect.DeepEqual(seen, Status{Phase: "starting", Profile: "p"}) {
 		t.Fatalf("status when boot starts %+v", seen)
+	}
+}
+
+// Only the site user enters run/ (ADR-047 decision 14), which the socket of
+// reload-socket relies on (ADR-062 decisions 4 and 16). The home of the test is made
+// through the operations library, which creates run/ with mode 0700 itself, so run/ is
+// removed first: Run creates it here.
+func TestRunCreatesTheRuntimeDirectoryWithMode0700(t *testing.T) {
+	h := home(t, "[]")
+	if err := os.RemoveAll(filepath.Join(h, "run")); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	fi, err := os.Stat(filepath.Join(h, "run"))
+	if err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("run/ = %v, %v; want mode 0700", fi.Mode(), err)
+	}
+}
+
+// A run/ that the S1 server created with mode 0755 is set to 0700 at start, and the
+// server says so, since reload-socket serves only from a directory of mode 0700 that
+// the site user owns (ADR-047 decision 14; ADR-062 decision 4).
+func TestRunNarrowsTheModeOfTheRuntimeDirectory(t *testing.T) {
+	h := home(t, "[]")
+	if err := os.Chmod(filepath.Join(h, "run"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if fi, err := os.Stat(filepath.Join(h, "run")); err != nil || fi.Mode().Perm() != 0o700 || !strings.Contains(stderr.String(), "0700") {
+		t.Errorf("run/ = %v, %v, stderr %q; want mode 0700 and a line that says so", fi.Mode(), err, stderr.String())
+	}
+}
+
+// A process.lock that the server cannot open, as one that a run as root left, says so
+// and names the file, and does not say that another process runs on the home.
+func TestRunNamesAProcessLockItCannotOpen(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens a file of mode 0000")
+	}
+	h := home(t, "[]")
+	if err := os.MkdirAll(filepath.Join(h, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h, "run", ProcessLock), nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	stubBoot(t, func(context.Context, boot.RunOptions) int { return boot.ExitOK })
+	e, stderr, _ := env("--profile", "p", "--home", h)
+	if code := Run(context.Background(), "aiops", e, distribution(t)); code != boot.ExitRefused || strings.Contains(stderr.String(), "another process") ||
+		!strings.Contains(stderr.String(), filepath.Join(h, "run", ProcessLock)) {
+		t.Errorf("exit %d, stderr %q; want 1 naming the file, and no other process", code, stderr.String())
+	}
+}
+
+// The client of reload-socket reads phase and profile of the status file through
+// reload.ProcessStatus and imports no package of boot or internal/ (ADR-062 decision
+// 8): every status this package writes carries both, with the values boot gave.
+func TestEachStatusDecodesIntoTheWireType(t *testing.T) {
+	for _, p := range []boot.Phase{boot.PhaseStarting, boot.PhaseRunning, boot.PhaseStopping, boot.PhaseStopped} {
+		b := statusJSON(boot.ProcessStatus{Phase: p, Profile: "dev", Role: "api", Ready: true, Exit: 3, Detail: "d"})
+		var fields map[string]any
+		var s reload.ProcessStatus
+		if err := json.Unmarshal(b, &fields); err != nil {
+			t.Fatal(err)
+		}
+		_, hasPhase := fields["phase"]
+		_, hasProfile := fields["profile"]
+		if err := json.Unmarshal(b, &s); err != nil || !hasPhase || !hasProfile || s != (reload.ProcessStatus{Phase: string(p), Profile: "dev"}) {
+			t.Errorf("%s: %s reads as %+v, %v", p, b, s, err)
+		}
+	}
+	if boot.PhaseStopped != reload.PhaseStopped {
+		t.Errorf("the stopped phase is %q here and %q on the wire", boot.PhaseStopped, reload.PhaseStopped)
+	}
+	if StatusFile != reload.StatusFile {
+		t.Errorf("status file %q, wire %q", StatusFile, reload.StatusFile)
 	}
 }
 

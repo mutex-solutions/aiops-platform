@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package fake
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	operations "github.com/mutex-solutions/aiops-platform/sdk/def/operations/v0"
+)
+
+// The artifact of the fake: it packs every plugin directory to the Artifact of its
+// config, keeps it in memory by layout and by spec, and records the key ids that
+// signed it. It writes no layout.
+
+// artifact is an artifact the fake packed: module is the path, the version and the sum
+// of the module of in-process code, as its module.json records them, the module line of
+// go.mod in the plugin directory, v<version> and an h1 sum of the files it read; empty
+// for none.
+type artifact struct {
+	in      operations.Inspected
+	signers []string
+	module  [3]string
+}
+
+// artifactAt returns the artifact at a layout or a spec, or a refusal.
+func (f *Fake) artifactAt(where string) (*artifact, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a, ok := f.artifacts[where]
+	if !ok {
+		return nil, refused("%s holds no artifact this fake packed", where)
+	}
+	return a, nil
+}
+
+func (s served) Pack(_ context.Context, r operations.PackRequest) (operations.Written, error) {
+	return do(s, "Pack", func() (operations.Written, error) {
+		if !filepath.IsAbs(r.Dir) || !filepath.IsAbs(r.Out) {
+			return operations.Written{}, usage("the plugin directory and the layout are absolute paths")
+		}
+		entries, _ := os.ReadDir(r.Out)
+		if _, err := s.f.artifactAt(r.Out); err == nil || len(entries) > 0 {
+			return operations.Written{}, refused("%s is not empty: a layout holds one artifact", r.Out)
+		}
+		if _, err := os.Stat(filepath.Join(r.Dir, "bundle.yaml")); err != nil {
+			return operations.Written{}, refused("every artifact carries a bundle: %v", err)
+		}
+		in, parts := s.f.cfg.Artifact, []string{} // the digest is of the files too: other content, another digest
+		// The id that plugin.yaml names, as boot's reader reads it.
+		if b, err := os.ReadFile(filepath.Join(r.Dir, "plugin.yaml")); err == nil {
+			for _, l := range strings.Split(string(b), "\n") {
+				if id, ok := strings.CutPrefix(l, "id: "); ok {
+					in.ID = id
+				}
+			}
+		}
+		_ = filepath.Walk(r.Dir, func(p string, _ os.FileInfo, _ error) error {
+			if b, err := os.ReadFile(p); err == nil {
+				parts = append(parts, strings.TrimPrefix(p, r.Dir), string(b))
+			}
+			return nil
+		})
+		in.Digest = digestOf(in.ID + "@" + in.Version + strings.Join(parts, "\x00"))
+		a := &artifact{in: in}
+		if b, err := os.ReadFile(filepath.Join(r.Dir, "go.mod")); err == nil {
+			for _, l := range strings.Split(string(b), "\n") {
+				if p, ok := strings.CutPrefix(strings.TrimSpace(l), "module "); ok {
+					sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+					a.module = [3]string{strings.Trim(strings.TrimSpace(p), `"`), "v" + in.Version, "h1:" + base64.StdEncoding.EncodeToString(sum[:])}
+				}
+			}
+		}
+		s.f.mu.Lock()
+		s.f.artifacts[r.Out] = a
+		s.f.mu.Unlock()
+		return operations.Written{Paths: []string{r.Out}}, nil
+	})
+}
+
+func (s served) Sign(_ context.Context, r operations.SignRequest) (operations.Written, error) {
+	return do(s, "Sign", func() (operations.Written, error) {
+		pw, err := password(r.Caller)
+		if err != nil {
+			return operations.Written{}, err
+		}
+		a, err := s.f.artifactAt(r.Out)
+		if err != nil {
+			return operations.Written{}, err
+		}
+		s.f.mu.Lock()
+		defer s.f.mu.Unlock()
+		k, ok := s.f.keys[r.Key]
+		if !ok || !k.private || k.password != pw {
+			return operations.Written{}, refused("%s is no private key this fake made, or the password is not its own", r.Key)
+		}
+		a.signers = append(a.signers, k.id)
+		return operations.Written{Paths: []string{r.Out}}, nil
+	})
+}
+
+func (s served) Push(_ context.Context, r operations.PushRequest) (operations.Pushed, error) {
+	return do(s, "Push", func() (operations.Pushed, error) {
+		a, err := s.f.artifactAt(r.Out)
+		if err != nil {
+			return operations.Pushed{}, err
+		}
+		repo := strings.TrimPrefix(r.Registry, "oci://")
+		spec := "oci://" + repo + "@" + a.in.Digest
+		s.f.mu.Lock()
+		s.f.artifacts[spec], s.f.artifacts["oci://"+repo+":"+a.in.Version] = a, a
+		s.f.mu.Unlock()
+		return operations.Pushed{Spec: spec}, nil
+	})
+}
+
+func (s served) Inspect(_ context.Context, r operations.SpecRequest) (operations.Inspected, error) {
+	return do(s, "Inspect", func() (operations.Inspected, error) {
+		a, err := s.f.artifactAt(r.Spec)
+		if err != nil {
+			return operations.Inspected{}, err
+		}
+		return a.in, nil
+	})
+}
+
+// Verify verifies the signature by the key ids that signed the artifact, against the
+// signers of the home that cover its id and runtimes; the fake runs no suite.
+func (s served) Verify(_ context.Context, r operations.SpecRequest) (operations.Verified, error) {
+	return do(s, "Verify", func() (operations.Verified, error) {
+		a, signer, err := s.f.signer(r.Home, r.Spec)
+		if err != nil {
+			return operations.Verified{}, err
+		}
+		return operations.Verified{Digest: a.in.Digest, Signer: signer, Steps: []operations.VerifyStep{{Name: "signature", Outcome: "pass"},
+			{Name: "attestation", Outcome: "pass"}, {Name: "suites", Outcome: "not-built", Reason: "the fake runs no suite"}}}, nil
+	})
+}
+
+// signer returns the artifact at spec and the first signer of the home at dir that
+// covers its id and runtimes and signed it.
+func (f *Fake) signer(dir, spec string) (*artifact, string, error) {
+	if err := homeOf(dir); err != nil {
+		return nil, "", err
+	}
+	a, err := f.artifactAt(spec)
+	if err != nil {
+		return nil, "", err
+	}
+	f.mu.Lock()
+	signers := f.home(dir).state.signers
+	f.mu.Unlock()
+	owner, _, _ := strings.Cut(a.in.ID, "/")
+	i := slices.IndexFunc(signers, func(sg operations.Signer) bool {
+		return slices.Contains(a.signers, sg.KeyID) && (slices.Contains(sg.IDs, a.in.ID) || slices.Contains(sg.IDs, owner+"/*")) &&
+			!slices.ContainsFunc(a.in.Runtimes, func(rt string) bool { return !slices.Contains(sg.Runtimes, rt) })
+	})
+	if i < 0 {
+		return nil, "", refused("check 5: no signer of the home that covers %s signed it", a.in.ID)
+	}
+	return a, signers[i].KeyID, nil
+}

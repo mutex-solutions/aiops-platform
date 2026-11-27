@@ -51,6 +51,12 @@ const (
 type parser struct {
 	file   string
 	server bool
+	// literal reads ${ as text: a manifest holds no reference (ADR-048 decision 3).
+	literal bool
+	// installed refuses a field of an inserted row other than id, plugin, roles, enabled
+	// and config, whatever its value: the bundle of an installed artifact (ADR-047
+	// decision 19).
+	installed bool
 }
 
 func (p *parser) err(n *yaml.Node, rule Rule, row, format string, a ...any) *Error {
@@ -133,7 +139,7 @@ func (p *parser) pairs(n *yaml.Node, row, what string) ([]pair, error) {
 		if k.ShortTag() == "!!merge" {
 			return nil, p.err(k, RuleAlias, row, "merge keys are not accepted")
 		}
-		if strings.Contains(k.Value, "${") {
+		if !p.literal && strings.Contains(k.Value, "${") {
 			return nil, p.err(k, RuleReference, row, "a reference cannot be a key")
 		}
 		if seen[k.Value] {
@@ -241,7 +247,7 @@ func decimal(s string) bool {
 
 // str builds a string Value, or a reference node when the string holds one.
 func (p *parser) str(n *yaml.Node, row string) (Value, error) {
-	if !strings.Contains(n.Value, "${") {
+	if p.literal || !strings.Contains(n.Value, "${") {
 		return Value{Kind: KindString, Str: n.Value}, nil
 	}
 	ref, ok := parseRef(n.Value)
@@ -528,6 +534,9 @@ func (p *parser) insertRow(n *yaml.Node, depth int) (ParsedRow, error) {
 	if b.id == nil || b.plugin == nil {
 		return ParsedRow{}, p.err(n, RuleType, row, "a row states id and plugin")
 	}
+	if p.installed && (b.required != nil || b.inject != nil || b.intercept != nil || b.isolate != nil || b.group != nil) {
+		return ParsedRow{}, p.err(n, RuleInstalled, row, "a row sets a field other than id, plugin, roles, enabled and config (ADR-047 decision 19)")
+	}
 	if !okID(*b.id, false) {
 		return ParsedRow{}, p.err(n, RuleSyntaxID, row, "id %q must be one name, with no \":\"", *b.id)
 	}
@@ -699,49 +708,85 @@ func (p *parser) item(n *yaml.Node) (Item, error) {
 	return Item{Line: n.Line, Patch: &pt}, nil
 }
 
-// parseProfile reads profile.yaml: {bundles: [name, ...]} in bundle order.
-func parseProfile(file string, data []byte) ([]string, error) {
+// ParseConfig reads data, the content of file, as the config of one row under the
+// rules of a layer (ADR-059 decision 6): one YAML document, a mapping, with the
+// layer parser's typing of plain scalars, its refusal of anchors, aliases, tags,
+// merge keys and duplicate keys, its references and its bounds. It returns the tree
+// the launcher hands the row (launch.Row.Config): nil, bool, int64, float64,
+// string, launch.Ref, []any and map[string]any. plugingen reads the row config of a
+// generated cycle test with it.
+func ParseConfig(file string, data []byte) (any, error) {
+	if len(data) > MaxFileBytes {
+		return nil, &Error{File: file, Rule: RuleLimit, Msg: "a config is larger than " + strconv.Itoa(MaxFileBytes) + " bytes"}
+	}
 	root, err := parseDocument(file, data)
 	if err != nil {
 		return nil, err
 	}
 	p := &parser{file: file}
-	prs, err := p.pairs(root, "", "profile.yaml")
+	v, err := p.value(root, "", 1)
 	if err != nil {
 		return nil, err
 	}
+	if v.Kind != KindMap {
+		return nil, p.err(root, RuleType, "", "config must be a mapping")
+	}
+	return plain(v), nil
+}
+
+// parseProfile reads profile.yaml: {bundles: [name, ...], minStability: <stability>},
+// the bundles in bundle order and minStability optional (ADR-060 decision 14).
+func parseProfile(file string, data []byte) ([]string, string, error) {
+	root, err := parseDocument(file, data)
+	if err != nil {
+		return nil, "", err
+	}
+	p := &parser{file: file}
+	prs, err := p.pairs(root, "", "profile.yaml")
+	if err != nil {
+		return nil, "", err
+	}
 	var bundles []string
-	found := false
+	found, min := false, ""
 	for _, pr := range prs {
+		if pr.key == "minStability" {
+			if min, err = p.text(pr.v, "", "minStability"); err == nil && rank(min) < 1 {
+				err = p.err(pr.v, RuleType, "", "minStability %q is not experimental, preview or ga", min)
+			}
+			if err != nil {
+				return nil, "", err
+			}
+			continue
+		}
 		if pr.key != "bundles" {
-			return nil, p.err(pr.k, RuleUnknownField, "", "unknown field %q in profile.yaml", pr.key)
+			return nil, "", p.err(pr.k, RuleUnknownField, "", "unknown field %q in profile.yaml", pr.key)
 		}
 		if err := p.guard(pr.v, ""); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if pr.v.Kind != yaml.SequenceNode {
-			return nil, p.err(pr.v, RuleType, "", "bundles must be a list")
+			return nil, "", p.err(pr.v, RuleType, "", "bundles must be a list")
 		}
 		found = true
 		seen := map[string]bool{}
 		for _, c := range pr.v.Content {
 			s, err := p.text(c, "", "bundle name")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			owner, name, two := strings.Cut(s, "/")
 			if !okIdent(owner) || two && !okIdent(name) {
-				return nil, p.err(c, RuleSyntaxID, "", "bundle name %q is not a name", s)
+				return nil, "", p.err(c, RuleSyntaxID, "", "bundle name %q is not a name", s)
 			}
 			if seen[s] {
-				return nil, p.err(c, RuleSyntaxID, "", "bundle %q is listed twice", s)
+				return nil, "", p.err(c, RuleSyntaxID, "", "bundle %q is listed twice", s)
 			}
 			seen[s] = true
 			bundles = append(bundles, s)
 		}
 	}
 	if !found {
-		return nil, p.err(root, RuleType, "", "profile.yaml states bundles")
+		return nil, "", p.err(root, RuleType, "", "profile.yaml states bundles")
 	}
-	return bundles, nil
+	return bundles, min, nil
 }
