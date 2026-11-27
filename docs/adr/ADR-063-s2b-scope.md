@@ -1847,11 +1847,10 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     container runtime of the host, and a CI job of its own starts it on a runner whose
     init is systemd and asserts what steps C2 and C3 assert of the fragment: the running
     digest, the user, the mounts and the network. The Helm entry waits for
-    `deploy/helm`. Compose is read and pinned first (decision 35). As the recommendation
-    states, if no job can run a systemd unit, the answer is Q13 (b) and not a rendered
-    text: the systemd unit then waits, with the Helm entry, for a step that can run it,
-    and `08:1292`, `02:313` and plugin record §11 name that step in the commit that
-    records it.
+    `deploy/helm`. Compose is read and pinned first (decision 35). The owner chose (a)
+    with no condition. A systemd unit that is rendered and only compared as text does
+    not meet this decision; if no job can run a systemd unit, the work stops on that
+    point and the owner is asked (decision 33).
 
 51. **The callback path and the remote listener path are built at S2b on a test
     definition** (Q14 (a)). S2b proves them on a test definition marked `callback` and a
