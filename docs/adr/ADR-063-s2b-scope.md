@@ -280,8 +280,8 @@ gaps:
     definitions only (`internal/vet/imports.go:199-202`), so the dial is in `apply`,
     which the proxy plugin supplies. The exported API of `sdk/plugin` changes, so
     `pluginApi` rises by a minor (ADR-060 decision 8). How a volatile change reaches a
-    remote instance is question Q12 (ADR-034:1829-1833). Note of 2026-11-27 at decision
-    49. Note of 2026-11-27: a `uses`
+    remote instance is question Q12 (ADR-034:1829-1833). The signature above is changed
+    by a note of 2026-11-27 at decision 49. Note of 2026-11-27: a `uses`
     entry whose key and major the same manifest lists in `registers` is inside the
     contribution set, so check 9 admits it and the `Inject` of the value may hold that
     registry key (ADR-048 decision 46). The entry gives the proxy no key that `registers`
@@ -1887,9 +1887,8 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     hand-off is stamped on the value that has the entry of `aiops/remote`, so
     `FromManifest` takes that defined value with the manifest and the `apply` function
     and returns a copy of it with the declarations of the manifest (ADR-034, point 18 of
-    that part), and `07:232` shows it. The note on decision 10 stands here, and decision
-    10 points to it, so that no line above this decision moves: other ADRs cite those
-    lines by number.
+    that part), and `07:232` shows it. The note on the signature of decision 10 stands
+    here, at decision 49, and decision 10 points to it.
 
 50. **S2b builds the compose fragment and the systemd unit, and runs both** (Q13 (a)).
     The compose fragment is a file of its own under the home that `plugin start` runs,

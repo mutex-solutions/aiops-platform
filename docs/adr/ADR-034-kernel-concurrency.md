@@ -3054,12 +3054,10 @@ through `plugin.Define`"; a note in the paragraph "Who writes" of G13 names
 `sdk/remotehost` as a committer in a plugin process; the status of this section and the
 basis of its line numbers are edited; and Q1 is marked answered. ADR-063 decision 49
 gains a dated note on what "the update" is. The dated note on the signature of ADR-063
-decision 10 stands in that same note, and decision 10 gains a pointer to it on its last
-line: a note written at decision 10 would move every later line of ADR-063, which
-ADR-061, ADR-020 and this section cite by number. `07:232` takes the defined value of
-`aiops/remote` as a parameter of `FromManifest`. Point 18 states that much of the
-signature and no more: the name and the place of that parameter in `07:232` are a
-sketch, as the line was before.
+decision 10 stands in that same note, at decision 49, and decision 10 gains a sentence
+that points to it. `07:232` takes the defined value of `aiops/remote` as a parameter of
+`FromManifest`. Point 18 states that much of the signature and no more: the name and
+the place of that parameter in `07:232` are a sketch, as the line was before.
 
 Lines that restate edited text were read. `07:29`, ADR-063 decisions 12 and 41 and the
 lines of ADR-044, ADR-048 and ADR-060 that name `FromManifest` do so without its
