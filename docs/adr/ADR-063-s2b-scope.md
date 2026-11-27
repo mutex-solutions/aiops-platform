@@ -2014,12 +2014,13 @@ Slack bundle, in `00:272`, `08:249` and plugin record §6, with the row `remote`
 section, `05:255` and the proxy rows that the one process holds in `02:196` (decision
 41); the stated exception in `07:50`, `07:527` and harness:217, with a dated note at
 ADR-054 decision 21, and the two upstream modules among the imports of the remote
-modules in `07:32` (decision 42); the proto written by hand and the adapter generated
-in `07:1199` (decisions 44 and 45); R2 at `07:60` and
-the module count in the builder paragraph of plugin record §11 (decision 43); the digest
-rule in `07:1160` and community:161 (decision 58); "stub remote plugins" in `07:1521`,
-`08:1244` and plugin record §13 (decision 64); the update rows of `07:1390` and plugin
-record §9 (decision 69); and the next free number in section 11 of
+modules in `07:32` (decision 42); the proto written by hand and the adapter generated in
+`07:1199` (decisions 44 and 45); the revocation by pin, written beside the words "the
+leader can revoke" in `02:215`, `02:336`, `07:1195` and `08:1292` (decision 55); R2 at
+`07:60` and the module count in the builder paragraph of plugin record §11 (decision
+43); the digest rule in `07:1160` and community:161 (decision 58); "stub remote plugins"
+in `07:1521`, `08:1244` and plugin record §13 (decision 64); the update rows of
+`07:1390` and plugin record §9 (decision 69); and the next free number in section 11 of
 `docs/design/delivery-bundle-2026-11.md`.
 
 Left to later commits, each named:
@@ -2028,10 +2029,13 @@ Left to later commits, each named:
   words "already carries the tenant binding" of plugin record §16, with the first
   message of the protocol (group 1 of decision 30);
 - the count of the launch keys, six, and of the provider-bound keys, in `00:212`,
-  `03:63`, `07:563`, `07:1367`, `08:86`, plugin record §5, row 44 of plugin record §15
-  and ADR-059 decision 35, with the commit that adds the key of decision 57 to the
-  launch definition, where the key gets its name; `00:246` and `07:564` take the name
-  there, and `dist/dist.yaml` its line;
+  `00:250`, `03:63`, `07:563`, `07:1367`, `08:86`, plugin record §5, row 44 of plugin
+  record §15 and ADR-059 decision 35, with the commit that adds the key of decision 57
+  to the launch definition, where the key gets its name; `00:246` and `07:564` take the
+  name there, and `dist/dist.yaml` its line. Until that commit these lines count the
+  launch definition as it stands, and `00:246` and `07:564` mark the new key "from
+  S2b". No count is marked in place before then: the answer Q20 (a) raises the count
+  of consumer-bound keys and states no other count;
 - the item of gRPC and Protocol Buffers in the table of ADR-054 decision 9 and the
   register entries of grpc-go and protobuf-go, with the S2b part of ADR-054 and the
   first import of either module (decisions 34 and 35);
@@ -2039,13 +2043,14 @@ Left to later commits, each named:
   that first uses its component, after the readings that decisions 45 and 52 require;
 - the directory `python/` in `08:1207` and in the tree of `08` §4, with the commit that
   creates it (decision 18);
-- the words "the leader can revoke" of `02:215`, `02:336`, `07:1195` and `08:1292`, and
-  the rows of ADR-041 at `00:777` and `08:1175`, with ADR-041, which writes how disable
-  and remove revoke where no leader exists (decision 34);
+- the words "the leader can revoke" of `02:215`, `02:336`, `07:1195` and `08:1292`,
+  which stand beside the sentence on the pinned key pair that each line gains with this
+  record, and the rows of ADR-041 at `00:777` and `08:1175`, with ADR-041, which writes
+  how disable and remove revoke where no leader exists (decision 34);
 - the counts of "three SDK modules" in the texts of ADR-020, ADR-044 and ADR-060 outside
   the decisions that carry a dated note, and the words "the `remote` proxy row" of
   ADR-060 decision 4, which stand as text of their date.
 
-`08:507`, `08:1292` and `02:313` are not edited: decisions 47 and 50 change no line of
-them. ADR-047, ADR-059 and ADR-062 are not edited: no chosen option names a line of
-them.
+`08:507` and `02:313` are not edited, and `08:1292` gains only the sentence of decision
+55: decisions 47 and 50 change no line of the three. ADR-047, ADR-059 and ADR-062 are
+not edited: no chosen option names a line of them.
