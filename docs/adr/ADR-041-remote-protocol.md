@@ -901,7 +901,15 @@ list against the code and the texts at `bbfd839` shows these facts:
     callback envelope of decision 13 and no client of any definition: the client of the
     test definition is test code under `python/` and ships in no wheel (ADR-063
     decision 51). A Python plugin is always remote (`07:1203`). The hand-written Python
-    stays under the cap of ADR-063 decision 36.
+    stays under the cap of ADR-063 decision 36. Note of 2026-11-27, with the owner's
+    answers on the S2b part of ADR-048: the generated modules are those of three kinds
+    of definition, one marked `contrib`, one marked `callback` and one that owns a hook
+    marked remote, one module per definition and major (ADR-048 decision 31; `07:1203`
+    and `07:1207`; ADR-063 decisions 13 and 18, by notes of that date). The wheel of S2b
+    still holds the modules of `echoers` and `stampers` alone, which own no hook and
+    are no callback. The module of the test definition, which is marked `callback` and
+    owns a hook marked remote, is generated into the tests of `python/` and is in no
+    built package (ADR-048 decision 31).
 30. **Interpreters.** The lowest interpreter is CPython 3.12, and at S2b the supported
     set is CPython 3.12 on Linux x86-64 with glibc: the one interpreter and platform
     whose wheels ADR-063 decision 35 read and that its decision 27 runs. The standard
@@ -2130,6 +2138,9 @@ Added on 2026-11-27, after the records of that date were read against each other
 question Q21, the range of the questions where the status and this section name it, and
 a dated note at ADR-044 decision 45 that points to the question. No line of decision 28
 or 45, of ADR-062 decision 14, of `07` or of the harness record is edited for it.
+Added with it: the dated note at decision 29 on the three kinds of definition that get
+a generated module, which the record of the owner's answers on the S2b part of ADR-048
+left to this ADR.
 
 Left, each to the commit that records the owner's answers to Q15 to Q21: the revised
 text of decisions 8, 16, 21, 24, 28, 31, 44 and 45 as the answers have it; the note at
