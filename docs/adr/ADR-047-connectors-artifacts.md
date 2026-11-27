@@ -4,9 +4,14 @@
   answered all seven questions on the same date with the recommended option of each; the
   section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
   ADR-047 stays for S8a start, as the scope below says.
-- S2b part: **proposed 2026-11-27, awaiting the project owner.** The section "S2b part"
-  at the end of this file holds it, with decisions 23 to 41 and questions Q8 to Q14
-  (ADR-063 decisions 2 and 34). Until the owner accepts it, nothing above changes.
+- S2b part: **answers recorded 2026-11-27; accepted when the rows of decision 39 have
+  recorded results.** The section "S2b part" at the end of this file holds it, with
+  decisions 23 to 41 and questions Q8 to Q14 (ADR-063 decisions 2 and 34). The owner
+  answered the seven questions on 2026-11-27 with the recommended option of each, Q11 on
+  its condition; the section "Owner answers of 2026-11-27" records them as decisions 42
+  to 48. By decision 48 the part stays proposed until each row of decision 39 has a
+  recorded result. Until the owner accepts it, nothing above changes but the two dated
+  notes that the answers to Q8 and Q9 add, at decisions 1 and 14.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -169,7 +174,11 @@ gaps:
    registry, and refuse a layout whose `index.json` does not name exactly one manifest of
    `artifactType` `application/vnd.aiops.plugin.v1`. The layout is written and read with
    the store of `oras-go` (decision 4), package `content/oci`, which implements that
-   specification.
+   specification. Note of 2026-11-27 (the owner's answer to question Q8, decision 42):
+   install and verify of remote code take a registry spec. Each refuses a local-path
+   spec of remote code, names the reason and `plugin push`, and writes nothing;
+   `inspect` and `gate --against` read a local path of remote code as they read any
+   other.
 
 2. **What each command fetches and verifies.** Every blob is checked against the digest of
    its descriptor before it is used. A command that verifies the signature over the image
@@ -486,7 +495,13 @@ gaps:
     `run/process.lock`, and names a lock file it cannot open instead of calling it held
     by another process. A `run/` of another mode, as the S1 server created it with mode
     0755, is set to 0700 at the start of the server and at a write of `aiopsctl`, each of
-    which says so (upgrade note of the S2a report).
+    which says so (upgrade note of the S2a report). Note of 2026-11-27 (the owner's
+    answer to question Q9, decision 43): one directory is a stated exception of the mode
+    0600. The directory of an instance of remote code, `remote/instances/<plugin id>/`,
+    has the mode 0755 and its files the mode 0644, so that the user of a unit reads the
+    one directory the unit binds; the home and the three directories above that one are
+    of mode 0700, which `aiopsctl` checks and sets at every install of remote code and
+    every `plugin start` (decision 30).
 
 15. **The container form.** A `kernel` container gets the home bound at the same path it
     has on the host, read-only; `run/` bound over it at the same path, read-write; the
@@ -818,15 +833,19 @@ edited for this point.
 
 ## S2b part: the artifact of remote code, its rows of the home and its network
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** This part is an addition
-  to ADR-047, written as ADR-063 decision 2 has the S2b parts of accepted ADRs written,
-  and it is accepted before the code it governs merges into `main`. Seven questions are
-  open, Q8 to Q14. Decisions 1 to 22 stand as accepted; where a decision of this part
+- Status: **answers recorded 2026-11-27; accepted when the rows of decision 39 have
+  recorded results.** This part is an addition to ADR-047, written as ADR-063 decision 2
+  has the S2b parts of accepted ADRs written, and it is accepted before the code it
+  governs merges into `main`. The owner answered the seven questions, Q8 to Q14, on
+  2026-11-27, each with its recommended option, Q11 on its condition; the section "Owner
+  answers of 2026-11-27" at the end of this part records the answers as decisions 42 to
+  48. By decision 48 the part stays proposed until each row of decision 39 has a
+  recorded result. Decisions 1 to 22 stand as accepted; where a decision of this part
   adds to one of them, it names it.
   - No behaviour of a container runtime was run for this part, and the project pins no
     container runtime yet. Decision 39 lists what was read, at which version, and what
     a run has to show; question Q14 asks whether the part is accepted before those
-    runs.
+    runs, and decision 48 holds the answer: it is not.
   - Values that no written line gives are proposed here, and the owner accepts them
     with the part: the depth of the SBOM of remote code (decision 26); the port 7443
     (decision 29); the path `/aiops/identity`, the numeric user 65532 and the absence
@@ -1615,7 +1634,11 @@ to 22 and the code at `bbfd839` leaves ten gaps:
 
 ### Edits on acceptance of the S2b part
 
-Made in the commit that records the owner's answers:
+Made in the commit that marks this part accepted, which by decision 48 follows the
+recorded results of decision 39. The lines that the chosen option of a question names
+are edited before that, in the commit that records the owner's answers; the section
+"Owner answers of 2026-11-27" of this part lists what that commit edits and what it
+leaves:
 
 - This file: the status of this part; dated notes that name the decisions of this part
   at decision 1 (the layer of decision 23, and the answer to question Q13), decision 2
@@ -1686,6 +1709,7 @@ throwaway home, with no registry.
   narrowed lines and a repository for `plugin smoke`, which the S2b part of ADR-061 has
   to take up before either part is accepted. Needed before `plugin install` of remote
   code and `plugin smoke` of remote code merge.
+- **Answered 2026-11-27: (a)**, decision 42.
 
 **Q9. How does the user of a unit read the one directory it binds?** Decision 14 gives
 every file of the home the mode 0600 and the site user as its owner, and `aiopsctl`
@@ -1731,6 +1755,7 @@ are of mode 0700, owned by the site user and checked at install and at `plugin s
   ADR-041, as proposed, recommends (b) in its own question on the point; the two texts
   are made one before either goes to the owner, who answers once. Needed before the
   unit and `plugin install` of remote code merge.
+- **Answered 2026-11-27: (a)**, decision 43.
 
 **Q10. What does `plugin start` do for a kernel that runs as a binary on the host?**
 ADR-063 decision 27 leaves the point here. The network of an instance has no route out,
@@ -1771,6 +1796,7 @@ the remote-plugin container at S2b.
   of the network that was read in a source, no address of the host, for a rule that
   nobody has read. The owner decides, because `02:295` draws the host form. Needed
   before `plugin start` merges.
+- **Answered 2026-11-27: (a)**, decision 44.
 
 **Q11. How does a kernel container that started with no network join the network of an
 instance?** ADR-063 decision 27: "The kernel container starts with no network, as at
@@ -1798,6 +1824,7 @@ start the kernel container again.
   decision 39 is run on the pinned runtime before `plugin start` merges. If the run
   fails, (b) is the other way and the owner is asked again with the two lines (ADR-063
   decision 33). Needed before `plugin start` merges.
+- **Answered 2026-11-27: (a), on its condition**, decision 45.
 
 **Q12. How is the name of a unit formed from a plugin id that may be too long for it?**
 The unit name is the host of the instance on its network (decision 31), so it is one DNS
@@ -1822,6 +1849,7 @@ of the items that has to be right before plugins are published (`08:680`).
   and a bound on published ids is not introduced by the length of a host name. The cost
   is a name that is longer than it has to be for a short id. Needed before the unit
   renderer merges.
+- **Answered 2026-11-27: (b)**, decision 46.
 
 **Q13. Does `index.json` name the plugin image, and does `plugin push` tag it?** ADR-063
 decision 61: `plugin pack` "writes the image beside the artifact as an OCI layout", and
@@ -1848,6 +1876,7 @@ decision 1 that have no subject, so it reads a layout whose index also names an 
 - Recommended: (a). It is the reading of "beside the artifact" that an OCI tool
   understands, and it costs one descriptor and one tag. Needed before `plugin pack` of
   remote code merges.
+- **Answered 2026-11-27: (a)**, decision 47.
 
 **Q14. Is this part accepted before the runs of decision 39?** The decisions of this
 part rest on ten behaviours of a container runtime. Four were read in the source or the
@@ -1866,3 +1895,140 @@ owner said on 2026-11-27 that an isolated sandbox can be provided for this work.
   question Q11, the runs are small, and a failure found after acceptance reopens an
   accepted decision and the code built on it. The owner decides, because (a) waits for an
   environment that only the owner can provide. Needed before this part is accepted.
+- **Answered 2026-11-27: (a)**, decision 48.
+
+### Owner answers of 2026-11-27
+
+The project owner answered every question of the section "Questions for the owner on the
+S2b part" on 2026-11-27, each with its recommended option, Q11 on its condition. By the
+answer to Q14 the part is not accepted on that date: it stays proposed until each row of
+decision 39 has a recorded result (decision 48). Each decision below names the question
+it answers. Where a decision of this part leaves a point to a question, the decision
+here settles it.
+
+42. **Remote code runs from a registry only** (Q8 (a)). `plugin install` and `plugin
+    verify` of remote code refuse a local-path spec: each names the reason and `plugin
+    push`, and writes nothing. `inspect` and `gate --against`, which fetch no image, read
+    a local path of remote code as they read any other. `plugin smoke` of remote code
+    pushes its throwaway artifact to a repository that the author names, in a form that
+    the S2b part of ADR-061 fixes. Two written lines are narrowed for one kind of
+    artifact: decision 1 and `07:1864` gain "install and verify of remote code take a
+    registry spec", and `07:1583` gains "and, for `remote`, a repository" beside the
+    container runtime. This settles the last point of decision 25 and the local-path
+    spec of decision 31.
+
+43. **The directory of an instance has the mode 0755 and its files the mode 0644** (Q9
+    (a)), as a stated exception of decision 14. Inside the container the bind of
+    `remote/instances/<plugin id>/` is readable to whatever user the unit names, under
+    every user mapping that decision 14 admits, and install needs to know nothing of the
+    runtime. On the host the guard is not the mode of the key: it is the three
+    directories of mode 0700 above it, which `aiopsctl` checks and sets at every install
+    of remote code and every `plugin start` (decision 30). Every other file of the home
+    is guarded by its own mode 0600 as well; this one is not. The cost stands as the
+    option states it: a copy that keeps the modes and lands outside a closed directory,
+    as an archive, a backup of `remote/` or `cp -a`, exposes the key to every user who
+    reads the copy, and so does whatever opens the three directories between two
+    commands of `aiopsctl`. The user of a unit stays the pair `65532:65532` of decision
+    30, and its second number is not the group of the site user. ADR-041 takes this
+    answer for the directory of an instance (decision 40), and row 10 of decision 39 is
+    run under it.
+
+44. **At S2b a unit's instance is reached by a kernel container only** (Q10 (a)), on the
+    compose target and on the systemd target alike: the systemd unit of ADR-063 decision
+    50 is built and run, and what dials its instance is a kernel container that `plugin
+    start` attached (decision 33). For a kernel on the host `plugin start` does what
+    decision 33 says where it finds no kernel container, and says that a kernel on the
+    host does not reach the network of a unit. The host form is an addition to this ADR,
+    due with `deploy/compose` at S7 (ADR-063, Context) and before the first community
+    release, with a mechanism shown on a pinned runtime to keep point 2 of decision 32:
+    the host dials the instance, and the instance reaches no listener of the host. This
+    defers part of a written view. Every line that draws or words the host form gains
+    "for a kernel that runs as a container; for a kernel on the host from S7": `02:295`,
+    `02:313`, `02:336`, `07:1854` and `08:1293`. This settles decision 34.
+
+45. **`plugin start` detaches the kernel container from the no-network mode, once, and
+    then attaches it to the network of the instance** (Q11 (a), on its condition).
+    ADR-063 decision 27 and the container form of decision 15 stand as written: the
+    container starts with no network, and from the first `plugin start` its only
+    networks are those of instances. The condition: row 6 of decision 39 is run on the
+    pinned runtime before `plugin start` merges. If the run fails, option (b) of Q11 is
+    the other way, and the owner is asked again with the two lines it changes, ADR-063
+    decision 27 and decision 15 (ADR-063 decision 33). This settles step 4 of `plugin
+    start` in decision 33.
+
+46. **The name of a unit is one derived form for every id** (Q12 (b)): `remote-plugin-`,
+    then `<owner>--<name>` cut to its first 32 bytes with any hyphen at its end removed,
+    then `-` and the first 16 hexadecimal digits of the SHA-256 of the plugin id; at
+    most 63 bytes. Every id that the grammar admits installs, and no bound on the ids of
+    remote code enters `00:657` or the S2b part of ADR-048. The name is a function of
+    the id alone, an operator reads the start of the id in it, and install refuses an id
+    whose unit name another installed id of the site already has, so two ids never share
+    a unit. No written line changes. This settles the unit name of decision 31.
+
+47. **`index.json` names the plugin image, and `plugin push` tags it** (Q13 (a)).
+    `index.json` names the image manifest beside the artifact's manifest, with
+    `org.opencontainers.image.ref.name` set to `image-` and the 64 hexadecimal digits of
+    its digest, and `plugin push` pushes the image under that tag. A tool that copies a
+    layout or a repository by its index or its tags then copies the image with the
+    artifact, and a registry that collects untagged manifests keeps it. The rule of
+    decision 1 stands as the code reads it: exactly one manifest of the `artifactType`
+    `application/vnd.aiops.plugin.v1`. No unit and no command of `aiopsctl` reads the
+    tag: a unit names the image by digest (ADR-063 decision 25). This settles the points
+    that decisions 24, 25 and 31 leave to Q13.
+
+48. **This part stays proposed until each row of decision 39 has a recorded result** (Q14
+    (a)). The programs are pinned, each row is run once in an isolated environment, and
+    the table of decision 39 gains the version and the result. A row that fails is
+    settled, by its last column or by a question, before the owner accepts. The
+    recommendations of Q8, Q10 and Q11, which decisions 42, 44 and 45 record as
+    answered, are then read against results.
+
+**Edits made with this record.** The commit that records the answers makes the edits
+that the chosen options name, and no line of `00` among them: the two dated notes in
+this file, at decision 1 (decision 42) and at decision 14 (decision 43); `07:1583` and
+`07:1864` (decision 42); and `02:295`, `02:313`, `02:336`, `07:1854` and `08:1293`
+(decision 44). Lines that restate an edited one are edited with it: the spec forms of
+`02:205`, of `01:222` and `01:306` (`01` is the file of `docs/architecture/` with that
+number, at the same commit) and of plugin record §11, which restate `07:1864`; what
+smoke needs in the row `Smoke` of `07:1537` and in plugin record §14, which restate
+`07:1583`; and the start of a remote instance per target in plugin record §11, which
+restates `08:1293`. `00:305` and `01:279` name the container runtime as the condition
+on which smoke is run and do not list what smoke needs, so they stand. The figure of
+`02` §4.2 is not redrawn: its dashed dial to a unit names no form of the kernel. An
+option the owner did not choose edits nothing.
+
+Left to later commits, each named:
+
+- the commit that marks this part accepted, once each row of decision 39 has a recorded
+  result (decision 48): every edit of the section "Edits on acceptance of the S2b part"
+  that no chosen option names. In this file those are the dated notes at decisions 1
+  (the layer of decision 23, and decision 47), 2, 10, 11, 13 and 15, and at decision 14
+  the closed directories of decision 30. Elsewhere they are `07:1850`, `07:1865` and
+  `08:393`; in `07:1854`, `08:1293` and `02:313` the paths under `remote/units/`, the
+  name `sidecars.json`, root's copy of the systemd unit and `plugin start` on the
+  systemd target; `08:432` and `02:316`; and the row of ADR-047 in the ADR table of
+  `08` §3;
+- the commits that record the runs of decision 39: the version and the result of each
+  row in its table, and for row 6 the condition of decision 45;
+- the commits that record the owner's answers on ADR-041, ADR-048, ADR-020 and ADR-061:
+  what decision 40 asks of each, in the text of that ADR. As proposed on 2026-11-27,
+  four of those texts differ from the answers above, and this record edits none of
+  them:
+  - ADR-041 decision 24 and option (a) of its question Q5, which it recommends, give
+    the instance's directory the mode 0750, its files the mode 0640 and the unit the
+    site user's group. That is option (b) of Q9 here, and decision 43 records (a), the
+    modes 0755 and 0644 with no group of the host. Decision 40 has ADR-041 take the
+    answer to Q9, and ADR-041 has this part take the modes of its decision 24. Where
+    the answer recorded on ADR-041 differs from decision 43, the owner is asked which
+    holds before either part is accepted;
+  - the S2b part of ADR-020 has `plugin verify` read the image of a local-path spec
+    from the layout, and decision 42 has the command refuse such a spec of remote code;
+  - the S2b part of ADR-061 has `plugin smoke` of remote code pack and install on a
+    throwaway home, with no registry, and lists as open what `plugin verify` of remote
+    code does with a local-path spec; decision 42 gives smoke a repository, whose form
+    that part fixes;
+  - the S2b part of ADR-048 asks this part for a unit name that is an injective
+    function of the id. The name of decision 46 is a function of the id that two ids
+    can share, and install refuses the second of them;
+- the commit that builds the clause in the one gate text (ADR-060 decision 16): `08:506`,
+  as the section "Edits on acceptance of the S2b part" says.

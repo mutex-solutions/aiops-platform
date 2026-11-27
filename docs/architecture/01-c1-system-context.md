@@ -219,7 +219,7 @@ System context of the `self-host-full` profile, on which leg A of the first comm
 | `ext-mcp-server` | Only where a connector pack with `tool-mcp` rows is installed (H21) | As `self-host-full` |
 | `ext-customer-estate` | As §4.3 | As §4.3 |
 | `ext-cloud-apis` | Absent (`kek-local-file`) | Absent |
-| `ext-artifact-registry` | A registry the site chooses, one the customer runs included (§7) | Optional: a plugin can be installed from a local path (§7) |
+| `ext-artifact-registry` | A registry the site chooses, one the customer runs included (§7) | Optional: a plugin can be installed from a local path (§7), remote code excepted (ADR-047 decision 42) |
 | `ext-plugin-index` | Optional, from S6a: only where the operator configures an index (§7) | As `self-host-full` |
 | Inside the box | Same rows as hosted, single tenant, in-process executors, monolithic backends; one process at the first community release, and several replicas from S4b (D §6.1). A first install runs no harness container and no on-call container (D §6.3) | The same compose as `self-host-full` (PostgreSQL, Envoy, SeaweedFS, the backends), single replicas |
 
@@ -303,7 +303,7 @@ Five notes on these relationships:
 | Unsigned plugins | Never: `allowUnsigned` is empty and the gate denies exemptions (D §6.1) | Only the ids the site lists in `trust.yaml` | As self-host |
 | Plugin manager | With cohort update, quarantine and exemptions by version, from S6b | On the profile files, from S6a | As self-host |
 | `person-platform-op` | Provider staff. From S4b a tenant overlay can then switch a `scope: tenant` row on or off for that tenant (D §6.1) | The customer's platform team | The contributor |
-| `ext-artifact-registry` | Any the publisher or the provider chooses | Any, one the customer runs included | Optional; a local path is a valid spec |
+| `ext-artifact-registry` | Any the publisher or the provider chooses | Any, one the customer runs included | Optional; a local path is a valid spec, except to install or verify remote code (ADR-047 decision 42) |
 | `ext-plugin-index` | Optional | Optional: the project index, a private one or none | As self-host |
 
 ### 7.6 Where a plugin lives, and the way back into the project
