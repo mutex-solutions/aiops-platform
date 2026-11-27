@@ -2013,7 +2013,9 @@ Lines that restate edited text are edited with them: the S2b builds of `00:573` 
 Slack bundle, in `00:272`, `08:249` and plugin record §6, with the row `remote` of that
 section, `05:255` and the proxy rows that the one process holds in `02:196` (decision
 41); the stated exception in `07:50`, `07:527` and harness:217, with a dated note at
-ADR-054 decision 21 (decision 42); R2 at `07:60` and
+ADR-054 decision 21, and the two upstream modules among the imports of the remote
+modules in `07:32` (decision 42); the proto written by hand and the adapter generated
+in `07:1199` (decisions 44 and 45); R2 at `07:60` and
 the module count in the builder paragraph of plugin record §11 (decision 43); the digest
 rule in `07:1160` and community:161 (decision 58); "stub remote plugins" in `07:1521`,
 `08:1244` and plugin record §13 (decision 64); the update rows of `07:1390` and plugin
