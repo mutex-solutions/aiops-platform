@@ -360,8 +360,7 @@ gaps:
       `dist build` refuses a proxy URL (ADR-044 decision 7).
     - Note of 2026-11-27: from S2b the SDK modules are five, with the nested modules
       `sdk/remote` and `sdk/remotehost` (ADR-063 decision 43). Each new module gets a
-      served `go.mod` copy under the same test, and a release gives the five one
-      version (ADR-063 decision 7).
+      served `go.mod` copy under the same test (ADR-063 decision 7).
 22. **The builder** (ADR-044) is a root-module package compiled into `aiopsctl`, run with
     a local toolchain or through the builder image, whose definition lives under `dist/`
     (`08:402`; `08:1201`, assumption 3). It takes the four fields of the site's
