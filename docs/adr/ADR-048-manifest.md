@@ -752,77 +752,108 @@ that updates that table. An option the owner did not choose edits nothing.
 ## 2026-11-27 proposed addition: the S2b part
 
 - Status: **proposed 2026-11-27, awaiting the project owner.** Nothing in this addition is
-  in force, and the S2a part above stands as accepted. The addition changes no line of
-  `00-decisions.md` by itself: where an answer would change one, the question names the
-  line, and `00` is edited in the commit that records the answer (`08:999`).
-- Scope: the S2b part of ADR-048 (`08:1182`): the Python parts that decision 20 left to
-  S2b and the points that ADR-063 decision 34 lists for this ADR. It is a dated addition
-  to this ADR, proposed before the code it governs and accepted before that code merges,
-  and it keeps every written requirement it touches (ADR-063 decision 2). The code it
-  governs is `aiops-sdk manifest` and the Python template, the `remoteProtocol` output
-  of `plugingen`, the contribution-set clause of gate check 9 and the grammar check of
-  the unit renderer. The S6a part, index format 1.0, stays open.
-- Citations: `00`, `07` and `08` are the files of `docs/architecture/` with those
-  numbers, and in this addition `07:148` is line 148 of `07` at commit `bbfd839`. A path
-  with a line, as `boot/manifest.go:188`, is a file of the repository at the same
-  commit. The S2a part above cites `8e1f7b9`: `07:129`, `:137` and `:143` there are
-  `07:134`, `:142` and `:148` here, `07:1201` and `:1567` there are `07:1208` and
-  `:1574` here, and `08:389`, `:497` and `:505` there are `08:391`, `:499` and `:507`
-  here. ADR-063 cites `50665fa`: the lines of `00` and `07` cited here did not move
-  since, and `08:1263` there is `08:1264` here. A line of this file is cited as
-  `ADR-048:433`, as ADR-063 cites it; the addition is appended, so no line above it
-  moves. "community" is `docs/design/community-first-2026-11.md`, and the plugin record,
-  `docs/design/plugin-system-2026-11.md`, is cited by section. The decisions continue
-  the numbering of this ADR from 25, and the questions from Q5.
+  in force, and the S2a part above stands as accepted. The addition changes no decision of
+  `00-decisions.md` by itself: where an answer would change a line of `00`, the question
+  names the line, and `00` is edited in the commit that records the answer (`08:999`). The
+  same commit records the S2b part in the row of this ADR at `00:786`.
+- Scope: the S2b part of ADR-048. Decision 20 left the Python parts to S2b, ADR-063
+  decision 2 has each S2b part written as a dated addition to its ADR, and ADR-063
+  decision 34 lists what this one settles. The rows of this ADR at `00:786` and `08:1182`
+  name an S2a part and an S6a part and no S2b part, and both gain it on acceptance
+  (Consequences). The addition is proposed before the code it governs and accepted before
+  that code merges, and it keeps every written requirement it touches (ADR-063 decision
+  2). The code it governs is `aiops-sdk manifest` and the Python template, the Python
+  output of the adapter generator as far as decision 31 binds it, the `remoteProtocol`
+  output of `plugingen`, the contribution-set clause of gate check 9 and the unit renderer
+  as far as decisions 28 to 30 bind it. The S6a part, index format 1.0, stays open.
+- Citations: `00`, `07` and `08` are the files of `docs/architecture/` with those numbers,
+  and in this addition `07:148` is line 148 of `07` at commit `bbfd839`. A path with a
+  line, as `boot/manifest.go:188`, is a file of the repository at the same commit. The S2a
+  part above cites `8e1f7b9`: `07:129`, `:137` and `:143` there are `07:134`, `:142` and
+  `:148` here, `07:1201` and `:1567` there are `07:1208` and `:1574` here, and `08:389`,
+  `:497` and `:505` there are `08:391`, `:499` and `:507` here. ADR-063 cites `50665fa`:
+  the lines of `00` and `07` cited here did not move since, and `08:1263` there is
+  `08:1264` here. A line of this file is cited as `ADR-048:433`, as ADR-063 cites it; the
+  addition is appended, so no line above it moves. "community" is
+  `docs/design/community-first-2026-11.md`, and the plugin record,
+  `docs/design/plugin-system-2026-11.md`, is cited by section. RFC 1035 is cited by
+  section. The decisions continue the numbering of this ADR from 25, and the questions
+  from Q5. This addition states no licence fact: no licence was read for it, and decision
+  26 names what is still to be read.
 
 ### Context of the S2b part
 
-Decision 20 left the Python parts to S2b, and ADR-063 decision 34 lists what this
-addition settles: every `plugin.toml` key; whether `plugin.yaml` carries `entrypoint`,
-with the closed grammar of that field and of the id as a deployment unit takes them
-(ADR-063 decision 25); how `@contributes` names a key; where `configSchema`, `uses` and
-the hook stages come from in Python, and which library, if any, derives the schema; the
-constant of spoken majors that `plugingen` reads; what a manifest that lists `inproc`
-and `remote` packs and installs; and which fields the contribution-set clause of check 9
-reads beyond those of ADR-048:433.
+Decision 20 left the Python parts to S2b, and ADR-063 decision 34 lists what this addition
+settles: every `plugin.toml` key; whether `plugin.yaml` carries `entrypoint`, with the
+closed grammar of that field and of the id as a deployment unit takes them (ADR-063
+decision 25); how `@contributes` names a key; where `configSchema`, `uses` and the hook
+stages come from in Python, and which library, if any, derives the schema; the constant of
+spoken majors that `plugingen` reads; what a manifest that lists `inproc` and `remote`
+packs and installs; and which fields the contribution-set clause of check 9 reads beyond
+those of ADR-048:433.
 
 Reading the sources against each other and against the code at `bbfd839` shows:
 
 - **What S2a built.** The reader takes `runtimes: [remote]` and asks for
-  `requires.remoteProtocol` exactly then, with at least one major
-  (`boot/manifest.go:188`, `:499-518`; decision 12). `plugin check`, `plugin pack` and
-  `plugin install` refuse `remote`
-  (`plugins/operations/internal/operations/author.go:248-249`, `artifact.go:90-91`,
-  `install.go:122-123`). No generator writes `remoteProtocol`, and `plugin.Generate`
-  writes `pluginApi` for every value (`sdk/plugin/manifest.go:154`).
+  `requires.remoteProtocol` exactly then, with at least one major (`boot/manifest.go:188`,
+  `:499-518`; decision 12). `plugin check`, `plugin pack` and `plugin install` refuse
+  `remote` (`plugins/operations/internal/operations/author.go:248-249`,
+  `artifact.go:90-91`, `install.go:122-123`). No generator writes `remoteProtocol`, and
+  `plugin.Generate` writes `pluginApi` for every value (`sdk/plugin/manifest.go:154`).
 - **`entrypoint`.** It "is what `aiopsctl plugin check` and the deployment unit start"
-  (`07:148`), and the sketch writes it as one string (`07:160`). `00:207` lists the
-  hand-written fields of `plugin.yaml` without it, and decision 9 reads that list as
-  closed. An artifact carries `plugin.yaml` and no `plugin.toml` (`08:393`), and install
-  renders the unit from the artifact with three inputs, the third being the
+  (`07:148`), and the sketch writes it as one string (`07:160`). Plugin record §14 has
+  `aiopsctl` start the plugin "as a local process from the `entrypoint` of `plugin.toml`".
+  `00:207` lists the hand-written fields of `plugin.yaml` without it, and decision 9 reads
+  that list as closed. An artifact carries `plugin.yaml` and no `plugin.toml` (`08:393`),
+  and install renders the unit from the artifact with three inputs, the third being the
   `entrypoint` "if the S2b part of ADR-048 keeps one in `plugin.yaml`" (ADR-063 decision
   25). `aiopsctl` parses no Python (ADR-063 decision 17) and links no reader of TOML.
+- **Two starts of one string.** Step 4 of `plugin check` starts the entrypoint as a local
+  process on the author's machine, with no container runtime, in every language
+  (`07:1570`, `:1577`; ADR-063 decision 17; ADR-063 decision 54, reading 5). The unit
+  starts it inside the plugin's image, and the image of a remote Go plugin is one static
+  binary on no base layer (ADR-063 decisions 19 and 25). No line says how the first word
+  is found in either place, in which directory either process starts, or whether the
+  unit's words replace the command that the image configures.
+- **What reaches a unit.** Nothing of the artifact reaches the unit but its three inputs:
+  no mount, no variable of the environment, no port, no user, no capability and no network
+  name (ADR-063 decision 25). The systemd form runs the image through the container
+  runtime of the host (ADR-063 decision 50), whose command line takes options of its own.
 - **The declarations of a Python plugin.** `aiops-sdk manifest` "reads `plugin.toml` and
-  the decorators" (`07:79`). The decorators name a definition, and a hook with a stage
-  (`07:1208-1209`). No part of the SDK (`07:1205-1213`) names a callback that a
+  the decorators" (`07:79`). The decorators name a definition, and a hook with a stage,
+  and are written `@contributes(definition)` and `@listens(hook, stage)` in `07:1208-1209`
+  and in plugin record §4. No part of the SDK (`07:1205-1213`) names a callback that a
   contribution calls or a config type, while the sketch reads a secret through the call
   context (`07:1227`) and `configSchema` is "derived from the config type" (`07:142`).
-  Nothing says which Python module holds the decorators.
+  ADR-063 decision 4 admits no departure from the plugin record without the owner's word.
+- **The objects that a declaration can name.** The adapter generator writes the Python
+  module of each definition marked `contrib` (ADR-063 decisions 13 and 18; `07:1203`,
+  `:1207`). A callback belongs to a definition marked `callback`, and a remote hook may
+  belong to any definition. At `bbfd839` every `definition.yaml` under `sdk/def` says
+  `remote: "no"`, for the definition and for each of its hooks; S2b marks the two toy
+  registries `contrib` (ADR-063 decision 14), neither of which owns a hook, and proves the
+  callback path and the remote listener path on one test definition of which nothing ships
+  in a release table (ADR-063 decision 51).
+- **The names of the Python parts.** R8 gives "the method names of the Python base classes
+  and of the test fixture" to this ADR, "the Python parts at S2b" (`07:66`). The sketch
+  already shows names that differ from the Go ones: `describe`, `invoke`,
+  `run_conformance` and `calls` (`07:1223-1243`).
 - **The schema keywords.** `configSchema` uses only the keywords of the Go derivation
   (decision 9), and the validator of the `plugin` package refuses any other keyword
-  (`sdk/plugin/validate.go:35-40`). It is the validator that step 3 of `plugin check`
-  runs on a Python plugin (ADR-063 decision 54, reading 6).
+  (`sdk/plugin/validate.go:35-40`). It is the validator that step 3 of `plugin check` runs
+  on a Python plugin, on the config examples of `testdata/config/*.json` (`07:1576`;
+  ADR-063 decision 54, reading 6).
 - **The registry key in `uses`.** `plugingen` writes one `uses` entry per dependency of
-  `Spec.Inject` (decision 6), and a Go contribution injects the registry it registers
-  with (`templates/echoers/plugin.go.tmpl:25-26`). Step G1 of the S2b exit takes that
-  `Plugin` value, unchanged, as remote code through step 7 of `plugin check`, which
-  runs the gate (ADR-063 decisions 16 and 27). Check 9 denies "a `uses` entry of a key
-  that is not marked `callback`" (ADR-063 decision 28; decision 10 there), and
+  `Spec.Inject` (decision 6), and a Go contribution injects the registry it registers with
+  (`templates/echoers/plugin.go.tmpl:25-26`). Step G1 of the S2b exit takes that `Plugin`
+  value, unchanged, as remote code through step 7 of `plugin check`, which runs the gate
+  (ADR-063 decisions 16 and 27). Check 9 denies "a `uses` entry of a key that is not
+  marked `callback`, a bound key included" (ADR-063 decision 28; decision 10 there), and
   `echoers` is to be marked `contrib` (ADR-063 decision 14).
 - **The spoken majors.** Both sides send "the list of majors they speak" (`07:1127`;
   `sdk/remote/handshake/handshake.proto:16`), and step D1 of the exit builds a plugin
-  against a version of the remote modules "in which the one list of spoken majors holds
-  7 alone" (ADR-063 decision 27). No Go is generated from the handshake file yet, and no
+  against a version of the remote modules "in which the one list of spoken majors holds 7
+  alone" (ADR-063 decision 27). No Go is generated from the handshake file yet, and no
   such list exists.
 - **Two runtimes in one manifest.** `runtimes` is a set (decision 4), `requires` then
   holds both `pluginApi` and `remoteProtocol` (decision 12), and `plugin check` runs T1
@@ -831,435 +862,824 @@ Reading the sources against each other and against the code at `bbfd839` shows:
   resolves a row in the module table or in `plugins.lock` (ADR-063 decision 12), and a
   site holds one digest per plugin id (ADR-047 decision 7). No exit step uses such a
   manifest (ADR-063 decision 34), and no manifest of the repository lists `remote`.
-- **The marks check 9 reads.** A definition carries `remote: contrib`, `callback` or
-  `no` (`tools/deflint/main.go:335`), which `serves` gains per served definition
-  (ADR-063 decision 46). A hook carries `remote: yes` or `no`, which `serves` holds
-  since S2a (`tools/deflint/main.go:395`; `boot/distribution.go:105-109`).
+- **The marks check 9 reads.** A definition carries `remote: contrib`, `callback` or `no`,
+  one value for the whole definition (`07:538`; `tools/deflint/main.go:335`), which
+  `serves` gains per served definition (ADR-063 decision 46). A hook carries `remote: yes`
+  or `no`, which `serves` holds since S2a (`tools/deflint/main.go:395`;
+  `boot/distribution.go:105-109`). `serves` also holds the provider class and the consumer
+  class of each key (`boot/distribution.go:100-101`), and one definition may declare
+  several keys of different classes, as `launch` declares six, two of them consumer-bound
+  (`sdk/def/launch/v0/definition.yaml`).
 - **The id.** It is two kebab-case segments with no bound on their length
-  (`boot/manifest.go:580-590`), while boot's reader bounds an identifier of a layer at
-  128 bytes (`boot/parse.go:301-303`). Each segment is already a path component under
-  the home (ADR-047 decision 13).
+  (`boot/manifest.go:580-590`), while boot's reader bounds an identifier of a layer at 128
+  bytes (`boot/parse.go:301-303`). Each segment is already a path component under the home
+  (ADR-047 decision 13). The endpoint of an instance is "a name that the runtime resolves"
+  on the instance's network (ADR-063 decision 27), the certificate of an instance names
+  the plugin id (ADR-063 decision 55), and the unit, the network and the credential
+  directory of one instance must never be another's (ADR-063 decisions 23 to 25).
+- **What the accepted part says of S2b.** Decision 1 says that the manifest digest of
+  `plugins.lock` and of the handshake names `plugin.yaml` (ADR-048:111-113), while the
+  lock holds the digest of the artifact's OCI manifest (ADR-047 decision 8); ADR-063
+  decision 58 settles the two. The table of decision 16 does not yet list `runtimes` for
+  check 8, which reads it from S2b for the one row of a remote bundle (`08:506`; ADR-063
+  decision 67), and its install paragraph (ADR-048:437-441) lists neither
+  `capabilities.network`, which install reads to refuse an entry (ADR-063 decision 56),
+  nor `entrypoint`.
+- **The receiving documents.** At `bbfd839` no file `docs/adr/ADR-041*` exists, and
+  ADR-020, ADR-044, ADR-047 and ADR-061 hold no S2b part. A point that this addition
+  leaves to one of them cannot be checked as taken up, and several such points are in no
+  list of ADR-063 decision 34.
 
 ### Decision of the S2b part
 
 #### `plugin.toml`
 
 25. **`plugin.toml` is the hand-written half of a Python plugin** (`07:148`, `:151`): one
-    TOML document in the plugin directory, beside the `plugin.yaml` that
-    `aiops-sdk manifest` writes from it. Its keys are the hand-written fields of
-    decision 4, each under the same name and with the same form and rules, the key
-    `entrypoint`, and one table that only the generator reads. The table under this
-    decision lists them all.
+    TOML document in the plugin directory, beside the `plugin.yaml` that `aiops-sdk
+    manifest` writes from it. Its keys are the hand-written fields of decision 4, each
+    under the same name and with the same form and rules, the key `entrypoint`, and one
+    table that only the generator reads. The table under this decision lists them all.
     - `instantiable` is not a key. A Python plugin is always remote (`07:1203`), and check
       8 reads `instantiable` from a manifest of the module table only (`08:506`), so the
-      key would have no reader. `aiops-sdk manifest` writes no `instantiable`, and an
-      absent one reads as `false` (decision 4).
-    - A key, a table or a TOML form outside that table is refused by
-      `aiops-sdk manifest`, as the strict reading refuses an unknown field (`07:125`;
-      decision 15).
+      key would have no reader. `aiops-sdk manifest` writes no `instantiable`, an absent
+      one reads as `false` (decision 4), and decision 39 gives a remote manifest written
+      in Go the same rule.
+    - A key, a table or a TOML form outside that table is refused by `aiops-sdk manifest`,
+      as the strict reading refuses an unknown field (`07:125`; decision 15).
     - An artifact carries `plugin.yaml` and no `plugin.toml` (`08:393`), so install, the
       gate and boot never read the file.
-    - The Python template (`07:1213`; ADR-063 decision 19) writes a `plugin.toml` with
-      the required keys, `scope = ["process"]`, `runtimes = ["remote"]`, an `entrypoint`
-      and the `[python]` table, and no `[capabilities]`. It writes no `plugin.yaml`:
-      `aiops-sdk manifest` writes it, as step P1 of the exit has it (ADR-063 decision
-      27).
+    - The Python template (`07:1213`; ADR-063 decision 19) writes a `plugin.toml` with the
+      required keys, `scope = ["process"]`, `runtimes = ["remote"]`, an `entrypoint` and
+      the `[python]` table, and no `[capabilities]`. It writes no `plugin.yaml`:
+      `aiops-sdk manifest` writes it, as step P1 of the exit has it (ADR-063 decision 27).
 
 | Key of `plugin.toml` | TOML form | Rule | Source |
 |---|---|---|---|
-| `manifestVersion`, `id`, `version`, `title`, `description`, `license`, `source`, `stability` | A string each | Decisions 2 and 4; decision 28 for the id | `07:152-157` |
+| `manifestVersion`, `id`, `version`, `title`, `description`, `license`, `source`, `stability` | A string each | Decisions 2 and 4; decision 29 for the id | `07:152-157` |
 | `scope` | An array of strings | Decision 22. The template writes `["process"]` | `07:158`; ADR-063 decision 54, reading 1 |
 | `runtimes` | An array of strings | Exactly `["remote"]`: a Python plugin is always remote | `07:159`, `:1203` |
-| `entrypoint` | A string | Required; decision 27 | `07:148`, `:160` |
+| `entrypoint` | A string | Required; decision 28 | `07:148`, `:160` |
 | `[publisher]` | A table of `id`, `name` and `url` | Decision 4 | `07:162-163` |
 | `[support]` | A table of `url` and `email` | Decision 4 | `07:131` |
 | `[capabilities]` | A table of `network` and `secrets`, each an array of strings | Decision 4. Install refuses a remote manifest that lists a `network` entry until the allow-list is built (ADR-063 decision 56) | `07:135`, `:165-167` |
 | `[[integrates]]` | An array of tables of `system`, `versions`, `tested`, `credential` and `license` | Decision 5 | `07:136` |
-| `[python]` | A table with the one key `module`, a string | Decision 26. Written to no file | `07:79` |
+| `[python]` | A table with the key `module`, a string, and with question Q9 (b) the three keys that option names | Decision 26. Written to no file | `07:79` |
 
 26. **`aiops-sdk manifest` writes both halves of `plugin.yaml`** from `plugin.toml` and
     the decorators (`07:79`, `:1210`).
-    - `[python] module` is the dotted name of the one module that the command imports
-      to read the decorators. The module must import without starting the plugin: it
-      calls `serve()` only when it is run as the program, as the sketch does
+    - **The module.** `[python] module` is the dotted name of the one module that the
+      command imports to read the decorators. The module must import without starting the
+      plugin: it calls `serve()` only when it is run as the program, as the sketch does
       (`07:1231-1232`). The command runs no `serve()` and opens no connection.
-    - Decision 1 words the rewrite for a file whose hand-written half lives in
-      `plugin.yaml`. A Python plugin keeps that half in `plugin.toml` and never writes
-      `plugin.yaml` (`07:148`), so the command writes the whole file: the hand-written
-      fields as `plugin.toml` holds them, in the order of the table of decision 4, and
-      then the seven generated fields in the order of decision 1. A comment lives in
-      `plugin.toml`.
-    - The command holds no second copy of the rules of the schema. It checks the keys
-      and forms of decision 25 and what the decorators declare (decisions 29 to 33), and
-      step 1 of `plugin check` reads the written file with the one reader (decision 15;
-      ADR-061 decision 22).
-    - Parity (`07:1575`; `08:1264`; `00:299`) runs the command again and compares the
-      two documents as read, over both halves, since the command writes both (decision
-      1). `aiopsctl` therefore reads no key of `plugin.toml` and parses no Python
-      (ADR-063 decision 17). How `aiopsctl` finds the command is the S2b part of ADR-061
-      (ADR-063 decision 34).
-    - The command needs no library for either file. It writes the closed shape of
-      `plugin.yaml` itself, and it reads TOML with the interpreter's own reader where
-      ADR-041 sets the lowest interpreter at a version that has one; a library taken
-      instead is read first (ADR-063 decision 35).
+    - **The whole file.** Decision 1 words the rewrite for a file whose hand-written half
+      lives in `plugin.yaml`. A Python plugin keeps that half in `plugin.toml` and never
+      writes `plugin.yaml` (`07:148`), so the command writes the whole file: the
+      hand-written fields as `plugin.toml` holds them, in the order of the table of
+      decision 4, and then the seven generated fields in the order of decision 1. A
+      comment lives in `plugin.toml`.
+    - **What it checks, and what it does not.** The command checks the TOML form of each
+      key of decision 25, the value of `runtimes`, which decides the shape of the
+      generated half, and what the decorators declare (decisions 31 to 36). It checks no
+      rule of the schema. It copies `id`, `entrypoint`, `license` and every other
+      hand-written value as the string or the list that `plugin.toml` holds, and the
+      encoding of decision 27 can write any string. Step 1 of `plugin check` then reads
+      the written file with the one reader (decision 15; ADR-061 decision 22), which holds
+      the only copy of the id rules, of the grammar of decision 28 and of every other rule
+      of decision 3. A `plugin.toml` whose `entrypoint` is outside the grammar therefore
+      gives a `plugin.yaml` that step 1 refuses, and no second copy of the grammar exists
+      in Python.
+    - **How `aiopsctl` knows a Python plugin.** A plugin directory that holds a file named
+      `plugin.toml` is the directory of a Python plugin. `aiopsctl` tests for the file,
+      reads no key of it and parses no Python (ADR-063 decision 17). A Go plugin and a
+      pack hold no file of that name, and `plugin new` writes one only with `--lang
+      python`. In such a directory step 2 of `plugin check` compares with `aiops-sdk
+      manifest` and never with `plugingen` (`07:1575`), and `plugin check --write` runs
+      the command, which writes the whole `plugin.yaml`. It writes no generated test: the
+      two generated tests belong to a Go plugin (`07:1563`).
+    - **Parity over both halves.** Decision 1 compares the seven generated fields. For a
+      Python plugin this addition adds a rule to it: step 2 has the command produce the
+      document again, reads both documents with the one reader and fails on a difference
+      in any field, hand-written or generated, since the command writes both halves and no
+      hand edits the file (`07:148`, `:1575`; `08:1264`; `00:299`).
+    - **No library, and what that rests on.** The command takes no library for TOML, for
+      YAML or for the schema (decision 35). It reads `plugin.toml` with the TOML reader of
+      the interpreter's standard library and writes the closed shape of `plugin.yaml`
+      itself (decision 27), which ADR-063 decision 35 foresees. Two things carry that, and
+      neither is settled here. First, ADR-041 sets the supported interpreter versions
+      (ADR-063 decision 34), and this addition asks it for a lowest version whose standard
+      library reads TOML, which ADR-063 decision 35 puts at 3.11. The wheels of `grpcio`,
+      `protobuf` and `pytest` that ADR-063 read ask for 3.10 or later, and at a floor of
+      3.10 the command would need a TOML library, read first under that decision; `tomli`,
+      which `pytest` requires below 3.11, is among the packages it lists as unread.
+      Second, the interpreter itself is among what that decision lists as not read. Its
+      licence is read at a primary source at the pinned version before `aiops-sdk
+      manifest` merges. No licence was read for this addition.
+27. **The bytes of the written file** are fixed, because the first message of the protocol
+    carries their digest (ADR-063 decision 58) and because boot's reader types every plain
+    scalar (decision 3; `boot/parse.go:33-49`).
+    - **One layout.** The file is one YAML document in UTF-8 that holds ASCII alone, with
+      LF line ends, no byte order mark, no document marker and one LF after the last line.
+      Its first line is a comment that names the command and `plugin.toml`, and it holds
+      no other comment. The fields stand in the order of decision 26. Every mapping and
+      every list is in block style, with one key or one entry to a line and each nested
+      level indented by two spaces. An empty list is `[]` and an empty mapping is `{}`.
+      The file holds no other flow form, no anchor, alias or tag, no block scalar and no
+      folded line: a scalar stands on the line of its key or of its list entry.
+    - **No plain string.** A key that the schema names is written plain. Every key that is
+      data, a definition name under `requires.definitions` or a key inside `configSchema`,
+      and every string value are written double-quoted, with `\"` for the quote, `\\` for
+      the backslash and `\u` with four hexadecimal digits, or `\U` with eight, for each
+      character outside the printable ASCII range U+0020 to U+007E. No string is ever
+      plain, so the reader never types one as a number, a boolean, a null or a comment,
+      whatever `title`, `description`, `publisher.name`, an entry of `integrates` or a
+      `default` or an example inside `configSchema` holds.
+    - **The other scalars.** A boolean is `true` or `false`. An integer is decimal, with
+      no leading zero and no `+`, and fits 64 bits. A float is finite and decimal, holds a
+      `.` or an exponent, and is the shortest form that reads back as the same value. No
+      field takes a null. The command refuses a value that it cannot write so.
+    - **The same bytes every time.** A set is written sorted, as decision 3 has it, and
+      the keys of `requires.definitions` and of every mapping inside `configSchema` stand
+      in the order of their code points. The same `plugin.toml`, module and SDK give the
+      same bytes on every run and on every machine.
+    - **The digest.** These bytes are what `plugin pack` puts in the artifact, what
+      install keeps and what the digest of the first message covers: the SHA-256 of the
+      `plugin.yaml` that the plugin was built with, which the kernel compares with the
+      file that install kept (ADR-063 decision 58; decision 40). Parity compares fields as
+      read and the digest compares bytes. A file that passes step 2 and differs in one
+      byte from the file that the image holds is caught by the digest clause of check 3 at
+      the handshake (ADR-063 decision 16). How an instance takes that digest from its
+      image is ADR-041's (decision 41).
+    - **The test.** Running the writer twice cannot see a scalar that it encodes wrongly,
+      so the Python job (ADR-063 decision 37) holds the counterpart of the test of
+      decision 15. A corpus of `plugin.toml` files, decorator sets and config classes is
+      written by the command, and each written file is read by boot's strict reader
+      through `aiopsctl` and compared field by field with the input of its case. The
+      corpus holds at least: a string with ` #`, with `: `, with a leading and with a
+      trailing space, with a quote, a backslash, a tab, a line break and a character
+      outside ASCII; the strings `yes`, `no`, `on`, `off`, `true`, `null`, `~`, `1.0`,
+      `0755`, `0x1F`, `1e3`, `2001-12-14` and `${env:X}`; each of those in a
+      `description`, in a `tested` entry of `integrates` and in a `default` of
+      `configSchema`; an empty optional string, which reads as absent (decision 3); a
+      default of each scalar type; and one file with every key of decision 25. A case
+      fails when the reader refuses the file or returns a value other than the input.
+      Through which command of `aiopsctl` the job reads a manifest is asked of ADR-041
+      (decision 41).
 
 #### `entrypoint`, and the id as a unit takes it
 
-27. **`entrypoint`** is the command that starts the plugin's process: what step 4 of
+28. **`entrypoint`** is the command that starts the plugin's process: what step 4 of
     `plugin check` starts as a local process, in every language, and what the deployment
     unit starts (`07:148`, `:1577`; ADR-063 decisions 17 and 25; ADR-063 decision 54,
     reading 5). It is a hand-written key of `plugin.toml` (`07:148`). Whether
-    `plugin.yaml` carries it, and so which of the two starts it, is question Q5.
-    Whatever the answer, its form and its grammar are these, checked wherever the field
-    is read:
-    - It is one string of words separated by single spaces, as `07:160` writes it. It is
-      split at the spaces into an argument list. No shell reads it, and no reader
-      expands, quotes or joins a word.
-    - The grammar is closed. A word holds ASCII letters, digits and the six characters
-      `_`, `.`, `/`, `-`, `:` and `=`, and nothing else: no other whitespace, no quote,
-      no backslash, no `$`, no `%` and no other punctuation. The first word begins with
-      a letter, a digit, `.` or `/`, so that it never reads as an option. The string has
-      no leading or trailing space and no two spaces in a row.
-    - It holds at most 16 words, and a word at most 128 bytes, the bound of an
-      identifier in boot's reader (`boot/parse.go:301-303`). The count of 16 is proposed
-      here; no written line gives one.
-    - It carries the command and nothing of the site: no listen address, no socket path
-      and no path of a credential. The unit and the check runner give those, from the
-      first-party template and from the runner alone (ADR-063 decision 25). How a
-      started process learns them is fixed with the protocol in ADR-041 (ADR-063
-      decision 34).
-    - What builds the binary of a remote Go plugin before step 4 starts it is the S2b
-      part of ADR-061, with the form of a remote Go plugin (ADR-063 decisions 34 and
-      60).
-28. **The id as a unit takes it** is the `id` of decision 4: exactly one `/` between two
-    kebab-case segments (`boot/manifest.go:580-590`), so it holds lowercase ASCII
-    letters, digits, single hyphens inside a segment and the one slash, and nothing
-    else.
-    - This addition adds one rule of the schema, for every manifest: a segment holds at
-      most 128 bytes, the bound that boot's reader gives an identifier of a layer
-      (`boot/parse.go:301-303`). No id of the repository is longer, so the rule changes
-      no manifest (decision 2).
-    - A unit takes the id as a value, never as text to splice (ADR-063 decision 25). A
-      slash cannot stand in a file name, so the name of a unit file is never the id
-      itself: how the unit file, the network and the endpoint are named from the two
-      segments is the S2b part of ADR-047, with the paths of the home (ADR-063 decisions
-      25 and 34). The image reference, the first of the three inputs, is that part's
-      too.
-    - **The grammar check of the unit renderer.** The renderer writes only an id and an
-      `entrypoint` that it took, in the same command, from a manifest that the one
-      reader of decision 15 accepted (ADR-061 decision 22). Both grammars are rules of
-      the schema (decision 3), so that reading is the check, in both modes, and gate
-      check 1 denies a manifest that breaks either at every entry point (decision 24;
-      `08:499`). A value from any other source is not written, and with a refused
-      manifest no unit is rendered and nothing is written (ADR-063 decisions 17 and 28).
-      Each value is written by the encoder of the target's format (ADR-063 decision 25).
+    `plugin.yaml` carries it, and so which of the two starts it, is question Q5. Whatever
+    the answer, its form, its grammar and the way its first word is found are these. The
+    one reader of decision 15 checks the form and the grammar wherever it reads the field
+    in `plugin.yaml`; `aiops-sdk manifest` copies the string and checks neither (decision
+    26).
+    - **Form.** It is one string of words separated by single spaces, as `07:160` writes
+      it. It is split at the spaces into an argument list. No shell reads it, and no
+      reader expands, quotes or joins a word.
+    - **Grammar.** The grammar is closed. A word holds ASCII letters, digits and the six
+      characters `_`, `.`, `/`, `-`, `:` and `=`, and nothing else: no other whitespace,
+      no quote, no backslash, no `$`, no `%` and no other punctuation. The first word
+      begins with a letter, a digit, `.` or `/`. The string has no leading or trailing
+      space and no two spaces in a row. A later word may begin with `-`, as `-m` does in
+      `07:160`, so the grammar alone does not keep a word from looking like an option;
+      decision 30 says where a word may be written.
+    - **Bounds.** It holds at most 16 words, and a word at most 128 bytes, the bound that
+      boot's reader already gives an identifier (`boot/parse.go:301-303`). Both numbers
+      are proposed here; no written line gives one.
+    - **The first word, in both starts.** A first word that holds a `/` is a path,
+      absolute or relative to the working directory of the process. A first word that
+      holds none is looked up on the search path of the environment in which the process
+      starts. No start adds a directory to that path, tries a second name or passes the
+      string to a shell.
+    - **Step 4 of `plugin check`** starts the process in the plugin directory, with the
+      environment of the runner and what ADR-041 adds to it (decision 41).
+    - **The unit** starts the process with the working directory and the environment that
+      the image configures: it sets neither from the artifact (ADR-063 decision 25). The
+      words are the whole command of the container (decision 30).
+    - **What makes one string valid in both places** is the build file that each
+      first-party template writes (ADR-063 decision 19), not a rule of the schema. The
+      Python template writes `python -m <package>`, as `07:160` does: its build file names
+      a base image whose search path holds `python` and sets the working directory of the
+      image to the directory into which it copies the plugin directory, so `-m` finds the
+      package in both places. The template of a remote Go plugin writes `./<name>`: the
+      build that precedes step 4 writes the binary at that path in the plugin directory,
+      which is asked of the ADR-061 part (decision 41), and the template's build file puts
+      the one static binary at the same path under the working directory of the image. An
+      absolute path of the image, such as `/<name>`, does not exist on the author's
+      machine, so no first-party template writes one.
+    - **What each start proves.** Step 4 and step 5 prove the string on the author's
+      machine. That it resolves inside the image is proven where the image runs: by
+      `plugin verify` and `plugin smoke` (ADR-063 decision 17) and by steps C3 and C4 of
+      the exit (ADR-063 decision 27). An entrypoint that resolves in one place and not in
+      the other fails the proof of that place; the schema cannot decide it.
+    - **Nothing of the site.** It carries the command and nothing of the site: no listen
+      address, no socket path and no path of a credential. The unit and the check runner
+      give those, from the first-party template and from the runner alone (ADR-063
+      decision 25). How a started process learns them is asked of ADR-041 (decision 41).
+29. **The id as a unit takes it** is the `id` of decision 4: exactly one `/` between two
+    kebab-case segments (`boot/manifest.go:580-590`), so it holds lowercase ASCII letters,
+    digits, single hyphens inside a segment and the one slash, and nothing else. That
+    closed set of characters is the grammar that ADR-063 decision 25 asks for.
+    - **One bound, which is the reader's and not a unit's.** This addition adds one rule
+      of the schema, for every manifest: a segment holds at most 128 bytes, the bound that
+      boot's reader gives an identifier of a layer (`boot/parse.go:301-303`). The reader
+      had none, and each segment is already a path component under the home (ADR-047
+      decision 13). No id of the repository is longer, the longest segment being 19 bytes,
+      so the rule changes no manifest (decision 2). The bound is not derived from any
+      target of a unit and is not offered as one. A DNS label holds at most 63 octets (RFC
+      1035, section 2.3.4), and the endpoint of an instance is a name that the runtime
+      resolves on the instance's network (ADR-063 decision 27), so a name that holds both
+      segments as they are can pass the limit of a target long before it passes this
+      bound.
+    - **No unit takes the id as text.** A unit takes the id as a value, never as text to
+      splice (ADR-063 decision 25), and a slash cannot stand in a file name, so no name of
+      a unit is the id itself. How the unit file, the network, the endpoint and the
+      credential directory are named from the id is the S2b part of ADR-047, with the
+      paths of the home (ADR-063 decisions 25 and 34), and the image reference, the first
+      of the three inputs, is that part's too.
+    - **Two things are asked of that part** (decision 41). The names are an injective
+      function of the id: two ids never share a unit file, a network, an endpoint or a
+      credential directory, since those of one instance must never be another's (ADR-063
+      decisions 23 to 25). Joining the two segments with a hyphen is not such a function,
+      as `a-b/c` and `a/b-c` show. And each name is inside the length and the character
+      limits of its target for every id that the schema admits, with each limit cited at
+      its source in that addition. Where a target cannot take a name of every admitted id,
+      that addition either maps the id to a name of fixed length or proposes a tighter
+      bound as an amendment of this ADR, before the first community release (decision 2).
+    - The certificate of an instance names the plugin id (ADR-063 decision 55). Which
+      field holds it, and that the field takes every id that the schema admits, is asked
+      of ADR-041 (decision 41).
+30. **What the unit renderer may do with the two values.** With question Q5 (a) the
+    renderer takes the id and the `entrypoint` from the artifact; with (b) or (c) it takes
+    the id alone, and the rules on the words below have nothing to bind.
+    - **The grammar check is the reading.** The renderer writes only an id and an
+      `entrypoint` that it took, in the same command, from a manifest that the one reader
+      of decision 15 accepted (ADR-061 decision 22). Both grammars are rules of the schema
+      (decision 3), so that reading is the check, in both modes, and gate check 1 denies a
+      manifest that breaks either at every entry point (decision 24; `08:499`). A value
+      from any other source is not written, and with a refused manifest no unit is
+      rendered and nothing is written (ADR-063 decisions 17 and 28). Each value is written
+      by the encoder of the target's format (ADR-063 decision 25).
+    - **The words are the whole command of the container.** The unit gives the container
+      the argument list of decision 28 as its whole command line, in place of both the
+      entrypoint and the command that the image configures: no word of the image stands
+      before or after the words of the manifest, and the process that the unit starts has
+      the arguments that step 4 of `plugin check` gave it.
+    - **A word is only ever an argument.** Each word reaches the target as one value: one
+      element of a list of the target's format, or one argument of the command line that
+      starts the container, in a position where the target reads the value of the
+      entrypoint or an argument of the process, and never an option, a directive or a
+      specifier of its own. On a command line the words after the first stand after the
+      image reference, in the position where the container runtime takes the arguments of
+      the process and reads no option, and the first word, which cannot begin with `-`
+      (decision 28), is the value of the entrypoint. No word stands before the image
+      reference as an argument of its own, and nothing else in the unit is computed from a
+      word.
+    - **Why the grammar is not enough alone.** The grammar admits `--privileged`,
+      `--network=host`, `--volume=/:/host`, `--user=0:0` and `--cap-add=ALL` as words
+      after the first. Under the rule above each is an argument of the plugin's own
+      program and changes nothing of the unit: the user, the mounts, the capabilities and
+      the network stay those of the first-party template (ADR-063 decisions 24 and 25).
+      The grammar holds no quote, no backslash, no `$` and no `%`, so that a word holds no
+      character that the reader of a target would expand or unquote. Which characters each
+      target reads so, with its source at the pinned version of that target, is asked of
+      the ADR-047 part (decision 41).
+    - **Two cases** join those of ADR-063 decision 28, each on the compose fragment and on
+      the systemd unit (ADR-063 decision 50). An entrypoint whose later words are
+      `--privileged`, `--network=host` and `--volume=/:/host` renders a unit whose user,
+      mounts, capabilities and network equal those of the same artifact with a one-word
+      entrypoint, and the process that the unit starts receives the three words as its
+      arguments. And two artifacts whose ids are `a-b/c` and `a/b-c`, installed on one
+      site, get two unit files, two networks, two endpoints and two credential
+      directories.
 
 #### The generated half of a Python plugin
 
-29. **`registers`** comes from `@contributes` (`07:1208`): one entry `{key, major}` per
+31. **A declaration names an object that `aiops-sdk` holds, and every such object is
+    generated.** A decorator takes a definition, a key or a hook as an object of a
+    generated module, never as a string, so a name that the SDK does not hold fails when
+    the plugin's module is imported. With question Q9 (b) alone a callback key is written
+    as a string, in `plugin.toml`, and `aiops-sdk manifest` resolves it to the same
+    object or refuses it.
+    - **Which definitions get a module.** The adapter generator writes one Python module
+      per definition and major (`07:1207`). ADR-063 decisions 13 and 18 give it the
+      definitions marked `contrib`. This addition widens its Python output, as an
+      extension of decision 13 there, to two more kinds: a definition marked `callback`,
+      and a definition that owns a hook marked remote. The same parity check holds every
+      generated file to its source (ADR-063 decision 13). The commit that records the
+      answers edits `07:1203` and `07:1207` and places a dated note at ADR-063 decisions
+      13 and 18 (Consequences).
+    - **What a module holds.** For a `contrib` definition: the message classes and the
+      base classes of its contributions, and with question Q6 (b) or (c) also one object
+      per registry key. For a `callback` definition: the message classes and one object
+      per key that a remote plugin may call, carrying the name and the major of the key;
+      the calls themselves are reached through the call context, which ADR-041 fixes
+      (ADR-063 decision 34). For a hook marked remote: one object per hook, with the stage
+      names that the `definition.yaml` declares, in order (ADR-060 decision 7). Every
+      module carries the `major.minor` of the `definition.yaml` it was generated from.
+    - **The names** follow the table under this decision. R8 puts the method names of the
+      Python base classes with this part (`07:66`); they are generated from the proto of
+      each definition (`07:1207`; ADR-063 decision 45), so the rule fixes them and no name
+      is written by hand. The generator fails, and so does the definition lint, when a
+      name that the rule gives is a reserved word of Python or when two names of one
+      module are equal. The methods of the test fixture `aiops_sdk.testing.host()`, which
+      R8 names beside them, are fixed in ADR-041 with the fixture (ADR-063 decision 34;
+      decision 41), and so is the call context that a method receives.
+    - **The test definition.** The test definition of ADR-063 decision 51 is marked
+      `callback` and owns a test hook marked remote. Its Python module is generated like
+      any other, by the same generator and under the same parity check, into the tests of
+      `python/`, a directory that the build of the package does not read, so no built
+      package holds it, as nothing of that definition ships in a release table. At S2b it
+      is the only input of a callback declaration and of `@listens`: the shipped package
+      holds the modules of `echoers` and `stampers`, which own no hook and are no
+      callback. The Python job (ADR-063 decision 37) exercises decisions 33 and 34 on it:
+      `aiops-sdk manifest` on plugins of the test tree that declare the test callback as a
+      need and as a want and listen on the test hook at each of its stages, each written
+      file read by boot's reader as decision 27 has it and compared with the declarations;
+      a declaration of an object that is not generated, and a stage that the hook does not
+      declare, each refused; and the callback and the listener driven through the fixture
+      (ADR-063 decision 51).
+
+| Generated name | Rule | Source |
+|---|---|---|
+| The module of a definition and major | `aiops_sdk.defs.<name>_v<N>`, with the `<name>` and the `<N>` of `sdk/def/<name>/v<N>` | `07:1218` |
+| A message class | The name of the proto message, unchanged; the proto compiler writes it | ADR-063 decision 45 |
+| A base class | The name of the proto declaration that lists the calls of one contribution, unchanged. Which proto declaration that is, a service per definition or the messages of the one stream, is ADR-041's | `07:1222`; ADR-063 decision 34 |
+| A method of a base class | The proto name of the call in lower case, with an underscore before each capital that is not the first character and that either follows a lower-case letter or a digit or stands before a lower-case letter: `Describe` gives `describe`, `RunOnce` gives `run_once` and `HTTPGet` gives `http_get` | `07:1223`, `:1226` |
+| The object of a key or of a hook | The name of the key or the hook by the same mapping, in upper case, with each run of characters other than letters and digits as one underscore | Decisions 33 and 34 |
+
+32. **`registers`** comes from `@contributes` (`07:1208`): one entry `{key, major}` per
     registry that a decorated class contributes to, written as the registry key that the
-    definition declares (decision 8). How the decorator names that key where a
-    definition declares more than one registry key is question Q6.
-30. **`uses`** is the set of callbacks that the plugin's contributions and listeners
-    call, since the contribution set includes the callbacks a remote plugin calls
-    (`08:391`; ADR-048:433). It comes from the decorators, the one source beside
-    `plugin.toml` that the generator reads (`07:79`).
-    - `@contributes` and `@listens` each take two optional keyword arguments, `needs`
-      and `wants`. Each is a list of definitions marked `callback`, named by the object
-      that `aiops-sdk` holds for the definition and its major. `needs` writes `as: need`
-      and `wants` writes `as: want`, the two forms of decision 6 (`07:192-194`). `uses`
-      is the union over the decorators of the module, and a key under both is a need.
-    - The call context offers a contribution the callbacks that its plugin declares, and
-      a call of another fails in the SDK, as an undeclared `Provide` or `On` fails in Go
+    definition declares (decision 8). How the decorator names that key where a definition
+    declares more than one registry key is question Q6.
+33. **`uses`** is the set of callbacks that the plugin's contributions and listeners call,
+    since the contribution set includes the callbacks a remote plugin calls (`08:391`;
+    ADR-048:433). Where a Python plugin declares them is question Q9, because the
+    recommended source adds arguments to the decorators as plugin record §4 writes them.
+    Whatever the answer:
+    - a callback is named by its key and not by its definition, as `uses` holds keys
+      (decision 6): by the key object of decision 31. A definition marked `callback` that
+      declares several keys offers one object per key, and a declaration names each key
+      that the plugin calls. The entry takes the name and the major of the key from the
+      object;
+    - a declared need writes `as: need` and a declared want writes `as: want`, the two
+      forms of decision 6 (`07:192-194`). `uses` is the union over the module, and a key
+      declared both ways is a need;
+    - the call context offers a contribution the callbacks that its plugin declares, and a
+      call of another fails in the SDK, as an undeclared `Provide` or `On` fails in Go
       (`07:139`, `:141`). The proxy holds only the declared ones in any case, since its
-      `Inject` is built from `uses` (ADR-063 decision 10). The call context itself is
-      fixed in ADR-041 (ADR-063 decision 34).
-    - The registry that a contribution registers with is not written into `uses`:
-      Python has no `Inject`, and `registers` names it. A remote Go manifest does hold
-      it there; question Q8.
-    - `07:1208-1209` gain the two arguments, inside the reading of R8 (`07:66`).
-31. **`hooks`** comes from `@listens(hook, stage)` (`07:1209`): one entry `{hook, stage}`
+      `Inject` is built from `uses` (ADR-063 decision 10);
+    - the registry that a contribution registers with is not written into `uses`: Python
+      has no `Inject`, and `registers` names it. A remote Go manifest does hold it there,
+      so the two languages differ on that one entry; question Q8 says what follows from
+      it.
+34. **`hooks`** comes from `@listens(hook, stage)` (`07:1209`): one entry `{hook, stage}`
     per decorated function, by name (decision 10).
-    - The hook is the object that `aiops-sdk` holds for a hook marked remote, and the
-      stage is one of the stage names of that hook. Both are copied from the
-      `definition.yaml` of the definition that owns the hook, where the stages are
-      declared in order (ADR-060 decision 7), by the adapter generator, whose parity
-      check holds the copy to its source (ADR-063 decision 13). No hook name and no
-      stage name of the SDK is written by hand.
-    - A hook that is not marked remote has no such object, so a Python plugin cannot
-      name one (`07:1116`), and `aiops-sdk manifest` refuses a stage that the hook does
-      not declare.
+    - The hook is the hook object of decision 31, and the stage is one of the stage names
+      that the object carries. No hook name and no stage name of the SDK is written by
+      hand.
+    - A hook that is not marked remote has no such object, so a Python plugin cannot name
+      one (`07:1116`), and `aiops-sdk manifest` refuses a stage that the hook does not
+      declare.
     - The ordinal of a stage is served data and is in no manifest (decision 10).
-32. **`configSchema`** is derived by `aiops-sdk` itself, with the standard library of
-    the language. No schema library is taken (ADR-063 decision 35).
-    - The config type is one class per plugin, named by the optional keyword argument
-      `config` of a decorator. Every decorator of the module that names a class names
-      the same one. A plugin whose decorators name none takes no config: its schema is
-      the closed empty object that `plugin.Define` derives from an empty struct
+35. **`configSchema`** is derived by `aiops-sdk` itself, with the standard library of the
+    language. No schema library is taken, on the terms of decision 26.
+    - **The config class.** A plugin has at most one config class, a class that
+      `dataclasses.dataclass` of the standard library made. Which declaration names it is
+      question Q9. A plugin that names none takes no config: its schema is the closed
+      empty object that `plugin.Define` derives from an empty struct
       (`examples/dispatch/plugin.yaml:22-26`), never `{}`, which decision 9 keeps for a
       value of `kernel.Define`.
-    - The derivation emits the keywords of the Go derivation and no other (decision 9;
-      ADR-060 decision 4): `$schema` at the root, `type` with one name, `properties`,
-      `additionalProperties`, `items`, `minimum`, `maximum` and `pattern`, and the
-      annotations `default`, `examples`, `x-aiops-volatile` and `x-aiops-tenant`
-      (`sdk/plugin/validate.go:35-40`). The validator of the `plugin` package refuses
-      any other keyword and is the one validator of a row's config, so a general schema
-      library, whose output holds other keywords, cannot be used as it is.
-      `aiops-sdk manifest` refuses a config class that those keywords cannot express.
-    - The two annotations are written from two markers of a field of the class: one for
-      a volatile field, and one for a tenant-writable field, which is also marked
-      volatile (`07:142`, `:480`). The proxy forwards a volatile change to the instance
-      and `aiops-sdk` hands the new config to the contribution (ADR-063 decision 49);
-      the volatile paths that the proxy reads are these marks (decision 9).
-    - Step 3 of `plugin check` compiles the written `configSchema` with that validator
-      and validates each config example against it (`07:1576`; ADR-063 decision 54,
-      reading 6), so a keyword outside the set fails there in any language. The Python
-      job compiles the result of each table case of the derivation with the same
-      validator, through the `aiopsctl` that the fixture wraps (ADR-063 decisions 18 and
-      37).
-    - Which class forms and field types the derivation reads, and how the tree of a
-      row's config is decoded into the class, are the Python counterpart of the decode
-      rules of ADR-060 decision 4: written in the package documentation and proven by
-      table tests, inside the scope of the SDK that ADR-041 fixes (ADR-063 decision 34).
-33. **The other generated fields of a Python manifest.** `provides` is `[]`, since a
+    - **The type map** is the table under this decision. `aiops-sdk manifest` refuses any
+      other annotation of a field: a union, an optional type, `Any`, a tuple, a set, a
+      class that is not a dataclass and a class that holds itself. The derivation emits
+      `$schema` at the root, `type` with one name, `properties`, `additionalProperties`,
+      `items` and the annotations `default`, `examples`, `x-aiops-volatile` and
+      `x-aiops-tenant`. At S2b it emits no `minimum`, `maximum` or `pattern`, since no
+      type of the map is bounded and none is a duration. Each is a keyword of the Go
+      derivation and of its validator (decision 9; ADR-060 decision 4;
+      `sdk/plugin/validate.go:35-40`). A type joins the map with its first consumer, by an
+      addition to this ADR.
+    - **Keys and defaults.** A property takes the name of its field, as written. A field
+      whose default is a `bool`, an `int`, a `float` or a `str` writes it as `default`, as
+      the Go derivation gives the tag to a scalar field alone
+      (`sdk/plugin/schema.go:245-260`); no other default is written. No keyword makes a
+      key required, in either language: a key that a row's config leaves out takes the
+      default of its field and, where the field has none, the empty value of its type.
+    - **The two markers** are `aiops_sdk.Volatile[T]` and `aiops_sdk.Tenant[T]`, each
+      written as the annotation of a field in place of `T`. `Volatile[T]` writes the
+      schema of `T` with `x-aiops-volatile: true`, as `plugin.Volatile[T]` does in Go.
+      `Tenant[T]` marks a tenant-writable field and writes both `x-aiops-tenant: true` and
+      `x-aiops-volatile: true`, since every tenant-writable field is volatile (`07:142`,
+      `:480`); the Go tag `aiops:"tenant"` is refused on a field that is not volatile
+      (`sdk/plugin/schema.go:208`), and here the one marker carries both. The proxy
+      forwards a volatile change to the instance and `aiops-sdk` hands the new config to
+      the contribution (ADR-063 decision 49); the volatile paths that the proxy reads are
+      these marks (decision 9).
+    - **The config examples** are the files `testdata/config/*.json` of the plugin
+      directory, as for a Go plugin (`07:1405`, `:1576`). Step 3 of `plugin check`
+      validates each against the `configSchema` of `plugin.yaml` (ADR-063 decision 54,
+      reading 6). `aiops-sdk manifest` writes them, in the byte order of their names, as
+      the root `examples` of the schema, as `plugingen` does (ADR-047 decision 12), so one
+      config has one manifest form in both languages.
+    - **Decoding.** `aiops-sdk` decodes the tree of a row's config into the class by the
+      same map. It refuses a key that the class does not hold and a value of another type,
+      with one widening: a `float` field takes an integer, as `number` admits one
+      (`sdk/plugin/validate.go:42-44`), while an `int` field takes neither a float nor a
+      boolean. Composition has validated the tree against the `configSchema` of the
+      manifest before the proxy sends it (`07:142`), so a refusal here is a defect of the
+      derivation or of the decoder, and it fails the activation with the path of the key.
+    - **The tests.** Each row of the map, each refusal and each marker is a table case of
+      the Python tests, and the Python job compiles the schema of each case with the
+      validator of the `plugin` package, through `aiopsctl` (ADR-063 decisions 18 and 37;
+      decision 41). One file of the repository holds the cases that both derivations
+      share, a type and the schema expected of it, and the Go test of `sdk/plugin` and the
+      Python test both read it, so the two derivations cannot drift on a type that both
+      have. Step 3 of `plugin check` compiles the written `configSchema` with that
+      validator in any language, so a keyword outside the set fails there (`07:1576`).
+
+| Annotation of a field | Schema | Its Go counterpart (`sdk/plugin/schema.go:99-126`) |
+|---|---|---|
+| `bool` | `type: boolean` | `bool` |
+| `int` | `type: integer` | `int`, `int64` |
+| `float` | `type: number` | `float64` |
+| `str` | `type: string` | `string` |
+| `list[T]` | `type: array`, with `items` the schema of `T` | A slice |
+| `dict[str, T]` | `type: object`, with `additionalProperties` the schema of `T` | A map with string keys |
+| A dataclass | `type: object`, with `properties`, one per field, and `additionalProperties: false` | A struct |
+| `aiops_sdk.Volatile[T]`, `aiops_sdk.Tenant[T]` | The schema of `T`, with the annotations of the two markers | `plugin.Volatile[T]`; the tag `aiops:"tenant"` |
+
+36. **The other generated fields of a Python manifest.** `provides` is `[]`, since a
     remote plugin provides no key (`07:1115`), and `durable` is `[]` (decision 11).
-    `requires` holds `remoteProtocol` (decision 34), `definitions` and no `pluginApi`
-    (decision 12; `07:148`). `definitions` names each definition that a decorator names,
-    as a contribution, as the owner of a hook or as a callback, at the `major.minor`
-    that the SDK's object for it carries, which is the version of the `definition.yaml`
-    it was generated from (decision 12; `08:1264`).
+    `requires` holds `remoteProtocol` (decision 37), `definitions` and no `pluginApi`
+    (decision 12; `07:148`). `definitions` names each definition that a declaration names,
+    as a contribution, as the owner of a hook or as the owner of a callback key, at the
+    `major.minor` that its generated module carries (decision 31; decision 12; `08:1264`).
 
 #### The spoken majors
 
-34. **The spoken majors are declared once.** The module rooted at `sdk/remote` (ADR-063
-    decision 43) declares, beside the Go that is generated from the frozen `Hello`
-    (ADR-063 decision 6), the set of protocol majors that this version of the module
-    speaks. At S2b it holds major 0 alone (ADR-063 decision 5). It is the constant that
-    `plugingen` reads.
-    - It is the only list. `sdk/remotehost` sends it as `Hello.majors`
-      (`sdk/remote/handshake/handshake.proto:16`; `07:1127`), the kernel side of the
-      protocol sends it (ADR-063 decision 9), and no package holds a second list of
-      majors. Step D1 of the S2b exit rests on that: a version of the remote modules
-      whose one list holds 7 alone gives a plugin that offers 7 and a manifest that says
-      so (ADR-063 decision 27).
+37. **The spoken majors are declared once.** The module rooted at `sdk/remote` (ADR-063
+    decision 43) declares the set of protocol majors that this version of the module
+    speaks. At S2b it holds major 0 alone (ADR-063 decision 5). It is what ADR-063
+    decision 34 calls the constant of spoken majors that `plugingen` reads.
+    - **The declaration** is the function `Majors() []uint32` of the package `remote`, the
+      root package of that module, whose import path is the module path. It returns a new
+      slice on each call, in ascending order and with no major twice, in the type of
+      `Hello.majors` (`sdk/remote/handshake/handshake.proto:16`). Go has no constant of a
+      list type, and any importer could change a package-level variable, so the
+      declaration is a function. `sdk/remotehost`, the kernel side of the protocol, the
+      driver program of `plugingen`, the builder and the pipeline of step D1 all compile
+      against that one name.
+    - It is the only list. `sdk/remotehost` sends it as `Hello.majors` (`07:1127`), the
+      kernel side of the protocol sends it (ADR-063 decision 9), and no package holds a
+      second list of majors. Step D1 of the S2b exit rests on that: a version of the
+      remote modules whose `Majors` returns 7 alone gives a plugin that offers 7 and a
+      manifest that says so (ADR-063 decision 27).
     - `plugingen` reads it as it reads the `Spec`. The driver program that prints what
       `plugin.Generate` reads from the plugin's value
-      (`internal/plugingen/plugingen.go:9-13`) also prints the declaration, from the
+      (`internal/plugingen/plugingen.go:9-13`) also prints what `Majors` returns, from the
       version of the module in the plugin's own build list. So `requires.remoteProtocol`
-      is what that build sends in `Hello`. A manifest that lists `remote` while the
-      build list of its plugin lacks the module fails `plugingen` with that reason.
-    - `plugingen` writes `remoteProtocol`, sorted, exactly when `runtimes` holds
-      `remote`, and `pluginApi` exactly when it holds `inproc` (decision 12; ADR-063
-      decision 17). `plugin.Generate` gives `pluginApi` for every value
-      (`sdk/plugin/manifest.go:154`), so `plugingen` leaves it out of a manifest without
-      `inproc`, as step G1 of the exit expects (ADR-063 decision 27).
+      is what that build sends in `Hello`. A manifest that lists `remote` while the build
+      list of its plugin lacks the module fails `plugingen` with that reason, and the
+      driver of a manifest without `remote` does not import the module.
+    - `plugingen` writes `remoteProtocol`, sorted, exactly when `runtimes` holds `remote`,
+      and `pluginApi` exactly when it holds `inproc` (decision 12; ADR-063 decision 17).
+      `plugin.Generate` gives `pluginApi` for every value (`sdk/plugin/manifest.go:154`),
+      so `plugingen` leaves it out of a manifest without `inproc`, as step G1 of the exit
+      expects (ADR-063 decision 27).
     - `serves.remoteProtocol` is written by the builder (ADR-063 decision 46), and its
       writer is the S2b part of ADR-044 (ADR-063 decision 34). This addition asks one
-      thing of it: it reads the same declaration, from the build list of the binary, and
+      thing of it (decision 41): it calls `Majors`, from the build list of the binary, and
       holds no list of its own.
-    - In Python the counterpart is one list of `aiops-sdk`: `serve()` sends it in
-      `Hello.majors`, and `aiops-sdk manifest` writes it as `requires.remoteProtocol`
-      (`07:1210-1211`).
-    - Go has no constant of a list type, so the form and the identifier of the
-      declaration are fixed with the code. The rule is that it is declared once and that
-      every reader above reads it.
+    - In Python the counterpart is one declaration inside `aiops-sdk`: `serve()` sends it
+      in `Hello.majors`, and `aiops-sdk manifest` writes it as `requires.remoteProtocol`
+      (`07:1210-1211`). No code outside the package reads it.
 
 #### A manifest that lists `inproc` and `remote`
 
-35. **What such a manifest packs and installs is question Q7.** Whatever the answer:
+38. **What such a manifest packs and installs is question Q7.** Whatever the answer:
     - decision 12 stands: its `requires` holds both `pluginApi` and `remoteProtocol`;
-    - a signer's entry covers it only when the entry lists both runtimes (ADR-020
-      decision 6; `07:1866`);
+    - a signer's entry covers it only when the entry lists both runtimes (ADR-020 decision
+      6; `07:1866`);
     - a site runs a plugin id in one runtime, since boot resolves a row in the module
       table or in `plugins.lock` (ADR-063 decision 12) and a site holds one digest per
       plugin id (ADR-047 decision 7);
-    - one `Plugin` value that passes the same suite in both runtimes (`07:1198`) needs
-      no such manifest: the fixture echoers of the S2a and S2b exits prove it with one
+    - one `Plugin` value that passes the same suite in both runtimes (`07:1198`) needs no
+      such manifest: the fixture echoers of the S2a and S2b exits prove it with one
       manifest per runtime (ADR-063 decision 28).
 
 #### The contribution-set clause of check 9
 
-36. **What the clause reads.** It reads a manifest whose `runtimes` holds `remote`,
+39. **What the clause reads.** It reads a manifest whose `runtimes` holds `remote`,
     against the `serves` of the distribution, and denies a declaration outside the
     contribution set (`08:391`, `:507`; `07:1113-1118`). The table under this decision
     says when each field of ADR-048:433 denies. A key or a hook that `serves` does not
     hold carries no mark, so it is denied here as well as by step 1 of `plugin check`
-    (`07:1574`). Beyond those fields:
-    - **`as`** is not read. A `want` is judged as a `need` is, by its key: a callback
-      that a plugin can do without is still a callback (decision 6). `FromManifest`
-      carries `as` into the `Inject` of the proxy, so a proxy is not PENDING for a
-      callback that its manifest wants (`07:194`, `:240`; ADR-063 decision 10).
+    (`07:1574`). Beyond the table:
+    - **A bound or signed key is denied whatever its mark.** The mark has one value per
+      definition (`07:538`), while a definition may declare several keys of different
+      classes and a `<key>.Bound` view of a key (decision 6). Read by the mark alone, the
+      row of `uses` would admit a bound key or a bound view of a definition marked
+      `callback`. The proxy value counts as `aiops/remote` for the binding lists and is
+      first-party code (ADR-063 decision 41), so such an entry would hand the manifest of
+      a third party a key through the bindings or the signer class of the proxy. ADR-063
+      decision 10 denies "a `uses` entry of any other key, a bound key included", so that
+      no manifest takes a key through the bindings of `aiops/remote`; decision 28 there
+      holds the case; and decision 41 there has a value take no key from its manifest that
+      those bindings would satisfy.
+      The clause therefore denies a `uses` entry that names a `<key>.Bound` view, and one
+      whose key has the consumer class `bound` or `signed` in `serves`
+      (`boot/distribution.go:100-101`; ADR-060 decisions 14 and 15), before it reads a
+      mark, and no answer to question Q8 opens a way around it. The rule costs nothing
+      that is planned: `credentials` is consumer-bound and is in the callback set, and a
+      remote executor reaches it through `remediation` and never by an inject (`07:62` R4;
+      `07:1180`).
+    - **One mark for a definition that is both.** `tools` is a `contrib` registry
+      (`07:1199`) and is in the callback set (`07:1178`; ADR-063 decision 34), and plugin
+      record §5 lists `audit` and `llm`, both callbacks, each in one row with a `contrib`
+      registry, `auditSinks` and `llmProviders`. A definition whose keys take both marks
+      cannot be written with one value, and this clause, read on such a definition, would
+      deny one of its two uses. No definition served at S2b is both: the two toy
+      registries are `contrib`, and the test definition of ADR-063 decision 51 is
+      `callback`. So the clause denies nothing wrongly at S2b, and no test of S2b reaches
+      the case. The step that first marks one definition both ways, S8a at the latest with
+      `tools`, settles the form of the mark, a value per key or a fourth value, by an
+      addition to this ADR before that definition is marked; `serves`, the definition lint
+      and this clause change with it (decision 42).
+    - **`instantiable`** belongs to check 8, and this addition adds one rule of the schema
+      to it: `instantiable: true` is valid only on a manifest whose `runtimes` holds
+      `inproc`. Check 8 reads the field from a manifest of the module table only
+      (`08:506`), and at S2b the bundle of a remote artifact holds exactly one row, of its
+      own plugin (ADR-063 decision 67), so on a manifest without `inproc` the field has no
+      reader, in Go as in Python (decision 25). No manifest of the repository changes
+      (decision 2).
+    - **`as`** is not read. A `want` is judged as a `need` is, by its key: a callback that
+      a plugin can do without is still a callback (decision 6). `FromManifest` carries
+      `as` into the `Inject` of the proxy, so a proxy is not PENDING for a callback that
+      its manifest wants (`07:194`, `:240`; ADR-063 decision 10).
     - **`durable`** is read from S3. Until then the list is `[]` and check 1 denies an
       entry in any manifest (decision 11; `boot/manifest.go:228-232`), so the clause has
       nothing to read. The addition that fixes the entry shape at S3 names the entries
       that are inside the set: a remote plugin keeps its own `kv` and `blob` state and
       registers no route, job handler or SQL (`07:1117-1118`), and `durable` lists a
-      schema, a key prefix, job kinds and a secret scope among its namespaces
-      (`07:143`).
+      schema, a key prefix, job kinds and a secret scope among its namespaces (`07:143`).
     - **`capabilities`** is not read. The contribution set of `08:391` holds no
-      capability. A `network` entry of a remote manifest is refused by install and
-      warned of by `plugin check` (ADR-063 decision 56), and the unit never has a wider
-      network than the manifest lists (ADR-063 decision 24). A `secrets` entry names
-      what the plugin reads in its own scope through the `secrets` callback, which
-      arrives at S3 (`07:135`, `:1174`; ADR-063 decision 26). The rule on a `harnesses`
-      contributor stays with the check that ADR-051 names (decision 15).
+      capability. A `network` entry of a remote manifest is refused by install and warned
+      of by `plugin check` (ADR-063 decision 56), and the unit never has a wider network
+      than the manifest lists (ADR-063 decision 24). A `secrets` entry names what the
+      plugin reads in its own scope through the `secrets` callback, which arrives at S3
+      (`07:135`, `:1174`; ADR-063 decision 26). The rule on a `harnesses` contributor
+      stays with the check that ADR-051 names (decision 15).
     - **The other fields** belong to other checks: `scope` and `runtimes` to the profile
       clause, which is not evaluated before S4a (ADR-048:433; ADR-063 decision 47); the
-      grammars of decisions 27 and 28 and every other rule of the schema to check 1;
-      `requires` to checks 1 to 3; `instantiable` to check 8.
+      grammars of decisions 28 and 29 and every other rule of the schema to check 1;
+      `requires` to checks 1 to 3.
     - At the handshake the clause runs on what the connection brings, against the same
-      marks and against the manifest's `registers` (ADR-063 decisions 11 and 16).
+      marks and classes and against the manifest's `registers` (ADR-063 decisions 11 and
+      16).
 
 | Field | The clause denies when | Source |
 |---|---|---|
 | `provides` | It holds an entry | `07:1115`; `08:391` |
 | `registers` | The key of an entry, at its major, is not a key of a served definition marked `remote: contrib` | `07:1115`; ADR-063 decision 46 |
 | `hooks` | The hook of an entry is not marked `remote: yes` in `serves`. A hook of the kernel never is (`internal/plugingen/defs.go:124`) | `07:1116`; `boot/distribution.go:105-109` |
-| `uses` | The key of an entry, at its major, is not a key of a served definition marked `remote: callback`. For a key that `registers` also lists, question Q8 | `08:391`; ADR-063 decisions 10, 28 and 46 |
+| `uses` | An entry names a `<key>.Bound` view; or its key has the consumer class `bound` or `signed` in `serves`, whatever the mark of its definition; or its key, at its major, is not a key of a served definition marked `remote: callback`. For a key of the third kind that `registers` also lists, question Q8 | `08:391`; ADR-063 decisions 10, 28, 41 and 46 |
+
+#### What is read from S2b
+
+40. **Decisions 1 and 16 are read with the notes below.** No line of either moves, since
+    ADR-063 cites lines of this file.
+    - **Decision 1 and the digest.** Decision 1 says that the manifest digest of
+      `plugins.lock`, of the handshake and of the index names the one file `plugin.yaml`
+      (ADR-048:111-113). ADR-063 decision 58 settles what that means at S2b. The digest of
+      the handshake is the SHA-256 of the bytes of the `plugin.yaml` that the plugin was
+      built with (decision 27). `plugins.lock` holds the digest of the artifact's OCI
+      manifest and not of `plugin.yaml` (ADR-047 decision 8), and the kernel compares the
+      digest of the first message with the `plugin.yaml` that install kept, whose
+      descriptor chains to the locked digest through `artifact.json` (ADR-047 decision
+      18). So the digest names this one file directly at the handshake and through that
+      chain in the lock. The digest of an index entry stays with the S6a part.
+    - **The table of decision 16** gains the rows under this decision, each from S2b.
+    - **The install paragraph of decision 16** (ADR-048:437-441) gains three readings.
+      Install of remote code reads `capabilities.network`, to refuse a manifest that lists
+      an entry (ADR-063 decision 56), and `plugin check` reads it for its warning. With
+      question Q5 (a), install reads `entrypoint`, the third input of the unit, beside
+      `id`, the second (ADR-063 decision 25). And the function that turns a kept manifest
+      into a plugin value reads `uses`, `registers`, `hooks` and `configSchema`, through
+      `FromManifest` (ADR-063 decisions 10 and 12).
+
+| Check | Fields read from S2b, beyond ADR-048:426-435 | Source |
+|---|---|---|
+| 1 | With question Q5 (a) or (b), `entrypoint`, whose form and grammar are rules of the schema (decision 28); the bound on a segment of `id` (decision 29); `instantiable` against `runtimes` (decision 39); with question Q7 (b), `runtimes` for the pair of `inproc` and `remote` | Decision 24; `08:499` |
+| 3 | `requires.remoteProtocol` against `serves.remoteProtocol`. The manifest digest of ADR-048:428 is no field: it is the SHA-256 of the bytes of the file | ADR-063 decisions 46 and 58 |
+| 8 | `runtimes` of the artifact's own manifest, which tells a remote artifact, whose bundle holds exactly one row | `08:506`; ADR-063 decision 67 |
+| 9 | The row of ADR-048:433 is read with decision 39: `provides`, `registers`, `hooks` and `uses` for the contribution-set clause, each against the marks and the key classes of `serves`; `scope` and `runtimes` for the profile clause, from S4a | ADR-063 decisions 46 and 47 |
+
+#### What the S2b part asks of other ADRs
+
+41. **Each point that this addition leaves to another ADR is in the table under this
+    decision**, with whether the list of ADR-063 decision 34 already holds it. An item
+    marked new is a requirement that this addition puts on the receiving ADR or addition,
+    not one that ADR-063 gave it. At `bbfd839` none of the receiving documents exists
+    (Context), so no item can be checked as taken up. Each receiving ADR or addition
+    answers every item that names it, by the number of this decision, and this addition
+    asks that the S2b exit report (ADR-063 decision 32) list each item with the decision
+    that settled it.
+
+| Asked of | What | In the list of ADR-063 decision 34 |
+|---|---|---|
+| ADR-041 | The call context, through which a contribution reaches the callbacks that its plugin declares (decision 33), and which each method of a base class receives (decision 31) | Yes |
+| ADR-041 | The fixture `aiops_sdk.testing.host()`, with the names of its methods, which R8 puts with the Python parts (decision 31) | Yes: the fixture |
+| ADR-041 | Which proto declaration lists the calls of one contribution, to which the naming rule of decision 31 applies | Yes: whether the calls are messages on the one stream or a service per definition |
+| ADR-041 | How an instance takes the digest of `plugin.yaml` that it sends (decision 27) | Yes: the fields of the first message and its digest |
+| ADR-041 | The lowest supported interpreter is a version whose standard library reads TOML (decision 26) | The versions are listed; the floor is new |
+| ADR-041 | How a started process learns its listen address or socket path and the path of its credential, at step 4 of `plugin check` and in the unit (decision 28). It is where the instance's key and the kernel's certificate reach the process | No: new |
+| ADR-041 | The field of the instance certificate that names the plugin id takes every id that the schema admits (decision 29) | The identity is listed; the bound is new |
+| ADR-041 | The command of `aiopsctl` that the fixture wraps lets a test read a `plugin.yaml` with boot's strict reader and receive the fields as read, and compile a `configSchema` with the validator of the `plugin` package (decisions 27 and 35) | The command is listed; this use is new |
+| ADR-047, S2b part | The layer and the media type of the image reference; the unit files, the endpoint table and the credentials as rows of the home table (decision 29) | Yes |
+| ADR-047, S2b part | The names of the unit file, the network, the endpoint and the credential directory: an injective function of the id, inside the limits of each target for every admitted id, each limit cited at its source (decision 29) | No: new |
+| ADR-047, S2b part | The template of each target keeps the rules of decision 30 on the words, and the addition states which characters the reader of each target expands or unquotes inside a value, with its source at the pinned version | No: new |
+| ADR-061, S2b part | `plugin new --lang python` and the form of a remote Go plugin (decisions 25 and 28) | Yes |
+| ADR-061, S2b part | What builds the binary of a remote Go plugin before step 4, at the path that the first word of its `entrypoint` names in the plugin directory (decision 28) | No: new |
+| ADR-061, S2b part | How `aiopsctl` finds and runs `aiops-sdk manifest`: the program it starts, the interpreter, and the form of the command that prints the document and writes no file, which step 2 needs (decision 26) | No: new |
+| ADR-044, S2b part | The writer of `serves.remoteProtocol` calls `Majors` of the module `sdk/remote`, from the build list of the binary, and holds no list of its own (decision 37) | The writer is listed; its source is new |
+| ADR-020, S2b part | Whether the attestation names the runtimes its suites ran in | Yes |
+| ADR-063 decisions 13 and 18, by a dated note | The Python output of the adapter generator also covers a definition marked `callback` and a definition that owns a hook marked remote (decision 31) | No: an extension of decision 13 there |
 
 #### What the S2b part leaves open
 
-37. Not settled here:
-    - the messages of the protocol, the call context, the interpreter versions and the
-      fixture of the Python SDK, which are ADR-041's (ADR-063 decision 34);
-    - the method names of the Python base classes, which R8 puts with the Python parts
-      of S2b (`07:66`). They are generated from the proto of each definition (`07:1207`;
-      ADR-063 decisions 13 and 45), and this addition fixes the name of no generated
-      class or method;
-    - the layer of the image reference, and the names of the unit file, the network and
-      the endpoint, the S2b part of ADR-047 (decision 28);
-    - what builds a remote Go plugin before step 4, how `aiopsctl` finds
-      `aiops-sdk manifest` and the text of each refusal, the S2b part of ADR-061;
-    - the writer of `serves.remoteProtocol`, the S2b part of ADR-044 (decision 34);
-    - whether the attestation names the runtimes its suites ran in, the S2b part of
-      ADR-020 (ADR-063 decision 34);
-    - the `durable` entries and their place in check 9, at S3 (decision 36);
+42. Not settled here:
+    - the messages of the protocol and the rest of the scope of the Python SDK, which are
+      ADR-041's (ADR-063 decision 34), and every item of decision 41 until its receiving
+      ADR answers it;
+    - the form of the `remote` mark of a definition whose keys take both marks, by an
+      addition to this ADR at the step that first marks one, S8a at the latest (decision
+      39);
+    - the types of the config class beyond the map of decision 35, each with its first
+      consumer;
+    - the `durable` entries and their place in check 9, at S3 (decision 39);
     - the allow-list side of `capabilities.network`, S5 at the latest (ADR-063 decision
       56), and the profile clause of check 9, at S4a (ADR-063 decision 47);
+    - with question Q7 (b), what a manifest of two runtimes packs and installs, with the
+      first plugin that is to be published for both;
     - index format 1.0, at S6a (decision 20).
 
 ### Consequences of the S2b part
 
-- `aiops-sdk manifest`, the Python template, the `remoteProtocol` output of `plugingen`,
-  the contribution-set clause of check 9 and the grammar check of the unit renderer each
-  have a written rule, and each waits for the answer it names: Q5 for the renderer and
-  for step 4 of `plugin check`, Q6 for `@contributes`, Q7 for a manifest of two runtimes
-  and Q8 for the `uses` of a remote Go manifest.
-- Schema 1.0 changes before the first community release, by this amendment (decision 2):
-  a segment of the id holds at most 128 bytes, and with question Q5 (a) or (b) the
-  hand-written half gains `entrypoint`. No manifest of the repository changes by either.
-  A binary built before the change denies a manifest that carries `entrypoint`, as an
-  unknown field at a known minor (decision 24); no such binary is published (decision
-  2).
-- `aiopsctl` reads `plugin.yaml` alone, with every option but Q5 (c), and no reader of
-  TOML enters a Go binary.
+- `aiops-sdk manifest`, the Python template, the Python output of the adapter generator,
+  the `remoteProtocol` output of `plugingen`, the contribution-set clause of check 9 and
+  the unit renderer each have a written rule, and each waits for the answer it names: Q5
+  for the renderer and for step 4 of `plugin check`, Q6 for `@contributes`, Q7 for a
+  manifest of two runtimes, Q8 for the `uses` of a remote Go manifest and Q9 for the
+  declarations of callbacks and of the config class.
+- Schema 1.0 changes before the first community release, by this amendment (decision 2): a
+  segment of the id holds at most 128 bytes; `instantiable: true` is valid only with
+  `inproc`; and with question Q5 (a) or (b) the hand-written half gains `entrypoint`. No
+  manifest of the repository changes by any of the three. A binary built before the change
+  denies a manifest that carries `entrypoint`, as an unknown field at a known minor
+  (decision 24); no such binary is published (decision 2).
+- `aiopsctl` reads `plugin.yaml` alone, with every option but Q5 (c). It tests for a
+  `plugin.toml` and reads no key of it, and no reader of TOML enters a Go binary.
 - A Python plugin declares in code what a Go plugin declares in its `Spec`: its
   contributions, its listeners with their stages, the callbacks it calls and its config
-  type. `aiops-sdk` takes no schema library, so the list of ADR-063 decision 35 gains
-  no entry from this addition.
+  type. No library is taken for TOML, for YAML or for the schema, so the list of ADR-063
+  decision 35 gains no library from this addition. That rests on the interpreter's
+  standard library, at a floor that ADR-041 is asked for, and the interpreter's licence is
+  still to be read under that decision before `aiops-sdk manifest` merges.
+- The grammar of `entrypoint` and the rules of decision 30 together keep a third party's
+  string out of every place where a unit reads an option: the grammar closes the
+  characters, and the placement makes each word an argument of the plugin's own program.
 - One declaration of the spoken majors feeds `Hello.majors` on both sides,
-  `requires.remoteProtocol` and `serves.remoteProtocol`. What a manifest states and
-  what its build sends then differ only in a manifest made without `plugingen`, which
-  is the copy of step D2 of the exit (ADR-063 decision 27).
+  `requires.remoteProtocol` and `serves.remoteProtocol`. What a manifest states and what
+  its build sends then differ only in a manifest made without `plugingen`, which is the
+  copy of step D2 of the exit (ADR-063 decision 27).
+- This addition hands seventeen points to other ADRs (decision 41), ten of them, in whole
+  or in part, outside the list of ADR-063 decision 34. None can be checked as taken up
+  until the receiving documents exist, and the addition is complete only with their
+  answers.
 - The commit that records the answers makes the edits that the chosen options name, and
-  these, which no option changes: R8 at `07:66` names this addition for the Python
-  parts; the sketch of `07:150-168` gains the `[python]` table; `07:1208-1209` gain the
-  arguments of decisions 30 and 32; the `id` row of `07:126` gains the bound of decision
-  28; and the row of check 9 in the table of decision 16 (ADR-048:433) is read with
-  decision 36.
-- On acceptance the Status at the head of this ADR and the row of ADR-048 in the ADR
-  table of `08` §3 (`08:1182`) record the S2b part, and the S6a part stays open. The
-  Status is edited without moving a line, since ADR-063 cites lines of this file.
+  these, which no option changes:
+  - R8 at `07:66` says that the S2b part of ADR-048 fixes the keys of `plugin.toml` and
+    the rule that names the generated Python classes and methods (decision 31), and that
+    ADR-041 fixes the methods of the test fixture;
+  - the sketch of `07:150-168` gains the `[python]` table;
+  - `07:1203` and `07:1207` name the three kinds of definition that get a Python module
+    (decision 31), with a dated note at ADR-063 decisions 13 and 18;
+  - the `id` row of `07:126` gains the bound of decision 29, and the `instantiable` row of
+    `07:137` the rule of decision 39;
+  - the rows of checks 1, 3, 8 and 9 in the table of decision 16 and its install paragraph
+    (ADR-048:426-441) are read with decisions 39 and 40.
+- On acceptance the Status at the head of this ADR, the row of ADR-048 in the ADR table of
+  `08` §3 (`08:1182`) and the row of ADR-048 in `00` §9 (`00:786`) record the S2b part, in
+  the commit that records the answers (`08:999`), and the S6a part stays open. The Status
+  is edited without moving a line, since ADR-063 cites lines of this file.
 
 ### Questions for the owner on the S2b part
 
-Each question gives its options, the recommended one, why, and when the answer is
-needed. An option that changes a written line names every line it edits.
+Each question gives its options, the recommended one, why, and when the answer is needed.
+An option that changes a written line names every line it edits, and an option that
+changes the plugin record amends it in its §17 and names the section (ADR-063 decision 4).
 
-**Q5. Does `plugin.yaml` carry `entrypoint`, and what starts it?** `07:148` has
-`plugin check` and the deployment unit start the `entrypoint`, a key of `plugin.toml`.
-`00:207` lists the hand-written fields of `plugin.yaml` without it. An artifact carries
-`plugin.yaml` and no `plugin.toml` (`08:393`), the unit takes the `entrypoint` only if
-`plugin.yaml` keeps one (ADR-063 decision 25), and `aiopsctl` links no reader of TOML.
-Decision 27 fixes the grammar under every option.
+**Q5. Does `plugin.yaml` carry `entrypoint`, and what starts it?** `07:148` has `plugin
+check` and the deployment unit start the `entrypoint`, a key of `plugin.toml`, and plugin
+record §14 has `aiopsctl` start the plugin "as a local process from the `entrypoint` of
+`plugin.toml`". `00:207` lists the hand-written fields of `plugin.yaml` without it. An
+artifact carries `plugin.yaml` and no `plugin.toml` (`08:393`), the unit takes the
+`entrypoint` only if `plugin.yaml` keeps one (ADR-063 decision 25), and `aiopsctl` links
+no reader of TOML. Decision 28 fixes the grammar and how the first word is found under
+every option, and decision 30 what a unit may do with the words.
 - (a) `plugin.yaml` carries it, and both start it, as `07:148` says. `entrypoint` is a
   hand-written field of schema 1.0, present exactly when `runtimes` holds `remote`, in
-  every language, written after `runtimes`; `aiops-sdk manifest` copies it from
+  every language, written after `runtimes`. `aiops-sdk manifest` copies it from
   `plugin.toml`, and the template of a remote Go plugin writes it in `plugin.yaml`
-  (ADR-063 decision 60). Step 4 of `plugin check` starts it, and the unit takes it as
-  its third input (ADR-063 decision 25). It edits `00:207`, whose list of hand-written
-  fields gains `entrypoint` for remote code; the field table of `07` §2, which gains a
-  row after `07:134`; the table of community record §4.4 after community:176; the
-  manifest paragraph of plugin record §4, by an amendment in its §17; and the table of
-  decision 4, which is read with decision 27.
-- (b) `plugin.yaml` carries it, and only `plugin check` starts it. The unit runs the
-  image with the command that the image itself configures, so it takes two inputs, the
-  image reference and the id. It edits what (a) edits and `07:148`, which loses "and
-  the deployment unit", and, by dated notes, ADR-063 decisions 25 and 28. The command that
-  conformance ran is then not the command a site runs, unless the build file of the
-  image repeats it.
-- (c) `plugin.yaml` does not carry it, and `00:207` stands. `aiopsctl` reads
-  `entrypoint` from `plugin.toml` to run step 4, with a reader of TOML: a new linked
-  module, read and registered first (ADR-063 decision 35), or a reader of its own. A
-  remote Go plugin has no `plugin.toml` and needs another rule. The unit runs the
-  image's own command, with the edits of (b) to `07:148` and to ADR-063 decisions 25
-  and 28.
-- Recommended: (a). It is `07:148` as written, the command that the suites drove is the
-  command that the unit runs, `aiopsctl` and `FromManifest` keep reading one file
-  (decision 1; ADR-063 decision 10), and the string that reaches a unit is closed by the
-  grammar of decision 27 and written by an encoder. The owner decides, because it edits
-  `00:207`. Needed before `aiops-sdk manifest`, step 4 of `plugin check` for remote code
-  and the unit renderer merge.
+  (ADR-063 decision 60) as `./<name>`, the path at which the build before step 4 and the
+  template's build file both put the binary (decision 28). Step 4 of `plugin check` starts
+  it from `plugin.yaml`, and the unit takes it as its third input and as the whole command
+  of the container (ADR-063 decision 25; decision 30). One string is then what the suites
+  drove and what the unit runs; that the string resolves inside the image is proven where
+  the image runs, not by step 4 (decision 28). It edits `00:207`, whose list of
+  hand-written fields gains `entrypoint` for remote code; the field table of `07` §2,
+  which gains a row after `07:134`; the table of community record §4.4 after
+  community:176; the manifest paragraph of plugin record §4 and the sentence of plugin
+  record §14, which then reads "from the `entrypoint` of `plugin.yaml`, which `aiops-sdk
+  manifest` copies from `plugin.toml`", both by an amendment in its §17; the table of
+  decision 4, which is read with decision 28; and the install paragraph of decision 16
+  (ADR-048:437-441), which is read with decision 40.
+- (b) `plugin.yaml` carries it, and only `plugin check` starts it. The unit runs the image
+  with the command that the image itself configures, so it takes two inputs, the image
+  reference and the id. It edits what (a) edits, plugin record §14 included, except the
+  install paragraph; `07:148`, which loses "and the deployment unit"; and, by dated notes,
+  ADR-063 decisions 25 and 28. The command that conformance ran is then not the command
+  that a site runs, unless the build file of the image repeats it, and no check holds the
+  two equal.
+- (c) `plugin.yaml` does not carry it. `00:207` stands, and so does plugin record §14,
+  which is this option to the letter. `aiopsctl` reads `entrypoint` from `plugin.toml` to
+  run step 4, with a reader of TOML: a new linked module, read and registered first
+  (ADR-063 decision 35), or a reader of its own, and that reader holds a second copy of
+  the grammar of decision 28. A remote Go plugin has no `plugin.toml` and needs another
+  rule. The unit runs the image's own command, with the edits of (b) to `07:148` and to
+  ADR-063 decisions 25 and 28.
+- Recommended: (a). It is `07:148` as written. The string that the suites drove is the
+  string that the unit runs, with no word of the image before or after it (decision 30);
+  `aiopsctl` and `FromManifest` keep reading one file (decision 1; ADR-063 decision 10); a
+  remote Go plugin needs no second rule; and the string that reaches a unit is closed by
+  the grammar of decision 28 and placed by the rules of decision 30. Its cost is the
+  amendment of plugin record §14, whose words only (c) keeps. The owner decides, because
+  it edits `00:207` and the plugin record. Needed before `aiops-sdk manifest`, step 4 of
+  `plugin check` for remote code and the unit renderer merge.
 
 **Q6. How does `@contributes` name a key where a definition declares more than one
-registry key?** The decorator is `@contributes(definition)` (`07:1208`; plugin record
-§4), `registers` names keys and not definitions (decision 8), and a definition may
-declare several keys (ADR-060 decision 7). The two toy registries declare one key each.
+registry key?** The decorator is `@contributes(definition)` (`07:1208`; plugin record §4),
+`registers` names keys and not definitions (decision 8), and a definition may declare
+several keys (ADR-060 decision 7). The two toy registries declare one key each.
 - (a) By the base class. The generated module of a definition holds one base class per
   registry key of the definition, each carrying the name and the major of its key
-  (`07:1207`; ADR-063 decision 13). `@contributes(definition)` takes the key from the
-  base class that the decorated class derives from, as the sketch derives from
-  `tools.Tool` (`07:1221-1222`), and refuses a class that derives from none of them or
-  from two. No line is edited.
+  (`07:1207`; decision 31). `@contributes(definition)` takes the key from the base class
+  that the decorated class derives from, as the sketch derives from `tools.Tool`
+  (`07:1221-1222`), and refuses a class that derives from none of them or from two. No
+  line is edited.
 - (b) By a second argument, required only where the definition declares more than one
-  registry key: `@contributes(definition, key)`. `07:1208` and plugin record §4 gain the
-  argument.
-- (c) Always by the key: `@contributes(key)`, with the key object of the generated
-  module. It edits `07:1208`, the sketch at `07:1221` and plugin record §4.
-- Recommended: (a). The decorator stays as written for every definition, the class
-  already says which contribution it implements, and a wrong class is refused when the
-  module is imported, before a manifest is written. Needed before the `@contributes` of
-  `aiops-sdk` and the Python output of the adapter generator merge.
+  registry key: `@contributes(definition, key)`, with the key object of decision 31.
+  `07:1208` and plugin record §4 gain the argument, the record by an amendment in its §17.
+- (c) Always by the key: `@contributes(key)`, with the key object of decision 31. It edits
+  `07:1208`, the sketch at `07:1221` and plugin record §4, the record by an amendment in
+  its §17.
+- Recommended: (a). The decorator stays as written for every definition, the class already
+  says which contribution it implements, and a wrong class is refused when the module is
+  imported, before a manifest is written. Needed before the `@contributes` of `aiops-sdk`
+  and the Python output of the adapter generator merge.
 
-**Q7. What does a manifest that lists `inproc` and `remote` pack and install?** The
-schema admits the pair (decision 4), `plugin check` runs T1 and T2 in every runtime
-listed (`07:134`, `:1578`), and a version entry of the index names one artifact with its
+**Q7. What does a manifest that lists `inproc` and `remote` pack and install?** The schema
+admits the pair (decision 4), `plugin check` runs T1 and T2 in every runtime listed
+(`07:134`, `:1578`), and a version entry of the index names one artifact with its
 `runtimes` (`07:1902`). No line says what the artifact holds, which form a site runs or
 how the two forms are told apart, no exit step and no case of ADR-063 uses the pair
 (ADR-063 decision 34), and a part lands with its first consumer (`08:680`).
-- (a) As written, built whole at S2b. One artifact holds both forms: the image
-  reference by digest, which `plugin pack` builds (ADR-063 decision 61), and the module
-  path, version and sum (`08:393`). `plugin check` runs steps 4 and 5 in both runtimes.
-  A site runs one form: `plugin install` takes the runtime as a flag, answers
-  `rebuild-required` for `inproc` and locks and renders the unit for `remote`, and a
-  plugin id that is both in the module table and locked is refused. The clauses "for
-  in-process code" and "a remote manifest" each apply to the manifest. It needs
-  additions to ADR-047 (two code layers), ADR-061 (the flag) and ADR-020 (the
-  attestation of two runtimes), and cases for each rule.
-- (b) Denied until a plugin needs it. The manifest validates, and gate check 1 denies
-  it at every entry point, as it denies `wasm` (`08:499`; `boot/checks.go:242-243`):
+- (a) As written, built whole at S2b. One artifact holds both forms: the image reference
+  by digest, which `plugin pack` builds (ADR-063 decision 61), and the module path,
+  version and sum (`08:393`). `plugin check` runs steps 4 and 5 in both runtimes. A site
+  runs one form: `plugin install` takes the runtime as a flag, answers `rebuild-required`
+  for `inproc` and locks and renders the unit for `remote`, and a plugin id that is both
+  in the module table and locked is refused. The clauses "for in-process code" and "a
+  remote manifest" each apply to the manifest. It needs additions to ADR-047 (two code
+  layers), ADR-061 (the flag) and ADR-020 (the attestation of two runtimes), and cases for
+  each rule.
+- (b) Denied until a plugin needs it. The manifest validates, and gate check 1 denies it
+  at every entry point, as it denies `wasm` (`08:499`; `boot/checks.go:242-243`):
   "`runtimes` lists `inproc` and `remote` together, a pair that no step serves yet".
   `plugin check` fails on it at step 1, before it runs a suite, so nothing packs or
   installs one. The schema keeps the set, so the pair is built later with no change of
-  schema: with the first plugin that is to be published for both runtimes, by an
-  addition to this ADR that settles what (a) lists. `08:499` gains the clause, and
-  `07:134` and community:176 gain the sentence beside `wasm`.
+  schema: with the first plugin that is to be published for both runtimes, by an addition
+  to this ADR that settles what (a) lists. `08:499` gains the clause, and `07:134` and
+  community:176 gain the sentence beside `wasm`.
 - Recommended: (b). It is the rule that the owner chose for a `network` entry and for a
-  second row of a remote bundle (ADR-063 decisions 56 and 67): nothing is built without
-  a consumer, and nothing that is not built is admitted. (a) adds a flag, a layer and a
-  boot rule that no test of S2b reaches. The owner decides, because (b) defers a form
-  that the schema admits. Needed before gate check 1 and `plugin pack` of remote code
-  merge.
+  second row of a remote bundle (ADR-063 decisions 56 and 67): nothing is built without a
+  consumer, and nothing that is not built is admitted. (a) adds a flag, a layer and a boot
+  rule that no test of S2b reaches. The owner decides, because (b) defers a form that the
+  schema admits. Needed before gate check 1 and `plugin pack` of remote code merge.
 
 **Q8. Is the registry key that a remote Go manifest holds in `uses` inside the
 contribution set?** `plugingen` writes `uses` from `Spec.Inject` (decision 6), and a Go
@@ -1267,22 +1687,62 @@ contribution injects the registry it registers with
 (`templates/echoers/plugin.go.tmpl:25-26`). Step G1 of the exit takes that value,
 unchanged, as remote code, and `plugin check` passes its step 7, which runs the gate
 (ADR-063 decisions 16 and 27). ADR-063 decisions 10 and 28 have check 9 deny a `uses`
-entry of a key that is not marked `callback`, and `07:1198` words the value as one
-"whose `Inject` is within the callback set".
-- (a) It is inside. The clause admits a `uses` entry whose key and major the same
-  manifest lists in `registers`, where the row of `registers` in decision 36 judges it.
-  One `Plugin` value then has one `uses` in both runtimes. The entry gives the proxy no
-  key that `registers` does not already give it, since the proxy needs each registry of
-  `registers` to register the contributions (ADR-063 decision 11). Every other key
-  stays outside: a bound key, a key of a definition marked `no`, and a built-in key of
-  the kernel, which belongs to `pluginApi` and carries no mark (ADR-060 decision 9). It
-  edits `07:1198`, which gains "beyond the registries it registers with", and, by dated
-  notes, ADR-063 decisions 10 and 28.
+entry of a key that is not marked `callback`, and `07:1198`, plugin record §11 and ADR-063
+decision 8 word the value as one "whose `Inject` is within the callback set".
+- (a) It is inside. The clause admits a `uses` entry whose key and major the same manifest
+  lists in `registers`, where the row of `registers` in decision 39 judges it. One
+  `Plugin` value then has one `uses` in both runtimes. The entry gives the proxy no key
+  that `registers` does not already give it, since the proxy needs each registry of
+  `registers` to register the contributions (ADR-063 decision 11). Every other key stays
+  outside: a bound view and a key of a bound or signed consumer class, which decision 39
+  denies before any mark is read; a key of a definition marked `no`; and a built-in key of
+  the kernel, which belongs to `pluginApi` and carries no mark (ADR-060 decision 9). The
+  two languages then differ on that entry: a remote Go manifest lists the registry key in
+  `registers` and in `uses`, and a Python manifest in `registers` alone (decision 33). A
+  reader of `uses` sees two shapes for one contribution, and none takes a decision from
+  the difference: check 9 judges the key through `registers`, and `FromManifest` needs
+  each registry of `registers` whether `uses` repeats it or not. It edits `07:1198` and
+  the same sentence of plugin record §11, the record by an amendment in its §17, each of
+  which gains "beyond the registries it registers with", and, by dated notes, ADR-063
+  decisions 8, 10 and 28.
 - (b) It is outside, to the letter. `plugingen` leaves out of the `uses` of a remote
   manifest each key that its `registers` lists, and decision 6 gains that exception.
-  `07:1198` and ADR-063 decisions 10 and 28 stand. One value then has two forms of
-  `uses`, and under question Q7 (a) the one manifest of both runtimes would have to
-  hold both.
+  `07:1198`, plugin record §11 and ADR-063 decisions 8, 10 and 28 stand, and both
+  languages write the same `uses` for a remote manifest. One value then has two forms of
+  `uses`, one per runtime, and under question Q7 (a) the one manifest of both runtimes
+  would have to hold both.
 - Recommended: (a). Step G1 passes with the value unchanged, the manifest of a value is
-  the same in both runtimes, and the proxy gains no key. Needed before check 9 and
-  `plugin.FromManifest` merge.
+  the same in both runtimes, and the proxy gains no key. The difference between the two
+  languages has no reader. Needed before check 9 and `plugin.FromManifest` merge.
+
+**Q9. Where does a Python plugin declare the callbacks it calls and its config class?**
+`uses` and `configSchema` are generated fields (`00:207`), and `aiops-sdk manifest` reads
+`plugin.toml` and the decorators (`07:79`). The decorators are written
+`@contributes(definition)` and `@listens(hook, stage)` (`07:1208-1209`; plugin record §4),
+and no part of the SDK names a callback or a config type (`07:1205-1213`), while the
+sketch calls `ctx.secrets` (`07:1227`). In Go both are parts of the `Spec`: `Inject` and
+the config type (ADR-060 decision 4). Decisions 33 and 35 fix what a declaration means
+under every option.
+- (a) Keyword arguments of the decorators. `@contributes` and `@listens` each take three
+  optional arguments: `needs` and `wants`, each a list of key objects (decision 33), and
+  `config`, the config class (decision 35). Every decorator of the module that names a
+  class names the same one. The declaration stands beside the code that makes the call, as
+  `Inject` stands in the `Spec`, and a name that the SDK does not hold fails when the
+  module is imported. It edits `07:1208-1209` and the decorators of plugin record §4, the
+  record by an amendment in its §17, and the sketch of `07:1221`, which then declares the
+  callback that `07:1227` calls.
+- (b) Keys of `plugin.toml`. The `[python]` table gains `needs` and `wants`, arrays of
+  strings of the form `<key>@<major>`, and `config`, the dotted name of the config class.
+  The decorators stay as written, and neither `07:1208-1209` nor plugin record §4 changes:
+  the keys are inside what R8 leaves to this part (`07:66`). A generated field then has a
+  hand-written source in a data file, a key is a string that only `aiops-sdk manifest`
+  checks, and the declaration stands apart from the code that makes the call.
+- (c) One call at module level, `aiops_sdk.plugin(needs, wants, config)`, a new part of
+  the SDK. The decorators stay as written. The table of `07:1205-1213` gains a row, and
+  plugin record §4 gains the part by an amendment in its §17.
+- Recommended: (a). A Python plugin then declares in code, beside each contribution, what
+  a Go plugin declares in its `Spec`; the declaration is checked at import; and the SDK
+  keeps the parts it has. The owner decides, because the plugin record writes the
+  decorators and ADR-063 decision 4 admits no departure from that record without the
+  owner's word. Needed before the decorators of `aiops-sdk` and `aiops-sdk manifest`
+  merge.
