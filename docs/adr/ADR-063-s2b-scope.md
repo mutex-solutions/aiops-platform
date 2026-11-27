@@ -2011,8 +2011,9 @@ Lines that restate edited text are edited with them: the S2b builds of `00:573` 
 `08:697`, community:43 and plugin record §16, which name the proxy plugin and `sidecars`
 (decisions 39 and 41); the rows that `self-host-full` composes, 100 and 105 with the
 Slack bundle, in `00:272`, `08:249` and plugin record §6, with the row `remote` of that
-section, and `05:255` (decision 41); the stated exception in `07:50`, `07:527` and
-harness:217, with a dated note at ADR-054 decision 21 (decision 42); R2 at `07:60` and
+section, `05:255` and the proxy rows that the one process holds in `02:196` (decision
+41); the stated exception in `07:50`, `07:527` and harness:217, with a dated note at
+ADR-054 decision 21 (decision 42); R2 at `07:60` and
 the module count in the builder paragraph of plugin record §11 (decision 43); the digest
 rule in `07:1160` and community:161 (decision 58); "stub remote plugins" in `07:1521`,
 `08:1244` and plugin record §13 (decision 64); the update rows of `07:1390` and plugin
@@ -2040,7 +2041,8 @@ Left to later commits, each named:
   the rows of ADR-041 at `00:777` and `08:1175`, with ADR-041, which writes how disable
   and remove revoke where no leader exists (decision 34);
 - the counts of "three SDK modules" in the texts of ADR-020, ADR-044 and ADR-060 outside
-  the decisions that carry a dated note, which stand as text of their date.
+  the decisions that carry a dated note, and the words "the `remote` proxy row" of
+  ADR-060 decision 4, which stand as text of their date.
 
 `08:507`, `08:1292` and `02:313` are not edited: decisions 47 and 50 change no line of
 them. ADR-047, ADR-059 and ADR-062 are not edited: no chosen option names a line of
