@@ -3,7 +3,9 @@
 - Status: **accepted 2026-11-23 by the project owner.** The owner answered all 13
   questions on the same date with the recommended option of each; the section "Owner
   answers of 2026-11-23" records them as decisions 15 to 27. ADR-060 decision 2 required
-  this acceptance before the builder code merges into `main`.
+  this acceptance before the builder code merges into `main`. The S2b part, the last
+  section of this file, is **proposed 2026-11-27, awaiting the project owner**: nothing
+  in it is decided, and it changes no decision above.
 - Scope: ADR-044 as `08:1175` and `00:778` state it (the builder image, the module cache
   format, when `--allow-bump` is acceptable, the content of the `init` deny-list), with
   the points ADR-060 decision 33 adds: the base layer and SBOM tool of the builder image
@@ -957,3 +959,468 @@ text of the ported library for go-diff and ISC for go-spew, and the register ent
 classifier and licence:57 record them. The owner answered on 2026-11-25 that decision 15
 names the selected versions, and it is edited to them, with `08:1386`, which restates
 it.
+
+## S2b part, proposed 2026-11-27
+
+- Status: **proposed 2026-11-27, awaiting the project owner.** Decisions 28 to 37 are
+  proposals and questions Q14 to Q17 are open; nothing below is decided until the owner
+  answers. The code this part governs merges into `main` only after it is accepted
+  (ADR-063 decision 2).
+- Scope: the S2b part of this ADR, as ADR-063 decision 34 lists it: the release modules
+  the builder serves; the suite binaries that drive a remote process; the writer of the
+  new `serves` fields, `remoteProtocol` and the `remote` mark (ADR-063 decision 46); and
+  the gRPC codec exemption, read again if the pin of `google.golang.org/grpc` moves
+  (ADR-020 decision 27). Decisions 1 to 27 stand. This part changes no decision of
+  `00-decisions.md`; every line an answer would edit is named in "Edits on acceptance
+  of the S2b part".
+- It blocks: the builder change that serves `sdk/remote` and `sdk/remotehost`; the
+  reader and the writer of the new `serves` fields, which change in one commit, and with
+  them the majors clause of check 3 and check 9; and step 5 of `plugin check` for the
+  runtime `remote`.
+- Citations: in this part `00`, `07` and `08`, and every path with a line, are at commit
+  `bbfd839`, where the sections above cite `8e1f7b9`: the builder paragraph is `08:402`
+  above and `08:404` here. ADR-020, ADR-048, ADR-060 and ADR-063 are cited by decision.
+  The facts on gRPC name `google.golang.org/grpc@v1.82.1`, whose files were read on
+  2026-11-27 as `go mod download -json` placed them in the Go module cache, at the sum
+  `h1:NnAxzGRA0677vCa4BUkOAnO5+FfQqVl9iUXeD0IqcGE=` that `go.sum:402` records.
+
+### Context of the S2b part
+
+ADR-063 fixes what S2b asks of the builder, and this part reopens none of it:
+
+- From S2b the SDK is five Go modules: `sdk/remote` and `sdk/remotehost` are nested
+  modules, each with a closed require list, and the builder serves six modules (ADR-063
+  decision 43; `07:23`; `00:263`). Each new module gets a served `go.mod` copy and its
+  place in the builder's list of release modules (ADR-063 decision 7). The generated Go
+  of a `contrib` definition lives in the module `sdk/remote`, under
+  `sdk/remote/def/<name>/v<N>` (ADR-063 decision 44; `07:28`).
+- gRPC and Protocol Buffers are imported from S2b by the remote modules, the proxy
+  plugin, the adapter generator and the check runner of `aiopsctl` (ADR-063 decision 42;
+  `00:268`).
+- `serves` gains `remoteProtocol`, the majors the binary speaks, and per served
+  definition its `remote` mark, `contrib`, `callback` or `no`. The reader and the
+  builder change in one commit, and `distVersion` stays 1 (ADR-063 decision 46). The
+  majors clause of check 3 and the contribution-set clause of check 9 read the two
+  fields at every entry point but `dist build` (ADR-063 decision 16).
+- For the runtime `remote`, in every language, step 4 of `plugin check` starts the
+  plugin's entrypoint as a local process and drives it over a Unix socket, and step 5
+  runs the obligations half of each suite through the adapter against that process,
+  with no Go toolchain for a non-Go plugin (ADR-063 decision 17; `07:1577-1578`;
+  `00:305`). The subject of the suite is the proxy fiber, and the guard half never runs
+  remote (ADR-063 decision 14). One implementation of the kernel side of the protocol
+  serves a server and `plugin check` (ADR-063 decision 9). Only the check runner opens
+  the socket, to a process that it started, and on it the handshake and check 3 run as
+  on a server (ADR-063 decisions 23 and 54, reading 2).
+
+The code at `bbfd839` holds none of it yet, and reading it against those decisions
+shows what this part must settle:
+
+- The release modules are one list of four: the root module, `sdk`, `sdk/kernel` and
+  `sdk/testkit` (`internal/builder/build.go:94`). Five rules read that list: the served
+  copy of a `go.mod` and the set of modules served (`internal/builder/serve.go:32`,
+  `:54`); the `go.sum` inside each served zip, a source of recorded hashes
+  (`build.go:222-224`; decision 8); the lines of a release's own modules, which a
+  release build takes as go writes them (`build.go:578`); strict versions
+  (`build.go:666-668`, `:677`; decision 20); and the owners `aiops` and `contrib`,
+  admitted only from a package of one of these modules
+  (`internal/builder/manifest.go:80`; `08:404`).
+- `sdk/remote/handshake`, the frozen proto with its freeze test, is a directory of the
+  module `sdk` (`Makefile:161`), and a served zip leaves out every directory that holds
+  a `go.mod` of its own (`serve.go:87`).
+- The pins of a signed manifest are the `go.sum` lines of the build (`build.go:559-586`,
+  `:608-645`; ADR-060 decision 20). Go writes the hash of a zip only for a module whose
+  packages the build lists, and the hash of a `go.mod` for every module of the graph it
+  loads. At S2a a release build lists packages of each of the four modules, `sdk/testkit`
+  through its suite binaries (`internal/builder/suites.go:76`; `build.go:560`). At S2b
+  the server, `aiopsctl` and their suite binaries drive the process of a plugin and
+  hold no plugin-side host, which is what `sdk/remotehost` is (`07:32`).
+- The release `aiopsctl` embeds four test binaries: the pack suites of `commands`,
+  `echoers` and `stampers`, and the echo scenario (`suites.go:31-41`, `:163-177`;
+  ADR-060 decisions 46 and 49). Each runs the rows of a pack on first-party
+  instantiable plugins, as a child process of `aiopsctl` with its input in the
+  environment (`internal/authoring/tools.go:475-504`), and none opens a connection. The
+  toolbox takes an embedded binary only for a directory that holds no Go code and
+  compiles the suite in the author's module otherwise (`tools.go:439-463`). An
+  `aiopsctl` built in the repository, or by a site's build, embeds none and answers
+  `launch.ErrNotCarried` (`tools.go:476-484`; ADR-060 decision 46).
+- The launcher's toolbox is a value of the `aiopsctl` process (`boot/launch.go:226-227`),
+  and ADR-063 decisions 16 and 57 have the check runner reach the handshake entry of
+  the gate "through the toolbox it already holds". A suite runs in a child process,
+  which holds no toolbox.
+- One function writes `serves` for every signed manifest, of a release, of a site and
+  of a binary built in the repository: `plugingen.Serves`, which `Manifest.Write` calls
+  on the `definition.yaml` of each package of the server's graph
+  (`internal/plugingen/defs.go:157-167`; `internal/builder/manifest.go:59-70`, `:108`).
+  It reads the `remote` mark of a definition and drops it (`defs.go:30`, `:85`,
+  `:137-144`), and it takes `pluginApi` from the constant compiled into the builder
+  (`defs.go:158`). Nothing in the repository lists the majors a binary speaks. The
+  reader refuses an unknown field of `serves` and of a served major
+  (`boot/distribution.go:241-242`, `:265-267`). A hook already carries its `remote` mark
+  in `serves` (`defs.go:46-50`; `boot/distribution.go:107-110`).
+- The exception of the `init` deny-list for gRPC's codec is keyed by package, module
+  and version, v1.82.1 (`internal/builder/initscan.go:61-63`). That is the version of
+  the root build list, where gRPC is an indirect requirement (`go.mod:102`). The scan
+  reads the graph of the server's main package alone (`build.go:161`).
+
+Read for this part in `google.golang.org/grpc@v1.82.1`:
+
+- `encoding/proto/proto.go:35-37`: the `init` calls `encoding.RegisterCodecV2` with the
+  module's own proto codec, and makes no other call.
+- `encoding/gzip/gzip.go:40-46`: the `init` calls `encoding.RegisterCompressor`. Outside
+  its tests, one file of the module imports that package,
+  `benchmark/benchmain/main.go`.
+- `trace_withtrace.go:1` carries the build constraint `!grpcnotrace`. Outside its tests
+  it is the one file of the module that imports `golang.org/x/net/trace`.
+- A search of the module's Go files outside its tests for a call of `RegisterCodec`,
+  `RegisterCodecV2` or `RegisterCompressor` finds those two and one more, inside a
+  closure that the `init` of package `encoding` stores as a test hook and does not run
+  (`encoding/encoding.go:41-45`).
+
+### Decision of the S2b part
+
+28. **The builder serves six release modules, at one version.** The list of
+    `internal/builder/build.go:94` gains `sdk/remote` and `sdk/remotehost`, and holds
+    the root module and the five SDK modules (ADR-063 decisions 7 and 43; the notes of
+    2026-11-27 at decisions 20 and 23). It stays one list, so each rule that reads it
+    holds for the two new modules as it holds for the four:
+    - a release serves each at the release version, with a served `go.mod` that names
+      every release module at that version and holds no `replace` line
+      (`serve.go:26-45`, `:52-59`; ADR-060 decision 21), and the test of the served
+      copies reads the six files (`internal/builder/serve_test.go:21`);
+    - the `go.sum` inside each served zip is a source of recorded hashes (decision 8);
+    - each is held at the release version, and `--allow-bump` never names one (decision
+      20);
+    - an id under `aiops/` or `contrib/` is admitted only from a package of one of the
+      six (`08:404`).
+
+    No module is served, pinned or protected by a rule of its own. The closed require
+    list of each new module and the CI steps of its directory are ADR-063's (decisions
+    7 and 37).
+29. **What the served zips hold.** A served zip leaves out a nested module
+    (`serve.go:87`). From S2b the zip of `sdk` therefore holds no file under `remote/`
+    or `remotehost/`: the handshake proto and its freeze test leave the module `sdk` and
+    travel in the zip of `sdk/remote`, in the directory they have (ADR-063 decisions 6
+    and 43). The six are served at one version and none is raised alone (decision 28),
+    so no build list holds that directory in two modules. A test over one serving of
+    the tree fails when a file of the tree is in two of the six zips, or when a
+    directory that holds a `go.mod` is in the zip of its parent. A release serves one
+    version of each of the six. The second version of the two remote modules that step
+    D1 of the S2b exit needs (ADR-063 decision 27) is a second serving, by the exit's
+    pipeline, of a changed copy of the tree into the module source of the job. It is in
+    no pin of the test release, and the builder asks a module source for exact versions
+    only (decision 7), so it changes no build of that release.
+30. **A release module that no release binary compiles** has its hashes recorded as
+    question Q14 decides. Decision 8 checks a module against recorded hashes, and the
+    release's signed manifest records the `go.sum` lines of the release's own build
+    (ADR-060 decision 20). No binary that a release links needs a package of
+    `sdk/remotehost` (decision 32), so that build writes the hash of its `go.mod` and
+    not of its zip. A site's build lists every package of each module of `plugins`
+    (`build.go:560-563`). One that holds a `main` on `sdk/remotehost` beside its
+    in-process plugin compiles that module, finds no recorded hash for its zip, and
+    under decision 8 prints the hash the module source gives and records it as checked
+    against nothing, for a module that the release pipeline built.
+31. **One binary drives a remote process**, as question Q15 decides: with (a),
+    `suites/runtime-remote.test`. The release build writes its test file into the
+    scratch module in both phases, so that its build list is in the release's pins. Its
+    second phase compiles it beside the pack binaries, with `go test -c`, `-trimpath`,
+    cgo off and the tag `grpcnotrace`, and the release `aiopsctl` embeds it (ADR-060
+    decision 46; `suites.go:163-177`; `build.go:349-350`). It carries what steps 4 and
+    5 of `plugin check` run in the runtime `remote` (ADR-063 decision 17). A suite
+    mounts its subject on the kernel root of `kerneltest` and behind definition fakes,
+    which only test files and the check runner import (`suites.go:84`; `07:33`;
+    `08:1265`), and step 4 mounts the same proxy fiber behind the same fakes. Both
+    steps therefore run in a test binary, as the suites of a pack do. A definition name
+    holds no hyphen (`internal/plugingen/defs.go:53`), so the name collides with the
+    suite binary of no registry.
+32. **What the binary links, and what it does not.**
+    - The kernel side of the protocol, the package of the module `sdk/remote` that the
+      proxy uses: one implementation serves a server and `plugin check` (ADR-063
+      decision 9).
+    - The proxy code of the plugin `aiops/remote`, with `plugin.FromManifest` (ADR-063
+      decisions 10 and 41). The subject of each suite is a proxy fiber of that code
+      (ADR-063 decision 14), and the binary holds no second proxy.
+    - For each registry of the builder's list (`suites.go:31`) whose `definition.yaml`,
+      in the zip of the module `sdk` at the release version, is marked `contrib`: its
+      suite, and its generated adapter of `sdk/remote/def/<name>/v<N>` (ADR-063
+      decisions 13 and 44). At S2b these are `echoers` and `stampers`. The release
+      build fails when a definition of that zip is marked `contrib` and the list lacks
+      it, so no `contrib` registry of a release is without its suite in the binary.
+    - The fakes of the definitions that the proxy fiber injects, and of each definition
+      marked `callback` (ADR-063 decision 17). No definition of a release is marked
+      `callback` at S2b: the test definition of ADR-063 decision 51 ships in no release
+      table.
+    - `boot`, for the handshake entry of the gate, as question Q16 decides.
+    - The dial of a Unix socket. It is code of this binary alone: a server has no
+      unauthenticated dial, by no flag, config field or fallback (ADR-063 decision 23).
+      The package that holds it is refused in the graph of `cmd/aiops` by the import
+      check of `make check`, which refuses the toolbox there today (`Makefile:197-203`).
+
+    It links no package of `sdk/remotehost`: the process under check brings its own
+    plugin-side host. It links no code of the plugin under check, in any language.
+33. **How the binary is run.** As the pack binaries are: a child process of `aiopsctl`,
+    with its input in the environment and a JSON report (`tools.go:475-504`; ADR-060
+    decision 46). Its input is the plugin directory, the address of the socket and, with
+    question Q16 (a), the signed manifest that `aiopsctl` embeds or that `--against`
+    names. For the runtime `remote` the toolbox takes this binary in every language,
+    whether or not the directory holds Go code and the machine a Go toolchain (ADR-063
+    decision 17); today it takes an embedded binary only where the directory holds no
+    Go code (`tools.go:439-463`). The binary runs the obligations half alone, and its
+    report names that half (ADR-063 decision 14). The runner alone opens the socket, to
+    a process that it started (ADR-063 decision 23). Which of the two processes starts
+    the entrypoint, which test of the binary each step runs and the form of the report
+    are the S2b part of ADR-061; the grammar of `entrypoint` is the S2b part of
+    ADR-048; the command that the Python fixture wraps is ADR-041's (ADR-063 decision
+    34).
+34. **Which `aiopsctl` carries the binary, and what the binary adds to the reports.**
+    - Only a release build embeds suite binaries. An `aiopsctl` built in the
+      repository, or by a site's build, embeds none (ADR-060 decision 46), and for the
+      runtime `remote` it answers `launch.ErrNotCarried` and names the binary, as it
+      does for a pack (`tools.go:476-484`). A case that needs the binary runs on the
+      `aiopsctl` of the test release (ADR-063 decision 37).
+    - The packages of the binary enter the licence report, `THIRD_PARTY_LICENSES/`, the
+      NOTICE texts and the SBOM of `aiopsctl`, and the SBOM of the builder image names
+      the binary with its build list (decision 5; `build.go:872`). The scan classifies
+      grpc-go and protobuf-go there at each build, as it classifies every module;
+      ADR-063 decision 35 holds the reading of both at their pins.
+    - The `init` deny-list reads the graph of the server's main package (decision 11;
+      `build.go:161`), and the clause of check 7 on a `fake` or `sdk/testkit` package
+      reads the graph of a server binary (`08:1265`). Neither reads this binary.
+    - Neither `plugin smoke` nor `plugin verify` of remote code runs the builder. Smoke
+      attaches the plugin's image to the released image (`07:1583`), and verify runs
+      the suite against a pulled image (ADR-063 decision 17), with this binary. How
+      verify starts that image and reaches it is the S2b parts of ADR-020 and ADR-061
+      (ADR-063 decision 34).
+    - The image of a remote plugin is built by `plugin pack` on the container runtime
+      at hand (ADR-063 decision 61), never by the builder. Decisions 3 to 6 do not read
+      it, and its SBOM is the S2b part of ADR-047 (ADR-063 decision 34).
+35. **The writer of the new `serves` fields** is the one writer of `serves`:
+    `plugingen.Serves` under `Manifest.Write`, for the manifest of a release, of a site
+    and of each binary built in the repository (`defs.go:157-167`; `manifest.go:108`;
+    ADR-060 decisions 9 and 20). It gains two outputs, and the reader of
+    `boot/distribution.go:241-289` gains the same two in the same commit (ADR-063
+    decision 46).
+    - **`remote`**, in each served major of each definition: the mark of that major's
+      `definition.yaml`, `contrib`, `callback` or `no` (`tools/deflint/main.go:335`),
+      which the writer parses today and drops. The reader requires it in every served
+      major and refuses any other value.
+    - **`remoteProtocol`**, beside `pluginApi`: the protocol majors the binary speaks, a
+      list of non-negative integers in ascending order, none twice, the form of
+      `requires.remoteProtocol` (ADR-048 decision 12; `boot/manifest.go:505-510`).
+      Whether it is always written is question Q17; with (a) it is a required field
+      that holds `[]` for a binary that speaks none.
+    - **Where the majors come from.** A binary speaks the protocol exactly when the
+      package graph that its manifest is written from, the graph of the server's main
+      package (`manifest.go:28-31`), holds the kernel side of the protocol. Its majors
+      are then the one list of spoken majors of the module `sdk/remote` (ADR-063
+      decision 27, step D1), the constant that `plugingen` reads for `requires`
+      (ADR-063 decision 34), compiled into the builder as `pluginApi` is
+      (`defs.go:158`; ADR-060 decision 8). A release builds only with its own builder
+      and no release module is ever raised (decisions 1 and 28), so the list the
+      builder holds is the list the binary links. Which package declares the list is
+      settled with the constant, by the S2b part of ADR-048 (ADR-063 decision 34).
+    - The kernel part of `serves` gains no field. Its hooks already carry a `remote`
+      mark, `no` for each (`defs.go:113-127`), and its four keys belong to `pluginApi`
+      and have no `definition.yaml` to take a mark from (ADR-048 decision 12). What
+      check 9 answers a remote manifest that uses a built-in key is among the fields
+      of that check, which the S2b part of ADR-048 settles (ADR-063 decision 34).
+    - `serves` gains nothing else: no version of a Go module, which no gate reads
+      (`08:904`; ADR-060 decision 21), and nothing of the suite binaries or of the
+      adapters.
+    - `distVersion` stays 1 (ADR-063 decision 46). The reader is strict, so it refuses
+      a manifest of the earlier writer and names the missing field. The commit
+      regenerates every signed manifest and every golden of the repository, which the
+      parity check of `make check` holds to the writer (`Makefile:206-209`; ADR-060
+      decisions 20 and 28; ADR-063 decision 15). The majors clause of check 3 and the
+      contribution-set clause of check 9 are the first readers of the two fields
+      (ADR-063 decision 16).
+36. **The gRPC codec exemption at S2b.**
+    - It stands as read. From S2b the proxy plugin and the remote modules import gRPC
+      directly (ADR-063 decision 42), at the version the root build list selects
+      today, v1.82.1 (`go.mod:102`), the pin that ADR-063 decision 35 read. Every
+      binary the builder writes keeps the tag `grpcnotrace` (`build.go:853`, `:863`;
+      `suites.go:167`). The entry gives sigstore-go as the reason gRPC is linked
+      (`initscan.go:62-63`); from the commit that first imports gRPC it names the
+      remote runtime too. That is a change of the table by a reviewed pull request
+      (decision 21) and calls for no new reading.
+    - A moved pin cannot pass unread. The entry is keyed by package, module and
+      version, and the scan admits the registration at that version only
+      (`initscan.go:61-63`, `:234-242`). From the commit that moves the pin of
+      `google.golang.org/grpc`, in the root `go.mod` or through the require list of a
+      remote module, every build fails at the deny-list scan until the entry changes.
+    - Read again means four things, in the pull request that moves the pin and at the
+      new version as the module cache holds it. (1) The `init` of `encoding/proto`
+      still registers gRPC's own proto codec with `RegisterCodecV2` and makes no other
+      call. (2) The scan of the server's graph, built with the tag, reports no other
+      registration of decision 11. (3) The tag still takes `golang.org/x/net/trace` out
+      of that graph, which `TestGRPCNeedsTheTag` proves
+      (`internal/builder/initscan_test.go:138`). (4) The entry of the table and the
+      condition of the register entry (`tools/upstream-components.yaml:204`) name the
+      new version in the same pull request (ADR-020 decision 27). A reading that finds
+      what the last one found needs that reviewed pull request and no more (decision
+      21). A reading that finds another registration adds no entry without the owner's
+      word, as the three gob entries were added on 2026-11-25 (decision 21, its note).
+    - One more registration is one import away. At v1.82.1 the `init` of
+      `google.golang.org/grpc/encoding/gzip` registers a compressor (Read for this
+      part), a call of the table of decision 11, so a server whose graph holds that
+      package fails the build on "a global codec". This part proposes no exception for
+      it. If ADR-041 gives the protocol compression, the exception is asked of the
+      owner with that ADR.
+    - The generated Go of the handshake and of the adapters registers its descriptors
+      and types with `protoregistry` from `init`, as every generated protobuf package
+      does (What was read). Protobuf type registries are not on the list (decision
+      21), so that code needs no exception.
+    - No exception names `google.golang.org/protobuf`, so a move of its pin calls for
+      no reading under this decision; its licence reading is ADR-063 decision 35's.
+    - The deny-list reads server binaries (decision 11). The binary of decision 31, a
+      plugin built on `sdk/remotehost` and the process of a remote plugin are none.
+37. **Tests.** Each fails on its base, and a test that is committed before its code is
+    marked as ADR-063 decision 29 says.
+    - The modules: the served `go.mod` of each of the six; the zips of decision 29; a
+      raise of `sdk/remote` or of `sdk/remotehost`, refused with or without
+      `--allow-bump`; an `aiops/` id declared in a module outside the six, refused as
+      before; with question Q14 (a), a site's build that compiles `sdk/remotehost`
+      checks its zip against the release's pin and records nothing as checked against
+      nothing, and one whose module source serves another zip fails.
+    - The binary: the `aiopsctl` of the test release embeds it, and the SBOM of the
+      builder image names it with its build list; a release build fails on a `contrib`
+      definition of the SDK zip that the builder's list lacks; an `aiopsctl` built in
+      the repository answers `launch.ErrNotCarried` for the runtime `remote` and names
+      the binary; the graph of `cmd/aiops` holds no package that dials the runner's
+      socket.
+    - `serves`: each served major carries the mark of its `definition.yaml`; the
+      manifest of the test release holds `remoteProtocol: [0]`, and that of a test
+      distribution whose graph holds no kernel side of the protocol holds what
+      question Q17 decides; the reader refuses a served major with no `remote` or with
+      another value, and a `remoteProtocol` that is out of order, holds a major twice
+      or holds a negative number; the parity check holds every committed manifest.
+    - gRPC: the scan reports the codec registration when the build list holds gRPC at
+      another version than the entry names; a server graph that imports
+      `encoding/gzip` fails on "a global codec"; `TestGRPCNeedsTheTag` passes with the
+      proxy in the graph of `cmd/aiops`.
+
+    The cases that drive the binary against a process are those of ADR-063 decisions
+    27 and 28, on the `aiopsctl` of the test release.
+
+### Consequences of the S2b part
+
+- Six modules are served by a change of one list, and no rule of the builder is added
+  for the two new ones.
+- With question Q14 (a) every signed manifest of a release records a hash for each
+  module the release serves, and a site's scratch module, which requires each pin that
+  holds a zip hash (`build.go:311-318`), requires each of the six at the release
+  version.
+- The release `aiopsctl`, and with it the builder image, grows by one test binary that
+  links gRPC, the proxy and the suites of the `contrib` registries. The licence report,
+  the notices and the SBOM cover it with the code they have.
+- An `aiopsctl` built in the repository runs no step 4 or 5 in the runtime `remote`.
+  `make plugin-check` builds its `aiopsctl` in the repository (`Makefile:139-150`) and
+  runs `plugin check` on the remote examples (ADR-063 decision 31); the steps that need
+  the binary run on the `aiopsctl` of the test release, in the job that builds it
+  (ADR-063 decision 37), as the connector case does (ADR-060 decision 24).
+- Every signed manifest changes by two fields, and a manifest written before the change
+  is refused by the reader after it. No distribution manifest exists outside the tests
+  of the repository (ADR-063, question Q9 (a)).
+- The gRPC exemption is unchanged at S2b, no exception is added, and the compressor of
+  `encoding/gzip` stays a finding.
+- `internal/builder` and `internal/packsuite` stay inside the provisional caps of
+  ADR-063 decision 36, 4,400 and 800 lines.
+- Nothing else of this ADR changes: the two paths, the builder image and its missing
+  base layer, the module cache format, the rule of `--allow-bump`, the content of the
+  deny-list and the site's entries are as decisions 1 to 27 have them.
+
+### Edits on acceptance of the S2b part
+
+Until the owner answers, nothing outside this file is edited. The commit that records
+the answers edits this section, its status and the decisions that the answers settle,
+and the status of this ADR in `00:782` and in the ADR table of `08` §3 (`08:1178`),
+which then name the S2b part. For the recommended options it adds a dated note to:
+decision 8 above and ADR-060 decision 20, for the hashes of the served modules in the
+pins (Q14 (a)); ADR-060 decision 46, for the binary `suites/runtime-remote.test` (Q15
+(a)); ADR-063 decisions 16 and 57, for the part of the toolbox through which the check
+runner reaches the handshake entry (Q16 (a)); and ADR-060 decision 9, for the two
+fields of `serves` (decision 35; Q17 (a)). No recommended option edits another line of
+`00` to `08`. An option the owner does not choose edits nothing.
+
+### Questions for the owner on the S2b part
+
+Each question gives its options, the recommended one, why, and what the answer blocks.
+
+**Q14. Does the signed manifest record a hash for a release module that no release
+binary compiles?** The pins are the `go.sum` lines of the release's own build (ADR-060
+decision 20), and go writes the hash of a zip only for a module whose packages the
+build lists. At S2b that leaves `sdk/remotehost` with the hash of its `go.mod` alone
+(decision 30). Decision 8 has a site's build take the hash of a version that no source
+records from the module source and record it as checked against nothing.
+- (a) The release build records, for each of the six modules it serves, the hash of its
+  zip and of its `go.mod` as its module source holds them, whether or not a release
+  binary compiles it. A site's build then checks each against the signed manifest.
+  Decision 8 and ADR-060 decision 20 gain a dated note: the pins hold these lines
+  beside the `go.sum` lines of the release's build.
+- (b) As built: the pins are the lines of the release's own build. A site's build that
+  compiles `sdk/remotehost` prints its hash and records it as checked against nothing.
+- (c) A release binary links it: the binary of decision 31 imports a package of
+  `sdk/remotehost`, so the release's build lists it. A package is then linked for its
+  hash alone, into a binary that drives the host of another process.
+- Recommended: (a). Every module the release serves is then checked by every build that
+  resolves it, no first-party module is ever recorded as checked against nothing, and
+  nothing is linked that no binary runs. Blocks: the builder change that serves
+  `sdk/remote` and `sdk/remotehost`.
+
+**Q15. How many binaries drive a remote process?** ADR-060 decision 46 embeds one test
+binary per registry suite, each for the rows of a pack. Step 4 of the runtime `remote`
+makes one activation with every registration the manifest lists, and step 5 runs the
+suite of each registry the plugin contributes to (ADR-063 decision 17).
+- (a) One, `suites/runtime-remote.test`. It links the proxy, the kernel side of the
+  protocol and gRPC once, and every `contrib` registry of the release with its suite
+  and its adapter (decision 32). `aiopsctl` runs it once for step 4 and once per
+  definition for step 5.
+- (b) One per `contrib` registry, `suites/runtime-remote-<name>.test`. Step 4 registers
+  with every registry the manifest lists, so one of them must still link them all, or
+  a further binary runs step 4. Each links the proxy and gRPC again.
+- (c) No new binary: the pack binary of each `contrib` registry gains the remote tests.
+  The suite binary that runs a pack's rows then links the proxy, gRPC and the socket
+  dial, and step 4 has the difficulty of (b).
+- Recommended: (a). Step 4 needs one binary that holds every `contrib` registry in any
+  case, the code that dials is linked once, and the pack binaries stay as ADR-060
+  decision 46 has them. Blocks: step 5 of `plugin check` for the runtime `remote`.
+
+**Q16. Where does the binary get the verdict of the handshake?** On the socket of
+`plugin check` the handshake and check 3 run as on a server (ADR-063 decision 54,
+reading 2), and `boot` is the one home of check 3 (ADR-063 decision 16). The same
+decision, with decision 57, has the check runner reach the handshake entry "through the
+toolbox it already holds", the one that the operations row resolves. That toolbox is a
+value of the `aiopsctl` process (`boot/launch.go:226-227`), and a suite runs in a child
+process (ADR-060 decision 46). The owner decides because two accepted decisions word
+the path.
+- (a) The binary links `boot`, as the pack binaries do
+  (`internal/packsuite/packsuite.go:31`), and reaches the handshake entry there, in its
+  own process, on the signed manifest that `aiopsctl` hands it. The words of ADR-063
+  decisions 16 and 57 are read as: through the `Suite` part of the toolbox
+  (`sdk/def/launch/v0/toolbox.go:54-56`), whose binary runs `boot`'s own code. No copy
+  of check 3 exists outside `boot`. Both decisions gain a dated note.
+- (b) The entry stays in the `aiopsctl` process, and the binary asks its parent for
+  each verdict over a pipe. A second wire format, between `aiopsctl` and its own child,
+  then carries what the gate reads of a connection.
+- (c) `aiopsctl` links the kernel side of the protocol and makes one handshake itself,
+  through its toolbox, before it starts the binary, whose own connections take a fake
+  of the entry. The suite then runs on connections whose handshake no gate evaluated,
+  against reading 2 of ADR-063 decision 54.
+- Recommended: (a). One code evaluates check 3 at every entry point, nothing new
+  crosses a process boundary, and the binary links `boot` as its neighbours do. Blocks:
+  step 5 of `plugin check` for the runtime `remote`, and the handshake row of ADR-063
+  decision 16 at that step.
+
+**Q17. Is `serves.remoteProtocol` always written?** `requires.remoteProtocol` is
+present exactly when `runtimes` holds `remote`, with at least one major (ADR-048
+decision 12; `boot/manifest.go:516-517`), and `serves` has the shape of `requires`
+(`08:904`; `07:545`). A binary speaks the protocol only when it links the kernel side
+of it (decision 35).
+- (a) Always: a required field of `serves`, which holds `[]` for a binary that speaks
+  none. The strict reader then refuses a manifest of the earlier writer by the name of
+  the missing field.
+- (b) Present exactly when the binary speaks, with at least one major, the rule of
+  `requires`. An absent field then means either that the binary speaks no major or
+  that the manifest was written before S2b, and the reader cannot tell the two.
+- Recommended: (a). Check 3 denies a remote manifest in both cases, and only (a) makes
+  the reader refuse a manifest that predates the field. Blocks: the reader and the
+  writer of the new `serves` fields, and with them the majors clause of check 3.
