@@ -2326,20 +2326,27 @@ that come with the code" asks.
 - Status: **proposed 2026-11-27, awaiting the project owner.** This is the S2b part of
   this ADR, which ADR-063 decisions 2 and 34 ask for: "G13 point 10, as question Q12
   decides" (ADR-063:866). It proposes no kernel change and no kernel API, and it puts one
-  question to the owner, Q1 below. The owner's answer to question Q12 of ADR-063 is not
-  asked again: it is ADR-063 decision 49 and the dated note at point 10 (lines
-  1833-1838), and this section changes neither.
+  question to the owner, Q1 below. The owner's answer to question Q12 of ADR-063 is
+  ADR-063 decision 49, and it is not asked again. Q1 is about one sentence of the dated
+  note that records that answer at point 10, "`FromManifest` gives a proxy row no
+  hand-off" (lines 1837-1838): that sentence and the written lines that Q1 (a) names
+  cannot all be built as written without a kernel change.
 - Citations: `00`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and a path with a line, as `sdk/kernel/key.go:424`, is a file of the
   repository. Both are read at `bbfd839`, the commit that holds the acceptance of
   ADR-063. ADR-063 cites `50665fa`: every line of `07` and `08` cited here has the same
   number at both commits, `00:774` here is `00:772` there, and `sdk/kernel`, `loader`,
-  `sdk/def/loader/v0`, `internal/vet`, `sdk/plugin/plugin.go` and `dist/dist.yaml` are
-  the same at both. Lines of this ADR are given as "line N", and a line of another ADR
-  as `ADR-063:866`. "Point N" is a point of the decision of G13 (lines 1753-1838), which
-  this section continues from point 11. "Decision N" is an owner decision of this ADR; a
-  decision of another ADR is named with its ADR. The plugin record,
-  `docs/design/plugin-system-2026-11.md`, is cited by section.
+  `boot/gate.go`, `sdk/def/loader/v0`, `internal/vet`, `sdk/plugin/plugin.go`,
+  `dist/dist.yaml` and `test/dist/dist.yaml` are the same at both. Lines of this ADR are
+  given as "line N", and a line of another ADR as `ADR-063:866`. "Point N" is a point of
+  the decision of G13 (lines 1753-1838), which this section continues from point 11.
+  "Decision N" is an owner decision of this ADR; a decision of another ADR is named with
+  its ADR. The plugin record, `docs/design/plugin-system-2026-11.md`, is cited by
+  section.
+- What does not exist yet: ADR-041 is not proposed and is in no commit of the repository,
+  and `sdk/remotehost`, the proxy plugin and `plugin.FromManifest` are not built. What
+  this section says of them states what they must do and cites no text and no code of
+  theirs. Each item that it leaves to ADR-041 is a requirement on that proposal.
 
 ### What ADR-063 asks of this ADR
 
@@ -2347,42 +2354,48 @@ that come with the code" asks.
   additions to those ADRs, proposed and accepted the same way", that is, proposed to the
   owner before the code they govern and accepted before that code merges into `main`.
   "Each keeps every written requirement it touches." ADR-063 decision 34 lists what each
-  settles, and for this ADR the list has one line: "ADR-034: G13 point 10, as question
-  Q12 decides" (ADR-063:866).
+  settles, "at least", and for this ADR the list has one line: "ADR-034: G13 point 10, as
+  question Q12 decides" (ADR-063:866).
 - Point 10 left one choice to S2b: "Whether `FromManifest` gives a proxy row a hand-off,
   or the proxy forwards `loader/volatile-update` to the remote instance" (lines
   1831-1832).
 - The owner made that choice on 2026-11-27 (ADR-063:1303-1315). ADR-063 decision 49, in
   full: "**A volatile config change reaches a remote instance as a protocol message**
   (Q12 (a)). The proxy forwards the update to the instance. In a Go plugin
-  `sdk/remotehost` applies it through the hand-off that the plugin's own `Define`
-  already has, and `aiops-sdk` hands the new config to the contribution. The kernel does
-  not change. A dated note records the answer at point 10 of G13 in ADR-034." The note
-  is at lines 1833-1838 and adds: "`FromManifest` gives a proxy row no hand-off", and
-  "ADR-041 names the message".
+  `sdk/remotehost` applies it through the hand-off that the plugin's own `Define` already
+  has, and `aiops-sdk` hands the new config to the contribution. The kernel does not
+  change. A dated note records the answer at point 10 of G13 in ADR-034." The note is at
+  lines 1833-1838 and adds: "`FromManifest` gives a proxy row no hand-off", and "ADR-041
+  names the message".
+- The recommendation that the owner accepted with that answer gave its reason: "One
+  plugin then behaves the same in both runtimes (`07:1198`), and the kernel does not
+  change" (ADR-063:1313-1314).
 - ADR-063 decision 3: "No kernel change is planned." The kernel "stays at 8,175 of its
-  8,200 lines", and "A kernel change that S2b finds necessary is proposed to the owner
-  as an ADR-034 addition before it merges, stays inside the cap and is verified as
-  ADR-060 decision 3 requires: the differential corpus, the property workload and the
-  call-path gate."
+  8,200 lines", and "A kernel change that S2b finds necessary is proposed to the owner as
+  an ADR-034 addition before it merges, stays inside the cap and is verified as ADR-060
+  decision 3 requires: the differential corpus, the property workload and the call-path
+  gate."
 - ADR-063 decision 41 names the one case in which such a change may prove necessary: "If
   a value built after boot cannot take the bindings of an entry without a kernel change,
   that change is an ADR-034 addition under decision 3." The consequences of ADR-063 say
   the same: "It is gated by decision 3 and has 25 lines" (ADR-063:1026-1027).
 - What a running plugin sees of a volatile change is `07:1382`: "No call and no restart.
   The loader commits the value in place, unless the old or new value holds a reference,
-  which restarts the row (ADR-059 decision 17); the next read of the `Volatile` field,
-  or the next `tenants.ConfigFor` call, returns it".
+  which restarts the row (ADR-059 decision 17); the next read of the `Volatile` field, or
+  the next `tenants.ConfigFor` call, returns it".
 - The remote runtime: "the kernel module learns nothing about "remote"" (`07:1140`);
   `sdk/remotehost` is "The kernel module inside a Go plugin process" and "Runs one fiber
   per activation, with that activation's config" (`07:1152`); a Go plugin inside the
   contribution set "is one `Plugin` value that passes the same suite in both runtimes"
   (`07:1198`); and "A non-Go plugin has no kernel in its language" (`07:1203`).
 - ADR-063 decision 4: S2b adds no departure from the plugin record "without the owner's
-  word: one that the work finds necessary is a question to the owner before it is
-  built". ADR-063 decision 33: "A written requirement is never weakened."
+  word: one that the work finds necessary is a question to the owner before it is built".
+  ADR-063 decision 33: "A written requirement is never weakened."
+- The rule for a question: "An option that changes or defers a written line says so and
+  names every line it edits, and each such question holds the option that keeps the text
+  as written" (ADR-063:1045-1046).
 
-### What the kernel does today, for a proxy row
+### What the kernel and the loader do today, for a proxy row
 
 - **The hand-off.** A fiber has a hand-off only when its `Plugin` value was stamped by
   `kernel.WithCommit` (`sdk/kernel/key.go:437-448`; `sdk/kernel/root.go:349`).
@@ -2390,250 +2403,596 @@ that come with the code" asks.
   (`sdk/plugin/plugin.go:170-172`), and plugin vet refuses the selector in plugin code
   (`internal/vet/vet.go:44-57`). Plugin vet reads `plugins`, `loader` and `boot`
   (`Makefile:204`), not `sdk/plugin`. Without a hand-off a commit retains the config, and
-  "the running activation keeps the value it was applied with" (point 9; lines
-  1249-1250; `sdk/kernel/config.go:288-306`).
+  "the running activation keeps the value it was applied with" (point 9; lines 1249-1250;
+  `sdk/kernel/config.go:288-306`).
+- **An activation and a commit that race.** An activation of a fiber with a hand-off is
+  recorded as the running one and resolves again when a retain overtook its resolve.
+  Without a hand-off `prepare` resolves once and returns what it resolved
+  (`sdk/kernel/config.go:137-156`, `:143`). A commit hands off to the running activation
+  unless its unload has begun or it resolved that config itself
+  (`sdk/kernel/config.go:76-116`). The retained config is written by `retain` and read by
+  `prepare` alone (`sdk/kernel/config.go:61`, `:140`): no exported symbol of the kernel
+  returns it to a plugin.
+- **The loader's commit in place.** The loader commits in place only when the change is
+  volatile-only and the row's fiber is ACTIVE, and it reads that state once, when it
+  builds the plan (`loader/apply.go:443-446`, `:488-491`). It then reports the row
+  `committed` (`loader/apply.go:446`). Point 8 names the race that this leaves: "the
+  hand-off to an activation that is still LOADING (point 4) serves a commit that races
+  the start of an activation, not a choice of the loader" (lines 1823-1825).
 - **The event.** `loader/volatile-update` is an event of the loader definition, owned by
   the loader's key and sealed (`sdk/def/loader/v0/loader.go:248`). The loader emits one
   for each row that it committed in place, after the batch that carries the `CommitOp`
-  has returned (`loader/apply.go:443-446`, `:103-105`). `Emit` calls every listener, one
-  after the other, on the goroutine of the loader's `Apply` and inside the loader's
-  semaphore, and the kernel does not interrupt a listener
-  (`sdk/kernel/event.go:106-118`, `:149-152`; `loader/apply.go:93-98`). The payload is
-  the id of the row, the whole new config "with every reference replaced by nil", and
-  the changed leaves, of which "No value at Paths holds a reference, old or new"
+  has returned and before `Apply` returns its results (`loader/apply.go:104-108`). It
+  emits with the context of the reload and drops the error of `Emit`, and with the
+  audience `kernel.Unscoped`, which "reaches unscoped listeners only"
+  (`loader/apply.go:105`; `sdk/kernel/hooks.go:290-293`; `07:447`). `Emit` calls every
+  listener, one after the other, on the goroutine of the loader's `Apply` and inside the
+  loader's semaphore, each under a lease of the listener's fiber. It does not interrupt a
+  listener, it skips a listener whose fiber is quiescing, and it calls no further
+  listener once the context has ended (`sdk/kernel/event.go:106-118`, `:133-136`,
+  `:149-152`; `sdk/kernel/hooks.go:302-309`; `loader/apply.go:93-98`). The payload is the
+  id of the row, the whole new config "with every reference replaced by nil", and the
+  changed leaves, of which "No value at Paths holds a reference, old or new"
   (`sdk/def/loader/v0/loader.go:223-237`; ADR-059 decisions 17 and 44).
+- **The mark.** The loader definition marks the hook `remote: "no"`
+  (`sdk/def/loader/v0/definition.yaml:16`), and plugin record §8 has "no" for it in the
+  column "Remote: what crosses the process boundary". A remote listener is "Allowed only
+  on the hooks marked remote" (`07:450`).
 - **The seal.** A sealed hook admits a plugin's listener only from an entry that
-  `Config.Listeners` lists for that hook, and only when the plugin's `Hooks` declares
-  the hook (`sdk/kernel/hooks.go:203-217`; `sdk/kernel/root.go:55-60`). `New` compiles
-  the three binding maps once (`sdk/kernel/root.go:89-92`). The release lists listeners
-  for `internal/status` and `internal/config` and none for a hook of the loader
-  (`dist/dist.yaml:52-54`).
+  `Config.Listeners` lists for that hook, and only when the plugin's `Hooks` declares the
+  hook (`sdk/kernel/hooks.go:203-217`; `sdk/kernel/root.go:55-60`). `New` compiles the
+  three binding maps once (`sdk/kernel/root.go:89-92`). The release lists listeners for
+  `internal/status` and `internal/config` and none for a hook of the loader
+  (`dist/dist.yaml:52-54`), and so does the test distribution
+  (`test/dist/dist.yaml:22-24`).
+- **The gate.** Check 7 denies "a listener on a sealed hook that the distribution does
+  not list for it" (`08:505`). It reads the `hooks` of the manifest of the row's plugin
+  and compares the row's plugin id with the listener list, as it compares that id with
+  the consumer binding of each key of the manifest's `uses` (`boot/gate.go:596-600`,
+  `:620-625`; ADR-048:431). The row of a remote artifact names the artifact's own id
+  (ADR-063 decision 41).
 - **The entry.** A binding names an entry by the token that `kernel.Define` mints, never
   by an id: "a copy of the result is the same entry and a hand-built Plugin, even one
-  with the same ID or the same Apply, is not" (`sdk/kernel/key.go:424-431`). The kernel
-  tests hold both halves: a copy of a listed entry, given another `ID`, mounts and
-  listens on a sealed hook, and a hand-built value is refused
-  (`sdk/kernel/hooks_bind_test.go:320-329`; `sdk/kernel/key_test.go:340-345`).
-  `WithCommit` "keeps p's entry" (`sdk/kernel/key.go:437-438`). A value with no entry
-  "inherits the entry of the mounting context" (`sdk/kernel/key.go:429-431`;
-  `sdk/kernel/root.go:360-363`). The kernel keeps no table of plugin values: a mount
-  takes any value, and the needs and the listeners of that value are checked against
-  the binding sets when it mounts and when it listens (`sdk/kernel/root.go:348-364`,
-  `:397`; `sdk/kernel/hooks.go:211`).
+  with the same ID or the same Apply, is not", and "Defining a value that is already
+  defined mints a new token" (`sdk/kernel/key.go:424-431`). The kernel tests hold both
+  halves. A copy of a listed entry, given another `ID`, mounts and listens on a sealed
+  hook, and a hand-built value is refused (`sdk/kernel/hooks_bind_test.go:320-329`). A
+  copy of an admitted entry whose `Inject` was set after `Define` resolves a
+  consumer-bound key, and another `Define` of the same `Apply` does not
+  (`sdk/kernel/entry_test.go:91-108`). `WithCommit` "keeps p's entry"
+  (`sdk/kernel/key.go:437-438`). A value with no entry "inherits the entry of the
+  mounting context" (`sdk/kernel/key.go:429-431`; `sdk/kernel/root.go:360-363`). The
+  kernel keeps no table of plugin values: a mount takes any value, and the needs and the
+  listeners of that value are checked against the binding sets when it mounts and when it
+  listens (`sdk/kernel/root.go:348-364`, `:397`; `sdk/kernel/hooks.go:211`).
 - **The size.** `tools/kernelcheck lines sdk/kernel 8200` reports 8,175 physical lines of
   production Go at `bbfd839`, 25 under the cap, as line 2319 and ADR-063:943 record.
 
 ### Decision: no kernel change
 
-No kernel change is proposed. The points continue the numbering of the decision of G13
-and state what the answer to Q12 means in each process.
+No kernel change is proposed. The points continue the numbering of the decision of G13.
+Points 11, 12 and 15 to 18 hold under either answer to Q1. Point 13 states the answer
+that this section recommends, and point 14 the other.
 
 11. **The kernel does not change for a volatile update at S2b** (ADR-063 decisions 3 and
-    49). `sdk/kernel` gains no line and no exported symbol, and its count stays 8,175
-    under the cap of 8,200 (ADR-063:943). The three gates of ADR-063 decision 3 are due
-    for a kernel change, so they are not due for this section.
-12. **A proxy value has no hand-off, so point 9 holds for a proxy row.**
-    `plugin.FromManifest` does not call `kernel.WithCommit` (line 1837). A `CommitOp` of
-    a proxy row retains the config as G6 states it (lines 1244-1258): the kernel records
-    no activation for it and resolves nothing again, the proxy's `Apply` is not called
-    again, and the next activation of the proxy, whatever starts it, resolves the
-    retained config. The kernel therefore keeps no value current for the proxy. What the
-    proxy knows of a commit in place it learns from the event of point 13, as G6 has it
-    for every plugin: "A plugin learns the new value from whoever commits it (the loader
-    dispatches `loader/volatile-update`)" (lines 1251-1253).
-13. **The proxy learns of a commit in place from `loader/volatile-update`.** That event
-    is "the update" of Q12 (ADR-063:1304-1305, :1307). The kernel already serves a
-    listener of it and needs nothing new; what the seal asks is asked of the
-    distribution and of the proxy value:
-    - The sealed-hook listeners of `dist/dist.yaml` gain `loader/volatile-update` with
-      `aiops/remote`, named once (ADR-063 decision 41), in the commit that adds the
-      plugin (`dist/dist.yaml:1-3`). `New` compiles that list at boot as it compiles the
-      other two.
-    - Each proxy value declares the hook in its `Hooks`, because an undeclared `On`
-      fails the fiber (`sdk/kernel/hooks.go:214-216`). The hook dump then shows it on
-      every proxy row (`07:1140`). It is a fixed hook of the proxy code, as ADR-063
-      decision 10 gives the proxy code its fixed needs in `Inject`.
-    - The event reaches every listener and names its row in `ID`. A proxy acts on an
-      event only when `ID` is its own row, and sends its instance nothing of another
-      row: an instance is served its own activation's config (`07:1152`).
-    - The listener runs on the loader's goroutine and inside the loader's semaphore, so
-      while it runs no other plan is staged (`loader/apply.go:93-98`). The kernel sets
-      no bound on it. How long a proxy may stay in it is a bound that ADR-041 sets with
-      its other deadlines (ADR-063 decision 34).
-14. **What the kernel process hands the proxy.** At its activation the proxy's `Apply`
-    receives the row config resolved through `internal/config` and `Decode`
-    (`sdk/kernel/config.go:22-25`). At a commit in place the event gives it the changed
-    leaves and, in `Config`, their new values, all literals; every reference is nil
-    there (`sdk/def/loader/v0/loader.go:223-237`). The update message is built
-    from those two, and ADR-041 names it and fixes its fields (line 1838; ADR-063
-    decision 34). The kernel process hands the proxy no value of a reference at a
-    commit. What an instance then reads from a `Volatile` field that holds a reference
-    is question Q1.
-15. **In the process of a Go plugin, G13 applies as accepted.** `sdk/remotehost` is the
+    49). Under either answer to Q1 `sdk/kernel` gains no line and no exported symbol for
+    it, and its count stays 8,175 under the cap of 8,200 (ADR-063:943). The three gates
+    of ADR-063 decision 3 are due for a kernel change, so this section makes none of them
+    due. It says nothing of the call-path gate that is still due on the S2a merge commit,
+    which "What this section blocks" records.
+12. **What "nothing lost" needs of a proxy row.** Point 4 gives a plugin with a hand-off
+    two things. A commit hands its config to the running activation before `Batch`
+    returns, and "An activation whose resolve a newer retain overtook resolves again
+    before its `Apply` runs, so no retain falls between an activation's resolve and the
+    hand-offs it receives" (lines 1789-1791). A fiber without a hand-off gets neither
+    (point 9), and G13 gave the reasons why the event alone does not replace them (lines
+    1708-1718). For a proxy row without a hand-off the one carrier of a commit in place
+    is `loader/volatile-update`, and its delivery is not guaranteed:
+    - *The commit races an activation of the proxy.* The loader saw the fiber ACTIVE when
+      it built the plan. If the proxy then starts a new activation, for a provider's
+      epoch change or a retry, and that activation resolves the old config before the
+      batch retains the new one, it applies the old config and does not resolve again
+      (`sdk/kernel/config.go:143`). The event is emitted after the batch. The listener of
+      the old activation is quiescing and is skipped, and the new activation hears it
+      only if its `On` is already registered.
+    - *The context of the reload ends.* The emit takes the reload's context and drops the
+      error, and no listener is called once that context has ended
+      (`loader/apply.go:104-106`; `sdk/kernel/event.go:133-136`). The config is then
+      retained and no listener is told.
+    - *A listener whose fiber is quiescing is skipped*, without an error
+      (`sdk/kernel/event.go:106-110`; `sdk/kernel/hooks.go:302-309`). Alone this loses
+      nothing, because the next activation resolves the retained config. With the first
+      case it does.
+    - After a lost event the instance keeps the old value until the next activation of
+      the proxy, while the loader has reported the row `committed`
+      (`loader/apply.go:446`) and `07:1382` says that the next read returns the new
+      value. In process none of the three loses a value: the hand-off runs before `Batch`
+      returns, and `prepare` resolves again.
+    - No code outside the kernel can close the first case, because nothing returns the
+      retained config to a plugin (`sdk/kernel/config.go:61`, `:140`). A hand-off closes
+      all three with no kernel change. Whether a proxy row has one is question Q1.
+13. **Under Q1 (b), which is recommended: a proxy value has a hand-off, and G13 holds for
+    a proxy row as it holds for any plugin with one.**
+    - `plugin.FromManifest` stamps the hand-off with `kernel.WithCommit`, which
+      `sdk/plugin` already calls and which plugin vet refuses in `plugins`, `loader` and
+      `boot` (`sdk/plugin/plugin.go:170-172`; `internal/vet/vet.go:44-57`;
+      `Makefile:204`). `WithCommit` "keeps p's entry" (`sdk/kernel/key.go:437-438`), so
+      it is stamped on the value that carries the entry of `aiops/remote` (point 18).
+    - The function is a function of `sdk/plugin`, as decision 16 requires. No code of the
+      proxy plugin and nothing of a manifest runs as a hand-off. It stores the committed
+      config, resolved as `Apply` would receive it (point 2), in the value that the
+      activation's `Apply` received, and it wakes the proxy's own goroutine without
+      waiting for it. It keeps the contract of the committer: it publishes what it writes
+      safely, does not block and changes no config (lines 1849-1857).
+    - Points 1 to 8 then hold for a proxy row as written. A commit hands off before
+      `Batch` returns. An activation whose resolve a retain overtook resolves again
+      before its `Apply` sends `Activate`. An activation whose unload has begun is handed
+      nothing, and the next one resolves the retained config. The three cases of point 12
+      lose nothing in the kernel process.
+    - The proxy forwards the config that the hand-off stored, whole, as the update
+      message. It has the form of the config that `Activate` carries (`07:1161`), with
+      each reference resolved again at that commit (point 7; decision 20). The proxy so
+      holds the latest committed config of its activation, which is also what a
+      reconnection inside that activation sends.
+    - `aiops/remote` listens on no sealed hook. The sealed-hook listeners of the release
+      and of the test distribution do not change, a proxy value declares no hook of the
+      proxy code, and `07:1140`, what ADR-063 decision 10 says of `Hooks`, the mark
+      `remote: "no"` and plugin record §8 stand as written. The entry of `aiops/remote`
+      is in no listener list, so the seal refuses a proxy value on every sealed hook,
+      whatever its manifest says (`sdk/kernel/hooks.go:211-213`).
+    - The cost in the kernel process is what G13 states for any plugin with a hand-off:
+      one function of `sdk/plugin` under the config change lock of the proxy row at each
+      commit, the resolves of points 4 and 5, and the closure of point 3 for a batch that
+      carries a `CommitOp` of a proxy row (lines 1858-1874). All are control paths.
+    - This answer reads "the update" of ADR-063 decision 49 as the volatile config change
+      that its first sentence names. Q12 named the loader's event (ADR-063:1304-1305),
+      which under this answer the proxy does not hear.
+14. **Under Q1 (a): a proxy value has no hand-off, as the note records, and the proxy
+    learns of a commit in place from `loader/volatile-update`.** Point 9 holds for the
+    proxy row: a `CommitOp` retains the config as G6 states it (lines 1245-1259), the
+    kernel records no activation and resolves nothing again, and "A plugin learns the new
+    value from whoever commits it (the loader dispatches `loader/volatile-update`)"
+    (lines 1251-1253). This answer needs the rules below.
+    - *The listener binding.* The sealed-hook listeners of `dist/dist.yaml` gain
+      `loader/volatile-update` with `aiops/remote`, named once (ADR-063 decision 41), in
+      the commit that adds the plugin. The file of the test distribution gains the same
+      line, since its module table holds `aiops/remote` too (`test/dist/dist.yaml:22-24`;
+      ADR-063:492-494). It is the first sealed-hook binding of an entry whose values are
+      built from third-party manifests.
+    - *A fixed hook of the proxy code.* Each proxy value declares the hook in its
+      `Hooks`, because an undeclared `On` fails the fiber
+      (`sdk/kernel/hooks.go:214-216`). No written line gives the proxy code a hook.
+      `07:1140` says "Its `Inject`, `Hooks` and registrations are that row's own", and
+      ADR-063 decision 10 gives the proxy code fixed needs in `Inject` and nothing in
+      `Hooks` (ADR-063:267-271). Both gain the clause, with the sentence of plugin record
+      §11 that `07:1140` restates.
+    - *No manifest takes the hook through that binding.* The seal checks the entry and
+      the declaration and nothing else (`sdk/kernel/hooks.go:211-216`), and every proxy
+      value has the entry of `aiops/remote`. A manifest whose `hooks` names
+      `loader/volatile-update`, or any hook that is not marked remote, is denied by check
+      9 before a value is built and again at the handshake (ADR-048:433; ADR-063:364,
+      :731-735), and `FromManifest` builds no value whose `Hooks` holds a hook of its
+      manifest that is not marked remote. This is the rule that ADR-063 decisions 10 and
+      41 state for keys: "no manifest takes a key through the bindings of
+      `aiops/remote`". The fixed listener is the proxy's own code. It is not a remote
+      listener that the proxy relays, which exists only on a hook marked remote
+      (`07:450`).
+    - *The gate.* Check 7 reads the `hooks` of the kept manifest under the row's plugin
+      id (`boot/gate.go:620-625`). The manifest of a remote plugin does not name the
+      fixed hook, so check 7 as built does not see it on a proxy row, and a gate that
+      added it under the row's own id would deny the row as not listed. No accepted text
+      says how the gate counts what the proxy code adds to a row; the same is open for
+      the fixed needs of ADR-063 decision 10. The S2b part of ADR-048 settles both with
+      the fields that checks 7 and 9 read (ADR-063 decisions 15, 16 and 34): the fixed
+      needs and the fixed hook count as `aiops/remote`, as ADR-063 decision 41 has it for
+      the binding lists. The hook dump and the static graph read manifests
+      (`07:138-141`), so the same text says where they take the fixed listener from.
+    - *The mark.* The instance is not a listener of the hook, and `remote: "no"` stands
+      in `sdk/def/loader/v0/definition.yaml:16` (`07:450`). Part of the payload, the
+      row's own new config and its changed leaves, does cross the process boundary, as
+      the update message. The cell of plugin record §8 gains that clause, as an amendment
+      under ADR-063 decision 4.
+    - *Its own row only.* The event reaches every listener and names its row in `ID`. A
+      proxy acts on an event only when `ID` is its own row and sends its instance nothing
+      of another row (`07:1152`).
+    - *Scope.* The loader emits with `kernel.Unscoped`, which reaches unscoped listeners
+      only (`sdk/kernel/hooks.go:290-293`). That serves the process-scope proxy rows of
+      S2b (ADR-063 decision 54, reading 1). It does not reach a proxy in a tenant tree,
+      so S4b reopens this answer with the per-tenant instances (`08:1175`).
+    - *What it carries.* The event gives the changed leaves and, in `Config`, their new
+      values, all literals; every reference is nil there
+      (`sdk/def/loader/v0/loader.go:223-237`). The kernel process hands the proxy no
+      value of a reference at a commit. In a `Volatile` field that holds a reference an
+      instance keeps the value that its activation was sent, where decision 20 stores the
+      value resolved at the commit. A secret rotated behind an unchanged `${secret:name}`
+      in a `Volatile` field does not reach a remote instance at a commit in place. It
+      reaches it at the next activation of the proxy.
+    - *What it loses.* The three cases of point 12 stand, and the owner accepts them with
+      this answer. The lines that Q1 (a) names say so.
+15. **Rules of the forward, under either answer.**
+    - *Nothing in the kernel process waits on the instance inside a commit.* The hand-off
+      of point 13 "must not block" (lines 1852-1853). The listener of point 14 runs on
+      the goroutine of the loader's `Apply`, inside its semaphore and before `Apply`
+      returns its results (`loader/apply.go:93-98`, `:104-108`), under a lease of the
+      proxy fiber (`sdk/kernel/event.go:106-111`). A listener that waited on a
+      third-party instance would hold the verdict of the reload and every later plan, use
+      up the context that later listeners need, and delay the unload of its own proxy,
+      which `plugin disable` needs right after the revocation (ADR-063 decision 23). So
+      either one hands the update to the proxy's own goroutine and returns. It makes no
+      call on the stream and takes no lock that such a call holds. ADR-041 does not relax
+      this rule, as it does not relax the points of ADR-063 decision 23.
+    - *The update is asynchronous.* The loader reports the row `committed` when the
+      kernel process has retained the config. The instance reads the new value once the
+      message has been applied, which is later. That follows from the answer to Q12: a
+      protocol message is not a store into a field. ADR-041 names the bound on the delay
+      and says whether `07:1382` needs words for it.
+    - *The update belongs to one activation.* It carries the activation id, as
+      `Activate`, `Register` and `Deactivate` "all carry it" (plugin record §11;
+      `07:1161`). It is sent only on the stream that ADR-063 decision 23 authenticated
+      for that activation, and it names no row and no tenant: "A field that names a row
+      or a tenant is ignored". An instance refuses an update for an activation that it
+      does not hold.
+    - *Order.* An activation "is never handed a config older than the one it holds"
+      (point 4, lines 1787-1788). The updates of one activation are applied in the order
+      of their commits, and an older one never replaces a newer one, whatever carries
+      them on the wire.
+16. **In the process of a Go plugin, G13 applies as accepted.** `sdk/remotehost` is the
     kernel module inside the plugin process (`07:1152`; ADR-063 decision 8), "the kernel
-    itself" in the words of plugin record §11. The plugin's `Plugin` value is the one
-    its own `plugin.Define` returns, stamped with a hand-off when its config type has a
+    itself" in the words of plugin record §11. The plugin's `Plugin` value is the one its
+    own `plugin.Define` returns, stamped with a hand-off when its config type has a
     `Volatile` field (decision 16; `sdk/plugin/plugin.go:170-172`). The kernel runs a
     hand-off only when `Fiber.Commit` or an admitted `CommitOp` retains a config of that
     fiber (`sdk/kernel/key.go:438-441`). So `sdk/remotehost` applies a forwarded update
     by committing the new config on the fiber of that activation, which is how it
     "applies it through the hand-off that the plugin's own `Define` already has" (ADR-063
-    decision 49). Points 1 to 9, the concurrency contract (lines 1840-1874) and
-    decisions 16 to 20 hold in that process as written: `Apply` is not called again,
-    each `Volatile` field is stored on its own (decision 18), and a config that the
-    plugin's `Decode` refuses retains nothing and leaves the activation its values
-    (`sdk/kernel/config.go:288-306`). `sdk/remotehost` is then the second caller of
-    `Fiber.Commit` outside the kernel package; lines 1683-1684 name the loader as the
-    only one, which stays true of the kernel process.
-16. **A Python plugin has no kernel, so G13 says nothing of it** (`07:1203`). `aiops-sdk`
-    "hands the new config to the contribution" (ADR-063 decision 49). What a
-    contribution reads while an update arrives belongs to the scope of the Python SDK,
-    which ADR-041 fixes: "the concurrency model of `serve()`" (ADR-063 decision 34).
-17. **The case that ADR-063 decision 41 names is not expected to need a kernel change,
+    decision 49). Under Q1 (b) that config is the forwarded one, whole. Under Q1 (a) it
+    is the activation's config with the changed leaves applied. Points 1 to 9, the
+    concurrency contract (lines 1840-1874) and decisions 16 to 20 hold in that process as
+    written: `Apply` is not called again, which is "No call" as G13 reads it (lines
+    1743-1751), each `Volatile` field is stored on its own (decision 18), and a config
+    that the plugin's `Decode` refuses retains nothing and leaves the activation its
+    values (`sdk/kernel/config.go:288-306`). The loader, which lines 1683-1685 name as
+    the only caller of `Fiber.Commit` or `CommitOp` outside the kernel, calls only
+    `CommitOp` (`loader/apply.go:246`, `:444`). `sdk/remotehost` is then a second
+    committer outside the kernel package, and the first caller of `Fiber.Commit` if it
+    commits with that. The loader stays the only one in the kernel process.
+17. **A Python plugin has no kernel, so G13 says nothing of it** (`07:1203`). `aiops-sdk`
+    "hands the new config to the contribution" (ADR-063 decision 49). G13 fixed what "No
+    call" of `07:1382` means for a Go plugin: no `Apply` and no lifecycle call (lines
+    1743-1751). Whether handing the new config to a Python contribution is a call in that
+    sense is not said anywhere. ADR-041 says it, with what a contribution reads while an
+    update arrives, in the scope of the Python SDK: "the concurrency model of `serve()`"
+    (ADR-063 decision 34).
+18. **The case that ADR-063 decision 41 names is not expected to need a kernel change,
     and none is proposed.** It is no part of point 10. It is recorded here because the
     addition it would need is an addition to this ADR.
     - The kernel as it stands lets a value built after boot take the bindings of an
-      entry: a copy of the defined value is that entry. A proxy value that is a copy of
-      the defined `aiops/remote` value, with its exported fields set from the manifest,
-      is `aiops/remote` for the three binding sets (`sdk/kernel/key.go:424-431`;
-      `sdk/kernel/hooks_bind_test.go:320-324`). Under point 12 it carries no hand-off, so
-      it needs no unexported field but the entry.
+      entry: a copy of the defined value is that entry, with the exported fields that are
+      set on it after `Define` (`sdk/kernel/key.go:424-431`;
+      `sdk/kernel/entry_test.go:91-108`; `sdk/kernel/hooks_bind_test.go:320-324`).
+    - `FromManifest` cannot give its result that entry by defining it, as `plugin.Define`
+      defines its result (`sdk/plugin/plugin.go:173`): the entry token is unexported, and
+      `kernel.Define` mints a new entry for a value that is already defined
+      (`sdk/kernel/key.go:428-429`, `:432-435`). Two builds remain. In the first the
+      proxy package copies its defined `aiops/remote` value and sets the exported fields
+      of the copy from what `FromManifest` returns; the signature of `07:232` stands. In
+      the second `FromManifest`, or a function of `sdk/plugin` beside it, takes the
+      defined value and returns a copy of it with the declarations of the manifest;
+      `07:232` and the words "the signature that `07:232` sketches" of ADR-063 decision
+      10 are edited.
+    - Under Q1 (a) the first build is meant: a proxy value carries no hand-off, so it
+      needs no unexported field but the entry. Under Q1 (b) the second is meant, because
+      the hand-off is an unexported field that only `sdk/plugin` may stamp, on the value
+      that has the entry (point 13).
     - A proxy value that reaches the loader with no entry would inherit the loader's
       entry and with it the loader's bindings, `profileContext` among them
       (`sdk/kernel/root.go:360-363`; `dist/dist.yaml:47`). Each proxy value therefore
       carries the entry of `aiops/remote`, which is what ADR-063 decision 41 requires:
       "for the binding lists each such value counts as `aiops/remote`".
-    - How `FromManifest` and the function of ADR-063 decision 12 build the value is S2b
-      work on the proxy, not a kernel matter.
+    - How the function of ADR-063 decision 12 hands the loader such a value is S2b work
+      on the proxy, not a kernel matter.
     - A further addition to this ADR is due only if that work finds a kernel change
       necessary (ADR-063 decision 3). It is then proposed to the owner before the change
       merges. It stays inside the 25 lines left under the cap and inside the closed
       vocabulary (ADR-063 decision 31). It is verified by the differential corpus, the
-      property workload and the call-path gate, as G13 was (lines 2016-2038). Until it
-      is accepted the work stops on that point (ADR-063 decision 33).
+      property workload and the call-path gate, as G13 was (lines 2016-2038). Until it is
+      accepted the work stops on that point (ADR-063 decision 33).
 
 ### What this section blocks
 
-- As answered, nothing: no S2b code waits for kernel work.
+- No S2b code waits for kernel work that this section proposes: it proposes none.
 - This section is accepted before the code it governs merges into `main` (ADR-063
-  decision 2): the proxy's listener of point 13 and the commit that `sdk/remotehost`
-  makes under point 15.
-- Q1 blocks the fields of the update message in ADR-041 and, under its option (b), the
-  first commit of `FromManifest`.
-- If the case of point 17 arises, the further addition blocks that kernel change and
-  the mount of a proxy value built after boot, and it has 25 lines.
+  decision 2): `FromManifest`, the forward of the proxy and the commit that
+  `sdk/remotehost` makes under point 16.
+- Q1 blocks the first commit of `FromManifest` and the fields of the update message in
+  ADR-041, as Q12 blocked "`FromManifest` and the messages of ADR-041" (ADR-063:1314).
+  The signature and the hand-off of `FromManifest` depend on the answer under either
+  option (point 18).
+- The call-path gate on the S2a merge commit is still due. The verification of G13 left
+  open "the second run of item 4, on the merge commit into `main`" (lines 2293-2295;
+  s2a-report:109), and ADR-063 decision 70 runs it on `d124a40` beside the first S2b
+  code. No result of it is recorded at `bbfd839`. Its result is recorded in this ADR when
+  it has run. "A kernel fix that the gate forces takes priority over S2b code" (ADR-063
+  decision 70), and such a fix is a separate addition to this ADR, as ADR-063 decision 3
+  requires. "No kernel change" in this section speaks of the volatile update and of the
+  case of point 18, and of nothing else.
+- If the case of point 18 needs a kernel change, the further addition blocks that change
+  and the mount of a proxy value built after boot, and it has 25 lines.
 
-### Left to ADR-041 and to the S2b part of ADR-048
+### Left to ADR-041, to the S2b part of ADR-048 and to S4b
 
-- ADR-041 fixes the update message: its fields, which side applies the changed leaves
-  to the activation's config, and the answer of the instance (ADR-063 decision 34).
-- The kernel keeps no value current for the proxy (point 12), so the config that a
-  reconnection inside one activation of the proxy sends is the proxy's to hold. It
-  belongs to the reconnect rules of ADR-041 (ADR-063 decision 34).
-- An instance may refuse an update, for example by the `Validate` of a Go plugin, which
-  runs in the plugin process. The kernel process has admitted the commit before the
-  event is emitted (`loader/apply.go:103-105`) and offers no veto after the admission.
-  Before it, the only code of the row's plugin that the kernel process runs on a
-  candidate is the `Decode` of the proxy value (`sdk/kernel/config.go:288-292`). The
-  same holds for the config of an `Activate`. What a refusal does is ADR-041's, with
-  the encoding of errors across the boundary (ADR-063 decision 34). If its answer
-  changes what `08:470` states for a remote row, "Rejected; the row keeps its
-  instance", it is a question to the owner there (ADR-063 decision 33).
+ADR-063 decision 34 lists what each settles "at least". It does not list the items below.
+This addition adds them.
+
+- ADR-041 fixes the update message and its fields, inside the rules of point 15: under Q1
+  (a), which side applies the changed leaves to the activation's config; the answer of
+  the instance; and the bound within which an update is answered. It decides what the
+  proxy does with an update that gets no answer in that bound, and with one that an
+  instance answers as unknown, which ADR-063 decision 5 allows for a call that it does
+  not know. In both cases the loader has reported the row `committed` and the instance
+  keeps its values.
+- ADR-041 fixes the config that a reconnection inside one activation of the proxy sends.
+  Under Q1 (b) it is the latest committed config, which the proxy holds (point 13). Under
+  Q1 (a) the kernel keeps no value current for the proxy, and the proxy must build it
+  from the config of its activation and the events it heard.
+- **A refused config is a second difference between the runtimes, under either answer to
+  Q1, and this section does not decide it.** In process the `Validate` of a plugin runs
+  in `Decode` at the vet, before anything is retained: a refused config "retains nothing"
+  (`sdk/kernel/config.go:288-293`; lines 1746-1748), and the generation is rejected,
+  "Rejected; the row keeps its instance" (`08:470`). The `Validate` of a remote Go
+  plugin, and whatever a Python plugin checks, run in the plugin process. Before the
+  admission the only code of the row's plugin that the kernel process runs on a candidate
+  is the `Decode` of the proxy value, which must be pure and has the manifest alone to
+  check against (`sdk/kernel/config.go:288-306`; ADR-048:242-245). After the admission
+  the kernel process offers no veto: the config is retained before an update or an
+  `Activate` reaches the instance. So for a remote row the kernel process can retain a
+  config that the instance then refuses. ADR-041 puts to the owner what such a refusal
+  does, for an update and for an `Activate`, with `08:470`, `07:1198` and the paragraph
+  "One plugin, either runtime" of plugin record §11 as the lines an answer edits, before
+  the forwarding code merges into `main` (ADR-063 decisions 4 and 33). An option that has
+  the kernel process ask the instance before the admission needs a kernel change, since
+  `Decode` must be pure and the kernel hooks "carry no fiber identity" (line 1714). It is
+  then also an addition to this ADR under ADR-063 decision 3.
+- ADR-041 states the reading of "No call" for a Python contribution and what a
+  contribution reads while an update arrives (point 17).
 - Which change of a remote row is volatile-only stays the loader's decision (line 1674;
   point 8). It reads the volatile paths of the row's plugin from the catalog
   (`loader/apply.go:435-439`), and those are the marks of `configSchema`
-  (ADR-048:233-240). Where a Python plugin's `configSchema` comes from is the S2b part
-  of ADR-048 (ADR-063 decision 34). A row whose schema marks no path restarts on every
+  (ADR-048:233-240). Where a Python plugin's `configSchema` comes from is the S2b part of
+  ADR-048 (ADR-063 decision 34). A row whose schema marks no path restarts on every
   change, and its instance is sent the new config by a new `Activate` (`07:1161`).
+- Under Q1 (a) the S2b part of ADR-048 also says how checks 7 and 9, the hook dump and
+  the static graph count the fixed hook of a proxy row (point 14).
+- Under Q1 (a) S4b reopens the listener for a proxy in a tenant tree (point 14). Under
+  either answer ADR-041 is ratified at S4b for one tenant per connection and activations
+  across replicas (`08:1175`).
+
+### Tests
+
+This section adds no kernel behaviour, so it adds no kernel test. The kernel tests that
+hold what it rests on exist. A `Plugin` without a hand-off is handed nothing (test 1,
+lines 1941-1943). A retain during the resolve of an activation with a hand-off makes it
+resolve again (test 3, lines 1950-1952). A copy of a listed entry is that entry, for a
+sealed hook and for a consumer-bound key (`sdk/kernel/hooks_bind_test.go:320-329`;
+`sdk/kernel/entry_test.go:91-108`).
+
+No test that ADR-063 names commits a remote row in place. The echoer of exit step G1 is
+the S2a fixture, "unchanged", and has no `Volatile` field. Step 4 of `plugin check`
+drives one activation and no update (ADR-063:368-373). The one plugin with `Volatile`
+fields is the in-process toy consumer of the test distribution
+(`test/dist/plugins/toy-consumer/plugin.go:28-29`). The cases below are cases of ADR-063
+decision 28, each with a test that fails on its base. They are not exit steps: no step of
+ADR-063 decision 27 is edited, and the echoer of G1 stays as it is.
+
+Two fixtures gain a `Volatile` field. A remote Go echoer of the test tree, apart from the
+echoer of the exit, has a config type with the two `Volatile` fields of the toy consumer,
+`note` and `tag`, and shows both in each reply. A Python stamper has a `configSchema`
+that marks one path volatile and shows that value in each reply; it waits for the S2b
+part of ADR-048, which says where that schema comes from. The harness starts each as a
+process of its own with the identity of ADR-063 decision 23, as it starts the stubs of
+the matrix (ADR-063 decision 64).
+
+1. **A volatile-only change of a remote Go row.** A live generation changes only `note`.
+   Reload reports the row `committed`. The kernel process runs no second `Apply` of the
+   proxy and sends no second `Activate`, and the plugin process runs no second `Apply` of
+   the plugin. A later call returns the new note, inside the bound of ADR-041.
+2. **The same for the Python stamper**: `committed`, no second `Activate`, and a later
+   call returns the new value.
+3. **A reference that did not change, beside a literal that did.** The `note` of the Go
+   row is `"${file:note}"`. The harness rewrites the file, and a generation that changes
+   only `tag` commits in place. Under Q1 (b) a later call returns the new tag and the new
+   content of the file, as the in-process case of lines 1998-2000 does. Under Q1 (a) it
+   returns the new tag and the old content, and the new content after the next activation
+   of the proxy.
+4. **Another row's commit.** With two remote rows, a commit in place of the first sends
+   the instance of the second no message.
+5. **A commit that races an activation of the proxy.** `internal/config` holds the first
+   resolve of a new activation of the proxy while the generation commits, as kernel test
+   3 holds it. Under Q1 (b) the instance ends with the committed config, by its
+   `Activate` or by an update. Under Q1 (a) the test records the accepted loss: the row
+   is reported `committed`, the instance holds the old value, and the next activation of
+   the proxy delivers the new one.
+6. **A reload whose context ends after its batch.** Under Q1 (b) the instance receives
+   the committed config. Under Q1 (a) the test records the accepted loss, as case 5 does.
+7. **An instance that does not read its stream.** A commit in place of its row returns
+   and reload reports its verdict. A plan of another row is then staged and applied while
+   the first update is still unsent. `plugin disable` of the row unloads the proxy inside
+   the bound of its disposer (`07:1196`).
+8. **Two commits in a row.** The instance ends with the config of the second, and no call
+   returns the first value after one returned the second.
+9. **The activation and the stream.** `sdk/remotehost` and `serve()` each refuse an
+   update for a superseded activation, and an update that carries a field naming a row or
+   a tenant changes neither.
+10. **An update that the instance refuses, and one that it answers as unknown.** Each is
+    asserted as ADR-041 decides, and the case is written when the owner has answered its
+    question.
+11. **A proxy value built after boot.** A value built for an id that the loader did not
+    hold when it mounted resolves the consumer-bound key of ADR-063 decision 57, and it
+    is handed a commit under Q1 (b) or listens on `loader/volatile-update` under Q1 (a).
+    A value built the same way but with no entry is refused that key and, under Q1 (a),
+    the hook.
+12. **A manifest and a sealed hook.** A remote manifest whose `hooks` names
+    `loader/volatile-update` is denied with check 9 at the entry points of
+    ADR-063:731-735, and `FromManifest` builds no value that listens on it for the
+    manifest. Under Q1 (b) a proxy value whose `Hooks` holds a sealed hook is also
+    refused by the seal when it listens.
+13. **In `sdk/plugin`, under Q1 (b).** The hand-off of a `FromManifest` value stores the
+    committed config, returns while no goroutine reads the wake, and runs beside reads
+    under `-race`.
+14. **In `sdk/remotehost`.** A forwarded config that the plugin's `Decode` refuses
+    retains nothing, and the activation keeps its values (point 16).
+
+### How the work is run
+
+- Test first (ADR-063 decision 29): each case is committed failing, marked as expected to
+  fail, before the code that makes it pass.
+- The review rounds of ADR-063 decision 30 cover them. Group 2, `FromManifest` and the
+  proxy, covers cases 3 to 8 and 11 to 13. Group 1, the protocol and the modules, covers
+  the update message and cases 1, 9, 10 and 14. Group 4, the Python SDK, covers case 2
+  and the Python half of case 9. The round on the whole step covers them together.
+- The cases run with the other cases of ADR-063 decision 28, in the jobs that ADR-063
+  decision 37 gives them.
 
 ### Cost and verification
 
 - `sdk/kernel`: no line. The count stays 8,175, and `kernelcheck lines sdk/kernel 8200`
   keeps holding it in `make check` and in CI (`Makefile:194`;
   `.github/workflows/ci.yml:105`).
-- The listener binding is one line of `dist/dist.yaml`. The proxy's listener and the
-  commit of `sdk/remotehost` count in their own packages (ADR-063 decision 36).
-- No gate of ADR-063 decision 3 is due, since no kernel line changes. The S2b report
-  records ADR-063 decision 3 with its evidence, the measured count (ADR-063 decision
-  32).
-- This section adds no kernel test, because it adds no kernel behaviour. The kernel
-  tests that hold what points 12 and 17 rest on exist: a `Plugin` without a hand-off is
-  handed nothing (test 1, lines 1940-1942), and a copy of a listed entry is that entry
-  (`sdk/kernel/hooks_bind_test.go:320-324`). The tests of the forwarding are tests of
-  the proxy and of `sdk/remotehost`, committed first (ADR-063 decision 29).
+- Under Q1 (b): no line of `dist/dist.yaml`. `sdk/plugin` grows by the hand-off of
+  `FromManifest` and by what the proxy's `apply` reads of a later commit, inside its
+  provisional cap of 1,800 lines (ADR-063:946). That part is not estimated here: no
+  prototype is committed. The exported API of `sdk/plugin` changes with `FromManifest` in
+  any case, and `pluginApi` rises by the minor that ADR-063 decision 10 already names.
+- Under Q1 (a): one line in `dist/dist.yaml` and one in `test/dist/dist.yaml`, with the
+  generated `distribution.yaml` of each. The listener counts in the proxy plugin.
+- The forward of the proxy and the commit of `sdk/remotehost` count in their own packages
+  (ADR-063 decision 36).
+- No gate of ADR-063 decision 3 is due for this section, since it changes no kernel line.
+  The S2b report records ADR-063 decision 3 with its evidence, the measured count
+  (ADR-063 decision 32).
 
 ### Consequences
 
-- Point 10 is closed for S2b once Q1 is answered. Under Q1 (a) G13 gives a hand-off only
-  through `plugin.Define`, in either process.
-- The kernel stays at 8,175 lines. The 25 lines under the cap are reserved for nothing.
-- A literal committed in place reaches a remote Go plugin's `Volatile` field with no
-  `Apply`, as it does in process (`07:1382`). A reference beside it is question Q1.
-- Under Q1 (a), no code that serves a remote plugin runs under a fiber's config change
-  lock in the kernel process: a proxy row has no hand-off, and its listener runs after
-  the batch.
-- Every proxy row lists `loader/volatile-update` among its hooks, and the signed
-  distribution manifest of the release gains one sealed-hook listener.
-- A proxy hears the event of every row committed in place, as any listener of that
-  hook would, and forwards only its own.
-- `sdk/remotehost` becomes a second caller of `Fiber.Commit`, on the root of a plugin
-  process.
+- Point 10 is closed for S2b once Q1 is answered.
+- This section leaves the kernel at 8,175 lines and reserves none of the 25 lines under
+  the cap.
+- Under Q1 (b) a hand-off exists through `plugin.Define` and through
+  `plugin.FromManifest`, both in `sdk/plugin`, and through nothing else. One `Plugin`
+  value reads the same from its `Volatile` fields in both runtimes after a commit in
+  place, a reference included, and in the remote runtime it reads it later, by the delay
+  of the message. One function of `sdk/plugin` runs under the config change lock of each
+  proxy row at each commit. `aiops/remote` has no sealed-hook binding, and the signature
+  of `FromManifest` is not the one `07:232` sketches.
+- Under Q1 (a) G13 gives a hand-off only through `plugin.Define`, in either process, and
+  no code that serves a remote plugin runs under a fiber's config change lock in the
+  kernel process. The signed distribution manifest of the release gains one sealed-hook
+  listener. Every proxy hears the event of every row committed in place and forwards only
+  its own. A committed value can miss an instance until the next activation of its proxy,
+  and a secret rotated behind an unchanged reference in a `Volatile` field reaches a
+  remote instance only then.
+- Under either answer an instance reads a committed value later than the loader reports
+  `committed`, and a config that an instance refuses stays an open difference between the
+  runtimes until the owner answers the question that ADR-041 puts.
+- `sdk/remotehost` commits configs on the root of a plugin process, the first code
+  outside the kernel and the loader to do so.
 
 ### Edits on acceptance
 
 - In this ADR: the status of this section; the owner's answer to Q1 as decision 21,
-  continuing the numbering of the owner decisions; and a dated note at lines 1683-1684
-  that names `sdk/remotehost` as a caller of `Fiber.Commit` in a plugin process.
+  continuing the numbering of the owner decisions; a dated note at lines 1683-1685 that
+  names `sdk/remotehost` as a committer in a plugin process; and the result of the
+  call-path gate on `d124a40` when it has run.
 - The row of ADR-034 in the ADR table of `08` §3 (`08:1168`) and in `00` §9 (`00:774`)
   gains the acceptance of this section, in the commit that records it (`08:999`).
-- Under Q1 (a): `07:1198` and the paragraph "One plugin, either runtime" of plugin
-  record §11 gain the clause on a reference, and plugin record §17 records the
-  amendment (ADR-063 decision 4).
-- Under Q1 (b): the last sentence of the note at point 10 (lines 1837-1838) and points
-  12 and 14 of this section are rewritten, and `07:232` if `FromManifest` takes one
-  more argument.
-- With the code: the sealed-hook listener in `dist/dist.yaml` (point 13).
-- Standing as written: `07:1382`, ADR-059 decisions 17 and 44, decisions 16 to 20, and
-  ADR-063 decisions 3, 41 and 49. An option the owner does not choose edits nothing.
+- Under Q1 (b): the sentence "`FromManifest` gives a proxy row no hand-off" of the note
+  at point 10 (lines 1837-1838) is rewritten; the sentence "G13 gives a hand-off only
+  through `plugin.Define`" (lines 1830-1831) gains a dated note; ADR-063 decision 49
+  gains a dated note on what "the update" is, and ADR-063 decision 10 one on the
+  signature; and `07:232` takes the new signature. ADR-063:1305-1306, "A hand-off exists
+  only through `plugin.Define`", is the text of a question of its date and stands.
+- Under Q1 (a): `07:1198` and the paragraph "One plugin, either runtime" of plugin record
+  §11 gain the clause that a commit in place of a remote row can miss the instance until
+  the next activation of its proxy and resolves no reference again; `07:1382` gains the
+  same clause for a remote row; `sdk/plugin/plugin.go:184-185` and
+  `sdk/def/loader/v0/volatile.go:38-41` say "in process"; decision 20 (lines 2247-2254)
+  gains a dated note that "a reference resolved again included" does not hold for a
+  remote instance; `07:1140`, the sentence of plugin record §11 that it restates, and a
+  dated note at ADR-063 decision 10 give the proxy code its fixed hook; the cell of
+  plugin record §8 gains the clause on the update message; and plugin record §17 records
+  the amendments (ADR-063 decision 4).
+- With the code, under Q1 (a): the sealed-hook listener in `dist/dist.yaml` and in
+  `test/dist/dist.yaml` (point 14).
+- Not edited by this section under either answer: ADR-059 decisions 17 and 44, decisions
+  16 to 19, and ADR-063 decisions 3 and 41. Under Q1 (b) it also edits none of `07:1140`,
+  `07:1198`, `07:1382`, decision 20 and plugin record §8 and §11. Under Q1 (a) it also
+  edits none of the note at point 10, lines 1830-1831, `07:232` and ADR-063 decision 49.
+  An option the owner does not choose edits nothing.
 
 ### Question for the owner
 
 The question gives its options, the recommended one, why, and what the answer blocks.
 
-**Q1. What does a remote instance read from a `Volatile` field that holds a reference,
-after a commit in place that changed a literal beside it?** In process, the hand-off
-stores the value that the reference resolves to at that commit: "A reference that did
-not change, beside a literal that did", "is resolved again for `committed`" (point 7,
-lines 1811-1813; decision 20), and `test/loader-smoke` holds it with a row whose `note`
-is `"${file:note}"` (lines 1998-2000). A proxy row has no hand-off (point 12), and the
-event carries nil in place of every reference (point 14). So under ADR-063 decision 49
-as recorded, the kernel process gives the proxy no newly resolved value to forward. The
-recommendation of Q12 gave as its reason "One plugin then behaves the same in both
-runtimes (`07:1198`)" (ADR-063:1313). This is the one case found where it does not.
-- (a) The instance keeps the value that its activation was sent. In the remote runtime a
-  reference is resolved when the proxy activates and not at a commit in place. A change
-  of the reference itself restarts the row in both runtimes (ADR-059 decision 17), and
-  the new `Activate` carries the new value. This is a departure for the remote runtime:
-  `07:1198` and plugin record §11 gain the clause, and the record is amended (ADR-063
-  decision 4). No line of `sdk/kernel` or of `sdk/plugin` serves it.
-- (b) As in process. `FromManifest` gives the proxy value a hand-off through
-  `kernel.WithCommit`, which `sdk/plugin` already calls. Its function, a function of
-  `sdk/plugin`, keeps the committed config, resolved as `Apply` would receive it (point
-  2), where the proxy reads it when the event arrives; it does not block (lines
-  1849-1856). The proxy forwards that config whole. The kernel does not change, and
-  ADR-063 decision 49 stands. It rewrites the sentence "`FromManifest` gives a proxy row
-  no hand-off" of the note at point 10 and points 12 and 14 of this section. The
-  hand-off must be stamped on the value that carries the entry of `aiops/remote` (point
-  17), so the signature of `07:232` may gain an argument. `sdk/plugin` grows inside its
-  provisional cap of 1,800 lines (ADR-063:946). A function that serves a remote plugin
-  then runs under the config change lock of every proxy row. It is not Q12 (b), which
-  the owner did not choose: nothing restarts.
-- Recommended: (a). It is ADR-063 decision 49 and its note with nothing rewritten. The
-  difference is one case: a reference that did not change. Its new value reaches the
-  instance at the next activation of the proxy, which is when every field outside the
-  `Volatile` fields takes a new value in process too (decision 20). And (a) keeps
-  everything that serves a remote plugin off the commit path of the kernel process. (b)
-  is the option that keeps one behaviour in both runtimes, at no kernel line. The owner
-  decides because (a) leaves a difference between the runtimes that the recommendation
-  of Q12 did not state. Blocks: the fields of the update message in ADR-041; under (b),
-  the first commit of `FromManifest`.
+**Q1. Does a proxy row have a hand-off?** ADR-063 decision 49 has the proxy forward a
+volatile config change to the instance as a protocol message, with no kernel change. The
+dated note at point 10 adds: "`FromManifest` gives a proxy row no hand-off" (lines
+1837-1838). Without a hand-off the kernel process tells the proxy of a commit in place
+only through `loader/volatile-update`, and one `Plugin` value then differs between the
+runtimes in two ways. A committed value can miss the instance until the next activation
+of the proxy (point 12). And a reference in a `Volatile` field is not resolved again,
+where in process it is: "A reference that did not change, beside a literal that did", "is
+resolved again for `committed`" (point 7, lines 1811-1813; decision 20), which
+`test/loader-smoke` holds with a row whose `note` is `"${file:note}"` (lines 1998-2000).
+The recommendation of Q12 did not state either difference. Its reason was "One plugin
+then behaves the same in both runtimes (`07:1198`)" (ADR-063:1313). Each option below
+edits a written line, because the sentence of the note and the lines under (a) cannot all
+be built with the kernel as it is; no option keeps both. A kernel change is not offered:
+(b) needs none, and ADR-063 decision 49 has "The kernel does not change". Two things are
+outside this question under either option: the update is asynchronous (point 15), and a
+config that the instance refuses is a question that ADR-041 puts.
+- (a) No hand-off, as the note records. The proxy listens on `loader/volatile-update` and
+  forwards the changed leaves of its own row (point 14). The owner then accepts, for the
+  remote runtime: that a committed value can miss the instance until the next activation
+  of the proxy, in the three cases of point 12, while the row is reported `committed`;
+  that a reference in a `Volatile` field is resolved when the proxy activates and not at
+  a commit in place, so that a rotated secret behind an unchanged reference reaches a
+  remote instance only at the next activation; and that `aiops/remote` takes a
+  sealed-hook listener binding and a fixed hook, under the rules of point 14. Nothing
+  found makes this option necessary: (b) builds the same lines with no kernel line. It
+  weakens `07:1198` and `07:1382` for the remote runtime, which only the owner can do
+  (ADR-063 decisions 4 and 33). It edits: `07:1198` and the paragraph "One plugin, either
+  runtime" of plugin record §11; `07:1382`; `sdk/plugin/plugin.go:184-185`;
+  `sdk/def/loader/v0/volatile.go:38-41`; decision 20, by a dated note; `07:1140`, the
+  sentence of plugin record §11 that it restates and ADR-063 decision 10, by a dated
+  note, for the fixed hook; the cell of plugin record §8; plugin record §17; and
+  `dist/dist.yaml` and `test/dist/dist.yaml`. It needs no code in `sdk/kernel`, and none
+  in `sdk/plugin` beyond `FromManifest` itself.
+- (b) A hand-off that restarts nothing. `FromManifest` stamps the proxy value with
+  `kernel.WithCommit`, and a function of `sdk/plugin` keeps the committed config,
+  resolved as `Apply` would receive it, for the proxy, which forwards it whole (point
+  13). G13 then gives a proxy row what it gives any plugin with a hand-off, so the three
+  cases of point 12 lose nothing in the kernel process and a reference is resolved again
+  at the commit. `aiops/remote` listens on no sealed hook. The first four sentences of
+  ADR-063 decision 49 hold as written: the proxy forwards the update as a protocol
+  message, `sdk/remotehost` applies it through the hand-off of the plugin's own `Define`,
+  `aiops-sdk` hands the config to the contribution, and the kernel does not change. It is
+  not Q12 (b), which the owner did not choose: nothing restarts. It edits: the sentence
+  "`FromManifest` gives a proxy row no hand-off" of the note (lines 1837-1838), which it
+  reverses; the sentence "G13 gives a hand-off only through `plugin.Define`" (lines
+  1830-1831), by a dated note; ADR-063 decision 49, by a dated note that "the update" is
+  the committed config and not the loader's event; and `07:232` with ADR-063 decision 10,
+  because the hand-off is stamped on the value that has the entry of `aiops/remote`
+  (point 18). `sdk/plugin` grows inside its provisional cap of 1,800 lines (ADR-063:946).
+  One function of `sdk/plugin`, which must not block, runs under the config change lock
+  of each proxy row at each commit.
+- Recommended: (b). It builds `07:1198`, `07:1382`, decision 20 and the author contract
+  of `plugin.Volatile` (`sdk/plugin/plugin.go:184-185`) as written, in both runtimes, at
+  no kernel line and but for the delay of the message, which either option has. It needs
+  no sealed-hook binding for an entry whose values come from third-party manifests, no
+  fixed hook, no edit of the plugin record and nothing in the loader's semaphore but a
+  function that does not block. What it reverses is one sentence of a note, and the first
+  four sentences of ADR-063 decision 49 hold as the owner accepted them. (a) keeps that
+  sentence, keeps every function that serves a remote plugin off the fiber's config
+  change lock and keeps the signature of `07:232`; it pays with two differences between
+  the runtimes that the recommendation of Q12 did not state. The owner decides because
+  either option changes a line that the owner accepted. Blocks: the first commit of
+  `FromManifest` and the fields of the update message in ADR-041.
