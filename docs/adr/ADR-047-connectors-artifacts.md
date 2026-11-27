@@ -4,6 +4,9 @@
   answered all seven questions on the same date with the recommended option of each; the
   section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
   ADR-047 stays for S8a start, as the scope below says.
+- S2b part: **proposed 2026-11-27, awaiting the project owner.** The section "S2b part"
+  at the end of this file holds it, with decisions 23 to 35 and questions Q8 to Q10
+  (ADR-063 decisions 2 and 34). Until the owner accepts it, nothing above changes.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -812,3 +815,556 @@ plugin id in the records install wrote under `$AIOPS_HOME/verified/`, whose
 row `Lock` and the relationship from `Install` to `Lock` in `07` §9, say that in-process
 code has no entry; `00:478` locks only a remote plugin or a pack with no code and is not
 edited for this point.
+
+## S2b part: the artifact of remote code, its rows of the home and its network
+
+- Status: **proposed 2026-11-27, awaiting the project owner.** This part is an addition
+  to ADR-047, written as ADR-063 decision 2 has the S2b parts of accepted ADRs written,
+  and it is accepted before the code it governs merges into `main`. Three questions are
+  open, Q8 to Q10. Decisions 1 to 22 stand as accepted; where a decision of this part
+  adds to one of them, it names it.
+- Scope: what ADR-063 decision 34 lists for this part, with what its decisions 25 and 27
+  leave to it: the layer and media type of the image reference; the image and its digest
+  (ADR-063 decision 61); the SBOM of remote code; the one row of a remote bundle (ADR-063
+  decision 67); the unit files, the endpoint table and the credentials as rows of the
+  home table of decision 13, with the one directory a unit binds; the network of an
+  instance and of a kernel container, and how `aiopsctl` names the kernel container.
+  - It blocks `plugin pack`, `push` and `install` of remote code, the rendered compose
+    fragment and systemd unit, the endpoint table that `sidecars-static` reads, `plugin
+    start`, and steps C2 and C3 of the S2b exit (ADR-063 decision 27).
+  - Settled by the other S2b parts and by ADR-041 (ADR-063 decision 34), and only named
+    here: the form of each identity, the files of a credential directory, their lifetime
+    and rotation, the mechanism of the revocation, and how an entrypoint is told its
+    listener and its credential directory (ADR-041); whether `plugin.yaml` carries
+    `entrypoint`, the grammar of that field and of the id as a unit takes them, and what
+    a manifest that lists both `inproc` and `remote` packs and installs (ADR-048); the
+    record of a remote artifact, `plugin verify` against a pulled image and
+    `allowUnsigned` for the runtime `remote` (ADR-020); `plugin start` as a command and
+    the text of each refusal (ADR-061). The content of a unit beyond its paths, its one
+    bind, its image reference and its network is the fixed template of ADR-063 decision
+    25.
+  - This part changes no decision of `00-decisions.md`. Where an answer would edit a
+    written line, the question names the line, and the section "Edits on acceptance of
+    the S2b part" names the rest.
+- Citations: in this part `00`, `02`, `03`, `07` and `08` are the files of
+  `docs/architecture/` with those numbers, and `08:393` is line 393 of `08` at commit
+  `bbfd839`, which holds the acceptance of ADR-063. The part above cites those files at
+  `8e1f7b9`, so its line numbers differ. A path with a line, as
+  `boot/manifest.go:582`, is a file of the repository at `bbfd839`. "Decision n" alone
+  is a decision of this ADR, of the part above or of this one; a decision of another
+  ADR carries its number. The plugin record is cited by section, and an outside module
+  as `module@version`, read in that module at that version.
+
+### Context of the S2b part
+
+ADR-063 fixes what S2b builds and leaves to this part the points that touch the artifact
+and the home (ADR-063 decisions 25, 27 and 34). Reading its decisions against decisions 1
+to 22 and the code at `bbfd839` leaves eight gaps:
+
+- **No image layer.** The layer table of decision 1 has none: decision 1 says only that
+  the image reference arrives at S2b "as one more layer type under the same
+  `artifactType`". `plugin check`, `pack` and `install` refuse the runtime `remote`
+  (`plugins/operations/internal/operations/author.go:248`, `artifact.go:90`,
+  `install.go:122`).
+- **An image that no line describes.** `plugin pack` builds the plugin image, "writes
+  the image beside the artifact as an OCI layout and records the digest of that image",
+  and `plugin push` "pushes the image and then the artifact" (ADR-063 decision 61). No
+  line says which file is built, over which bytes the digest is taken, where the layout
+  puts the image, or in which repository a unit finds it. An artifact is fixed at `pack`
+  and signed before `push` names a registry, and a local path is a spec too (`07:1864`;
+  decision 1).
+- **`inspect` prints what it may not fetch.** Step C1 has `plugin inspect` print the
+  image reference and fetch no image (ADR-063 decision 27), and decision 2 lets it fetch
+  the artifact's manifest, `plugin.yaml` and the bundle only (`07:1865`).
+- **An SBOM for two kinds only.** Every artifact carries an SBOM (`08:393`), and decision
+  1 says what it lists for a pack and for in-process code.
+- **One row, of which plugin.** The bundle of a remote artifact holds exactly one row
+  (ADR-063 decision 67; `08:506`), and the row of an installed remote artifact names the
+  artifact's own id (ADR-063 decision 41), while check 8 also admits a row of an
+  instantiable first-party plugin (decision 11).
+- **No row of the home for a remote plugin.** Install renders a unit, writes "a line in
+  the `sidecars-static` table" (`08:1293`; `02:313`) and makes key pairs (ADR-063
+  decision 55; `00:412-413`). The table of decision 13 has a path for none of them, and
+  the endpoint table has no file, no format and no name. Its reader in the kernel is a
+  row that injects nothing (`03:113`).
+- **One owner, two users.** Decision 14 gives the home one owner and every file the mode
+  0600. A unit names "a user that is neither the site user nor root" and binds one
+  directory of the home, the one that holds its instance's credential (ADR-063 decision
+  25).
+- **No network in the container form.** Decision 15 names no network, and the S2a exit
+  starts the kernel with none (`test/authoring/exit_test.go:1063`). At S2b `plugin start`
+  creates the network of an instance and attaches the instance and the kernel container
+  to it; how `aiopsctl` names that container, and what the same step does for a kernel
+  that runs as a binary on the host, are left to this part (ADR-063 decision 27).
+
+### Decision of the S2b part
+
+#### The artifact of remote code
+
+23. **The image reference is one more layer.** An artifact of remote code, one whose
+    `plugin.yaml` lists the runtime `remote` (`07:134`), carries the layer below under
+    the same `artifactType`, after the module layer in the order of decision 1 (ADR-063
+    decision 17):
+
+    | Layer | Title annotation | Media type | Present in |
+    |---|---|---|---|
+    | The image reference | `image.json` | `application/vnd.aiops.plugin.image.v1+json` | Remote code |
+
+    - The prefix is that of decision 20. The layer is one JSON object with exactly three
+      members, named as the three required properties of an OCI content descriptor
+      (`github.com/opencontainers/image-spec@v1.1.1`, `descriptor.md`): `mediaType`,
+      always `application/vnd.oci.image.manifest.v1+json`; `digest`, `sha256:` and 64
+      lower-case hexadecimal digits, the digest of the plugin image's manifest (decision
+      24); and `size`, the length of that manifest in bytes. `aiopsctl` writes it with
+      the standard library's `encoding/json`.
+    - It names no registry, no repository, no tag and no URL. An artifact is fixed by
+      `plugin pack` and signed before `plugin push` names a registry (`07:1864`), so it
+      cannot hold one, and no host name from a third party's artifact reaches a unit
+      (ADR-063 decision 25). Decision 31 says which repository a unit names.
+    - The layer's descriptor in the artifact's manifest carries the annotation
+      `aiops.plugin.image.digest`, set to the same digest, as the content layer's
+      descriptor carries its paths (decision 2). The manifest that `plugin sign` signs
+      then holds the image digest itself, and `plugin inspect` prints it with no other
+      fetch (decision 25).
+    - `plugin pack` writes the layer exactly when `runtimes` holds `remote`. Install
+      refuses, before it writes anything: an artifact whose manifest lists `remote` and
+      that has no such layer; one that has the layer and does not list `remote`; a layer
+      that is not the closed form above, read under the bound that the library sets on
+      `plugin.yaml` (`plugins/operations/internal/operations/oci.go:146-153`); and an
+      annotation that differs from the layer. What an artifact carries whose manifest
+      lists both `inproc` and `remote` is the S2b part of ADR-048 (ADR-063 decision 34).
+    - A reader that does not know the type ignores it and fetches no blob of it
+      (decision 1), so an `aiopsctl` of S2a reads such an artifact as far as its own
+      refusal of the runtime `remote`. Boot does not read the layer: it reads the kept
+      files of decision 5 and ignores a layer of a type it does not read
+      (`boot/install.go:79-80`). A layer type and an annotation are what decision 22
+      lets a release add, and nothing is published before L14 (`08:1349`).
+
+24. **The plugin image and its digest** (ADR-063 decision 61).
+    - **The build file** is `Containerfile` at the root of the plugin directory, a name
+      that names no runtime. Each remote template writes it (ADR-063 decision 19), and
+      `plugin pack` refuses remote code that has none.
+    - **The container runtime at hand** is the program `docker` of the caller's `PATH`,
+      the one that the image path of the builder already runs
+      (`internal/builder/image.go:417`); any runtime that takes the same commands
+      qualifies, as decision 14 says of a user mapping. Without one, `plugin pack` of
+      remote code refuses and names what it lacks, and step 7 of `plugin check` is
+      reported as not run (`07:1570`; ADR-063 decision 17).
+    - **What pack does.** It runs the runtime's build on that file, with the plugin
+      directory as the build context and nothing else passed in. It takes the built
+      image out of the runtime as an OCI image layout
+      (`github.com/opencontainers/image-spec@v1.1.1`, `image-layout.md`) and copies the
+      image manifest, its config and its layers into `blobs/sha256/` of the layout of
+      decision 1. That is "the image beside the artifact as an OCI layout": one directory
+      holds the artifact and its image, so `--out`, `plugin sign`, `plugin push` and a
+      local-path spec name one directory, as at S2a. The rule of decision 1 stands:
+      `index.json` names exactly one manifest of the `artifactType`
+      `application/vnd.aiops.plugin.v1`. A reader finds the image by the digest in
+      `image.json` and never through `index.json`: a layout may hold a blob that
+      `index.json` does not name (`image-layout.md`, "Blobs").
+    - **The digest** is the SHA-256 of the bytes of that image manifest as the layout
+      holds them. It is never an identifier that the runtime's own store gives an
+      image. `plugin push` copies those bytes unchanged (decision 25), so the digest in
+      the artifact is the digest under which the registry serves the image (ADR-063
+      decision 27, step G2) and by which the runtime of the clean machine pulls and runs
+      it (step C3).
+    - **One image manifest, one platform.** Pack refuses a build whose export is not
+      exactly one `application/vnd.oci.image.manifest.v1+json`: an image index, or a
+      manifest of another type. The platform is that of the runtime that built it, and
+      the S2b exit runs linux/amd64 alone (ADR-063 decision 27). An image for several
+      platforms arrives with its first consumer (`08:680`), in a form that decision 22
+      lets a release add.
+    - **Not read.** Which commands of the runtime build and export, and with which
+      flags, was read in no source for this ADR. The code states them, the runtime of
+      the exit is read and pinned before its first use (ADR-063 decision 35), and steps
+      G2 and C3 prove them on it. If that runtime exports no OCI image manifest that a
+      registry then serves byte for byte, the work stops on that point and the owner is
+      asked (ADR-063 decision 33).
+    - **What does not change.** `plugin sign` signs the artifact's manifest and nothing
+      else: the image has no signature of its own, because the artifact's own field pins
+      it (ADR-020 decision 9). `plugins.lock` keeps the form of decision 8: the lock
+      names the artifact's digest, which fixes `image.json`, so a generation digest pins
+      the image through it (`08:185`). The blobs of the image are copied as streams by
+      `pack` and `push` and by no other command, so the bounds that the library sets on
+      a blob it reads into memory do not bind them
+      (`plugins/operations/internal/operations/oci.go:46-47`).
+
+25. **What each command does with the image.** This adds to decision 2.
+    - `plugin push` copies the image manifest and every blob it names to the repository
+      that the command names, then the artifact, then what `sign` added (ADR-063
+      decision 61). A registry therefore holds no artifact of remote code without its
+      image, and holds both in one repository.
+    - `plugin inspect` fetches what decision 2 lists and prints the image reference from
+      the annotation of decision 23: the repository of the spec with the digest, or the
+      digest alone for a local path. It fetches neither `image.json` nor a blob of the
+      image, so `07:1865` stands as written (ADR-063 decision 27, step C1).
+    - `plugin gate --against` fetches what decision 2 lists.
+    - `plugin install` fetches `image.json` beside what decision 2 lists and makes the
+      checks of decision 23. It fetches no manifest, config or layer of the image, asks
+      the registry nothing about them, pulls nothing and runs nothing (ADR-063 decision
+      17; step C2). An image that the repository does not hold shows at `plugin start`,
+      as the runtime's own error.
+    - `plugin verify` fetches what install fetches. The image itself is pulled by the
+      container runtime, by the reference of decision 31; the rest of its form for
+      remote code is the S2b parts of ADR-020 and ADR-061.
+
+26. **The SBOM of remote code** has the form of decision 1: an SPDX 2.3 document in JSON
+    that `aiopsctl` writes itself with `encoding/json`, so it adds no linked module and
+    ADR-060 decision 34 asks nothing more.
+    - It lists the plugin image as one package: the plugin id and version, the digest of
+      the image manifest as its checksum, and the manifest's `license` as its declared
+      licence. Under it, it lists the image's config and each layer as files, each with
+      the SHA-256 and the size that the image manifest gives it.
+    - It is not an inventory of what the image contains. It states no licence of the
+      contents (`NOASSERTION`) and lists no package of an operating system or of an
+      interpreter: `aiopsctl` unpacks no image layer and links no scanner of image
+      contents, as the builder writes its own SBOM and holds no SBOM tool (ADR-044
+      decision 15). Nothing asks such an inventory of remote code: the licence scan is
+      over code linked into a binary (check 6, `08:504`), and a remote plugin is a
+      separate program whose licence is unrestricted (L16, `08:1351`).
+    - The rule is by layer: the files of a content layer and of a fixtures layer, the
+      build list of a module layer (decision 1), and the image of an image layer.
+
+27. **The bundle of a remote artifact holds exactly one row, the proxy row** (ADR-063
+    decisions 41 and 67).
+    - Its `insert` items hold, together, exactly one row, and that row's `plugin` is the
+      artifact's own id. The other plugin that decision 11 admits, a first-party plugin
+      marked `instantiable`, is not open to it: a remote artifact with no row of its own
+      plugin would start an instance that no row dials.
+    - The row sets the fields of decision 19 and no other. It states its roles (`08:157`),
+      and only replicas of those roles dial the instance (`03:571`). It mounts under the
+      group of decision 5, so its id is `<name>:<row>`, the id that `plugin enable`
+      takes.
+    - `plugin check` refuses a remote bundle with no row, with a second row or with a
+      row of another plugin, and names the rows. The gate denies it under check 8 at
+      every entry point that evaluates check 8 (ADR-060 decision 17), in the clause that
+      the gate text carries from S2b (`08:506`).
+    - Several rows of one remote plugin are the work of S4b, where the question can be
+      reopened with the replicas (ADR-063 decision 67).
+
+#### The home
+
+28. **The rows of the home that a remote plugin adds.** This adds to the table of
+    decision 13.
+
+    | Path under `$AIOPS_HOME` | Written by | The kernel mounts it | Source |
+    |---|---|---|---|
+    | `sidecars.json`, the endpoint table (decision 29) | `aiopsctl` `install`, `remove` | Read-only; the row `sidecars-static` reads it | `08:1293`; `02:215`; ADR-063 decisions 17 and 39 |
+    | `remote/units/<plugin id>/`: `compose.yaml`, the compose fragment, and `<unit name>.service`, the systemd unit (decision 31) | `aiopsctl` `install`, `remove` | Read-only, and the kernel does not read it: the host starts the instance from it | ADR-063 decisions 25 and 50 |
+    | `remote/kernel/`: the key pair and the certificate of the kernel | `aiopsctl` `install`, on first need | Read-only; the proxy reads it | ADR-063 decisions 23 and 55; `00:413` |
+    | `remote/pins/`: the pin of the certificate of each installed instance, one entry per plugin id | `aiopsctl`: `install` writes it, `disable` and `remove` delete it | Read-only; the proxy reads it at every dial | ADR-063 decision 55; `00:412` |
+    | `remote/instances/<plugin id>/`: the key pair and the certificate of that instance, and the certificate of the kernel | `aiopsctl` `install`; `remove` deletes it | Read-only, and the kernel does not read it: it is the one directory that the unit of that instance binds (decision 30) | ADR-063 decisions 25 and 55 |
+
+    - A plugin id holds one `/`, so `<plugin id>` is two path segments, as under
+      `bundles/` and `content/` (decision 5).
+    - Every row is of the site and not of a profile: a site holds one digest and one
+      shared instance per plugin id (decision 7; `08:388`).
+    - `aiopsctl` writes each of them through the operations library, under `write.lock`
+      and with the snapshot of decision 13 (ADR-061 decisions 17 and 19). The kernel
+      writes none of them: it still writes nothing outside `run/`. `plugin start` writes
+      no file of the home.
+    - The kernel's private key is in `remote/kernel/` and nowhere else, and
+      `remote/instances/<plugin id>/` holds no private key but that instance's, so the
+      kernel's key is in no file that a unit gives an instance (ADR-063 decision 23).
+    - The names of the files in the three credential directories, their form, their
+      lifetime and rotation, and which command writes a pin again after a `disable`, are
+      ADR-041's (ADR-063 decisions 23 and 34). This part fixes the directories, who
+      writes them and who may read them.
+
+29. **The endpoint table** is `$AIOPS_HOME/sidecars.json`: one JSON object with
+    `tableVersion`, which is 1, and `endpoints`, a list sorted by `name` of objects with
+    the two members `name` and `address`.
+    - It is JSON and not YAML because its reader in the kernel is a row, a plugin under
+      `plugins/` that injects nothing (`03:113`): it reads the file with the standard
+      library and adds no importer to the register entry of the YAML library
+      (`tools/upstream-components.yaml:124-132`).
+    - `aiopsctl` writes the file whole and replaces it by a rename (decision 14). The
+      home is bound as a directory (decision 15), so a running kernel container sees
+      the new file.
+    - `name` is, for a remote plugin, its plugin id. A name that holds `/` is a plugin
+      id and never the role name of an upstream process, such as `harness-sidecar`,
+      which holds none (`00:664`; `02:310`). Those names enter the table with their
+      plugins.
+    - `address` is `<host>:<port>`. For an instance that a unit starts, the host is the
+      unit name of decision 31 and the port is 7443, the one port on which every unit
+      has its instance listen (decision 32).
+    - Install writes the line with the unit (`08:1293`). Between install and `plugin
+      start` the endpoint is therefore listed and does not answer, and `plugin enable`
+      fails by the server's verdict; `aiopsctl` reads this file for its own refusal of
+      an endpoint that is missing (ADR-063 decision 17; step C2). `remove` deletes the
+      line (decision 35).
+    - How the row learns the path of the file, when it reads it again and what it calls
+      ready are the row's, with the `sidecars` definition (ADR-063 decision 39).
+
+30. **The one directory a unit binds.** The unit of an instance binds
+    `remote/instances/<plugin id>/` of the home, read-only, at `/aiops/identity` in the
+    container: the same path in every unit, under no path of the home, so that no path
+    inside an instance is a path of the home.
+    - It binds nothing else: no other path of the home, not `run/`, no socket of the
+      container runtime and no other path of the host (ADR-063 decision 25).
+    - The directory is bound, never its files one by one, for the reason of decision 15.
+      On a host with SELinux enforcing the bind needs the label of decision 14.
+    - The unit names a user that is neither the site user nor root (ADR-063 decision
+      25), and decision 14 gives every file of the home the mode 0600 and the site user
+      as its owner. How that user reads this one directory is question Q9. Whatever the
+      answer, the home keeps its mode 0700 and its one owner, and decision 14 holds for
+      every other path.
+
+31. **The unit files, and the image a unit names.**
+    - **The unit name** is `remote-plugin-<owner>--<name>`: the role name of the
+      container (`00:138`, `:664`) and the two segments of the plugin id, joined by two
+      hyphens, which no kebab-case segment holds (`boot/manifest.go:582-590`). Distinct
+      ids therefore give distinct names. It names the container of the instance, its
+      network and its host on that network (decision 32), and the systemd unit file.
+      It has to resolve as a name, so `plugin check` and install refuse an id whose
+      unit name is longer than 63 bytes, the length of a DNS label, with no unit
+      rendered (ADR-063 decision 28); the S2b part of ADR-048 takes that bound into the
+      grammar of the id as a unit takes it (ADR-063 decision 34).
+    - **Both targets are rendered at install** (ADR-063 decision 50), into
+      `remote/units/<plugin id>/`: `compose.yaml` and `<unit name>.service`. They name
+      the same container and the same network, so one of them runs at a time, which is
+      the one shared instance of `08:388`. `plugin start` runs the fragment; the
+      operator enables the systemd unit by its path (`08:1293`). The form of both
+      commands is the S2b part of ADR-061.
+    - **The image reference** of a unit is `<registry>/<repository>@sha256:<digest>`:
+      the repository from which install read the artifact, and the digest of
+      `image.json`. It holds no tag (ADR-063 decision 25). That repository is where
+      `plugin push` put the image (decision 25). The runtime pulls it with the registry
+      credentials of the site, which the orchestrator holds and the kernel never does
+      (`00:416`). A site that copies artifacts into a registry of its own copies the
+      artifact and its image into one repository and installs from there. Of the three
+      inputs that ADR-063 decision 25 lets an artifact give a unit, the image reference
+      by digest is thus the digest that the signed artifact pins; the repository is the
+      operator's, through the spec.
+    - **A local-path spec** names no repository. What install of remote code does with
+      one is question Q8.
+
+#### The network
+
+32. **The network of an instance** (ADR-063 decision 24).
+    - Each instance has one network of the container runtime, named by the unit name
+      and created by the unit: the compose fragment declares it, and the systemd unit
+      creates it before it starts the container. It is an internal network (ADR-063,
+      Context: "a compose file has an internal network"): nothing routes from it to
+      another network, to an interface of the host or outside.
+    - Its members are the instance and the kernel container of decision 33, and nothing
+      else. The instance joins no other network and publishes no port. Its name on the
+      network is the unit name, and it listens on port 7443 of that network alone, a
+      port that the unit's user binds with no capability.
+    - What the network has to give, each point asserted on the runtime of the exit
+      (ADR-063 decision 27, step C3; decision 28): from inside the instance no
+      connection reaches an address outside the network, the registry or another
+      instance; the runtime's resolver answers the instance for no name outside the
+      network; and of the kernel the instance reaches only the stream that the kernel
+      opened. The last holds at S2b because the kernel listens on no network: the row
+      `reload-socket` listens on a Unix socket in `run/` (ADR-062 decision 3), and no
+      row that S2b ships opens a network listener. The step that builds the first row
+      with a network listener keeps that listener off the networks of instances, or
+      shows that an instance cannot reach it, in the ADR of that step.
+    - How a pinned runtime treats each of these points on an internal network was read
+      in no source for this ADR. A point that the runtime of the exit does not give
+      stops the work and goes to the owner (ADR-063 decision 33); it is never recorded
+      as built.
+    - A remote manifest that lists a `network` entry is refused at install (ADR-063
+      decision 56), so every unit of S2b has this network and no other.
+
+33. **The kernel container.**
+    - **How `aiopsctl` names it.** It gives the kernel container no name and reads none
+      from a file: it finds it. The kernel container of a home is the running container,
+      on the runtime that `plugin start` uses, that has a read-write bind whose source
+      and target are both `<home>/run`. That is the form of decision 15, and no other
+      container has it, since one server process runs on a home until S4b (ADR-062
+      decision 2, note of 2026-11-26). The form of decision 15 therefore needs no new
+      flag, label or file, a kernel container started as at S2a is found, and two homes
+      on one host name two containers. Where two running containers have that bind,
+      `plugin start` refuses and names both.
+    - **It starts with no network**, as at S2a (`test/authoring/exit_test.go:1063`;
+      ADR-063 decision 27), and decision 15 gains that sentence. `plugin start <id>`
+      attaches it to the network of that instance, and from then its only networks are
+      the networks of instances. The kernel and the instances are containers of one
+      runtime (ADR-063 decision 27).
+    - **`plugin start` is idempotent.** It creates the network where it is absent,
+      starts the instance unless it runs, and attaches the kernel container unless it is
+      attached. A kernel container that the operator starts or replaces after the
+      instance, as after `dist use`, is attached by the same command, which is the
+      exact command that `plugin enable` prints (ADR-063 decision 17).
+    - **Where it finds no kernel container,** `plugin start` starts the instance,
+      attaches nothing and says that no kernel container of this home runs on this
+      runtime and that the same command attaches one that starts later.
+    - **Names are per runtime, not per home.** A container of the unit's name that does
+      not bind `remote/instances/<plugin id>/` of this home is not this site's
+      instance: `plugin start` refuses and names it.
+    - **Not read.** Whether the runtime of the exit attaches a container that started
+      with no network was read in no source for this ADR. Step C3 proves it; if the
+      runtime refuses, the work stops on that point and the owner is asked (ADR-063
+      decision 33).
+    - Until `deploy/compose` exists (S7; ADR-063, Context) the operator starts the
+      kernel container by hand in the form of decision 15. The step that builds
+      `deploy/compose` says how a kernel that is a compose service joins the networks of
+      instances.
+
+34. **A kernel that runs as a binary on the host** is question Q10. Whatever the answer,
+    no unit gets a wider network than decision 32 gives it, and the server dials only
+    the address that the endpoint table names.
+
+#### Install and remove of remote code
+
+35. **The order of the writes.** This adds to decision 10.
+    - Install writes `remote/units/<plugin id>/`, `remote/instances/<plugin id>/`, the
+      pin, `remote/kernel/` on first need and the line of the endpoint table before it
+      changes the lock and the bundle list, in the one write of the home that holds the
+      kept files of decision 5. A failure that restores the snapshot therefore leaves no
+      lock entry without its files, and a denial writes nothing (ADR-063 decision 17).
+    - Install into a second profile of an id that the site holds at the same digest
+      reuses all of them and writes none again (decision 7).
+    - Where `disable` or `remove` revokes the credential (ADR-063 decision 68), it
+      deletes the pin first, in the changes that precede the submission that unloads
+      the proxy (ADR-063 decision 23; `00:412`). When no profile names the id, `remove`
+      deletes the unit files, the directory of the instance with its key, and the line
+      of the endpoint table, with the kept files of decision 10 and under its note of
+      2026-11-23: only after a final result that shows the change, or when no process
+      runs the profile (ADR-063 decision 68).
+    - `remote/kernel/` stays: it is the site's and not a plugin's, and its lifetime is
+      ADR-041's.
+    - A file that a write deletes lies in `snapshot/` until that write drops its
+      snapshot (ADR-061 decision 17). A key is deleted once the command has returned
+      without a restore.
+
+### Consequences of the S2b part
+
+- The operations plugin gains the writer and the reader of `image.json`, the build and
+  the export through the container runtime, the push of an image before its artifact,
+  the paths of decision 28 with the writer of `sidecars.json`, and in `plugin start` the
+  network of decision 32 and the attachment of decision 33. `plugins/sidecars-static`
+  reads `sidecars.json`. `boot` gains from this part only the wording of the one-row
+  clause of check 8 (decision 27).
+- `plugin pack` of remote code needs a container runtime, and `plugin install` needs
+  none.
+- An artifact of remote code and its image live in one repository, and a unit names the
+  repository that the operator's spec named.
+- The SBOM of remote code says which image the artifact ships and not what is inside
+  it. A site that needs an inventory of an image runs a scanner of its own on it.
+- Boot checks none of the files of decision 28 against a digest: decision 18 covers the
+  kept files of decision 5. The units, the endpoint table and the credentials are as
+  strong as `trust.yaml`, which the ownership of the home protects (ADR-020 decision
+  11). The image that a unit names is fixed at install, and nothing reads the unit
+  against the artifact again.
+- One container runtime serves the instances of one home per plugin id, since the unit
+  names carry no home (decision 33).
+- With question Q8 (a), remote code installs from a registry only. With Q9 (a), one
+  directory per instance holds files that others may read, inside a home that others
+  cannot enter. With Q10 (a), a kernel that runs as a binary on the host reaches no
+  instance that a unit starts until the step that adds the host form.
+- The media type and the annotation key of decision 23 enter the artifact layout that
+  decision 22 freezes at its first publication. The unit name, the port and the path
+  `/aiops/identity` are constants of the unit template and are not part of that layout.
+
+### Edits on acceptance of the S2b part
+
+Made in the commit that records the owner's answers:
+
+- This file: the status of this part; dated notes that name the decisions of this part
+  at decision 1 (the layer of decision 23), decision 2 (decision 25), decision 10
+  (decision 35), decision 13 (the rows of decision 28), decision 14 (as question Q9 is
+  answered) and decision 15 (no network; decision 33).
+- `07:1850` (`Artifact`): the image digest is in the layer `image.json`, and the image
+  is in the artifact's repository. `07:1865`: for remote code `plugin inspect` prints
+  the image reference from the artifact's manifest.
+- `07:1854` (`Unit`), `08:1293` and `02:313`: the fragment and the unit are under
+  `remote/units/<plugin id>/` of the home, and the table is `sidecars.json`. `08:432`
+  (profile files) and `02:316` (composition source): the units, the endpoint table and
+  the credential directories are files of the home.
+- The row of ADR-047 in the ADR table of `08` §3 (`08:1181`): the S2b part and its date.
+- The lines that the chosen option of each question names.
+
+Left to the commit that builds the clause in the one gate text (ADR-060 decision 16):
+`08:506` says that the one row of a remote bundle is a row of the artifact's own plugin
+(decision 27).
+
+### Questions for the owner on the S2b part
+
+Each question gives its options, the recommended one, why, and when the answer is
+needed. An option that changes or defers a written line says so and names the lines.
+
+**Q8. What does `plugin install` of remote code do with a local-path spec?** A spec is an
+OCI reference, an `<id>@<version>` through an index, or a local path (`07:1864`), and
+decision 1 has `inspect`, `gate --against`, `install` and `verify` read a local layout
+"as they read a registry". A unit names its image in a repository by digest (decision
+31), install pulls no image and runs none (ADR-063 decision 17), and a layout on disk is
+no repository that a container runtime pulls from. No step of the S2b exit and no case
+of ADR-063 decision 28 installs remote code from a local path.
+- (a) Install of remote code from a local-path spec is refused: it names the reason and
+  `plugin push`, and writes nothing. `inspect`, `gate --against` and `verify` read a
+  local path of remote code as they read any other. This narrows a written line for one
+  kind of artifact: decision 1 and `07:1864` gain "install of remote code takes a
+  registry spec".
+- (b) Install loads the image from the layout into the store of the container runtime
+  at hand, and the unit names it there by digest. Install then needs a container
+  runtime and moves an image, where ADR-063 decision 17 has it pull none, and whether a
+  runtime's store names a loaded image by the digest of its manifest was read in no
+  source.
+- (c) Install takes the repository from the operator, who pushed the image there with
+  another tool. This adds a flag to the S2b part of ADR-061 and a second place where an
+  image may be, beside the artifact's repository.
+- Recommended: (a). It rests on no behaviour of a runtime that nobody has read, it keeps
+  install free of a container runtime, and nothing at S2b consumes the other forms
+  (`08:680`). Needed before `plugin install` of remote code merges.
+
+**Q9. How does the user of a unit read the one directory it binds?** Decision 14 gives
+every file of the home the mode 0600 and the site user as its owner, and `aiopsctl`
+runs as that user and cannot give a file to another. ADR-063 decision 25 has a unit
+name a user that is neither the site user nor root and bind
+`remote/instances/<plugin id>/` read-only. As written, the two leave that user unable
+to read its own key, so no option keeps both to the letter.
+- (a) That one directory has the mode 0755 and its files the mode 0644, as a stated
+  exception of decision 14. On the host the mode 0700 of the home still keeps every
+  other user from the path. Inside the container the bind is readable to whatever user
+  the unit names, under every user mapping that decision 14 admits. The cost: a private
+  key whose file others may read, protected by the directory above it; a copy of the
+  home that loses its modes exposes it.
+- (b) The directory has the mode 0750 and its files 0640, and the unit names the group
+  of the site user beside its own user. It holds only under a mapping that carries that
+  group into the container, so install has to know the mapping, and an instance then
+  holds the site's group for any file that a later step makes group-readable.
+- (c) Decision 14 to the letter, and the unit names the site user. This changes ADR-063
+  decision 25 and the assertion of step C2. The instance then runs as the one user that
+  `run/reload.sock` serves (ADR-062 decision 5), and only the missing bind keeps it from
+  the socket and the home.
+- Recommended: (a). It is the one option that works under every mapping with no input
+  from the runtime, it keeps the user of ADR-063 decision 25, and what guards the key
+  on the host, the mode of the home, is what guards every other file of the home.
+  Needed before the unit and `plugin install` of remote code merge.
+
+**Q10. What does `plugin start` do for a kernel that runs as a binary on the host?**
+ADR-063 decision 27 leaves the point here. The network of an instance has no route out
+and publishes no port (ADR-063 decision 24; decision 32), and the endpoint that install
+writes is a name that the runtime resolves on that network (ADR-063 decision 27), so a
+process on the host is not served by it. The clean machine of the exit runs the kernel
+as a container (ADR-063 decision 27); the T3 of a remote example and the stubs of the
+failure matrix start their instances as processes, with no unit (ADR-063 decisions 31
+and 64). The deployment view D-2 runs the `aiops` binary on the VM beside a remote
+plugin from a unit (`02:295`, `:313`, `:336`), and `02:191` places the remote-plugin
+container at S2b.
+- (a) At S2b a unit's instance is reached by a kernel container only. For a kernel on
+  the host `plugin start` does what decision 33 says where it finds no kernel container,
+  and says that a kernel on the host does not reach the network of a unit. The host
+  form is an addition to this ADR, due with `deploy/compose` at S7 (ADR-063, Context)
+  and before the first community release, with a mechanism shown on a pinned runtime to
+  keep ADR-063 decision 24: the host dials the instance, and the instance reaches no
+  listener of the host. This defers part of a written view: `02:313` and `02:336` gain
+  "for a kernel that runs as a container; for a kernel on the host from S7".
+- (b) The host form is built at S2b. `plugin start` reads the address that the runtime
+  gave the instance on its network and writes it into the line of the endpoint table,
+  which then has a second writer, holds an address that changes at every start and
+  makes `plugin start` a write of the home. The systemd job of ADR-063 decision 50
+  proves that the host reaches that address and that the instance reaches no listener
+  of the host. Neither was read for any runtime; if the pinned runtime gives only one,
+  the work stops (ADR-063 decision 33).
+- (c) The unit of such a site publishes the port of the instance on the loopback
+  interface of the host. The instance then has a way to the host that ADR-063 decision
+  24 does not give it, and whether a runtime publishes a port of an internal network
+  was read in no source, so this weakens that decision or cannot be built.
+- Recommended: (a). The exit and every case of S2b run a kernel container or no unit,
+  so nothing at S2b consumes the host form (`08:680`), and (b) builds it on two
+  behaviours of a runtime that nobody has read. The owner decides, because `02:313`
+  draws the host form. Needed before `plugin start` merges.
