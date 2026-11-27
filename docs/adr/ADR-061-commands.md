@@ -1625,6 +1625,9 @@ otherwise, the decision here holds.
   decisions 60 to 66. ADR-063 decision 2 had this part proposed to the owner before the
   code it governs and accepted before that code merges into `main`. The text of
   decisions 45 to 59 is the proposal as corrected after its review of the same date.
+  Three points wait for the owner, questions Q17 to Q19 of the section "Points for the
+  owner after the records of 2026-11-27". Q19 is whether this part stays accepted ahead
+  of ADR-041, which is not accepted, and of the S2b part of ADR-047, which is proposed.
 - Scope: what ADR-063 decision 34 has this part settle (`ADR-063:849-854`): `plugin
   start`, with `Start` in the operations definition as a minor with a raised suite
   revision; `plugin new --lang python`; the form of a remote Go plugin, which ADR-063
@@ -1646,11 +1649,19 @@ otherwise, the decision here holds.
   that one of them hands to it. This part is accepted together with those parts or
   after them. Where the accepted text of one differs from what decision 59 assumes,
   this part is corrected by a dated note before the code that the point governs merges.
-  Note of 2026-11-27: the owner answered the questions of those parts on the same date
-  as the questions of this one, so the parts are accepted together. Decision 59 is read
-  against their accepted text from that date. Decision 65 names one point where two of
-  those texts differ from this part, and the record of the answers leaves the comparison
-  of the other rows to a later commit.
+  Note of 2026-11-27, corrected on the same date against the records of those parts:
+  the owner answered the questions of those parts on the same date as the questions of
+  this one, and the parts are not all accepted. The S2b parts of ADR-020, ADR-044 and
+  ADR-048 are accepted on 2026-11-27. ADR-041 is not accepted: it waits for the owner
+  on the questions after its runs. The S2b part of ADR-047 is proposed: it waits for
+  the owner on two questions. This part is recorded as accepted on 2026-11-27, so its
+  acceptance stands ahead of two texts that the sentence above puts with it or before
+  it. That departure is put to the owner as question Q19 of the section "Points for the
+  owner after the records of 2026-11-27". Decision 59 is read against the text of each
+  of the five as it stands, and again when ADR-041 and the S2b part of ADR-047 are
+  accepted. Decision 65 names one point where two of those texts differ from this part,
+  and the record of the answers leaves the comparison of the other rows to a later
+  commit.
 - Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
   is written against. The sections above cite `a3c85ae`, so a line number here differs
@@ -3212,9 +3223,10 @@ Left to later commits, each named:
 Note of 2026-11-27. The owner's answers on ADR-041 and on the S2b parts of ADR-020,
 ADR-034, ADR-044, ADR-047, ADR-048 and ADR-054 were recorded on the same date as the
 answers above, and the runs of ADR-041 decision 38 and of ADR-047 decision 39 were
-recorded after them. This section holds the two points of this part that wait for the
-owner, as questions Q17 and Q18, and what those records ask of this part. The part
-stays accepted. `Verify` of remote code waits for Q17, and `sidecars-static` for Q18.
+recorded after them. This section holds the three points of this part that wait for
+the owner, as questions Q17 to Q19, and what those records ask of this part. The status
+of the part is not changed here: Q19 asks whether it stays accepted ahead of two texts
+that it rests on. `Verify` of remote code waits for Q17, and `sidecars-static` for Q18.
 
 **Q17. Which channel does `plugin verify` use?** This is the difference that decision
 65 puts to the owner. Decision 65 (Q15 (a)) has `plugin verify` reach the container as
@@ -3251,6 +3263,32 @@ no text for that rule.
   decision 39).
 - Recommended: (a). The rule is about one file, the part that defines the file is open
   for revision now, and no document is added. Blocks: `sidecars-static`.
+
+**Q19. Does this part stay accepted ahead of ADR-041 and the S2b part of ADR-047?**
+The head of the part gives the order: "This part is accepted together with those parts
+or after them." This part is recorded as accepted on 2026-11-27, in its two status
+lines and in its row of the ADR table of `08` §3. The S2b parts of ADR-020, ADR-044 and
+ADR-048 are accepted on the same date. ADR-041 is not accepted, by the owner's answer
+to its question Q14 (its decision 53) and the questions after its runs, and the S2b
+part of ADR-047 is proposed, by the owner's answer to its question Q14 (its decision
+48) and its questions Q15 and Q16. So the acceptance of this part came before two of
+the texts that the order puts with it or before it, and the note of 2026-11-27 at the
+order said otherwise until it was corrected.
+- (a) The part stays accepted, and the order is read for the code. No code that a
+  point of decision 59 governs merges before the text that owns the point is accepted,
+  and where that text then differs from what decision 59 assumes, this part is
+  corrected by a dated note first, as the head already says. The sentence on the order
+  gains a dated note with that reading. No status line and no row of `08` §3 changes.
+- (b) The order holds as written. The status of the part goes back to "answers
+  recorded, not accepted" until ADR-041 and the S2b part of ADR-047 are accepted. The
+  two status lines of this ADR and its row in the ADR table of `08` §3 change,
+  decisions 45 to 66 stand as text, and the code that this part governs waits for that
+  acceptance (ADR-063 decision 2).
+- Recommended: (a). What the order protects is that no code merges on a point whose
+  owning text may still change, and (a) keeps that with no change to a status that is
+  recorded as the owner's word. Blocks: under (a), the code of each point that decision
+  59 takes from ADR-041 or from the S2b part of ADR-047, until that text is accepted;
+  under (b), all the code that this part governs.
 
 **What the other records ask of this part,** each by an addition to this ADR or a dated
 note here before the code that the point governs merges, and none a question:
