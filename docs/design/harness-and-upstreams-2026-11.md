@@ -214,7 +214,7 @@ A third party that sells a wrapper of an upstream harness ships the upstream ins
 
 ### 7.3 Stated exceptions: contracts, not defaults
 
-The PostgreSQL dialect behind `sql` (W2); the two query dialect keys; protocols with several implementations (the S3 API, the OpenAI-compatible API, OIDC, SMTP, OCI, OTLP, the Kubernetes API, MCP); the Cordis semantics of the kernel port; the default stack bundle; the Go language, in which definitions are declared, and SPDX identifiers (ADR-054). `aiops-base` may wrap an upstream only in a row on the base provider allow-list (the protocol providers and `jobs-river`), and an entry joins that list only with verdict `ok` or `ok-with-conditions`.
+The PostgreSQL dialect behind `sql` (W2); the two query dialect keys; protocols with several implementations (the S3 API, the OpenAI-compatible API, OIDC, SMTP, OCI, OTLP, the Kubernetes API, MCP, and gRPC and Protocol Buffers, the wire of the remote protocol; amended 2026-11-27, ADR-063 decision 42); the Cordis semantics of the kernel port; the default stack bundle; the Go language, in which definitions are declared, and SPDX identifiers (ADR-054). `aiops-base` may wrap an upstream only in a row on the base provider allow-list (the protocol providers and `jobs-river`), and an entry joins that list only with verdict `ok` or `ok-with-conditions`.
 
 Kept as defaults with no second real implementation, each already behind a definition or the stack bundle: the tenant gateway proxy, the jobs library, the dashboard server, the agent. Two fixes: the jobs library is imported only under `plugins/jobs-river/`, so every leader takes leadership through `jobs` or `sql`; decision texts name the role.
 

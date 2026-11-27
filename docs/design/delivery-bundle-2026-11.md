@@ -447,7 +447,7 @@ No format is stable before its decision. The request, the mapping and the plan s
 
 ## 11. The ADRs this needs
 
-New ADRs take the next free number from ADR-063 when they are opened, and an ADR that changes a decision edits `00-decisions.md` in the same change (`08:999`). None changes the order of work.
+New ADRs take the next free number from ADR-064 when they are opened (ADR-063, the scope of S2b, was accepted on 2026-11-27), and an ADR that changes a decision edits `00-decisions.md` in the same change (`08:999`). None changes the order of work.
 
 | # | ADR | Decides | Edits | Due |
 |---|---|---|---|---|

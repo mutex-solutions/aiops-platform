@@ -1,7 +1,11 @@
 # ADR-063: Scope and working rules of S2b (the remote runtime, single-tenant form)
 
-- Status: **proposed, awaiting the project owner.** No S2b code starts before this ADR is
-  accepted and the questions marked "before any S2b code" are answered (decision 1).
+- Status: **accepted 2026-11-27 by the project owner.** The owner answered all 32
+  questions on the same date with the recommended option of each, Q8 and Q15 each on a
+  condition; the section "Owner answers of 2026-11-27" records them as decisions 38 to
+  69. S2a is merged into `main` (`d124a40`), and on the owner's word S2b code starts on
+  the branch `s2b/integration` in parallel with the call-path gate that runs on that
+  merge commit (decision 70).
 - Scope: roadmap step S2b (`08-profiles-roadmap-adrs.md` §2.1). It turns the S2b text of
   the roadmap into decidable work and working rules, as ADR-060 did for S2a. It changes no
   decision of `00-decisions.md` by itself: every point where an answer would change one
@@ -182,7 +186,10 @@ gaps:
    run on the merge commit and the S2a exit caps written into ADR-060, `ci.yml` and the
    Makefile (s2a-report:481, :409-454); and the owner gives the word of s2a-report:502.
    The branch of decision 32 is cut from that `main`. Each other question is answered
-   before the code it names merges into `main`.
+   before the code it names merges into `main`. Note of 2026-11-27: the owner accepted
+   this ADR, answered every question and gave the word to start on that date, with S2a
+   merged into `main` at `d124a40`. On the owner's word the call-path gate on that merge
+   commit runs beside the first S2b code and not before it (decision 70).
 2. **Each ADR due at S2b is its own ADR.** ADR-041 is proposed to the owner, provisional,
    before the first commit of groups 1 to 3 of decision 30 and of the exit harness: the
    protocol, the proxy, the unit, and every command that reads or writes a credential.
@@ -1056,6 +1063,7 @@ and no tenant data are involved".
 - Recommended: (a). No written clause is lost, each toy registry passes its suite through
   its adapter once (community:109), and the template job of decision 19 covers both
   registries in both languages. (c) weakens a written exit. Blocks: any S2b code.
+- **Answered 2026-11-27: (a)**, decision 38.
 
 **Q2. Where does the proxy's endpoint come from before S4a?** The proxy injects
 `sidecars` (`03:72`), takes its endpoint from it and is PENDING until `Endpoint(name)` is
@@ -1082,6 +1090,7 @@ says it injects none.
   written lines and (c) breaks the order of `08:609`. Blocks: the proxy, the unit that
   install renders, the refusal of `plugin enable` and the matrix cells; needed before
   any S2b code.
+- **Answered 2026-11-27: (a)**, decision 39.
 
 **Q3. Does the proxy inject `tenantMint` at S2b?** `03:72` lists `tenantMint` (C) among
 the proxy's injects, and `00:330` lists `remote` among the mint points. Its provider
@@ -1094,6 +1103,7 @@ the proxy's injects, and `00:330` lists `remote` among the mint points. Its prov
   the tenant `default` for every call.
 - Recommended: (a). No toy definition takes a tenant, so a mint at S2b would have no
   reader, which `08:680` rules out. Blocks: the proxy.
+- **Answered 2026-11-27: (a)**, decision 40.
 
 **Q4. Which plugin does the row of an installed remote artifact name, and what is the
 `remote` row of `aiops-core`?** The bundle of an installed artifact may insert only rows
@@ -1129,6 +1139,7 @@ plugins of the module table and are compiled once, when the kernel starts
   under its own id and origin, and the third party's id enters no binding list. Its open
   point, how a later value takes the bindings, is named and gated. Blocks: the proxy,
   `FromManifest`, the resolution of remote rows and install; needed before any S2b code.
+- **Answered 2026-11-27: (a)**, decision 41.
 
 **Q5. Where may gRPC and Protocol Buffers be imported and named?** The remote runtime is
 "remote over gRPC" by decision (`00:44`; `07:1104`). An upstream's name and module appear
@@ -1150,6 +1161,7 @@ definition with its fake and suite (ADR-054 decision 17).
   rules of ADR-054 stay whole. (c) adds a definition whose only purpose is to hide a
   protocol that the proto packages already name. Blocks: the first import of either
   module, so any protocol code.
+- **Answered 2026-11-27: (a)**, decision 42.
 
 **Q6. How many modules hold the remote packages, and where is the kernel side of the
 protocol?** R2 keeps both packages out of the require list of `sdk` and fixes their home
@@ -1180,6 +1192,7 @@ README of `docs/architecture`; plugin record §2, row 5), and `07:42` and plugin
 - Recommended: (a). It keeps every written path and the closed list of `sdk`, an
   in-process author's graph gains nothing, and the kernel imports nothing that exists to
   run inside a plugin. Blocks: the first generated Go file.
+- **Answered 2026-11-27: (a)**, decision 43.
 
 **Q7. Where does the generated adapter of a `contrib` definition live?** `07:28`,
 `07:578` and `08:1215` put the proto, the message types and the generated adapter in
@@ -1202,6 +1215,7 @@ imports no upstream module (`07:527`), which the import boundary enforces
 - Recommended: (a). It keeps the module rule and the upstream rule, and it uses the
   standard runtime, not a private encoder. Blocks: the adapter generator and the
   `contrib` mark of the toy registries.
+- **Answered 2026-11-27: (a)**, decision 44.
 
 **Q8. What is the source of an adapter, and which tools generate it?** `07:1199` says the
 proto and the adapter are generated; `00:44`, `07:578` and `08:1255` say the proto is
@@ -1233,6 +1247,8 @@ digest" (`08:1374`).
   before its first use; if that reading finds a text that the tool rule does not
   admit, the owner is asked again with it, and (a) is the other way, on the same
   condition for its wheel. Blocks: the adapter generator.
+- **Answered 2026-11-27: (d), on the condition that the compiler release is read at its
+  pin before its first use**, decision 45.
 
 **Q9. Does check 3 have a clause that needs no connection, and what does `serves`
 gain?** The gate text names the handshake only (`08:501`); ADR-048:428 has check 3 read
@@ -1254,6 +1270,7 @@ an unknown field (`boot/distribution.go:241-242`).
 - Recommended: (a). A plugin that cannot connect is refused before an operator starts it,
   the offline gate answers for remote code as it does for in-process code, and `08:904`
   is built as written. Blocks: checks 3 and 9, and steps D1 and D2 of the exit.
+- **Answered 2026-11-27: (a)**, decision 46.
 
 **Q10. What does the profile clause of check 9 read before S4a?** Check 9 denies "a
 remote row at process scope in a multi-tenant profile" from S2b (`08:507`; `07:1194`). No
@@ -1267,6 +1284,7 @@ at S4a (`08:689`, `:699`). The shared instance of S2b is a row at process scope.
 - Recommended: (a). It is the rule of ADR-060 decision 17 for a clause with no input, and
   (b) stores a field whose reader ships later (`08:680`). The owner decides, because
   `08:507` says "from S2b". Blocks: check 9.
+- **Answered 2026-11-27: (a)**, decision 47.
 
 **Q11. Does the `contrib` minor of the toy registries carry `compatibleFrom`?** At major
 0 the exact minor is needed unless `definition.yaml` carries `compatibleFrom` (`08:906`;
@@ -1280,6 +1298,7 @@ Go interface does not change.
 - Recommended: (a). Nothing built on `0.1` exists outside the repository, so (b) would
   admit only artifacts that no one holds, and (a) is the plain rule of major 0. Blocks:
   the `contrib` mark.
+- **Answered 2026-11-27: (a)**, decision 48.
 
 **Q12. How does a volatile config change reach a remote instance?** ADR-034 leaves to S2b
 whether `FromManifest` gives a proxy row a hand-off or the proxy forwards
@@ -1293,6 +1312,7 @@ through `plugin.Define`.
   25 lines.
 - Recommended: (a). One plugin then behaves the same in both runtimes (`07:1198`), and
   the kernel does not change. Blocks: `FromManifest` and the messages of ADR-041.
+- **Answered 2026-11-27: (a)**, decision 49.
 
 **Q13. Which deployment-unit targets does S2b build, and is each one run?** Install
 renders the unit per target: a compose fragment started with `plugin start`, a systemd
@@ -1314,6 +1334,7 @@ is what keeps an instance off the home, off the reload socket and off the networ
   can run a systemd unit, the answer is (b) and not a rendered text. Compose is read and
   pinned first (decision 35). Blocks: the install of remote code, `plugin start` and the
   exit.
+- **Answered 2026-11-27: (a)**, decision 50.
 
 **Q14. What do the callbacks and the remote listeners run on at S2b?** `sdk/remotehost`
 provides definitions through callback clients (`07:1152`), `aiops-sdk` has `@listens`
@@ -1332,6 +1353,7 @@ exists before S3, and a part lands with its first consumer (`08:680`).
 - Recommended: (a). `07:1152` and `07:1209` are built at the step that names them, the
   protocol is exercised before S5 ratifies it, and no product definition moves. Blocks:
   ADR-041, `sdk/remotehost` and the Python SDK.
+- **Answered 2026-11-27: (a)**, decision 51.
 
 **Q15. Which licence rule holds the dependency set of `aiops-sdk`?** L7 lists the
 licences allowed in process, and remote plugins stay unrestricted (`08:1341`, `:1350`).
@@ -1351,6 +1373,8 @@ libraries of other projects whose licence texts are not read yet (decision 35).
   (decision 35), but a search is not a reading. If a text that L7 denies until reviewed
   is found, the dependency does not merge and the owner is asked with that text, with
   (c) as the other way. Blocks: the first Python dependency.
+- **Answered 2026-11-27: (a), on the condition that the licence texts of the bundled
+  libraries are read before the first Python dependency merges**, decision 52.
 
 **Q16. Do generated files count against a line cap?** `kernelcheck lines` counts every
 Go file of a package (ADR-060 decision 35). The repository already commits one generated
@@ -1364,6 +1388,7 @@ cap. S2b commits generated Go inside capped packages for the first time.
 - Recommended: (a). A cap bounds what is written and reviewed by hand, parity already
   holds a generated file to its source, and it is the treatment the one generated file
   of S2a has. Blocks: the first generated file.
+- **Answered 2026-11-27: (a)**, decision 53.
 
 **Q17. Six readings that reconcile wording.** None changes what a line requires or when
 it is built: each says which of two written lines governs a point, or fills a point that
@@ -1401,6 +1426,7 @@ of its own, Q25 to Q32.
 - (a) Accept the six readings, each landing with the code that builds it.
 - (b) Answer each item on its own.
 - Recommended: (a). Blocks: the code each reading names.
+- **Answered 2026-11-27: (a), all six readings**, decision 54.
 
 **Q18. What identifies the kernel and an instance on a single-tenant self-host?** The
 dial is mutual TLS and `00` ties it to S2b (`00:44`; `08:449`; `07:1159`), the row and
@@ -1431,6 +1457,7 @@ hold, and ADR-041 writes the answer out.
   classes to `00` §5.4 and closes the open point in `02:213`, `02:336`, `02:483`,
   `03:162`, `03:490` and `07:1159`. Blocks: ADR-041, the proxy, the unit, `plugin
   start`, `disable`, `remove` and the exit; needed before any S2b code.
+- **Answered 2026-11-27: (a)**, decision 55.
 
 **Q19. What does a unit render for a manifest that lists network entries?**
 `capabilities.network` is "rendered as the network policy of a remote instance"
@@ -1459,6 +1486,7 @@ policy of Kubernetes by address block. The two toy plugins list no entry.
   leaves the form of the filter to the step that has a plugin to prove it on. (c)
   weakens the written isolation. Blocks: install and the unit; needed before group 3 of
   decision 30.
+- **Answered 2026-11-27: (a)**, decision 56.
 
 **Q20. Through which key does the proxy reach the handshake entry of the gate?** The
 gate is `boot` code and a plugin imports no `boot` package, so the proxy reaches it
@@ -1480,6 +1508,7 @@ fiber that parses what a third-party process sends.
   only answer a verdict, and the owner-accepted consumer list of a key that can commit
   a composition does not grow. Blocks: the proxy and check 3 at the handshake; needed
   before the proxy.
+- **Answered 2026-11-27: (a)**, decision 57.
 
 **Q21. Which digest does the first message carry, and what does the kernel compare it
 with?** The first message carries the "manifest digest, which must equal `plugins.lock`"
@@ -1500,6 +1529,7 @@ the artifact pins the image.
   drift check and authenticates nothing, since the instance reports it itself: the
   authentication is the credential of decision 23 and the image digest that the unit
   runs (decision 25). Blocks: ADR-041 and the digest clause of check 3.
+- **Answered 2026-11-27: (a)**, decision 58.
 
 **Q22. How does `08:495` hold for the clauses of check 3 that need a connection?**
 `08:495`: "boot and every live generation evaluate every clause on every row", and
@@ -1518,6 +1548,7 @@ holds no kernel credential (decisions 17 and 23).
 - Recommended: (a). No row becomes ACTIVE without every clause evaluated, which is what
   the line protects, and no credential leaves the server. Blocks: checks 3 and 9 at
   boot and the goldens of `profile render`.
+- **Answered 2026-11-27: (a)**, decision 59.
 
 **Q23. How is a remote Go plugin made, and which runtimes does its manifest list?** The
 documents know `plugin new <registry> --lang go|python` (`07:1556`; ADR-061:934), and
@@ -1541,6 +1572,7 @@ a remote plugin (`07:1198`), and some `main` must call it. No line says what wri
   still proves one `Plugin` value in both runtimes. Blocks: the Go template, step G1 and
   the template job; needed before any S2b code, since the exit test is written first
   (decision 29).
+- **Answered 2026-11-27: (a)**, decision 60.
 
 **Q24. Who builds the plugin image, and how does `plugin pack` learn its digest?** The
 artifact carries the image digest (`08:393`), step 7 of `plugin check` "needs [a
@@ -1558,6 +1590,7 @@ of the exit need both.
   three commands as for every other artifact, and no step trusts a digest that another
   tool reported. Blocks: `plugin pack` of remote code and steps G2 and P2; needed before
   any S2b code, for the reason of Q23.
+- **Answered 2026-11-27: (a)**, decision 61.
 
 **Q25. From when must a change inside `aiops.remote.v0` be additive?** A change of
 written text. `07:1126` and community:159: inside a major, changes are additive.
@@ -1576,6 +1609,7 @@ names no start.
   the repository, "provisional" means nothing if no message can change, and (a) can
   force a choice between two written lines at S5. Under either answer both sides ignore
   unknown fields, calls and feature names from S2b (decision 5). Blocks: ADR-041.
+- **Answered 2026-11-27: (b)**, decision 62.
 
 **Q26. What is the activation id?** A change of what two written lines mean. `07:1161`
 and plugin record §11: "An activation id is (replica id, epoch)". The kernel shows no
@@ -1592,6 +1626,7 @@ of ADR-047 decision 15 is process 1 at every boot.
   4).
 - Recommended: (b). It gives the property that the id exists for, across restarts too,
   and the kernel does not change. Blocks: ADR-041 and the proxy.
+- **Answered 2026-11-27: (b)**, decision 63.
 
 **Q27. Are the two stubs of the matrix images or processes?** A change of written text.
 `08:463` boots the binary through every cell "with fault plugins ... and stub remote
@@ -1605,6 +1640,7 @@ and in `make s1-suites` with no container runtime, and the kernel launches nothi
 - Recommended: (b). A cell asserts what the kernel does when a remote misbehaves, which
   an image adds nothing to, and the matrix keeps running wherever `make check` runs.
   Blocks: the matrix cells.
+- **Answered 2026-11-27: (b)**, decision 64.
 
 **Q28. On which row does the disposer cell run at S2b?** The cell of
 `matrix.yaml:689-694` is the live-recomposition cell of "A tenant-scope disposer passes
@@ -1618,6 +1654,7 @@ marked `since: S2b`, and every remote row of S2b is at process scope (`07:1194`)
 - Recommended: (a). The cell passes from the step it is marked with, and what it asserts
   at S2b, a disposer that does not wait on the remote, is the same at either scope.
   Blocks: the matrix cells.
+- **Answered 2026-11-27: (a)**, decision 65.
 
 **Q29. What does a row do after a denial at the handshake?** A denied row is detached as
 disabled (`08:510`), and the matrix row "Remote unreachable or handshake mismatch"
@@ -1632,6 +1669,7 @@ required one, a failed verdict live and a breaker while running (`08:477`).
 - Recommended: (a). The matrix is the one failure text and its four cells are marked S2b
   as they stand, and a mismatch ends when the operator starts the right image, with no
   new generation. Blocks: the proxy and the matrix cells.
+- **Answered 2026-11-27: (a)**, decision 66.
 
 **Q30. May the bundle of a remote artifact hold more than one row?** A narrowing of
 written text. An artifact holds "a bundle of one or more rows" (`08:393`; `07:1850`;
@@ -1650,6 +1688,7 @@ shared instance per plugin on a self-host (`07:1194`).
   plugin, and several activations of one instance are the work of S4b, where the
   question can be reopened with the replicas. Blocks: the bundle of a remote artifact
   and check 8.
+- **Answered 2026-11-27: (b)**, decision 67.
 
 **Q31. When does a shared unit stop, and what does `remove` delete?** `plugin disable`
 run on the host also stops the unit (`07:1195`; `08:1292`), disable and remove revoke
@@ -1668,6 +1707,7 @@ instance serves the site, where several profiles may name one plugin (ADR-047 de
 - Recommended: (a). One profile's operator does not stop a plugin that another profile
   runs, and where one profile names the plugin, the usual case, (a) is the written
   behaviour. Blocks: `plugin disable` and `remove` of remote code.
+- **Answered 2026-11-27: (a)**, decision 68.
 
 **Q32. Is the handover of new remote code built at S2b?** A deferral of written text.
 `00:490`, `03:494` and `08:194`: "Remote: live; the new instance is handshaken before
@@ -1687,3 +1727,322 @@ version arrives "by `update` at S6b, or by `remove` and `install`" (ADR-047 deci
   and holds a site to one digest, and (a) would pull `plugin update` forward and reopen
   that decision. The owner decides, because `00:490` is a line of `00`. Blocks: nothing
   at S2b under (b); the commands and the proxy under (a).
+- **Answered 2026-11-27: (b)**, decision 69.
+
+## Owner answers of 2026-11-27
+
+The project owner accepted this ADR on 2026-11-27 and answered every question of the
+section "Questions for the owner" on the same date, each with its recommended option,
+two of them on a condition (decisions 45 and 52). Each decision below names the question
+it answers. Where a decision above leaves a point to a question, the decision here
+settles it. The six answers that decision 1 needs before any S2b code, Q1, Q2, Q4, Q18,
+Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
+
+38. **The exit text is the strictest one, everywhere** (Q1 (a)): "The same repository
+    publishes a remote Go echoer and a remote Python stamper. A clean machine installs
+    them into `dev` from signed artifacts with no rebuild and calls each through the toy
+    caller. A plugin that offers only an unknown protocol major is refused at the
+    handshake, with the reason logged on both sides. No policy service and no tenant
+    data are involved." `00:573`, `01:290`, `08:623` and `08:697` gain what they lacked,
+    and community:60 and plugin record §16 hold the same text.
+
+39. **`sidecars` and `sidecars-static` are built at S2b** (Q2 (a)). The definition
+    `sidecars`, in its process form, with its fake, its suite and its `definition.yaml`,
+    and the provider `sidecars-static`, which reads the endpoint table that install
+    writes and injects nothing (`03:113`), move to S2b, where the proxy is the first
+    consumer. The provider's row ships in the bundle `aiops-selfhost`, its home in
+    `00:292`, which `dev` lists after `aiops-core` (decision 22; `08:264`). The bound
+    view, the leader and `sidecars-kubernetes` stay where they are. The lines that
+    placed the two at S4a are edited: `00:573`, `02:215`, `08:646`, `08:699`,
+    community:45 and the S4a row of plugin record §16, which the answer amends (decision
+    4).
+
+40. **The proxy injects no `tenantMint` at S2b** (Q3 (a)). It gains that inject at S4a
+    with the handle, as the two-tenant tests wait for S4a (ADR-060 decision 43). `03:72`
+    says "from S4a" for that inject.
+
+41. **The row of an installed remote artifact names the artifact's own id** (Q4 (a)) and
+    is resolved through the lock. `aiops/remote` is the first-party plugin of the module
+    table whose code is the proxy: one plugin value per locked remote id is built with
+    `FromManifest` and that code, and for the binding lists each such value counts as
+    `aiops/remote`, which the lists name once. The factory and every value it builds
+    stay with the loader alone (ADR-059 decision 41; decision 12), and a value takes no
+    key from its manifest that those bindings would satisfy (decision 10). The bundle
+    `aiops-core` holds no row of the proxy and counts ten rows: `00:276`, `08:253` and
+    `08:273` change the count and take `remote` out of the rows that arrive on the way
+    to the release. The lines that said "an `aiops/remote` row" say a proxy row of the
+    artifact's own plugin: `00:138`, `02:191`, `03:72`, `03:490`, `03:571`, `07:1140`,
+    `07:1149`, `08:437` and plugin record §11, which the answer amends (decision 4). If
+    a value built after boot cannot take the bindings of an entry without a kernel
+    change, that change is an ADR-034 addition under decision 3.
+
+42. **gRPC and Protocol Buffers are a stated exception** (Q5 (a)). `00:268` gains one
+    stated exception: gRPC and Protocol Buffers, the wire of the remote protocol, among
+    the protocols with several implementations. The register gains entries for grpc-go
+    and protobuf-go whose importers are the remote modules of decision 43, the proxy
+    plugin, the adapter generator and the check runner of `aiopsctl`; each entry is
+    written in the commit that first imports the module (decision 35). The bundle
+    `aiops-core` holds no row of the proxy (decision 41), so ADR-054 decision 23 stands
+    as written, and no definition package imports either module (decision 44).
+
+43. **Two nested modules hold the remote packages** (Q6 (a)), rooted at `sdk/remote` and
+    at `sdk/remotehost`, each with a closed require list, and the kernel side of the
+    protocol is a package of the first (decision 9). Every written path stays (`07:32`;
+    `08:1218`). The SDK is five Go modules, and `00:263`, `07:23`, `07:59` (R1),
+    `08:1205`, `08:1207`, line 16 of the README of `docs/architecture` and row 5 of
+    plugin record §2 say so; `07:51` names the two for the author of a remote Go plugin;
+    `07:42` and plugin record §14 say "the kernel side of the protocol"; and the builder
+    serves six modules. Dated notes say so in ADR-044, at its decisions 20 and 23, and
+    in ADR-060, at its decisions 21 and 54. ADR-056 and ADR-057 decision 1 record the
+    three-module boundary as it stood when each was accepted and are not edited. The
+    answer amends plugin record §2 and §14 (decision 4).
+
+44. **The generated Go of a `contrib` definition lives in the remote module** (Q7 (a)).
+    The proto, which imports nothing, stays beside the definition (`08:1255`). The
+    generated Go, wire types and adapter, lives under `sdk/remote/def/<name>/v<N>`. Both
+    are written in the change that writes the definition, which is what `00:44`
+    requires; the Go types of a definition stay plain Go, and the adapter converts.
+    `00:44`, `07:28`, `07:578` and `08:1215` say where the generated Go lives.
+
+45. **The proto is written by hand, and the proto compiler's own release generates both
+    languages** (Q8 (d)), on a condition. The proto is written with the definition. One
+    compiler, an unmodified binary of the proto compiler's own release that is fetched
+    by pinned version and checksum, writes the Python message code itself and the Go
+    wire code through `protoc-gen-go`. The in-repository generator writes everything
+    else, the Python service glue on the public API of `grpcio` included, so neither
+    `grpcio-tools` nor `setuptools` enters the repository. The owner's condition: the
+    compiler release is read at its pin before its first use (decision 35). If that
+    reading finds a text that the tool rule does not admit, the owner is asked again
+    with it, and Q8 (a) is the other way, on the same condition for its wheel.
+
+46. **`serves` gains the protocol majors and the `remote` mark, and check 3 has a clause
+    that needs no connection** (Q9 (a)). `serves` gains `remoteProtocol`, the majors the
+    binary speaks, and per served definition its `remote` mark with its three values,
+    `contrib`, `callback` and `no`: check 9 reads `contrib` for a registration and
+    `callback` for a `uses` entry (ADR-048:433). Check, pack, the offline gate, install
+    and boot deny a manifest whose `requires.remoteProtocol` shares no major with it,
+    and the handshake evaluates every clause (decision 16). The exit holds both denials,
+    D1 and D2. The reader and the builder change in one commit, and `distVersion` stays
+    1.
+
+47. **The profile clause of check 9 is not evaluated before S4a** (Q10 (a)). It is
+    reported "not evaluated: no profile holds tenants before S4a", and S4a builds it
+    with the tenant directory. The contribution-set clause is built whole at S2b.
+    `08:507` is not edited: the clause is in the gate text from S2b and has no input
+    before S4a (ADR-060 decision 17).
+
+48. **The toy registries move to `0.2` with no `compatibleFrom`** (Q11 (a)). Every
+    manifest of the repository is regenerated at `0.2` in the same pull request, and the
+    unserved minor of the S2a exit moves to `0.3`.
+
+49. **A volatile config change reaches a remote instance as a protocol message** (Q12
+    (a)). The proxy forwards the update to the instance. In a Go plugin `sdk/remotehost`
+    applies it through the hand-off that the plugin's own `Define` already has, and
+    `aiops-sdk` hands the new config to the contribution. The kernel does not change. A
+    dated note records the answer at point 10 of G13 in ADR-034.
+
+50. **S2b builds the compose fragment and the systemd unit, and runs both** (Q13 (a)).
+    The compose fragment is a file of its own under the home that `plugin start` runs,
+    and the exit uses it. The systemd unit runs the same image by digest through the
+    container runtime of the host, and a CI job of its own starts it on a runner whose
+    init is systemd and asserts what steps C2 and C3 assert of the fragment: the running
+    digest, the user, the mounts and the network. The Helm entry waits for
+    `deploy/helm`. Compose is read and pinned first (decision 35). As the recommendation
+    states, if no job can run a systemd unit, the answer is Q13 (b) and not a rendered
+    text: the systemd unit then waits, with the Helm entry, for a step that can run it,
+    and `08:1292`, `02:313` and plugin record §11 name that step in the commit that
+    records it.
+
+51. **The callback path and the remote listener path are built at S2b on a test
+    definition** (Q14 (a)). S2b proves them on a test definition marked `callback` and a
+    test hook marked remote, as ADR-060 decision 15 proved the signed class on a test
+    definition. The one test definition stands in for all nine callbacks; nothing of it
+    ships in a release table, and each real callback arrives with its definition
+    (decision 26).
+
+52. **The dependency set of `aiops-sdk` is held to L7** (Q15 (a)), on a condition.
+    PSF-2.0 is recorded by name for `typing-extensions`, and the MPL-2.0 file is under
+    the condition of L8. Each package has a register entry and a licence-record row, and
+    a check fails on a package of the set that has none. The owner's condition: the
+    licence texts of the libraries bundled inside the two native extensions are read
+    before the first Python dependency merges (decision 35). If a text that L7 denies
+    until reviewed is found, the dependency does not merge and the owner is asked with
+    that text, with Q15 (c) as the other way.
+
+53. **A generated file counts against no line cap** (Q16 (a)). A file that the adapter
+    parity check regenerates is listed and summed apart, as `dist/modules.go` counts
+    against none today. The generator has a cap of its own.
+
+54. **The six readings of Q17 are accepted** (Q17 (a), all six), each landing with the
+    code that builds it. (1) The remote toy plugins and the templates of S2b declare
+    `scope: [process]`, the shared instance of `07:1194`. (2) On the Unix socket of
+    `plugin check` the handshake and check 3 run as on a server, the identity is the
+    process that the runner started, and only the check runner opens such a socket
+    (decision 23). (3) The wordings of `07:1212` and `08:1218` both stand, and this ADR
+    says "the kernel side of the protocol" and "the plugin-side host"; the tenant
+    binding is the connection's, and plugin record §16 follows `07:1128`. (4) At `plugin
+    enable`, `aiopsctl` refuses a missing endpoint before it submits, and the refusal
+    for an instance that does not answer is the server's failed verdict, which
+    `aiopsctl` prints with the exact command; `aiopsctl` never dials an instance
+    (decision 17). (5) For the runtime `remote`, step 4 of `plugin check` starts the
+    entrypoint and drives it over the socket in every language, and a Go plugin's own
+    tests run under `-race` as well (decision 17). (6) On a Python plugin step 3
+    validates the config examples against `configSchema`, and `aiopsctl` parses no
+    Python (decision 17).
+
+55. **Pinned key pairs and no issuer identify the kernel and an instance on a
+    single-tenant self-host** (Q18 (a)). `plugin install` makes one key pair and a
+    self-signed certificate for the instance, which names the plugin id, and on first
+    need one for the kernel. Each side trusts exactly the other's certificate: the
+    kernel holds the pin of each installed instance in the home, and the unit gives the
+    instance its own key and the kernel's certificate. `plugin disable` and `remove`
+    revoke by deleting the pin, which the proxy reads at every dial, and `remove`
+    deletes the key. No key of the site can mint an identity. The issued form arrives
+    where there are several tenants and a leader to issue it, at S4b. ADR-041 writes the
+    answer out, inside the points of decision 23. `00` §5.4 gains the two credential
+    classes, and the open point closes in `02:213`, `02:336`, `02:483`, `03:162`,
+    `03:490` and `07:1159`.
+
+56. **A remote manifest that lists a `network` entry is refused until the list can be
+    enforced** (Q19 (a)). `plugin install` refuses a remote artifact whose manifest
+    lists a `network` entry, names the entry and writes nothing, and `plugin check`
+    warns of it. The allow-list side is built with its first consumer, S5 at the latest
+    (decision 26), by the ADR of that step. No instance ever has a wider network than
+    its manifest lists. This defers half of a written line: `07:135`, `07:1109`,
+    `08:388` and plugin record §11, which the answer amends (decision 4), gain the step.
+
+57. **The proxy reaches the handshake entry of the gate through a new consumer-bound key
+    of the launch definition** (Q20 (a)), which carries that entry and nothing else.
+    `boot` provides it, and the release manifest lists `aiops/remote` as its one
+    consumer. The count of consumer-bound keys rises by one, to 14, wherever it is
+    stated: `00:246`, `07:564`, row 45 of the dsh checklist at `08:87` and row 45 of
+    plugin record §15, which the answer amends (decision 4). `dist/dist.yaml` gains the
+    line with the key. The check runner keeps the toolbox that the operations row
+    already resolves.
+
+58. **The first message carries the digest of `plugin.yaml`** (Q21 (a)): the SHA-256 of
+    the `plugin.yaml` that the plugin was built with. The kernel compares it with the
+    `plugin.yaml` that install kept, whose descriptor chains to the locked digest
+    through `artifact.json`, the chain that check 5 verifies at every composition
+    (ADR-047 decision 18). `07:1128`, `03:489` and `08:501` say that it must equal the
+    digest of the manifest that `plugins.lock` pins. The digest is a drift check and
+    authenticates nothing: the authentication is the credential of decision 23 and the
+    image digest that the unit runs (decision 25).
+
+59. **The two connection clauses of check 3 are not evaluated on a disabled remote row
+    or in `profile render`** (Q22 (a)). There the digest and registration clauses are
+    reported "not evaluated: no connection", and they are evaluated when the row is
+    enabled, inside that generation. `08:495` gains the two exceptions beside the module
+    tie.
+
+60. **A remote Go plugin is made with a flag** (Q23 (a)): `plugin new <registry> <id>
+    --lang go --runtime remote`, with `inproc` the default, so the S2a form is
+    unchanged. The remote form writes the same plugin package, a `main` that serves it
+    through `sdk/remotehost`, a manifest with `runtimes: [remote]` and the file from
+    which its image is built (decision 19). Its `requires` holds `remoteProtocol` and
+    `definitions` and no `pluginApi` (ADR-048 decision 12). `07:1556` and the table of
+    ADR-061 decision 30 gain the flag.
+
+61. **`plugin pack` builds the plugin image** (Q24 (a)). It runs the build file of the
+    plugin directory on the container runtime at hand, writes the image beside the
+    artifact as an OCI layout and records the digest of that image; `plugin push` pushes
+    the image and then the artifact. The command that signs for the digest is the one
+    that computed it.
+
+62. **The additive rule of `aiops.remote.v0` binds from the first community release that
+    ships major 0** (Q25 (b)). Before it a change is made by an ADR-041 addition, with
+    the generated code and every plugin of the repository in the same pull request.
+    `07:1126` and community:159 gain "from its first release", the words of `07:1127`.
+    Both sides ignore unknown fields, calls and feature names from S2b (decision 5).
+
+63. **The activation id takes no kernel accessor** (Q26 (b)). The replica id is a random
+    value that the process draws at boot, and the epoch is the proxy's own count of its
+    activations in that process. `07:1161` and plugin record §11 gain the clause, and
+    the record is amended (decision 4).
+
+64. **The two stubs of the matrix are processes** (Q27 (b)): programs that the harness
+    builds and starts as its own processes, each with the identity of decision 23.
+    `08:463` says "stub remote plugins". The image path is proven by the exit.
+
+65. **The disposer cell runs on a process-scope remote row at S2b** (Q28 (a)), a row
+    whose instance ignores `Deactivate`: the proxy's disposer returns at its bound
+    (`07:1196`), the outcome is "Reported" and the process is not replaced. S4b runs the
+    cell again in a tenant tree. No line is edited.
+
+66. **A denial at the handshake fails the proxy, and the row follows the matrix** (Q29
+    (a)). A denial at admission detaches the row, as `08:510` says. A denial at the
+    handshake fails the proxy with check 3 named, and the row follows the matrix row
+    "Remote unreachable or handshake mismatch". `08:510` gains that clause.
+
+67. **At S2b the bundle of a remote artifact holds exactly one row** (Q30 (b)). `plugin
+    check` refuses another, and so does the gate at every entry point, under check 8,
+    whose text gains the clause. `08:393`, `07:1850`, `08:506` and plugin record §11,
+    which the answer amends (decision 4), say so for remote code. Several activations of
+    one instance are the work of S4b, where the question can be reopened with the
+    replicas.
+
+68. **A shared unit stops when no enabled row of the site names its plugin** (Q31 (a)).
+    `disable` revokes the credential and stops the unit when no enabled row of any
+    profile of the site names the plugin; while another profile's enabled row names it,
+    `disable` unloads the proxy of its own profile and leaves the instance. `remove`
+    deletes the files that install rendered, the credential among them, with the other
+    kept files of ADR-047 decision 10, when no profile names the id. Removing the unit
+    from an orchestrator stays the operator's. `07:1195` and `03:495` gain the clause
+    for a plugin that another profile still runs.
+
+69. **The handover of new remote code is built with `plugin update` at S6b** (Q32 (b)).
+    `00:490`, `03:494` and `08:194` gain "from S6b, with `plugin update`". At S2b remote
+    code is live in the first half of the sentence: it is installed and enabled with no
+    restart (decision 12). A new version arrives by `remove` and `install`, with its
+    contributions absent in between.
+
+70. **S2b code starts beside the call-path gate** (owner, 2026-11-27; no question). S2a
+    is merged into `main`, and the merge commit is `d124a40`. S2b code starts on the
+    branch `s2b/integration` in parallel with the call-path gate that runs on that merge
+    commit. A kernel fix that the gate forces takes priority over S2b code. Decision 1
+    had the gate run before the first S2b code; this decision replaces that one
+    condition, and every other condition of decision 1 stands.
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:999`), and that commit makes the edits that the chosen options name; each decision
+above lists its lines. The ADR table of `08` §3 lists this ADR as accepted, and the next
+free number at `08:999` is ADR-064.
+
+Lines that restate edited text are edited with them: the S2b builds of `00:573` and
+`08:697`, community:43 and plugin record §16, which name the proxy plugin and `sidecars`
+(decisions 39 and 41); the rows that `self-host-full` composes, 100 and 105 with the
+Slack bundle, in `00:272`, `08:249` and plugin record §6, with the row `remote` of that
+section, and `05:255` (decision 41); the stated exception in `07:50`, `07:527` and
+harness:217, with a dated note at ADR-054 decision 21 (decision 42); R2 at `07:60` and
+the module count in the builder paragraph of plugin record §11 (decision 43); the digest
+rule in `07:1160` and community:161 (decision 58); "stub remote plugins" in `07:1521`,
+`08:1244` and plugin record §13 (decision 64); the update rows of `07:1390` and plugin
+record §9 (decision 69); and the next free number in section 11 of
+`docs/design/delivery-bundle-2026-11.md`.
+
+Left to later commits, each named:
+
+- the six readings of decision 54, each with the code that builds it; among them the
+  words "already carries the tenant binding" of plugin record §16, with the first
+  message of the protocol (group 1 of decision 30);
+- the count of the launch keys, six, and of the provider-bound keys, in `00:212`,
+  `03:63`, `07:563`, `07:1367`, `08:86`, plugin record §5, row 44 of plugin record §15
+  and ADR-059 decision 35, with the commit that adds the key of decision 57 to the
+  launch definition, where the key gets its name; `00:246` and `07:564` take the name
+  there, and `dist/dist.yaml` its line;
+- the item of gRPC and Protocol Buffers in the table of ADR-054 decision 9 and the
+  register entries of grpc-go and protobuf-go, with the S2b part of ADR-054 and the
+  first import of either module (decisions 34 and 35);
+- the licence-record rows and the register entries of decision 35, each in the commit
+  that first uses its component, after the readings that decisions 45 and 52 require;
+- the directory `python/` in `08:1207` and in the tree of `08` §4, with the commit that
+  creates it (decision 18);
+- the words "the leader can revoke" of `02:215`, `02:336`, `07:1195` and `08:1292`, and
+  the rows of ADR-041 at `00:777` and `08:1175`, with ADR-041, which writes how disable
+  and remove revoke where no leader exists (decision 34);
+- the counts of "three SDK modules" in the texts of ADR-020, ADR-044 and ADR-060 outside
+  the decisions that carry a dated note, which stand as text of their date.
+
+`08:507`, `08:1292` and `02:313` are not edited: decisions 47 and 50 change no line of
+them. ADR-047, ADR-059 and ADR-062 are not edited: no chosen option names a line of
+them.

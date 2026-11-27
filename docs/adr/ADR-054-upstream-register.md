@@ -804,6 +804,13 @@ to a question, the decision here settles it.
     gains one stated exception: the Go language, in which definitions are declared, and
     SPDX identifiers, which L1 and L16 require. Decision 9 records it with the tokens `go`,
     `golang` and `spdx`, allowed in every place, and the entries keep those names.
+    Note of 2026-11-27: `00` §4.3 gains one more stated exception, gRPC and Protocol
+    Buffers, the wire of the remote protocol, among the protocols with several
+    implementations (ADR-063 decision 42). Its item in the table of decision 9, with
+    its tokens and places, and the register entries of grpc-go and protobuf-go with
+    their importers are the S2b part of this ADR (ADR-063 decision 34), accepted
+    before the first import of either module. Decision 23 stands as written: the
+    bundle `aiops-core` holds no row of the proxy (ADR-063 decision 41).
 
 22. **U1 reads the documentation places of harness record 7.2 from S2a** (Q6 (a)). U1
     reads the Decision column of `00` §2.1, the classes of the credential table of §5.4

@@ -358,6 +358,10 @@ gaps:
       job (`08:1342` L14). `dist build` passes the same settings into the builder image.
       Until L14 clears, every module source of the builder is a `file://` directory and
       `dist build` refuses a proxy URL (ADR-044 decision 7).
+    - Note of 2026-11-27: from S2b the SDK modules are five, with the nested modules
+      `sdk/remote` and `sdk/remotehost` (ADR-063 decision 43). Each new module gets a
+      served `go.mod` copy under the same test, and a release gives the five one
+      version (ADR-063 decision 7).
 22. **The builder** (ADR-044) is a root-module package compiled into `aiopsctl`, run with
     a local toolchain or through the builder image, whose definition lives under `dist/`
     (`08:402`; `08:1201`, assumption 3). It takes the four fields of the site's
@@ -1721,7 +1725,9 @@ to a question, the decision here settles it.
     modules. `sdk/remote` and `sdk/remotehost` then need a nested module at S2b, since R2
     keeps them out of the require list. The module's name changes in `00:262`, `07:23`,
     `07:28-33`, `07:51`, `08:1199` and plugin record §3, with the `go.mod` require and
-    replace lines.
+    replace lines. Note of 2026-11-27: the owner fixed that home with ADR-063 decision
+    43: two nested modules, rooted at `sdk/remote` and at `sdk/remotehost`, each with
+    a closed require list, so the SDK is five modules from S2b.
 
 55. **A fault or control row of a test distribution attests suite revision 0** (Q19
     (a)). `test/dist/def` declares `suite: 0`, "no suite". The attestation of a row that

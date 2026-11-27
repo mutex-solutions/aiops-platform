@@ -968,7 +968,7 @@
     | `profile verify` | `profile verify` | `08:366` |
     | `profile init` | `profile init <p>` | `08:72` row 30; ADR-060 decision 27 |
     | `profile sanitize` | `profile sanitize [<p>]` | `08:72` row 30; dsh §3.4; question Q9 |
-    | `plugin new` | `plugin new <registry> <id> --lang go [--contrib]`; `plugin new connector <id> [--contrib] [--against <dist.yaml>] [--plugin <id>]...` | `07:1528`, `:1551`; ADR-047 decision 12; ADR-060 decision 24. `--lang python` arrives at S2b (`07:1551`) |
+    | `plugin new` | `plugin new <registry> <id> --lang go [--contrib]`; `plugin new connector <id> [--contrib] [--against <dist.yaml>] [--plugin <id>]...` | `07:1528`, `:1551`; ADR-047 decision 12; ADR-060 decision 24. `--lang python` arrives at S2b (`07:1551`). Note of 2026-11-27: from S2b the Go form also takes `--runtime remote`, with `inproc` the default (ADR-063 decision 60) |
     | `plugin check` | `plugin check [<dir>] [--write] [--json] [--against <dist.yaml>]` | `07:1531`, `:1543`, `:1565`; ADR-060 decision 23 |
     | `plugin smoke` | `plugin smoke <dir> --against <release> [--builder image\|local]` | `07:1578`; ADR-044 decision 1 |
     | `plugin pack` | `plugin pack [<dir>] [--out <dir>]` | `07:1533`; ADR-047 decision 1 |

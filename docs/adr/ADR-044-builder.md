@@ -819,7 +819,9 @@ settles it.
 20. **`--allow-bump` never names a module the release pipeline builds** (Q6 (a)). The
     three SDK modules and the root module fail strict versions with or without the flag,
     and an author requires the SDK version of the release the plugin targets, which
-    `plugin smoke --against` proves before a site builds.
+    `plugin smoke --against` proves before a site builds. Note of 2026-11-27: from
+    S2b the SDK modules are five, with the nested modules `sdk/remote` and
+    `sdk/remotehost` (ADR-063 decision 43), and the rule holds for each.
 
 21. **"A global codec" and the exceptions** (Q7 (a)). The table of decision 11 holds,
     with `gob`'s type registry under "a global codec"; image format and protobuf type
@@ -849,7 +851,10 @@ settles it.
     root module at the release version, from the same module source as the SDK modules,
     with a served `go.mod` that names the SDK version and holds no `replace` line, under
     the test of ADR-060 decision 21. Until L14 clears it is served only where the SDK
-    modules are, inside the exit job (ADR-060 decision 40).
+    modules are, inside the exit job (ADR-060 decision 40). Note of 2026-11-27: from
+    S2b a release serves six modules, the five SDK modules and the root module
+    (ADR-063 decision 43). The S2b part of this ADR, which ADR-063 decision 34 lists,
+    is a dated addition proposed apart.
 
 24. **A registry package's own registration counts** (Q10 (a)), as decision 11 writes. A
     server binary that links the package `prometheus` of the Prometheus client or

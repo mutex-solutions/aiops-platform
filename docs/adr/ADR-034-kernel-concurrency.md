@@ -1830,7 +1830,12 @@ and 5.
     plugin arrive at S2b (`07:1133`; ADR-060 decision 4). G13 gives a hand-off only
     through `plugin.Define`. Whether `FromManifest` gives a proxy row a hand-off, or the
     proxy forwards `loader/volatile-update` to the remote instance, is left to S2b; it
-    depends on the remote protocol, ADR-041 (`00:775`).
+    depends on the remote protocol, ADR-041 (`00:775`). Note of 2026-11-27: the owner
+    answered question Q12 of ADR-063 with (a). The proxy forwards the update to the
+    remote instance as a protocol message; in a Go plugin `sdk/remotehost` applies it
+    through the hand-off that the plugin's own `Define` has, and `aiops-sdk` hands the
+    new config to the contribution. `FromManifest` gives a proxy row no hand-off and
+    the kernel does not change (ADR-063 decision 49); ADR-041 names the message.
 
 ### Concurrency contract
 
