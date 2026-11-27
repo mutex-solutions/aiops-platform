@@ -280,7 +280,8 @@ gaps:
     definitions only (`internal/vet/imports.go:199-202`), so the dial is in `apply`,
     which the proxy plugin supplies. The exported API of `sdk/plugin` changes, so
     `pluginApi` rises by a minor (ADR-060 decision 8). How a volatile change reaches a
-    remote instance is question Q12 (ADR-034:1829-1833). Note of 2026-11-27: a `uses`
+    remote instance is question Q12 (ADR-034:1829-1833). Note of 2026-11-27 at decision
+    49. Note of 2026-11-27: a `uses`
     entry whose key and major the same manifest lists in `registers` is inside the
     contribution set, so check 9 admits it and the `Inject` of the value may hold that
     registry key (ADR-048 decision 46). The entry gives the proxy no key that `registers`
@@ -1875,7 +1876,20 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     (a)). The proxy forwards the update to the instance. In a Go plugin `sdk/remotehost`
     applies it through the hand-off that the plugin's own `Define` already has, and
     `aiops-sdk` hands the new config to the contribution. The kernel does not change. A
-    dated note records the answer at point 10 of G13 in ADR-034.
+    dated note records the answer at point 10 of G13 in ADR-034. Note of 2026-11-27: the
+    owner answered question Q1 of the S2b part of ADR-034 with (b) (ADR-034 decision
+    21). "The update" is the committed config: the proxy holds it through a hand-off
+    that restarts nothing, and forwards it whole. It is not the loader's event
+    `loader/volatile-update`, which the proxy does not hear. The four sentences before
+    the one on the note hold as written, and that note now says that `FromManifest`
+    gives a proxy row a hand-off. The same answer edits the signature of decision 10,
+    which is not the one that `07:232` sketched when that decision was written: the
+    hand-off is stamped on the value that has the entry of `aiops/remote`, so
+    `FromManifest` takes that defined value with the manifest and the `apply` function
+    and returns a copy of it with the declarations of the manifest (ADR-034, point 18 of
+    that part), and `07:232` shows it. The note on decision 10 stands here, and decision
+    10 points to it, so that no line above this decision moves: other ADRs cite those
+    lines by number.
 
 50. **S2b builds the compose fragment and the systemd unit, and runs both** (Q13 (a)).
     The compose fragment is a file of its own under the home that `plugin start` runs,

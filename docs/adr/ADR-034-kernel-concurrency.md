@@ -1682,7 +1682,10 @@ the following sections say:
   of the decision). In Cordis an assignment to `rawConfig` writes nothing into the running
   object; under G13 a `Fiber.Commit` or a `CommitOp` does. The loader is the only caller of
   either outside the kernel, at `loader/apply.go:246` and `:442`, on `a3c85ae` and on
-  `502a355`, and the first of these hands nothing off (point 3). The sentence of the
+  `502a355`, and the first of these hands nothing off (point 3). Note of 2026-11-27: the
+  loader stays the only caller in the kernel process. From S2b `sdk/remotehost` commits a
+  forwarded config on the fiber of an activation in the process of a Go plugin, and is a
+  second committer outside the kernel package (point 16; decision 21). The sentence of the
   plugin record §3 then reads: the loader decides and commits volatile values, and the
   kernel stores them in the running activation's fields at that commit. It is recorded as
   an amendment in §17 with the code (question Q1).
@@ -1834,13 +1837,17 @@ and 5.
     answered question Q12 of ADR-063 with (a). The proxy forwards the update to the
     remote instance as a protocol message; in a Go plugin `sdk/remotehost` applies it
     through the hand-off that the plugin's own `Define` has, and `aiops-sdk` hands the
-    new config to the contribution. `FromManifest` gives a proxy row no hand-off and
-    the kernel does not change (ADR-063 decision 49); ADR-041 names the message. Note of
-    2026-11-27, with the owner's answers on ADR-041: the message is `UpdateConfig`,
-    which the instance answers with `ConfigUpdated`. An instance that answers with an
-    error, or not inside 2 s, does not take the update: the kernel ends the session
-    and the instance is activated again, with the committed config (ADR-041 decisions
-    8 and 16).
+    new config to the contribution. `FromManifest` gives a proxy row a hand-off that
+    restarts nothing, and the kernel does not change (ADR-063 decision 49; decision 21,
+    which rewrote this sentence on 2026-11-27: it said that `FromManifest` gives a proxy
+    row no hand-off); ADR-041 names the message. Note of 2026-11-27 on the sentence "G13
+    gives a hand-off only through `plugin.Define`": since decision 21 a hand-off exists
+    through `plugin.Define` and through `plugin.FromManifest`, both in `sdk/plugin`, and
+    through nothing else. Note of 2026-11-27, with the owner's answers on ADR-041: the
+    message is `UpdateConfig`, which the instance answers with `ConfigUpdated`. An
+    instance that answers with an error, or not inside 2 s, does not take the update:
+    the kernel ends the session and the instance is activated again, with the committed
+    config (ADR-041 decisions 8 and 16).
 
 ### Concurrency contract
 
@@ -2328,7 +2335,11 @@ that come with the code" asks.
 
 ## 2026-11-27 proposed addition: G13 point 10 at S2b, the proxy row and the remote instance
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** This is the S2b part of
+- Status: **accepted 2026-11-27 by the project owner.** Proposed on the same date. The
+  owner answered its one question, Q1, on that date with (b), the recommended option;
+  the section "Owner answers of 2026-11-27" at the end of this section records the
+  answer as decision 21 and lists the edits made with it. The text between this status
+  and that section is the proposal as the owner answered it. This is the S2b part of
   this ADR, which ADR-063 decisions 2 and 34 ask for: "G13 point 10, as question Q12
   decides" (ADR-063:866). It proposes no kernel change and no kernel API, and it puts one
   question to the owner, Q1 below. The owner's answer to question Q12 of ADR-063 is
@@ -2343,7 +2354,11 @@ that come with the code" asks.
   number at both commits, `00:774` here is `00:772` there, and `sdk/kernel`, `loader`,
   `boot/gate.go`, `sdk/def/loader/v0`, `internal/vet`, `sdk/plugin/plugin.go`,
   `dist/dist.yaml` and `test/dist/dist.yaml` are the same at both. Lines of this ADR are
-  given as "line N", and a line of another ADR as `ADR-063:866`. "Point N" is a point of
+  given as "line N", numbered as before the record of 2026-11-27. That record added
+  three lines after line 1685 and five in point 10, so a line from 1686 to 1838 is now
+  three lines lower and a line from 1839 to 2323 eight lines lower, and lines 1829-1838
+  are point 10 as it read before decision 21 rewrote one sentence of its note. A line of
+  another ADR is given as `ADR-063:866`. "Point N" is a point of
   the decision of G13 (lines 1753-1838), which this section continues from point 11.
   "Decision N" is an owner decision of this ADR; a decision of another ADR is named with
   its ADR. The plugin record, `docs/design/plugin-system-2026-11.md`, is cited by
@@ -3001,3 +3016,81 @@ config that the instance refuses is a question that ADR-041 puts.
   the runtimes that the recommendation of Q12 did not state. The owner decides because
   either option changes a line that the owner accepted. Blocks: the first commit of
   `FromManifest` and the fields of the update message in ADR-041.
+- **Answered 2026-11-27: (b)**, decision 21.
+
+### Owner answers of 2026-11-27
+
+The project owner accepted this section on 2026-11-27 and answered its question on the
+same date with the recommended option. The decision below continues the numbering of the
+owner decisions of this ADR and names the question it answers. Points 11 to 13 and 15 to
+18 are the decision of this section as the owner accepted it. Point 14 states the answer
+that the owner did not choose, and it edits nothing.
+
+21. **A proxy row has a hand-off, and it restarts nothing** (Q1 (b)). `FromManifest`
+    stamps the proxy value with `kernel.WithCommit`, and a function of `sdk/plugin` keeps
+    the committed config, resolved as `Apply` would receive it, for the proxy, which
+    forwards it whole (point 13). G13 then gives a proxy row what it gives any plugin
+    with a hand-off: the three cases of point 12 lose nothing in the kernel process, and
+    a reference is resolved again at the commit. `aiops/remote` listens on no sealed
+    hook. No line of `sdk/kernel` changes (point 11). The first four sentences of ADR-063
+    decision 49 hold as written: the proxy forwards the update as a protocol message,
+    `sdk/remotehost` applies it through the hand-off of the plugin's own `Define`,
+    `aiops-sdk` hands the config to the contribution, and the kernel does not change.
+    "The update" of that decision is the committed config and not the loader's event.
+    The answer reverses the sentence "`FromManifest` gives a proxy row no hand-off" of
+    the note at point 10. The hand-off is stamped on the value that has the entry of
+    `aiops/remote`, so `FromManifest` takes that value (point 18), and `07:232` and the
+    note on ADR-063 decision 10 say so. One function of `sdk/plugin`, which must not
+    block, runs under the config change lock of each proxy row at each commit, and
+    `sdk/plugin` grows inside its provisional cap of 1,800 lines (ADR-063:946).
+
+**Edits made with this record.** `00` is edited in the commit that records the answer
+(`08:999`): the row of ADR-034 in `00` §9 gains the acceptance of this section. In this
+ADR the note at point 10 says that `FromManifest` gives a proxy row a hand-off that
+restarts nothing, and a second note there dates the sentence "G13 gives a hand-off only
+through `plugin.Define`"; a note in the paragraph "Who writes" of G13 names
+`sdk/remotehost` as a committer in a plugin process; the status of this section and the
+basis of its line numbers are edited; and Q1 is marked answered. ADR-063 decision 49
+gains a dated note on what "the update" is. The dated note on the signature of ADR-063
+decision 10 stands in that same note, and decision 10 gains a pointer to it on its last
+line: a note written at decision 10 would move every later line of ADR-063, which
+ADR-061, ADR-020 and this section cite by number. `07:232` takes the defined value of
+`aiops/remote` as a parameter of `FromManifest`. Point 18 states that much of the
+signature and no more: the name and the place of that parameter in `07:232` are a
+sketch, as the line was before.
+
+Lines that restate edited text were read. `07:29`, ADR-063 decisions 12 and 41 and the
+lines of ADR-044, ADR-048 and ADR-060 that name `FromManifest` do so without its
+signature, and they stand. ADR-063:275 and :1305 cite point 10 as `ADR-034:1829-1833`,
+its lines before this record, and ADR-063:1305-1306, "A hand-off exists only through
+`plugin.Define`", is the text of a question of its date; both stand.
+
+Left to later commits, each named:
+
+- the row of ADR-034 in the ADR table of `08` §3 (`08:1168`), with the commit that
+  brings that table to the S2b parts accepted on 2026-11-27;
+- the sketch of `FromManifest` in plugin record §4, which restates `07:232` as it read
+  before this record. The chosen option names no line of the plugin record, so the
+  sketch stands as text of its date until the commit that adds `plugin.FromManifest` to
+  `sdk/plugin`, which fixes the signature as built;
+- the name and the place of the new parameter, and what the proxy's `apply` reads of a
+  later commit, with that same commit ("Cost and verification");
+- the lines of ADR-041 that give `UpdateConfig` the payload of the loader's event. This
+  section says that ADR-041 is not proposed; it was proposed on 2026-11-27. Its
+  decisions 8, 16 and 31 have `UpdateConfig` carry "what the loader's event carries",
+  the config with every reference left out and the changed leaves as `paths`, and have
+  the instance merge the values at `paths` (ADR-041:272, :296, :497-500, :926). Under
+  decision 21 the proxy does not hear that event: it forwards the committed config,
+  whole, with each reference resolved again at that commit (point 13), and case 3 of
+  "Tests" expects the new content of a reference that did not change. The two texts
+  cannot both be built as written. The chosen option names no line of ADR-041, so this
+  record edits none: the point is one for the owner under ADR-063 decision 33, before
+  the update message is built, and those lines are left to the commit that records how
+  the two are reconciled;
+- the result of the call-path gate on `d124a40`, recorded in this ADR when it has run
+  ("What this section blocks"). No result of it is recorded with this answer.
+
+Not edited, as the section "Edits on acceptance" lists for Q1 (b): `07:1140`, `07:1198`,
+`07:1382`, decisions 16 to 20, plugin record §8 and §11, ADR-059 decisions 17 and 44, and
+ADR-063 decisions 3 and 41. `dist/dist.yaml` and `test/dist/dist.yaml` gain no line. An
+option the owner did not choose edits nothing.

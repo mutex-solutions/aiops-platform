@@ -233,7 +233,7 @@ type Spec[C any] struct {
 }
 
 func Define[C any](s Spec[C]) kernel.Plugin // JSON Schema 2020-12 from C behind a validator interface; Volatile[T] fields
-func FromManifest(m Manifest, apply func(*kernel.Context, Manifest, any) error) kernel.Plugin // declarations as data (section 5)
+func FromManifest(defined kernel.Plugin, m Manifest, apply func(*kernel.Context, Manifest, any) error) kernel.Plugin // declarations as data (section 5); a copy of defined, the value that has the entry, with a hand-off (ADR-034 decision 21)
 ```
 
 | Id | Name | Technology | Responsibility |
