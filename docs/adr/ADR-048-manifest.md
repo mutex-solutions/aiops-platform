@@ -1,11 +1,11 @@
 # ADR-048: Manifest schema 1.0 (the S2a part)
 
-- Status: **accepted 2026-11-23 by the project owner, for the S2a part.** The owner
-  answered the four questions on the same date with the recommended option of each; the
-  section "Owner answers of 2026-11-23" records them as decisions 21 to 24. The S6a part
-  (Scope) and the other points of decision 20 stay open for their later steps. Where an
-  answer changes a line of `00-decisions.md`, the question names the line, and `00` is
-  edited in the commit that records the answer (`08:996`).
+- Status: **accepted by the project owner: the S2a part on 2026-11-23, the S2b part on
+  2026-11-27.** The owner answered the questions of each part on its date with the
+  recommended option of each: "Owner answers of 2026-11-23" records decisions 21 to 24,
+  "Owner answers of 2026-11-27" decisions 43 to 47. The S6a part (Scope) and the points
+  of decisions 20 and 42 stay open. Where an answer changes a line of `00-decisions.md`,
+  the question names it, and `00` is edited in the commit that records it (`08:996`).
 - Scope: the S2a part of ADR-048 (`08:1179`; `00:782`), manifest schema 1.0, which S2a
   delivers (`08:694`). The S6a part of the same ADR, index format 1.0 with the trust roots
   for indexes, `renamedTo`, the `compat` statuses and the re-certification job and its
@@ -751,11 +751,11 @@ that updates that table. An option the owner did not choose edits nothing.
 
 ## 2026-11-27 proposed addition: the S2b part
 
-- Status: **proposed 2026-11-27, awaiting the project owner.** Nothing in this addition is
-  in force, and the S2a part above stands as accepted. The addition changes no decision of
-  `00-decisions.md` by itself: where an answer would change a line of `00`, the question
-  names the line, and `00` is edited in the commit that records the answer (`08:999`). The
-  same commit records the S2b part in the row of this ADR at `00:786`.
+- Status: **accepted 2026-11-27 by the project owner, for the S2b part.** The owner
+  answered questions Q5 to Q9 on the same date with the recommended option of each; the
+  section "Owner answers of 2026-11-27" records them as decisions 43 to 47. The S2a part
+  above stands as accepted. `00` is edited in the commit that records the answers
+  (`08:999`), and the same commit records the S2b part in the row of this ADR at `00:786`.
 - Scope: the S2b part of ADR-048. Decision 20 left the Python parts to S2b, ADR-063
   decision 2 has each S2b part written as a dated addition to its ADR, and ADR-063
   decision 34 lists what this one settles. The rows of this ADR at `00:786` and `08:1182`
@@ -1630,6 +1630,7 @@ every option, and decision 30 what a unit may do with the words.
   amendment of plugin record §14, whose words only (c) keeps. The owner decides, because
   it edits `00:207` and the plugin record. Needed before `aiops-sdk manifest`, step 4 of
   `plugin check` for remote code and the unit renderer merge.
+- **Answered 2026-11-27: (a)**, decision 43.
 
 **Q6. How does `@contributes` name a key where a definition declares more than one
 registry key?** The decorator is `@contributes(definition)` (`07:1208`; plugin record §4),
@@ -1651,6 +1652,7 @@ several keys (ADR-060 decision 7). The two toy registries declare one key each.
   says which contribution it implements, and a wrong class is refused when the module is
   imported, before a manifest is written. Needed before the `@contributes` of `aiops-sdk`
   and the Python output of the adapter generator merge.
+- **Answered 2026-11-27: (a)**, decision 44.
 
 **Q7. What does a manifest that lists `inproc` and `remote` pack and install?** The schema
 admits the pair (decision 4), `plugin check` runs T1 and T2 in every runtime listed
@@ -1680,6 +1682,7 @@ how the two forms are told apart, no exit step and no case of ADR-063 uses the p
   consumer, and nothing that is not built is admitted. (a) adds a flag, a layer and a boot
   rule that no test of S2b reaches. The owner decides, because (b) defers a form that the
   schema admits. Needed before gate check 1 and `plugin pack` of remote code merge.
+- **Answered 2026-11-27: (b)**, decision 45.
 
 **Q8. Is the registry key that a remote Go manifest holds in `uses` inside the
 contribution set?** `plugingen` writes `uses` from `Spec.Inject` (decision 6), and a Go
@@ -1714,6 +1717,7 @@ decision 8 word the value as one "whose `Inject` is within the callback set".
 - Recommended: (a). Step G1 passes with the value unchanged, the manifest of a value is
   the same in both runtimes, and the proxy gains no key. The difference between the two
   languages has no reader. Needed before check 9 and `plugin.FromManifest` merge.
+- **Answered 2026-11-27: (a)**, decision 46.
 
 **Q9. Where does a Python plugin declare the callbacks it calls and its config class?**
 `uses` and `configSchema` are generated fields (`00:207`), and `aiops-sdk manifest` reads
@@ -1746,3 +1750,98 @@ under every option.
   decorators and ADR-063 decision 4 admits no departure from that record without the
   owner's word. Needed before the decorators of `aiops-sdk` and `aiops-sdk manifest`
   merge.
+- **Answered 2026-11-27: (a)**, decision 47.
+
+### Owner answers of 2026-11-27
+
+The project owner accepted the S2b part of this ADR on 2026-11-27 and answered every
+question of the section "Questions for the owner on the S2b part" on the same date, each
+with its recommended option. Each decision below names the question it answers. Where a
+decision of the S2b part leaves a point to a question, the decision here settles it.
+
+43. **`plugin.yaml` carries `entrypoint`, and both `plugin check` and the deployment unit
+    start it** (Q5 (a)), as `07:148` says. `entrypoint` is a hand-written field of schema
+    1.0, present exactly when `runtimes` holds `remote`, in every language, and written
+    after `runtimes`. `aiops-sdk manifest` copies it from `plugin.toml`, and the template
+    of a remote Go plugin writes it in `plugin.yaml` (ADR-063 decision 60) as `./<name>`,
+    the path at which the build before step 4 and the template's build file both put the
+    binary (decision 28). Step 4 of `plugin check` starts it from `plugin.yaml`, and the
+    unit takes it as its third input and as the whole command of the container (ADR-063
+    decision 25; decision 30). One string is then what the suites drove and what the unit
+    runs; that the string resolves inside the image is proven where the image runs, not
+    by step 4 (decision 28). The table of decision 4 is read with decision 28, and the
+    install paragraph of decision 16 (ADR-048:437-441) with decision 40. With this answer
+    the owner accepted the amendment of plugin record §4 and §14.
+
+44. **`@contributes` takes the key from the base class** (Q6 (a)). The generated module
+    of a definition holds one base class per registry key of the definition, each
+    carrying the name and the major of its key (`07:1207`; decision 31).
+    `@contributes(definition)` takes the key from the base class that the decorated class
+    derives from, as the sketch derives from `tools.Tool` (`07:1221-1222`), and refuses a
+    class that derives from none of them or from two. The decorator stays as written for
+    every definition, and this answer edits no line.
+
+45. **A manifest that lists `inproc` and `remote` is denied until a plugin needs it** (Q7
+    (b)). The manifest validates, and gate check 1 denies it at every entry point, as it
+    denies `wasm` (`08:499`; `boot/checks.go:242-243`): "`runtimes` lists `inproc` and
+    `remote` together, a pair that no step serves yet". `plugin check` fails on it at
+    step 1, before it runs a suite, so nothing packs or installs one. The schema keeps
+    the set, so the pair is built later with no change of schema: with the first plugin
+    that is to be published for both runtimes, by an addition to this ADR that settles
+    what option (a) of Q7 lists (decision 42). Check 1 reads `runtimes` for the pair
+    (decision 40).
+
+46. **The registry key that a remote Go manifest holds in `uses` is inside the
+    contribution set** (Q8 (a)). The contribution-set clause of check 9 admits a `uses`
+    entry whose key and major the same manifest lists in `registers`, where the row of
+    `registers` in decision 39 judges it. One `Plugin` value then has one `uses` in both
+    runtimes, and decision 6 stands with no exception. The entry gives the proxy no key
+    that `registers` does not already give it (ADR-063 decision 11). Every other key
+    stays outside: a bound view and a key of a bound or signed consumer class, which
+    decision 39 denies before any mark is read; a key of a definition marked `no`; and a
+    built-in key of the kernel, which belongs to `pluginApi` and carries no mark (ADR-060
+    decision 9). The two languages differ on that entry: a remote Go manifest lists the
+    registry key in `registers` and in `uses`, and a Python manifest in `registers` alone
+    (decision 33). No reader takes a decision from the difference: check 9 judges the key
+    through `registers`, and `FromManifest` needs each registry of `registers` whether
+    `uses` repeats it or not. With this answer the owner accepted the amendment of plugin
+    record §11.
+
+47. **A Python plugin declares the callbacks it calls and its config class as keyword
+    arguments of the decorators** (Q9 (a)). `@contributes` and `@listens` each take three
+    optional arguments: `needs` and `wants`, each a list of key objects (decision 33),
+    and `config`, the config class (decision 35). Every decorator of the module that
+    names a config class names the same one. The declaration stands beside the code that
+    makes the call, as `Inject` stands in the `Spec`, and a name that the SDK does not
+    hold fails when the module is imported. The `[python]` table of `plugin.toml` holds
+    the key `module` alone (decision 25), and no callback key is written as a string
+    (decision 31). With this answer the owner accepted the amendment of the decorators of
+    plugin record §4.
+
+**Edits made with this record.** `00` is edited in the commit that records the answers
+(`08:999`), and that commit makes the edits the chosen options name. For decision 43:
+`00:207`, whose list of hand-written fields gains `entrypoint` for remote code; a row for
+`entrypoint` in the field table of `07` §2, after `07:134`, and in the table of community
+record §4.4, after community:176; the manifest paragraph of plugin record §4; and the
+sentence of plugin record §14. Decision 44 edits no line. For decision 45: check 1 in
+`08:499`, and the sentence beside `wasm` in `07:134` and in community:176. For decision
+46: `07:1198` and the same sentence of plugin record §11, and dated notes at ADR-063
+decisions 8, 10 and 28. For decision 47: `07:1208-1209`, the decorators of plugin record
+§4, and the sketch of `07:1221`, which now declares the callback that `07:1227` calls.
+Plugin record §17 holds the amendment of its §4, §11 and §14. The same commit makes the
+edits that no option changes (Consequences of the S2b part): R8 at `07:66`; the
+`[python]` table in the sketch of `07:150-168`; the three kinds of definition in
+`07:1203` and `07:1207`, with dated notes at ADR-063 decisions 13 and 18; the bound of
+decision 29 in the `id` row of `07:126` and the rule of decision 39 in the `instantiable`
+row of `07:137`; the Status at the head of this ADR, edited without moving a line; and
+the row of this ADR in `00` §9 (`00:786`), which records the S2b part. `07:148` and
+ADR-063 decision 25 hold as written under decision 43, and the decorators keep the
+written forms `@contributes(definition)` and `@listens(hook, stage)` wherever they are
+restated, since the keyword arguments of decision 47 are optional. Left to later commits:
+the row of ADR-048 in the ADR table of `08` §3 (`08:1182`), to the commit that updates
+that table, and with it the two lists that restate the steps of that row, the ADR list
+of `03` §10 and the ADR table of community record §9; ADR-041 decision 29, which lists
+the generated modules as ADR-063 decision 18 did, and the sentences of the S2b parts of
+ADR-020, ADR-047 and ADR-061 that call this part not accepted, proposed or a question,
+each to the commit that records the owner's answers on that ADR. An option the owner did
+not choose edits nothing.

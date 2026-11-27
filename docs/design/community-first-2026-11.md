@@ -173,7 +173,8 @@ The callback set, deadlines for remote gate listeners, the reconnect budget and 
 | `license` | Required SPDX expression; SPDX list ids only in `aiops`, `aiops-contrib` and the project index | |
 | `source`, `support {url, email}` | Optional; the project index requires both | |
 | `stability`, `scope` | As record §4 | |
-| `runtimes` | A list of `inproc`, `remote`, `wasm`. An empty list is valid and means a pack with no code. `wasm` validates and the gate denies it | |
+| `runtimes` | A list of `inproc`, `remote`, `wasm`. An empty list is valid and means a pack with no code. `wasm` validates and the gate denies it. A list that holds `inproc` and `remote` together also validates and gate check 1 denies it, a pair that no step serves yet (amended 2026-11-27, ADR-048 decision 45) | |
+| `entrypoint` | Present exactly when `runtimes` holds `remote`: the command that `plugin check` and the deployment unit start, one string of words in a closed grammar that no shell reads (amended 2026-11-27, ADR-048 decision 43) | |
 | `capabilities {network, secrets}` | A network entry is a host or `config:` and a JSON Pointer into the config, such as `config:/endpoint`, for an endpoint the site sets | |
 | `integrates [{system, versions, tested, credential}]` | Optional. The external system, the versions the fixtures were recorded against, and whether the read credential is `read-only` or `broader` | |
 | `instantiable` | `true` only on a first-party generic plugin whose rows a pack may insert; such a plugin registers contributions and nothing else | Three plugins (6.4) |

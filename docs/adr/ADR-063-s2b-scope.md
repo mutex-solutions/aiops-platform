@@ -252,7 +252,10 @@ gaps:
    and that registers only `contrib` registries and remote-capable hooks is one `Plugin`
    value that passes the same suite in both runtimes (`07:1198`; plugin record §11). The
    plugin process is the gRPC server: the kernel dials it and never the reverse
-   (`07:1158`).
+   (`07:1158`). Note of 2026-11-27: the owner answered question Q8 of the S2b part of
+   ADR-048 with option (a). The `Inject` of such a plugin is within the callback set
+   beyond the registries it registers with, and `07:1198` and plugin record §11 now say
+   so (ADR-048 decision 46).
 9. **The kernel side of the protocol** (the dial, the handshake, the stream and the
    stubs) is one package of the module that holds `sdk/remote`. The proxy plugin and the
    check runner of `aiopsctl` both use it (`00:305`), so one implementation serves a
@@ -272,7 +275,12 @@ gaps:
     definitions only (`internal/vet/imports.go:199-202`), so the dial is in `apply`,
     which the proxy plugin supplies. The exported API of `sdk/plugin` changes, so
     `pluginApi` rises by a minor (ADR-060 decision 8). How a volatile change reaches a
-    remote instance is question Q12 (ADR-034:1829-1833).
+    remote instance is question Q12 (ADR-034:1829-1833). Note of 2026-11-27: a `uses`
+    entry whose key and major the same manifest lists in `registers` is inside the
+    contribution set, so check 9 admits it and the `Inject` of the value may hold that
+    registry key (ADR-048 decision 46). The entry gives the proxy no key that `registers`
+    does not already give it (decision 11), and a bound key stays denied (ADR-048
+    decision 39).
 11. **The proxy** is the in-process fiber of an out-of-process plugin (`03:72`). It dials
     the instance over mutual TLS (decision 23), handshakes before the row is ACTIVE
     (`08:449`), registers the plugin's contributions with the dispatchers that serve
@@ -310,7 +318,10 @@ gaps:
     core change. What it reads, and with which tools, is question Q8; where its Go output
     lives is question Q7. At S2b it supports the types the two toy registries use and
     nothing more (`08:680`). The definition lint gains the rule of `08:645`: a definition
-    marked `contrib` has its proto and its adapter.
+    marked `contrib` has its proto and its adapter. Note of 2026-11-27: the Python output
+    of the generator also covers a definition marked `callback` and a definition that
+    owns a hook marked remote, under the same parity check (ADR-048 decision 31). The
+    remote adapter stays that of a definition marked `contrib`.
 14. **The toy registries become `contrib`** as a minor of each, `0.2`, with the adapter
     generator (ADR-060 decision 5; plugin record §5). Whether `0.2` carries
     `compatibleFrom` is question Q11. Whoever raises the minor fixes every plugin under
@@ -444,7 +455,9 @@ gaps:
     repository root, which `08:1207` leaves to S2b: under `sdk/` its files would enter
     the zip of the Go module `sdk` that every author downloads. It builds outside the
     tree, and no wheel and no build output is committed (`scripts/ci/hygiene.sh` refuses
-    a tracked executable).
+    a tracked executable). Note of 2026-11-27: the generated modules are those of three
+    kinds of definition, one marked `contrib`, one marked `callback` and one that owns a
+    hook marked remote, and `07:1203` and `07:1207` now say so (ADR-048 decision 31).
 19. **The templates.** `aiopsctl plugin new <registry> --lang python` writes a skeleton
     with its `plugin.toml`, a test and a row snippet, for each registry marked `contrib`,
     and it fails conformance with one line per obligation until the obligations are
@@ -732,7 +745,9 @@ gaps:
       an unmarked hook or a `uses` entry of a key that is not marked `callback`, a bound
       key included, denied with check 9 at `plugin check`, at `plugin gate --against`,
       at install and at boot (ADR-048:433); and `FromManifest` builds no value whose
-      `Inject` holds such a key (decision 10).
+      `Inject` holds such a key (decision 10). Note of 2026-11-27: a `uses` entry whose
+      key and major the same manifest lists in `registers` is not such an entry: check 9
+      admits it, and a bound key stays denied (ADR-048 decisions 39 and 46).
     - Identity (decision 23). A process at an instance's endpoint with another identity,
       and one that listens in plaintext, each refused by the kernel, with the row not
       ACTIVE. A dialler without the kernel's credential, refused by `sdk/remotehost` and
