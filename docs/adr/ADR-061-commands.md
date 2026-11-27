@@ -1920,6 +1920,14 @@ such runs can be made; none was made for this text.
     - `Start` refuses an id for which the home holds no unit, with an error that
       matches `ErrRefused`, and starts nothing and writes nothing. With no home it
       returns an error that matches `ErrUsage` (decision 17).
+    - Note of 2026-11-27: before it starts anything, `Start` evaluates check 5 on the
+      installed artifact as boot does, with no signature verified: the kept files
+      against the locked digest, the record against the kept manifest, the
+      reserved-owner clause, and the recorded signer against the present `trust.yaml`
+      for the id and the runtime `remote`. Where the check denies, it starts nothing,
+      names check 5 and `plugin start` exits non-zero. It does not evaluate the tie of
+      the entry `aiops/remote`, which needs the server binary (ADR-020 decision 46).
+      The text of the refusal is this part's, as ADR-020 decision 40 asks.
     - **The lock.** `Start` is a method that writes the home, and decision 19 holds the
       lock "for the whole of each method that writes the home", through bounded steps
       only. A pull of an image has no bound. So `Start` holds the lock for its write

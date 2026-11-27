@@ -296,7 +296,11 @@ gaps:
     decidable. ADR-020 fixes that digest per kind of artifact, the type URI, and whether
     the statement is a layer of the artifact or an OCI referrer. The attestation type and
     the OCI layout of decision 19 are documented in the repository for third parties
-    (`08:935`); making them public waits for L14 (`08:1342`).
+    (`08:935`); making them public waits for L14 (`08:1342`). Note of 2026-11-27: from
+    S2b the statement also names the runtimes in which step 5 ran its suites, an added
+    field of the predicate, for every subject whose manifest lists a runtime, and check
+    10 denies such a subject when the list lacks a runtime that its manifest lists
+    (ADR-020 decision 42).
 19. **The artifact form** (ADR-047): one OCI artifact with its signature and attestation
     as referrers (ADR-020 decision 24), holding the module path, version and sum of
     in-process code, or nothing for a pack; `plugin.yaml`; a bundle of rows, all

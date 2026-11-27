@@ -411,7 +411,10 @@ gaps:
       profile `cli` (`08:273`).
     - `aiopsctl plugin start <id>` starts the unit (ADR-061:1014-1016; `08:1292`). Which
       targets install renders is question Q13. The server never launches or stops a
-      plugin process (`08:447`).
+      plugin process (`08:447`). Note of 2026-11-27: before it starts anything,
+      `plugin start` evaluates check 5 on the installed artifact as boot does, with no
+      signature verified, and where the check denies it starts no unit, names check 5
+      and exits non-zero (ADR-020 decision 46).
     - `plugin enable` refuses, printing the exact command, while the endpoint is missing
       from the table or does not answer the handshake (`08:398`; `07:1870`; `02:326`).
       Only the server process dials an instance (`08:448-449`; `02:213`): `aiopsctl`
@@ -1872,7 +1875,10 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     test hook marked remote, as ADR-060 decision 15 proved the signed class on a test
     definition. The one test definition stands in for all nine callbacks; nothing of it
     ships in a release table, and each real callback arrives with its definition
-    (decision 26).
+    (decision 26). Note of 2026-11-27: the test definition owns a second test hook,
+    marked remote and of access `signed`, on which the `signed` clause of check 7 is
+    proven on a remote row. It adds no mark and no value to `definition.yaml` or
+    `serves`, and nothing of it ships (ADR-020 decision 43, reading 7).
 
 52. **The dependency set of `aiops-sdk` is held to L7** (Q15 (a)), on a condition.
     PSF-2.0 is recorded by name for `typing-extensions`, and the MPL-2.0 file is under
