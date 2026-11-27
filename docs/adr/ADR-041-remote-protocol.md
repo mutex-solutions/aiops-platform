@@ -1,7 +1,7 @@
 # ADR-041 (provisional): The remote protocol at major 0 and the identity of a remote instance on a single-tenant self-host
 
 - Status: **answers recorded 2026-11-27; the three runs of decision 38 recorded
-  2026-11-27; not accepted, and with the owner on questions Q15 to Q20.** The project
+  2026-11-27; not accepted, and with the owner on questions Q15 to Q21.** The project
   owner answered all 14 questions on 2026-11-27, each with its recommended option, Q9
   while nothing is published; the section "Owner answers of 2026-11-27" records them as
   decisions 40 to 53. By the answer to Q14 (decision 53) the ADR is accepted only after
@@ -12,7 +12,8 @@
   decision 24 hold on rootful Docker and were not run on a rootless runtime or under
   SELinux, and the record of the S2b part of ADR-047 gives the same directory other
   modes. Those points are questions Q15 to Q19 of that section; Q20 is the payload of
-  `UpdateConfig`, against ADR-034 decision 21. The ADR is accepted when they are
+  `UpdateConfig`, against ADR-034 decision 21, and Q21 is the place of the Unix dial of
+  decision 28, against ADR-044 decision 45. The ADR is accepted when they are
   answered. The ADR is provisional by its row in the ADR table
   (`08:1175`): it is ratified at S5 for the policy callbacks and at S4b for one tenant
   per connection and activations across replicas. It was proposed before the first
@@ -1634,7 +1635,7 @@ recorded, and until then its status is "answers recorded".
 
 Note of 2026-11-27: the runs are recorded in the section "Runs of decision 38, recorded
 2026-11-27". Three rows fail and two were not run, so the ADR is not accepted by that
-record, and the points go to the owner as questions Q15 to Q20 of that section.
+record, and the points go to the owner as questions Q15 to Q21 of that section.
 
 40. **"One stream" is one connection with one session, and a contribution call is a call
     of the service of its definition** (Q1 (a)). One connection per proxy row carries
@@ -1841,8 +1842,10 @@ of decision 21, and the third and the fourth bullet of decision 31. Two rows of 
 third run were not run. By decision 53 a result that changes a decision comes back to
 the owner, so the status stays "answers recorded", and questions Q15 to Q19 below go to
 the owner, each with the lines that an option edits. Question Q20 is not from a run: it
-is the point that the record of ADR-034 leaves for this ADR. Decisions 40 to 53 stand as
-the owner gave them, except where a question below names one.
+is the point that the record of ADR-034 leaves for this ADR. Question Q21 is not from a
+run either: it is a difference between decisions 28 and 45 and the owner's answer on the
+S2b part of ADR-044 (its decision 45), which no record of that date named. Decisions 40
+to 53 stand as the owner gave them, except where a question below names one.
 
 ### Versions
 
@@ -1949,7 +1952,7 @@ the bound directory, tries to write into it and tries each other path of the hom
 ### Questions for the owner after the runs
 
 Each question gives its options, the recommended one, and why. The ADR is accepted when
-Q15 to Q20 are answered and the rows that the answer to Q19 requires are recorded.
+Q15 to Q21 are answered and the rows that the answer to Q19 requires are recorded.
 
 **Q15. What does `serve()` log when the TLS of `grpcio` refuses a dialler?** Decision
 21, fourth bullet: "the refusing side logs the fingerprint it saw". R1-LOG: in the form
@@ -2068,6 +2071,44 @@ The two cannot both be built as written.
   this ADR put the payload to the owner in no question. Blocks: the update message, in
   group 2.
 
+**Q21. Which package holds the Unix dial of the remote protocol?** This is not a result
+of a run. Two texts whose questions the owner answered on 2026-11-27 differ, and no
+record of that date named the difference. Decision 28 has the kernel-side package of
+`sdk/remote` export two dial functions, the TLS dial and the Unix dial, and has the
+check runner in the operations plugin call the Unix dial. Decision 45 (Q6 (a)) gives
+`aiops/operations` a named entry for that dial on the list of ADR-062 decision 14; the
+note of 2026-11-27 at ADR-062 decision 14, the T0 row of `07` §8.1 (`07:1405`) and
+harness:58 were edited to that answer and name the entry. ADR-044 decision 45 (its Q19
+(a)) says: "The kernel side of the protocol holds no Unix dial". There the Unix dial is
+code of `internal/remotesuite` alone, which the import check and the builder refuse in
+every server graph, the kernel-side package serves a connection that its caller made
+(ADR-044 decision 32), and the suite binary alone dials the socket (ADR-044 decision
+33). The note of 2026-11-27 at ADR-063 decision 9 follows that answer. Question Q19 of
+ADR-044 says that this ADR "is worded to this answer". Decision 28 is not, and question
+Q6 asked how the proxy dials under the dial rule, not which package holds the Unix
+dial. The two cannot both be built as written.
+- (a) ADR-044 decision 45 holds. Decision 28 is revised: the kernel-side package
+  exports the TLS dial and no Unix dial, and the check runner brings its own connection
+  from `internal/remotesuite`. That package is no plugin, and by ADR-044 decision 33
+  the operations plugin makes no dial of the protocol, so the second named entry of
+  decision 45, `aiops/operations` for the Unix dial, leaves; `aiops/remote` keeps its
+  entry for the TLS dial. The words on that second entry leave the note at ADR-062
+  decision 14, the T0 row of `07` §8.1 and harness:58, which then name two entries
+  where they name three. Decision 27 and the first row of its table stand: one Unix
+  socket, opened by the check runner alone.
+- (b) Decisions 28 and 45 hold as written. ADR-044 decision 45 is reversed to option
+  (b) of its question Q19: the kernel-side package holds the Unix dial, every server
+  that links the proxy links it, and what keeps a row from it is that the proxy never
+  calls it, held by a check over call sites. The fence of ADR-044 decision 32 and the
+  note at ADR-063 decision 9 are revised, and the S2b part of ADR-044, accepted on
+  2026-11-27, is asked again. The note at ADR-062 decision 14, the T0 row of `07` §8.1
+  and harness:58 stand.
+- Recommended: (a). Question Q19 of ADR-044 set both places out and the owner chose
+  one; this ADR put the place of the Unix dial to the owner in no question. With (a)
+  ADR-063 decision 23 holds by what a server links and not by what its code leaves
+  uncalled. Blocks: the dial functions of the kernel side of the protocol, in group 2,
+  and the dial of the suite binary.
+
 **Also open, and no question of this ADR.** Decision 27 gives `plugin verify` the Unix
 socket with no network, and the owner's answer to question Q15 of the S2b part of
 ADR-061 (its decision 65) gives it mutual TLS as a unit. ADR-061 puts that difference to
@@ -2085,8 +2126,14 @@ recorded and that the ADR waits for the owner, and its row in `00` §9 stays as 
 (decision 53). No other line is edited: an option that the owner has not chosen edits
 nothing.
 
-Left, each to the commit that records the owner's answers to Q15 to Q20: the revised
-text of decisions 8, 16, 21, 24, 31 and 44 as the answers have it; `07:1211`, which
-restates decisions 25, 26 and 31, read again against the revision; and every line that
-the section "Owner answers of 2026-11-27" leaves to the commit that sets this ADR
-accepted.
+Added on 2026-11-27, after the records of that date were read against each other:
+question Q21, the range of the questions where the status and this section name it, and
+a dated note at ADR-044 decision 45 that points to the question. No line of decision 28
+or 45, of ADR-062 decision 14, of `07` or of the harness record is edited for it.
+
+Left, each to the commit that records the owner's answers to Q15 to Q21: the revised
+text of decisions 8, 16, 21, 24, 28, 31, 44 and 45 as the answers have it; the note at
+ADR-062 decision 14, the T0 row of `07` §8.1 and harness:58, as the answer to Q21 has
+them; `07:1211`, which restates decisions 25, 26 and 31, read again against the
+revision; and every line that the section "Owner answers of 2026-11-27" leaves to the
+commit that sets this ADR accepted.

@@ -2018,7 +2018,16 @@ decision here settles it. Decisions 1 to 39 stand.
     connection that its caller made, under the rule of the seam (decision 32). ADR-063
     decision 9 carries the dated note: the dial of that package is the mutual-TLS dial,
     and the check runner brings its own connection to the handshake, the stream and
-    the stubs.
+    the stubs. Note of 2026-11-27: ADR-041 is not worded to this answer, as question
+    Q19 said it was. Its decision 28 has the kernel-side package export a Unix dial
+    that the check runner in the operations plugin calls. Its decision 45, the owner's
+    answer of the same date to its question Q6, gives `aiops/operations` a named entry
+    for that dial on the list of ADR-062 decision 14, and the note at ADR-062 decision
+    14, the T0 row of `07` §8.1 and harness:58 follow that answer. The two answers
+    cannot both be built as written. The difference is put to the owner as question Q21
+    of ADR-041 (ADR-063 decision 33), before the dial functions of the kernel side and
+    the dial of `internal/remotesuite` are built. No line of either text is edited for
+    it: an option the owner has not chosen edits nothing.
 
 **Edits made with this record.** The commit that records these answers makes the edits
 that "Edits on acceptance of the S2b part" names for the options chosen: the status of
