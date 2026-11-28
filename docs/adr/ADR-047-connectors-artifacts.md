@@ -4,18 +4,21 @@
   answered all seven questions on the same date with the recommended option of each; the
   section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
   ADR-047 stays for S8a start, as the scope below says.
-- S2b part: **proposed; answers recorded 2026-11-27 and the runs of decision 39 recorded
-  2026-11-27, all ten rows holding; with the owner on two points, questions Q15 and
-  Q16.** The section "S2b part" at the end of this file holds it, with decisions 23 to
-  41 and questions Q8 to Q14 (ADR-063 decisions 2 and 34). The owner answered the seven
-  questions on 2026-11-27 with the recommended option of each, Q11 on its condition; the
-  section "Owner answers of 2026-11-27" records them as decisions 42 to 48. By decision
-  48 the part stayed proposed until each row of decision 39 had a recorded result; the
-  section "Runs of decision 39, recorded 2026-11-27" records them. The part stays
-  proposed for the modes of the directory of an instance (Q15) and for the order in
-  which `plugin start` checks a network that already exists (Q16). Until the owner
-  accepts it, nothing above changes but the two dated notes that the answers to Q8 and
-  Q9 add, at decisions 1 and 14.
+- S2b part: **proposed; answers recorded 2026-11-27 and 2026-11-28, and the runs of
+  decision 39 recorded 2026-11-27, all ten rows holding.** The section "S2b part" at the
+  end of this file holds it, with decisions 23 to 41 and questions Q8 to Q14 (ADR-063
+  decisions 2 and 34). The owner answered the seven questions on 2026-11-27 with the
+  recommended option of each, Q11 on its condition; the section "Owner answers of
+  2026-11-27" records them as decisions 42 to 48. By decision 48 the part stayed
+  proposed until each row of decision 39 had a recorded result; the section "Runs of
+  decision 39, recorded 2026-11-27" records them, with the four questions that the runs
+  raised, Q15 to Q18. The owner answered those four on 2026-11-28 with the recommended
+  option of each; the section "Owner answers of 2026-11-28" records them as decisions
+  49 to 52, and its decision 53 adds to the endpoint table what the owner's answer of
+  the same date on the S2b part of ADR-061 puts there. That record does not mark the
+  part accepted. It puts one question to the owner, Q19, which is needed before
+  `sidecars-static` merges. Until the owner accepts the part, nothing above changes but
+  the two dated notes that the answers to Q8 and Q9 add, at decisions 1 and 14.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -837,20 +840,26 @@ edited for this point.
 
 ## S2b part: the artifact of remote code, its rows of the home and its network
 
-- Status: **proposed; answers recorded 2026-11-27 and the runs of decision 39 recorded
-  2026-11-27, all ten rows holding; with the owner on two points, questions Q15 and
-  Q16.** This part is an addition to ADR-047, written as ADR-063 decision 2 has the S2b
-  parts of accepted ADRs written, and it is accepted before the code it governs merges
-  into `main`. The owner answered the seven questions, Q8 to Q14, on 2026-11-27, each
-  with its recommended option, Q11 on its condition; the section "Owner answers of
-  2026-11-27" records the answers as decisions 42 to 48. By decision 48 the part stayed
-  proposed until each row of decision 39 had a recorded result. The section "Runs of
-  decision 39, recorded 2026-11-27" at the end of this part holds the results: every row
-  holds, and the condition of decision 45 is met. The part stays proposed for two points
-  only. Decision 43 and the answer recorded on ADR-041 give the directory of an instance
-  different modes (Q15), and row 7 shows that the order of decision 33 lets an instance
-  start on a network that is not the network of decision 32 (Q16). Decisions 1 to 22
-  stand as accepted; where a decision of this part adds to one of them, it names it.
+- Status: **proposed; answers recorded 2026-11-27 and 2026-11-28, and the runs of
+  decision 39 recorded 2026-11-27, all ten rows holding.** This part is an addition to
+  ADR-047, written as ADR-063 decision 2 has the S2b parts of accepted ADRs written, and
+  it is accepted before the code it governs merges into `main`. The owner answered the
+  seven questions, Q8 to Q14, on 2026-11-27, each with its recommended option, Q11 on
+  its condition; the section "Owner answers of 2026-11-27" records the answers as
+  decisions 42 to 48. By decision 48 the part stayed proposed until each row of decision
+  39 had a recorded result. The section "Runs of decision 39, recorded 2026-11-27" holds
+  the results: every row holds, and the condition of decision 45 is met. After the runs
+  the part stayed proposed for two points. Decision 43 and the answer recorded on
+  ADR-041 gave the directory of an instance different modes (Q15), and row 7 showed that
+  the order of decision 33 lets an instance start on a network that is not the network
+  of decision 32 (Q16). The owner answered both on 2026-11-28, with the two smaller
+  points of the runs, Q17 and Q18, each with its recommended option; the section "Owner
+  answers of 2026-11-28" at the end of this part records the four answers as decisions
+  49 to 52. Its decision 53 adds to the endpoint table of decision 29 what the owner's
+  answer of the same date to question Q18 of the S2b part of ADR-061 puts there. That
+  record does not mark the part accepted, and it puts one question to the owner, Q19,
+  which is needed before `sidecars-static` merges. Decisions 1 to 22 stand as accepted;
+  where a decision of this part adds to one of them, it names it.
   - No behaviour of a container runtime was run for the proposal of this part, and the
     project pins no container runtime yet. Decision 39 lists what was read, at which
     version, and what a run has to show; question Q14 asks whether the part is accepted
@@ -860,7 +869,9 @@ edited for this point.
     with the part: the depth of the SBOM of remote code (decision 26); the port 7443
     (decision 29); the path `/aiops/identity`, the numeric user 65532 and the absence
     of a restart policy in both templates (decisions 30 and 31); the options of the
-    network of an instance (decision 32).
+    network of an instance (decision 32). Note of 2026-11-28: the record of that date
+    proposes one more such value, the name and the form of the attempt value of a line
+    of the endpoint table (decision 53).
 - Scope: what ADR-063 decision 34 lists for this part, with what its decisions 25 and 27
   leave to it: the layer and media type of the image reference; the image and its digest
   (ADR-063 decision 61); the SBOM of remote code; the one row of a remote bundle (ADR-063
@@ -1156,7 +1167,7 @@ to 22 and the code at `bbfd839` leaves ten gaps:
 
     | Path under `$AIOPS_HOME` | Written by | The kernel mounts it | Source |
     |---|---|---|---|
-    | `sidecars.json`, the endpoint table (decision 29) | `aiopsctl` `install`, `remove`; and `plugin start`, which writes a missing line (ADR-061 decisions 45 and 60, its question Q10 (a), answered 2026-11-27) | Read-only; the row `sidecars-static` reads it | `08:1293`; `02:215`; ADR-063 decisions 17 and 39 |
+    | `sidecars.json`, the endpoint table (decision 29) | `aiopsctl` `install`, `remove`; and `plugin start`, which writes a missing line (ADR-061 decisions 45 and 60, its question Q10 (a), answered 2026-11-27); and `plugin enable`, which replaces the attempt value of a line (decision 53, recorded 2026-11-28; ADR-041 decisions 18 and 42) | Read-only; the row `sidecars-static` reads it | `08:1293`; `02:215`; ADR-063 decisions 17 and 39 |
     | `remote/units/<plugin id>/`: `compose.yaml`, the compose fragment, and `<unit name>.service`, the systemd unit (decision 31) | `aiopsctl` `install`, `remove` | Read-only, and the kernel does not read it: the host starts the instance from it | ADR-063 decisions 25 and 50 |
     | `remote/kernel/`: the key pair and the certificate of the kernel | `aiopsctl` `install`, on first need; what deletes it is ADR-041's | Read-only; the proxy reads it | ADR-063 decisions 23 and 55; `00:413` |
     | `remote/pins/`: the pin of the certificate of each installed instance, one entry per plugin id | `aiopsctl`: `install` writes it, `disable` and `remove` delete it; the command that writes a pin again after a revocation is ADR-041's | Read-only; the proxy reads it at every dial | ADR-063 decision 55; `00:412` |
@@ -1211,6 +1222,11 @@ to 22 and the code at `bbfd839` leaves ten gaps:
       line (decision 35).
     - How the row learns the path of the file, when it reads it again and what it calls
       ready are the row's, with the `sidecars` definition (ADR-063 decision 39).
+    - Note of 2026-11-28 (decision 53). An object of `endpoints` gains a third member,
+      `attempt`, and `plugin enable` is a writer of the file. When the row reads the
+      file again is no longer left to the row: by the owner's answer to question Q18 of
+      the S2b part of ADR-061 this decision carries that rule, and decision 53 words it.
+      How the row learns the path of the file and what it calls ready stay the row's.
 
 30. **The one directory a unit binds, and the user of a unit.** The unit of an instance
     binds `remote/instances/<plugin id>/` of the home, read-only, at `/aiops/identity`
@@ -1277,7 +1293,11 @@ to 22 and the code at `bbfd839` leaves ten gaps:
       manager. The unit creates the network where it is absent and runs the same image
       by digest through the program `docker` (ADR-063 decision 25). After a new install
       the operator copies the new file again; `plugin start` refuses to attach an
-      instance that differs from the rendered unit (decision 36).
+      instance that differs from the rendered unit (decision 36). Note of 2026-11-28
+      (the owner's answer to question Q16, decision 50): where a network of the unit
+      name exists, the unit checks, before it runs the container, that the network is
+      internal and that its gateway mode is `isolated`, and it fails to start on a
+      network that is not.
     - **Neither template restarts a container by itself at S2b.** The fragment sets no
       restart policy and the unit file no restart directive, so a container that
       `aiopsctl` stops through the runtime stays stopped (decision 37). After a reboot
@@ -1372,6 +1392,14 @@ to 22 and the code at `bbfd839` leaves ten gaps:
       3. It makes the checks of decision 36 on the network and on the instance.
       4. It finds the kernel container and attaches it to the network unless it is
          attached, as question Q11 decides.
+    - Note of 2026-11-28 (the owner's answers to questions Q16, Q17 and Q18; decisions
+      50 to 52). Before step 2, `plugin start` reads a network of the unit name that
+      already exists and refuses one that fails a network check of decision 36, so the
+      fragment never runs on such a network; the checks of step 3 follow as written. In
+      step 2, "replaced by the run of the fragment" reads "started again or replaced by
+      the run of the fragment": a stopped container of an unchanged fragment is started
+      again as the same container. After an attach of step 4 that takes the kernel
+      container out of the no-network mode, `plugin start` waits before it returns.
     - **It is idempotent.** A second run starts nothing and attaches nothing. A kernel
       container that the operator starts or replaces after the instance, as after
       `dist use`, is attached by the same command, which is the exact command that
@@ -1439,7 +1467,10 @@ to 22 and the code at `bbfd839` leaves ten gaps:
       the unit name as the runtime reports it and refuses, naming the network and the
       point: a network that is not internal; one in which the host holds an address;
       and one with a member that is neither the instance nor the kernel container of
-      this home. After the attachment it reads the members again.
+      this home. After the attachment it reads the members again. Note of 2026-11-28
+      (the owner's answer to question Q16, decision 50): where a network of the unit
+      name exists before the fragment runs, the three points are read on it first, and
+      a refusal then starts nothing.
     - **The instance.** It never keeps a running container of the unit name whose
       image reference is not the reference by digest of the rendered unit, whose user
       is not the user of the template, or whose binds are not the one bind of decision
@@ -1596,7 +1627,10 @@ to 22 and the code at `bbfd839` leaves ten gaps:
       name that is not internal, one in which the host holds an address, and one with
       a third member; a running container of the unit name with another image digest,
       another user or another bind; a container of the unit name that binds another
-      home; a fragment whose digest differs from the kept `artifact.json`.
+      home; a fragment whose digest differs from the kept `artifact.json`. Note of
+      2026-11-28 (decision 50): where the network exists before the run, each of the
+      three refusals of a network is made before the fragment runs, and the case
+      asserts that no container of the unit name was started.
     - From inside an instance no connection reaches a listener that the test opens on
       the host, on the gateway address of the network and on another address of the
       host (decision 32, point 2).
@@ -2181,6 +2215,7 @@ both.
   is checked by the commands that write and use the key. Its cost stands as decision 43
   states it. Needed before the unit and `plugin install` of remote code merge, and
   before this part or ADR-041 is accepted.
+- **Answered 2026-11-28: (a)**, decision 49.
 
 **Q16. When is a network of the unit name that already exists checked?** Decision 33
 runs the fragment in step 2 and makes the checks of decision 36 in step 3, and decision
@@ -2206,6 +2241,7 @@ both targets a network of the unit name that something else made is used as it i
 - Recommended: (a). It closes the gap on both targets, keeps the network a thing of the
   unit and keeps the flow of `08:1293`. Needed before this part is accepted and before
   `plugin start` and the templates merge.
+- **Answered 2026-11-28: (a)**, decision 50.
 
 **Q17. What follows the first attach of the kernel container?** Row 6: for 2.6 s after
 the first attach from the no-network mode the running kernel process still asked its
@@ -2223,6 +2259,7 @@ that lag was read in no source.
 - Recommended: (b). The command that `plugin enable` prints is then true the first time
   it is followed, and no written line changes. Needed before `plugin start` merges; it
   is the S2b part of ADR-061 that words the command.
+- **Answered 2026-11-28: (b)**, decision 51.
 
 **Q18. Is a stopped container that the fragment made started again or replaced?**
 Decision 33, step 2: "One that is stopped or differs is replaced by the run of the
@@ -2234,6 +2271,7 @@ unchanged fragment again as the same container.
 - (b) `plugin start` forces a new container at every start of a stopped one.
 - Recommended: (a). The checks of decision 36 hold the container to the rendered unit
   either way, and (a) is what the runtime does. Needed before `plugin start` merges.
+- **Answered 2026-11-28: (a)**, decision 52.
 
 **Also taken by the revision of this part,** from answers that the owner gave on other
 ADRs on 2026-11-27, and no question here:
@@ -2246,6 +2284,9 @@ ADRs on 2026-11-27, and no question here:
   renews the kernel's pair when the S2b part of ADR-061 has named it (ADR-041 decision
   43).
 
+Note of 2026-11-28: decision 53 takes the first two. The third stays with the commit
+that marks this part accepted, with the other writers of the table of decision 28.
+
 #### Edits made with this record, and left
 
 Made: the status of this part; the two columns and a note in the table of decision 39;
@@ -2253,3 +2294,224 @@ a note at decision 45; and this section. The row of ADR-047 in the ADR table of 
 names the S2b part as open with the owner. The edits of the section "Edits on acceptance
 of the S2b part" that no chosen option names are not made: they stay with the commit
 that marks the part accepted, after the answers to Q15 and Q16.
+
+### Owner answers of 2026-11-28
+
+The project owner answered the four questions of the section "Questions for the owner
+after the runs" on 2026-11-28, each with its recommended option: (a) for Q15, Q16 and
+Q18, and (b) for Q17. On the same date the owner answered question Q18 of the S2b part
+of ADR-061 with its option (a): this part carries, in its decision 29, the rule on when
+`sidecars-static` reads the endpoint table again. Decisions 49 to 52 each name the
+question they answer, and decision 53 writes what that fifth answer puts into decision
+29. This record does not mark the part accepted, and it holds the result of no run.
+
+49. **The directory of an instance keeps the modes of decision 43** (Q15 (a)). Decision
+    43 holds as the owner gave it on 2026-11-27: the directory `remote/instances/<plugin
+    id>/` has the mode 0755 and its files the mode 0644, the user of a unit is the pair
+    `65532:65532`, the instance holds no group of the host, and the guard on the host is
+    the three directories of mode 0700 above it, which `aiopsctl` checks and sets
+    (decision 30). The answer is one with the owner's answer to question Q18 of ADR-041,
+    option (a): ADR-041 decisions 24 and 44, which gave the directory the mode 0750, its
+    files the mode 0640 and the instance the site user's group, are revised to decision
+    43, in the record of that answer in ADR-041. No line of this part changes: decision
+    43, the dated note at decision 14 and the user of decision 30 stand, and the cost
+    stands as decision 43 states it. That revision is what decision 40 asks of ADR-041
+    on these modes. Row 10 of decision 39 was run under these modes on rootful Docker
+    alone. A rootless runtime with the user kept and a host that enforces SELinux are
+    rows of the third run of ADR-041 decision 38, and by the owner's answer to question
+    Q19 of ADR-041 they are run before that ADR is accepted. Their record is ADR-041's,
+    and a row that these modes do not pass comes back to the owner (ADR-041 decision
+    53).
+
+50. **A network of the unit name that already exists is checked before anything runs on
+    it, on both targets** (Q16 (a)).
+    - **`plugin start`.** Before it runs the fragment, `plugin start` reads a network of
+      the unit name as the runtime reports it and refuses, with the network and the
+      point named, one that fails a network check of decision 36: a network that is not
+      internal, one in which the host holds an address, and one with a member that is
+      neither the instance nor the kernel container of this home. That refusal starts
+      nothing. With no network of that name the fragment creates it, and the checks of
+      step 3 of decision 33 follow as written, as they do on a network that existed and
+      passed.
+    - **The systemd unit.** Before it runs the container, the unit checks a network of
+      the unit name that it finds for the two settings of decision 32: that the network
+      is internal, and that its gateway mode is `isolated`. It fails to start on a
+      network that does not have them, and it still creates the network where none
+      exists. That a unit can make this check in the service manager was not run, and
+      the systemd job of ADR-063 decision 50 shows it. The members of the network are
+      read by `plugin start`, which the operator runs after `systemctl enable --now`
+      (decision 33).
+    - An instance that `plugin start` or the systemd unit starts is then never on a
+      network of the unit name that gives it a route out or an address of the host,
+      which ADR-063 decision 24 needs and which the written order did not give (rows 7
+      and 9 of decision 39). The network stays a thing of the unit (decision 32), and
+      the flow of `08:1293` stands.
+    - The answer edits steps 2 and 3 of decision 33, the systemd bullet of decision 31,
+      the network check of decision 36 and one case of decision 41. Each gains a dated
+      note, and no line of `docs/architecture/` changes.
+
+51. **After an attach that takes the kernel container out of the no-network mode,
+    `plugin start` waits before it returns** (Q17 (b)). Row 6 of decision 39: for 2.6 s
+    after the first attach, the kernel process that started with no network still asked
+    its old resolver, so the dial that a `plugin enable` causes at once could fail. After
+    an attach that first detached the kernel container from the no-network mode
+    (decision 45), `plugin start` therefore waits for a bound and then returns. The
+    bound is read in the source of the Go resolver before the code of `plugin start` is
+    written. This record holds no value for it: the reading is recorded by a dated note
+    at this decision, with the file and the toolchain that were read. An attach of a
+    kernel container that already holds a network of an instance does not wait. The
+    command that `plugin enable` prints is then true the first time it is followed, and
+    step C4 of the exit, which follows step C3, rests on that. No written line changes:
+    ADR-063 decision 27, decision 15 and decision 45 stand. What `plugin start` prints
+    while it waits is the S2b part of ADR-061's. This adds to step 4 of decision 33.
+
+52. **A stopped container that the fragment made is started again or replaced** (Q18
+    (a)). Step 2 of decision 33 reads "started again or replaced" where it says
+    "replaced". Compose starts a stopped container of an unchanged fragment again as the
+    same container (row 7 of decision 39) and replaces one whose fragment changed, and
+    `plugin start` forces no new container. The checks of decision 36 are made on a
+    container that was started again as on any other, so it is held to the rendered unit
+    in its image reference by digest, its user, its one bind and its network either way.
+    A container that the fragment did not make is refused as written.
+
+53. **The endpoint table: the attempt value of a line, its writers, and when
+    `sidecars-static` reads the file again.** This adds to decision 29. The owner's
+    answer to question Q18 of the S2b part of ADR-061, option (a), has decision 29 carry
+    the rule on when `sidecars-static` reads the endpoint table again. ADR-041 decision
+    42, with its decisions 18 and 39, needs two things of the table: an attempt value in
+    each line, and `plugin enable` as a writer.
+    - **The line.** An object of `endpoints` has three members: `name` and `address`, as
+      decision 29 has them, and `attempt`, a string of 32 lower-case hexadecimal digits
+      that its writer takes from the random source of the system. `tableVersion` stays
+      1, since no code reads or writes the file yet. The name and the form of `attempt`
+      are values that no written line gives: they are proposed here, and the owner
+      accepts them with the part. That the value is random is ADR-041 decision 18, and
+      it has to be: a `plugin enable` that is rolled back restores the old value, so a
+      counter would give the next `plugin enable` the value of the one that was rolled
+      back, and the report made against that value would still hold.
+    - **What reads the value.** `Endpoint(name)` of the definition `sidecars` returns
+      the address and the attempt value of the line, a consumer that got no answer says
+      so with `Report(name, attempt)`, and the provider holds a report only against the
+      attempt value that it names (ADR-041 decision 18). A reader compares the value
+      for equality and reads nothing else in it. `aiopsctl` writes it and never reads
+      it.
+    - **The writers.** Install writes the line with a first value. `plugin start`
+      writes a missing line, with a new value, and leaves a line that exists as it is
+      (ADR-061 decision 60), so it clears no report by itself (ADR-041 decision 18).
+      `plugin enable` of a remote row replaces the value in the line of the row's
+      plugin before it submits (ADR-041 decisions 18 and 42). It writes the file whole,
+      under `write.lock` and with the snapshot, as every writer of the table does
+      (decisions 28 and 29), so a `plugin enable` that is rolled back restores the line
+      with the other files (ADR-062 decision 23). `remove` deletes the line (decision
+      35). The row of the table in decision 28 names `plugin enable`. How `Enable` makes
+      the write, and whether it makes it while no process runs the profile (ADR-061
+      decision 66), is the S2b part of ADR-061's.
+    - The table is of the site (decision 28), so a `plugin enable` in one profile
+      replaces the value that the processes of every profile of the site read. A
+      process of another profile that holds a report against the old value dials once
+      more at its next check.
+    - **When the row reads the file again.** `sidecars-static` reads the file after
+      boot, "at every generation or at every lookup, and not once at boot" (ADR-061
+      decision 60). What that answer and ADR-041 decision 42 require together is fixed
+      here, and it does not depend on the point that question Q19 leaves open:
+      1. The row reads the file each time the kernel runs the availability check of
+         `sidecars` for a consumer: the check that a generation runs, and the check
+         that the row itself asked for when it offers an endpoint again on its timer
+         (ADR-041 decisions 18 and 49). It answers that check from that read and from
+         no earlier one.
+      2. A write of the table that returned before a command submitted a generation is
+         therefore in every answer that the row gives for that generation, in a
+         process that booted before the write: the kernel that serves step C4 of the
+         exit booted before install wrote the line in step C2 (ADR-063 decision 27).
+      3. At that check the row compares the attempt value of the line with the value
+         of a report that it holds for the instance, so the generation of a new
+         `plugin enable` dials at once (ADR-041 decision 42).
+      4. The row opens the path at each read and keeps no open file from one read to
+         the next. `aiopsctl` replaces the file by a rename (decision 29), and a file
+         held open would be the one that was replaced. An absent file is an empty
+         table at every read, and not at the first alone.
+      5. The row does not watch the file. A write that no generation and no check
+         follows is read at the next check.
+    - Whether `Endpoint(name)` reads the file again or answers from the read of the
+      check is question Q19 below. The owner's answer names both points and chooses
+      neither, and nothing above needs the choice.
+    - Of the three things that the last bullet of decision 29 leaves to the row, this
+      decision takes the second. How the row learns the path of the file and what it
+      calls ready, with what it answers on a file that it cannot read or parse, stay
+      the row's, with the definition `sidecars` (ADR-063 decision 39).
+    - **Cases,** beside those of decision 41, each with a test that fails on its base
+      (ADR-063 decision 29): a server process that booted on a home whose table lacked
+      a line answers from that line at the generation that follows its write; `plugin
+      enable` of a remote row leaves the line with another attempt value; and a `plugin
+      enable` that is rolled back leaves the value that the line had before it.
+
+#### Question for the owner after the answers of 2026-11-28
+
+The question gives its options, the recommended one, and why.
+
+**Q19. Does `Endpoint(name)` read the endpoint table again, or answer from the read of
+the availability check?** The owner's answer to question Q10 of the S2b part of ADR-061
+(its decision 60) has `sidecars-static` read the table "at every generation or at every
+lookup, and not once at boot". It names two points and chooses neither. Decision 53
+fixes the first, which ADR-041 decision 42 needs in any case: the row reads the file at
+every availability check of `sidecars`, and a generation runs that check. The lookup,
+`Endpoint(name)`, is open.
+- (a) At every answer. The row keeps no copy of the table: it reads the file at each
+  availability check and again at each `Endpoint(name)`. A consumer that looks an
+  endpoint up long after its check gets the line as the file then has it. The cost is
+  one read of a small file for each lookup. Where a write falls between a check and the
+  lookup that follows it, the two see different files; the report then names the
+  attempt value that the lookup gave, so the report still holds against the right
+  value.
+- (b) At the availability check alone. `Endpoint(name)` answers from the read of the
+  check that admitted the consumer, so the address and the attempt value that a
+  consumer gets are the ones that the check judged. The row holds a copy of the table
+  from one check to the next, and a consumer that looks an endpoint up again later gets
+  the line of its check.
+- Recommended: (a). The row then holds nothing of the table that can be out of date,
+  and needs no rule on when a copy is dropped. It is both halves of the answer as the
+  owner worded it, and its cost is the read of one small file. Needed before
+  `sidecars-static` merges; it blocks no other code of this part.
+
+#### Edits made with this record, and left
+
+Made, in this file: the status of this part, at the head of the file and at the head of
+the part, with a dated note at its list of proposed values; in the table of decision 28,
+`plugin enable` in the row of `sidecars.json`; dated notes at decision 29 (decision 53),
+at the systemd bullet of decision 31 (decision 50), at the steps of `plugin start` in
+decision 33 (decisions 50 to 52), at the network check of decision 36 (decision 50) and
+at the case of the refusals of `plugin start` in decision 41 (decision 50); the answer
+under each of the questions Q15 to Q18; a note at the list "Also taken by the revision
+of this part"; and this section. The row of ADR-047 in the ADR table of `08` §3 names
+the record of 2026-11-28 and no longer says that the part awaits the owner on two
+points. No other line of `docs/architecture/` is edited: no chosen option names one.
+
+Not edited here, each with the record that edits it:
+
+- ADR-041 decisions 24 and 44, which the answer to Q15 has revised to decision 43: the
+  record of the owner's answer to question Q18 of ADR-041, in that ADR;
+- the sentence of ADR-061 decision 60 on the rule "until a text carries" it, and the
+  row of ADR-061 decision 59 on when `sidecars-static` reads the endpoint table: the
+  record of the owner's answer to question Q18 of that part, in that ADR;
+- ADR-061 decision 45, which follows decisions 50 to 52 for `plugin start`, with the
+  texts of the refusals of decision 50 and what the command prints while it waits: a
+  dated note in that ADR before `Start` merges, as its section "Points for the owner
+  after the records of 2026-11-27" says.
+
+Left to later commits, each named:
+
+- the commit that marks this part accepted: every edit of the section "Edits on
+  acceptance of the S2b part" that no chosen option names, as the record of 2026-11-27
+  lists them; and, in the table of decision 28, the writers that the owner's answers on
+  ADR-041 add, which are `plugin start` as the command that makes a new pair and writes
+  the pin after a revocation (ADR-041 decision 50) and the command that renews the
+  kernel's pair, once the S2b part of ADR-061 has named it (ADR-041 decision 43);
+- the bound of decision 51, by a dated note there, before the code of `plugin start` is
+  written;
+- the answer to question Q19, before `sidecars-static` merges;
+- the definition `sidecars` beyond `Endpoint` and `Report`: its key, its fake, its
+  suite, how a provider tells which instance a consumer waits for, how the row learns
+  the path of the file and what it calls ready. ADR-041 decisions 36 and 39 send those
+  points to this part, decision 29 leaves the last two to the row, and no text fixes
+  them yet. They are an addition to this part, due before `sidecars-static` and the
+  proxy merge.
