@@ -1628,11 +1628,6 @@ otherwise, the decision here holds.
   Three points wait for the owner, questions Q17 to Q19 of the section "Points for the
   owner after the records of 2026-11-27". Q19 is whether this part stays accepted ahead
   of ADR-041, which is not accepted, and of the S2b part of ADR-047, which is proposed.
-  Note of 2026-11-28: the owner answered the three on that date (decisions 67 to 69),
-  and the part stays accepted. Five points wait for the owner on that date. Q24 is the
-  channel of `plugin verify`, which came back from the run of the condition of Q17,
-  and `Verify` of remote code waits for it. Q20 to Q23 are the questions of the two
-  additions, decisions 70 and 71, which are proposed and not accepted.
 - Scope: what ADR-063 decision 34 has this part settle (`ADR-063:849-854`): `plugin
   start`, with `Start` in the operations definition as a minor with a raised suite
   revision; `plugin new --lang python`; the form of a remote Go plugin, which ADR-063
@@ -1676,10 +1671,13 @@ otherwise, the decision here holds.
   and 68), Q17 on a condition that is not run yet. Two additions are proposed on the
   same date, decisions 70 and 71, and wait on questions Q20 to Q23.
   Note of 2026-11-28, after the runs of that date: the condition of Q17 was run and is
-  not met, and the point is back with the owner as question Q24. ADR-041 is still not
-  accepted: it waits for the owner on its questions Q22 to Q24 and on Q24 here. The
-  S2b part of ADR-047 is still proposed: it waits for the owner on its questions Q19
-  to Q23.
+  not met, and the point is back with the owner as question Q24, on which `Verify` of
+  remote code waits. Five points then wait for the owner in this part: Q24, and Q20 to
+  Q23 of the two additions, which are proposed and not accepted. The status line of
+  the part is not edited (decision 69): it still names Q17 to Q19, and these notes say
+  where each point stands. ADR-041 is still not accepted: it waits for the owner on
+  its questions Q22 to Q24 and on Q24 here. The S2b part of ADR-047 is still proposed:
+  it waits for the owner on its questions Q19 to Q23.
 - Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
   is written against. The sections above cite `a3c85ae`, so a line number here differs
@@ -3694,12 +3692,12 @@ decision 65 words it. The text of Q17 (a) names two other ways, and the run adds
 
 #### Edits made with this record, and left
 
-Made, in this ADR: this section; dated notes at decisions 65 and 67, at the status and
-at the acceptance order of the part, and after the list "Left to later commits" of the
-section "Owner answers of 2026-11-28"; and the dated note at decision 45 for the
-owner's answers of 2026-11-28 on the S2b part of ADR-047. The two status lines keep
-their status, and the row of this ADR in the ADR table of `08` §3 is not edited
-(decision 69). ADR-041 decision 27, ADR-044 and ADR-020 are not edited.
+Made, in this ADR: this section; dated notes at decisions 65 and 67, at the acceptance
+order of the part, and after the list "Left to later commits" of the section "Owner
+answers of 2026-11-28"; and the dated note at decision 45 for the owner's answers of
+2026-11-28 on the S2b part of ADR-047. The two status lines and the row of this ADR in
+the ADR table of `08` §3 are not edited (decision 69). ADR-041 decision 27, ADR-044 and
+ADR-020 are not edited.
 
 Left to the commit that records the owner's answer to Q24: decision 65 as the answer
 has it, and, in the three other ADRs, the lines that the chosen option names. Left as
