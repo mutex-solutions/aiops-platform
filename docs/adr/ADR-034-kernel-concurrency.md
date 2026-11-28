@@ -3086,7 +3086,12 @@ Left to later commits, each named:
   cannot both be built as written. The chosen option names no line of ADR-041, so this
   record edits none: the point is one for the owner under ADR-063 decision 33, before
   the update message is built, and those lines are left to the commit that records how
-  the two are reconciled. The point is put to the owner as question Q20 of ADR-041;
+  the two are reconciled. The point is put to the owner as question Q20 of ADR-041.
+  Note of 2026-11-28: the owner answered that question with (a). Decision 21 holds,
+  and ADR-041 revises its decisions 8, 16 and 31 by notes of that date (its decision
+  59): `UpdateConfig` carries the committed config whole, in the form in which
+  `Activate` carries the config, and no `paths`, and the instance replaces the config
+  of its activation with it;
 - the result of the call-path gate on `d124a40`, recorded in this ADR when it has run
   ("What this section blocks"). No result of it is recorded with this answer.
 

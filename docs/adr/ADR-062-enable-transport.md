@@ -452,7 +452,12 @@
     the same list gains two more named entries, for the two dial functions of the
     remote protocol. `aiops/remote` may call the TLS dial and `aiops/operations` the
     Unix dial (ADR-041 decision 28). The T0 row of the test tiers in `07` §8.1 and
-    harness:58 name the three entries.
+    harness:58 name the three entries. Note of 2026-11-28, with the owner's answer to
+    question Q21 of ADR-041 (its decision 60): the list gains one more named entry and
+    not two. ADR-044 decision 45 holds: the kernel side of the remote protocol exports
+    no Unix dial and the operations plugin makes no dial of that protocol, so the entry
+    of `aiops/operations` for the Unix dial leaves. `aiops/remote` may call the TLS
+    dial. The T0 row of `07` §8.1 and harness:58 name the two entries.
 
 ### `admin-api` at S4a and after
 

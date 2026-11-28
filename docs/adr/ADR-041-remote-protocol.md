@@ -1,20 +1,30 @@
 # ADR-041 (provisional): The remote protocol at major 0 and the identity of a remote instance on a single-tenant self-host
 
-- Status: **answers recorded 2026-11-27; the three runs of decision 38 recorded
-  2026-11-27; not accepted, and with the owner on questions Q15 to Q21.** The project
+- Status: **answers recorded 2026-11-27 and 2026-11-28; the three runs of decision 38
+  recorded 2026-11-27; not accepted. Acceptance waits for the two rows of the third run
+  that were not run (decision 58) and for the reading of this record against the
+  records of 2026-11-28 on the S2b parts of ADR-047 and ADR-061.** The project
   owner answered all 14 questions on 2026-11-27, each with its recommended option, Q9
   while nothing is published; the section "Owner answers of 2026-11-27" records them as
   decisions 40 to 53. By the answer to Q14 (decision 53) the ADR is accepted only after
   the three throwaway runs of decision 38 are recorded here, and a run result that
   changes a decision comes back to the owner. The section "Runs of decision 38, recorded
   2026-11-27" holds the runs. The certificate form of decision 20 holds as written. One
-  sentence of decision 21 and two of decision 31 do not hold as worded, the modes of
-  decision 24 hold on rootful Docker and were not run on a rootless runtime or under
-  SELinux, and the record of the S2b part of ADR-047 gives the same directory other
-  modes. Those points are questions Q15 to Q19 of that section; Q20 is the payload of
-  `UpdateConfig`, against ADR-034 decision 21, and Q21 is the place of the Unix dial of
-  decision 28, against ADR-044 decision 45. The ADR is accepted when they are
-  answered. The ADR is provisional by its row in the ADR table
+  sentence of decision 21 and two of decision 31 did not hold as worded, the modes of
+  decision 24 held on rootful Docker and were not run on a rootless runtime or under
+  SELinux, and the record of the S2b part of ADR-047 gave the same directory other
+  modes. Those points were questions Q15 to Q19 of that section; Q20 was the payload of
+  `UpdateConfig`, against ADR-034 decision 21, and Q21 the place of the Unix dial of
+  decision 28, against ADR-044 decision 45. The owner answered the seven on 2026-11-28,
+  each with its recommended option, and the section "Owner answers of 2026-11-28"
+  records them as decisions 54 to 60, with a note of that date at each decision that an
+  answer revises. That record does not accept the ADR. By decision 58 the two rows,
+  rootless Podman with the user kept and the binds under SELinux labels, are run and
+  recorded here first. The commit that sets the ADR accepted follows that record and
+  the reading of the three records of 2026-11-28 against each other; it also makes the
+  revision of the row of `plugin verify` in decision 27 that the owner's answer to
+  question Q17 of the S2b part of ADR-061 names, or returns that point to the owner.
+  The ADR is provisional by its row in the ADR table
   (`08:1175`): it is ratified at S5 for the policy callbacks and at S4b for one tenant
   per connection and activations across replicas. It was proposed before the first
   commit of groups 1 to 3 of ADR-063 decision 30 and of the exit harness, and it is
@@ -319,6 +329,12 @@ list against the code and the texts at `bbfd839` shows these facts:
    status by the transport. The names above are the names of major 0 and replace the
    descriptive ones of `07` §5 and of plugin record §11 (`07:67`, R9); before the first
    community release they change only by an addition to this ADR (ADR-063 decision 62).
+
+   Note of 2026-11-28, with the owner's answer to question Q20 (decision 59):
+   `UpdateConfig` has the fields `activation` 1 and `config` 2, the committed config
+   whole, in the form in which `Activate` carries the config. The field `paths` leaves
+   both tables, and the words "as the loader's event carries it" of the first no longer
+   hold.
 9. **Activation on the wire.** An activation is ACTIVE on the wire from the kernel's
    `Activate` to its `Deactivate` or to the end of the session, whichever is first.
    - The plugin-side host runs one fiber per activation with that activation's config
@@ -517,7 +533,15 @@ list against the code and the texts at `bbfd839` shows these facts:
       `Bye`, and the proxy dials again as after a lost session (decision 18). The
       `Activate` of the new activation carries the committed config, so an instance
       never keeps serving a config that the kernel replaced. The row stays ACTIVE and
-      the generation's verdict does not change.
+      the generation's verdict does not change. Note of 2026-11-28 (decision 59): the
+      first two sentences of this bullet do not hold. `UpdateConfig` carries the
+      committed config whole, with each reference resolved again at that commit, as the
+      hand-off of ADR-034 decision 21 gives it to the proxy, which does not hear the
+      loader's event. The instance replaces the config of its activation with it and
+      merges nothing. From its third sentence on the bullet stands, with one reason
+      changed: the proxy cannot refuse the change because the kernel process has
+      retained the config before the message is sent (ADR-034, G13 points 13 and 15),
+      not because the loader drops a listener's error.
     - The values of this table that this ADR gives, and those of decision 18, are
       construction data of the kernel side of the protocol: the dial function of
       decision 28 takes them in one value whose zero value is the values written here.
@@ -688,7 +712,12 @@ list against the code and the texts at `bbfd839` shows these facts:
       the TLS library has already verified.
     - Both checks finish before `Hello` is answered (ADR-063 decision 23). A peer with
       another certificate, with a certificate signed by either pinned key, or in
-      plaintext is refused, and the refusing side logs the fingerprint it saw.
+      plaintext is refused, and the refusing side logs the fingerprint it saw. Note of
+      2026-11-28 (decision 54): the last clause is revised. A side logs the fingerprint
+      it saw where its own comparison makes the refusal: the kernel side and
+      `sdk/remotehost` always, and `serve()` in its comparison of the bullet above.
+      Where the TLS of `grpcio` refuses the dialler first, the line of the library is
+      the record, with the reason and no fingerprint. The refusal is unchanged.
     - On success each side logs the identity it verified, once per connection: the
       kernel logs the plugin id and the fingerprint of the instance's certificate, and
       the SDK logs the kernel's name and the fingerprint of its certificate. Step C3 of
@@ -743,7 +772,14 @@ list against the code and the texts at `bbfd839` shows these facts:
     its group (ADR-062 decision 5). This is one exception to "each file with mode 0600"
     of ADR-047 decision 14, and question Q5 holds the other ways. Whether the instance's
     user reads the files under each runtime and mapping that ADR-047 decision 14 admits
-    has not been run (decision 38).
+    has not been run (decision 38). Note of 2026-11-28, with the owner's answer to
+    question Q18 (decision 57): the modes, the group and the guard of this decision are
+    replaced by those of ADR-047 decision 43. The directory is of mode 0755 and its
+    three files of mode 0644, the unit's user is the pair `65532:65532` and holds no
+    group of the host, and on the host the guard is the home and the three directories
+    of mode 0700 above the instance's directory. The heading and the first two
+    sentences no longer hold. The exception to ADR-047 decision 14 stays one, in the
+    form of ADR-047 decision 43.
 25. **Lifetime and rotation.** A pair has no expiry: it is valid while it is pinned, as
     a signer key is valid while `trust.yaml` lists it (`00:415`). A date in a
     certificate would stop a single host at a time that no leader is there to move.
@@ -891,6 +927,15 @@ list against the code and the texts at `bbfd839` shows these facts:
       and this endpoint is a line of a site file, and the peer is authenticated by its
       pin before any byte of the protocol. The choice is question Q6.
 
+    Note of 2026-11-28, with the owner's answer to question Q21 (decision 60): the
+    kernel-side package exports the TLS dial and no Unix dial, so it has one dial
+    function where the heading counts two. The last sentence of the first bullet and
+    the second sentence of the second do not hold: the check runner brings its own
+    connection to the socket of decision 27, on the Unix dial of `internal/remotesuite`
+    (ADR-044 decision 45). In the fifth bullet the list of ADR-062 decision 14 gains one
+    named entry, `aiops/remote` for the TLS dial, and none for `aiops/operations`. The
+    rest of the decision stands.
+
 ### The scope of the Python SDK
 
 29. **What `aiops-sdk` holds at S2b** is the parts of `07:1205-1213`, as ADR-063
@@ -933,11 +978,21 @@ list against the code and the texts at `bbfd839` shows these facts:
       stream takes one thread for as long as its connection is open, and a reconnect
       may overlap the session it replaces. So the pool holds two threads more than the
       number of calls, and the transport's limit on calls at once is set to the same
-      sum.
+      sum. Note of 2026-11-28 (decision 56): the transport's limit is one counter over
+      sessions and calls (R2-SIZE), so by itself it does not keep the two units for
+      sessions. `serve()` counts the calls itself and refuses the call that would be
+      number N+1, where N is the number of calls it serves at once. The pool and the
+      transport's limit stay at N+2.
     - A call that finds no free thread is refused with `RESOURCE_EXHAUSTED`. The
       transport makes that refusal before any code of the SDK runs, so it may carry no
       `aiops-reason`, and the kernel acts on the code alone (decision 10). That
-      behaviour of the pinned `grpcio` has not been run (decision 38).
+      behaviour of the pinned `grpcio` has not been run (decision 38). Note of
+      2026-11-28 (decisions 55 and 56): the second sentence holds on one condition,
+      that `serve()` installs no server interceptor, and it installs none. It is the
+      refusal at the transport's limit of N+2. The refusal of call N+1 is made by the
+      count of `serve()`, in the generated handlers, which is code of the SDK. Both
+      carry `RESOURCE_EXHAUSTED` and no `aiops-reason`, and the kernel acts on the code
+      alone.
     - A contribution object is called from several threads at once, as a provided
       service is in Go (`07:475`). A contribution is a plain method, as `07:1222-1228`
       sketches it. Coroutine contributions are not part of S2b.
@@ -949,7 +1004,11 @@ list against the code and the texts at `bbfd839` shows these facts:
       object, in the order of their registration, and answers `ConfigUpdated`. The
       generated base class has that method and it does nothing by default. An exception
       of one is the error of `ConfigUpdated`, which ends the session and brings a new
-      activation with the committed config (decision 16).
+      activation with the committed config (decision 16). Note of 2026-11-28 (decision
+      59): `UpdateConfig` carries the committed config whole and no `paths`. `serve()`
+      replaces the activation's config with it, merges nothing and calls
+      `config_updated(config)`; the method has no argument `paths`. The rest of the
+      bullet stands.
     - `sdk/remotehost` applies `UpdateConfig` through the hand-off that the plugin's own
       `Define` has, so the plugin's `Volatile` fields read the new values (ADR-063
       decision 49; ADR-034, G13). A plugin whose kept manifest marks no path volatile
@@ -1146,6 +1205,15 @@ list against the code and the texts at `bbfd839` shows these facts:
     - every generated Python module imported under the pinned `protobuf`;
     - the fixture on a plugin that passes and on one that fails an obligation.
 
+    Note of 2026-11-28, with the owner's answers of that date: four cases are read with
+    decisions 54, 56, 57 and 59. The case on a peer whose certificate another key
+    signed, where it reads the log of the refusal, finds the fingerprint on the kernel
+    side and in `sdk/remotehost`, and for `serve()` the line of the library, with the
+    reason and no fingerprint (decision 54). In the case on a full `serve()`, the call
+    that is refused is call N+1, by the count of `serve()` (decision 56). The modes of
+    the case on the instance's user are those of decision 57. In the case on a volatile
+    change, `config_updated` is given the committed config, whole (decision 59).
+
 ### What was not run, and what this ADR depends on
 
 38. **Three things this ADR writes were not run.** Each is run before the code that
@@ -1167,6 +1235,8 @@ list against the code and the texts at `bbfd839` shows these facts:
     - Note of 2026-11-27: the three were run on that date, and the section "Runs of
       decision 38, recorded 2026-11-27" at the end of this ADR holds the versions, the
       command and the result of each row.
+    - Note of 2026-11-28: two rows of the third run were not run on that date. By
+      decision 58 both are run before acceptance, on the modes of decision 57.
 39. **What this ADR sends to an addition that does not exist yet.** None of the
     additions below exists at the commit that proposes this ADR, so no reference into
     them can be checked. Each is a dependency that blocks the code named beside it, and
@@ -1645,6 +1715,10 @@ Note of 2026-11-27: the runs are recorded in the section "Runs of decision 38, r
 2026-11-27". Three rows fail and two were not run, so the ADR is not accepted by that
 record, and the points go to the owner as questions Q15 to Q21 of that section.
 
+Note of 2026-11-28: the owner answered Q15 to Q21 on that date. The section "Owner
+answers of 2026-11-28" records the answers as decisions 54 to 60, and each of decisions
+8, 16, 21, 24, 28, 31, 37, 38, 44 and 45 carries a note of that date.
+
 40. **"One stream" is one connection with one session, and a contribution call is a call
     of the service of its definition** (Q1 (a)). One connection per proxy row carries
     one session stream, for the activation and the callbacks, and each contribution call
@@ -1695,14 +1769,21 @@ record, and the points go to the owner as questions Q15 to Q21 of that section.
     its decision 13 the rows of `remote/`, by the S2b part of ADR-047. The modes have
     not been run under each user mapping. That is the third run of decision 38, and if
     the group does not reach the files under one mapping, question Q5 is asked again for
-    that mapping.
+    that mapping. Note of 2026-11-28: the owner's answer to question Q18 revises this
+    decision to ADR-047 decision 43 (decision 57). The directory is of mode 0755, its
+    three files are of mode 0644, and the unit gives the instance the user
+    `65532:65532` and no group of the host.
 
 45. **The dial rule gains two named entries** (Q6 (a)). When plugin vet refuses a dial
     outside `dialer`, `aiops/remote` may call the TLS dial of decision 28 and
     `aiops/operations` the Unix dial, on the list of ADR-062 decision 14. The proxy does
     not dial through `dialer`, and its injects gain nothing (`03:72`). `07:1405` and
     harness:58 name the two entries beside the first, and ADR-062 decision 14 gains a
-    dated note.
+    dated note. Note of 2026-11-28: the owner's answer to question Q21 takes the entry
+    of `aiops/operations` for the Unix dial out of this decision (decision 60). The dial
+    rule gains one named entry, `aiops/remote` for the TLS dial; `07:1405` and
+    harness:58 name it beside the first, and ADR-062 decision 14 gains a second dated
+    note.
 
 46. **`aiops-sdk` supports one interpreter on one platform at S2b** (Q7 (a)): CPython
     3.12 on Linux x86-64 with glibc, and nothing else until more is read (decision 30).
@@ -1984,6 +2065,7 @@ library, which logs a reason and no fingerprint.
 - Recommended: (a). The form as written holds and every refusal is made; only the log
   of one side differs. (b) weakens the form for one of four cases, and (c) delays the
   ADR for a log line.
+- **Answered 2026-11-28: (a)**, decision 54.
 
 **Q16. Does `serve()` install a server interceptor?** Decision 31, fourth bullet: "The
 transport makes that refusal before any code of the SDK runs". R2-PRE: on `grpcio`
@@ -1998,6 +2080,7 @@ every call.
   every call, and must not block. The code and the empty trailers stay as written.
 - Recommended: (a). It keeps the sentence that the owner accepted and keeps code of the
   SDK off the one accepting thread. No message changes under either option.
+- **Answered 2026-11-28: (a)**, decision 55.
 
 **Q17. How are the sizes of decision 31 held?** Decision 31, third bullet: `serve()`
 serves N calls at once, and the pool and the transport's limit hold two more, for the
@@ -2019,6 +2102,7 @@ with one session open N+1 calls are served, and a reconnecting session, with its
   R2-CANCEL shows why the room matters: a cancelled call keeps its unit until its method
   returns, so after a lost session a full instance would refuse the session that
   replaces it for as long as its methods run. No message changes under either option.
+- **Answered 2026-11-28: (a)**, decision 56.
 
 **Q18. Which modes does the directory of an instance have?** Two answers of 2026-11-27
 differ. Decision 44 (Q5 (a)): the directory of mode 0750, its files of mode 0640, and
@@ -2043,6 +2127,7 @@ the second on the same runtime.
   with the one directory a unit binds. Its option needs nothing of the user mapping and
   gives third-party code no group of the host. Either option was run on rootful Docker
   alone.
+- **Answered 2026-11-28: (a)**, decision 57.
 
 **Q19. The two rows of run 3 that were not run.** Decision 53 has the modes run "under
 each user mapping" before acceptance. R3-PODMAN and R3-SELINUX were not run: the host
@@ -2059,6 +2144,8 @@ label of SELinux.
   33).
 - Recommended: (a). It is what the owner answered in Q14, and the ADR waits for Q15 to
   Q18 in any case. (b) is the way if no such host can be had.
+- **Answered 2026-11-28: (a), in a throwaway virtual machine and on no host of the
+  owner**, decision 58.
 
 **Q20. What does `UpdateConfig` carry?** This is not a result of a run. Decisions 8, 16
 and 31 have `UpdateConfig` carry what the loader's event carries: the committed config
@@ -2078,6 +2165,7 @@ The two cannot both be built as written.
 - Recommended: (a). ADR-034 decision 21 answers a question that set both ways out, and
   this ADR put the payload to the owner in no question. Blocks: the update message, in
   group 2.
+- **Answered 2026-11-28: (a)**, decision 59.
 
 **Q21. Which package holds the Unix dial of the remote protocol?** This is not a result
 of a run. Two texts whose questions the owner answered on 2026-11-27 differ, and no
@@ -2116,6 +2204,7 @@ dial. The two cannot both be built as written.
   ADR-063 decision 23 holds by what a server links and not by what its code leaves
   uncalled. Blocks: the dial functions of the kernel side of the protocol, in group 2,
   and the dial of the suite binary.
+- **Answered 2026-11-28: (a)**, decision 60.
 
 **Also open, and no question of this ADR.** Decision 27 gives `plugin verify` the Unix
 socket with no network, and the owner's answer to question Q15 of the S2b part of
@@ -2125,6 +2214,10 @@ the command that renews the kernel's pair (decision 43) is in no text yet: the S
 of ADR-061 names it as an addition that blocks group 3. The endpoint table of ADR-047
 decision 29 holds no attempt value and does not name `plugin enable` as a writer, which
 decision 42 needs of it; the revision of that part takes both.
+
+Note of 2026-11-28: the owner answered questions Q17 and Q18 of the S2b part of ADR-061
+on that date. The section "Owner answers of 2026-11-28" says where the row of decision
+27 and the two other points of this paragraph stand.
 
 ### Edits made with this record, and left
 
@@ -2148,3 +2241,176 @@ ADR-062 decision 14, the T0 row of `07` §8.1 and harness:58, as the answer to Q
 them; `07:1211`, which restates decisions 25, 26 and 31, read again against the
 revision; and every line that the section "Owner answers of 2026-11-27" leaves to the
 commit that sets this ADR accepted.
+
+## Owner answers of 2026-11-28
+
+The project owner answered questions Q15 to Q21 of the section "Questions for the owner
+after the runs" on 2026-11-28, each with its recommended option, and Q19 with the place
+of its runs named (decision 58). Each decision below names the question it answers.
+Text of 2026-11-27 is not rewritten: a decision that an answer revises keeps its words
+and gains a note of 2026-11-28 that names the decision here, and where the two differ
+the decision here holds. The answers do not accept this ADR. It is accepted after the
+two rows of decision 58 are recorded and this record has been read against the records
+of the same date on the S2b parts of ADR-047 and ADR-061, and until then its status is
+"answers recorded".
+
+54. **A side logs the fingerprint it saw where its own comparison makes the refusal**
+    (Q15 (a)). The clause "the refusing side logs the fingerprint it saw" of decision
+    21 is revised for `serve()`. The kernel side and `sdk/remotehost` log the
+    fingerprint always, and `serve()` logs it in its comparison of decision 21. Where
+    the TLS of `grpcio` refuses the dialler first, the line of the library is the
+    record: it holds the reason and no fingerprint (R1-LOG). The refusal itself is
+    unchanged, and so are the certificate form of decision 20 and the two log lines of
+    a successful connection. The clause stands in the third bullet of decision 21,
+    which the record of the runs and question Q15 cite as the fourth; that bullet
+    gains the note. The case of decision 37 that reads the log of a refusal is read
+    with this decision, by the note at decision 37. No line of `docs/architecture/` is
+    edited.
+
+55. **`serve()` installs no server interceptor** (Q16 (a)). The comparison of decision
+    21 and the bounds of decision 19 are made in the handlers that the SDK generates,
+    as the first run made the comparison in the `Hello` handler. The sentence "The
+    transport makes that refusal before any code of the SDK runs" of decision 31 then
+    holds as written, and its bullet gains the condition by a note. No code of the SDK
+    runs on the one thread that accepts every call (R2-PRE). No message changes.
+
+56. **`serve()` counts the calls itself** (Q17 (a)). The pool and the transport's limit
+    stay at N+2, where N is the number of calls that `serve()` serves at once, 32
+    unless it is given another. `serve()` refuses the call that would be number N+1
+    with `RESOURCE_EXHAUSTED` and no `aiops-reason`, so the kernel still acts on the
+    code alone (decision 10). The two units more are then kept for sessions: the
+    `Session` stream and a reconnect that overlaps it. That refusal is code of the
+    SDK, where the fourth bullet of decision 31 has the transport make it, and by
+    decision 55 the count is kept in the generated handlers. Whether the count keeps
+    the two units free under load was not run; it is run before group 4 merges. The
+    third and the fourth bullet of decision 31 gain a note. No message changes.
+
+57. **The directory of an instance has the modes of ADR-047 decision 43** (Q18 (a),
+    which is also question Q15 of the S2b part of ADR-047). ADR-047 decision 43 holds,
+    and decisions 24 and 44 are revised to it.
+    - `remote/instances/<plugin id>/` is of mode 0755 and its three files are of mode
+      0644. The unit's user is the pair `65532:65532` of ADR-047 decision 30. Its
+      second number is not the group of the site user, and third-party code holds no
+      group of the host.
+    - The key is readable by every user by its mode. On the host the guard is the home
+      and the three directories of mode 0700 above the directory of the instance,
+      `remote/`, `remote/instances/` and `remote/instances/<owner>/`, which `aiopsctl`
+      checks and sets at every install of remote code and every `plugin start`
+      (ADR-047 decision 30).
+    - The cost is the one that ADR-047 decision 43 states: a copy that keeps the modes
+      and lands outside a closed directory exposes the key.
+    - Where this ADR names the modes of decision 24, in decisions 23, 37 and 38, in the
+      row of ADR-047 in decision 39 and in the section "Edits on acceptance", it means
+      these modes. The consequence "one directory whose mode is not 0700 and three
+      files whose mode is not 0600" stands.
+    - The third run of decision 38 stands as the record of the modes it ran, 0750 and
+      0640 through the group. Row 10 of ADR-047 decision 39 is the run of the modes
+      that hold, on rootful Docker.
+    - No line of ADR-047 is edited with this record. The mark at its question Q15 is
+      left to the record of the owner's answers of that date on its S2b part.
+
+58. **Both rows of the third run that were not run are run before acceptance** (Q19
+    (a)). Decision 53 stands as answered. R3-PODMAN, rootless Podman with
+    `--userns=keep-id`, and R3-SELINUX, the binds under SELinux labels, are run as
+    throwaway runs that commit nothing, and the versions, the command and the result
+    of each are recorded in this ADR by a dated note before it is accepted.
+    - Option (a) had the owner provide a host for each row. The owner provides none.
+      The rows are run in a throwaway virtual machine, a Fedora cloud image with
+      SELinux enforcing and rootless Podman, which is built for the run on the local
+      machine and deleted after it.
+    - With decision 57 the rows no longer ask whether a group reaches the files. They
+      show whether the unit's user, `65532:65532`, reads the bound directory of modes
+      0755 and 0644 under a rootless runtime that keeps the user, and under a label of
+      SELinux.
+    - A result that changes a decision comes back to the owner (decision 53). No
+      result is recorded with these answers.
+
+59. **`UpdateConfig` carries the committed config whole** (Q20 (a)). ADR-034 decision
+    21 holds. The proxy holds the committed config through the hand-off of that
+    decision, with each reference resolved again at that commit, and forwards it whole;
+    it does not hear the loader's event. `UpdateConfig` carries it in the form in which
+    `Activate` carries the config, and the instance replaces the config of its
+    activation with it. Decisions 8, 16 and 31 are revised, each by a note.
+    - Decision 8: `UpdateConfig` has the fields `activation` 1 and `config` 2. Option
+      (a) left to the revision whether the field `paths` leaves or stays as a hint. It
+      leaves: the hand-off gives the proxy the committed config and no list of changed
+      leaves (ADR-034, G13 points 13 and 16), so the proxy would compute a hint that
+      nothing reads.
+    - Decision 16: the message no longer carries what the loader's event carries, and
+      the instance merges nothing. The bound of 2 s stands, and so does what follows a
+      `ConfigUpdated` with an error or none inside it: the kernel sends `Bye`, the
+      proxy dials again, and the `Activate` of the new activation carries the committed
+      config.
+    - Decision 31: `serve()` replaces the config of the activation and calls
+      `config_updated(config)` of each live contribution object, in the order of their
+      registration; the method has no argument `paths`. `sdk/remotehost` commits the
+      forwarded config, whole, on the fiber of the activation, which applies it through
+      the hand-off of the plugin's own `Define` (ADR-034, G13 point 16).
+    - The dated note at ADR-034 G13 point 10 on `UpdateConfig` stands. The item of
+      ADR-034 that left this point to question Q20 gains a note that names this
+      decision. `07` names `UpdateConfig` and no field of it, so no line of
+      `docs/architecture/` is edited.
+
+60. **The kernel side of the protocol exports the TLS dial and no Unix dial** (Q21
+    (a)). ADR-044 decision 45 holds, and decision 28 is revised to it.
+    - The package of the module `sdk/remote` exports one dial function, the TLS dial,
+      and serves a connection that its caller made (ADR-044 decision 32). The check
+      runner brings its own connection from `internal/remotesuite`, which alone holds
+      the Unix dial and which the import check and the builder refuse in every server
+      graph (ADR-044 decisions 33 and 45).
+    - That package is no plugin, and the operations plugin makes no dial of the
+      protocol. So the second named entry of decision 45, `aiops/operations` for the
+      Unix dial, leaves, and `aiops/remote` keeps its entry for the TLS dial.
+    - The dial rule then has two named entries where the answer of 2026-11-27 gave it
+      three: the `net.DialUnix` of the operations plugin for the reload socket
+      (ADR-062 decision 14), and the TLS dial of `aiops/remote`. ADR-062 decision 14
+      gains a note of 2026-11-28, and the T0 row of `07` §8.1 (`07:1405`) and
+      harness:58 name the two entries.
+    - Decision 27 and the first row of its table stand: one Unix socket, opened by the
+      check runner alone.
+    - ADR-044 decision 45, whose note of 2026-11-27 put the difference to the owner,
+      gains a note with the answer.
+
+**Edits made with this record.** In this ADR: the status; the mark at each of Q15 to
+Q21; the notes of 2026-11-28 at decisions 8, 16, 21, 24, 28, 31, 37, 38, 44 and 45, at
+the head of the section "Owner answers of 2026-11-27" and after the paragraph "Also
+open"; and this section. In other documents: the dated note at ADR-062 decision 14; the
+T0 row of `07` §8.1, reworded in place with no line added or removed; harness:58,
+amended and marked; the dated note at ADR-044 decision 45; and the note in the item of
+ADR-034 that names question Q20 (decision 59). Two lines that state where this ADR
+stands are brought to this record: its row in the ADR table of `08` §3, and the
+sentence on it in the list of amendments at the head of the plugin record.
+
+**The row of `plugin verify` in decision 27 is not revised with this record.** The
+owner answered question Q17 of the S2b part of ADR-061 on 2026-11-28 with (a): its
+decision 65 holds, and `plugin verify` reaches the container as a unit over mutual TLS.
+Decision 27 here, ADR-044 decision 38 and the lines of ADR-020 that restate them are
+then revised, and this ADR gains the dial of the check runner with a throwaway pair.
+The answer has a condition, which is run first: that a process on the host reaches a
+container on an internal network. If the run shows that the answer cannot be built as
+worded, the point comes back to the owner and nothing is revised. Until that run the
+row of decision 27, its case in decision 37 and the row of ADR-020 in decision 39
+stand as text of their date.
+
+Left to later commits, each named:
+
+- the record of R3-PODMAN and R3-SELINUX, by a dated note in this ADR (decision 58);
+- the revision of decision 27 for `plugin verify`, after the run of its condition, or
+  the point back with the owner (the paragraph above);
+- the commit that sets this ADR accepted, after both: the status, and every line that
+  the section "Owner answers of 2026-11-27" leaves to it;
+- the run of the count of decision 56 under load, before group 4 merges;
+- the form of the command that renews the kernel's pair (decision 43), which is still
+  in no text: an addition to the S2b part of ADR-061, which blocks group 3;
+- the attempt value of a line of the endpoint table and `plugin enable` as its writer
+  (decision 42), with the revision of ADR-047 decision 29. By the owner's answer of
+  2026-11-28 to question Q18 of the S2b part of ADR-061, that decision also carries the
+  rule on when `sidecars-static` reads the table again.
+
+Not edited. The row of `serve()` in `07` §6 (`07:1211`) restates of decision 31 only
+that `serve()` is synchronous and runs calls on a pool of threads, and stands. `00:412`
+and `00:413` state no mode and no group, and stand. The note of 2026-11-27 at ADR-063
+decision 9 follows ADR-044 decision 45, and stands. Questions Q5 and Q6 and decisions
+44 and 45 keep the text of 2026-11-27, with the notes above. The lines of the S2b parts
+of ADR-047 and ADR-061 that cite this ADR as not accepted stand: it is not accepted. An
+option that the owner did not choose edits nothing.

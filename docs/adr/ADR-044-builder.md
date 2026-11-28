@@ -2027,7 +2027,12 @@ decision here settles it. Decisions 1 to 39 stand.
     cannot both be built as written. The difference is put to the owner as question Q21
     of ADR-041 (ADR-063 decision 33), before the dial functions of the kernel side and
     the dial of `internal/remotesuite` are built. No line of either text is edited for
-    it: an option the owner has not chosen edits nothing.
+    it: an option the owner has not chosen edits nothing. Note of 2026-11-28: the owner
+    answered question Q21 of ADR-041 with (a). This decision holds, and ADR-041 revises
+    its decisions 28 and 45 to it (its decision 60): the kernel-side package exports
+    the TLS dial alone, the check runner brings its own connection from
+    `internal/remotesuite`, and the named entry of `aiops/operations` for the Unix dial
+    leaves the note at ADR-062 decision 14, the T0 row of `07` §8.1 and harness:58.
 
 **Edits made with this record.** The commit that records these answers makes the edits
 that "Edits on acceptance of the S2b part" names for the options chosen: the status of
