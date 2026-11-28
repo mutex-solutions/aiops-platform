@@ -2551,8 +2551,11 @@ holds N calls. Four points keep the ADR open, and each is the owner's (decision 
 `<id>` is the plugin id of the throwaway home, `<dir>` is `<home>/remote/instances/<id>`,
 and `<image>` is the image above by its digest. Unless a row says otherwise, a container
 ran with `--network none --cap-drop ALL --security-opt no-new-privileges`, and `<run>`
-stands for those flags. Rows whose name holds `PODMAN` are the row R3-PODMAN of the
-third run, and rows whose name holds `SELINUX` the row R3-SELINUX.
+stands for those flags. Rows whose name starts with `R3-PODMAN` are the row R3-PODMAN
+of the third run, and rows whose name starts with `R3-SELINUX` the row R3-SELINUX;
+R3-SELINUX-PODMAN is of the second, on rootful Podman. R3-OTHER-USER and
+R3-OTHER-INSTANCE are of neither: they were run on the same machine for the guard of
+decision 57.
 
 | Row | What was run | Versions | Command | Result | Observed |
 |---|---|---|---|---|---|
