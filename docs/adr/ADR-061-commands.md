@@ -3703,8 +3703,8 @@ ADR-020 are not edited.
 
 Left to the commit that records the owner's answer to Q24: decision 65 as the answer
 has it, and, in the three other ADRs, the lines that the chosen option names. Left as
-the sections above list them: the answers to questions Q20 to Q23, on which decisions
-70 and 71 wait.
+the section "Additions proposed 2026-11-28" below lists them: the answers to questions
+Q20 to Q23, on which decisions 70 and 71 wait.
 
 ### Additions proposed 2026-11-28
 

@@ -862,7 +862,7 @@ edited for this point.
   the order of decision 33 lets an instance start on a network that is not the network
   of decision 32 (Q16). The owner answered both on 2026-11-28, with the two smaller
   points of the runs, Q17 and Q18, each with its recommended option; the section "Owner
-  answers of 2026-11-28" at the end of this part records the four answers as decisions
+  answers of 2026-11-28" records the four answers as decisions
   49 to 52. Its decision 53 adds to the endpoint table of decision 29 what the owner's
   answer of the same date to question Q18 of the S2b part of ADR-061 puts there. That
   record does not mark the part accepted, and it puts one question to the owner, Q19,
