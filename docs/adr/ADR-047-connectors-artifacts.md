@@ -4,8 +4,10 @@
   answered all seven questions on the same date with the recommended option of each; the
   section "Owner answers of 2026-11-23" records them as decisions 16 to 22. The rest of
   ADR-047 stays for S8a start, as the scope below says.
-- S2b part: **proposed; answers recorded 2026-11-27 and 2026-11-28, and the runs of
-  decision 39 recorded 2026-11-27, all ten rows holding.** The section "S2b part" at the
+- S2b part: **proposed; answers recorded 2026-11-27 and 2026-11-28, the runs of
+  decision 39 recorded 2026-11-27, all ten rows holding, and the runs after the answers
+  recorded 2026-11-28; it waits for the owner on questions Q19 to Q23.** The section
+  "S2b part" at the
   end of this file holds it, with decisions 23 to 41 and questions Q8 to Q14 (ADR-063
   decisions 2 and 34). The owner answered the seven questions on 2026-11-27 with the
   recommended option of each, Q11 on its condition; the section "Owner answers of
@@ -17,8 +19,13 @@
   49 to 52, and its decision 53 adds to the endpoint table what the owner's answer of
   the same date on the S2b part of ADR-061 puts there. That record does not mark the
   part accepted. It puts one question to the owner, Q19, which is needed before
-  `sidecars-static` merges. Until the owner accepts the part, nothing above changes but
-  the two dated notes that the answers to Q8 and Q9 add, at decisions 1 and 14.
+  `sidecars-static` merges. The section "Runs after the answers of 2026-11-28" records
+  the runs that those answers left: the check of the systemd unit holds, and the bound
+  of decision 51 is 5 s. The same runs raise four questions, Q20 to Q23, on the label
+  of a bind under SELinux, on the group of an instance under rootless Podman and on a
+  unit on Podman. The part waits for the owner on Q19 to Q23. Until the owner accepts
+  the part, nothing above changes but the two dated notes that the answers to Q8 and
+  Q9 add, at decisions 1 and 14.
 - Scope: the S2a part of ADR-047 only, "the pack artifact form and the insert-only rule of
   gate check 8" (`00:781`; `08:1178`; community:438), with every point ADR-060 decision 33
   lists for it.
@@ -840,8 +847,9 @@ edited for this point.
 
 ## S2b part: the artifact of remote code, its rows of the home and its network
 
-- Status: **proposed; answers recorded 2026-11-27 and 2026-11-28, and the runs of
-  decision 39 recorded 2026-11-27, all ten rows holding.** This part is an addition to
+- Status: **proposed; answers recorded 2026-11-27 and 2026-11-28, the runs of decision
+  39 recorded 2026-11-27, all ten rows holding, and the runs after the answers recorded
+  2026-11-28; it waits for the owner on questions Q19 to Q23.** This part is an addition to
   ADR-047, written as ADR-063 decision 2 has the S2b parts of accepted ADRs written, and
   it is accepted before the code it governs merges into `main`. The owner answered the
   seven questions, Q8 to Q14, on 2026-11-27, each with its recommended option, Q11 on
@@ -858,8 +866,19 @@ edited for this point.
   49 to 52. Its decision 53 adds to the endpoint table of decision 29 what the owner's
   answer of the same date to question Q18 of the S2b part of ADR-061 puts there. That
   record does not mark the part accepted, and it puts one question to the owner, Q19,
-  which is needed before `sidecars-static` merges. Decisions 1 to 22 stand as accepted;
-  where a decision of this part adds to one of them, it names it.
+  which is needed before `sidecars-static` merges. The section "Runs after the answers
+  of 2026-11-28" at the end of this part records the runs that those answers left. The
+  systemd unit's check of an existing network (decision 50) holds in a service manager,
+  and the bound of decision 51 is read: 5 s. The modes of decision 43 hold under
+  rootless Podman and under SELinux enforcing once the bind carries a label. Four
+  results come back to the owner as questions Q20 to Q23: the bind forms of decision
+  39 cannot carry that label on Docker and Compose (Q20), the `z` option of decision
+  14 relabels the credential directories with the home (Q21), under rootless Podman
+  with the user kept the instance holds the site user's group (Q22), and on Podman
+  the internal network gave the host an address in it, in one reading (Q23). The part
+  is marked accepted after the owner's answers to Q19 to Q23 are recorded. Decisions 1
+  to 22 stand as accepted; where a decision of this part adds to one of them, it names
+  it.
   - No behaviour of a container runtime was run for the proposal of this part, and the
     project pins no container runtime yet. Decision 39 lists what was read, at which
     version, and what a run has to show; question Q14 asks whether the part is accepted
@@ -1980,7 +1999,11 @@ here settles it.
     commands of `aiopsctl`. The user of a unit stays the pair `65532:65532` of decision
     30, and its second number is not the group of the site user. ADR-041 takes this
     answer for the directory of an instance (decision 40), and row 10 of decision 39 is
-    run under it.
+    run under it. Note of 2026-11-28, after the runs of that date: the modes and the
+    guard hold under rootless Podman and under SELinux enforcing once the bind carries
+    a label. Under rootless Podman with `--userns=keep-id` the runtime adds the site
+    user's group to the instance, which is question Q22 of the section "Runs after the
+    answers of 2026-11-28"; the label is its questions Q20 and Q21.
 
 44. **At S2b a unit's instance is reached by a kernel container only** (Q10 (a)), on the
     compose target and on the systemd target alike: the systemd unit of ADR-063 decision
@@ -2321,7 +2344,10 @@ question they answer, and decision 53 writes what that fifth answer puts into de
     rows of the third run of ADR-041 decision 38, and by the owner's answer to question
     Q19 of ADR-041 they are run before that ADR is accepted. Their record is ADR-041's,
     and a row that these modes do not pass comes back to the owner (ADR-041 decision
-    53).
+    53). Note of 2026-11-28, after the runs of that date: both rows were run and the
+    modes pass them. The words "the instance holds no group of the host" do not hold
+    under rootless Podman with the user kept, and they stand as written until the
+    owner answers question Q22 of the section "Runs after the answers of 2026-11-28".
 
 50. **A network of the unit name that already exists is checked before anything runs on
     it, on both targets** (Q16 (a)).
@@ -2340,7 +2366,10 @@ question they answer, and decision 53 writes what that fifth answer puts into de
       exists. That a unit can make this check in the service manager was not run, and
       the systemd job of ADR-063 decision 50 shows it. The members of the network are
       read by `plugin start`, which the operator runs after `systemctl enable --now`
-      (decision 33).
+      (decision 33). Note of 2026-11-28, after the runs of that date: the check was
+      run in a unit of a system's service manager and holds (rows N-UNIT and N-BAD-NET
+      of the section "Runs after the answers of 2026-11-28"). The systemd job still
+      proves it on the rendered unit.
     - An instance that `plugin start` or the systemd unit starts is then never on a
       network of the unit name that gives it a route out or an address of the host,
       which ADR-063 decision 24 needs and which the written order did not give (rows 7
@@ -2364,6 +2393,25 @@ question they answer, and decision 53 writes what that fifth answer puts into de
     step C4 of the exit, which follows step C3, rests on that. No written line changes:
     ADR-063 decision 27, decision 15 and decision 45 stand. What `plugin start` prints
     while it waits is the S2b part of ADR-061's. This adds to step 4 of decision 33.
+    Note of 2026-11-28 (the reading, recorded in the section "Runs after the answers of
+    2026-11-28", rows G-SRC to G-GRPC): the bound is 5 s.
+    - It was read in `net/dnsclient_unix.go` of Go `go1.26.8`, the toolchain that
+      `go.mod` names: `tryUpdate` of the resolver's configuration checks `resolv.conf`
+      again at most once in 5 s, and only a lookup makes the check. The released
+      binary is built with `CGO_ENABLED=0` and always holds that resolver.
+    - The 5 s count from the rewrite of `resolv.conf`, which the connect of the
+      runtime makes before it returns. So `plugin start` waits a fixed 5 s after the
+      connect that takes the kernel container out of the no-network mode has
+      returned, and then returns. The lag itself is anywhere from nothing to just
+      under 5 s, by when the process last looked a name up; the 2.6 s of row 6 of
+      decision 39 is one sample.
+    - The hosts file and `nsswitch.conf` have checks of 5 s of their own and do not
+      hold the name of an instance.
+    - The wait covers the standard resolver. It does not cover a channel of `grpc-go`
+      that is already in the backoff of its `dns` resolver, which was read and not
+      run. A generation that is submitted after `plugin start` has returned dials
+      after the wait and does not meet that case.
+    - The value is that of `go1.26.8`.
 
 52. **A stopped container that the fragment made is started again or replaced** (Q18
     (a)). Step 2 of decision 33 reads "started again or replaced" where it says
@@ -2515,3 +2563,327 @@ Left to later commits, each named:
   points to this part, decision 29 leaves the last two to the row, and no text fixes
   them yet. They are an addition to this part, due before `sidecars-static` and the
   proxy merge.
+
+Note of 2026-11-28, after the runs of that date: the section "Runs after the answers of
+2026-11-28" holds the bound of decision 51 and the run of the systemd unit's check of
+decision 50, the two points that this record left to a reading and to a run. It also
+holds four questions that the runs raise, Q20 to Q23.
+
+### Runs after the answers of 2026-11-28
+
+Note of 2026-11-28. Two throwaway runs were made on that date, after the owner's answers
+of the same date, on the tree of commit `84c7deb`. They committed nothing, and every
+machine, container, network, image and file that they made was removed. The first was
+made in the throwaway virtual machine of ADR-041 decision 58 and shows what decision 50
+left unrun: that the systemd unit can check a network that it finds, in a service
+manager. The second is the reading that decision 51 asks for, the bound of the Go
+resolver, with runs that reproduce it. A row "holds" when the run showed what this part
+writes, "fails" when it showed otherwise, and nothing is inferred for what was not run.
+The rows of the first run that bear on the modes of the directory of an instance are
+recorded in ADR-041, in its section of the same name, and are cited here by their names
+there.
+
+**The part is not marked accepted by this record.** The owner's answer to Q16 can be
+built on the systemd target as worded, and the answer to Q17 can be built as worded:
+the bound is 5 s. The modes of decision 43 hold under rootless Podman and under SELinux
+enforcing once the bind carries a label (ADR-041, rows R3-PODMAN-43 and
+R3-SELINUX-ROOTLESS). Five points keep the part proposed, and each is the owner's:
+
+- question Q19, on the lookup of `sidecars-static`, which is not answered yet;
+- the label of SELinux cannot be written into the bind forms that the runs of decision
+  39 recorded, so an instance on an enforcing host whose runtime confines cannot read
+  its key as those forms stand: question Q20;
+- the `z` option of decision 14 on the kernel container's bind of the home relabels
+  the credential directories with the rest of the home: question Q21;
+- the words "no group of the host" of decision 43 do not hold under rootless Podman
+  with the user kept: question Q22, which is also question Q23 of ADR-041;
+- on Podman the internal network of a unit gave the host an address in it, in one
+  reading: question Q23.
+
+#### Versions and stand-ins
+
+- **The first run** used the machine that the section "Runs after the answers of
+  2026-11-28" of ADR-041 describes: Fedora Cloud Base 45 under QEMU with KVM, SELinux
+  enforcing with the targeted policy, kernel 7.2.11-300.fc45, and systemd 262-3 as the
+  first process of the machine, where row 9 of decision 39 ran systemd 259 as the
+  first process of a container. Docker Engine and client 29.10.0, containerd 2.4.2 and
+  runc 1.5.3, with `selinux-enabled` set in the machine and with the default network
+  settings of the daemon, not the flags of the S2a exit. Podman 6.1.3 with netavark
+  2.1.0 and aardvark-dns 2.1.0, for the last row.
+- **The instance** of the first run is a stand-in: an image built in the machine from
+  `python@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b`, with
+  a listener on port 7443 that reads its key at its start, run by its local digest.
+  The pinned registry was not used. The unit name is the form of decision 46 for an id
+  made for the run.
+- **The unit** is the unit of row 9 with one line more, rendered by hand: no template
+  exists yet. `Requires=docker.service` and `After=docker.service`; a first
+  `ExecStartPre=-/usr/bin/docker network create --internal --ipv6=false -o
+  com.docker.network.bridge.gateway_mode_ipv4=isolated -o
+  com.docker.network.bridge.gateway_mode_ipv6=isolated <unit>`, whose failure is
+  ignored; a second `ExecStartPre`, the check; `ExecStart=/usr/bin/docker run --rm
+  --name <unit> --network <unit> --user 65532:65532 --cap-drop ALL --security-opt
+  no-new-privileges -v <home>/remote/instances/<id>:/aiops/identity:ro,Z <image by its
+  digest>`; `ExecStop=/usr/bin/docker stop <unit>`; no `Restart=`; and
+  `WantedBy=multi-user.target`.
+- **The check** is a shell line. It reads `docker network inspect --format
+  '{{.Driver}}/{{.Internal}}/{{.EnableIPv6}}/{{range $k, $v :=
+  .Options}}{{$k}}={{$v}};{{end}}/{{range .IPAM.Config}}{{if
+  .Gateway.IsValid}}{{.Gateway}}{{end}}{{end}}' <unit>` and compares the result with
+  the one string of a bridge network that is internal, has IPv6 off, has exactly the
+  two gateway-mode options and has no gateway. On a difference it writes `network
+  <unit> is not the network of the unit: <what it read>` and exits 1.
+- **The second run** was made on the local machine: Ubuntu 26.04.1 on Linux 7.0.0-44,
+  Docker Engine 29.10.1, rootful, where the runs of decision 39 used 29.10.0, under
+  AppArmor and without SELinux. The source read is the package `net` of Go `go1.26.8`,
+  the toolchain that `go.mod` names. The probe is a Go program on the standard library
+  alone, built with the environment and the flags of `internal/builder/build.go`:
+  `CGO_ENABLED=0` and `go build -trimpath -tags=grpcnotrace`. It ran in the root
+  filesystem of the Python image above, Debian 13 with `hosts: files dns` in its
+  `nsswitch.conf`, and not in the site image that `dist build` writes.
+
+#### The systemd unit and the check of its network (decision 50)
+
+| Row | What was run | Versions | Command | Result | Observed |
+|---|---|---|---|---|---|
+| N-UNIT | A unit of the machine's service manager, copied by root, creates the network where it is absent, checks the network that it finds, and starts the instance | systemd 262-3 as the init of Fedora 45; Docker Engine 29.10.0 with `selinux-enabled` | `install -o root -g root -m 0644 <home>/remote/units/<id>/<unit>.service <the unit directory of the service manager>`; `systemctl daemon-reload`; `systemctl enable --now <unit>.service` | holds | `systemd-analyze verify` had no complaint. The file in the home is the site user's, of mode 0600 and type `user_home_t`; root's copy is `root:root`, of mode 0644 and type `systemd_unit_file_t`. With no network of the name: `enable --now` exited 0, and the unit was active and enabled. The network was internal, with IPv6 off, both gateway modes `isolated`, a subnet, no gateway and one member. The container ran from the digest of the image with the user `65532:65532`, every capability dropped, no privilege gain and one read-only bind of mode `ro,Z`; the host saw its first process as `65532:65532` with no effective capability, `NoNewPrivs` 1 and a label `container_t` with a category pair; and the journal held the line of the instance that it read its key. With a network of the unit's settings made by hand beforehand: the create line failed with `already exists`, which the unit ignores, the check passed and the unit started. With a stand-in of the kernel container attached, started with `--network none`, detached from `none` and connected, the stand-in dialled the instance; `systemctl restart` with that member on the network passed the check and started, and the stand-in dialled again. The check needs a shell in the unit, and the unit name is written into the shell line. Not tested: the time between the check and `docker run`, which names the network by its name again. The unit does not read the members of the network |
+| N-BAD-NET | The unit fails to start on a network of its name that exists before the start and is not the network of decision 32: one that is not internal; one that is internal in the default gateway mode, where the host holds the gateway address; and one that is `isolated` for IPv4 alone, with IPv6 on. Contrast: the unit of row 9 as recorded, with no check | systemd 262-3; Docker Engine 29.10.0 | `docker network create <unit>`; `systemctl start <unit>.service`; `systemctl show <unit>.service -p ActiveState -p SubState -p Result`; `docker ps -a --filter name=<unit>`; `journalctl -u <unit>.service`. The same after `docker network create --internal <unit>`, and after `docker network create --internal --ipv6 -o com.docker.network.bridge.gateway_mode_ipv4=isolated <unit>`. Contrast: the unit without its second `ExecStartPre` line, on the first two networks, then dials from inside the instance | holds | All three: `systemctl start` exited 1, the unit was `failed` with the result `exit-code`, no container was created and `ExecStart` did not run. The journal held the reason each time, the line of the check with what it read: a network that is not internal, with a gateway; one that is internal with no option and a gateway; and one that is internal with IPv6 on, the one option and a gateway for IPv6; then `Control process exited, code=exited, status=1/FAILURE` and `Failed to start`. Contrast, the unit with no check: on the plain network it started, and from inside the instance a listener on the address of the machine, a listener on the address of the default bridge and a public address on port 443 all connected, and a public name resolved; on the internal network in the default gateway mode it started and connected to a listener of the host on the gateway address of the network. This is the gap that question Q16 names, shown on a real init, and the check closes it |
+| N-NO-ROUTE | The instance that the unit starts on a good network has no route out (decision 32, points 1 to 3) | Docker Engine 29.10.0 with its default network settings | A listener of the host on every address, port 8099. `docker exec <unit> python -I probe.py` with dials to its own name on port 7443, to the address of the default bridge and the address of the machine on port 8099 and to a public address on port 443, and lookups of its own name, of a public name and of `host.docker.internal`; the addresses of the bridge of the network on the host. Control: the same dials from a container on a network that is not internal | holds | Inside the instance the one route is its own subnet with no gateway, and `resolv.conf` names the resolver of the runtime. Its own name on port 7443 connected, and its name resolved. The address of the default bridge, the address of the machine and the public address: `Network is unreachable`. The public name and `host.docker.internal`: no answer, `Temporary failure in name resolution`. The bridge of the network held no IPv4 address on the host and one IPv6 link-local address, as row 4 of decision 39 recorded. Control: from a container on a plain network the same three dials connected and the public name resolved, and the host reached its own listener |
+| N-UNIT-SELINUX | The same unit with the bind in the `--mount` form that rows 4 and 9 of decision 39 recorded, on a daemon that confines; and with the directory labelled beforehand | systemd 262-3; Docker Engine 29.10.0 with `selinux-enabled` | The unit with `--mount type=bind,src=<home>/remote/instances/<id>,dst=/aiops/identity,readonly` in its `ExecStart`; `systemctl start <unit>.service`. Then `chcon -R -t container_file_t -l s0 <home>/remote/instances/<id>` and `systemctl start` again | fails | With the `--mount` form the check passed and the container started; the instance could not read its key and exited 3. The journal held its line with `Permission denied`, the unit ended `failed`, and the audit log held `avc: denied { read } for comm="python" name="key.pem" scontext=system_u:system_r:container_t:s0:c289,c971 tcontext=unconfined_u:object_r:user_home_t:s0 tclass=file`. `systemctl start` itself exited 0, since the failure comes after the start. With the directory labelled beforehand the same unit started and read the key, and with the form `-v ...:ro,Z` of N-UNIT it started and read the key. The form that the runs of decision 39 recorded for the unit does not work on an enforcing host whose runtime confines |
+| N-PODMAN | Outside decision 50, one reading: whether an internal network of Podman gives the host an address that an instance reaches (decision 32, point 2) | Podman 6.1.3, netavark 2.1.0, aardvark-dns 2.1.0, rootful and rootless | `sudo podman network create --internal <network>`; `sudo podman run --rm --network <network> <image> python -I -c <dials to the gateway address of the network and to the address of the machine on port 8099, and to a public address on port 443>`, with a listener of the host on every address, port 8099; the same without `sudo` | fails | Both networks reported `internal`, the driver `bridge`, their resolver on and a gateway address. Rootful: the dial to the gateway address connected to the listener of the host; the address of the machine and the public address failed with `Network is unreachable`. Rootless: the gateway address answered `Connection refused`, since that address exists in the network namespace of the rootless runtime, where the listener of the host is not; the two other dials failed with `Network is unreachable`. The network that Podman made from the compose fragment of the run reported the same, a gateway address with its resolver on, so the two gateway-mode options of the fragment change nothing on Podman (ADR-041, row R3-PODMAN-TARGETS). No setting of Podman that removes the address was looked for |
+
+#### The bound of the resolver (decision 51)
+
+`<unit>` is the network and the instance of the run, made with the options of row 4 of
+decision 39 and the flags of the unit. Each run row repeats this twelve times: `docker
+run -d --network none --user <uid of the site user>:<its gid> -e MODE=<mode> ... <image>
+/probe <unit>`, then `docker network disconnect none <container>` and `docker network
+connect <unit> <container>`, as row 6 of decision 39.
+
+| Row | What was run | Versions | Result | Observed |
+|---|---|---|---|---|
+| G-SRC | The bound, read in the source of the Go resolver: `net/dnsclient_unix.go`, `dnsconfig_unix.go`, `dnsconfig.go`, `conf.go`, `hosts.go`, `nss.go` and `cgo_stub.go` | Go `go1.26.8`, the toolchain of `go.mod`; the files are the same bytes in the installed toolchain and in the module `golang.org/toolchain@v0.0.1-go1.26.8.linux-amd64` | holds | The process first reads `resolv.conf` at its first lookup, not at its start (`resolverConfig.init`). Only a lookup reads it again: `getSystemDNSConfig` calls `tryUpdate`, which returns at once if the last check was less than 5 s ago (`dnsclient_unix.go:402`), and otherwise reads the modification time of the file and parses the file again only if that time changed. There is no timer and no watch of the file. The option `no-reload` of `resolv.conf` turns the re-read off. So a lookup that starts less than 5 s after the last check uses the old servers, and every lookup that starts 5 s or more after the rewrite uses the new ones; one that races the lookup that reloads may still take the old configuration. A process that made no lookup in the 5 s before the rewrite has no lag. A lookup already in flight keeps its configuration, for up to 5 s an attempt and two attempts a server and a search name if the old server is silent. The hosts file has its own expiry of 5 s (`hosts.go`), and `nsswitch.conf` its own check of 5 s (`nss.go:59`). The longest time after the rewrite at which a lookup can still start on the old configuration is just under 5 s |
+| G-BUILD | Which resolver the released binary holds | `internal/builder/build.go` at `84c7deb`; Go `go1.26.8` | holds | The builder sets `CGO_ENABLED=0` and the one tag `grpcnotrace`, and no tag `netgo`. With cgo off `net/cgo_stub.go` is compiled, so the process always uses the resolver written in Go, with the order files and then DNS, and `GODEBUG=netdns=cgo` is ignored. The probe built with the same environment and flags reports `go1.26.8`, `-tags=grpcnotrace`, `-trimpath=true` and `CGO_ENABLED=0` and is a static executable |
+| G-POLL | Row 6 of decision 39 again: a Go process that looks the name of the instance up every 20 ms from its start, in a container started with `--network none` and then attached to the network of decision 32; twelve repeats, the attach after 1 to 9 s chosen at random | The probe above; Docker Engine 29.10.1 | holds | 12 of 12 resolved with no restart. The first lookup that succeeded came 1.87 to 4.62 s after the connect returned: 1.87, 1.94, 2.40, 3.11, 3.16, 3.50, 3.56, 3.98, 4.00, 4.29, 4.40 and 4.62 s. The 2.6 s of row 6 is one sample of this spread. In every repeat the success came 5.005 to 5.033 s or 10.006 to 10.033 s after the first lookup of the process, which is the check of `tryUpdate`. Started with no network, `resolv.conf` named the upstream server of the host; the connect rewrote it to the resolver of the runtime, 32 to 44 ms after the connect started and before it returned, and the connect took 76 to 110 ms. Lookups on the old configuration failed in under 3 ms with `connect: network is unreachable` |
+| G-PRIME | The worst case of the bound: one lookup just before the attach, and none after it until the connect has returned; twelve repeats | As G-POLL | holds | 12 of 12: the first success came 4.909 to 4.935 s after the connect returned, 4.958 to 4.982 s after the rewrite of `resolv.conf`, and 5.001 to 5.019 s after the one earlier lookup. About 240 lookups failed in between, each in under 2 ms. This is the bound as read: just under 5 s after the rewrite |
+| G-IDLE | A process that makes no lookup before the attach; twelve repeats | As G-POLL | holds | 12 of 12: the first lookup succeeded, 6 to 14 ms after the connect returned and 49 to 92 ms after the rewrite. There is no lag: the process reads `resolv.conf` for the first time at that lookup |
+| G-GRPC | What a channel of `grpc-go` adds to the standard resolver when its first resolution falls inside the window | `google.golang.org/grpc` v1.82.1, read in `internal/resolver/dns/dns_resolver.go`, `backoff/backoff.go` and `dialoptions.go` | not run | Read alone. `grpc.NewClient` takes the `dns` scheme by default. The resolver of that scheme resolves again after a failure on its own backoff, from 1 s by a factor of 1.6 to 120 s, and no sooner than 30 s after a success. ADR-041 names no target scheme for the dial of the proxy. A channel whose first resolution failed inside the 5 s can therefore succeed later than 5 s after the attach. A wait in `plugin start` before any dial avoids the case |
+
+#### What the results touch
+
+- **Decision 50, the systemd unit: no change.** A unit of the system's service manager
+  checks a network that it finds before it runs the container, and fails to start on
+  one that is not the network of decision 32, with the reason in the journal and no
+  container created (N-UNIT, N-BAD-NET). The instance that it starts on a good network
+  has no route out (N-NO-ROUTE). The point that decision 50 left to the systemd job is
+  shown on a real init; the job still proves it on the rendered unit.
+- **Decision 50 and ADR-063 decision 25.** The check of the run is a shell line with
+  the unit name written into it. ADR-063 decision 25 has every input of a template
+  written by an encoder and never spliced into text. The name that the line holds is
+  the derived name of decision 46 and no input of the artifact as it stands. Whether a
+  shell line with that name fits ADR-063 decision 25, or the check takes another form,
+  is for the text of the template in the S2b part of ADR-061; it is named here so that
+  the template does not take the line of the run unread.
+- **Decision 51: the bound is 5 s.** It is the interval at which the Go resolver of
+  the pinned toolchain checks `resolv.conf` again, and only a lookup makes the check
+  (G-SRC). The released binary always holds that resolver (G-BUILD). The lag after
+  the first attach is anywhere from nothing to just under 5 s, by when the process
+  last looked a name up (G-POLL, G-PRIME, G-IDLE), so the 2.6 s of row 6 is a sample
+  and no bound. The decision gains the value by a dated note, and no option of Q17 is
+  reversed. A poll in place of the fixed wait would need a new way to ask the kernel
+  process to look a name up, and the fixed wait is already the worst case.
+- **Decision 30 with decision 14, the label of the bind** (ADR-041, rows
+  R3-SELINUX-ROOTLESS and R3-SELINUX-FORMS; N-UNIT-SELINUX). Under SELinux enforcing,
+  on a runtime that confines, the instance reads its directory only when the bind or
+  the directory carries a label, as decisions 14 and 30 write. The forms in which the
+  runs of decision 39 wrote the bind cannot carry it on Docker 29.10.0 and Compose
+  5.8.1: `docker run --mount` has no option for it, and the long form of Compose drops
+  `selinux: Z`, with no message, when `create_host_path: false` is set. As recorded,
+  an instance on such a host cannot read its key. Question Q20.
+- **Decision 14, "the `z` option", with decision 43** (ADR-041, row
+  R3-SELINUX-RENDER). The bind of the home whole with `:z` can be built, and the
+  kernel reads. Its effect is in no text: it relabels every file of the home to the
+  shared label, the kernel's key, the pins and every instance's directory among them,
+  so SELinux then separates no instance from another's key or from the kernel's, and
+  a private label of a running instance is removed. The same bind with `:Z` makes
+  every running instance lose its key until it is started again. Question Q21.
+- **Decision 43 and decision 49, "no group of the host"** (ADR-041, rows R3-PODMAN-43
+  and R3-PODMAN-TARGETS). Under rootless Podman with `--userns=keep-id` the runtime
+  adds the site user's group to the process of the instance. The read is not
+  affected, and the group reached nothing. Question Q22.
+- **Decisions 14, 32 and 33, a unit on Podman** (N-PODMAN; ADR-041, row
+  R3-PODMAN-TARGETS). Decision 14 has rootless Podman with the user kept qualify for
+  the kernel container, and decision 33 has the kernel and the instances be
+  containers of one runtime. On Podman 6.1.3 an internal network has a gateway
+  address, a rootful instance connected to a listener of the host on it, and the two
+  gateway-mode options of the template change nothing. By decision 36 `plugin start`
+  refuses that network, so as the texts stand a site whose kernel container runs on
+  Podman can start no unit. The modes of decision 43 hold on Podman; the network of a
+  unit there is shown by no run. This is one reading. Question Q23.
+- **Decision 36 reads no setting of SELinux.** Docker as its package installs it on
+  Fedora 45 enables no SELinux in the daemon: every container runs unconfined, and the
+  enforcing host does not confine the instance at all (ADR-041, row
+  R3-SELINUX-DOCKER). No check of decision 36 reads that setting of the runtime, and
+  no decision asks it to. It is recorded for the answer to question Q20.
+- **Decision 43, the guard, and decision 30, the user as the host sees it: no
+  change.** Another local user reads nothing through the closed directories (ADR-041,
+  row R3-OTHER-USER). Under three rootless mappings the instance is the site user on
+  the host, and under one of them the inside shows 65532, so the read from the host
+  that decision 30 gives `plugin start` is what finds it (ADR-041, row R3-PODMAN-43).
+
+#### Limits of the runs
+
+- The limits of the first run are those that the section of ADR-041 lists: one
+  distribution, one machine, one policy, each case run once or twice.
+- The renderings are stand-ins. No template, no `plugin start` of remote code and no
+  kernel image of the exit was used; the kernel container is a sleeping container
+  bound to the home.
+- Not run: a reboot of the machine with the unit enabled; a unit of the system's
+  service manager over Podman; a nested engine with the flags of the S2a exit; the
+  check of decision 50 on the compose target, which is `plugin start`'s and has no
+  code yet.
+- The public targets of the dials were one public address on port 443 and one public
+  name.
+- The resolver was not run for: a lookup in flight against an old server that drops
+  packets without an answer, where the source gives up to 5 s an attempt and two
+  attempts; a second attach to a further network; a channel of `grpc-go` inside the
+  window (G-GRPC). That a root filesystem with no `nsswitch.conf` gives the same
+  order, files and then DNS, was read in `conf.go` and not run.
+
+#### Questions for the owner after the runs of 2026-11-28
+
+Each question gives its options, the recommended one, and why. Question Q19 above is
+still open.
+
+**Q20. How does the bind of an instance's directory get its label under SELinux?**
+Decision 30: "On a host with SELinux enforcing the bind needs the label of decision
+14." ADR-041 row R3-SELINUX-FORMS and row N-UNIT-SELINUX: the forms that the runs of
+decision 39 recorded, and that decisions 31 and 33 will render, cannot carry a label on
+Docker and Compose, and on an enforcing host whose runtime confines the instance then
+cannot read its key.
+- (a) `aiopsctl` labels the directory of the instance itself, with the type
+  `container_file_t`, at install and at every `plugin start`, where the host has
+  SELinux, and both templates keep the forms of decision 39. The site user can set the
+  label with no root. `restorecon -R` keeps it; `restorecon -RF` removes it, and the
+  instance then fails to read its key until the next `plugin start`. The label is the
+  shared one, so SELinux adds no separation between instances for this directory,
+  unless a fixed level per instance is also rendered with `--security-opt
+  label=level`, which read correctly in the run. It was run with `chcon` by hand and
+  not by a command of `aiopsctl`.
+- (b) Both templates write the bind in the form that carries the option, `-v
+  <dir>:/aiops/identity:ro,Z` in the unit and the short form in the fragment. The
+  label is private to the container and renewed at each start, and the runtime does
+  the relabel. `create_host_path: false` is lost: in the run a missing source was
+  created inside the home as `root:root` of mode 0755. `HostConfig.Binds` is no longer
+  null. A daemon that does not confine accepts the option and ignores it. A private
+  label is taken by any other container that binds the directory with `:Z`, and by
+  the kernel container's bind of the home with a label option (question Q21).
+- (c) S2b supports no unit on a runtime that reports SELinux confinement: `plugin
+  start` refuses it and says so, and the label is settled in a later step. This defers
+  the sentence of decision 30 and needs the owner's word (ADR-063 decision 33).
+- Each of the three edits decision 30 and the sentence on SELinux of decision 14.
+- Recommended: (a). Both templates stay as they were run for decision 39, with
+  `create_host_path: false` in the fragment, and the label does not depend on which
+  container started last. Its label is the one
+  that the `z` option of decision 14 gives the whole home in any case, and what keeps
+  another instance out is then, as under the modes of decision 43, the mount namespace
+  and the closed directories. The cost is one write of a label by `aiopsctl`, and a
+  host on which an operator resets labels by force until the next `plugin start`.
+  Needed before the templates, install of remote code and `plugin start` merge.
+
+**Q21. Which label does the kernel container's bind of the home carry?** Decision 14:
+"each bind of decision 15 also needs a label the container may read (the `z` option of
+the bind in Docker and Podman), which the exit does not test". ADR-041 row
+R3-SELINUX-RENDER: with `:z` every file of the home takes the shared label, the
+credential directories among them, and with `:Z` every running instance loses its key
+until it is started again.
+- (a) The shared label is accepted everywhere. Decisions 14 and 43 gain a sentence:
+  on a host with SELinux, the files of the home carry a label that every container of
+  the host may read, SELinux adds no separation between instances or between an
+  instance and the kernel's key, and the guard is the closed directories and the mount
+  namespace, as on a host without SELinux. The option `Z` is never written on a bind
+  of the home.
+- (b) The directory of an instance has a private label, and the kernel container's
+  bind of the home is written with no label option, on a home that `aiopsctl` labelled
+  once. Decision 15 gains that rule, and `aiopsctl` gains the labelling of the home.
+- (c) The kernel container runs with `label=disable`, which removes its confinement by
+  SELinux.
+- Not run for any option: what the kernel image of the exit needs.
+- Recommended: (a). It is decision 14 as written, with its effect said. The texts
+  claim no separation by SELinux today: the guard of decision 43 is the closed
+  directories. (b) adds a second mechanism that one bind with a label option undoes,
+  and (c) gives up the confinement of the kernel container. With question Q20 (a) the
+  two answers are one rule: one shared label, written by the bind of the kernel
+  container or by `aiopsctl`. Needed before the container form of decision 15 is
+  documented for an enforcing host; it blocks no code of the exit, which does not
+  test SELinux.
+
+**Q22. What do the words "no group of the host" mean under a rootless runtime that
+keeps the user?** This is question Q23 of ADR-041, and one answer settles both.
+Decision 43: the user of a unit is `65532:65532`, "and its second number is not the
+group of the site user"; decision 49: "the instance holds no group of the host". Under
+rootless Podman 6.1.3 with `--userns=keep-id` the runtime adds the site user's group to
+the process of the instance as a supplementary group, whatever `--user` is given. The
+read of the credentials is not affected, and in the runs the group reached nothing:
+the directory of the instance is the one bind, and no other path of the home has a
+mode with group bits. The cause was not read in the source of Podman.
+- (a) The sentence is reworded to "the unit names no group of the host", in decisions
+  43 and 49 and in ADR-041 decisions 24, 44 and 57, with a note that a runtime that
+  keeps the user adds the site user's group and that the group reaches no file through
+  the one bind.
+- (b) `plugin start` reads the groups of the first process of the instance with its
+  uid, as the host sees them (decision 30), and refuses an instance that holds the
+  site user's group. That refuses `--userns=keep-id` for units.
+- (c) A unit is refused on every rootless runtime at S2b. That is option (b) of
+  question Q19 of ADR-041, which the owner did not choose.
+- Recommended: (a). What decision 43 protects is that the instance reads nothing of
+  the home but its one directory, and the runs show that under this mapping too. (b)
+  refuses a mapping that decision 14 names as one that qualifies, for a group that
+  opens no file. Needed before the templates and `plugin start` merge.
+
+**Q23. Does a unit run on Podman at S2b?** Decision 14 has rootless Podman with the
+user kept qualify for the kernel container, decision 33 has the kernel and the
+instances be containers of one runtime, and decision 32 has the host hold no address
+in the network of an instance. N-PODMAN, in one reading: an internal network of Podman
+6.1.3 has a gateway address that the host holds, a rootful instance connected to a
+listener of the host on it, and the gateway-mode options of the template are Docker's
+and change nothing there. Both templates name the program `docker` (decision 31), and
+every row of decision 39 was run on Docker. `plugin start` refuses the network that
+Podman makes (decision 36), so no instance runs unfenced under any option.
+- (a) At S2b a unit runs on Docker alone. `plugin start` says so on Podman, decision
+  14 gains that limit for a site with remote code, and the network of a unit on Podman
+  is an addition to this part with runs of its own. This narrows decision 14 for
+  remote code and needs the owner's word (ADR-063 decision 33).
+- (b) A rendering of decision 32 for Podman is found and run before the part is
+  accepted, with the unit of the system's service manager over Podman, which was not
+  run either.
+- (c) Nothing changes, and decision 36 refuses at run time. An operator on Podman
+  learns the limit from the refusal of one network.
+- Under every option the reading is run again by itself before it is recorded as a
+  result.
+- Recommended: (a). The fence holds either way, so the choice is where the limit is
+  written. No run shows a unit on Podman: the network fails in this reading, the
+  system unit was not run, and the templates name another program. A limit that every
+  site on Podman meets belongs in the text that the operator reads and in the words of
+  `plugin start`, not in the refusal of one network. (b) is the way if units on Podman
+  are wanted at S2b; it holds the acceptance of this part until a rendering is found.
+  Needed before this part is accepted.
+
+#### Edits made with this record, and left
+
+Made, in this file: the status of this part, at the head of the file and at the head of
+the part; this section; the value of the bound, by a dated note at decision 51; and
+notes of 2026-11-28 that point here, at decisions 43, 49 and 50 and after the list
+"Left to later commits" of the section "Owner answers of 2026-11-28". No decision is
+revised but in the value that decision 51 left to its reading: an option that the owner
+has not chosen edits nothing. The row of ADR-047 in the ADR table of `08` §3 names this
+record and the questions that the part waits on.
+
+Left, each to the commit that records the owner's answers to Q19 to Q23: decision 30
+and the sentence on SELinux of decision 14, as the answers to Q20 and Q21 have them;
+the words on the group in decisions 43 and 49, as the answer to Q22 has them; decision
+14 and the words of `plugin start`, with Q23 (a); and the lookup of decision 53, as the
+answer to Q19 has it. Left to the commit that marks this part accepted, after those
+answers: every edit of the section "Edits on acceptance of the S2b part", as the
+records of 2026-11-27 and of 2026-11-28 list them. Still left as the section "Owner
+answers of 2026-11-28" lists it: the definition `sidecars` beyond `Endpoint` and
+`Report`, an addition due before `sidecars-static` and the proxy merge.
