@@ -2304,7 +2304,7 @@ windows at 8 and 32 callers on `b7071ed` and 7 of 20 on `17283a8`, within the sp
 the section "2026-11-22 call-path gate on the merge commit" describes
 (`callpath-full-g13-ab`). G13 may therefore merge into `main` with S2a, as the owner
 answers of 2026-11-23 allow; the second run of item 4, on the merge commit into `main`,
-follows that merge.
+follows that merge. Note of 2026-11-28: it ran on `d124a40` and passes (last section).
 
 ### As merged, recorded 2026-11-25
 
@@ -2737,7 +2737,7 @@ that this section recommends, and point 14 the other.
   it has run. "A kernel fix that the gate forces takes priority over S2b code" (ADR-063
   decision 70), and such a fix is a separate addition to this ADR, as ADR-063 decision 3
   requires. "No kernel change" in this section speaks of the volatile update and of the
-  case of point 18, and of nothing else.
+  case of point 18, and of nothing else. Note of 2026-11-28: it ran and passes.
 - If the case of point 18 needs a kernel change, the further addition blocks that change
   and the mount of a proxy value built after boot, and it has 25 lines.
 
@@ -2923,7 +2923,7 @@ the matrix (ADR-063 decision 64).
 - In this ADR: the status of this section; the owner's answer to Q1 as decision 21,
   continuing the numbering of the owner decisions; a dated note at lines 1683-1685 that
   names `sdk/remotehost` as a committer in a plugin process; and the result of the
-  call-path gate on `d124a40` when it has run.
+  call-path gate on `d124a40` when it has run. Recorded 2026-11-28, last section.
 - The row of ADR-034 in the ADR table of `08` §3 (`08:1168`) and in `00` §9 (`00:774`)
   gains the acceptance of this section, in the commit that records it (`08:999`).
 - Under Q1 (b): the sentence "`FromManifest` gives a proxy row no hand-off" of the note
@@ -3094,3 +3094,41 @@ Not edited, as the section "Edits on acceptance" lists for Q1 (b): `07:1140`, `0
 `07:1382`, decisions 16 to 20, plugin record §8 and §11, ADR-059 decisions 17 and 44, and
 ADR-063 decisions 3 and 41. `dist/dist.yaml` and `test/dist/dist.yaml` gain no line. An
 option the owner did not choose edits nothing.
+
+## 2026-11-28 call-path gate on the S2a merge commit
+
+The second run of item 4 of the G13 verification plan ran on 2026-11-27 and passes. The
+gate ran four full processes in one session on the measurement host, alternating
+`d124a40`, the commit that merges S2a with G13 into `main`, with `17283a8`, the `main`
+commit before that merge and the comparison commit of `callpath-full-g13-ab`. All four
+runs are valid and pass under protocol amendment 2, with the argv and the environment of
+the runs of 2026-11-24; no run is invalid by host noise. The source closure of the gate
+on `d124a40` differs from that of `b7071ed` in `go.mod` and `go.sum` only, so `sdk/kernel`
+and the harness are the files measured on 2026-11-24.
+
+Owner Enter+Leave on the kernel candidate, baseline arm, ten windows per caller count:
+
+| Run | Commit | p99 at 1, 8 and 32 callers (ns) | Highest window p99 (ns) | Windows above 1,200 ns at 8 and 32 callers |
+|---|---|---|---|---|
+| 1 | `d124a40` | 376, 1,483, 1,507 | 1,665 | 12 of 20 |
+| 2 | `17283a8` | 328, 1,339, 1,374 | 1,633 | 10 of 20 |
+| 3 | `d124a40` | 336, 1,459, 1,459 | 1,615 | 12 of 20 |
+| 4 | `17283a8` | 358, 1,434, 1,459 | 1,630 | 11 of 20 |
+
+The highest owner Enter+Leave window p99 of any candidate is 1,665 ns on `d124a40` and
+1,633 ns on `17283a8`, against the bound of 2,000 ns, and against 1,649 and 1,614 ns in
+`callpath-full-g13-ab`. The slow mode takes 24 of 40 kernel windows at 8 and 32 callers on
+`d124a40` and 21 of 40 on `17283a8`, within the spread that the section "2026-11-22
+call-path gate on the merge commit" describes. Owner Enter+Leave allocates nothing in any
+run, and no swap page moved and no period was throttled in the 120 samples of any run.
+The runs carry 11, 10, 9 and 10 observations of candidate variation above 10 per cent
+with a clean control, none invalidating (`callpath-full-s2a-merge-ab`).
+
+Item 4 of the verification plan is done, and with it the plan: items 1, 2, 3 and 5 passed
+as "Verification of 2026-11-24" records. The gate forces no kernel fix, so the priority that ADR-063 decision 70
+gives such a fix does not arise. This section is the record that these passages left
+open: the last sentence of "Verification of 2026-11-24"; the last bullet of "What this
+section blocks"; the first bullet of "Edits on acceptance"; and the last bullet of the
+list of what is left in "Owner answers of 2026-11-27". Notes of this date at `s2a-report`
+(status, row 3 of §1, "Still due" of §2, §9 and the closing paragraph), at the status of
+ADR-060 and at ADR-063 decision 70 point here. No line above this section moves.

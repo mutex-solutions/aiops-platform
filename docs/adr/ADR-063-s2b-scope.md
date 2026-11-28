@@ -2065,7 +2065,7 @@ Q23 and Q24, are decisions 38, 39, 41, 55, 60 and 61.
     branch `s2b/integration` in parallel with the call-path gate that runs on that merge
     commit. A kernel fix that the gate forces takes priority over S2b code. Decision 1
     had the gate run before the first S2b code; this decision replaces that one
-    condition, and every other condition of decision 1 stands.
+    condition, and every other condition of decision 1 stands. Note of 2026-11-28: the gate ran on `d124a40` and passes, and it forces no kernel fix (ADR-034, "2026-11-28 call-path gate on the S2a merge commit").
 
 **Edits made with this record.** `00` is edited in the commit that records the answers
 (`08:999`), and that commit makes the edits that the chosen options name; each decision

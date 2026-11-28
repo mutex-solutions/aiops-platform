@@ -6,7 +6,7 @@
   (s1-report:29). **Closed 2026-11-26:** the owner approved the S2a exit report
   (`docs/design/s2a-report.md`) and closed S2a on 2026-11-26. The merge of
   `s2a/integration` into `main` follows, and then the call-path gate of G13 on the merge
-  commit (ADR-034, verification item 4).
+  commit (ADR-034, verification item 4). Note of 2026-11-28: it ran on `d124a40` and passes.
 - Scope: roadmap step S2a (`08-profiles-roadmap-adrs.md` §2.1). It turns the S2a text of
   the roadmap into decidable work and working rules, as ADR-059 did for S1. It changes no
   decision of `00-decisions.md` by itself: every point where an answer would change one
