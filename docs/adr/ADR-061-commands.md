@@ -1662,6 +1662,14 @@ otherwise, the decision here holds.
   accepted. Decision 65 names one point where two of those texts differ from this part,
   and the record of the answers leaves the comparison of the other rows to a later
   commit.
+  Note of 2026-11-28: the owner answered Q19 with (a), and the part stays accepted
+  (decision 69). The sentence "This part is accepted together with those parts or
+  after them" is read for the code: no code that a point of decision 59 governs merges
+  before the text that owns the point is accepted, and where that text then differs
+  from what decision 59 assumes, this part is corrected by a dated note first. No
+  status line changes. The owner answered Q17 and Q18 on the same date (decisions 67
+  and 68), Q17 on a condition that is not run yet. Two additions are proposed on the
+  same date, decisions 70 and 71, and wait on questions Q20 to Q23.
 - Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
   is written against. The sections above cite `a3c85ae`, so a line number here differs
@@ -3066,7 +3074,8 @@ the same date, and each is recorded in its own ADR.
     decision 29 leaves when the row reads the file again to the row, with the definition
     `sidecars` (ADR-063 decision 39). The owner is asked again before `sidecars-static`
     merges. Until a text carries the rule, it stands here as what this answer requires of
-    that provider.
+    that provider. Note of 2026-11-28: the owner named the text, the S2b part of ADR-047
+    in its decision 29 (decision 68).
 
 61. **The server's reason holds the exact command** (Q11 (a), with the rule on what a peer
     supplies). Where the dial of a proxy got no answer, the reason with which its row
@@ -3148,7 +3157,9 @@ the same date, and each is recorded in its own ADR.
     this question, and neither decision was put to the owner as a question. ADR-020
     decision 34 admits either channel. This answer is recorded as the owner gave it, the
     difference is put to the owner with this record, and `Verify` of remote code does not
-    merge before the owner's word on it is recorded in the ADRs that it changes.
+    merge before the owner's word on it is recorded in the ADRs that it changes. Note of
+    2026-11-28: the owner's word is that this decision holds, with its condition run
+    before anything is revised (decision 67).
 
 66. **`plugin enable` of a remote row keeps its files and answers `not-running` while no
     process runs the profile** (Q16 (a)). The half "does not answer the handshake" of
@@ -3250,6 +3261,7 @@ ADR-020 decision 34 admits either channel.
   to the one question that set both channels out, and (b) edits two accepted decisions
   of ADR-063. The run of the condition is small and decides whether (a) can be built as
   worded. Blocks: `Verify` of remote code and its cases (`ADR-063:756-758`).
+- **Answered 2026-11-28: (a)**, with its condition run first, decision 67.
 
 **Q18. Which text carries the rule on when `sidecars-static` reads the endpoint
 table?** This is the open point of decision 60: the provider reads the table at every
@@ -3263,6 +3275,7 @@ no text for that rule.
   decision 39).
 - Recommended: (a). The rule is about one file, the part that defines the file is open
   for revision now, and no document is added. Blocks: `sidecars-static`.
+- **Answered 2026-11-28: (a)**, decision 68.
 
 **Q19. Does this part stay accepted ahead of ADR-041 and the S2b part of ADR-047?**
 The head of the part gives the order: "This part is accepted together with those parts
@@ -3289,6 +3302,7 @@ order said otherwise until it was corrected.
   recorded as the owner's word. Blocks: under (a), the code of each point that decision
   59 takes from ADR-041 or from the S2b part of ADR-047, until that text is accepted;
   under (b), all the code that this part governs.
+- **Answered 2026-11-28: (a)**, decision 69.
 
 **What the other records ask of this part,** each by an addition to this ADR or a dated
 note here before the code that the point governs merges, and none a question:
@@ -3311,3 +3325,462 @@ note here before the code that the point governs merges, and none a question:
   the S2b part of ADR-047, which come from the runs of its decision 39: when a network
   that already exists is checked, what follows the first attach of the kernel
   container, and whether a stopped container is started again or replaced.
+
+Note of 2026-11-28: the first two are proposed as decisions 71 and 70 of the section
+"Additions proposed 2026-11-28", and neither is accepted. The third waits for the
+revision of ADR-047 decision 29. The fourth has its answers, which the owner gave on
+2026-11-28, and "Owner answers of 2026-11-28" names the dated note that decision 45
+still needs for them.
+
+### Owner answers of 2026-11-28
+
+The project owner answered questions Q17 to Q19 of the section "Points for the owner
+after the records of 2026-11-27" on 2026-11-28, each with its recommended option, which
+is (a) in every question, Q17 on the condition that the option names. Each decision
+below names the question it answers. The owner answered questions Q15 to Q21 of ADR-041
+and questions Q15 to Q18 of the S2b part of ADR-047 on the same date, and each is
+recorded in its own ADR. This record sets no text accepted and changes no status.
+
+67. **Decision 65 holds: `plugin verify` reaches a unit over mutual TLS, and the
+    condition is run before anything is revised** (Q17 (a)). The channel of `plugin
+    verify` of remote code is the one of decision 65: a throwaway home, the unit of the
+    artifact rendered into it, a throwaway key pair for each side, the unit started on
+    an internal network of its own, and a dial with the throwaway kernel pair. Option
+    (b), the Unix socket, is not chosen, and ADR-063 decisions 23 and 54 gain no note.
+    - **The condition is run first.** The answer rests on one behaviour that was read
+      in no source and run on no runtime: that a process on the host reaches the
+      address of a container on an internal network of the container runtime (decision
+      65). It is run on the network of ADR-047 decision 32, as `plugin start` creates
+      it, before `Verify` of remote code is written, and its result is recorded in this
+      ADR by a dated section. Row 4 of ADR-047 decision 39 bears on it: in the gateway
+      mode `isolated` the host holds no IPv4 address in that network, and whether a
+      process on the host then reaches the container was not run.
+    - **Where the run holds,** the commit that records it makes the revisions that the
+      option names, and no commit before it: the row of `plugin verify` in the table of
+      ADR-041 decision 27; in ADR-044 decision 38, the bullet "How the binary reaches
+      the container" and the words "the binary gains no second dial"; the lines of
+      ADR-020 that restate them; and, in ADR-041, the dial of the check runner with a
+      throwaway pair, which decision 59 lists as open.
+    - **Where the run shows that the answer cannot be built as worded,** the point
+      comes back to the owner and nothing is revised (ADR-063 decision 33). Decision
+      65, ADR-041 decision 27 and ADR-044 decision 38 then stand as they are written,
+      each with its note. Q17 names two other ways, a runner that dials from a
+      container that joins the network, and the Unix socket of option (b). This record
+      chooses neither: the choice is the owner's.
+    - **None of those revisions is made with this record.** ADR-041, ADR-044 and
+      ADR-020 are not edited here. `Verify` of remote code and its cases
+      (`ADR-063:756-758`) do not merge before the run is recorded and, where it holds,
+      before those three texts are revised.
+    - The owner's answer of the same date to question Q21 of ADR-041 has the
+      kernel-side package export the TLS dial and no Unix dial, and has the check
+      runner bring its own connection from `internal/remotesuite`. Which package makes
+      the dial of `plugin verify` under that answer is worded by the revision of
+      ADR-041 decision 27 and of ADR-044 decision 38. It is not fixed here.
+
+68. **The S2b part of ADR-047 carries the rule on when `sidecars-static` reads the
+    endpoint table, in its decision 29** (Q18 (a)). The rule is the one of decision 60:
+    the provider reads the table at every generation or at every lookup, and not once
+    at boot. ADR-047 decision 29 defines the file and, as written on 2026-11-27, leaves
+    "when it reads it again" to the row. The revision of that part words the rule
+    there, with the attempt value that ADR-041 decision 42 gives a line of the table.
+    No part of its own is written for the definition `sidecars` on this point, which
+    was option (b). Nothing is removed here. The sentence of decision 60 stands as what
+    its answer requires of the provider, and the last row of the first table of
+    decision 59 keeps its text. Once ADR-047 decision 29 holds the rule, that decision
+    is the text that is cited for it. The S2b part of ADR-047 is proposed, so the rule
+    is accepted with that part, and `sidecars-static` does not merge before it
+    (decision 69).
+
+69. **The S2b part stays accepted, and its acceptance order is read for the code** (Q19
+    (a)). The part is accepted as of 2026-11-27. No status line of this ADR changes,
+    and no row of the ADR table of `08` §3. The sentence of the head, "This part is
+    accepted together with those parts or after them", is read for the code: no code
+    that a point of decision 59 governs merges before the text that owns the point is
+    accepted, and where that text then differs from what decision 59 assumes, this
+    part is corrected by a dated note first, as the head already says. The sentence
+    gains a dated note with that reading. Option (b), under which the status went back
+    to "answers recorded, not accepted", is not chosen.
+    - On 2026-11-28 the two texts that the part stands ahead of are ADR-041, which is
+      not accepted, and the S2b part of ADR-047, which is proposed.
+    - Until ADR-041 is accepted, the code of each point that decision 59 takes from it
+      waits: the command that makes a credential again and what `plugin enable` does
+      with no pin; the command that the fixture wraps; the deadline that makes "did not
+      answer"; the closed list of reasons; the command line of `aiops-sdk manifest`;
+      and the dial of the check runner.
+    - Until the S2b part of ADR-047 is accepted, the code of each point that decision
+      59 takes from it waits: the files of the unit, of the endpoint table and of the
+      credentials; the file that pins the image; the network of an instance and the
+      kernel container; the build file with its context; and what a command does with a
+      local-path spec of remote code.
+    - Other code that this part governs does not wait for the two.
+
+**Edits made with this record.** All are in this ADR, and each is below the lines that
+other records cite by number: this section; the line "Answered 2026-11-28" under Q17,
+Q18 and Q19; a dated note at the acceptance order of the part (decision 69), at decision
+60 (decision 68) and at decision 65 (decision 67); and a dated note under "What the
+other records ask of this part". The two status lines of this ADR and its row in the ADR
+table of `08` §3 are not edited (decision 69). The status line of the part still names
+Q17 to Q19 as points that wait, and the note at the acceptance order says that each is
+answered. No line of `00` and no other file of `docs/architecture/` is edited: no chosen
+option names one. ADR-041 and ADR-047 are not edited: decision 67 makes no revision
+before its run, and decision 68 points to ADR-047 decision 29 and adds nothing there.
+
+Left to later commits, each named:
+
+- ADR-041 decision 27, ADR-044 decision 38 and the lines of ADR-020 that restate them,
+  with the commit that records the run of the condition of decision 67; where the run
+  sends the point back to the owner, none of them is edited;
+- in ADR-047 decision 29, the words of the rule of decision 68, with the commit that
+  revises the S2b part of ADR-047 for the owner's answers of 2026-11-28;
+- a dated note at decision 45 for the owner's answers of 2026-11-28 to questions Q16,
+  Q17 and Q18 of the S2b part of ADR-047, in the commit that brings the records of that
+  date together and before `plugin start` merges. By those answers `plugin start` reads
+  a network of the unit name that already exists before it runs the fragment, and
+  refuses one that fails the checks; after an attach that takes the kernel container
+  out of the no-network mode it waits before it returns, for a bound that is read in
+  the source of the Go resolver before the code is written; and a stopped container of
+  an unchanged fragment is started again or replaced, with the checks made on it as on
+  any other. The note cites the decision of ADR-047 that records each answer;
+- `plugin enable` as a writer of the attempt value of the endpoint table (ADR-041
+  decisions 18 and 42), with the same revision of ADR-047 decision 29.
+
+### Additions proposed 2026-11-28
+
+- Status: **proposed 2026-11-28, not accepted.** Decisions 70 and 71 are a proposal to
+  the owner and wait on questions Q20 to Q23 below. They are the two forms that the
+  section "Points for the owner after the records of 2026-11-27" names as missing: the
+  command that renews the kernel's pair (ADR-041 decision 43) and the form by which
+  `plugin smoke` of remote code names its repository (ADR-047 decision 42). The status
+  of the S2b part does not change with them (decision 69). No code that either governs
+  merges before the owner accepts it (ADR-063 decision 2).
+- What each blocks. Decision 70: the method and the command of the renewal, in group 3
+  of ADR-063 decision 30. Decision 71: `Smoke` of remote code and its case in ADR-063
+  decision 28.
+- What each rests on. ADR-041 is not accepted and the S2b part of ADR-047 is proposed.
+  Decision 70 takes the files of the credentials and the function that makes a pair
+  from ADR-041 decisions 23, 25 and 27. Decision 71 takes the push, the tag of the
+  image and the image reference of a unit from ADR-047 decisions 25, 31, 42 and 47.
+  Where the accepted text of either differs from what is assumed here, the decision is
+  corrected by a dated note before its code merges, as decision 69 reads the order.
+- Citations are those of the head of the S2b part.
+- What was run and what was read. Nothing was run for this proposal, and no source of a
+  container runtime or of a registry was read for it. Each behaviour that a decision
+  relies on is marked as an assumption, with what proves it.
+
+70. **Proposed: one command renews the kernel's pair alone, `plugin renew-kernel`.**
+    ADR-041 decision 43 gives the command and what it does: "under the write lock it
+    makes a new pair, writes `kernel.pem` into every instance's directory, replaces
+    `remote/kernel/` and restarts the units it finds running". It submits no
+    generation, and its form is this part's. The name and the row of the command are
+    question Q20, and the text below uses the name of the recommended option.
+    - **Form.** `plugin renew-kernel`, with no argument and no flag. It takes no id and
+      no `--profile`: a site holds one kernel pair, and every path under `remote/` is of
+      the site and not of a profile (ADR-047 decision 28). The home is `$AIOPS_HOME`;
+      with none, the command is a usage error and exits 2 (decisions 10 and 17).
+    - **What it does, in order.**
+      1. It asks the container runtime for the state of the unit of every installed
+         remote plugin id, through `Unit` (decision 47). A host with no container
+         runtime, or none that answers, ends here with nothing written: the command
+         cannot then say which instances run and hold the old certificate.
+      2. **The write phase**, under the write lock, with the snapshot of decision 17.
+         It reads the home and refuses where the home holds no `remote/kernel/`. It
+         checks the closed directories as install of remote code and `plugin start`
+         check them (ADR-047 decision 30), since it writes a key under them. It
+         makes a new key pair and certificate for the kernel with the function that
+         install uses (ADR-041 decisions 20 and 27). It writes the new certificate as
+         `kernel.pem` into `remote/instances/<plugin id>/` of every installed remote
+         plugin and replaces `remote/kernel/key.pem` and `remote/kernel/cert.pem`
+         (ADR-041 decision 23). Each file is written whole and replaced by a rename,
+         with the owner and the mode that the S2b part of ADR-047 gives its path. It
+         writes nothing else: no pin, no pair of an instance, no line of the endpoint
+         table and no unit file. It submits nothing. A write that fails restores the
+         snapshot, and the old pair stands whole. Then the snapshot, which holds the
+         old key, is removed, and the lock is released.
+      3. **The run phase**, with no lock. For each id whose unit runs, it stops the
+         container and starts the unit again, as `plugin start` does where it made a
+         new pair (decision 45, steps 3 and 4), on the target of the id (decision 48)
+         and with every check that `Start` makes before it starts anything. A unit that
+         does not run is left as it is: its instance reads the new `kernel.pem` when it
+         next starts.
+    - **The lock** is held for the write phase alone, as `Start` holds it (decision
+      46): a holder holds it through bounded steps only (decision 19), and a restart
+      waits for the runtime. "Under the write lock" of ADR-041 decision 43 is read for
+      the writes. A `plugin install` or a `plugin start` that takes the lock between
+      the two phases copies the new certificate where it writes a `kernel.pem`, since
+      each writes it from the current pair (ADR-041 decision 25). A second renewal
+      between the two phases makes one more pair, and a unit that the first then
+      restarts reads the newest file.
+    - **A restart never undoes the renewal.** The run phase starts after the snapshot
+      is gone. From the release of the lock the old key is in no file of the home,
+      whatever a restart then does (ADR-041 decision 23). What the command does with a
+      unit that it could not restart is question Q21.
+    - **Sessions.** The command restarts no kernel process and submits no generation,
+      so the method answers no `Outcome`. The proxy reads the kernel's key and
+      certificate at every dial (ADR-041 decision 26), so its next dial presents the
+      new pair. Each open session is lost with its unit and returns inside the
+      reconnect budget (ADR-041 decisions 18 and 43). An instance that still runs on
+      the old `kernel.pem` keeps a session that is open, and it refuses the next dial
+      of its proxy, which is refusal 4 of decision 52, "refused the kernel's
+      certificate".
+    - **Output**, on stderr, with nothing on stdout (decision 11). One line per file
+      that the write phase wrote, as every write of the home prints it, and the note
+      `a new kernel pair was made for <home>: <fingerprint>`, with the fingerprint of
+      the new certificate and no key material (ADR-041 decision 23). Then one line per
+      installed remote plugin id: `restarted <id>: <image reference by digest>`; `not
+      running <id>: the instance reads the new certificate at its next start`; or `not
+      restarted <id>: <reason>: run "<command>"`.
+    - **Exit.** 0 where every unit that ran was restarted. With question Q21 (a), 1
+      where one was not, after every line above and with the new pair kept.
+    - **Refusals**, each with exit 1 and nothing written:
+
+      | Refusal | What stderr holds |
+      |---|---|
+      | The host has no container runtime, or none that answers | The text of `ErrNoRuntime` (decision 47) |
+      | The home holds no `remote/kernel/` | `<home> holds no kernel pair: no remote artifact is installed` |
+      | The home, or a directory above an instance's directory, is not the site user's | The refusal of ADR-047 decision 30, as install of remote code and `plugin start` make it |
+
+    - **The definition.** `operations` gains the method in the minor of decision 46, or
+      in the minor after it where that one has merged. The change is additive, and
+      `compatibleFrom: "0.1"` is kept.
+
+      | Change of the definition | What it is |
+      |---|---|
+      | The method `RenewKernel`, with `RenewKernelRequest` and `Renewed` | `RenewKernelRequest` holds `Caller` and `Home`. `Renewed` holds `Fingerprint`, of the new certificate; `Units`, one entry per installed remote plugin id, with `ID`, `Outcome` (`restarted`, `not-running` or `not-restarted`, with the reason of the last), `Image` and `Target`; and `Change`, whose `Written` and `Notes` hold what the write phase wrote |
+      | The error `ErrNotRestarted` | Matches the error of a `RenewKernel` that kept the new pair and did not restart a unit that ran (question Q21) |
+      | In `Home.Remote`, the fingerprint of the kernel's certificate | The suite reads the renewal through it, since it reads no file (decision 18) |
+
+      | Method | Command (decision 30) | Writes the home under the lock | Gate entry point (ADR-060 decision 17) | Toolbox parts (decision 21) | Source |
+      |---|---|---|---|---|---|
+      | `RenewKernel` | `plugin renew-kernel` | Yes, in its write phase alone: `remote/kernel/`, and `kernel.pem` in the directory of every instance | None | `Unit` | ADR-041 decisions 25 and 43; `00:413` |
+
+      `Unit` gains no action: the method uses `state`, `stop` and `start`. In `aiops`
+      `Unit` answers `ErrNotCarried` (decision 47), so in a server process the method
+      refuses at its first step and writes nothing. The kernel's pair is renewed by
+      the command run on the host and by nothing else.
+    - **Fake and suite** (decision 18). The fake takes from its config what the runtime
+      answers for each id, as it does for `Start` (decision 46). The suite revision
+      that adds the method adds these cases:
+      - on a home with two installed remote ids, one of whose units runs, the method
+        answers a new fingerprint, which `Home` shows in place of the old one,
+        `restarted` for the one and `not-running` for the other, and it starts no unit
+        that did not run;
+      - the pin of each id is the one that `Home` showed before;
+      - on a home with no remote artifact it is refused and writes nothing;
+      - with no container runtime it returns the error that names what the host lacks
+        and writes nothing; with no home it is a usage error; after release it returns
+        `ErrInactive`;
+      - with question Q21 (a), with a restart that fails, the new fingerprint is kept,
+        the unit is `not-restarted` with its reason, and the error matches
+        `ErrNotRestarted`.
+    - **Tests**, beside those of decision 58:
+      - T1 tests of `plugins/operations`, on the files: after the method returns the
+        old key is in no file of the home; `kernel.pem` in the directory of every
+        instance is the new certificate; no pin and no key of an instance changed in
+        any byte; a write that fails leaves the old pair whole; and no lock is held
+        while a unit restarts;
+      - in the job that holds a container runtime: an instance that the command
+        restarted completes the handshake with the kernel on the new pair and refuses a
+        dialler that holds the old one (`00:413`); and an instance that was left
+        running on the old certificate refuses the next dial of its proxy, with the
+        text of refusal 4 of decision 52;
+      - the help golden of the command, its cases in `fixtures/commands/`, and its
+        exit codes: 2 with no home, 1 for each refusal, 0 where every unit that ran was
+        restarted.
+    - **Assumption**, read in no source: that `sdk/remotehost` and `serve()` read
+      `kernel.pem` when the instance starts and not again while it runs. ADR-041
+      decision 43 restarts the units for that reason, and ADR-041 fixes what each SDK
+      reads and when. Of the container runtime and of the service manager the command
+      assumes what decisions 45 and 48 assume, and nothing more.
+    - **Licences.** The command runs no program that decision 57 does not list.
+
+71. **Proposed: `plugin smoke` of remote code names its repository with the flag
+    `--repository`.** ADR-047 decision 42 has remote code run from a registry only.
+    `plugin install` of remote code refuses a local-path spec, and `plugin smoke` of
+    remote code "pushes its throwaway artifact to a repository that the author names,
+    in a form that the S2b part of ADR-061 fixes". Decision 55 names no repository and
+    no push, and its step 2 installs what its step 1 packed. How the author names the
+    repository is question Q22, and the text below uses the recommended option.
+    - **Form.** `plugin smoke <dir> --against <release> [--repository <repository>]
+      [--modcache <dir>] [--mirror <prefix>=<site prefix>]... [--builder image|local]`.
+      `--repository` is required where the manifest lists `remote`, and it is not read
+      for a manifest that lists `inproc` alone, as `--modcache` is required where the
+      manifest lists `inproc` and is not read for one that lists `remote` alone
+      (decision 55). `<repository>` is what `plugin push` takes as its argument: the
+      host of a registry and the path of a repository, with no tag and no digest.
+    - **The path.** Step 1 of decision 55 stands. A push follows it, and step 2 then
+      installs from the registry:
+      - `Push` of the layout that step 1 packed and signed, to `<repository>`, as
+        `plugin push` does it: the image under its tag, then the artifact, then what
+        the signature added (ADR-047 decisions 25 and 47);
+      - `Install` of the spec by digest that `Push` answered,
+        `oci://<repository>@sha256:<digest>`, into the test-only profile, and `Enable`
+        of the row, as step 2 has them. The unit that install renders then names the
+        image in that repository by its digest (ADR-047 decision 31), and the
+        container runtime pulls it from there when `Start` runs in step 3.
+
+      Steps 3 to 6 of decision 55 stand as written.
+    - **Credentials.** Smoke reaches the repository as `plugin push` does, with the
+      registry credentials of the invocation's environment, and the container runtime
+      pulls the image with its own (`00:416`). Smoke takes no credential, writes none
+      into the throwaway home and gives none to a container.
+    - **The gate.** No entry point is added. `Push` evaluates none (decision 16), and
+      `Install` on the throwaway home evaluates `plugin install`, as decision 46 lists
+      it for `Smoke`.
+    - **Refusals.**
+
+      | Refusal | Exit | What stderr holds |
+      |---|---|---|
+      | The manifest lists `remote` and `--repository` is absent | 2, a usage error (decision 10) | `plugin smoke of remote code takes --repository <repository>: remote code runs from a registry only`, and the synopsis |
+      | `<repository>` holds a tag or a digest | 2, a usage error | The text that `plugin push` prints for it |
+      | The registry refuses the push | 1 | The error of the registry. Nothing was installed and nothing was started |
+      | The container runtime does not pull the image from the repository | 1 | The error of the runtime, as `Start` gives it (decision 45) |
+
+      In each the throwaway home and what smoke made on the host are removed, as
+      decision 55 has it.
+    - **What it leaves.** On the host, nothing, as decision 55 says. In the repository,
+      what the push put there: the image manifest with its tag and its blobs, the
+      artifact, and the signature of the throwaway key. Whether smoke leaves or deletes
+      them is question Q23. The sentence of decision 55, "writes no home of the site
+      and nothing beside the plugin", gains the repository that the author named.
+    - **The definition.** The request of `Smoke` gains the field `Repository`, in the
+      minor of decision 46, and its result does not change. The sentences of decisions
+      46 and 55 that say `Smoke` keeps its request gain a dated note. The row of
+      `Smoke` in the method table of decision 46 gains no toolbox part, since `Push`
+      needs none.
+    - **Fake and suite.** `Smoke` of a plugin whose manifest lists `remote`, with no
+      repository, is a usage error and calls no part of the toolbox. A run with a
+      repository needs a registry and a container runtime, so it is a case of the exit
+      and no case of the suite.
+    - **Tests**, beside those of decision 58: the help golden of `plugin smoke`; the
+      two usage errors, with nothing pushed; and the smoke case of ADR-063 decision 28,
+      which passes a repository of the exit's registry (ADR-063 decision 32) and
+      asserts that the spec that was installed is the one that the push answered.
+    - **Assumptions**, read in no source for this proposal: that the container runtime
+      of the host reaches the repository under the name by which `aiopsctl` reached
+      it, a registry on the loopback interface of the host among them; and that it
+      pulls by digest an image that was pushed under a tag. Row 2 of ADR-047 decision
+      39 pulled an image by digest from the registry that the project pins, on the
+      runtime of that run, and the push there was a script and not `plugin push`. The
+      smoke case of ADR-063 decision 28 proves both on the runtime of the exit.
+
+**What the additions ask of the other parts,** each by the revision of that part or by a
+dated note there, and none made with this proposal:
+
+- ADR-041: the name of the command at its decision 43; that an instance reads
+  `kernel.pem` at its start (the assumption of decision 70); and, among its cases, a
+  dialler that holds the old kernel pair, refused by an instance after the renewal.
+- The S2b part of ADR-047: in the table of its decision 28, the command as a writer of
+  `remote/kernel/` and of `kernel.pem` under `remote/instances/`, which the section
+  "Questions for the owner after the runs" of that part already leaves to this name;
+  and in its decision 30, the renewal beside install and `plugin start` among the
+  commands that check the closed directories.
+- ADR-063 decision 36: with question Q20 (a) `command-plugin` registers fifteen
+  commands under the cap that was estimated for fourteen. The cap stands and stays an
+  estimate.
+
+**Edits on acceptance of the additions.** None is made with this proposal. The commit
+that records the owner's answers makes those that the chosen options name:
+
+- this ADR: in decision 16, the method `RenewKernel`, its types, its error and its row;
+  in decision 19, a dated note that the method holds the lock for its write phase
+  alone; in decision 30, the command in the row of its group and in the CLI spec, and
+  `--repository` in the CLI spec row of `plugin smoke`; dated notes at decisions 46 and
+  55 for the request, the path and what smoke leaves; and in decision 58, the tests of
+  decisions 70 and 71;
+- `00:137`: the command among the commands of P0, in the group that the answer to Q20
+  names. `00:413`: the name of the command, where the cell reads "the form of the
+  command is the S2b part of ADR-061". The acceptance of decision 70 is the owner's
+  word for both;
+- `07:1583`: the name of the flag, where the line says that smoke needs a repository
+  for `remote`; with it the lines that restate what smoke needs, the row `Smoke` of
+  `07:1537` and plugin record §14;
+- with Q21 (c), ADR-041 decision 43 and `00:413`, which have the command restart the
+  units;
+- an option that the owner does not choose edits nothing.
+
+#### Questions for the owner on the additions
+
+Each question gives its options, the recommended one, why, and what the answer blocks.
+An option that changes a written line says so and names every line it edits.
+
+**Q20. What is the name of the command that renews the kernel's pair, and which row
+holds it?** ADR-041 decision 43 gives `aiopsctl` one command and leaves its form here.
+`00:137` lists the commands of P0 and leaves exact names to the CLI spec, so every
+option adds a name to `00:137` and to the CLI spec of decision 30, and puts that name in
+the cell of `00:413`. No option keeps `00:137` as written.
+- (a) `plugin renew-kernel`, the fifteenth command of `command-plugin`.
+- (b) `key renew-kernel`, the second command of `command-key`, beside `key generate`.
+- (c) `remote renew-kernel`, in a new group `remote` with a sixth command row,
+  `command-remote`. Decisions 29 and 30 and the bundle `aiops-cli` then gain a row.
+- Recommended: (a). Every command that writes under `remote/` or restarts a unit is a
+  `plugin` command: `install`, `start`, `disable` and `remove`. An operator who has run
+  `plugin start` looks for the renewal beside it. `key generate` writes a signing key
+  pair for an author and reads no home, so (b) puts two kinds of key under one group.
+  (c) adds a row and a group for one command. The cost of (a) is a fifteenth command
+  under a cap that was estimated for fourteen (ADR-063 decision 36). Blocks: the
+  command row, its help golden, and the edits of `00:137` and `00:413`.
+
+**Q21. What does the command do with a unit that it could not restart?** ADR-041
+decision 43 has it restart "the units it finds running" and says nothing of a restart
+that fails: the runtime does not stop the container, the service manager refuses the
+site user (decision 48), or a check of `Start` refuses the unit once it is stopped.
+- (a) The renewal is kept, the command goes on to the next unit, and it exits 1 after
+  the last. The unit is `not-restarted` with its reason, the error matches
+  `ErrNotRestarted`, and the line of the unit ends with the command to run. Where the
+  container was not stopped, that command is the restart of the target by the unit's
+  name, `docker restart <unit name>` or `systemctl restart <unit name>`, as decision 49
+  prints a stop: `plugin start` leaves an instance that runs, so it would not make that
+  instance read the new certificate. Where the container was stopped and not started,
+  the command is `aiopsctl plugin start <id>`, and the unit stays stopped until then.
+  Until its restart an instance that was not stopped still trusts the old certificate,
+  and the line says so.
+- (b) The command keeps the snapshot and the lock until every restart is done, and
+  restores the old pair where one fails. The lock is then held through steps that wait
+  for the runtime, which decision 19 forbids, and a failed restart puts back a key
+  that the operator renews because it may be known to another. It edits decision 19.
+- (c) The command restarts nothing. It prints each unit that runs with the restart
+  command of its target and exits 0. That changes ADR-041 decision 43 and the cell of
+  `00:413`, which have the command restart the units, and needs the owner's word
+  (ADR-063 decision 33).
+- Recommended: (a). It is the rule of decision 49 for a stop that fails: what was
+  written stays written, nothing is hidden behind exit 0, and the operator is given
+  the one command that finishes the work. Blocks: the method, its error and its suite
+  cases.
+
+**Q22. How does the author name the repository of `plugin smoke`?** ADR-047 decision 42
+has the author name it and leaves the form here. No option edits a line of `00`. Each
+edits the sentence of `07:1583` on what smoke needs for `remote`, which gains the name
+of the form.
+- (a) The flag `--repository <repository>`, required where the manifest lists `remote`,
+  whose value is what `plugin push` takes as its argument. The CLI spec row of `plugin
+  smoke` in decision 30 gains it.
+- (b) The flag `--registry <host>`, which names a registry alone. Smoke forms the path
+  of the repository from the plugin id under a fixed prefix. The author names less,
+  and smoke then chooses a path in a registry that is the author's, which a registry
+  that gives the author one namespace may refuse.
+- (c) No flag: the variable `AIOPS_SMOKE_REPOSITORY` of the invocation's environment,
+  as `AIOPS_SDK` names a program (decision 51). The CLI spec does not change, and the
+  place to which a command pushes is then in no command line and in no help.
+- Recommended: (a). The author says exactly where the throwaway artifact lands, with
+  the value that `plugin push` already takes, and the help shows it. Blocks: `Smoke` of
+  remote code, the help golden of `plugin smoke` and the smoke case of the exit.
+
+**Q23. What does smoke leave in the repository?** Decision 55 has smoke remove what it
+made. ADR-047 decision 42 has it push, and names no removal.
+- (a) Smoke leaves what it pushed and says so: it prints the spec by digest and that
+  the artifact stays in `<repository>`. The key that signed it is deleted with the
+  throwaway home and is in no `trust.yaml` of a site, and `allowUnsigned` covers no
+  remote artifact (ADR-020 decision 45), so no site installs it. The README of each
+  remote template tells the author to name a repository that is kept for smoke. The
+  sentence "What it leaves" of decision 55 gains a dated note.
+- (b) Smoke deletes the manifests that it pushed through the registry when it ends,
+  and prints a warning where the registry refuses; the exit code does not change. A
+  registry need not serve a deletion, which was read in no source for this proposal,
+  and the blobs stay until the registry collects them. `aiopsctl` gains a deletion in
+  a registry, which no command has today.
+- (c) As (b), and smoke exits 1 where the deletion is refused. Smoke then cannot pass
+  against a registry that serves no deletion.
+- Recommended: (a). It behaves the same against every registry, adds no operation to
+  `aiopsctl`, and what stays can be installed by no site. Its cost is said in the
+  output: a repository that grows with each run until its owner clears it. Blocks:
+  `Smoke` of remote code and the README of the remote templates.
