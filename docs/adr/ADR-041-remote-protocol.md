@@ -2687,11 +2687,12 @@ second, and over 90% under one sender in a tight loop.
   `serve()` gains no code beyond the count. It edits the sentence of decision 56 and
   the note at the third bullet of decision 31.
 - (b) `serve()` counts sessions as well, at most 2, sets no limit of the transport and
-  has a pool of N+3 (L-V2). Every reconnect was accepted at every width, the slowest
-  in 55 ms. This revises "the pool and the transport's limit stay at N+2" of decision
-  56 and the fourth bullet of decision 31: every refusal is then code of the SDK, and
-  an excess call waits in the queue of the pool until a thread refuses it. That queue
-  has no bound and was not sized against a flood.
+  has a pool of N+3 (L-V2). Every reconnect was accepted at the four widths that the
+  row reports, the slowest in 55 ms in the bursts and one in 179 ms in the paced run.
+  This revises "the pool and the transport's limit stay at N+2" of decision 56 and the
+  fourth bullet of decision 31: every refusal is then code of the SDK, and an excess
+  call waits in the queue of the pool until a thread refuses it. That queue has no
+  bound and was not sized against a flood.
 - (c) The pool and the limit gain spare units beyond N+2, and `serve()` counts
   sessions (L-V1). It holds only against as many refusals at once as there are spare
   units: 8 spare units lost 7 of 194 reconnects under 64 senders.
