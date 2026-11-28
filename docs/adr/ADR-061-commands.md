@@ -3362,7 +3362,9 @@ Note of 2026-11-28: the first two are proposed as decisions 71 and 70 of the sec
 "Additions proposed 2026-11-28", and neither is accepted. The third waits for the
 revision of ADR-047 decision 29. The fourth has its answers, which the owner gave on
 2026-11-28, and "Owner answers of 2026-11-28" names the dated note that decision 45
-still needs for them.
+still needs for them. Note of 2026-11-28, after the records and the runs of that date
+were read together: the third is made by decision 53 of the S2b part of ADR-047, which
+is still proposed, and the dated note at decision 45 is made.
 
 ### Owner answers of 2026-11-28
 
