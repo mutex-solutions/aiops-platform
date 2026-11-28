@@ -3090,8 +3090,10 @@ Left to later commits, each named:
   Note of 2026-11-28: the owner answered that question with (a). Decision 21 holds,
   and ADR-041 revises its decisions 8, 16 and 31 by notes of that date (its decision
   59): `UpdateConfig` carries the committed config whole, in the form in which
-  `Activate` carries the config, and no `paths`, and the instance replaces the config
-  of its activation with it;
+  `Activate` carries the config, and the instance replaces the config of its
+  activation with it. Those notes also have the field `paths` leave. That is no part
+  of the owner's answer: option (a) left it to the revision, and it is question Q24
+  of ADR-041, which is open;
 - the result of the call-path gate on `d124a40`, recorded in this ADR when it has run
   ("What this section blocks"). No result of it is recorded with this answer.
 

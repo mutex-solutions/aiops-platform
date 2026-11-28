@@ -344,7 +344,9 @@ list against the code and the texts at `bbfd839` shows these facts:
    `UpdateConfig` has the fields `activation` 1 and `config` 2, the committed config
    whole, in the form in which `Activate` carries the config. The field `paths` leaves
    both tables, and the words "as the loader's event carries it" of the first no longer
-   hold.
+   hold. That the field leaves is no part of the owner's answer, which left it to the
+   revision: it is question Q24 of the section "Runs after the answers of 2026-11-28",
+   and it is open.
 9. **Activation on the wire.** An activation is ACTIVE on the wire from the kernel's
    `Activate` to its `Deactivate` or to the end of the session, whichever is first.
    - The plugin-side host runs one fiber per activation with that activation's config
@@ -1018,7 +1020,8 @@ list against the code and the texts at `bbfd839` shows these facts:
       59): `UpdateConfig` carries the committed config whole and no `paths`. `serve()`
       replaces the activation's config with it, merges nothing and calls
       `config_updated(config)`; the method has no argument `paths`. The rest of the
-      bullet stands.
+      bullet stands. That `paths` leaves the message and the method is question Q24
+      of the section "Runs after the answers of 2026-11-28", which is open.
     - `sdk/remotehost` applies `UpdateConfig` through the hand-off that the plugin's own
       `Define` has, so the plugin's `Volatile` fields read the new values (ADR-063
       decision 49; ADR-034, G13). A plugin whose kept manifest marks no path volatile
@@ -2739,7 +2742,8 @@ choice was made by the record and not by the owner, so it is put here.
 - (b) The field stays as a hint. The proxy computes the changed leaves by comparing
   the committed config with the one that it held, the instance still replaces its
   config whole, and `config_updated(config, paths)` keeps its second argument.
-  Decision 59 and the three notes are reworded.
+  Decision 59, the three notes and the note of 2026-11-28 in ADR-034 that restates
+  them are reworded.
 - Recommended: (a). Under ADR-034 decision 21 the hand-off gives the proxy the
   committed config whole and no list of changed leaves, so a hint is code of the proxy
   for a field that nothing has to read. Nothing of major 0 is published, and a field
@@ -2749,20 +2753,23 @@ choice was made by the record and not by the owner, so it is put here.
 ### Edits made with this record, and left
 
 Made, in this ADR: the status; this section; and notes of 2026-11-28 that point here,
-at decision 38, at decisions 56 to 59, after the paragraph on the row of `plugin
-verify` and after the list "Left to later commits" of the section "Owner answers of
-2026-11-28". No decision is revised: an option that the owner has not chosen edits
-nothing. Two lines that state where this ADR stands are brought to this record: its
-row in the ADR table of `08` §3, and the sentence on it in the list of amendments at
-the head of the plugin record. Its row in `00` §9 stays as it is (decision 53).
+at decision 38, at decisions 56 to 59, in the notes of decision 59 at decisions 8 and
+31, after the paragraph on the row of `plugin verify` and after the list "Left to
+later commits" of the section "Owner answers of 2026-11-28". In ADR-034: the pointer to
+question Q24 in the note of the item that names question Q20. No decision is revised:
+an option that the owner has not chosen edits nothing. Two lines that state where
+this ADR stands are brought to this record: its row in the ADR table of `08` §3, and
+the sentence on it in the list of amendments at the head of the plugin record. Its row
+in `00` §9 stays as it is (decision 53).
 
 Left, each to the commit that records the owner's answers to Q22 to Q24 and to
 question Q24 of the S2b part of ADR-061: the sentence of decision 56 and the notes at
 decision 31, as the answer to Q22 has them; the words on the group in decisions 24, 44
-and 57, as the answer to Q23 has them; decision 59 and its three notes, with Q24 (b)
-alone; the row of `plugin verify` in decision 27, its case in decision 37 and the row
-of ADR-020 in decision 39; and every line that the section "Owner answers of
-2026-11-27" leaves to the commit that sets this ADR accepted. Still left as the section
+and 57, as the answer to Q23 has them; decision 59, its three notes and the note of
+2026-11-28 in the item of ADR-034 that names question Q20, with Q24 (b) alone; the row
+of `plugin verify` in decision 27, its case in decision 37 and the row of ADR-020 in
+decision 39; and every line that the section "Owner answers of 2026-11-27" leaves to
+the commit that sets this ADR accepted. Still left as the section
 "Owner answers of 2026-11-28" lists them: the form of the command that renews the
 kernel's pair, which the S2b part of ADR-061 proposes as its decision 70 and its
 questions Q20 and Q21, and the definition `sidecars` beyond `Endpoint` and `Report`,
