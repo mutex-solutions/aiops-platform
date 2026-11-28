@@ -2711,17 +2711,19 @@ second, and over 90% under one sender in a tight loop.
 
 **Q23. What do the words "no group of the host" mean under a rootless runtime that
 keeps the user?** This is also question Q22 of the S2b part of ADR-047, and one answer
-settles both. Decision 57 and ADR-047 decision 43: "third-party code holds no group of
-the host". R3-PODMAN-43 and R3-PODMAN-TARGETS: under rootless Podman 6.1.3 with
-`--userns=keep-id` the runtime adds the site user's group to the process of the
-instance as a supplementary group, whatever `--user` is given, and the host sees the
-groups 1000 and 589819. The read of the credentials is not affected. In the runs the
-group reached nothing: the directory of the instance is the one bind, and no other
-path of the home has a mode with group bits.
+settles both. Decision 57: "third-party code holds no group of the host". ADR-047
+decision 49: "the instance holds no group of the host". ADR-047 decision 43 says of
+the group only that the second number of the unit's pair "is not the group of the site
+user", which the runs do not contradict. R3-PODMAN-43 and R3-PODMAN-TARGETS: under
+rootless Podman 6.1.3 with `--userns=keep-id` the runtime adds the site user's group
+to the process of the instance as a supplementary group, whatever `--user` is given,
+and the host sees the groups 1000 and 589819. The read of the credentials is not
+affected. In the runs the group reached nothing: the directory of the instance is the
+one bind, and no other path of the home has a mode with group bits.
 - (a) The sentence is reworded to "the unit names no group of the host", in decision
-  57, in the notes at decisions 24 and 44 and in ADR-047 decisions 43 and 49, with a
-  note that a runtime that keeps the user adds the site user's group and that the
-  group reaches no file through the one bind.
+  57, in the notes at decisions 24 and 44 and in ADR-047 decision 49, with a note that
+  a runtime that keeps the user adds the site user's group and that the group reaches
+  no file through the one bind. ADR-047 decision 43 keeps its sentence.
 - (b) `plugin start` reads the groups of the first process of the instance with its
   uid, as the host sees them (ADR-047 decision 30), and refuses an instance that holds
   the site user's group. That refuses `--userns=keep-id` for units.

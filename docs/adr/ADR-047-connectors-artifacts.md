@@ -2595,7 +2595,7 @@ R3-SELINUX-ROOTLESS). Five points keep the part proposed, and each is the owner'
   its key as those forms stand: question Q20;
 - the `z` option of decision 14 on the kernel container's bind of the home relabels
   the credential directories with the rest of the home: question Q21;
-- the words "no group of the host" of decision 43 do not hold under rootless Podman
+- the words "no group of the host" of decision 49 do not hold under rootless Podman
   with the user kept: question Q22, which is also question Q23 of ADR-041;
 - on Podman the internal network of a unit gave the host an address in it, in one
   reading: question Q23.
@@ -2706,10 +2706,14 @@ connect <unit> <container>`, as row 6 of decision 39.
   so SELinux then separates no instance from another's key or from the kernel's, and
   a private label of a running instance is removed. The same bind with `:Z` makes
   every running instance lose its key until it is started again. Question Q21.
-- **Decision 43 and decision 49, "no group of the host"** (ADR-041, rows R3-PODMAN-43
-  and R3-PODMAN-TARGETS). Under rootless Podman with `--userns=keep-id` the runtime
-  adds the site user's group to the process of the instance. The read is not
-  affected, and the group reached nothing. Question Q22.
+- **Decision 49, "the instance holds no group of the host"** (ADR-041, rows
+  R3-PODMAN-43 and R3-PODMAN-TARGETS). Under rootless Podman with `--userns=keep-id`
+  the runtime adds the site user's group to the process of the instance. The read is
+  not affected, and the group reached nothing. The words are those of decision 49 and
+  of the recommendation of Q9, and decision 43 does not hold them: its sentence, that
+  the second number of the unit's pair is not the group of the site user, holds under
+  this mapping too, since the runtime adds the group and the unit names none.
+  Question Q22.
 - **Decisions 14, 32 and 33, a unit on Podman** (N-PODMAN; ADR-041, row
   R3-PODMAN-TARGETS). Decision 14 has rootless Podman with the user kept qualify for
   the kernel container, and decision 33 has the kernel and the instances be
@@ -2826,10 +2830,11 @@ the process of the instance as a supplementary group, whatever `--user` is given
 read of the credentials is not affected, and in the runs the group reached nothing:
 the directory of the instance is the one bind, and no other path of the home has a
 mode with group bits. The cause was not read in the source of Podman.
-- (a) The sentence is reworded to "the unit names no group of the host", in decisions
-  43 and 49 and in ADR-041 decisions 24, 44 and 57, with a note that a runtime that
-  keeps the user adds the site user's group and that the group reaches no file through
-  the one bind.
+- (a) The sentence is reworded to "the unit names no group of the host", in decision
+  49 and in ADR-041 decision 57 and the notes at its decisions 24 and 44, with a note
+  that a runtime that keeps the user adds the site user's group and that the group
+  reaches no file through the one bind. Decision 43 keeps its sentence, which the
+  runs do not contradict, and its note of 2026-11-28 names the answer.
 - (b) `plugin start` reads the groups of the first process of the instance with its
   uid, as the host sees them (decision 30), and refuses an instance that holds the
   site user's group. That refuses `--userns=keep-id` for units.
@@ -2878,12 +2883,12 @@ revised but in the value that decision 51 left to its reading: an option that th
 has not chosen edits nothing. The row of ADR-047 in the ADR table of `08` §3 names this
 record and the questions that the part waits on.
 
-Left, each to the commit that records the owner's answers to Q19 to Q23: decision 30
-and the sentence on SELinux of decision 14, as the answers to Q20 and Q21 have them;
-the words on the group in decisions 43 and 49, as the answer to Q22 has them; decision
-14 and the words of `plugin start`, with Q23 (a); and the lookup of decision 53, as the
-answer to Q19 has it. Left to the commit that marks this part accepted, after those
-answers: every edit of the section "Edits on acceptance of the S2b part", as the
-records of 2026-11-27 and of 2026-11-28 list them. Still left as the section "Owner
-answers of 2026-11-28" lists it: the definition `sidecars` beyond `Endpoint` and
-`Report`, an addition due before `sidecars-static` and the proxy merge.
+Left, each to the commit that records the owner's answers to Q19 to Q23: decision 30 and
+the sentence on SELinux of decision 14, as the answers to Q20 and Q21 have them; the
+words on the group in decision 49 and the note at decision 43, as the answer to Q22 has
+them; decision 14 and the words of `plugin start`, with Q23 (a); and the lookup of
+decision 53, as the answer to Q19 has it. Left to the commit that marks this part
+accepted, after those answers: every edit of the section "Edits on acceptance of the S2b
+part", as the records of 2026-11-27 and of 2026-11-28 list them. Still left as the
+section "Owner answers of 2026-11-28" lists it: the definition `sidecars` beyond
+`Endpoint` and `Report`, an addition due before `sidecars-static` and the proxy merge.
