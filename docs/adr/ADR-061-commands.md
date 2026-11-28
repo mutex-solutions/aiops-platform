@@ -1628,6 +1628,11 @@ otherwise, the decision here holds.
   Three points wait for the owner, questions Q17 to Q19 of the section "Points for the
   owner after the records of 2026-11-27". Q19 is whether this part stays accepted ahead
   of ADR-041, which is not accepted, and of the S2b part of ADR-047, which is proposed.
+  Note of 2026-11-28: the owner answered the three on that date (decisions 67 to 69),
+  and the part stays accepted. Five points wait for the owner on that date. Q24 is the
+  channel of `plugin verify`, which came back from the run of the condition of Q17,
+  and `Verify` of remote code waits for it. Q20 to Q23 are the questions of the two
+  additions, decisions 70 and 71, which are proposed and not accepted.
 - Scope: what ADR-063 decision 34 has this part settle (`ADR-063:849-854`): `plugin
   start`, with `Start` in the operations definition as a minor with a raised suite
   revision; `plugin new --lang python`; the form of a remote Go plugin, which ADR-063
@@ -1670,6 +1675,11 @@ otherwise, the decision here holds.
   status line changes. The owner answered Q17 and Q18 on the same date (decisions 67
   and 68), Q17 on a condition that is not run yet. Two additions are proposed on the
   same date, decisions 70 and 71, and wait on questions Q20 to Q23.
+  Note of 2026-11-28, after the runs of that date: the condition of Q17 was run and is
+  not met, and the point is back with the owner as question Q24. ADR-041 is still not
+  accepted: it waits for the owner on its questions Q22 to Q24 and on Q24 here. The
+  S2b part of ADR-047 is still proposed: it waits for the owner on its questions Q19
+  to Q23.
 - Citations: `00`, `02`, `07` and `08` are the files of `docs/architecture/` with those
   numbers, and `07:1556` is line 1556 of `07` at commit `bbfd839`, the commit this part
   is written against. The sections above cite `a3c85ae`, so a line number here differs
@@ -1944,6 +1954,25 @@ such runs can be made; none was made for this text.
       on the runtime of the clean machine (`ADR-063:683-694`). A behaviour that the
       runtime does not give stops the work on that point, and the owner is asked
       (ADR-063 decision 33).
+    - Note of 2026-11-28 (the owner's answers of that date to questions Q16, Q17 and
+      Q18 of the S2b part of ADR-047, its decisions 50 to 52). That part is proposed,
+      and this note holds what `plugin start` takes from it once it is accepted.
+      - Before it runs the fragment, `plugin start` reads a network of the unit name
+        that already exists and refuses one that fails a network check of ADR-047
+        decision 36: not internal, an address of the host in it, or a member that is
+        neither the instance nor the kernel container of this home. That refusal
+        starts nothing (ADR-047 decision 50).
+      - After an attach that takes the kernel container out of the no-network mode,
+        the command waits 5 s and then returns: the bound of ADR-047 decision 51, read
+        in the Go resolver of the pinned toolchain. The sentence above, "it returns
+        when the container runtime reports the container of the unit running", is
+        read with that wait. A later attach does not wait.
+      - A stopped container of an unchanged fragment is started again or replaced,
+        and the checks are made on it as on any other (ADR-047 decision 52).
+      - Not fixed yet, and due by a dated note here before `Start` merges: the words
+        of the three refusals of a network, which the seventh row of the table leaves
+        to that part and that part leaves here (ADR-047 decision 36), and the line
+        that the command prints while it waits.
 
 46. **`Start` joins the `operations` definition in its next minor**, the minor after
     the version that `main` holds when the change merges, with `compatibleFrom: "0.1"`
@@ -3159,7 +3188,12 @@ the same date, and each is recorded in its own ADR.
     difference is put to the owner with this record, and `Verify` of remote code does not
     merge before the owner's word on it is recorded in the ADRs that it changes. Note of
     2026-11-28: the owner's word is that this decision holds, with its condition run
-    before anything is revised (decision 67).
+    before anything is revised (decision 67). Note of 2026-11-28, after the run of that
+    condition: it is not met. On the network of ADR-047 decision 32 a process on the
+    host does not reach the address of the container (row VC-A2 of the section "Run of
+    the condition of decision 67, recorded 2026-11-28"). The work stops on the point,
+    the owner is asked again as question Q24 of that section, and this decision,
+    ADR-041 decision 27 and ADR-044 decision 38 stand as written until the answer.
 
 66. **`plugin enable` of a remote row keeps its files and answers `not-running` while no
     process runs the profile** (Q16 (a)). The half "does not answer the handshake" of
@@ -3376,6 +3410,11 @@ recorded in its own ADR. This record sets no text accepted and changes no status
       runner bring its own connection from `internal/remotesuite`. Which package makes
       the dial of `plugin verify` under that answer is worded by the revision of
       ADR-041 decision 27 and of ADR-044 decision 38. It is not fixed here.
+    - Note of 2026-11-28, after the run: the condition was run on the network of
+      ADR-047 decision 32 and is not met, so the third bullet above applies. The
+      section "Run of the condition of decision 67, recorded 2026-11-28" holds the
+      rows and puts the point to the owner as question Q24, with the two ways that
+      Q17 names and two more that the run showed. Nothing is revised.
 
 68. **The S2b part of ADR-047 carries the rule on when `sidecars-static` reads the
     endpoint table, in its decision 29** (Q18 (a)). The rule is the one of decision 60:
@@ -3443,6 +3482,229 @@ Left to later commits, each named:
   any other. The note cites the decision of ADR-047 that records each answer;
 - `plugin enable` as a writer of the attempt value of the endpoint table (ADR-041
   decisions 18 and 42), with the same revision of ADR-047 decision 29.
+
+Note of 2026-11-28, after the records and the runs of that date were read together.
+The first item came back to the owner: the section "Run of the condition of decision
+67, recorded 2026-11-28" holds the run and question Q24, and none of the three texts
+is edited. The second and the fourth are made by decision 53 of the S2b part of
+ADR-047, which words the rule in its decision 29 and names `plugin enable` as a writer
+in its decision 28; that part is still proposed. The third is the dated note at
+decision 45.
+
+### Run of the condition of decision 67, recorded 2026-11-28
+
+Note of 2026-11-28. The condition of decisions 65 and 67 was run on that date, as a
+throwaway run on the tree of commit `84c7deb`, on the local machine. It committed
+nothing, and every container, network, key and file that it made was removed. This
+section is the dated record that decision 67 asks for. A row "holds" when the way that
+it ran completed the handshake and left the instance with no route out, "fails" when it
+did not, and nothing is inferred for what was not run.
+
+**The condition is not met on the network of a unit, and nothing is revised.** Decision
+65 rests on one behaviour: "a process on the host reaches an address on an internal
+network of the container runtime".
+
+- On the network of ADR-047 decision 32, internal with the gateway mode `isolated`,
+  the host holds no IPv4 address, routes the address of the container to its own
+  default gateway, and the dial ends at its deadline (row VC-A2).
+- On a plain internal network the dial and the mutual TLS complete, with both pin
+  comparisons, but only because the host holds the gateway address of the network,
+  and by that address the instance reaches listeners of the host (row VC-A1). That is
+  against point 2 of ADR-047 decision 32, it is the network that ADR-047 decision 36
+  refuses, and it is less than "the container gets exactly what a unit gives an
+  instance".
+- A port published on a loopback address is not created on an internal network at
+  all, and ADR-020 decision 34 forbids a published listener (row VC-B).
+
+So the answer to question Q17 cannot be built as worded. By decision 65, "the work
+stops on that point and the owner is asked again", and by decision 67 nothing is
+revised: ADR-041 decision 27, ADR-044 decision 38 and the lines of ADR-020 that restate
+them stand, each with its note. The point is question Q24 below. Three other ways
+complete the handshake with the instance still fenced, each with other words than
+those of decision 65 (rows VC-C, VC-D1 and VC-D2), and they are the options of that
+question with the Unix socket of Q17 (b).
+
+#### Versions and stand-ins
+
+- Go `go1.26.8` on linux/amd64, with `google.golang.org/grpc` v1.82.1 and
+  `google.golang.org/protobuf` v1.36.11 at the hashes that ADR-063 records; `go mod
+  verify` passed, and the built binary reports both versions.
+- CPython 3.12.16 with glibc 2.41 from the image
+  `python@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b`, the
+  local copy, whose id equals the pinned digest. `grpcio` 1.85.4, `protobuf` 7.36.2 and
+  `typing-extensions` 4.16.0, installed with `pip --require-hashes` against the three
+  SHA-256 values that ADR-063 records.
+- Docker Engine and client 29.10.1, where the records of ADR-041 and ADR-047 ran
+  29.10.0, with containerd v2.4.2 and runc 1.5.3: rootful, with no remapped user
+  namespace, the firewall backend `iptables`, the userland proxy on, AppArmor, and the
+  overlay snapshotter of containerd. Ubuntu 26.04.1 on Linux 7.0.0-44. The invoking
+  user is `1000:1000`. Row VC-D3 used `nsenter` of util-linux 2.41.3.
+- **Stand-ins,** in no commit, rebuilt from the record of the first run of ADR-041
+  decision 38. `probe` is a static Go program. `probe gen` makes a throwaway home with
+  the pairs of ADR-041 decision 20, in the layout of its decision 23 and with the modes
+  of ADR-047 decision 43, and a second pair of the kernel's form that the instance does
+  not trust. `probe dial` is the kernel side: TLS 1.3 as its lowest version, no chain,
+  and a `VerifyConnection` that accepts only a presented certificate equal to the pin
+  with the URI name `aiops://plugin/<id>`; it writes a report and exits 0 only on `OK`.
+  `probe relay` copies bytes between a Unix socket and a TCP address and holds no key.
+  `serve_tls.py` is a `grpcio` server with `ssl_server_credentials` that requires a
+  client certificate and takes `kernel.pem` as its only root, with no interceptor,
+  whose `Hello` handler compares the presented certificate with `kernel.pem`. The two
+  certificates printed in the form of ADR-041 decision 20, and the throwaway home had
+  the modes above: the home and the three directories 0700, the directory of the
+  instance 0755 with three files of mode 0644, the kernel pair and the pin 0600.
+- **The unit** of every row, `<unit>`: `docker run -d --name <unit> --network <network>
+  --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges --mount
+  type=bind,src=<home>/remote/instances/<id>,dst=/aiops/identity,readonly --mount
+  type=bind,src=<app>,dst=/app,readonly -e AIOPS_REMOTE_LISTEN=0.0.0.0:7443 -e
+  AIOPS_REMOTE_CREDENTIALS=/aiops/identity <image> python -I /app/serve_tls.py`. These
+  are the flags of row 4 of ADR-047 decision 39, with a second read-only bind that
+  stands in for the content of the plugin image, so the binds were two and not the one
+  of ADR-047 decision 30.
+- **The dial of the kernel side,** `<dial>`: `probe dial -addr <address>:7443 -key
+  <home>/remote/kernel/key.pem -cert <home>/remote/kernel/cert.pem -pin
+  <home>/remote/pins/<id>/cert.pem -id <id> -out <report>`.
+- **The dials from inside the instance,** `<egress>`: `docker exec <unit> python -I
+  /app/egress.py` with a public address on port 443, and, on port 18443, where a
+  listener of the host binds every address, the address of the host on its local
+  network, the address of the default bridge and the gateway address of the unit's
+  network, where it has one; and the lookup of a public name.
+
+#### The rows
+
+| Row | What was run | Versions | Command | Result | Observed |
+|---|---|---|---|---|---|
+| VC-CTL | Control. The same unit on a bridge network that is not internal, so that a dial that fails in a later row is the network's doing and not the stand-in's or the host firewall's | As above | `docker network create <control network>`; `<unit>` on it; `probe listen -addr :18443` on the host; `<egress>`; `<dial>` to the address of the container | holds | `serve()` started as the user and the group 65532. From inside, the public address, the address of the host on its local network, the address of the default bridge and the gateway of its network all connected, and a public name resolved. The dial of the host: `OK`, TLS 1.3 with `TLS_AES_128_GCM_SHA256`, the presented certificate equal to the pin, the URI name `aiops://plugin/<id>`; `serve()` logged the dialler accepted with the fingerprint of `kernel.pem` |
+| VC-PIN | The two comparisons of ADR-041 decision 21 refuse, so an `OK` in the other rows means that both sides compared their pin. Run on the network of VC-A1; the refusal of a wrong pin was repeated in VC-C, VC-D1 and VC-D2 | As above | `<dial>` with the pin of the other pair; `<dial>` with `-id` of another plugin; `<dial>` with the key and the certificate of the other pair and the right pin; `docker logs <unit>` | holds | A wrong pin: `Unavailable` with `presented certificate is not the pin`, exit 1. The right pin and another id: `Unavailable` with `URI name is not aiops://plugin/<the other id>`, exit 1. Another self-signed pair of the kernel's form as the dialler: `Unavailable` with `error reading server preface: EOF`, exit 1; `grpcio` logged `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`, and no `Hello` reached the handler. This repeats R1-A4 and R1-A7 of ADR-041 |
+| VC-A1 | The binary on the host dials the address of the container on a plain internal network, `--internal` with the default gateway mode: the handshake of ADR-041 decision 20, and whether the instance stays without a route out | As above | `docker network create --internal --ipv6=false <network>`; `<unit>` on it; `docker network inspect`; `ip -o addr show <bridge of the network>`; `ip route get <address of the container>`; `<dial>`; `<egress>` | fails | The handshake part holds: `OK`, exit 0, TLS 1.3, the presented certificate equal to the pin, and `serve()` accepted the kernel's fingerprint. The fence part fails. The network reports `Internal=true` and a gateway; the bridge of the host holds that gateway address, and the host routes to the container through that bridge. From inside the instance the public address, the address of the host on its local network and the address of the default bridge failed with `Network is unreachable`, and a public name did not resolve, but the listener of the host on the gateway address of the network connected. So the host reaches the instance only because it holds an address in the network, and by that address the instance reaches every listener of the host that binds all addresses. That is the contrast of row 4 of ADR-047 decision 39. What the fence would need here is a packet-filter rule of the host that drops what the instance sends to the gateway address, which root sets and no command of the site user can |
+| VC-A2 | The binary on the host dials the address of the container on the network of ADR-047 decision 32: internal, the gateway mode `isolated` for IPv4 and IPv6, IPv6 off. This is the condition of decision 65 on the network that a unit has | As above | `docker network create --internal --ipv6=false -o com.docker.network.bridge.gateway_mode_ipv4=isolated -o com.docker.network.bridge.gateway_mode_ipv6=isolated <network>`; `<unit>` on it; `docker network inspect`; `ip -o addr show <bridge of the network>`; `ip route get <address of the container>`; `<dial>` with a deadline of 6 s; a plain TCP connect to port 7443; `<egress>` with one more dial to an unused address of its subnet and one to its own name on port 7443 | fails | The host does not reach the instance. The network reports `Internal=true`, a subnet and no gateway; the bridge holds an IPv6 link-local address alone. `ip route get` on the host answers with the default route of the host, through its default gateway on its outward interface: by the routing table the connect leaves the host and never enters the bridge. That is read from the route, and no packet was captured. The dial: `DeadlineExceeded`, exit 1, with no TLS started; the plain TCP connect: `i/o timeout`; `serve()` logged nothing. The instance stays fenced: the public address, the address of the host on its local network and the address of the default bridge failed with `Network is unreachable`, an unused address of its own subnet timed out, a public name did not resolve, its own name on port 7443 connected, and IPv6 is off on its interface. Row 4 of ADR-047 decision 39 is confirmed and extended: on the network of a unit no process of the host dials the address of the container. ADR-047 decision 44 already says so for a kernel on the host |
+| VC-B | A port published on a loopback address for a container on an internal network, on both networks, with one contrast: the same publish for a container that is also on a bridge network that is not internal | As above | `<unit>` with `-p` of a loopback address and port 17443 to port 7443, on each internal network; `docker port <unit>`; `docker inspect` of `HostConfig.PortBindings` and `NetworkSettings.Ports`; the listeners of the host on the port, and the proxy processes of the runtime; `<dial>` to the loopback address. Contrast: the same on the control network, then `docker network connect <isolated network> <unit>`, `<dial>` and `<egress>` | fails | On both internal networks the runtime accepted the flag with no error and no warning and published nothing: `docker port` printed nothing, `HostConfig.PortBindings` held the binding and `NetworkSettings.Ports` held none for the port, the host had no listener on the port and no proxy process, and the dial got `connection refused`. Contrast: with a network that is not internal as well, the port was published on the loopback address and the handshake completed with the pin equal on both sides, but from inside the instance the public address, the address of the host on its local network and the address of the default bridge all connected. So a published port exists only together with a route out, and ADR-020 decision 34 forbids it by its words. No fence makes this way usable |
+| VC-C | The runner as a second container on the network of ADR-047 decision 32, from the same image as a stand-in, with the binary and the throwaway kernel pair bound in from a run directory, and the result carried back by the exit code and by a file. This is the way that the text of question Q17 (a) names: "the runner dials from a container that joins the network, as the kernel container does" | As above. The image of the runner is a stand-in: only the static Go binary runs in it | A run directory of mode 0700 that holds `probe`, the kernel pair and the pin of the throwaway home, of mode 0600, and the report. `docker run --name <runner> --network <isolated network> --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges --read-only --mount type=bind,src=<run directory>,dst=/run/aiops <image> /run/aiops/probe dial -addr <unit>:7443 ...`; the exit code of `docker run` and `State.ExitCode`; the same with a wrong pin. Then an idle member of the same form, `<egress>` from the instance with a dial to the address of the runner and a lookup of its name, the same dials from the runner, and `docker network inspect` | holds | The handshake completed from inside the network: `docker run` exited 0 and `State.ExitCode` was 0, 0.4 s from start to exit, with the unit name resolved by the resolver of the runtime at once; the container starts on the network, so the lag of ADR-047 decision 51 does not arise. The report on the host, of mode 0600 and owned by the invoking user: `OK`, TLS 1.3, the presented certificate equal to the pin, the URI name `aiops://plugin/<id>`; `serve()` accepted the kernel's fingerprint. A wrong pin: exit 1, and the report names `presented certificate is not the pin`. The instance stayed fenced with the runner as a member: the three outward dials failed with `Network is unreachable` and a public name did not resolve; the address of the runner answered `Connection refused` on a port where it does not listen, and the name of the runner resolved, as a member's does. The runner had no route out either: the same three dials failed, and only the instance on port 7443 connected. After the runner was removed the network held the instance alone |
+| VC-D1 | The runner as a container that joins the network namespace of the instance, `--network container:<unit>`, and dials the loopback address; with the unit on the network of ADR-047 decision 32, and once more with the unit on `--network none` | As above; the same stand-in image | `docker run --name <runner> --network container:<unit> --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges --read-only --mount type=bind,src=<run directory>,dst=/run/aiops <image> /run/aiops/probe dial -addr <loopback address>:7443 ...`; the same with a wrong pin; `docker network inspect <isolated network>`; `docker inspect <runner>`. Then `<unit>` with `--network none`, the same runner against it, and `<egress>` from that unit | holds | Exit 0; the report: `OK`, TLS 1.3, the presented certificate equal to the pin; `serve()` accepted the kernel's fingerprint. A wrong pin: exit 1 with `presented certificate is not the pin`. The network listed the instance as its only member throughout, and the runner reported `NetworkMode=container:<id>` with no network of its own, so "its network holds that container alone" of ADR-020 decision 34 holds as worded. With the unit on `--network none` the same dial was `OK`; that instance had the loopback interface alone, and every outward dial failed with `Network is unreachable`. The runner shares the loopback of the instance, so it must listen on nothing there, an abstract Unix socket included. The variant with no network is tighter than a unit's network and is not "an internal network of its own" |
+| VC-D2 | The binary stays on the host and holds the key; a relay container on the network of ADR-047 decision 32 copies bytes between a Unix socket in a run directory and the port of the instance, and the mutual TLS runs end to end between the binary on the host and the instance. Run twice: the relay as a member of the network, and the relay in the network namespace of the instance | As above; the relay is `probe relay`, about 25 lines with no key, in the stand-in image | A run directory of mode 0700 with a directory for the socket; `docker run -d --name <relay> --network <isolated network> --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges --read-only --mount type=bind,src=<run directory>,dst=/run/aiops <image> /run/aiops/probe relay -unix /run/aiops/sock/relay.sock -to <unit>:7443`; on the host `probe dial -unix <run directory>/sock/relay.sock` with the kernel pair and the pin of the throwaway home; the same with a wrong pin and with the other pair; `<egress>`. Second run: the relay with `--network container:<unit>` and `-to <loopback address>:7443` | holds | The binary on the host: exit 0, `OK`, TLS 1.3 with `TLS_AES_128_GCM_SHA256`, the presented certificate equal to the pin, the URI name `aiops://plugin/<id>`; `serve()` accepted the kernel's fingerprint, so both comparisons were made through the relay. A wrong pin: exit 1 with `presented certificate is not the pin`. The other pair as the dialler: exit 1 with `error reading server preface: EOF`. The socket was of mode 0600 in a directory of mode 0700 of the invoking user. The kernel key never left the host, and the one bind of the relay held the binary and the socket. The instance stayed fenced: the three outward dials failed with `Network is unreachable`, and the address of the relay answered `Connection refused` on a port where it does not listen. Second run: the same `OK` and the same refusal, and the network listed the instance as its only member |
+| VC-D3 | The binary on the host enters the network namespace of the instance and dials the loopback address, with no container and no change of the network | As above; `nsenter` of util-linux 2.41.3 | As the invoking user, `nsenter --net=/proc/<pid of the instance>/ns/net true`. For the record, as root, `nsenter` into the namespace, then the dial as the invoking user with its groups cleared | fails | As the invoking user: `cannot open /proc/<pid>/ns/net: Permission denied`. As root the dial was `OK`, TLS 1.3, with the pin equal. The way needs root on the host for every `plugin verify`, and no decision gives `aiopsctl` root: the site user is unprivileged, and ADR-047 decision 31 has `aiopsctl` run no command that root must run. It is no way for the product |
+| VC-NOTRUN | Ways that were considered and not run | None | None | not run | (1) A packet-filter rule of the host that closes the gateway address of a plain internal network to the instance, which VC-A1 would need: it changes the host and needs root. (2) The binary copied into the instance's own container and run there with `docker exec`: it puts the throwaway key of the kernel and the judge of conformance inside the third party's container under the third party's user, against ADR-020 decision 34, "a process other than the container that the runner started cannot answer the runner"; refused by reading. (3) The rendered compose fragment and the systemd unit: the unit was started with `docker run`. (4) A nested engine at 29.10.0 with the flags of the S2a exit, the firewall backend `nftables`, a rootless engine, Podman and SELinux |
+
+#### What the result touches
+
+- **Decision 65 and decision 67.** The condition is not met on the network that a unit
+  has (VC-A2). It is met only on a network that is weaker than a unit's (VC-A1), and a
+  published port is no way (VC-B). The answer to Q17 cannot be built as worded, the
+  point is back with the owner as question Q24, and nothing is revised.
+- **ADR-041 decision 27, ADR-044 decision 38 and the lines of ADR-020 that restate
+  them** are not edited. Each stands with its note of 2026-11-27 or 2026-11-28.
+- **ADR-047 decision 44** has a kernel on the host not reach the network of a unit
+  until S7. VC-A2 agrees with it, and it needs no change.
+- **Decision 54** has the step `suites` report "the container started, the handshake
+  passed", and question Q15 has the runner dial "the address of the container on that
+  network". Both are read with the channel that the owner chooses, and the case of
+  `ADR-063:756-758` proves that channel on the runtime of the exit.
+- **ADR-041 decision 21** holds in every row that reached the instance: both sides
+  compared their pin, and each wrong pin and each untrusted dialler was refused
+  (VC-PIN).
+
+#### Limits of the run
+
+- One engine: Docker Engine 29.10.1, rootful, with no remapped user namespace, the
+  firewall backend `iptables` and the userland proxy on, under AppArmor. Not run: the
+  nested engine at 29.10.0 with the flags of the S2a exit, the backend `nftables`, a
+  rootless engine, Podman and SELinux.
+- Stand-ins. `serve_tls.py` is not `serve()` of the SDK, and `probe` is not the suite
+  binary: one unary call named `Hello` was driven, not the frozen `Hello`, the
+  session, check 3 or a suite. The unit was a `docker run` and no rendered fragment or
+  systemd unit.
+- The image of the runner and of the relay was the Python image as a stand-in. Which
+  image a runner or a relay container runs from on the host of an operator was not
+  determined.
+- The dial to a public address used one address on port 443, and the dials to the host
+  used one listener on every address of the host; the control row shows both reachable
+  from a container on a network that is not internal.
+- No timing under load, no restart of the instance during a run and no two runs of
+  `plugin verify` at once on one host were tried.
+- The Unix socket of Q17 (b) and the packet-filter rule that VC-A1 would need were not
+  run. The build of `probe` left what it fetched in the module cache and the build
+  cache of the Go toolchain of the local machine.
+
+#### Question for the owner after the run
+
+The question gives its options, the recommended one, why, and what the answer blocks.
+An option that changes a written line names the lines.
+
+**Q24. How does `plugin verify` reach the container, now that the host does not reach
+the network of a unit?** The owner answered Q15 and Q17 with (a): `plugin verify`
+starts the container as a unit and reaches it over mutual TLS with throwaway pairs.
+The condition of that answer is not met (VC-A2), so the answer cannot be built as
+decision 65 words it. The text of Q17 (a) names two other ways, and the run adds two.
+- (a) The runner is a container of the run on the unit's network (VC-C). The binary
+  that runs the suites is the first process of a second container, which joins the
+  network of ADR-047 decision 32, dials the unit name on port 7443 as the kernel
+  container does, and has one bind, the run directory, through which the result comes
+  back. Words that change: in decision 65, the sentence of the condition, since the
+  dialler is a container of the run and no process on the host, and what the runner
+  container gets (the invoking user, no capability, no privilege gain, a read-only
+  root, no path of a home, and no listener); in ADR-044 decision 33, "the binary that
+  this part runs as its child" and "the child alone dials", for a run with `Image`
+  set, and its decision 38 as Q17 (a) already has it revised; in ADR-020 decision 34,
+  "its network holds that container alone", which becomes that container and the
+  container of the runner; and ADR-041 decision 27 gains a row for this runner. Open
+  with it: which image the runner container runs from on the host of an operator, and
+  that the throwaway key of the kernel side is bound into a container, a first-party
+  one.
+- (b) The runner is a container in the network namespace of the instance (VC-D1) and
+  dials its loopback address. As (a), and ADR-020 decision 34 holds as worded, since
+  the network keeps one member. Decision 65 then says that the runner joins the
+  namespace of the unit, not that it dials "the address of the container on that
+  network"; ADR-044 decision 33 changes as in (a). The same open point on the image.
+  The dial does not go by the unit name, as the kernel container's does.
+- (c) The binary stays on the host, and a relay container that holds no key carries
+  the bytes (VC-D2). The suite binary stays the child of `aiopsctl` as ADR-044
+  decision 33 has it, the throwaway key of the kernel side never enters a container,
+  and the mutual TLS runs end to end. Decision 65 gains the relay and says that the
+  binary dials a Unix socket of its run directory over which the TLS of ADR-041
+  decision 20 runs; that connection is the check runner's own, from
+  `internal/remotesuite`, as the owner's answer to question Q21 of ADR-041 has it,
+  since the TLS dial of ADR-041 decision 28 takes a TCP endpoint; ADR-020 decision 34
+  keeps "holds that container alone" with the relay in the namespace of the instance,
+  or names the relay as a second member. It adds a relay program and an image for it,
+  which no decision names and which ADR-063 decision 35 has read before its first
+  use.
+- (d) The Unix socket, option (b) of Q17. ADR-041 decision 27 and ADR-044 decision 38
+  hold as written, decision 65 is reversed, and ADR-063 decisions 23 and 54 gain the
+  dated note that Q15 (b) names. The container has no network and one writable bind,
+  so it is not what a unit gives an instance. Not run: that the user of the container
+  opens a socket in a directory that the invoking user can reach is still read in no
+  source.
+- (e) A plain internal network for `plugin verify` alone (VC-A1). It builds the
+  sentence of decision 65 as worded and weakens the fence: the host holds an address
+  in the network, and the instance reaches listeners of the host on it unless root
+  adds a packet-filter rule. It weakens ADR-047 decisions 32 and 36 and the "no route
+  out" of reading 3 of question Q15 of the S2b part of ADR-020 for this command, and
+  needs the owner's word (ADR-063 decision 33).
+- Recommended: (a). It is the way that the owner's answer already names where the host
+  does not reach the container, it keeps what the owner chose twice, a container that
+  gets exactly what a unit gives an instance and is reached over mutual TLS with
+  throwaway pairs, and its dial goes the way of the kernel container's: the unit name
+  on port 7443 of the unit's network. Its cost is the words above and one open point,
+  the image of the runner, which the revision names before `Verify` is written. (b)
+  changes fewer words of ADR-020 and dials a path that no kernel uses. (c) adds a
+  program and an image. (d) reverses the answer and edits two accepted decisions of
+  ADR-063. (e) is not recommended. Blocks: `Verify` of remote code and its cases
+  (`ADR-063:756-758`), the row of `plugin verify` in ADR-041 decision 27, and with it
+  the acceptance of ADR-041.
+
+#### Edits made with this record, and left
+
+Made, in this ADR: this section; dated notes at decisions 65 and 67, at the status and
+at the acceptance order of the part, and after the list "Left to later commits" of the
+section "Owner answers of 2026-11-28"; and the dated note at decision 45 for the
+owner's answers of 2026-11-28 on the S2b part of ADR-047. The two status lines keep
+their status, and the row of this ADR in the ADR table of `08` §3 is not edited
+(decision 69). ADR-041 decision 27, ADR-044 and ADR-020 are not edited.
+
+Left to the commit that records the owner's answer to Q24: decision 65 as the answer
+has it, and, in the three other ADRs, the lines that the chosen option names. Left as
+the sections above list them: the answers to questions Q20 to Q23, on which decisions
+70 and 71 wait.
 
 ### Additions proposed 2026-11-28
 
