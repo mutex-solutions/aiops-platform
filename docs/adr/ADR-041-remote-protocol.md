@@ -1,9 +1,11 @@
 # ADR-041 (provisional): The remote protocol at major 0 and the identity of a remote instance on a single-tenant self-host
 
 - Status: **answers recorded 2026-11-27 and 2026-11-28; the three runs of decision 38
-  recorded 2026-11-27; not accepted. Acceptance waits for the two rows of the third run
-  that were not run (decision 58) and for the reading of this record against the
-  records of 2026-11-28 on the S2b parts of ADR-047 and ADR-061.** The project
+  recorded 2026-11-27, and the two rows of the third run that were left, with the run
+  of the count of decision 56 under load, recorded 2026-11-28; not accepted. Acceptance
+  waits for the owner on questions Q22 to Q24 of the section "Runs after the answers of
+  2026-11-28", and on question Q24 of the S2b part of ADR-061, which the row of `plugin
+  verify` in decision 27 follows.** The project
   owner answered all 14 questions on 2026-11-27, each with its recommended option, Q9
   while nothing is published; the section "Owner answers of 2026-11-27" records them as
   decisions 40 to 53. By the answer to Q14 (decision 53) the ADR is accepted only after
@@ -19,11 +21,19 @@
   each with its recommended option, and the section "Owner answers of 2026-11-28"
   records them as decisions 54 to 60, with a note of that date at each decision that an
   answer revises. That record does not accept the ADR. By decision 58 the two rows,
-  rootless Podman with the user kept and the binds under SELinux labels, are run and
-  recorded here first. The commit that sets the ADR accepted follows that record and
-  the reading of the three records of 2026-11-28 against each other; it also makes the
-  revision of the row of `plugin verify` in decision 27 that the owner's answer to
-  question Q17 of the S2b part of ADR-061 names, or returns that point to the owner.
+  rootless Podman with the user kept and the binds under SELinux labels, were run in a
+  throwaway virtual machine on the same date, and the section "Runs after the answers
+  of 2026-11-28" records them: both hold under the modes of decision 57. That section
+  also holds the run of the count of decision 56 under load. It does not accept the
+  ADR either. Two results come back to the owner (decision 53): the room that decision
+  56 keeps for a reconnect does not hold while calls are being refused (Q22), and under
+  rootless Podman with the user kept the instance holds the site user's group, against
+  the words of decision 57 (Q23). Q24 asks the owner to confirm that the field `paths`
+  of `UpdateConfig` leaves, which decision 59 words. The condition of the owner's
+  answer to question Q17 of the S2b part of ADR-061 was run and is not met on the
+  network of a unit, so the row of `plugin verify` in decision 27 is not revised and
+  that point is back with the owner as question Q24 of that part. The commit that sets
+  the ADR accepted follows the record of those four answers.
   The ADR is provisional by its row in the ADR table
   (`08:1175`): it is ratified at S5 for the policy callbacks and at S4b for one tenant
   per connection and activations across replicas. It was proposed before the first
@@ -1237,6 +1247,9 @@ list against the code and the texts at `bbfd839` shows these facts:
       command and the result of each row.
     - Note of 2026-11-28: two rows of the third run were not run on that date. By
       decision 58 both are run before acceptance, on the modes of decision 57.
+    - Note of 2026-11-28, after the runs of that date: both rows were run in a
+      throwaway virtual machine, and both hold. The section "Runs after the answers of
+      2026-11-28" holds the versions, the command and the result of each row.
 39. **What this ADR sends to an addition that does not exist yet.** None of the
     additions below exists at the commit that proposes this ADR, so no reference into
     them can be checked. Each is a dependency that blocks the code named beside it, and
@@ -2283,7 +2296,12 @@ of the same date on the S2b parts of ADR-047 and ADR-061, and until then its sta
     SDK, where the fourth bullet of decision 31 has the transport make it, and by
     decision 55 the count is kept in the generated handlers. Whether the count keeps
     the two units free under load was not run; it is run before group 4 merges. The
-    third and the fourth bullet of decision 31 gain a note. No message changes.
+    third and the fourth bullet of decision 31 gain a note. No message changes. Note of
+    2026-11-28, after the runs of that date: the count was run under load. It holds N
+    calls, and the two units are kept against calls that run. They are not kept
+    against calls that are being refused (row L-BURST-RECONNECT of the section "Runs
+    after the answers of 2026-11-28"), so the sentence on the two units is question Q22
+    of that section, and this decision is not revised until the owner answers.
 
 57. **The directory of an instance has the modes of ADR-047 decision 43** (Q18 (a),
     which is also question Q15 of the S2b part of ADR-047). ADR-047 decision 43 holds,
@@ -2308,6 +2326,12 @@ of the same date on the S2b parts of ADR-047 and ADR-061, and until then its sta
       that hold, on rootful Docker.
     - No line of ADR-047 is edited with this record. The mark at its question Q15 is
       left to the record of the owner's answers of that date on its S2b part.
+    - Note of 2026-11-28, after the runs of that date: the modes and the guard hold
+      under rootless Podman and under SELinux enforcing (decision 58). The words
+      "third-party code holds no group of the host" do not hold under rootless Podman
+      with `--userns=keep-id`, where the runtime adds the site user's group to the
+      instance. They are question Q23 of the section "Runs after the answers of
+      2026-11-28", and they stand as written until the owner answers.
 
 58. **Both rows of the third run that were not run are run before acceptance** (Q19
     (a)). Decision 53 stands as answered. R3-PODMAN, rootless Podman with
@@ -2324,6 +2348,9 @@ of the same date on the S2b parts of ADR-047 and ADR-061, and until then its sta
       SELinux.
     - A result that changes a decision comes back to the owner (decision 53). No
       result is recorded with these answers.
+    - Note of 2026-11-28, after the runs of that date: the rows are recorded in the
+      section "Runs after the answers of 2026-11-28", and both hold. Two results of
+      the same runs come back to the owner, as questions Q22 and Q23 of that section.
 
 59. **`UpdateConfig` carries the committed config whole** (Q20 (a)). ADR-034 decision
     21 holds. The proxy holds the committed config through the hand-off of that
@@ -2335,7 +2362,9 @@ of the same date on the S2b parts of ADR-047 and ADR-061, and until then its sta
       (a) left to the revision whether the field `paths` leaves or stays as a hint. It
       leaves: the hand-off gives the proxy the committed config and no list of changed
       leaves (ADR-034, G13 points 13 and 16), so the proxy would compute a hint that
-      nothing reads.
+      nothing reads. Note of 2026-11-28: the option left this choice to the revision,
+      and the record made it. It is put to the owner as question Q24 of the section
+      "Runs after the answers of 2026-11-28"; until the answer the field leaves.
     - Decision 16: the message no longer carries what the loader's event carries, and
       the instance merges nothing. The bound of 2 s stands, and so does what follows a
       `ConfigUpdated` with an error or none inside it: the kernel sends `Bye`, the
@@ -2392,6 +2421,12 @@ worded, the point comes back to the owner and nothing is revised. Until that run
 row of decision 27, its case in decision 37 and the row of ADR-020 in decision 39
 stand as text of their date.
 
+Note of 2026-11-28, after the run of that condition: it is recorded in the S2b part of
+ADR-061. On the network of ADR-047 decision 32 a process on the host does not reach the
+container, so the answer cannot be built as worded. The point is back with the owner as
+question Q24 of that part, and nothing is revised: the row of decision 27, its case in
+decision 37 and the row of ADR-020 in decision 39 stand.
+
 Left to later commits, each named:
 
 - the record of R3-PODMAN and R3-SELINUX, by a dated note in this ADR (decision 58);
@@ -2414,3 +2449,321 @@ decision 9 follows ADR-044 decision 45, and stands. Questions Q5 and Q6 and deci
 44 and 45 keep the text of 2026-11-27, with the notes above. The lines of the S2b parts
 of ADR-047 and ADR-061 that cite this ADR as not accepted stand: it is not accepted. An
 option that the owner did not choose edits nothing.
+
+Note of 2026-11-28, after the runs of that date: the section "Runs after the answers of
+2026-11-28" holds the record of R3-PODMAN and R3-SELINUX and the run of the count of
+decision 56 under load, the first and the fourth item of the list above. The second
+item came back to the owner: the condition of ADR-061 decision 67 is not met on the
+network of a unit, and the row of decision 27 is not revised. The ADR is not accepted
+by that section, which says what it waits for.
+
+## Runs after the answers of 2026-11-28
+
+Note of 2026-11-28. Two throwaway runs were made on that date, after the owner's answers
+of the same date, on the tree of commit `84c7deb`. They committed nothing, and every
+machine, container, network, key and file that they made was removed. The first is the
+record that decision 58 asks for: the two rows of the third run of decision 38 that
+were not run, in a throwaway virtual machine. The second is the run that decision 56
+leaves open: the count of `serve()` under load. A row "holds" when the run showed what
+this ADR writes, "fails" when it showed otherwise, and nothing is inferred for what was
+not run. The rows of the first run that bear on the systemd unit and on the network of
+an instance are ADR-047's, and its S2b part records them in the section of the same
+name. The run of the condition of ADR-061 decision 67 is recorded in that ADR.
+
+**The ADR is not accepted by this record.** Both rows of decision 58 are recorded and
+hold: under the modes of decision 57 the user of the unit reads the bound directory and
+nothing else under rootless Podman, with the default mapping and with the user kept,
+and under SELinux enforcing once the bind carries a label. The count of decision 56
+holds N calls. Four points keep the ADR open, and each is the owner's (decision 53):
+
+- the sentence of decision 56, "The two units more are then kept for sessions", does
+  not hold against calls that are being refused (row L-BURST-RECONNECT): question Q22;
+- the words "no group of the host" of decision 57 do not hold under rootless Podman
+  with the user kept (rows R3-PODMAN-43 and R3-PODMAN-TARGETS): question Q23, which is
+  also question Q22 of the S2b part of ADR-047;
+- the field `paths` of `UpdateConfig`, which option (a) of question Q20 left to the
+  revision and which decision 59 has leave: question Q24;
+- the row of `plugin verify` in decision 27. The condition of ADR-061 decision 67 was
+  run and is not met on the network of a unit, so the point is back with the owner as
+  question Q24 of the S2b part of ADR-061, and nothing is revised here.
+
+### The machine, the versions and the stand-ins
+
+- **The virtual machine of decision 58.** Fedora Cloud Base 45, the image
+  `Fedora-Cloud-Base-Generic-45-1.4.x86_64.qcow2` with the SHA-256
+  `50bdc5e70f6a24f540932d15411c1c6ae9fcfa40fb990d876d83c5cc823b2ad0`, under QEMU 10.2.1
+  with KVM on the local machine: user-mode networking with one port forwarded for SSH
+  on a loopback address, a cloud-init seed image and no libvirt. The checksum file of
+  the release carries a good signature of the Fedora 45 key
+  `4F50A6114CD5C6976A7F1179655A4B02F577861E`, and the image hashes to the value in it;
+  the bytes came from a mirror of the Fedora mirror list. The machine was powered off
+  after the runs, and its disk, its seed image and the downloaded image were deleted.
+  No host of the owner and no remote host was used, and nothing was created on a
+  container runtime of the local machine.
+- **In the machine,** as the image ships it and with no package update: kernel
+  7.2.11-300.fc45, systemd 262-3, `selinux-policy-targeted` 45.23-1, `container-selinux`
+  2.251.0-1, and Podman 6.1.3 with crun 1.29.1, netavark 2.1.0, aardvark-dns 2.1.0 and
+  conmon 2.2.1. `getenforce` answered `Enforcing` with the policy `targeted`, and
+  `podman info` reported a rootless runtime with SELinux enabled. Added from Docker's
+  package repository for Fedora 45, whose key is
+  `060A61C51B558A7F742B77AAC52FEB6B621E9F35`: Docker Engine and client 29.10.0,
+  containerd 2.4.2, runc 1.5.3, the Compose plugin 5.8.1 and the build plugin 0.39.1.
+  Every container ran the image
+  `python@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b`,
+  pulled by digest in the machine.
+- **Users and homes.** The machine has two unprivileged users: the site user,
+  `1000:1000`, whose home directory is of mode 0700 and whose subordinate ids start at
+  524288, and another local user, `1001:1001`. The throwaway home, `<home>`, is under
+  the site user's home directory and has the SELinux type `user_home_t`. A second copy,
+  `<second home>`, is under a parent of mode 0755 outside every home directory and has
+  the type `var_t`. The home, `remote/`, `remote/instances/` and
+  `remote/instances/<owner>/` are of mode 0700 and owned by the site user. The three
+  credential files are PEM files made with `openssl` in the machine. They were read
+  and not used: no TLS server loaded the key in these rows.
+- **The load run** was made on the local machine: Ubuntu 26.04.1 on Linux 7.0.0-44,
+  with Docker Engine 29.10.1, rootful, where the records of 2026-11-27 ran 29.10.0,
+  containerd v2.4.2 and runc 1.5.3, under AppArmor and without SELinux. `grpcio`
+  1.85.4, `protobuf` 7.36.2 and `typing-extensions` 4.16.0 were installed with `pip
+  --require-hashes` against the three SHA-256 values that ADR-063 records, on CPython
+  3.12.16 of the same image. The client is built with Go `go1.26.8`,
+  `google.golang.org/grpc` v1.82.1 and `google.golang.org/protobuf` v1.36.11, at the
+  hashes that ADR-063 records.
+- **Stand-ins,** in no commit. `modes.py` is the program of the third run. `count.py`
+  is a `grpcio` server of the synchronous interface, sized as decision 56 has it: a
+  pool and `maximum_concurrent_rpcs` of N+2, no server interceptor (decision 55), and
+  handlers written by hand in the shape of generated handlers on the public interface
+  of `grpcio`. The count is a `threading.BoundedSemaphore(N)`. The wrapper of each
+  handler takes one unit without blocking as its first statement, on the thread of the
+  pool; where it gets none it aborts with `RESOURCE_EXHAUSTED` and no trailing
+  metadata; and it gives the unit back in the `finally` of a `try` around the call of
+  the plugin's method. `load` is a Go client on `grpc-go`. The generated module of the
+  SDK does not exist yet, and no template renders a unit yet.
+
+### Run 3, the two rows that were not run (decision 58)
+
+`<id>` is the plugin id of the throwaway home, `<dir>` is `<home>/remote/instances/<id>`,
+and `<image>` is the image above by its digest. Unless a row says otherwise, a container
+ran with `--network none --cap-drop ALL --security-opt no-new-privileges`, and `<run>`
+stands for those flags. Rows whose name holds `PODMAN` are the row R3-PODMAN of the
+third run, and rows whose name holds `SELINUX` the row R3-SELINUX.
+
+| Row | What was run | Versions | Command | Result | Observed |
+|---|---|---|---|---|---|
+| R3-PODMAN-43 | Rootless Podman as the site user, under the modes of decision 57, the directory 0755 and its files 0644, with five mappings: (1) no `--user`; (2) `--user 65532:65532`, the user of the template; (3) `--userns=keep-id`; (4) `--userns=keep-id --user 65532:65532`; (5) `--userns=keep-id:uid=65532,gid=65532`. Whether the instance process reads its three files and nothing else, which owner and mode the files show inside and outside, and which user the host sees. Each case ran with no label option, with `:z` and with `:Z` (row R3-SELINUX-ROOTLESS) | Podman 6.1.3 rootless, crun 1.29.1, SELinux enforcing | `podman run --rm -i <run> <mapping> -v <dir>:/aiops/identity:ro,Z <image> python -I - <home> <home>/remote/kernel/key.pem <dir>/key.pem < modes.py`. For the host's view the same with `-d` and a sleep, then `Uid`, `Gid` and `Groups` of `/proc/<pid>/status`, and `/proc/<pid>/uid_map` | holds | Outside: `1000:1000`, the directory 0755 and the files 0644. With a label every mapping listed the directory and read `key.pem`, `cert.pem` and `kernel.pem`; creating a file failed with `Read-only file system`; the home, `remote/kernel/key.pem` and the host path of its own key failed with `No such file or directory`. (1) Inside `0:0`, the files shown as `0:0`; the host sees `1000:1000`, the site user; opening the key for writing failed with `Read-only file system`, so the read-only bind alone stops the write. (2) Inside `65532:65532` with the one group 65532, the files shown as `0:0`; the host sees the user and the group 589819, a subordinate id of the site user, no effective capability and `NoNewPrivs` 1; a write to the key failed with `Permission denied`. (3) Inside and outside `1000:1000`, the site user. (4) Inside `65532:65532` with the groups 1000 and 65532, the files shown as `1000:1000`; the host sees the user and the group 589819 and the groups 1000 and 589819; a write failed with `Permission denied`. Under `keep-id` Podman adds the site user's group as a supplementary group for every `--user` that was tried, `12345:12345`, `--passwd=false` and `keep-id:uid=2000,gid=2000` among them. (5) Inside `65532:65532`, the files shown as `65532:65532`, and the host sees `1000:1000`, the site user. So the user of the template reads its files and nothing else under the default rootless mapping and under `keep-id`. Mappings 1, 3 and 5 are the site user on the host, which ADR-047 decision 30 has `plugin start` refuse; for mapping 5 only the read from the host shows it, since the inside shows 65532 |
+| R3-PODMAN-44 | For the record, the same under the modes that decisions 24 and 44 had before decision 57: the directory 0750, its files 0640, the group of the site user | Podman 6.1.3 rootless, SELinux enforcing | `chmod` of the directory to 0750 and of the files to 0640, then the command of R3-PODMAN-43 with `<mapping>` one of `--user 65532:65532`, `--user 65532:1000`, `--user 65532:0`, `--userns=keep-id --user 65532:65532`, `--userns=keep-id --user 65532:1000` and `--userns=keep-id --user 12345:1000` | fails | Under the default rootless mapping the number of the site user's group does not reach the files: `--user 65532:65532` and `--user 65532:1000` got `Permission denied` on the directory and on each file, since group 1000 inside is a subordinate group outside. `--user 65532:0` read all three: group 0 inside is group 1000 outside, and the host saw the user 589819 with the group 1000. Under `keep-id`, `--user 65532:1000` and `--user 12345:1000` read the files, and so did `--user 65532:65532`, through the supplementary group 1000 that Podman adds. So no one number for the group gives those modes on rootful, on default rootless and under `keep-id` together: it is the site group's number on the first and the last, and 0 on default rootless. This is what ADR-047 question Q9 said of its option (b), now run, and it agrees with decision 57 |
+| R3-OTHER-USER | Whether another local user reads the credentials, on the second home, under both sets of modes: "the guard is the home and the three directories of mode 0700" (decision 57) | Fedora 45; Podman 6.1.3 rootless for the other user; SELinux enforcing | As the user 1001: `ls` of the parent and of `<second home>`; `cat` of the instance's key and of `remote/kernel/key.pem`. As the user 1001 with its own Podman: `podman run --rm --network none -v <second home>/remote/instances/<id>:/aiops/identity:ro <image> ls /aiops/identity`, and the parent bound whole and read-only with `--security-opt label=disable`, then `cat` of the key through it. Control: `chmod 0755` of the home and of the three directories, then `cat` of the key as the user 1001, under each set of modes | holds | The parent listed. `Permission denied` on the home, on the instance's key and directory through the home and on `remote/kernel/key.pem`, under 0755 with 0644 and under 0750 with 0640 alike. The other user's Podman failed with `statfs ...: permission denied`; with the parent bound whole and the label disabled it got `Permission denied` on the home and on the key. Control, with the home and the three directories opened to 0755: under 0755 with 0644 the other user read the key, 241 bytes; under 0750 with 0640 it got `Permission denied`. That is the cost that decision 57 states: the mode of the key is no guard |
+| R3-OTHER-INSTANCE | Whether another instance reads the credentials: two instances, each with its own directory bound, and two contrasts in which a third container is handed the first instance's directory, which no template renders | Podman 6.1.3 rootless; repeated on rootful Podman 6.1.3 and on Docker 29.10.0 with `selinux-enabled`, with the same results | Instance A: `podman run -d <run> --user 65532:65532 -v <dir>:/aiops/identity:ro,Z <image> sleep 600`; instance B the same with the directory of a second id; then, in B, a read of A's key by its path on the host. Contrasts: a third container with `-v <dir>:/mnt/a:ro` and a read of `/mnt/a/key.pem`, once while the directory holds the private label of `:Z` and once after a bind with `:z` | holds | Each instance read its own key. From B, the host path of A's key: `No such file or directory`. The two processes had the labels `container_t:s0:c308,c966` and `container_t:s0:c67,c607`, and each directory carried `container_file_t` with the category pair of its own instance. Contrast with the private label: `Permission denied` in the third container. The audit log held no line for it; with the `dontaudit` rules off for one run it held `avc: denied { search } ... scontext=system_u:system_r:container_t:s0:c198,c205 tcontext=system_u:object_r:container_file_t:s0:c612,c888 tclass=dir`. Contrast with the shared label of `:z`, `container_file_t:s0`: the third container read the key. So under the modes of decision 57 the mount namespace is what keeps another instance out; a private label adds a second barrier, and a shared label adds none |
+| R3-SELINUX-ROOTLESS | The read-only bind of the credential directory under SELinux enforcing, with no label option, with `:z` and with `:Z`, on rootless Podman under each of the five mappings; and the denials that the audit log holds | Podman 6.1.3 rootless, `container-selinux` 2.251.0-1, `selinux-policy-targeted` 45.23-1 | `restorecon -RF <home>` before each case; the command of R3-PODMAN-43 with `-v <dir>:/aiops/identity:ro`, `:ro,z` and `:ro,Z`; then the new `avc:` lines of the audit log, and `stat -c %C` of the directory and of the key. Extras: `--security-opt label=disable` with no label option, and the same bind from the second home | holds | With no label option, under every mapping, the process ran as `container_t` with a category pair of its own; it could `stat` the directory and nothing in it, with `Permission denied` on the listing and on each file, whatever the modes. Three denials a run: `avc: denied { read } for comm="python" name="key.pem" scontext=system_u:system_r:container_t:s0:c154,c660 tcontext=unconfined_u:object_r:user_home_t:s0 tclass=file`, and the same for `cert.pem` and `kernel.pem`; where the process owns the file, mappings 1, 3 and 5, also `{ append }` for the attempt to write. For the second home the target was `system_u:object_r:var_t:s0`. The denied listing left no line, under a `dontaudit` rule. With `:z` all three were read, and the directory and its files then carry `system_u:object_r:container_file_t:s0` on the host, and keep it. With `:Z` all three were read, and they carry `container_file_t` with the category pair of that container, changed at every start. With `label=disable` the process is `spc_t`, reads with no relabel and is not confined. Only the bound directory was relabelled: the home and `remote/kernel/` kept `user_home_t`. This is what ADR-047 decisions 14 and 30 write: the bind needs a label |
+| R3-SELINUX-RENDER | What a unit would have to carry so that the instance reads its files without a relabel of the home that lets another instance read them, and what breaks that label | Podman 6.1.3 rootless; repeated on rootful Podman 6.1.3 and on Docker 29.10.0 with `selinux-enabled`, with the same results | (a) `-v <dir>:/aiops/identity:ro,Z`. (b) `--mount type=bind,src=<dir>,dst=/aiops/identity,ro,relabel=private` of Podman. (c) No label option, after `chcon -R -t container_file_t -l s0 <dir>` run by the site user with no root; also with the type `container_ro_file_t`. (d) `chcon -R -t container_file_t -l s0:c100,c200 <dir>` with `--security-opt label=level:s0:c100,c200` and no label option. Against a running instance: a second container with `-v <dir>:/mnt/a:ro,Z`; a stand-in of the kernel container with `-v <home>:<home>:ro,z -v <home>/run:<home>/run:z`, the form of ADR-047 decisions 14 and 15, and the same with `:Z`; and `restorecon -RF <home>` | holds | (a) and (b) read, and relabel the one directory alone, to a label private to that container. (c) read with either type; the site user's `chcon` exited 0; `restorecon -R` left the type in place, and `restorecon -RF` reset it to `user_home_t`. (d) read at the fixed level, and a container of another level got `Permission denied`. What breaks a private label: a second container that binds the same directory with `:Z` takes the label, and the running instance then gets `Permission denied` on its key. A kernel stand-in that binds the home whole with `:z` relabels every file of the home to `container_file_t:s0`, `remote/kernel/key.pem` and every instance's directory among them: the running instance still reads, its private label is gone, and the kernel's key passes SELinux for every container of the host, so the closed directories and the mount namespace are then the only guard. The same bind with `:Z` gives the whole home the category pair of the kernel container, and the running instance gets `Permission denied` on its key until it is started again; started again with `:Z` it reads, and the kernel stand-in gets `Permission denied` on that one directory, which it does not read. `restorecon -RF` of the home while the instance runs: `Permission denied` on the key until the next start |
+| R3-SELINUX-FORMS | Whether the bind forms that the runs of ADR-047 decision 39 recorded can carry the label: `docker run --mount type=bind,...,readonly` (its rows 4 and 9), and the long form of Compose with `create_host_path: false` (its row 7) | Docker Engine 29.10.0 with `selinux-enabled`, the Compose plugin 5.8.1, where that record ran 5.8.0; Podman 6.1.3 through its socket with the same Compose | `docker run --rm --mount type=bind,src=<dir>,dst=/aiops/identity,readonly,relabel=private ...`. `docker compose -f <fragment> up -d` with the volume as: (v0) the long form with `bind: {create_host_path: false, selinux: Z}`; (v1) the long form with `bind: {selinux: Z}`; (v2) the short form `<dir>:/aiops/identity:ro,Z`; (v3) v0 without `selinux` and the directory labelled beforehand; (v5) the short form with a source that does not exist. Then `docker compose logs`, `docker inspect` of `HostConfig.Binds` and of the mode of each mount, and `stat -c %C <dir>` | fails | `docker run --mount` refused the option: `unknown option 'relabel' in 'relabel=private'`, and the same for `bind-selinux`. The plain `--mount` form on a daemon that confines: `Permission denied` on the key, with the denial of R3-SELINUX-ROOTLESS. v0: `config -q` and `up -d` exited 0 and the label was not applied, with no message: `Binds` null, the mode of the mount empty, the directory still `user_home_t`, and the instance got `Permission denied`. The same through the socket of Podman. v1 and v2: `Binds` held `<dir>:/aiops/identity:ro,Z`, the directory was relabelled, and the instance read its key as `65532:65532`. v3: read, with `Binds` null as row 7 of ADR-047 decision 39 recorded. v5: `up -d` exited 0 and the missing source was created on the host, inside the home, as `root:root` of mode 0755, which `create_host_path: false` exists to prevent. So on Docker and Compose the label and `create_host_path: false` cannot both be rendered, and the `--mount` form of the systemd unit cannot carry a label at all; the `--mount` of Podman can |
+| R3-SELINUX-PODMAN | Rootful Podman under SELinux enforcing: the same bind with no label option, with `:z` and with `:Z`, under both sets of modes | Podman 6.1.3 rootful, crun 1.29.1 | `sudo podman run --rm -i <run> --user 65532:65532 -v <dir>:/aiops/identity:ro <image> python -I - ... < modes.py`, and with `:ro,z` and `:ro,Z`; also with no `--user`, with `--user 1000:1000` and with `--security-opt label=disable`; under 0750 with 0640, with `--user 65532:65532` and `--user 65532:1000` | holds | As the host sees it the first process is `65532:65532` with the one group 65532, an identity `uid_map`, no effective capability, `NoNewPrivs` 1 and a label `container_t` with a category pair. The files are shown as `1000:1000` inside and outside. With no label option: `Permission denied`, with `avc: denied { read } ... scontext=system_u:system_r:container_t:s0:c408,c578 tcontext=unconfined_u:object_r:user_home_t:s0 tclass=file` for each of the three files. With `:z` and with `:Z` the three files were read and the write refused, with the labels of the rootless rows. The runtime made the bind through the three directories of mode 0700. Under 0750 with 0640: `65532:65532` got `Permission denied`, by the modes, and `65532:1000` read with `:Z` and was denied with no label option. The cases of R3-OTHER-INSTANCE and R3-SELINUX-RENDER gave the same results here |
+| R3-SELINUX-DOCKER | Rootful Docker under SELinux enforcing: the same bind, on the daemon as its package installs it, and with `selinux-enabled` set in the `daemon.json` of the machine | Docker Engine and client 29.10.0, containerd 2.4.2, runc 1.5.3, the overlay snapshotter of containerd, cgroup v2 | `sudo docker run --rm -i <run> --user 65532:65532 -v <dir>:/aiops/identity:ro <image> python -I - ... < modes.py`, and with `:ro,z` and `:ro,Z`; `docker info --format '{{json .SecurityOptions}}'`; then `{"selinux-enabled": true}` in the `daemon.json` of the machine, a restart of the daemon, and the same runs | holds | As installed, `docker info` lists seccomp and the cgroup namespace and no SELinux. Every container ran as `spc_t`: the files were read with no label option, `:z` and `:Z` changed no label, and no denial was logged. On that daemon the enforcing host does not confine the instance at all. With `selinux-enabled`, `docker info` lists `name=selinux`, and the results are those of Podman: with no label option `Permission denied`, with a denial as in R3-SELINUX-PODMAN; with `:z` and with `:Z` the files were read; `label=disable` gives `spc_t`. The host sees `65532:65532` with an identity `uid_map` under both settings. Under 0750 with 0640, `65532:1000` reads, with `:Z` where the daemon confines, and `65532:65532` does not. The daemon that does not confine accepts the `Z` option and ignores it |
+| R3-PODMAN-TARGETS | The row R3-PODMAN on its two targets: a unit of the user's service manager over rootless Podman, in the form of R3-SYSTEMD, and a compose fragment run by `docker compose` against the socket of the site user's rootless Podman | systemd 262, Podman 6.1.3 rootless, the Compose plugin 5.8.1 | `systemd-run --user --wait --collect --pipe --quiet podman run --rm -i <run> --user 65532:65532 -v <dir>:/aiops/identity:ro,Z <image> python -I - <home> < modes.py`, and the same with `--userns=keep-id`. `systemctl --user start podman.socket`, then `docker compose -f <fragment> up -d` with `DOCKER_HOST` naming that socket; the fragment has `user: "65532:65532"`, `cap_drop: [ALL]`, `no-new-privileges`, the one bind and the network of row 7 of ADR-047 decision 39; once more with `userns_mode: keep-id` | holds | The transient unit exited 0 under both mappings and read the three files; under `keep-id` the groups were 1000 and 65532 again. Compose against the socket of Podman created the container and the network. With a label that takes effect, the short form or the long form without `create_host_path: false`, the instance read its key as `65532:65532`, and the host saw the user and the group 589819, with the groups 1000 and 589819 under `userns_mode: keep-id`. The modes hold on both targets. Two things differ from Docker, and both are recorded in the S2b part of ADR-047: the label of the long form with `create_host_path: false` is dropped here too, and the network that Podman made from the fragment reported `internal` with a gateway address and its resolver on, so the two gateway-mode options of Docker change nothing on Podman. Not run: a unit of the system's service manager over Podman, since the template names the program `docker` |
+
+### The count of decision 56 under load
+
+The server of every row: `docker run -d --network <network of the run> --user 12345:12345
+--cap-drop ALL --security-opt no-new-privileges -e N=<N> ... <image> python -I ...
+count.py`, on a bridge network made for the run, over gRPC without TLS. The client:
+`load -addr <address of the container> -n <N> -burst 10s -tries 200 -w
+1@100ms,1@10ms,1,8,64` for N of 32, the default of decision 31, and with `-burst 5s
+-tries 100` for N of 4. The widths are the senders of calls that are all refused: one
+every 100 ms, one every 10 ms, and 1, 8 and 64 in a tight loop. Every row ran at the
+versions of the load run above.
+
+| Row | What was run | Versions | Result | Observed |
+|---|---|---|---|---|
+| L-SIZE | Decision 56 as worded: N long calls in flight and the session open; call N+1 is refused with `RESOURCE_EXHAUSTED` and no `aiops-reason`, and its method does not run | As above | holds | N of 32: 32 methods running; call 33 got `RESOURCE_EXHAUSTED` with the message `call limit reached` after 1.1 ms; 32 bodies ran and the count made one refusal; the open session answered its ping. The only trailer that `grpc-go` reports is the content type of a reply that is trailers alone, so no `aiops-reason`. N of 4 gave the same for call 5. Control with the count switched off, the transport's limit alone: 33 methods ran with one session open, which is R2-SIZE again |
+| L-OVERLAP | A second session that overlaps the first during a reconnect, a new connection with `Hello`, the `Session` stream and one ping, is accepted while N calls are in flight; and what a third dialler gets | As above | holds | N of 32 and of 4: with N methods running the second session was accepted, and both sessions answered a ping. With N calls and two sessions open, N+2 units, the `Hello` of a third dialler and a further call were refused by the transport: `RESOURCE_EXHAUSTED` with `Concurrent RPC limit exceeded!` and no `aiops-reason`. So a refusal has one of two messages, from the count or from the transport, with the same code and no reason, as the note at decision 31 has it. After the methods returned the 32 calls ended `OK`, the next call was `OK` and the count was 0 |
+| L-CANCEL | Cancelled calls whose method has not returned keep their unit, and the session that replaces a lost one is still accepted; the same after the old connection is closed outright | As above | holds | N of 32: the client saw `CANCELLED` for all 32 within 290 microseconds; 300 ms later 32 methods were still running, and a new call on the old connection got `RESOURCE_EXHAUSTED` from the count. The replacing session on a new connection was accepted and answered its ping; a call on the new connection was refused, as it must be while the units are held. After the old connection was closed: one session, 32 methods still running, and the new session still answered. After the methods returned a call on the new connection was `OK` and the count was 0. The same at N of 4 |
+| L-RAISE | A handler that raises, or that aborts, gives its unit back | As above | holds | N of 32, 320 calls with at most 32 at once, half whose method raises `RuntimeError` and half whose method calls `context.abort`: 160 ended `UNKNOWN` and 160 `FAILED_PRECONDITION`, 320 bodies ran and none was refused. Then 32 blocked calls all ran at once and call 33 was refused, so no unit was lost. The `finally` of the wrapper runs on a return, on an exception of the method and on `context.abort`, which raises. `BoundedSemaphore` raises `ValueError` on a unit given back twice, and none was raised in any run |
+| L-STREAM | A streamed call holds its unit for the whole of its stream, also when it is cancelled while its method is blocked, and gives it back when the method raises in the middle of the stream | As above | holds | N of 32: with 31 calls and one open server stream the next call was refused. After the client cancelled the stream the count was still 32 at 300 ms and the next call was still refused; after the methods returned the next call was `OK`. A stream whose method raises after its first item ended `UNKNOWN`, and 32 calls then ran at once. The wrapper of a streamed handler is a generator: the unit is taken at the first item and given back in a `finally` around `yield from`. On a cancellation `grpcio` does not close the generator: the `finally` ran when `grpcio` dropped it after the method yielded, which rests on the reference counting of CPython |
+| L-CHURN | The count under a load of short calls: never more than N methods at once, every excess call refused with the code and no reason, the count back at 0, the session alive | As above | holds | N of 4, 16 senders for 5 s, each call a method of 5 ms, with a ping of the session every 10 ms: 3485 `OK` and 26662 `RESOURCE_EXHAUSTED`, 6787 by the count and 19875 by the transport's limit, no other code and none with a reason; at most 4 methods at once; the count 0 at the end; 466 pings, none failed, the slowest 7.2 ms. N of 32, 128 senders for 10 s: 19523 `OK`, 66 refused, at most 32 methods at once, the count 0 at the end, 847 pings and none failed. At N of 32 the Python server was the limit, at about 2000 calls a second, so that run pressed the count far less than the run at N of 4 |
+| L-BURST-SESSION | Many refused calls in a burst do not starve the open session: N calls in flight, and 1 to 64 senders of calls that are all refused, on the connection of the session | As above | holds | N of 32, 10 s a burst, at 10, 85, 1967, 6927 and 7454 refused calls a second: 873 to 938 pings a burst on the open session, none failed, the median 0.46 to 0.63 ms and the slowest 11.7 ms. Never more than 32 methods ran, and no refusal carried a reason. An open `Session` stream holds its thread and its unit, so refusals cannot take them |
+| L-BURST-RECONNECT | "The two units more are then kept for sessions" (decision 56), for a reconnect, a new connection with `Hello` and `Session`, that arrives while calls beyond N are being refused: 200 reconnects spread over each burst of 10 s, with N of 32 in flight and one session open | As above | fails | A call that the count refuses is first admitted by the transport, and it holds one unit of the transport and one thread of the pool until its handler has aborted: `grpc/_server.py` of the wheel, lines 1271-1287, counts a call up when it is dispatched and down when its task on the pool ends. With one session open there is one spare unit, so the `Hello` or the `Session` of the reconnect was refused by the transport, with `RESOURCE_EXHAUSTED` and `Concurrent RPC limit exceeded!`. N of 32, reconnects refused: 4 of 200 at 10 refused calls a second; 23 of 200 at 85 a second; 187 of 200 with one sender in a tight loop, 1967 a second; 189 of 200 with 8 senders; 182 of 200 with 64. N of 4: none of 100 at 10 a second, 12 of 100 at 81 a second, and 92, 88 and 98 of 100 for the three tight widths. Each refused call holds its unit for about 1.5 ms. With no such calls the reconnect was always accepted (L-OVERLAP, L-CANCEL) |
+| L-V1 | A variant, not decision 56 as worded: the pool and the transport's limit at N+2+8, and `serve()` counts sessions too, at most 2. The same bursts | As above | fails | Reconnects accepted: 200 of 200 at 81 refused calls a second, with one tight sender and with 8; with 64 senders the transport's limit refused 7 of 194. Spare units hold only against as many refusals at once as there are spare units. L-SIZE, L-CANCEL and L-CHURN held |
+| L-V2 | A variant, not decision 56 as worded: no limit of the transport, a pool of N+3, and `serve()` counts calls, N, and sessions, 2, with `Hello` not counted. The same bursts, then a third session | As above | holds | Reconnects accepted: 199 of 199 at 87 refused calls a second, and 200 of 200 with 1, 8 and 64 tight senders, up to 3743 refused calls a second. The time to an accepted reconnect: a median of 2.1 ms with one sender and 36 ms with 64, the slowest 55 ms in the bursts and one of 179 ms in the paced run. Every excess call was refused by the count and none by the transport, with the code and no reason; no ping of the session failed; never more than 32 methods ran. A third session was refused by the count of sessions, with `RESOURCE_EXHAUSTED` and `session limit reached`. L-SIZE, L-CANCEL and L-CHURN held. Here an excess call waits in the queue of the pool until the one spare thread refuses it, where decision 31 has it refused before any code of the SDK runs. The queue of the pool has no bound, and it was not sized against a flood |
+| L-LOCK | Whether the count needs a lock | CPython 3.12.16 of the image, the standard library alone | holds | It needs one. `docker run --rm --network none ... python -I lock.py`, 64 threads of 20000 takes each at N of 4: a test of the count followed by an add, with one call between the two, admitted up to 51 at once and ended at a negative count. The same lines with nothing between them showed no excess on this interpreter, which is a property of where CPython 3.12 switches threads and no guarantee. `threading.BoundedSemaphore(N)` taken without blocking admitted at most 4 and ended at 0, in every run and in every row above |
+
+### What the results touch
+
+- **Decision 58: both rows are recorded, and both hold.** Under the modes of decision
+  57 the user of the unit, `65532:65532`, reads its three files and no other path of
+  the home under rootless Podman with the default mapping and with `--userns=keep-id`,
+  on a transient unit of the user's service manager and through Compose on the socket
+  of Podman (R3-PODMAN-43, R3-PODMAN-TARGETS). Under SELinux enforcing it reads them
+  once the bind carries a label, on rootless Podman, rootful Podman and a Docker daemon
+  that confines, and is denied without one, as ADR-047 decisions 14 and 30 write
+  (R3-SELINUX-ROOTLESS, R3-SELINUX-PODMAN, R3-SELINUX-DOCKER). The answers to Q18 and
+  Q19 are met for the read.
+- **Decisions 24 and 44 as they stood before decision 57** do not hold under the
+  default rootless mapping (R3-PODMAN-44). Decision 57 already revises them, and no
+  decision changes.
+- **Decision 57, the guard,** holds: another local user reads nothing through the home
+  and the three closed directories, and the control shows the cost that the decision
+  states (R3-OTHER-USER). Another instance is kept out by its mount namespace
+  (R3-OTHER-INSTANCE).
+- **Decision 57, the words "third-party code holds no group of the host",** and the
+  same words in the notes at decisions 24 and 44, do not hold under rootless Podman
+  with `--userns=keep-id`: the runtime adds the site user's group to the process of
+  the instance, whatever `--user` the unit names (R3-PODMAN-43, mapping 4;
+  R3-PODMAN-TARGETS). The read of the credentials is not affected, and in the runs the
+  group reached nothing. The cause was not read in the source of Podman. Question Q23.
+- **The label of the bind is ADR-047's.** The forms in which the runs of ADR-047
+  decision 39 wrote the bind cannot carry a label on Docker and Compose
+  (R3-SELINUX-FORMS), and a bind of the whole home with a label option relabels the
+  credential directories with it (R3-SELINUX-RENDER). Both touch ADR-047 decisions 14
+  and 30 and no decision of this ADR; they are questions Q20 and Q21 of its S2b part.
+  The network of a unit on Podman is its question Q23.
+- **Decision 56, the count,** holds: `serve()` serves N calls and refuses call N+1 with
+  the code and no reason; a cancelled call, a handler that raises or aborts and a
+  streamed call keep and give back their unit as decision 31 has it; and refusals do
+  not starve an open session (L-SIZE, L-CANCEL, L-RAISE, L-STREAM, L-CHURN,
+  L-BURST-SESSION). The room for a reconnect holds against calls that run, cancelled
+  or not (L-OVERLAP, L-CANCEL).
+- **Decision 56, the sentence "The two units more are then kept for sessions",** does
+  not hold as worded with the pool and the transport's limit at N+2
+  (L-BURST-RECONNECT). A call that the count refuses holds a unit of the transport
+  until its handler has aborted, and a reconnect that arrives then is refused by the
+  transport. Question Q22.
+- **Readings for the code of `serve()`, and no decision.** The count needs a lock, and
+  a semaphore of the standard library taken without blocking is one (L-LOCK). The unit
+  of a cancelled streamed call is given back when the interpreter drops the generator,
+  which is true of CPython and was run on no other; decision 30 supports CPython 3.12
+  alone at S2b.
+- **Decision 27, the row of `plugin verify`,** is not revised. The run of the condition
+  of ADR-061 decision 67 is recorded in that ADR: on the network of ADR-047 decision 32
+  a process on the host does not reach the container, so the answer to question Q17 of
+  that part cannot be built as worded, and the point is back with the owner as its
+  question Q24. The row, its case in decision 37 and the row of ADR-020 in decision 39
+  stand as text of their date until the owner answers.
+
+### Limits of the runs
+
+- One distribution and one machine for the third run: Fedora Cloud Base 45 with the
+  packages of the image, the targeted policy, in one guest. No policy of another
+  distribution, no MLS policy, no host under AppArmor and no second kernel was run.
+  Each case was run once, some twice.
+- The rows of the third run read the files with the Python of the image. `grpcio`, the
+  Go module of gRPC and the pinned registry were not used in the machine.
+- Not run: rootless Docker; Docker with a remapped user namespace; a unit of the
+  system's service manager over Podman, the shim that gives Podman the name `docker`,
+  and `podman-compose`; a home on a network file system or under another SELinux type
+  than `user_home_t` and `var_t`.
+- Denials under a `dontaudit` rule left no line in the audit log. One was shown once
+  with those rules off, and the rules were restored.
+- The Docker daemon of the machine enables no SELinux as its package installs it. The
+  results on a daemon that confines come from `selinux-enabled` set in the machine
+  alone.
+- The load rows ran over gRPC without TLS, from one client process and, for calls, one
+  connection. The comparison of decision 21 and the bounds of decision 19 were not
+  part of them. Only the churn at N of 4 pressed the count hard.
+- L-V1 and L-V2 were run to show what an option gives, and neither is a proposal of
+  this record.
+- `pip` fetched the three wheels from the public index and checked them with
+  `--require-hashes`. The build of the client left what it fetched in the module cache
+  and the build cache of the Go toolchain of the local machine.
+
+### Questions for the owner after the runs of 2026-11-28
+
+Each question gives its options, the recommended one, and why. The ADR is accepted when
+Q22 to Q24 are answered, the answers are recorded as the records above were, and the
+row of `plugin verify` in decision 27 follows the owner's answer to question Q24 of the
+S2b part of ADR-061.
+
+**Q22. How is the room for a reconnect kept while calls are being refused?** Decision
+56: "The two units more are then kept for sessions". L-BURST-RECONNECT: with the pool
+and the transport's limit at N+2, a call that the count refuses holds a unit of the
+transport for about 1.5 ms, and a reconnect that arrives then is refused with
+`RESOURCE_EXHAUSTED`: 2% of the reconnects at 10 refused calls a second, 12% at 85 a
+second, and over 90% under one sender in a tight loop.
+- (a) Decision 56 stands, and the sentence is reworded: the two units are kept against
+  calls that run. A reconnect that meets calls being refused may get
+  `RESOURCE_EXHAUSTED` from the transport; that is a dial that got no session, not a
+  denial, and the proxy dials again inside the reconnect budget of decision 18.
+  `serve()` gains no code beyond the count. It edits the sentence of decision 56 and
+  the note at the third bullet of decision 31.
+- (b) `serve()` counts sessions as well, at most 2, sets no limit of the transport and
+  has a pool of N+3 (L-V2). Every reconnect was accepted at every width, the slowest
+  in 55 ms. This revises "the pool and the transport's limit stay at N+2" of decision
+  56 and the fourth bullet of decision 31: every refusal is then code of the SDK, and
+  an excess call waits in the queue of the pool until a thread refuses it. That queue
+  has no bound and was not sized against a flood.
+- (c) The pool and the limit gain spare units beyond N+2, and `serve()` counts
+  sessions (L-V1). It holds only against as many refusals at once as there are spare
+  units: 8 spare units lost 7 of 194 reconnects under 64 senders.
+- (d) A rule of the kernel side: the proxy sends no call on a connection while the
+  connection that replaces it dials. It was not run, and it is a new sentence of
+  decision 18.
+- Recommended: (a). The calls that an instance refuses come from the one kernel that
+  dials it, and by decision 18 a proxy that lost its session marks its contributions
+  unavailable before it dials again, so calls fail in the kernel and few reach the
+  instance while a reconnect is in flight; that is read in decision 18 and was not
+  run. A reconnect that is refused once is tried again after 250 ms, well inside the
+  30 s. (b) gives the sentence as worded and gives up the refusal before any code of
+  the SDK runs, with a queue that has no bound; (c) does not hold; (d) adds a rule
+  where (a) needs none. No message changes under any option. Blocks: `serve()`, in
+  group 4.
+
+**Q23. What do the words "no group of the host" mean under a rootless runtime that
+keeps the user?** This is also question Q22 of the S2b part of ADR-047, and one answer
+settles both. Decision 57 and ADR-047 decision 43: "third-party code holds no group of
+the host". R3-PODMAN-43 and R3-PODMAN-TARGETS: under rootless Podman 6.1.3 with
+`--userns=keep-id` the runtime adds the site user's group to the process of the
+instance as a supplementary group, whatever `--user` is given, and the host sees the
+groups 1000 and 589819. The read of the credentials is not affected. In the runs the
+group reached nothing: the directory of the instance is the one bind, and no other
+path of the home has a mode with group bits.
+- (a) The sentence is reworded to "the unit names no group of the host", in decision
+  57, in the notes at decisions 24 and 44 and in ADR-047 decisions 43 and 49, with a
+  note that a runtime that keeps the user adds the site user's group and that the
+  group reaches no file through the one bind.
+- (b) `plugin start` reads the groups of the first process of the instance with its
+  uid, as the host sees them (ADR-047 decision 30), and refuses an instance that holds
+  the site user's group. That refuses `--userns=keep-id` for units.
+- (c) A unit is refused on every rootless runtime at S2b. That is option (b) of
+  question Q19, which the owner did not choose.
+- Recommended: (a). What decision 57 protects is that the instance reads nothing of
+  the home but its one directory, and the runs show that under this mapping too. (b)
+  refuses a mapping that ADR-047 decision 14 names as one that qualifies, for a group
+  that opens no file. Blocks: the unit templates and `plugin start`, in group 3.
+
+**Q24. Does the field `paths` of `UpdateConfig` leave?** This is not a result of a run.
+Option (a) of question Q20, which the owner chose, left one point to the revision: "the
+field `paths` and the merge at `paths` leave, or `paths` stays as a hint that the
+revision words". Decision 59 has the field leave: `UpdateConfig` carries `activation`
+and `config` alone, and the method of the Python SDK is `config_updated(config)`. The
+choice was made by the record and not by the owner, so it is put here.
+- (a) The field leaves, as decision 59 and the notes at decisions 8, 16 and 31 have
+  it. No line changes.
+- (b) The field stays as a hint. The proxy computes the changed leaves by comparing
+  the committed config with the one that it held, the instance still replaces its
+  config whole, and `config_updated(config, paths)` keeps its second argument.
+  Decision 59 and the three notes are reworded.
+- Recommended: (a). Under ADR-034 decision 21 the hand-off gives the proxy the
+  committed config whole and no list of changed leaves, so a hint is code of the proxy
+  for a field that nothing has to read. Nothing of major 0 is published, and a field
+  can be added later inside the major if a consumer needs it. Blocks: the update
+  message, in group 2.
+
+### Edits made with this record, and left
+
+Made, in this ADR: the status; this section; and notes of 2026-11-28 that point here,
+at decision 38, at decisions 56 to 59, after the paragraph on the row of `plugin
+verify` and after the list "Left to later commits" of the section "Owner answers of
+2026-11-28". No decision is revised: an option that the owner has not chosen edits
+nothing. Two lines that state where this ADR stands are brought to this record: its
+row in the ADR table of `08` §3, and the sentence on it in the list of amendments at
+the head of the plugin record. Its row in `00` §9 stays as it is (decision 53).
+
+Left, each to the commit that records the owner's answers to Q22 to Q24 and to
+question Q24 of the S2b part of ADR-061: the sentence of decision 56 and the notes at
+decision 31, as the answer to Q22 has them; the words on the group in decisions 24, 44
+and 57, as the answer to Q23 has them; decision 59 and its three notes, with Q24 (b)
+alone; the row of `plugin verify` in decision 27, its case in decision 37 and the row
+of ADR-020 in decision 39; and every line that the section "Owner answers of
+2026-11-27" leaves to the commit that sets this ADR accepted. Still left as the section
+"Owner answers of 2026-11-28" lists them: the form of the command that renews the
+kernel's pair, which the S2b part of ADR-061 proposes as its decision 70 and its
+questions Q20 and Q21, and the definition `sidecars` beyond `Endpoint` and `Report`,
+with the S2b part of ADR-047.
