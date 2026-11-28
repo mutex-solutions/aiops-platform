@@ -2457,8 +2457,12 @@ Note of 2026-11-28, after the runs of that date: the section "Runs after the ans
 2026-11-28" holds the record of R3-PODMAN and R3-SELINUX and the run of the count of
 decision 56 under load, the first and the fourth item of the list above. The second
 item came back to the owner: the condition of ADR-061 decision 67 is not met on the
-network of a unit, and the row of decision 27 is not revised. The ADR is not accepted
-by that section, which says what it waits for.
+network of a unit, and the row of decision 27 is not revised. The fifth item is
+proposed and not accepted: decision 70 of the S2b part of ADR-061, with its questions
+Q20 and Q21. The sixth item is made by decision 53 of the S2b part of ADR-047, with a
+note at its decision 29 and `plugin enable` in the row of the table of its decision
+28; that part is proposed and not accepted. The third item is left. The ADR is not
+accepted by that section, which says what it waits for.
 
 ## Runs after the answers of 2026-11-28
 
@@ -2772,8 +2776,9 @@ and 57, as the answer to Q23 has them; decision 59, its three notes and the note
 2026-11-28 in the item of ADR-034 that names question Q20, with Q24 (b) alone; the row
 of `plugin verify` in decision 27, its case in decision 37 and the row of ADR-020 in
 decision 39; and every line that the section "Owner answers of 2026-11-27" leaves to
-the commit that sets this ADR accepted. Still left as the section
-"Owner answers of 2026-11-28" lists them: the form of the command that renews the
-kernel's pair, which the S2b part of ADR-061 proposes as its decision 70 and its
-questions Q20 and Q21, and the definition `sidecars` beyond `Endpoint` and `Report`,
-with the S2b part of ADR-047.
+the commit that sets this ADR accepted. Still left: the form of the command that
+renews the kernel's pair, the fifth item of the list "Left to later commits" of the
+section "Owner answers of 2026-11-28", which the S2b part of ADR-061 proposes as its
+decision 70 and its questions Q20 and Q21; and the definition `sidecars` beyond
+`Endpoint` and `Report`, which is no item of that list: the S2b part of ADR-047 lists
+it as left in its own record of 2026-11-28.
